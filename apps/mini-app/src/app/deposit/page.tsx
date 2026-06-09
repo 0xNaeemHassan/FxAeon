@@ -9,7 +9,7 @@ import Link from 'next/link';
 export default function DepositPage() {
   const { user, ready } = usePrivy();
   const [copied, setCopied] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+
   const [error, setError] = useState<string | null>(null);
 
   const walletAddress = user?.wallet?.address;
@@ -61,7 +61,7 @@ export default function DepositPage() {
         {error && (
           <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
             <p className="text-red-700 text-sm">{error}</p>
-            <button type="button" type="button"
+            <button type="button"
               onClick={() => setError(null)}
               className="mt-2 text-red-600 text-sm hover:underline"
             >
@@ -98,7 +98,7 @@ export default function DepositPage() {
                   <p className="text-sm font-mono text-gray-900 break-all mr-3">
                     {walletAddress}
                   </p>
-                  <button type="button" type="button"
+                  <button type="button"
                     onClick={handleCopy}
                     className="flex-shrink-0 p-2 hover:bg-gray-200 rounded-lg transition-colors"
                     aria-label="Copy address"
@@ -123,7 +123,7 @@ export default function DepositPage() {
           ) : (
             <div className="text-center py-8">
               <p className="text-gray-500 mb-4">No wallet address available</p>
-              <button type="button" type="button"
+              <button type="button"
                 onClick={() => window.location.reload()}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >

@@ -3,10 +3,11 @@
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { useSearchParams } from 'next/navigation';
 import { useState, useEffect } from 'react';
+import { Suspense } from 'react';
 import { ArrowLeft, TrendingUp, TrendingDown, AlertTriangle, Check } from 'lucide-react';
 
-export default function TradePage() {
-  const { user, ready } = usePrivy();
+function TradePageContent() {
+  const { ready } = usePrivy();
   const { wallets } = useWallets();
   const searchParams = useSearchParams();
   
@@ -15,7 +16,6 @@ export default function TradePage() {
   const leverage = parseFloat(searchParams.get('lev') || '3');
   const amount = searchParams.get('amt') || '1';
   
-  const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState(1); // 1: confirm, 2: simulating, 3: signing, 4: done
   const [simResult, setSimResult] = useState<any>(null);
   const [error, setError] = useState('');
@@ -203,5 +203,13 @@ export default function TradePage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function TradePage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>}>
+      <TradePageContent />
+    </Suspense>
   );
 }

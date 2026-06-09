@@ -15,7 +15,6 @@ const LANGUAGES = [
 
 export default function SettingsPage() {
   const { user, logout } = usePrivy();
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lang, setLang] = useState('en');
   const [slippage, setSlippage] = useState(0.5);
@@ -49,7 +48,7 @@ export default function SettingsPage() {
         {error && (
           <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
             <p className="text-red-700 text-sm">{error}</p>
-            <button type="button" type="button"
+            <button type="button"
               onClick={() => setError(null)}
               className="mt-2 text-red-600 text-sm hover:underline"
             >

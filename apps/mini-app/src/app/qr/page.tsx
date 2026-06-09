@@ -1,11 +1,12 @@
 'use client';
 
 import { useState } from 'react';
+import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
 import { Copy, Check, ArrowLeft } from 'lucide-react';
 
-export default function QRPage() {
+function QRPageContent() {
   const searchParams = useSearchParams();
   const address = searchParams.get('address') || '';
   const [copied, setCopied] = useState(false);
@@ -92,5 +93,13 @@ export default function QRPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function QRPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>}>
+      <QRPageContent />
+    </Suspense>
   );
 }
