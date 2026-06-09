@@ -1,0 +1,32 @@
+{
+  "start": {
+    "welcome_new": "Bienvenido a fxBot — la interfaz de clase mundial para f(x) Protocol.\n\n🔐 No custodial. Cero custodia de claves. Automatización sin confianza.",
+    "welcome_back": "¡Bienvenido de vuelta! Tu billetera: {wallet}",
+    "connect_wallet": "🔐 Conectar Billetera",
+    "how_it_works": "📖 Cómo funciona"
+  },
+  "portfolio": {
+    "title": "📊 Portafolio de {wallet}",
+    "no_positions": "No hay posiciones activas.\n\nUsa /trade para abrir una posición apalancada o /mint para pedir prestado fxUSD.",
+    "position": "{emoji} *{market} {side}* — {leverage}x\nColateral: {collateral} | Deuda: {debt}\nSalud: {health}% | Liq: ${liqPrice}"
+  },
+  "trade": {
+    "usage": "Uso: /trade <mercado> <long|short> <apalancamiento> <cantidad>\n\nEjemplo: /trade wstETH long 3x 1ETH",
+    "preview": "⚡ *Vista previa de operación*\n\nMercado: {market} {side}\nApalancamiento: {leverage}x\nColateral: {amount} ETH\nDeslizamiento: {slippage}%\n\nToca para confirmar y firmar:"
+  },
+  "settings": {
+    "title": "⚙️ Configuración",
+    "language": "Idioma: {lang}",
+    "slippage": "Deslizamiento: {slippage}%",
+    "mev": "Protección MEV: {mev}",
+    "changed": "{key} configurado a {value}"
+  },
+  "errors": {
+    "no_wallet": "Por favor conecta tu billetera primero con /start",
+    "invalid_market": "Mercado inválido. Elige: wstETH, WBTC",
+    "invalid_leverage": "El apalancamiento debe estar entre 1.1x y {max}x",
+    "simulation_failed": "Simulación de transacción fallida: {reason}",
+    "rate_limited": "Demasiadas solicitudes. Por favor espera un momento.",
+    "tx_failed": "Transacción fallida: {hash}"
+  }
+}

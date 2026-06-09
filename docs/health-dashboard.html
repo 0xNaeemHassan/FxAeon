@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>fxBot System Health Dashboard</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+    .header {
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      padding: 24px 32px;
+      border-bottom: 1px solid #334155;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .header h1 {
+      font-size: 24px;
+      font-weight: 700;
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .status-healthy {
+      background: #064e3b;
+      color: #34d399;
+    }
+    .status-healthy::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #34d399;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .container {
+      padding: 24px 32px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .metric {
+      font-size: 32px;
+      font-weight: 700;
+      color: #f8fafc;
+      margin-bottom: 4px;
+    }
+    .metric-sub {
+      font-size: 13px;
+      color: #64748b;
+    }
+    .metric-change {
+      font-size: 13px;
+      font-weight: 600;
+      margin-top: 8px;
+    }
+    .change-up { color: #34d399; }
+    .change-down { color: #f87171; }
+    .change-neutral { color: #94a3b8; }
+    .progress-bar {
+      height: 6px;
+      background: #334155;
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 12px;
+    }
+    .progress-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.3s ease;
+    }
+    .progress-green { background: #10b981; }
+    .progress-yellow { background: #f59e0b; }
+    .progress-red { background: #ef4444; }
+    .service-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .service-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: #0f172a;
+      border-radius: 8px;
+      border: 1px solid #334155;
+    }
+    .service-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .service-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+    .service-name {
+      font-weight: 600;
+      font-size: 14px;
+      color: #f1f5f9;
+    }
+    .service-detail {
+      font-size: 12px;
+      color: #64748b;
+      margin-top: 2px;
+    }
+    .service-status {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 12px;
+    }
+    .status-online {
+      background: #064e3b;
+      color: #34d399;
+    }
+    .status-degraded {
+      background: #451a03;
+      color: #fbbf24;
+    }
+    .status-offline {
+      background: #450a0a;
+      color: #f87171;
+    }
+    .section-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #f8fafc;
+      margin: 32px 0 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .alert-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .alert-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px 16px;
+      background: #1e293b;
+      border-radius: 8px;
+      border-left: 3px solid;
+    }
+    .alert-info { border-color: #3b82f6; }
+    .alert-warning { border-color: #f59e0b; }
+    .alert-critical { border-color: #ef4444; }
+    .alert-icon {
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+    .alert-content {
+      flex: 1;
+    }
+    .alert-title {
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 2px;
+    }
+    .alert-time {
+      font-size: 12px;
+      color: #64748b;
+    }
+    .footer {
+      text-align: center;
+      padding: 24px;
+      color: #475569;
+      font-size: 13px;
+      border-top: 1px solid #334155;
+      margin-top: 32px;
+    }
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 768px) {
+      .two-col { grid-template-columns: 1fr; }
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>
+      <span style="color: #00d4aa;">fx</span>Bot
+      <span style="font-size: 14px; color: #64748b; font-weight: 400;">System Health Dashboard</span>
+    </h1>
+    <span class="status-badge status-healthy">All Systems Operational</span>
+  </div>
+
+  <div class="container">
+    <!-- Key Metrics -->
+    <div class="grid">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Active Users</span>
+          <span style="font-size: 20px;">👥</span>
+        </div>
+        <div class="metric">487</div>
+        <div class="metric-sub">of 500 MAU limit (free tier)</div>
+        <div class="progress-bar">
+          <div class="progress-fill progress-yellow" style="width: 97.4%"></div>
+        </div>
+        <div class="metric-change change-up">+12 today</div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Transactions (24h)</span>
+          <span style="font-size: 20px;">⚡</span>
+        </div>
+        <div class="metric">1,247</div>
+        <div class="metric-sub">Avg 52 tx/hour</div>
+        <div class="progress-bar">
+          <div class="progress-fill progress-green" style="width: 62%"></div>
+        </div>
+        <div class="metric-change change-up">+8.3% vs yesterday</div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Success Rate</span>
+          <span style="font-size: 20px;">✅</span>
+        </div>
+        <div class="metric">99.7%</div>
+        <div class="metric-sub">4 failed / 1,251 total</div>
+        <div class="progress-bar">
+          <div class="progress-fill progress-green" style="width: 99.7%"></div>
+        </div>
+        <div class="metric-change change-up">+0.2% vs last week</div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Avg Response Time</span>
+          <span style="font-size: 20px;">⏱️</span>
+        </div>
+        <div class="metric">142ms</div>
+        <div class="metric-sub">P95: 380ms, P99: 520ms</div>
+        <div class="progress-bar">
+          <div class="progress-fill progress-green" style="width: 28%"></div>
+        </div>
+        <div class="metric-change change-down">+12ms vs yesterday</div>
+      </div>
+    </div>
+
+    <!-- Infrastructure Status -->
+    <h2 class="section-title">🏗️ Infrastructure</h2>
+    <div class="grid">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Backend Services</span>
+        </div>
+        <div class="service-list">
+          <div class="service-item">
+            <div class="service-info">
+              <div class="service-icon" style="background: #1e3a5f; color: #60a5fa;">🤖</div>
+              <div>
+                <div class="service-name">Telegram Bot</div>
+                <div class="service-detail">Fly.io · 256MB · 3 shared CPUs</div>
+              </div>
+            </div>
+            <span class="service-status status-online">Online</span>
+          </div>
+          <div class="service-item">
+            <div class="service-info">
+              <div class="service-icon" style="background: #1e3a5f; color: #60a5fa;">🌐</div>
+              <div>
+                <div class="service-name">Mini App</div>
+                <div class="service-detail">Cloudflare Pages · Edge</div>
+              </div>
+            </div>
+            <span class="service-status status-online">Online</span>
+          </div>
+          <div class="service-item">
+            <div class="service-info">
+              <div class="service-icon" style="background: #1e3a5f; color: #60a5fa;">🔐</div>
+              <div>
+                <div class="service-name">Privy Auth</div>
+                <div class="service-detail">TEE · SOC 2 Type II</div>
+              </div>
+            </div>
+            <span class="service-status status-online">Online</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Data Layer</span>
+        </div>
+        <div class="service-list">
+          <div class="service-item">
+            <div class="service-info">
+              <div class="service-icon" style="background: #1e3a5f; color: #a78bfa;">🐘</div>
+              <div>
+                <div class="service-name">PostgreSQL</div>
+                <div class="service-detail">Supabase · 312MB / 500MB</div>
+              </div>
+            </div>
+            <span class="service-status status-online">Online</span>
+          </div>
+          <div class="service-item">
+            <div class="service-info">
+              <div class="service-icon" style="background: #1e3a5f; color: #a78bfa;">📦</div>
+              <div>
+                <div class="service-name">Redis</div>
+                <div class="service-detail">Upstash · 7,234 / 10k cmds/day</div>
+              </div>
+            </div>
+            <span class="service-status status-degraded">72% usage</span>
+          </div>
+          <div class="service-item">
+            <div class="service-info">
+              <div class="service-icon" style="background: #1e3a5f; color: #a78bfa;">☁️</div>
+              <div>
+                <div class="service-name">R2 Backups</div>
+                <div class="service-detail">Cloudflare · 2.1GB / 10GB</div>
+              </div>
+            </div>
+            <span class="service-status status-online">Online</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Blockchain</span>
+        </div>
+        <div class="service-list">
+          <div class="service-item">
+            <div class="service-info">
+              <div class="service-icon" style="background: #1e3a5f; color: #fbbf24;">⛓️</div>
+              <div>
+                <div class="service-name">Alchemy RPC</div>
+                <div class="service-detail">18.2M / 30M CU (monthly)</div>
+              </div>
+            </div>
+            <span class="service-status status-online">Online</span>
+          </div>
+          <div class="service-item">
+            <div class="service-info">
+              <div class="service-icon" style="background: #1e3a5f; color: #fbbf24;">🛡️</div>
+              <div>
+                <div class="service-name">Flashbots Protect</div>
+                <div class="service-detail">23 users opted in</div>
+              </div>
+            </div>
+            <span class="service-status status-online">Available</span>
+          </div>
+          <div class="service-item">
+            <div class="service-info">
+              <div class="service-icon" style="background: #1e3a5f; color: #fbbf24;">📜</div>
+              <div>
+                <div class="service-name">f(x) Protocol</div>
+                <div class="service-detail">Mainnet · Router v2</div>
+              </div>
+            </div>
+            <span class="service-status status-online">Online</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">External APIs</span>
+        </div>
+        <div class="service-list">
+          <div class="service-item">
+            <div class="service-info">
+              <div class="service-icon" style="background: #1e3a5f; color: #34d399;">📊</div>
+              <div>
+                <div class="service-name">DefiLlama</div>
+                <div class="service-detail">Prices + Yields · 30s cache</div>
+              </div>
+            </div>
+            <span class="service-status status-online">Online</span>
+          </div>
+          <div class="service-item">
+            <div class="service-info">
+              <div class="service-icon" style="background: #1e3a5f; color: #34d399;">🎯</div>
+              <div>
+                <div class="service-name">fx Limit Order API</div>
+                <div class="service-detail">Relayer · 30s poll interval</div>
+              </div>
+            </div>
+            <span class="service-status status-online">Online</span>
+          </div>
+          <div class="service-item">
+            <div class="service-info">
+              <div class="service-icon" style="background: #1e3a5f; color: #34d399;">🤖</div>
+              <div>
+                <div class="service-name">Surplus Intelligence</div>
+                <div class="service-detail">AI inference · ~$18/mo</div>
+              </div>
+            </div>
+            <span class="service-status status-online">Online</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Two Column Layout -->
+    <div class="two-col">
+      <!-- Recent Alerts -->
+      <div>
+        <h2 class="section-title">🔔 Recent Alerts</h2>
+        <div class="alert-list">
+          <div class="alert-item alert-info">
+            <span class="alert-icon">ℹ️</span>
+            <div class="alert-content">
+              <div class="alert-title">Daily backup completed</div>
+              <div class="alert-time">2 minutes ago · R2</div>
+            </div>
+          </div>
+          <div class="alert-item alert-warning">
+            <span class="alert-icon">⚠️</span>
+            <div class="alert-content">
+              <div class="alert-title">Redis approaching 75% daily limit</div>
+              <div class="alert-time">15 minutes ago · Upstash</div>
+            </div>
+          </div>
+          <div class="alert-item alert-info">
+            <span class="alert-icon">ℹ️</span>
+            <div class="alert-content">
+              <div class="alert-title">3 limit orders filled</div>
+              <div class="alert-time">32 minutes ago · f(x) Keepers</div>
+            </div>
+          </div>
+          <div class="alert-item alert-info">
+            <span class="alert-icon">ℹ️</span>
+            <div class="alert-content">
+              <div class="alert-title">New user onboarded: 12 today</div>
+              <div class="alert-time">1 hour ago · Telegram</div>
+            </div>
+          </div>
+          <div class="alert-item alert-critical">
+            <span class="alert-icon">🚨</span>
+            <div class="alert-content">
+              <div class="alert-title">Position health alert: 2 users near liquidation</div>
+              <div class="alert-time">2 hours ago · Health Monitor</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cost Breakdown -->
+      <div>
+        <h2 class="section-title">💰 Monthly Cost Breakdown</h2>
+        <div class="card">
+          <div class="service-list">
+            <div class="service-item">
+              <div class="service-info">
+                <div class="service-icon" style="background: #064e3b; color: #34d399;">✅</div>
+                <div>
+                  <div class="service-name">Fly.io Backend</div>
+                  <div class="service-detail">Free tier · 3 shared CPUs</div>
+                </div>
+              </div>
+              <span style="font-weight: 700; color: #34d399;">$0</span>
+            </div>
+            <div class="service-item">
+              <div class="service-info">
+                <div class="service-icon" style="background: #064e3b; color: #34d399;">✅</div>
+                <div>
+                  <div class="service-name">Supabase Postgres</div>
+                  <div class="service-detail">Free tier · 500MB</div>
+                </div>
+              </div>
+              <span style="font-weight: 700; color: #34d399;">$0</span>
+            </div>
+            <div class="service-item">
+              <div class="service-info">
+                <div class="service-icon" style="background: #064e3b; color: #34d399;">✅</div>
+                <div>
+                  <div class="service-name">Upstash Redis</div>
+                  <div class="service-detail">Free tier · 10k cmds/day</div>
+                </div>
+              </div>
+              <span style="font-weight: 700; color: #34d399;">$0</span>
+            </div>
+            <div class="service-item">
+              <div class="service-info">
+                <div class="service-icon" style="background: #064e3b; color: #34d399;">✅</div>
+                <div>
+                  <div class="service-name">Alchemy RPC</div>
+                  <div class="service-detail">Free tier · 30M CU</div>
+                </div>
+              </div>
+              <span style="font-weight: 700; color: #34d399;">$0</span>
+            </div>
+            <div class="service-item">
+              <div class="service-info">
+                <div class="service-icon" style="background: #064e3b; color: #34d399;">✅</div>
+                <div>
+                  <div class="service-name">Cloudflare R2 + Pages</div>
+                  <div class="service-detail">Free tier · 10GB</div>
+                </div>
+              </div>
+              <span style="font-weight: 700; color: #34d399;">$0</span>
+            </div>
+            <div class="service-item">
+              <div class="service-info">
+                <div class="service-icon" style="background: #064e3b; color: #34d399;">✅</div>
+                <div>
+                  <div class="service-name">Privy Wallet</div>
+                  <div class="service-detail">Free tier · 499 MAU</div>
+                </div>
+              </div>
+              <span style="font-weight: 700; color: #34d399;">$0</span>
+            </div>
+            <div class="service-item">
+              <div class="service-info">
+                <div class="service-icon" style="background: #451a03; color: #fbbf24;">💳</div>
+                <div>
+                  <div class="service-name">Surplus Intelligence</div>
+                  <div class="service-detail">Pay-per-token · AI inference</div>
+                </div>
+              </div>
+              <span style="font-weight: 700; color: #fbbf24;">~$18</span>
+            </div>
+            <div class="service-item">
+              <div class="service-info">
+                <div class="service-icon" style="background: #451a03; color: #fbbf24;">💳</div>
+                <div>
+                  <div class="service-name">Domain (Cloudflare)</div>
+                  <div class="service-detail">Registrar · $9/yr</div>
+                </div>
+              </div>
+              <span style="font-weight: 700; color: #fbbf24;">~$1</span>
+            </div>
+            <div class="service-item" style="border-top: 2px solid #334155; margin-top: 8px; padding-top: 16px;">
+              <div class="service-info">
+                <div class="service-icon" style="background: #1e3a5f; color: #f8fafc;">💰</div>
+                <div>
+                  <div class="service-name" style="font-size: 16px;">Total Monthly Cost</div>
+                  <div class="service-detail">At 487 MAU</div>
+                </div>
+              </div>
+              <span style="font-weight: 700; font-size: 18px; color: #f8fafc;">~$19</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Automation Rules -->
+    <h2 class="section-title">⚙️ Automation Rules</h2>
+    <div class="grid">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Active Rules</span>
+          <span class="service-status status-online">142 active</span>
+        </div>
+        <div class="metric">142</div>
+        <div class="metric-sub">Across 89 users</div>
+        <div class="progress-bar">
+          <div class="progress-fill progress-green" style="width: 85%"></div>
+        </div>
+        <div class="metric-change change-neutral">12 paused, 3 failed</div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Rules Executed (24h)</span>
+          <span class="service-status status-online">847 runs</span>
+        </div>
+        <div class="metric">847</div>
+        <div class="metric-sub">Success rate: 99.6%</div>
+        <div class="progress-bar">
+          <div class="progress-fill progress-green" style="width: 99.6%"></div>
+        </div>
+        <div class="metric-change change-up">+23% vs yesterday</div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Pre-flight Simulations</span>
+          <span class="service-status status-online">1,251</span>
+        </div>
+        <div class="metric">1,247</div>
+        <div class="metric-sub">Passed / 1,251 total</div>
+        <div class="progress-bar">
+          <div class="progress-fill progress-green" style="width: 99.7%"></div>
+        </div>
+        <div class="metric-change change-up">4 caught before sending</div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">BullMQ Queue Depth</span>
+          <span class="service-status status-online">0 pending</span>
+        </div>
+        <div class="metric">0</div>
+        <div class="metric-sub">Jobs processing in real-time</div>
+        <div class="progress-bar">
+          <div class="progress-fill progress-green" style="width: 0%"></div>
+        </div>
+        <div class="metric-change change-neutral">Queue healthy</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    fxBot System Health Dashboard · Last updated: 2026-06-08 22:38:39 UTC · 
+    <a href="https://fx.aladdin.club" style="color: #00d4aa; text-decoration: none;">f(x) Protocol</a> · 
+    <a href="https://github.com/your-org/fxbot" style="color: #00d4aa; text-decoration: none;">GitHub</a>
+  </div>
+</body>
+</html>

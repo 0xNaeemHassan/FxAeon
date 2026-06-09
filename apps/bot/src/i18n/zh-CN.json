@@ -1,0 +1,69 @@
+{
+  "start": {
+    "welcome_new": "欢迎使用 fxBot — f(x) Protocol 的世界级界面。\n\n🔐 非托管。零密钥托管。无需信任的自动化。",
+    "welcome_back": "欢迎回来！您的钱包: {wallet}",
+    "connect_wallet": "🔐 连接钱包",
+    "how_it_works": "📖 如何使用"
+  },
+  "portfolio": {
+    "title": "📊 {wallet} 的投资组合",
+    "no_positions": "没有活跃仓位。\n\n使用 /trade 开设杠杆仓位，或使用 /mint 借入 fxUSD。",
+    "position": "{emoji} *{market} {side}* — {leverage}x\n抵押品: {collateral} | 债务: {debt}\n健康度: {health}% | 清算价: ${liqPrice}"
+  },
+  "trade": {
+    "usage": "用法: /trade <市场> <做多|做空> <杠杆> <数量>\n\n示例: /trade wstETH long 3x 1ETH",
+    "preview": "⚡ *交易预览*\n\n市场: {market} {side}\n杠杆: {leverage}x\n抵押品: {amount} ETH\n滑点: {slippage}%\n\n点击确认并签名:"
+  },
+  "limit": {
+    "usage": "用法: /limit <开仓|平仓> <市场> <做多|做空> at <价格>\n\n示例: /limit open wstETH long at 2800",
+    "preview": "🎯 *限价单预览*\n\n操作: {action} {market} {side}\n触发价: ${price}\n\n点击签名并提交:"
+  },
+  "orders": {
+    "title": "🎯 您的限价单",
+    "no_orders": "没有限价单。使用 /limit 下单。",
+    "order": "{status} {type} {side} @ ${price} ({tp}) — {statusText}"
+  },
+  "mint": {
+    "usage": "用法: /mint <市场> <抵押品> <fxUSD 数量>\n\n示例: /mint wstETH 1ETH 1500",
+    "preview": "🏦 *fxMINT 预览*\n\n抵押品: {collateral} {market}\n借入: {mintAmount} fxUSD\n\n点击确认:"
+  },
+  "save": {
+    "usage": "用法: /save <存入|取出> <数量>\n\n示例: /save deposit 1000",
+    "preview": "💰 *fxSAVE {action}*\n\n数量: {amount} fxUSD\n\n点击确认:"
+  },
+  "settings": {
+    "title": "⚙️ 设置",
+    "language": "语言: {lang}",
+    "slippage": "滑点: {slippage}%",
+    "mev": "MEV 保护: {mev}",
+    "changed": "{key} 已设置为 {value}"
+  },
+  "security": {
+    "title": "🔒 安全中心",
+    "wallet": "钱包: {wallet}",
+    "audits": "*审计报告:*\n• Trail of Bits (2024年4月, 2024年7月)\n• OpenZeppelin (2025年8月)\n• Secbit (2025年10月)",
+    "policies": "*安全策略:*\n• 零密钥托管 — 密钥存储在 Privy TEE 中\n• 自动化策略: 默认拒绝，用户可撤销\n• 每日交易上限: 50"
+  },
+  "refer": {
+    "title": "🎁 推荐计划",
+    "code": "您的推荐码: `{code}`",
+    "link": "分享链接:\nhttps://t.me/fxAladdinBot?start=ref_{code}",
+    "earnings": "推荐人数: {count}\n累计收益: ${earnings}"
+  },
+  "help": {
+    "title": "📚 fxBot 命令",
+    "trading": "*交易:*\n/trade — 开设杠杆仓位\n/limit — 下限价/止损单\n/orders — 查看活跃订单\n/mint 或 /borrow — 借入 fxUSD\n/redeem — 赎回 fxUSD\n/repay — 偿还 fxUSD 债务",
+    "yield": "*收益与治理:*\n/save — fxSAVE 存入/取出\n/lock — 锁定 FXN → veFXN\n/vote — 投票权重\n/claim — 领取奖励",
+    "portfolio": "*投资组合:*\n/portfolio — 查看仓位\n/deposit — 显示钱包地址 + 二维码\n/withdraw — 发送到外部地址\n/bridge — 跨链 fxUSD",
+    "automation": "*自动化:*\n/auto — 创建/管理规则\n/refer — 推荐链接 + 收益",
+    "settings": "*设置:*\n/settings — 语言、滑点、MEV\n/security — 策略、审计\n/help — 此菜单"
+  },
+  "errors": {
+    "no_wallet": "请先使用 /start 连接钱包",
+    "invalid_market": "无效的市场。选择: wstETH, WBTC",
+    "invalid_leverage": "杠杆必须在 1.1x 到 {max}x 之间",
+    "simulation_failed": "交易模拟失败: {reason}",
+    "rate_limited": "请求过多。请稍后再试。",
+    "tx_failed": "交易失败: {hash}"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "start": {
+    "welcome_new": "fxBot에 오신 것을 환영합니다 — f(x) Protocol의 세계적 수준 인터페이스입니다.\n\n🔐 비수탁. 키 수탁 없음. 신뢰 없는 자동화.",
+    "welcome_back": "다시 오신 것을 환영합니다! 지갑: {wallet}",
+    "connect_wallet": "🔐 지갑 연결",
+    "how_it_works": "📖 사용 방법"
+  },
+  "portfolio": {
+    "title": "📊 {wallet} 포트폴리오",
+    "no_positions": "활성 포지션이 없습니다.\n\n/trade로 레버리지 포지션을 열거나 /mint로 fxUSD를 빌리세요.",
+    "position": "{emoji} *{market} {side}* — {leverage}x\n담보: {collateral} | 부채: {debt}\n건전성: {health}% | 청산가: ${liqPrice}"
+  },
+  "trade": {
+    "usage": "사용법: /trade <마켓> <롱|숏> <레버리지> <수량>\n\n예시: /trade wstETH long 3x 1ETH",
+    "preview": "⚡ *거래 미리보기*\n\n마켓: {market} {side}\n레버리지: {leverage}x\n담보: {amount} ETH\n슬리피지: {slippage}%\n\n확인 및 서명:"
+  },
+  "settings": {
+    "title": "⚙️ 설정",
+    "language": "언어: {lang}",
+    "slippage": "슬리피지: {slippage}%",
+    "mev": "MEV 보호: {mev}",
+    "changed": "{key}이(가) {value}(으)로 설정되었습니다"
+  },
+  "errors": {
+    "no_wallet": "먼저 /start로 지갑을 연결하세요",
+    "invalid_market": "잘못된 마켓입니다. 선택: wstETH, WBTC",
+    "invalid_leverage": "레버리지는 1.1x에서 {max}x 사이여야 합니다",
+    "simulation_failed": "거래 시뮬레이션 실패: {reason}",
+    "rate_limited": "너무 많은 요청입니다. 잠시 후 다시 시도하세요.",
+    "tx_failed": "거래 실패: {hash}"
+  }
+}

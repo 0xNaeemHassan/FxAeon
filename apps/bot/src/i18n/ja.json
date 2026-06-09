@@ -1,0 +1,32 @@
+{
+  "start": {
+    "welcome_new": "fxBotへようこそ — f(x) Protocolの世界クラスインターフェースです。\n\n🔐 非カストディアル。キー預託なし。トラストレス自動化。",
+    "welcome_back": "お帰りなさい！ウォレット: {wallet}",
+    "connect_wallet": "🔐 ウォレットを接続",
+    "how_it_works": "📖 使い方"
+  },
+  "portfolio": {
+    "title": "📊 {wallet} のポートフォリオ",
+    "no_positions": "アクティブなポジションはありません。\n\n/tradeでレバレッジポジションを開くか、/mintでfxUSDを借りてください。",
+    "position": "{emoji} *{market} {side}* — {leverage}x\n担保: {collateral} | 債務: {debt}\n健全性: {health}% | 清算価格: ${liqPrice}"
+  },
+  "trade": {
+    "usage": "使い方: /trade <マーケット> <ロング|ショート> <レバレッジ> <数量>\n\n例: /trade wstETH long 3x 1ETH",
+    "preview": "⚡ *取引プレビュー*\n\nマーケット: {market} {side}\nレバレッジ: {leverage}x\n担保: {amount} ETH\nスリッページ: {slippage}%\n\n確認して署名:"
+  },
+  "settings": {
+    "title": "⚙️ 設定",
+    "language": "言語: {lang}",
+    "slippage": "スリッページ: {slippage}%",
+    "mev": "MEV保護: {mev}",
+    "changed": "{key}が{value}に設定されました"
+  },
+  "errors": {
+    "no_wallet": "まず/startでウォレットを接続してください",
+    "invalid_market": "無効なマーケットです。選択: wstETH, WBTC",
+    "invalid_leverage": "レバレッジは1.1xから{max}xの間である必要があります",
+    "simulation_failed": "取引シミュレーション失敗: {reason}",
+    "rate_limited": "リクエストが多すぎます。しばらくしてから再試行してください。",
+    "tx_failed": "取引失敗: {hash}"
+  }
+}

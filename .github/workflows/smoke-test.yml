@@ -1,0 +1,44 @@
+name: Post-Deploy Smoke Test
+
+on:
+  workflow_run:
+    workflows: ["Deploy Bot", "Deploy Mini App"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to test'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run Smoke Tests
+        run: node smoke-test.js "${{ inputs.environment == 'staging' && secrets.STAGING_URL || secrets.PRODUCTION_URL }}"
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          MINI_APP_URL: ${{ secrets.MINI_APP_URL }}
+
+      - name: Notify on Failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "fxBot smoke tests failed on ${{ inputs.environment || 'production' }}"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

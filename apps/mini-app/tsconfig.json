@@ -1,0 +1,25 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./app",
+    "strict": true,
+    "noImplicitAny": true,
+    "esModuleInterop": true,
+    "moduleResolution": "bundler",
+    "jsx": "preserve",
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "app/**/*",
+    "components/**/*",
+    "lib/**/*",
+    "hooks/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}

@@ -1,0 +1,11 @@
+export const APP_NAME = 'fxBot';
+export const APP_VERSION = '1.1.0';
+export const SUPPORTED_ASSETS = ['xETH', 'xUSD'] as const;
+export const SUPPORTED_LEVERAGE = [1, 2, 3, 5, 10, 15, 20, 31] as const;
+export const SUPPORTED_SIDES = ['long', 'short'] as const;
+export const MAX_POSITIONS_PER_USER = 10;
+export const PRICE_UPDATE_INTERVAL_MS = 30000;
+export const NOTIFICATION_CHECK_INTERVAL_MS = 60000;
+export const GAS_PRICE_UPDATE_INTERVAL_MS = 15000;
+export const DEFAULT_LANGUAGE = 'en' as const;
+export const SUPPORTED_LANGUAGES = ['en', 'zh', 'es', 'ru', 'ar', 'de'] as const;

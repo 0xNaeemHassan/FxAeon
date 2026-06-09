@@ -1,0 +1,69 @@
+{
+  "start": {
+    "welcome_new": "Welcome to fxBot — the world-class interface for f(x) Protocol.\n\n🔐 Non-custodial. Zero key custody. Trustless automation.",
+    "welcome_back": "Welcome back! Your wallet: {wallet}",
+    "connect_wallet": "🔐 Connect Wallet",
+    "how_it_works": "📖 How it works"
+  },
+  "portfolio": {
+    "title": "📊 Portfolio for {wallet}",
+    "no_positions": "No active positions.\n\nUse /trade to open a leveraged position or /mint to borrow fxUSD.",
+    "position": "{emoji} *{market} {side}* — {leverage}x\nCollateral: {collateral} | Debt: {debt}\nHealth: {health}% | Liq: ${liqPrice}"
+  },
+  "trade": {
+    "usage": "Usage: /trade <market> <long|short> <leverage> <amount>\n\nExample: /trade wstETH long 3x 1ETH",
+    "preview": "⚡ *Trade Preview*\n\nMarket: {market} {side}\nLeverage: {leverage}x\nCollateral: {amount} ETH\nSlippage: {slippage}%\n\nTap to confirm and sign:"
+  },
+  "limit": {
+    "usage": "Usage: /limit <open|close> <market> <long|short> at <price>\n\nExample: /limit open wstETH long at 2800",
+    "preview": "🎯 *Limit Order Preview*\n\nAction: {action} {market} {side}\nTrigger: ${price}\n\nTap to sign and submit:"
+  },
+  "orders": {
+    "title": "🎯 Your Limit Orders",
+    "no_orders": "No limit orders. Use /limit to place one.",
+    "order": "{status} {type} {side} @ ${price} ({tp}) — {statusText}"
+  },
+  "mint": {
+    "usage": "Usage: /mint <market> <collateral> <fxUSD amount>\n\nExample: /mint wstETH 1ETH 1500",
+    "preview": "🏦 *fxMINT Preview*\n\nCollateral: {collateral} {market}\nBorrow: {mintAmount} fxUSD\n\nTap to confirm:"
+  },
+  "save": {
+    "usage": "Usage: /save <deposit|withdraw> <amount>\n\nExample: /save deposit 1000",
+    "preview": "💰 *fxSAVE {action}*\n\nAmount: {amount} fxUSD\n\nTap to confirm:"
+  },
+  "settings": {
+    "title": "⚙️ Settings",
+    "language": "Language: {lang}",
+    "slippage": "Slippage: {slippage}%",
+    "mev": "MEV Protection: {mev}",
+    "changed": "{key} set to {value}"
+  },
+  "security": {
+    "title": "🔒 Security Center",
+    "wallet": "Wallet: {wallet}",
+    "audits": "*Audits:*\n• Trail of Bits (Apr 2024, Jul 2024)\n• OpenZeppelin (Aug 2025)\n• Secbit (Oct 2025)",
+    "policies": "*Policies:*\n• Zero key custody — keys in Privy TEE\n• Automation policy: default-deny, user-revocable\n• Daily tx cap: 50"
+  },
+  "refer": {
+    "title": "🎁 Referral Program",
+    "code": "Your code: `{code}`",
+    "link": "Share link:\nhttps://t.me/fxAladdinBot?start=ref_{code}",
+    "earnings": "Referees: {count}\nLifetime earnings: ${earnings}"
+  },
+  "help": {
+    "title": "📚 fxBot Commands",
+    "trading": "*Trading:*\n/trade — Open leveraged position\n/limit — Place limit/stop orders\n/orders — View active orders\n/mint or /borrow — Borrow fxUSD\n/redeem — Redeem fxUSD\n/repay — Repay fxUSD debt",
+    "yield": "*Yield & Governance:*\n/save — fxSAVE deposit/withdraw\n/lock — Lock FXN → veFXN\n/vote — Gauge voting\n/claim — Claim rewards",
+    "portfolio": "*Portfolio:*\n/portfolio — View positions\n/deposit — Show wallet address + QR\n/withdraw — Send to external address\n/bridge — Bridge fxUSD",
+    "automation": "*Automation:*\n/auto — Create/manage rules\n/refer — Referral link + earnings",
+    "settings": "*Settings:*\n/settings — Language, slippage, MEV\n/security — Policies, audits\n/help — This menu"
+  },
+  "errors": {
+    "no_wallet": "Please connect your wallet first with /start",
+    "invalid_market": "Invalid market. Choose: wstETH, WBTC",
+    "invalid_leverage": "Leverage must be between 1.1x and {max}x for {side}",
+    "simulation_failed": "Transaction simulation failed: {reason}",
+    "rate_limited": "Too many requests. Please wait a moment.",
+    "tx_failed": "Transaction failed: {hash}"
+  }
+}

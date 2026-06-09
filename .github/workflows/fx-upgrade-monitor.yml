@@ -1,0 +1,36 @@
+name: FX Protocol Upgrade Monitor
+
+on:
+  schedule:
+    - cron: '0 0 * * 1'  # Weekly on Monday
+  workflow_dispatch:
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for new deployments
+        run: |
+          curl -s https://raw.githubusercontent.com/AladdinDAO/fx-protocol-contracts/main/ignition/deployments/ethereum/deployed_addresses.json > /tmp/new_addresses.json
+          if [ -f docs/fx-addresses.json ]; then
+            diff docs/fx-addresses.json /tmp/new_addresses.json > /tmp/address_diff.txt || true
+            if [ -s /tmp/address_diff.txt ]; then
+              echo "⚠️ NEW DEPLOYMENTS DETECTED"
+              cat /tmp/address_diff.txt
+              # Send alert to Discord
+              curl -X POST ${{ secrets.DISCORD_WEBHOOK }}                 -H "Content-Type: application/json"                 -d '{"content": "🚨 fxBot Alert: New f(x) Protocol deployments detected. Manual review required."}'
+              cp /tmp/new_addresses.json docs/fx-addresses.json
+            else
+              echo "No changes detected"
+            fi
+          else
+            cp /tmp/new_addresses.json docs/fx-addresses.json
+          fi
+      - name: Commit if changed
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add docs/fx-addresses.json
+          git diff --cached --quiet || git commit -m "Update f(x) addresses snapshot"
+          git push

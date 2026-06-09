@@ -1,0 +1,32 @@
+{
+  "start": {
+    "welcome_new": "Добро пожаловать в fxBot — мировой интерфейс для f(x) Protocol.\n\n🔐 Некастодиальный. Нулевое хранение ключей. Бездоверительная автоматизация.",
+    "welcome_back": "С возвращением! Ваш кошелек: {wallet}",
+    "connect_wallet": "🔐 Подключить кошелек",
+    "how_it_works": "📖 Как это работает"
+  },
+  "portfolio": {
+    "title": "📊 Портфель {wallet}",
+    "no_positions": "Нет активных позиций.\n\nИспользуйте /trade для открытия позиции с плечом или /mint для займа fxUSD.",
+    "position": "{emoji} *{market} {side}* — {leverage}x\nЗалог: {collateral} | Долг: {debt}\nЗдоровье: {health}% | Ликвидация: ${liqPrice}"
+  },
+  "trade": {
+    "usage": "Использование: /trade <рынок> <лонг|шорт> <плечо> <сумма>\n\nПример: /trade wstETH long 3x 1ETH",
+    "preview": "⚡ *Предпросмотр сделки*\n\nРынок: {market} {side}\nПлечо: {leverage}x\nЗалог: {amount} ETH\nПроскальзывание: {slippage}%\n\nНажмите для подтверждения и подписи:"
+  },
+  "settings": {
+    "title": "⚙️ Настройки",
+    "language": "Язык: {lang}",
+    "slippage": "Проскальзывание: {slippage}%",
+    "mev": "MEV-защита: {mev}",
+    "changed": "{key} установлено на {value}"
+  },
+  "errors": {
+    "no_wallet": "Сначала подключите кошелек с помощью /start",
+    "invalid_market": "Неверный рынок. Выберите: wstETH, WBTC",
+    "invalid_leverage": "Плечо должно быть между 1.1x и {max}x",
+    "simulation_failed": "Симуляция транзакции не удалась: {reason}",
+    "rate_limited": "Слишком много запросов. Пожалуйста, подождите.",
+    "tx_failed": "Транзакция не удалась: {hash}"
+  }
+}
