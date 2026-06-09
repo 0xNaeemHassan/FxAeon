@@ -23,7 +23,7 @@
     "ioredis": "^5.4.0",
     "viem": "^2.13.0",
     "@privy-io/server-auth": "^1.12.0",
-    "libsodium-wrappers": "^0.7.13",
+    "libsodium-wrappers": "^0.8.4",
     "openai": "^4.47.0",
     "helmet": "^7.1.0",
     "cors": "^2.8.5",
