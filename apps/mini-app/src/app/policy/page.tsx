@@ -1,9 +1,12 @@
-function safeJSONStringify(obj: any): string { try { return JSON.stringify(obj); } catch { return '{}'; } }
 'use client';
 
 import { usePrivy } from '@privy-io/react-auth';
 import { useState } from 'react';
 import { Shield, Check, AlertTriangle } from 'lucide-react';
+
+function safeJSONStringify(obj: unknown, _replacer?: unknown, space?: number): string {
+  try { return JSON.stringify(obj, null, space); } catch { return '{}'; }
+}
 
 const POLICY = {
   name: "fxBot-automation-policy",
@@ -41,22 +44,25 @@ const POLICY = {
 };
 
 export default function PolicyPage() {
-  const { user, signMessage } = usePrivy();
-  const [isLoading, setIsLoading] = useState(false);
+  const { signMessage } = usePrivy();
   const [error, setError] = useState<string | null>(null);
   const [signed, setSigned] = useState(false);
 
   const handleSign = async () => {
-    const message = `I authorize fxBot to execute the following policy:
+    try {
+      const message = `I authorize fxBot to execute the following policy:
 
 ${safeJSONStringify(POLICY, null, 2)}
 
 This authorization is revocable at any time via /security.`;
-    await signMessage(message);
-    setSigned(true);
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.sendData(safeJSONStringify({ type: 'policy_signed' }));
-      window.Telegram.WebApp.close();
+      await signMessage(message);
+      setSigned(true);
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.sendData(safeJSONStringify({ type: 'policy_signed' }));
+        window.Telegram.WebApp.close();
+      }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Signing failed');
     }
   };
 
@@ -66,7 +72,7 @@ This authorization is revocable at any time via /security.`;
         {error && (
           <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
             <p className="text-red-700 text-sm">{error}</p>
-            <button type="button" type="button"
+            <button type="button"
               onClick={() => setError(null)}
               className="mt-2 text-red-600 text-sm hover:underline"
             >

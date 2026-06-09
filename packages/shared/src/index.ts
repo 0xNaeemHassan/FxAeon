@@ -3,3 +3,4 @@ export { RISK_PARAMETERS, getRiskParameter, getAllRiskParameters, validateLevera
 export * from './types';
 export * from './constants';
 export * from './abis';
+export * from './addresses';

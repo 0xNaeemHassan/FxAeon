@@ -1,12 +1,14 @@
-function safeJSONStringify(obj: any): string { try { return JSON.stringify(obj); } catch { return '{}'; } }
 'use client';
+
+function safeJSONStringify(obj: unknown): string { try { return JSON.stringify(obj); } catch { return '{}'; } }
 
 import { usePrivy } from '@privy-io/react-auth';
 import { useState } from 'react';
 import { ArrowLeft, KeyRound, AlertTriangle, Check, Eye, EyeOff } from 'lucide-react';
 
 export default function ImportPage() {
-  const { importWallet } = usePrivy();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { importWallet } = usePrivy() as any;
   const [isLoading, setIsLoading] = useState(false);
   const [privateKey, setPrivateKey] = useState('');
   const [showKey, setShowKey] = useState(false);

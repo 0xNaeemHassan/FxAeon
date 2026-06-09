@@ -1,6 +1,6 @@
 'use client';
 
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { usePrivy } from '@privy-io/react-auth';
 import { useState } from 'react';
 import { ArrowLeft, Plus, Pause, Play, Trash2, Clock, TrendingUp, Shield } from 'lucide-react';
 
@@ -15,10 +15,8 @@ interface Rule {
 
 export default function AutoPage() {
   const { ready } = usePrivy();
-  const { wallets } = useWallets();
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [rules, setRules] = useState<<Rule[]>([
+  const [rules, setRules] = useState<Rule[]>([
     {
       id: '1',
       name: 'Auto-compound fxSAVE',
@@ -37,8 +35,6 @@ export default function AutoPage() {
   ]);
   const [showCreate, setShowCreate] = useState(false);
 
-  const wallet = wallets[0];
-
   const toggleRule = (id: string) => {
     setRules(rules.map(r => 
       r.id === id ? { ...r, status: r.status === 'active' ? 'paused' : 'active' } : r
@@ -56,7 +52,7 @@ export default function AutoPage() {
         {error && (
           <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
             <p className="text-red-700 text-sm">{error}</p>
-            <button type="button" type="button"
+            <button type="button"
               onClick={() => setError(null)}
               className="mt-2 text-red-600 text-sm hover:underline"
             >

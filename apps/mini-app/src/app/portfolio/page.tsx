@@ -3,7 +3,6 @@
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { useState, useEffect } from 'react';
 import { ArrowLeft, TrendingUp, TrendingDown, AlertTriangle, Shield, Wallet } from 'lucide-react';
-import { ADDRESSES } from '@fxbot/shared';
 
 interface Position {
   tokenId: string;
@@ -19,7 +18,7 @@ interface Position {
 export default function PortfolioPage() {
   const { ready } = usePrivy();
   const { wallets } = useWallets();
-  const [positions, setPositions] = useState<<Position[]>([]);
+  const [positions, setPositions] = useState<Position[]>([]);
   const [loading, setLoading] = useState(true);
   const [fxSaveBalance, setFxSaveBalance] = useState('0');
   const [fxnBalance, setFxnBalance] = useState('0');
@@ -73,19 +72,6 @@ export default function PortfolioPage() {
   if (!ready) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        {/* Error Display */}
-        {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-700 text-sm">{error}</p>
-            <button type="button" type="button"
-              onClick={() => setError(null)}
-              className="mt-2 text-red-600 text-sm hover:underline"
-            >
-              Dismiss
-            </button>
-          </div>
-        )}
-
         <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
       </div>
     );

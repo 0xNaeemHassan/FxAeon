@@ -1,7 +1,6 @@
 'use client';
 
 import React, { Component, ErrorInfo, ReactNode } from 'react';
-import { useTheme } from './ThemeProvider';
 
 interface Props {
   children: ReactNode;
@@ -24,7 +23,7 @@ class ErrorBoundaryInner extends Component<Props, State> {
     isRetrying: false,
   };
 
-  public static getDerivedStateFromError(error: Error): State {
+  public static getDerivedStateFromError(error: Error): Partial<State> {
     return { hasError: true, error, errorInfo: null, isRetrying: false };
   }
 
@@ -36,9 +35,8 @@ class ErrorBoundaryInner extends Component<Props, State> {
     this.props.onError?.(error, errorInfo);
     
     // Show Telegram alert if available
-    const tg = typeof window !== 'undefined' ? (window as any).Telegram?.WebApp : null;
-    if (tg) {
-      tg.HapticFeedback?.notificationOccurred?.('error');
+    if (typeof window !== 'undefined') {
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.('error');
     }
   }
 
@@ -87,13 +85,11 @@ function ErrorFallback({
   onRetry: () => void;
   onReload: () => void;
 }) {
-  const { isDark } = useTheme();
-  
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-900">
-      <div className="max-w-md w-full bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-8 text-center border border-slate-200 dark:border-slate-700">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
+      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center border border-slate-200">
         {/* Error icon */}
-        <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-red-50 dark:bg-red-900/20 flex items-center justify-center">
+        <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-red-50 flex items-center justify-center">
           <svg 
             className="w-10 h-10 text-red-500" 
             fill="none" 
@@ -110,24 +106,24 @@ function ErrorFallback({
           </svg>
         </div>
         
-        <h1 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
+        <h1 className="text-xl font-bold text-slate-900 mb-2">
           Something went wrong
         </h1>
         
-        <p className="text-slate-500 dark:text-slate-400 mb-6">
-          We encountered an unexpected error. Don't worry, your funds are safe.
+        <p className="text-slate-500 mb-6">
+          We encountered an unexpected error. Don&apos;t worry, your funds are safe.
         </p>
         
         {/* Error details (collapsible) */}
         {error && (
           <details className="mb-6 text-left">
-            <summary className="cursor-pointer text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
+            <summary className="cursor-pointer text-sm text-slate-500 hover:text-slate-700 transition-colors">
               Error details
             </summary>
-            <div className="mt-2 p-3 bg-slate-100 dark:bg-slate-900 rounded-lg text-xs font-mono text-slate-700 dark:text-slate-300 overflow-auto max-h-40">
-              <p className="text-red-500 dark:text-red-400 font-semibold mb-1">{error.message}</p>
+            <div className="mt-2 p-3 bg-slate-100 rounded-lg text-xs font-mono text-slate-700 overflow-auto max-h-40">
+              <p className="text-red-500 font-semibold mb-1">{error.message}</p>
               {errorInfo?.componentStack && (
-                <pre className="text-slate-500 dark:text-slate-500 whitespace-pre-wrap">{errorInfo.componentStack}</pre>
+                <pre className="text-slate-500 whitespace-pre-wrap">{errorInfo.componentStack}</pre>
               )}
             </div>
           </details>
@@ -157,7 +153,7 @@ function ErrorFallback({
           
           <button type="button"
             onClick={onReload}
-            className="flex-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-medium py-3 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
+            className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-3 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -167,11 +163,11 @@ function ErrorFallback({
         </div>
         
         {/* Support link */}
-        <p className="mt-4 text-sm text-slate-400 dark:text-slate-500">
+        <p className="mt-4 text-sm text-slate-400">
           Still having issues?{' '}
           <a 
             href="https://t.me/FxAeonBot" 
-            className="text-blue-600 dark:text-blue-400 hover:underline"
+            className="text-blue-600 hover:underline"
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -183,7 +179,7 @@ function ErrorFallback({
   );
 }
 
-export function ErrorBoundary({ children, fallback, onError }: Props) {
+export default function ErrorBoundary({ children, fallback, onError }: Props) {
   return (
     <ErrorBoundaryInner fallback={fallback} onError={onError}>
       {children}

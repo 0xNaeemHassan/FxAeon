@@ -3,6 +3,7 @@
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
+import { Suspense } from 'react';
 import { ArrowLeft, Target, Check, AlertTriangle } from 'lucide-react';
 import { ADDRESSES } from '@fxbot/shared';
 
@@ -32,7 +33,7 @@ const EIP712_TYPES = {
   ],
 };
 
-export default function LimitPage() {
+function LimitPageContent() {
   const { ready } = usePrivy();
   const { wallets } = useWallets();
   const searchParams = useSearchParams();
@@ -42,7 +43,6 @@ export default function LimitPage() {
   const side = searchParams.get('side') || 'long';
   const price = searchParams.get('price') || '2800';
   
-  const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState(1);
   const [error, setError] = useState('');
   const [orderHash, setOrderHash] = useState('');
@@ -224,5 +224,13 @@ export default function LimitPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function LimitPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>}>
+      <LimitPageContent />
+    </Suspense>
   );
 }
