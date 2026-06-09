@@ -9,7 +9,7 @@ jobs:
   monitor:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Check for new deployments
         run: |
           curl -s https://raw.githubusercontent.com/AladdinDAO/fx-protocol-contracts/main/ignition/deployments/ethereum/deployed_addresses.json > /tmp/new_addresses.json
