@@ -15,7 +15,7 @@
     "@fxbot/shared": "workspace:*",
     "@fxbot/db": "workspace:*",
     "grammy": "^1.25.0",
-    "@grammyjs/conversations": "^1.2.0",
+    "@grammyjs/conversations": "^2.1.1",
     "@grammyjs/i18n": "^1.0.1",
     "@grammyjs/runner": "^2.0.1",
     "@grammyjs/transformer-throttler": "^1.2.1",
