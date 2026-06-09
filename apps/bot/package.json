@@ -31,7 +31,7 @@
     "node-cron": "^3.0.3",
     "pino": "^9.0.0",
     "zod": "^4.4.3",
-    "express": "^4.19.0",
+    "express": "^5.2.1",
     "ethers": "^6.9.0",
     "redis": "^4.6.0",
     "@grammyjs/menu": "^1.2.0",
