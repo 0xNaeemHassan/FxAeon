@@ -14,7 +14,8 @@ out/
 .env
 .env.local
 .env.*.local
-.env.production
+# .env.production is committed — it contains ONLY NEXT_PUBLIC_ vars (public client config)
+# .env.production
 !.env.example
 
 # Secret files
