@@ -20,7 +20,8 @@ docker-compose up -d
 # Set Telegram webhook
 echo "Setting Telegram webhook..."
 WEBHOOK_URL="${WEBHOOK_URL:-https://your-domain.com/webhook}"
-curl -X POST "https://api.telegram.org/bot8829006529:AAEedRLv8KKXx7DWBFbAfzBrFmtfj52S3so/setWebhook" \
+: "${TELEGRAM_BOT_TOKEN:?TELEGRAM_BOT_TOKEN env var is required}"
+curl -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
   -d "url=${WEBHOOK_URL}" \
   -d "max_connections=40" \
   -d "allowed_updates=["message","callback_query","inline_query"]"

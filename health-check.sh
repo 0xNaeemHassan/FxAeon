@@ -6,7 +6,7 @@ set -e
 #   BASE_URL: defaults to http://localhost:8080
 
 BASE_URL="${1:-http://localhost:8080}"
-TELEGRAM_TOKEN="${TELEGRAM_TOKEN:-8829006529:AAEedRLv8KKXx7DWBFbAfzBrFmtfj52S3so}"
+TELEGRAM_TOKEN="${TELEGRAM_TOKEN:?TELEGRAM_TOKEN env var is required}"
 
 # Colors
 RED='\033[0;31m'
@@ -118,7 +118,7 @@ echo "--- Ethereum RPC ---"
 RPC_STATUS=$(curl -s -X POST \
     -H "Content-Type: application/json" \
     -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' \
-    "https://eth-mainnet.g.alchemy.com/v2/JIxO3Kr6uIQpBImDQEebV" 2>/dev/null | grep -o '"result":"0x[0-9a-f]*"' | head -1)
+    "${ALCHEMY_RPC_URL:?ALCHEMY_RPC_URL env var is required}" 2>/dev/null | grep -o '"result":"0x[0-9a-f]*"' | head -1)
 
 if [ -n "$RPC_STATUS" ]; then
     BLOCK_HEX=$(echo "$RPC_STATUS" | grep -o '0x[0-9a-f]*' | head -1)
@@ -164,8 +164,8 @@ fi
 echo ""
 echo "--- Upstash Redis ---"
 UPSTASH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-    "https://allowed-honeybee-114181.upstash.io" \
-    -H "Authorization: Bearer gQAAAAAAAb4FAAIgcDI0ZjczYzM4YmQwZDE0NjFlYWVmYmVhNTZmMTFlYzcxMw" 2>/dev/null || echo "000")
+    "${REDIS_URL:?REDIS_URL env var is required}" \
+    -H "Authorization: Bearer ${REDIS_TOKEN:?REDIS_TOKEN env var is required}" 2>/dev/null || echo "000")
 if [ "$UPSTASH_STATUS" = "200" ] || [ "$UPSTASH_STATUS" = "401" ]; then
     log_pass "Upstash Redis responds (HTTP $UPSTASH_STATUS)"
 else
