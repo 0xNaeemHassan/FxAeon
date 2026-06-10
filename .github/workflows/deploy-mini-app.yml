@@ -24,12 +24,13 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package
+        run: pnpm --filter @fxbot/shared build
 
       - name: Build Mini App
-        run: |
-          cd apps/mini-app
-          pnpm build
+        run: pnpm --filter @fxbot/mini-app build
         env:
           NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID }}
           NEXT_PUBLIC_TELEGRAM_BOT_USERNAME: ${{ secrets.TELEGRAM_BOT_USERNAME }}
