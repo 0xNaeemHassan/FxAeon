@@ -2,10 +2,14 @@ FROM node:22-alpine
 
 WORKDIR /app
 
+# Build tools for native modules (@sentry/profiling-node, keccak, etc.)
+# plus openssl for Prisma engine
+RUN apk add --no-cache python3 make g++ openssl
+
 # Install pnpm
 RUN npm install -g pnpm@9
 
-# Copy workspace files
+# Copy workspace config + per-package manifests (cache-friendly layer)
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/db/package.json ./packages/db/
@@ -19,8 +23,9 @@ COPY packages/shared/ ./packages/shared/
 COPY packages/db/ ./packages/db/
 COPY apps/bot/ ./apps/bot/
 
-# Build
+# Build all workspaces (turbo: shared → db → bot)
 RUN pnpm build
 
-# Run
+ENV NODE_ENV=production
+
 CMD ["node", "apps/bot/dist/main.js"]
