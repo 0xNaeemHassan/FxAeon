@@ -2,7 +2,7 @@ name: Deploy Mini App to Cloudflare Pages
 
 on:
   push:
-    branches: [master]  # was: [main]
+    branches: [main]
     paths:
       - 'apps/mini-app/**'
       - 'packages/shared/**'
