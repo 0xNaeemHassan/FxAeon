@@ -1,13 +1,4 @@
-name = "fxbot-mini-app"
+name = "fxaeon"
 compatibility_date = "2026-06-09"
 compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = "apps/mini-app/dist"
-
-[env.production]
-name = "fxbot-mini-app"
-
-[env.preview]
-name = "fxbot-mini-app-preview"
-
-[build]
-command = "pnpm --filter @fxbot/shared build && pnpm --filter @fxaeon/mini-app build"
