@@ -1,12 +1,12 @@
 import { Context } from "grammy";
 import { prisma } from "@fxbot/db";
 
-export async function async claimCommand(ctx: Context) {
+export async function claimCommand(ctx: Context) {
   const telegramId = ctx.from?.id.toString();
   if (!telegramId) return;
 
   const user = await prisma.user.findUnique({ where: { telegramId } });
-  async if(!user) {
+  if(!user) {
     await ctx.reply("Please connect your wallet first with /start");
     return;
   }

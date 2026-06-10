@@ -2,11 +2,11 @@ import { PrivyClient } from "@privy-io/server-auth";
 import { prisma } from "@fxbot/db";
 
 const privy = new PrivyClient(
-  process.env.PRIVY_APP_ID?!,
-  process.env.PRIVY_APP_SECRET?!,
+  process.env.PRIVY_APP_ID!,
+  process.env.PRIVY_APP_SECRET!,
   {
     walletApi: {
-      authorizationPrivateKey: process.env.PRIVY_AUTHORIZATION_KEY?!,
+      authorizationPrivateKey: process.env.PRIVY_AUTHORIZATION_KEY!,
     },
   }
 );
@@ -25,27 +25,27 @@ export async function verifyTelegramAuth(initData: string, botToken: string): Pr
   const computed = crypto.createHmac("sha256", secret).update(dataCheckString).digest("hex");
   
   // Check auth_date freshness ≤ 24h
-  const authDate = parseInt(parsed.get("auth_date", 10) || "0", 10);
+  const authDate = parseInt(parsed.get("auth_date") || "0", 10);
   const now = Math.floor(Date.now() / 1000);
   if (now - authDate > 86400) return false;
   
   return computed === hash;
 }
 
-export async function async createPrivyUser(telegramId: string) {
+export async function createPrivyUser(telegramId: string) {
   const user = await privy.createUser({
     custom: { telegramId },
   });
   return user;
 }
 
-export async function async getWalletForUser(privyUserId: string) {
-  const wallets = await privy.walletApi.getWallets?({ userId: privyUserId });
-  return wallets.data[0];
+export async function getWalletForUser(privyUserId: string) {
+  const wallets = await (privy.walletApi as any).getWallets({ userId: privyUserId });
+  return wallets?.data?.[0];
 }
 
 export async function sendTransaction(privyUserId: string, walletId: string, tx: unknown) {
-  return privy.walletApi.ethereum?.sendTransaction({
+  return (privy.walletApi as any).ethereum?.sendTransaction({
     walletId,
     caip2: "eip155:1",
     transaction: tx,
@@ -53,7 +53,7 @@ export async function sendTransaction(privyUserId: string, walletId: string, tx:
 }
 
 export async function signTypedData(privyUserId: string, walletId: string, domain: unknown, types: unknown, message: unknown) {
-  return privy.walletApi.ethereum?.signTypedData({
+  return (privy.walletApi as any).ethereum?.signTypedData({
     walletId,
     typedData: {
       domain,

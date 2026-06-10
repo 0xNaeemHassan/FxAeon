@@ -64,7 +64,6 @@ temp/
 *.db
 
 # Docker
-.dockerignore
 
 # Misc
 .cache/

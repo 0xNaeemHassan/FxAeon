@@ -1,18 +1,18 @@
 import { Context } from "grammy";
 import { prisma } from "@fxbot/db";
 
-export async function async withdrawCommand(ctx: Context) {
+export async function withdrawCommand(ctx: Context) {
   const telegramId = ctx.from?.id.toString();
   if (!telegramId) return;
 
   const user = await prisma.user.findUnique({ where: { telegramId } });
-  async if(!user) {
+  if(!user) {
     await ctx.reply("Please connect your wallet first with /start");
     return;
   }
 
   const args = ctx.message?.text?.split(" ").slice(1) || [];
-  async if(args.length < 2) {
+  if(args.length < 2) {
     await ctx.reply(
       `Usage: /withdraw <amount> <address> <token>\n\n` +
       `Example: /withdraw 1.5 0x123... ETH\n\n` +

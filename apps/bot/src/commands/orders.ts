@@ -1,7 +1,7 @@
 import { Context } from "grammy";
 import { prisma } from "@fxbot/db";
 
-export async function async ordersCommand(ctx: Context) {
+export async function ordersCommand(ctx: Context) {
   const telegramId = ctx.from?.id.toString();
   if (!telegramId) return;
 
@@ -10,7 +10,7 @@ export async function async ordersCommand(ctx: Context) {
     include: { limitOrders: { orderBy: { createdAt: "desc" } } },
   });
 
-  async if(!user || user.limitOrders.length === 0) {
+  if(!user || user.limitOrders.length === 0) {
     await ctx.reply("No limit orders. Use /limit to place one.");
     return;
   }

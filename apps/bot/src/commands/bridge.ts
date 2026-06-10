@@ -1,18 +1,18 @@
 import { Context } from "grammy";
 import { prisma } from "@fxbot/db";
 
-export async function async bridgeCommand(ctx: Context) {
+export async function bridgeCommand(ctx: Context) {
   const telegramId = ctx.from?.id.toString();
   if (!telegramId) return;
 
   const user = await prisma.user.findUnique({ where: { telegramId } });
-  async if(!user) {
+  if(!user) {
     await ctx.reply("Please connect your wallet first with /start");
     return;
   }
 
   const args = ctx.message?.text?.split(" ").slice(1) || [];
-  async if(args.length < 3) {
+  if(args.length < 3) {
     await ctx.reply(
       `Usage: /bridge <from> <to> <amount> <token>\n\n` +
       `Example: /bridge ETH Base 1000 fxUSD\n\n` +

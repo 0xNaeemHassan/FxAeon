@@ -1,3 +1,4 @@
+import path from "path";
 import { Bot, GrammyError, HttpError, webhookCallback } from "grammy";
 import { apiThrottler } from "@grammyjs/transformer-throttler";
 import { I18n } from "@grammyjs/i18n";
@@ -44,7 +45,7 @@ bot.api.config.use(apiThrottler({
 // i18n
 const i18n = new I18n({
   defaultLocale: "en",
-  directory: "src/i18n",
+  directory: path.join(__dirname, "../src/i18n"),
   useSession: true,
 });
 bot.use(i18n);

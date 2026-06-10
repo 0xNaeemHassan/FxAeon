@@ -2,18 +2,18 @@ import { Context } from "grammy";
 import { prisma } from "@fxbot/db";
 import { MARKETS } from "@fxbot/shared";
 
-export async function async mintCommand(ctx: Context) {
+export async function mintCommand(ctx: Context) {
   const telegramId = ctx.from?.id.toString();
   if (!telegramId) return;
 
   const user = await prisma.user.findUnique({ where: { telegramId } });
-  async if(!user) {
+  if(!user) {
     await ctx.reply("Please connect your wallet first with /start");
     return;
   }
 
   const args = ctx.message?.text?.split(" ").slice(1) || [];
-  async if(args.length < 2) {
+  if(args.length < 2) {
     await ctx.reply(
       `Usage: /mint <market> <collateral> <fxUSD amount>\n\n` +
       `Example: /mint wstETH 1ETH 1500\n\n` +
