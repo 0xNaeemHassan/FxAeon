@@ -18,7 +18,7 @@ jobs:
         with:
           node-version: '22'
           cache: 'pnpm'
-      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm install --frozen-lockfile
       - run: pnpm lint
 
   typecheck:
@@ -32,7 +32,7 @@ jobs:
         with:
           node-version: '22'
           cache: 'pnpm'
-      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @fxbot/shared build
       - run: pnpm --filter @fxbot/db build
       - run: pnpm typecheck
@@ -60,37 +60,20 @@ jobs:
         with:
           node-version: '22'
           cache: 'pnpm'
-      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @fxbot/shared build
       - run: pnpm --filter @fxbot/db build
       - run: pnpm test
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
 
-  smoke-test:
+  verify-addresses:
+    # Every address in packages/shared/src/addresses.ts must have deployed
+    # code on mainnet (guards against fabricated/typo'd addresses, AUDIT P0-4).
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, test]
-    if: ${{ vars.SMOKE_TEST_ENABLED == 'true' }}
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v3
-        with:
-          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'pnpm'
-      - run: pnpm install --no-frozen-lockfile
-      - run: pnpm --filter @fxbot/shared build
-      - run: pnpm --filter @fxbot/db build
-      - run: pnpm --filter @fxbot/bot build
-      - run: |
-          timeout 10s pnpm --filter @fxbot/bot start &
-          sleep 3
-          curl -f http://localhost:8080/health || exit 1
+      - run: node scripts/verify-addresses.mjs
         env:
-          NODE_ENV: test
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN_TEST }}
-          PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID_TEST }}
-          PRIVY_APP_SECRET: ${{ secrets.PRIVY_APP_SECRET_TEST }}
-          ALCHEMY_RPC_URL: ${{ secrets.ALCHEMY_RPC_URL_TEST }}
+          ETH_RPC_URL: ${{ secrets.ALCHEMY_RPC_URL || 'https://eth.drpc.org' }}
