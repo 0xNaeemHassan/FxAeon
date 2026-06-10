@@ -1,0 +1,29 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Root Directory must be the repo root so the Docker context
+# can reach packages/*, apps/*, and workspace config files.
+
+services:
+  - type: web
+    name: fxbot
+    runtime: docker
+    dockerfilePath: ./apps/bot/Dockerfile
+    dockerContext: .
+    plan: starter
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: PRIVY_APP_ID
+        sync: false
+      - key: PRIVY_APP_SECRET
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
