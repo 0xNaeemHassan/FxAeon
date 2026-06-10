@@ -16,68 +16,21 @@ function TradePageContent() {
   const leverage = parseFloat(searchParams.get('lev') || '3');
   const amount = searchParams.get('amt') || '1';
   
-  const [step, setStep] = useState(1); // 1: confirm, 2: simulating, 3: signing, 4: done
-  const [error, setError] = useState('');
-  const [txHash, setTxHash] = useState('');
+  const [step] = useState(1); // 1: confirm, 2: simulating, 3: signing, 4: done
+  const [error] = useState('');
+  const [txHash] = useState('');
 
   const wallet = wallets[0];
   const isLong = side === 'long';
   const maxLev = isLong ? 7 : 3;
   const isValid = leverage >= 1.1 && leverage <= maxLev;
 
-  const handleConfirm = async () => {
-    if (!wallet) {
-      setError('No wallet connected. Please log in first.');
-      return;
-    }
-    
-    setStep(2);
-    setError('');
-    
-    try {
-      const provider = await wallet.getEthereumProvider();
-      
-      // Build tx from fx-sdk plan
-      // TODO: Replace with real fx-sdk encoded calldata when backend is ready
-      const tx = {
-        to: '0x33636D49FbefBE798e15e7F356E8DBef543CC708', // Router
-        data: '0x', // Would be encoded from fx-sdk
-        value: '0x0',
-        from: wallet.address,
-      };
-      
-      setStep(3);
-      
-      const hash = await provider.request({
-        method: 'eth_sendTransaction',
-        params: [tx],
-      });
-      
-      setTxHash(hash as string);
-      setStep(4);
-      
-      // Send back to Telegram
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.sendData(JSON.stringify({
-          type: 'trade_executed',
-          hash,
-          market,
-          side,
-          leverage,
-          amount,
-        }));
-      }
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      // Don't show error for user rejections
-      if (msg.includes('user rejected') || msg.includes('User denied')) {
-        setError('Transaction cancelled.');
-      } else {
-        setError(msg);
-      }
-      setStep(1);
-    }
-  };
+  // SAFETY KILL-SWITCH (see docs/audit/AUDIT.md P0-2):
+  // The previous implementation broadcast an empty-calldata transaction to the
+  // Router (user pays gas for a no-op) and reported a fake success back to the
+  // bot. Execution stays disabled until real fx-sdk calldata + a passing
+  // simulateContract gate exist (PLAN.md W-07). Do not re-enable without both.
+  const EXECUTION_LIVE = false;
 
   if (!ready) {
     return (
@@ -161,12 +114,23 @@ function TradePageContent() {
       )}
 
       {step === 1 && (
-        <button type="button" onClick={handleConfirm}
-          disabled={!isValid || !wallet}
-          className="w-full btn-touch bg-primary text-white py-3 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Confirm & Sign
-        </button>
+        <>
+          {!EXECUTION_LIVE && (
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-4">
+              <p className="text-sm text-blue-700 dark:text-blue-400">
+                <AlertTriangle className="w-4 h-4 inline mr-1" />
+                Trade execution is not live yet. This is a preview only — no
+                transaction will be sent and no funds will move.
+              </p>
+            </div>
+          )}
+          <button type="button"
+            disabled
+            className="w-full btn-touch bg-primary text-white py-3 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Execution coming soon
+          </button>
+        </>
       )}
 
       {(step === 2 || step === 3) && (

@@ -14,25 +14,6 @@ const EIP712_DOMAIN = {
   verifyingContract: ADDRESSES.LIMIT_ORDER_MANAGER,
 };
 
-const EIP712_TYPES = {
-  Order: [
-    { name: "maker", type: "address" },
-    { name: "pool", type: "address" },
-    { name: "positionId", type: "uint256" },
-    { name: "positionSide", type: "bool" },
-    { name: "orderType", type: "bool" },
-    { name: "orderSide", type: "bool" },
-    { name: "allowPartialFill", type: "bool" },
-    { name: "triggerPrice", type: "uint256" },
-    { name: "fxUSDDelta", type: "int256" },
-    { name: "collDelta", type: "int256" },
-    { name: "debtDelta", type: "int256" },
-    { name: "nonce", type: "uint256" },
-    { name: "salt", type: "bytes32" },
-    { name: "deadline", type: "uint256" },
-  ],
-};
-
 function LimitPageContent() {
   const { ready } = usePrivy();
   const { wallets } = useWallets();
@@ -44,9 +25,9 @@ function LimitPageContent() {
   const side = searchParams.get('side') || 'long';
   const price = searchParams.get('price') || '2800';
   
-  const [step, setStep] = useState(1);
-  const [error, setError] = useState('');
-  const [orderHash, setOrderHash] = useState('');
+  const [step] = useState(1);
+  const [error] = useState('');
+  const [orderHash] = useState('');
 
   const wallet = wallets[0];
   const isLong = side === 'long';
@@ -61,69 +42,13 @@ function LimitPageContent() {
     ? (market === 'wstETH' ? ADDRESSES.WSTETH_LONG_POOL : ADDRESSES.WBTC_LONG_POOL)
     : (market === 'wstETH' ? ADDRESSES.WSTETH_SHORT_POOL : ADDRESSES.WBTC_SHORT_POOL);
 
-  const handleSign = async () => {
-    setStep(2);
-    
-    try {
-      const provider = await wallet.getEthereumProvider();
-      
-      const order = {
-        maker: wallet.address,
-        pool: poolAddress,
-        positionId: 0, // 0 = new position
-        positionSide: isLong,
-        orderType: !isOpen, // false = open, true = close
-        orderSide: isTP,
-        allowPartialFill: false,
-        triggerPrice: BigInt(Math.floor(targetPrice * 1e18)),
-        fxUSDDelta: 0,
-        collDelta: 0,
-        debtDelta: 0,
-        nonce: Date.now(),
-        salt: '0x' + Array(64).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join(''),
-        deadline: Math.floor(Date.now() / 1000) + 86400, // 24h
-      };
-      
-      const signature = await provider.request({
-        method: 'eth_signTypedData_v4',
-        params: [wallet.address, JSON.stringify({
-          domain: EIP712_DOMAIN,
-          types: EIP712_TYPES,
-          primaryType: 'Order',
-          message: order,
-        })],
-      });
-      
-      // Submit to relayer
-      const res = await fetch('https://fx-limit-order-api.aladdin.club/v1/order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orderHash: '0x...', // Compute from order
-          data: order,
-          signature,
-        }),
-      });
-      
-      const data = await res.json();
-      setOrderHash(data.orderHash || 'submitted');
-      setStep(3);
-      
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.sendData(JSON.stringify({
-          type: 'limit_order_signed',
-          orderHash: data.orderHash,
-          market,
-          side,
-          action,
-          price: targetPrice,
-        }));
-      }
-    } catch (e: any) {
-      setError(e.message);
-      setStep(1);
-    }
-  };
+  // SAFETY KILL-SWITCH (see docs/audit/AUDIT.md P0-6):
+  // The previous implementation signed an EIP-712 order with a Math.random()
+  // salt, Date.now() nonce, hardcoded zero deltas, an unverified domain, and
+  // submitted a placeholder orderHash ('0x...') to the relayer. Signing stays
+  // disabled until the typed data is verified against the deployed
+  // LimitOrderManager and hashed with hashTypedData (PLAN.md W-09 / A2).
+  const SIGNING_LIVE = false;
 
   if (!ready) {
     return (
@@ -195,11 +120,22 @@ function LimitPageContent() {
       )}
 
       {step === 1 && (
-        <button type="button" onClick={handleSign}
-          className="w-full bg-primary text-white py-3 rounded-lg font-medium hover:bg-primary/90"
-        >
-          Sign EIP-712 & Submit
-        </button>
+        <>
+          {!SIGNING_LIVE && (
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-4">
+              <p className="text-sm text-blue-700 dark:text-blue-400">
+                Limit orders are not live yet. This is a preview only — nothing
+                will be signed or submitted.
+              </p>
+            </div>
+          )}
+          <button type="button"
+            disabled
+            className="w-full bg-primary text-white py-3 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Limit orders coming soon
+          </button>
+        </>
       )}
 
       {step === 2 && (
