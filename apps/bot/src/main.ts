@@ -1,8 +1,7 @@
 import { Bot, GrammyError, HttpError, webhookCallback } from "grammy";
 import { apiThrottler } from "@grammyjs/transformer-throttler";
 import { I18n } from "@grammyjs/i18n";
-import { conversations, createConversation } from "@grammyjs/conversations";
-import { run } from "@grammyjs/runner";
+import { conversations } from "@grammyjs/conversations";
 import { prisma } from "@fxbot/db";
 import { ADDRESSES } from "@fxbot/shared";
 
@@ -33,10 +32,10 @@ import { limitOrderPolling } from "./notifications/limit-order-poller";
 import { healthMonitor } from "./notifications/health-monitor";
 import { txNotifier } from "./notifications/tx-notifier";
 
-const bot = new Bot(process.env.TELEGRAM_BOT_TOKEN?!);
+const bot = new Bot(process.env.TELEGRAM_BOT_TOKEN!);
 
 // Rate limiting: 30 msg/s global, 1 msg/s per user
-bot.api.config?.use(apiThrottler({
+bot.api.config.use(apiThrottler({
   global: { reservoir: 30, reservoirRefreshAmount: 30, reservoirRefreshInterval: 1000 },
   group: { reservoir: 20, reservoirRefreshAmount: 20, reservoirRefreshInterval: 60_000 },
   out: { maxConcurrent: 1, minTime: 1000 },
@@ -79,7 +78,7 @@ bot.command("help", helpCommand);
 // Error handling
 bot.catch((err) => {
   const ctx = err.ctx;
-  console.error(`Error while handling update ${ctx.update.update_id?}:`);
+  console.error(`Error while handling update ${ctx.update.update_id}:`);
   const e = err.error;
   if (e instanceof GrammyError) {
     console.error("Error in request:", e.description);
@@ -96,18 +95,22 @@ healthMonitor.start();
 txNotifier.start();
 
 // Start bot
-if (process.env.NODE_ENV? === "production") {
-  // Webhook mode for Fly.io
-  const port = parseInt(process.env.PORT? || "8080", 10);
-  const app = require("express")();
-  app.use(require("helmet")());
-  app.use(require("express").json());
+if (process.env.NODE_ENV === "production") {
+  // Webhook mode for production
+  const port = parseInt(process.env.PORT || "8080", 10);
+  const express = require("express");
+  const helmet = require("helmet");
+  const app = express();
+  app.use(helmet());
+  app.use(express.json());
   app.post("/webhook", webhookCallback(bot, "express"));
   app.post("/privy-webhook", privyWebhookHandler);
-  app.get("/health", (_req: unknown, res: unknown) => res.setHeader('Content-Type', 'application/json');
-  res.json({ ok: true }));
+  app.get("/health", (_req: any, res: any) => {
+    res.setHeader("Content-Type", "application/json");
+    res.json({ ok: true });
+  });
   app.listen(port, () => console.log(`Bot listening on port ${port}`));
 } else {
   bot.start();
-  if (process.env.NODE_ENV? !== "production") console.log("Bot started in polling mode");
+  console.log("Bot started in polling mode");
 }

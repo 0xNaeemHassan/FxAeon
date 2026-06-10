@@ -28,6 +28,7 @@ model User {
   auditLogs       AuditLog[]
   notifications   NotificationPref?
   aiKeys          AiKey?
+  transactions    Transaction[]
 
   @@index([telegramId])
   @@index([walletAddress])
