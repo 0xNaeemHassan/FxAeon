@@ -1,3 +1,22 @@
+/**
+ * SINGLE SOURCE OF TRUTH for f(x) Protocol mainnet addresses.
+ *
+ * Provenance (verified 2026-06-10, see docs/audit/AUDIT.md appendix):
+ * - Core protocol entries match AladdinDAO fx-protocol-contracts
+ *   ignition/deployments/ethereum/deployed_addresses.json
+ *   (ROUTER = Router#Diamond, pool managers, FXUSD, FXUSD_BASE_POOL, PEG_KEEPER).
+ * - Pools & tokens confirmed live on mainnet with matching token symbols
+ *   (Blockscout).
+ * - ⚠️ LIMIT_ORDER_MANAGER is a live TransparentUpgradeableProxy but is NOT in
+ *   the ignition manifest; its identity is unverified against an official f(x)
+ *   source (PLAN.md owner action A2). Do not build limit-order signing against
+ *   it until confirmed.
+ *
+ * Rules:
+ * - Never add or change an address without a verification citation in the PR.
+ * - Do NOT reintroduce a parallel registry (the old contracts.ts contained
+ *   fabricated addresses with no code on mainnet — AUDIT.md P0-4).
+ */
 export const ADDRESSES = {
   // Core Protocol
   ROUTER: "0x33636D49FbefBE798e15e7F356E8DBef543CC708",
