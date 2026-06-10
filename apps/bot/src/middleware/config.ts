@@ -6,7 +6,7 @@ import { logger } from "./logger.js";
  * Everything else is optional — missing keys disable the corresponding feature
  * but the bot still boots and responds to commands.
  */
-const envSchema = z.object({
+export const envSchema = z.object({
   // ── Core (required) ──────────────────────────────────────
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   TELEGRAM_BOT_TOKEN: z.string().min(1),
@@ -27,11 +27,53 @@ const envSchema = z.object({
 
   // ── Encryption ───────────────────────────────────────────
   KMS_MASTER_KEY: z.string().length(64).optional(),
+  ENCRYPTION_KEY: z.string().min(32).optional(),
+
+  // ── Webhook authentication ───────────────────────────────
+  TELEGRAM_WEBHOOK_SECRET: z.string().min(32).optional(),
+  PRIVY_WEBHOOK_SECRET: z.string().min(1).optional(),
+
+  // ── Webhook URL (production webhook mode) ────────────────
+  RENDER_EXTERNAL_URL: z.string().url().optional(),
+  WEBHOOK_URL: z.string().url().optional(),
 
   // ── Optional services ────────────────────────────────────
   SURPLUS_API_KEY: z.string().optional(),
   MINI_APP_URL: z.string().url().default("https://fxbot-mini-app.pages.dev"),
   DAILY_TX_CAP: z.string().default("50"),
+}).superRefine((cfg, ctx) => {
+  // ── Production fail-fast (PLAN.md W-05) ────────────────────────────────
+  // A money-touching bot must not boot into a silently-degraded state.
+  // Anything security-critical that is missing kills the process at startup
+  // with an explicit list of what to set.
+  if (cfg.NODE_ENV !== "production") return;
+
+  const fail = (path: string, message: string) =>
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path], message });
+
+  if (!cfg.TELEGRAM_WEBHOOK_SECRET) {
+    fail("TELEGRAM_WEBHOOK_SECRET",
+      "required in production — webhook auth (generate with: openssl rand -hex 32)");
+  }
+  if (!cfg.ENCRYPTION_KEY) {
+    fail("ENCRYPTION_KEY",
+      "required in production — at-rest encryption key (generate with: openssl rand -hex 32)");
+  }
+  if (!cfg.RENDER_EXTERNAL_URL && !cfg.WEBHOOK_URL) {
+    fail("WEBHOOK_URL",
+      "set RENDER_EXTERNAL_URL or WEBHOOK_URL in production — otherwise the Telegram webhook is never registered and the bot is unreachable");
+  }
+  // Privy is optional as a feature, but if it is configured at all it must be
+  // configured completely — a partial config means signed webhooks get
+  // rejected or wallet auth half-works.
+  if (cfg.PRIVY_APP_ID || cfg.PRIVY_APP_SECRET) {
+    if (!cfg.PRIVY_APP_ID) fail("PRIVY_APP_ID", "required when PRIVY_APP_SECRET is set");
+    if (!cfg.PRIVY_APP_SECRET) fail("PRIVY_APP_SECRET", "required when PRIVY_APP_ID is set");
+    if (!cfg.PRIVY_WEBHOOK_SECRET) {
+      fail("PRIVY_WEBHOOK_SECRET",
+        "required in production when Privy is configured — SVIX signing secret (whsec_…) from the Privy dashboard");
+    }
+  }
 });
 
 export type Env = z.infer<typeof envSchema>;
