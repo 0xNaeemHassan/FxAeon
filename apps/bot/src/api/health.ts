@@ -3,7 +3,10 @@ import { Router } from "express";
 import { prisma } from "@fxbot/db";
 import Redis from "ioredis";
 
-const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
+// Only create a Redis client if REDIS_URL is configured
+const redis = process.env.REDIS_URL
+  ? new Redis(process.env.REDIS_URL)
+  : null;
 
 export const healthRouter = Router();
 
@@ -19,32 +22,36 @@ healthRouter.get("/", async (req, res) => {
   }
   
   // Check Redis
-  let redisStatus = "healthy";
-  try {
-    await redis.ping();
-  } catch (e) {
-    redisStatus = "unhealthy";
+  let redisStatus = redis ? "healthy" : "skipped";
+  if (redis) {
+    try {
+      await redis.ping();
+    } catch (e) {
+      redisStatus = "unhealthy";
+    }
   }
   
   // Check Alchemy RPC
-  let rpcStatus = "healthy";
-  try {
-    const response = await fetch(process.env.ALCHEMY_RPC_URL!, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: safeJSONStringify({
-        jsonrpc: "2.0",
-        method: "eth_blockNumber",
-        params: [],
-        id: 1,
-      }),
-    });
-    if (!response.ok) rpcStatus = "degraded";
-  } catch (e) {
-    rpcStatus = "unhealthy";
+  let rpcStatus = process.env.ALCHEMY_RPC_URL ? "healthy" : "skipped";
+  if (process.env.ALCHEMY_RPC_URL) {
+    try {
+      const response = await fetch(process.env.ALCHEMY_RPC_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: safeJSONStringify({
+          jsonrpc: "2.0",
+          method: "eth_blockNumber",
+          params: [],
+          id: 1,
+        }),
+      });
+      if (!response.ok) rpcStatus = "degraded";
+    } catch (e) {
+      rpcStatus = "unhealthy";
+    }
   }
   
-  const overall = dbStatus === "healthy" && redisStatus === "healthy" ? "healthy" : "degraded";
+  const overall = dbStatus === "healthy" ? "healthy" : "degraded";
   
   res.status(overall === "healthy" ? 200 : 503).json({
     status: overall,

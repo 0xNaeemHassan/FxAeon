@@ -1,21 +1,37 @@
 import { z } from "zod";
 import { logger } from "./logger.js";
 
+/**
+ * Core env vars required for the bot to start at all (Telegram + DB).
+ * Everything else is optional — missing keys disable the corresponding feature
+ * but the bot still boots and responds to commands.
+ */
 const envSchema = z.object({
+  // ── Core (required) ──────────────────────────────────────
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   TELEGRAM_BOT_TOKEN: z.string().min(1),
-  PRIVY_APP_ID: z.string().min(1),
-  PRIVY_APP_SECRET: z.string().min(1),
-  PRIVY_AUTHORIZATION_KEY: z.string().min(1),
-  DATABASE_URL: z.string().url(),
-  REDIS_URL: z.string().url(),
-  ALCHEMY_RPC_URL: z.string().url(),
-  KMS_MASTER_KEY: z.string().length(64),
+  DATABASE_URL: z.string().min(1),
+  PORT: z.string().default("8080"),
+  LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).default("info"),
+
+  // ── Privy (wallet creation & auth) ───────────────────────
+  PRIVY_APP_ID: z.string().min(1).optional(),
+  PRIVY_APP_SECRET: z.string().min(1).optional(),
+  PRIVY_AUTHORIZATION_KEY: z.string().min(1).optional(),
+
+  // ── Blockchain / RPC ─────────────────────────────────────
+  ALCHEMY_RPC_URL: z.string().url().optional(),
+
+  // ── Redis (rate limiting, queues, caching) ───────────────
+  REDIS_URL: z.string().min(1).optional(),
+
+  // ── Encryption ───────────────────────────────────────────
+  KMS_MASTER_KEY: z.string().length(64).optional(),
+
+  // ── Optional services ────────────────────────────────────
   SURPLUS_API_KEY: z.string().optional(),
   MINI_APP_URL: z.string().url().default("https://fxbot-mini-app.pages.dev"),
   DAILY_TX_CAP: z.string().default("50"),
-  LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).default("info"),
-  PORT: z.string().default("8080"),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -25,7 +41,26 @@ export function validateConfig(): Env {
   if (validatedEnv) return validatedEnv;
   try {
     validatedEnv = envSchema.parse(process.env);
-    logger.info({ nodeEnv: validatedEnv.NODE_ENV, logLevel: validatedEnv.LOG_LEVEL }, "Configuration validated");
+    logger.info(
+      { nodeEnv: validatedEnv.NODE_ENV, logLevel: validatedEnv.LOG_LEVEL },
+      "Configuration validated — core env OK",
+    );
+
+    // Warn about missing optional vars so operators know what's disabled
+    const optionalChecks: [string, unknown, string][] = [
+      ["PRIVY_APP_ID", validatedEnv.PRIVY_APP_ID, "Wallet creation disabled"],
+      ["PRIVY_APP_SECRET", validatedEnv.PRIVY_APP_SECRET, "Privy auth disabled"],
+      ["PRIVY_AUTHORIZATION_KEY", validatedEnv.PRIVY_AUTHORIZATION_KEY, "Privy wallet API disabled"],
+      ["ALCHEMY_RPC_URL", validatedEnv.ALCHEMY_RPC_URL, "Blockchain RPC calls disabled"],
+      ["REDIS_URL", validatedEnv.REDIS_URL, "Rate limiting & queues disabled"],
+      ["KMS_MASTER_KEY", validatedEnv.KMS_MASTER_KEY, "Encryption disabled"],
+    ];
+    for (const [key, value, impact] of optionalChecks) {
+      if (!value) {
+        logger.warn({ key }, `${key} not set — ${impact}`);
+      }
+    }
+
     return validatedEnv;
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -42,8 +77,14 @@ export function getConfig(): Env {
   return validatedEnv;
 }
 
+/** Feature flags derived from available env vars */
 export const features = {
-  enableAi: !!process.env.SURPLUS_API_KEY,
+  get enablePrivy() { return !!(process.env.PRIVY_APP_ID && process.env.PRIVY_APP_SECRET); },
+  get enablePrivyWalletApi() { return !!(features.enablePrivy && process.env.PRIVY_AUTHORIZATION_KEY); },
+  get enableBlockchain() { return !!process.env.ALCHEMY_RPC_URL; },
+  get enableRedis() { return !!process.env.REDIS_URL; },
+  get enableEncryption() { return !!process.env.KMS_MASTER_KEY; },
+  get enableAi() { return !!process.env.SURPLUS_API_KEY; },
   enableByok: true,
   enableFlashbots: true,
   enableNotifications: true,
