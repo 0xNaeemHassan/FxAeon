@@ -1,4 +1,3 @@
-export { CONTRACTS, getContractAddress, getAllContracts } from './contracts.js';
 export {
   RISK_PARAMETERS, RISK_PARAMS, HEALTH_LEVELS,
   computeHealthPercent, computeLiquidationPrice,
