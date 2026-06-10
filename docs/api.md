@@ -1,193 +1,38 @@
-# fxBot API Documentation
+# fxBot HTTP API
 
-## Base URL
-```
-https://api.fxbot.io/v1
-```
+The bot exposes a small HTTP surface from the single Express server in
+`apps/bot/src/main.ts` (webhook mode, production only). There is **no public
+REST API**; everything below exists to serve Telegram, Privy, the Mini App,
+and the hosting platform.
 
-## Authentication
-All API requests require a valid API key passed in the `Authorization` header:
-```
-Authorization: Bearer <YOUR_API_KEY>
-```
-
-## Environment Variables
-
-| Variable | Description | Required | Default |
-|----------|-------------|----------|---------|
-| `BOT_TOKEN` | Telegram bot token | Yes | - |
-| `DATABASE_URL` | PostgreSQL connection string | Yes | - |
-| `REDIS_URL` | Redis connection string | Yes | - |
-| `PRIVY_APP_ID` | Privy app ID | Yes | - |
-| `PRIVY_APP_SECRET` | Privy app secret | Yes | - |
-| `ETH_RPC_URL` | Ethereum RPC endpoint | Yes | - |
-| `SENTRY_DSN` | Sentry error tracking | No | - |
-| `RATE_LIMIT_MAX` | Max requests per window | No | 30 |
-| `RATE_LIMIT_WINDOW` | Rate limit window (ms) | No | 60000 |
-| `ALLOWED_ORIGINS` | CORS allowed origins | No | `https://t.me` |
+Base URL: the Render service URL (`RENDER_EXTERNAL_URL`).
 
 ## Endpoints
 
-### Positions
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| POST | `/webhook` | Telegram `X-Telegram-Bot-Api-Secret-Token` (required) | Telegram bot updates (grammY) |
+| POST | `/privy-webhook` | SVIX HMAC signature (required, fail-closed) | Privy transaction webhooks |
+| POST | `/api/webhook/privy` | SVIX HMAC signature (required, fail-closed) | Privy webhooks (router-mounted alias) |
+| GET | `/api/webhook/status` | none | Webhook liveness info |
+| GET | `/health` | none | Basic health check |
+| GET | `/api/health` | none | Health router |
+| GET | `/api/v1/health` | none | Alias kept for Render health checks |
+| POST | `/api/simulate` | none (rate-limited) | Trade simulation for the Mini App — **not execution-grade until W-07** |
 
-#### GET /positions
-List all positions for the authenticated user.
+## Rate limiting
 
-**Response:**
-```json
-{
-  "positions": [],
-  "total": 0
-}
-```
+`middleware/rate-limiter.ts` (Redis-backed when `REDIS_URL` is set, in-memory
+otherwise):
 
-#### POST /positions
-Open a new position.
+- global: 100 req/min/IP
+- `/api/*`: 60 req/min/IP
+- webhook paths: 30 req/sec/IP, **fail-closed** if the limiter store is
+  unavailable (Telegram/SVIX retry with backoff)
 
-**Request Body:**
-```json
-{
-  "asset": "xETH",
-  "size": 1.5,
-  "leverage": 5,
-  "side": "long"
-}
-```
+## History
 
-**Response:**
-```json
-{
-  "success": true,
-  "positionId": "pos_1234567890",
-  "asset": "xETH",
-  "size": 1.5,
-  "leverage": 5,
-  "side": "long"
-}
-```
-
-#### GET /positions/:id
-Get position details.
-
-#### DELETE /positions/:id
-Close position (full or partial via `?partial=true` query).
-
-### Gas
-
-#### GET /gas/estimate
-Estimate gas for a transaction.
-
-**Query Parameters:**
-- `txType`: `open`, `close`, `adjust`, `leverage`
-- `asset`: Asset symbol
-- `size`: Position size
-
-#### GET /gas/prices
-Current gas price tiers.
-
-### TWAP
-
-#### POST /twap
-Create a TWAP (Time-Weighted Average Price) order.
-
-**Request Body:**
-```json
-{
-  "asset": "xETH",
-  "totalSize": 10,
-  "intervals": 4,
-  "intervalMinutes": 15,
-  "side": "buy"
-}
-```
-
-#### GET /twap/:id
-Get TWAP execution status.
-
-#### DELETE /twap/:id
-Cancel TWAP order.
-
-### Batch
-
-#### POST /batch
-Execute multiple transactions atomically.
-
-**Request Body:**
-```json
-{
-  "transactions": [
-    { "type": "open", "asset": "xETH", "params": { "size": 1, "leverage": 3 } },
-    { "type": "close", "asset": "xUSD", "params": { "positionId": "pos_123" } }
-  ]
-}
-```
-
-### Health
-
-#### GET /health
-System health check.
-
-**Response:**
-```json
-{
-  "status": "healthy",
-  "timestamp": "2026-06-09T00:00:00.000Z",
-  "version": "1.1.0",
-  "uptime": 3600,
-  "services": {
-    "telegram": "connected",
-    "database": "connected",
-    "blockchain": "connected"
-  }
-}
-```
-
-## Error Responses
-
-All errors follow this format:
-```json
-{
-  "error": "Error description",
-  "code": "ERROR_CODE",
-  "details": {}
-}
-```
-
-| Status Code | Meaning |
-|-------------|---------|
-| 400 | Bad Request - Invalid parameters |
-| 401 | Unauthorized - Invalid API key |
-| 429 | Too Many Requests - Rate limit exceeded |
-| 500 | Internal Server Error |
-
-## Rate Limiting
-
-API requests are limited to 30 requests per minute per API key. 
-Exceeding this limit returns a 429 status code with a `Retry-After` header.
-
-## Deployment
-
-### Prerequisites
-- Node.js 20+
-- PostgreSQL 15+
-- Redis 7+
-- Ethereum RPC access
-
-### Steps
-1. Clone repository
-2. Install dependencies: `pnpm install`
-3. Set environment variables (see table above)
-4. Run database migrations: `pnpm db:migrate`
-5. Build: `pnpm build`
-6. Start: `pnpm start`
-
-### Docker Deployment
-```bash
-docker build -t fxbot:latest .
-docker run -p 3000:3000 --env-file .env fxbot:latest
-```
-
-### Fly.io Deployment
-```bash
-fly deploy --config apps/bot/fly.toml
-```
+A set of aspirational `/api/v1/*` routes (gas, positions, twap, batch) was
+documented here previously against a fictitious `api.fxbot.io` domain. Those
+routers were never mounted and were removed in W-13. If a public API ships
+later, it gets designed deliberately — with auth — not resurrected from stubs.

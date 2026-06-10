@@ -38,8 +38,10 @@ const limiters = buildLimiters();
 
 export async function rateLimiter(req: Request, res: Response, next: NextFunction) {
   const key = req.ip || "unknown";
+  const isWebhook =
+    req.path === "/webhook" || req.path === "/privy-webhook" || req.path.startsWith("/api/webhook");
   let limiter = limiters.global;
-  if (req.path === "/webhook") limiter = limiters.webhook;
+  if (isWebhook) limiter = limiters.webhook;
   else if (req.path.startsWith("/api/")) limiter = limiters.api;
 
   try {
@@ -48,8 +50,13 @@ export async function rateLimiter(req: Request, res: Response, next: NextFunctio
   } catch (rejRes) {
     if (rejRes instanceof RateLimiterRes) {
       res.status(429).json({ error: "Too many requests", retryAfter: Math.round(rejRes.msBeforeNext / 1000) });
+    } else if (isWebhook) {
+      // Fail CLOSED on webhook paths: if the limiter store is down we refuse
+      // rather than accept unmetered traffic. Telegram and SVIX both retry
+      // with backoff, so legitimate updates are not lost.
+      res.status(503).json({ error: "Rate limiter unavailable" });
     } else {
-      // Redis down or unexpected error — let the request through rather than blocking
+      // Non-webhook traffic: fail open (health checks must keep working).
       next();
     }
   }
