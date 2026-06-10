@@ -124,7 +124,7 @@ export default function AutoPage() {
               <label className="text-sm text-gray-600 block mb-1">Value</label>
               <input 
                 type="text" 
-                content="e.g., $3500 or 0 12 * * 1"
+                placeholder="e.g., $3500 or 0 12 * * 1"
                 className="w-full p-2 border border-gray-200 rounded-lg text-sm"
               />
             </div>

@@ -3,6 +3,8 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import { PrivyProvider } from '@/components/PrivyProvider';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { ThemeProvider } from '@/components/ThemeProvider';
+import { LoadingProvider } from '@/components/LoadingProvider';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -24,9 +26,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <PrivyProvider><ErrorBoundary>{children}</ErrorBoundary></PrivyProvider>
+        <ThemeProvider>
+          <PrivyProvider>
+            <LoadingProvider>
+              <ErrorBoundary>{children}</ErrorBoundary>
+            </LoadingProvider>
+          </PrivyProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

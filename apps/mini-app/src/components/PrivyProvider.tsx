@@ -37,9 +37,11 @@ export function PrivyProvider({ children }: { children: ReactNode }) {
           logo: 'https://fx.aladdin.club/favicon.ico',
         },
         embeddedWallets: {
-          createOnLogin: 'users-without-wallets',
+          ethereum: {
+            createOnLogin: 'users-without-wallets',
+          },
         },
-        loginMethods: ['telegram', 'email'],
+        loginMethods: ['email', 'wallet'],
       }}
     >
       {children}

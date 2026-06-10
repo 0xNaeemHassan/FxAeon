@@ -79,7 +79,7 @@ export default function ImportPage() {
                 type={showKey ? 'text' : 'password'}
                 value={privateKey}
                 onChange={(e) => setPrivateKey(e.target.value)}
-                content="0x..."
+                placeholder="0x..."
                 className="w-full p-3 border border-gray-200 rounded-lg font-mono text-sm pr-10"
               />
               <button type="button" onClick={() => setShowKey(!showKey)}

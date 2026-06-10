@@ -182,7 +182,7 @@ export default function SettingsPage() {
           <div className="space-y-2">
             <input
               type="password"
-              content="OpenAI / Anthropic / Surplus key"
+              placeholder="OpenAI / Anthropic / Surplus key"
               value={byokKey}
               onChange={(e) => setByokKey(e.target.value)}
               className="w-full p-2 border border-gray-200 rounded-lg text-sm"
