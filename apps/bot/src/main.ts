@@ -1,45 +1,40 @@
 import path from "path";
 import { fileURLToPath } from "url";
 import express from "express";
-import helmet from "helmet";
 import { Bot, Context, GrammyError, HttpError, webhookCallback } from "grammy";
 import { apiThrottler } from "@grammyjs/transformer-throttler";
-import { I18n, type I18nFlavor } from "@grammyjs/i18n";
 import { conversations, type ConversationFlavor } from "@grammyjs/conversations";
 import { prisma } from "@fxbot/db";
-import { ADDRESSES } from "@fxbot/shared";
 
-import { startCommand } from "./commands/start.js";
-import { portfolioCommand } from "./commands/portfolio.js";
-import { tradeCommand } from "./commands/trade.js";
-import { limitCommand } from "./commands/limit.js";
-import { ordersCommand } from "./commands/orders.js";
-import { mintCommand } from "./commands/mint.js";
-import { redeemCommand } from "./commands/redeem.js";
-import { saveCommand } from "./commands/save.js";
-import { borrowCommand } from "./commands/borrow.js";
-import { repayCommand } from "./commands/repay.js";
-import { bridgeCommand } from "./commands/bridge.js";
-import { lockCommand } from "./commands/lock.js";
-import { voteCommand } from "./commands/vote.js";
-import { claimCommand } from "./commands/claim.js";
-import { referCommand } from "./commands/refer.js";
-import { autoCommand } from "./commands/auto.js";
-import { settingsCommand } from "./commands/settings.js";
-import { securityCommand } from "./commands/security.js";
-import { depositCommand } from "./commands/deposit.js";
-import { withdrawCommand } from "./commands/withdraw.js";
-import { helpCommand } from "./commands/help.js";
+import {
+  startCommand, portfolioCommand, tradeCommand, limitCommand,
+  ordersCommand, mintCommand, redeemCommand, saveCommand,
+  borrowCommand, repayCommand, bridgeCommand, lockCommand,
+  voteCommand, claimCommand, referCommand, autoCommand,
+  settingsCommand, securityCommand, depositCommand, withdrawCommand,
+  helpCommand,
+} from "./commands/index.js";
 
+import { apiRouter } from "./api/index.js";
+import { applySecurityMiddleware, errorHandler } from "./middleware/index.js";
+import { validateConfig } from "./middleware/config.js";
+import { logger } from "./middleware/logger.js";
 import { privyWebhookHandler } from "./handlers/privy-webhooks.js";
 import { limitOrderPolling } from "./notifications/limit-order-poller.js";
 import { healthMonitor } from "./notifications/health-monitor.js";
 import { txNotifier } from "./notifications/tx-notifier.js";
 
-// Custom Context type with all middleware flavors
-type BotContext = Context & I18nFlavor & ConversationFlavor<Context>;
+// ---------------------------------------------------------------------------
+// Configuration
+// ---------------------------------------------------------------------------
+const env = validateConfig();
 
-const bot = new Bot<BotContext>(process.env.TELEGRAM_BOT_TOKEN!);
+// ---------------------------------------------------------------------------
+// Bot setup
+// ---------------------------------------------------------------------------
+type BotContext = Context & ConversationFlavor<Context>;
+
+const bot = new Bot<BotContext>(env.TELEGRAM_BOT_TOKEN);
 
 // Rate limiting: 30 msg/s global, 1 msg/s per user
 bot.api.config.use(apiThrottler({
@@ -48,18 +43,12 @@ bot.api.config.use(apiThrottler({
   out: { maxConcurrent: 1, minTime: 1000 },
 }));
 
-// i18n
-const i18n = new I18n<BotContext>({
-  defaultLocale: "en",
-  directory: path.join(path.dirname(fileURLToPath(import.meta.url)), "../src/i18n"),
-  useSession: true,
-});
-bot.use(i18n);
-
 // Conversations
 bot.use(conversations());
 
+// ---------------------------------------------------------------------------
 // Commands
+// ---------------------------------------------------------------------------
 bot.command("start", startCommand);
 bot.command("portfolio", portfolioCommand);
 bot.command("trade", tradeCommand);
@@ -82,40 +71,163 @@ bot.command("deposit", depositCommand);
 bot.command("withdraw", withdrawCommand);
 bot.command("help", helpCommand);
 
+// ---------------------------------------------------------------------------
 // Error handling
+// ---------------------------------------------------------------------------
 bot.catch((err) => {
   const ctx = err.ctx;
-  console.error(`Error while handling update ${ctx.update.update_id}:`);
+  logger.error({ updateId: ctx.update.update_id }, "Error handling update");
   const e = err.error;
   if (e instanceof GrammyError) {
-    console.error("Error in request:", e.description);
+    logger.error({ description: e.description }, "Grammy error");
   } else if (e instanceof HttpError) {
-    console.error("Could not contact Telegram:", e);
+    logger.error({ error: e }, "Could not contact Telegram");
   } else {
-    console.error("Unknown error:", e);
+    logger.error({ error: e }, "Unknown error");
   }
 });
 
-// Start polling workers
-limitOrderPolling.start();
-healthMonitor.start();
-txNotifier.start();
+// ---------------------------------------------------------------------------
+// Telegram bot menu & commands list
+// ---------------------------------------------------------------------------
+async function configureTelegramBot() {
+  // Register command list with Telegram so users see a menu
+  await bot.api.setMyCommands([
+    { command: "start", description: "Start / connect wallet" },
+    { command: "portfolio", description: "View portfolio & positions" },
+    { command: "trade", description: "Open a leveraged trade" },
+    { command: "limit", description: "Set a limit order" },
+    { command: "orders", description: "View active orders" },
+    { command: "mint", description: "Mint fxUSD" },
+    { command: "redeem", description: "Redeem fxUSD" },
+    { command: "save", description: "Earn yield on fxUSD" },
+    { command: "borrow", description: "Borrow against collateral" },
+    { command: "repay", description: "Repay a loan" },
+    { command: "deposit", description: "Deposit funds" },
+    { command: "withdraw", description: "Withdraw funds" },
+    { command: "bridge", description: "Bridge assets cross-chain" },
+    { command: "lock", description: "Lock governance tokens" },
+    { command: "vote", description: "Vote on proposals" },
+    { command: "claim", description: "Claim rewards" },
+    { command: "refer", description: "Referral program" },
+    { command: "auto", description: "Automation settings" },
+    { command: "settings", description: "Bot settings" },
+    { command: "security", description: "Security settings" },
+    { command: "help", description: "Help & commands" },
+  ]);
+  logger.info("Bot command menu registered");
 
-// Start bot
-if (process.env.NODE_ENV === "production") {
-  // Webhook mode for production
-  const port = parseInt(process.env.PORT || "8080", 10);
-  const app = express();
-  app.use(helmet());
-  app.use(express.json());
-  app.post("/webhook", webhookCallback(bot, "express"));
-  app.post("/privy-webhook", privyWebhookHandler);
-  app.get("/health", (_req: any, res: any) => {
-    res.setHeader("Content-Type", "application/json");
-    res.json({ ok: true });
-  });
-  app.listen(port, () => console.log(`Bot listening on port ${port}`));
-} else {
-  bot.start();
-  console.log("Bot started in polling mode");
+  // Set mini-app menu button (opens the mini-app inside Telegram)
+  const miniAppUrl = env.MINI_APP_URL;
+  if (miniAppUrl) {
+    await bot.api.setChatMenuButton({
+      menu_button: {
+        type: "web_app",
+        text: "Open App",
+        web_app: { url: miniAppUrl },
+      },
+    });
+    logger.info({ url: miniAppUrl }, "Mini-app menu button set");
+  }
 }
+
+// ---------------------------------------------------------------------------
+// Background workers (with graceful error handling)
+// ---------------------------------------------------------------------------
+function startBackgroundWorkers() {
+  // Delay worker start to let connections settle
+  setTimeout(() => {
+    try { limitOrderPolling.start(); } catch (e) { logger.error(e, "Failed to start limit order polling"); }
+    try { healthMonitor.start(); } catch (e) { logger.error(e, "Failed to start health monitor"); }
+    try { txNotifier.start(); } catch (e) { logger.error(e, "Failed to start tx notifier"); }
+  }, 5000);
+}
+
+// ---------------------------------------------------------------------------
+// Start
+// ---------------------------------------------------------------------------
+async function main() {
+  if (env.NODE_ENV === "production") {
+    // ------ Webhook mode (production) ------
+    const port = parseInt(env.PORT, 10);
+
+    const app = express();
+
+    // Apply full security middleware (helmet, cors, rate limiter, request logging)
+    applySecurityMiddleware(app);
+
+    // Parse JSON bodies (needed for webhook + API routes)
+    app.use(express.json());
+
+    // Telegram webhook endpoint — must be BEFORE apiRouter
+    app.post("/webhook", webhookCallback(bot, "express"));
+
+    // Privy webhook
+    app.post("/privy-webhook", privyWebhookHandler);
+
+    // API routes (health, simulate, webhook verification, etc.)
+    app.use("/api", apiRouter);
+
+    // Simple health check at root /health (fallback for quick pings)
+    app.get("/health", (_req, res) => {
+      res.json({ ok: true, timestamp: new Date().toISOString() });
+    });
+
+    // Render expects /api/v1/health — add a direct alias
+    app.get("/api/v1/health", (_req, res) => {
+      res.json({
+        status: "healthy",
+        timestamp: new Date().toISOString(),
+        version: "1.1.0",
+        uptime: process.uptime(),
+      });
+    });
+
+    // Error handler (must be last)
+    app.use(errorHandler);
+
+    app.listen(port, async () => {
+      logger.info({ port }, "Express server listening");
+
+      // Register webhook with Telegram
+      // Render provides RENDER_EXTERNAL_URL; fall back to WEBHOOK_URL env var
+      const webhookDomain = process.env.RENDER_EXTERNAL_URL || process.env.WEBHOOK_URL;
+      if (webhookDomain) {
+        const webhookUrl = `${webhookDomain}/webhook`;
+        await bot.api.setWebhook(webhookUrl, {
+          allowed_updates: ["message", "callback_query", "inline_query"],
+          drop_pending_updates: true,
+        });
+        logger.info({ webhookUrl }, "Telegram webhook registered");
+      } else {
+        logger.warn(
+          "No RENDER_EXTERNAL_URL or WEBHOOK_URL set — Telegram webhook NOT registered! " +
+          "The bot will not receive messages."
+        );
+      }
+
+      // Configure bot menu & mini-app button
+      await configureTelegramBot().catch((e) =>
+        logger.error(e, "Failed to configure Telegram bot menu")
+      );
+
+      // Start background workers (delayed)
+      startBackgroundWorkers();
+    });
+  } else {
+    // ------ Polling mode (development) ------
+    await configureTelegramBot().catch((e) =>
+      logger.error(e, "Failed to configure Telegram bot menu")
+    );
+
+    bot.start();
+    logger.info("Bot started in polling mode");
+
+    startBackgroundWorkers();
+  }
+}
+
+main().catch((err) => {
+  logger.fatal(err, "Fatal startup error");
+  process.exit(1);
+});
