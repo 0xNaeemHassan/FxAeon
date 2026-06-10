@@ -10,4 +10,4 @@ name = "fxbot-mini-app"
 name = "fxbot-mini-app-preview"
 
 [build]
-command = "pnpm --filter @fxaeon/mini-app build"
+command = "pnpm --filter @fxbot/shared build && pnpm --filter @fxaeon/mini-app build"
