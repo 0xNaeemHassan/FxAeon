@@ -24,7 +24,7 @@ Choose an action:
 ❓ /help - Help & docs
 `;
     await ctx.reply(menuText, { parse_mode: 'Markdown' });
-  } async catch(error) {
+  } catch(error) {
     console.error('Menu error:', error);
     await ctx.reply('❌ Error displaying menu. Please try again.');
   }

@@ -16,8 +16,8 @@ export function sanitizeInput(ctx: Context, next: NextFunction): Promise<void> {
   return next();
 }
 
-export function sanitizeObject(obj: Record<<<>): Record<<<> {
-  const sanitized: Record<<<> = {};
+export function sanitizeObject(obj: Record<string, string>): Record<string, string> {
+  const sanitized: Record<string, string> = {};
   for (const [key, value] of Object.entries(obj)) {
     if (FORBIDDEN_KEYS.includes(key)) {
       throw new Error(`Forbidden key: ${key}`);

@@ -94,7 +94,7 @@ export const ruleWorker = // NOTE: Use worker pool with max size in production
       },
     });
     
-  } async catch(error: unknown) {
+  } catch(error: unknown) {
     const newFailureCount = rule.failureCount + 1;
     
     if (newFailureCount >= 3) {
@@ -152,7 +152,7 @@ export async function async startConditionWatcher() {
       include: { user: true },
     });
     
-    async for(const rule of activeRules) {
+    for(const rule of activeRules) {
       if (rule.trigger.priceCondition || rule.trigger.healthCondition) {
         // Evaluate condition
         // If met, add to queue

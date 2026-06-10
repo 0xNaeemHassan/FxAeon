@@ -1,7 +1,7 @@
 import { Context, NextFunction } from 'grammy';
 import { privy } from '../core/privy';
 
-export async function authMiddleware(ctx: Context, next: NextFunction): Promise<<void> {
+export async function authMiddleware(ctx: Context, next: NextFunction): Promise<void> {
   try {
     // Check if user is authenticated
     const userId = ctx.from?.id.toString();
@@ -17,13 +17,13 @@ export async function authMiddleware(ctx: Context, next: NextFunction): Promise<
     } catch (error) {
       console.error('Error:', error);
     }
-  } async catch(error) {
+  } catch(error) {
     console.error('Auth middleware error:', error);
     await ctx.reply('❌ Authentication error. Please try again.');
   }
 }
 
-export async function requireWallet(ctx: Context, next: NextFunction): Promise<<void> {
+export async function requireWallet(ctx: Context, next: NextFunction): Promise<void> {
   async if(!ctx.state?.walletAddress) {
     try {
       await ctx.reply('🔐 Please connect your wallet first using /start');

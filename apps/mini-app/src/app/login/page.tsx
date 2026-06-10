@@ -1,11 +1,12 @@
 'use client';
 
 import { useLogin, usePrivy } from '@privy-io/react-auth';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, useCallback, Suspense } from 'react';
 
 function LoginPageContent() {
   const { ready, authenticated, user } = usePrivy();
+  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [loginAttempted, setLoginAttempted] = useState(false);
   const searchParams = useSearchParams();
@@ -17,7 +18,6 @@ function LoginPageContent() {
     },
     onError: (privyError: unknown) => {
       const errorStr = String(privyError);
-      // Don't show error for user-dismissed modal
       if (errorStr.includes('exited_auth_flow') || errorStr.includes('user_exited')) {
         setLoginAttempted(false);
         return;
@@ -41,21 +41,27 @@ function LoginPageContent() {
     }
   }, [ready, authenticated, loginAttempted, handleLogin]);
 
-  // After successful authentication, send data to Telegram if in WebApp context
+  // After successful authentication, redirect or send data to Telegram
   useEffect(() => {
-    if (authenticated && user) {
-      const wallet = user.wallet?.address;
-      if (wallet && window.Telegram?.WebApp) {
-        window.Telegram.WebApp.sendData(JSON.stringify({
-          type: 'wallet_connected',
-          address: wallet,
-          privyUserId: user.id,
-          referral: ref,
-        }));
-        window.Telegram.WebApp.close();
-      }
+    if (!authenticated || !user) return;
+
+    const wallet = user.wallet?.address;
+
+    // If inside Telegram WebApp, send wallet data and close
+    if (wallet && window.Telegram?.WebApp?.initData) {
+      window.Telegram.WebApp.sendData(JSON.stringify({
+        type: 'wallet_connected',
+        address: wallet,
+        privyUserId: user.id,
+        referral: ref,
+      }));
+      window.Telegram.WebApp.close();
+      return;
     }
-  }, [authenticated, user, ref]);
+
+    // Otherwise redirect to portfolio
+    router.replace('/portfolio');
+  }, [authenticated, user, ref, router]);
 
   if (authenticated && user) {
     return (
@@ -67,11 +73,12 @@ function LoginPageContent() {
             </svg>
           </div>
           <h1 className="text-2xl font-bold mb-2">Connected!</h1>
-          <p className="text-gray-600">
+          <p className="text-gray-600 mb-4">
             {user.wallet?.address
               ? `Wallet: ${user.wallet.address.slice(0, 6)}...${user.wallet.address.slice(-4)}`
               : `Logged in as ${user.email?.address || user.id}`}
           </p>
+          <p className="text-sm text-gray-400">Redirecting...</p>
         </div>
       </div>
     );

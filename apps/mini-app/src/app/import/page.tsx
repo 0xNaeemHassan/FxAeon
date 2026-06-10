@@ -1,5 +1,7 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
+
 function safeJSONStringify(obj: unknown): string { try { return JSON.stringify(obj); } catch { return '{}'; } }
 
 import { usePrivy } from '@privy-io/react-auth';
@@ -7,6 +9,7 @@ import { useState } from 'react';
 import { ArrowLeft, KeyRound, AlertTriangle, Check, Eye, EyeOff } from 'lucide-react';
 
 export default function ImportPage() {
+  const router = useRouter();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { importWallet } = usePrivy() as any;
   const [isLoading, setIsLoading] = useState(false);
@@ -39,7 +42,7 @@ export default function ImportPage() {
 
   return (
     <div className="flex min-h-screen flex-col p-4 bg-gray-50">
-      <button type="button" onClick={() => window.Telegram?.WebApp?.close()} 
+      <button type="button" onClick={() => { window.Telegram?.WebApp?.initData ? window.Telegram.WebApp.close() : router.back(); }} 
         className="flex items-center text-gray-600 mb-4"
       >
         <ArrowLeft className="w-5 h-5 mr-1" /> Back
@@ -123,7 +126,7 @@ export default function ImportPage() {
           <p className="text-sm text-green-600 mt-1">
             Your wallet is now connected and secured in Privy&apos;s TEE.
           </p>
-          <button type="button" onClick={() => window.Telegram?.WebApp?.close()}
+          <button type="button" onClick={() => { window.Telegram?.WebApp?.initData ? window.Telegram.WebApp.close() : router.back(); }}
             className="mt-3 text-sm text-green-700 underline"
           >
             Close

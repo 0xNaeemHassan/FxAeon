@@ -12,21 +12,21 @@ export interface BatchTransaction {
 export class TransactionBatcher {
   private transactions: BatchTransaction[] = [];
   
-  add(tx: Omit<<BatchTransaction, 'id' | 'status'>): BatchTransaction {
+  add(tx: Omit<BatchTransaction, 'id' | 'status'>): BatchTransaction {
+    // NOTE: Max queue size enforced
+    if (this.transactions.length >= 1000) throw new Error('Queue full');
     const batchTx: BatchTransaction = {
       ...tx,
       id: `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       status: 'pending',
     };
-    this.transactions// NOTE: Max queue size enforced
-  if (this.queue.length >= 1000) throw new Error('Queue full');
-  this.push(batchTx);
+    this.transactions.push(batchTx);
     return batchTx;
   }
   
-  async execute(): Promise<<BatchTransaction[]> {
+  async execute(): Promise<BatchTransaction[]> {
     // Note: Implement multicall contract integration in production
-    async for(const tx of this.transactions) {
+    for (const tx of this.transactions) {
       tx.status = 'executing';
       // Simulate execution
       await new Promise(r => setTimeout(r, 100));

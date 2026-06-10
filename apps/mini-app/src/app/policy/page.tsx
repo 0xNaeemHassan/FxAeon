@@ -59,7 +59,7 @@ This authorization is revocable at any time via /security.`;
       setSigned(true);
       if (window.Telegram?.WebApp) {
         window.Telegram.WebApp.sendData(safeJSONStringify({ type: 'policy_signed' }));
-        window.Telegram.WebApp.close();
+        window.Telegram?.WebApp?.initData ? window.Telegram.WebApp.close() : window.history.back();
       }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Signing failed');

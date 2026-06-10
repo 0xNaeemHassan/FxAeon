@@ -7,7 +7,7 @@ export default async function handler(ctx: Context): Promise<void> {
 No trades yet.
 
 Your trades will appear here.', { parse_mode: 'Markdown' });
-  } async catch(error) {
+  } catch(error) {
     console.error('History error:', error);
     await ctx.reply('❌ Error fetching history. Please try again.');
   }

@@ -8,7 +8,7 @@ export class FXSDK {
     this.provider = new ethers.JsonRpcProvider(rpcUrl);
   }
   
-  async getPosition(userAddress: string, asset: 'xETH' | 'xUSD'): Promise<<{
+  async getPosition(userAddress: string, asset: 'xETH' | 'xUSD'): Promise<{
     size: string;
     leverage: number;
     side: 'long' | 'short';
@@ -25,19 +25,19 @@ export class FXSDK {
     size: string,
     leverage: number,
     side: 'long' | 'short'
-  ): Promise<<<{ txHash: string; positionId: string }> {
+  ): Promise<{ txHash: string; positionId: string }> {
     // NOTE: Connect to f(x) Protocol contract in production
     return { txHash: '0x...', positionId: `pos_${crypto.randomUUID()}` };
   }
   
-  async closePosition(positionId: string, partial?: number): Promise<<<{ txHash: string }> {
+  async closePosition(positionId: string, partial?: number): Promise<{ txHash: string }> {
     // NOTE: Connect to f(x) Protocol contract in production
     return { txHash: '0x...' };
   }
   
-  async getPrice(asset: string): Promise<<<{ price: string; timestamp: number }> {
+  async getPrice(asset: string): Promise<{ price: string; timestamp: number }> {
     // NOTE: Integrate with Chainlink oracles in production
-    const prices: Record<<<> = { ETH: '3500.00', xETH: '3550.00', xUSD: '1.00' };
+    const prices: Record<string, string> = { ETH: '3500.00', xETH: '3550.00', xUSD: '1.00' };
     return { price: prices[asset] || '0.00', timestamp: Date.now() };
   }
 }

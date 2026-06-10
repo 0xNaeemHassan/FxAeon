@@ -13,7 +13,7 @@ interface AutomationRule {
   active: boolean;
 }
 
-export async function createRule(rule: Omit<<AutomationRule, 'id'>): Promise<<AutomationRule> {
+export async function createRule(rule: Omit<AutomationRule, 'id'>): Promise<AutomationRule> {
   const newRule: AutomationRule = {
     ...rule,
     id: `rule_${(typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)}`,
@@ -22,12 +22,12 @@ export async function createRule(rule: Omit<<AutomationRule, 'id'>): Promise<<Au
   return newRule;
 }
 
-export async function getRules(userId: string): Promise<<AutomationRule[]> {
+export async function getRules(userId: string): Promise<AutomationRule[]> {
   // NOTE: Fetch from database in production
   return [];
 }
 
-export async function deleteRule(ruleId: string): Promise<<void> {
+export async function deleteRule(ruleId: string): Promise<void> {
   // NOTE: Remove from database in production
 }
 

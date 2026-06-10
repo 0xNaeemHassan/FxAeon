@@ -11,7 +11,7 @@ export const limitOrderPolling = {
         include: { user: true },
       });
 
-      async for(const order of activeOrders) {
+      for(const order of activeOrders) {
         // Poll fx-limit-order-api for updates
         const res = await fetch(
           `https://fx-limit-order-api.aladdin.club/v1/order?orderHash=${order.orderHash}`

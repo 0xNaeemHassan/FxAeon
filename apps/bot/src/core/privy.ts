@@ -6,7 +6,7 @@ export const privy = new PrivyClient(
   config.PRIVY_APP_SECRET
 );
 
-export async function verifyUser(token: string): Promise<<<{
+export async function verifyUser(token: string): Promise<{
   id: string;
   wallet?: string;
 } | null> {
@@ -18,7 +18,7 @@ export async function verifyUser(token: string): Promise<<<{
   }
 }
 
-export async function createWallet(userId: string): Promise<<<{ address: string }> {
+export async function createWallet(userId: string): Promise<{ address: string }> {
   // NOTE: Implement embedded wallet creation in production
   return { address: '0x...' };
 }

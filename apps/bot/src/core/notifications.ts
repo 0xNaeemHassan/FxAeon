@@ -14,7 +14,7 @@ export async function sendNotification(
   chatId: string,
   message: string,
   type: 'info' | 'warning' | 'error' | 'success' = 'info'
-): Promise<<void> {
+): Promise<void> {
   const emoji = { info: 'ℹ️', warning: '⚠️', error: '❌', success: '✅' };
   // NOTE: Implement notification queue in production
   console.log(`[${type}] ${emoji[type]} ${message} to ${chatId}`);
@@ -24,7 +24,7 @@ export async function scheduleNotification(
   chatId: string,
   message: string,
   delayMs: number
-): Promise<<void> {
+): Promise<void> {
   // NOTE: Implement Redis-backed scheduling in production
   setTimeout(() => sendNotification(chatId, message), delayMs);
 }

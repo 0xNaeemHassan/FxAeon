@@ -12,7 +12,7 @@ export async function estimateGas(
   txType: 'open' | 'close' | 'adjust' | 'leverage',
   asset: string,
   size: number
-): Promise<<GasEstimate> {
+): Promise<GasEstimate> {
   const baseGas = 21000;
   const complexityMultiplier = {
     open: 3,
@@ -23,7 +23,7 @@ export async function estimateGas(
   
   const estimatedGas = baseGas * complexityMultiplier;
   const gasPrice = '20'; // gwei - NOTE: fetch from network
-  const totalCost = (estimatedGas * parseInt(gasPrice) / 1e9, 10).toFixed(6, 10);
+  const totalCost = (estimatedGas * parseInt(gasPrice, 10) / 1e9).toFixed(6);
   
   return {
     estimatedGas,

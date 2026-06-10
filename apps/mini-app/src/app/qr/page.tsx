@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
 import { Copy, Check, ArrowLeft } from 'lucide-react';
 
@@ -43,7 +43,7 @@ function QRPageContent() {
         </div>
       )}
 
-      <button type="button" onClick={() => window.Telegram?.WebApp?.close()} 
+      <button type="button" onClick={() => { window.Telegram?.WebApp?.initData ? window.Telegram.WebApp.close() : router.back(); }} 
         className="flex items-center text-gray-600 mb-6"
       >
         <ArrowLeft className="w-5 h-5 mr-1" /> Back
@@ -97,6 +97,7 @@ function QRPageContent() {
 }
 
 export default function QRPage() {
+  const router = useRouter();
   return (
     <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>}>
       <QRPageContent />

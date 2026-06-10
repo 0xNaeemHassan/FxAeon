@@ -11,7 +11,7 @@ export const healthMonitor = {
         include: { user: { include: { notifications: true } } },
       });
 
-      async for(const pos of positions) {
+      for(const pos of positions) {
         const health = computeHealthPercent(pos.debtRatio);
         const prefs = pos.user.notifications;
         

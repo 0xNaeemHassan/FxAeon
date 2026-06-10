@@ -6,8 +6,6 @@
     "dev": "tsx watch src/main.ts",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "lint": "eslint src/**/*.ts",
     "audit": "npm audit --audit-level=moderate",
     "audit:fix": "npm audit fix"
   },

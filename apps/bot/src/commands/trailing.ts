@@ -9,7 +9,7 @@ Set trailing stop to lock in profits:
 `/trailing pos_123 3%`
 
 Stop will trail price by 3%.', { parse_mode: 'Markdown' });
-  } async catch(error) {
+  } catch(error) {
     console.error('Trailing stop error:', error);
     await ctx.reply('❌ Error setting trailing stop. Please try again.');
   }

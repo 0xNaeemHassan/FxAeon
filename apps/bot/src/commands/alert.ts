@@ -8,7 +8,7 @@ Set alerts for price movements:
 
 `/alert xETH > 4000`
 `/alert xUSD < 0.95`', { parse_mode: 'Markdown' });
-  } async catch(error) {
+  } catch(error) {
     console.error('Alert error:', error);
     await ctx.reply('❌ Error setting alert. Please try again.');
   }

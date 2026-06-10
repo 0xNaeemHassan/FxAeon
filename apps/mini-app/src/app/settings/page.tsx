@@ -1,5 +1,7 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
+
 import { usePrivy } from '@privy-io/react-auth';
 import { useState } from 'react';
 import { ArrowLeft, Globe, Sliders, Shield, Zap, Bell, Key } from 'lucide-react';
@@ -14,6 +16,7 @@ const LANGUAGES = [
 ];
 
 export default function SettingsPage() {
+  const router = useRouter();
   const { user, logout } = usePrivy();
   const [error, setError] = useState<string | null>(null);
   const [lang, setLang] = useState('en');
@@ -57,7 +60,7 @@ export default function SettingsPage() {
           </div>
         )}
 
-      <button type="button" onClick={() => window.Telegram?.WebApp?.close()} 
+      <button type="button" onClick={() => { window.Telegram?.WebApp?.initData ? window.Telegram.WebApp.close() : router.back(); }} 
         className="flex items-center text-gray-600 mb-4"
       >
         <ArrowLeft className="w-5 h-5 mr-1" /> Back

@@ -1,5 +1,7 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
+
 import { usePrivy } from '@privy-io/react-auth';
 import { useState } from 'react';
 import { ArrowLeft, Plus, Pause, Play, Trash2, Clock, TrendingUp, Shield } from 'lucide-react';
@@ -14,6 +16,7 @@ interface Rule {
 }
 
 export default function AutoPage() {
+  const router = useRouter();
   const { ready } = usePrivy();
   const [error, setError] = useState<string | null>(null);
   const [rules, setRules] = useState<Rule[]>([
@@ -68,7 +71,7 @@ export default function AutoPage() {
 
   return (
     <div className="flex min-h-screen flex-col p-4 bg-gray-50">
-      <button type="button" onClick={() => window.Telegram?.WebApp?.close()} 
+      <button type="button" onClick={() => { window.Telegram?.WebApp?.initData ? window.Telegram.WebApp.close() : router.back(); }} 
         className="flex items-center text-gray-600 mb-4"
       >
         <ArrowLeft className="w-5 h-5 mr-1" /> Back

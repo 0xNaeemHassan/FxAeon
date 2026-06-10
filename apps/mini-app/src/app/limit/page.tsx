@@ -1,7 +1,7 @@
 'use client';
 
 import { usePrivy, useWallets } from '@privy-io/react-auth';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { Suspense } from 'react';
 import { ArrowLeft, Target, Check, AlertTriangle } from 'lucide-react';
@@ -134,7 +134,7 @@ function LimitPageContent() {
 
   return (
     <div className="flex min-h-screen flex-col p-4 bg-gray-50">
-      <button type="button" onClick={() => window.Telegram?.WebApp?.close()} 
+      <button type="button" onClick={() => { window.Telegram?.WebApp?.initData ? window.Telegram.WebApp.close() : router.back(); }} 
         className="flex items-center text-gray-600 mb-4"
       >
         <ArrowLeft className="w-5 h-5 mr-1" /> Back
@@ -216,7 +216,7 @@ function LimitPageContent() {
           <p className="text-xs text-gray-500 mt-2">
             f(x) keepers will fill this order when the trigger price is reached.
           </p>
-          <button type="button" onClick={() => window.Telegram?.WebApp?.close()}
+          <button type="button" onClick={() => { window.Telegram?.WebApp?.initData ? window.Telegram.WebApp.close() : router.back(); }}
             className="mt-3 text-sm text-green-700 underline"
           >
             Close
@@ -228,6 +228,7 @@ function LimitPageContent() {
 }
 
 export default function LimitPage() {
+  const router = useRouter();
   return (
     <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>}>
       <LimitPageContent />

@@ -18,7 +18,7 @@ const envSchema = z.object({
   PORT: z.string().default("8080"),
 });
 
-export type Env = z.infer<<typeof envSchema>;
+export type Env = z.infer<typeof envSchema>;
 let validatedEnv: Env | null = null;
 
 export function validateConfig(): Env {

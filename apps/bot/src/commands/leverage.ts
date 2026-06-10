@@ -9,7 +9,7 @@ Current max leverage:
 • xUSD: 10x
 
 Use `/leverage xETH 5` to set leverage.', { parse_mode: 'Markdown' });
-  } async catch(error) {
+  } catch(error) {
     console.error('Leverage error:', error);
     await ctx.reply('❌ Error fetching leverage settings. Please try again.');
   }

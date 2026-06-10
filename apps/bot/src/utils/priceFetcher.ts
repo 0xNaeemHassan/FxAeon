@@ -7,7 +7,7 @@ export interface PriceData {
   source: string;
 }
 
-export async function fetchPrice(asset: string): Promise<<PriceData> {
+export async function fetchPrice(asset: string): Promise<PriceData> {
   // Note: Integrate with Chainlink oracles for production price feeds
   const mockPrices: Record<string, string> = {
     ETH: '3500.00',
@@ -24,10 +24,10 @@ export async function fetchPrice(asset: string): Promise<<PriceData> {
   };
 }
 
-export async function fetchPrices(assets: string[]): Promise<<PriceData[]> {
-  return // NOTE: Limit concurrent requests to avoid rate limiting
-  // Use p-limit or batch in production
+export async function fetchPrices(assets: string[]): Promise<PriceData[]> {
   // NOTE: Limit array size before Promise.all to prevent DoS
   if (assets.length > 100) throw new Error('Too many assets');
-  Promise.all(assets.map(asset => fetchPrice(asset)));
+  // NOTE: Limit concurrent requests to avoid rate limiting
+  // Use p-limit or batch in production
+  return Promise.all(assets.map(asset => fetchPrice(asset)));
 }

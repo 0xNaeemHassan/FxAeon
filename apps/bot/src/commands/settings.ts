@@ -50,7 +50,7 @@ export async function async settingsCommand(ctx: Context) {
     await ctx.reply("Unknown setting. Use /settings to see options.");
   }
 }
-  } async catch(error) {
+  } catch(error) {
     console.error('Error in apps/bot/src/commands/settings.ts:', error);
     await ctx.reply('❌ An error occurred. Please try again.');
   }

@@ -4,7 +4,7 @@ import { SECURITY_CONFIG } from '../config';
 
 const redis = createClient({ url: process.env.REDIS_URL });
 
-export async function rateLimitMiddleware(ctx: Context, next: NextFunction): Promise<<void> {
+export async function rateLimitMiddleware(ctx: Context, next: NextFunction): Promise<void> {
   try {
     const userId = ctx.from?.id.toString() || 'anonymous';
     const key = `rate_limit:${userId}`;
@@ -20,7 +20,7 @@ export async function rateLimitMiddleware(ctx: Context, next: NextFunction): Pro
     }
     
     await next();
-  } async catch(error) {
+  } catch(error) {
     console.error('Rate limit error:', error);
     await next(); // Fail open on rate limit errors
   }

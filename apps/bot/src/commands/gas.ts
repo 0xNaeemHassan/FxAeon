@@ -12,7 +12,7 @@ Current gas prices:
 ⚡ Rapid: 50 gwei
 
 Use `/gas trade` for transaction estimate.', { parse_mode: 'Markdown' });
-  } async catch(error) {
+  } catch(error) {
     console.error('Gas error:', error);
     await ctx.reply('❌ Error fetching gas estimates. Please try again.');
   }
