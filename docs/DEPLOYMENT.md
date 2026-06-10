@@ -6,7 +6,7 @@
 |---|---|---|
 | **Telegram Bot** | @FxAeonBot | Ready |
 | **Privy App ID** | `cmq6a73jc002k0cl5vgleejt2` | Ready |
-| **Alchemy RPC** | `https://eth-mainnet.g.alchemy.com/v2/JIxO3Kr6uIQpBImDQEebV` | Ready |
+| **Alchemy RPC** | `https://eth-mainnet.g.alchemy.com/v2/<key>` (from Alchemy dashboard) | Ready |
 | **Supabase DB** | `gadzbgakqipnvkfozcfa.supabase.co` | Ready |
 | **Upstash Redis** | `allowed-honeybee-114181.upstash.io` | Ready |
 
@@ -16,7 +16,7 @@
 # 1. Clone and enter
 cd fxbot
 
-# 2. Environment is already configured in .env
+# 2. Copy .env.example to .env and fill in real values (never commit .env)
 
 # 3. Build and start
 docker-compose up -d
@@ -40,21 +40,21 @@ flyctl apps create fxaeon-bot
 
 # Set secrets
 flyctl secrets set \
-  TELEGRAM_BOT_TOKEN=8829006529:AAEedRLv8KKXx7DWBFbAfzBrFmtfj52S3so \
-  PRIVY_APP_ID=cmq6a73jc002k0cl5vgleejt2 \
-  PRIVY_APP_SECRET=privy_app_secret_4VcKWY4GKjpfQ4NwKqSjPgt2YMhXZSKdGtW7hoSAVCSdnGurbCj1g1WEwBriJneZpdej76feaErUPTHAu1sGfzR2 \
-  DATABASE_URL=postgresql://postgres:vL5mMcXne1CLOm4z@db.gadzbgakqipnvkfozcfa.supabase.co:5432/postgres \
-  REDIS_URL=https://allowed-honeybee-114181.upstash.io \
-  REDIS_TOKEN=gQAAAAAAAb4FAAIgcDI0ZjczYzM4YmQwZDE0NjFlYWVmYmVhNTZmMTFlYzcxMw \
-  ALCHEMY_RPC_URL=https://eth-mainnet.g.alchemy.com/v2/JIxO3Kr6uIQpBImDQEebV \
-  ENCRYPTION_KEY=your_32_char_key_here \
+  TELEGRAM_BOT_TOKEN=<from BotFather> \
+  PRIVY_APP_ID=<from Privy dashboard> \
+  PRIVY_APP_SECRET=<from Privy dashboard> \
+  DATABASE_URL=<from Supabase: Settings -> Database -> Connection string> \
+  REDIS_URL=<from Upstash: REST URL> \
+  REDIS_TOKEN=<from Upstash: REST token> \
+  ALCHEMY_RPC_URL=https://eth-mainnet.g.alchemy.com/v2/<key> \
+  ENCRYPTION_KEY=<openssl rand -hex 32> \
   MINI_APP_URL=https://fxbot-mini-app.pages.dev
 
 # Deploy
 flyctl deploy
 
 # Set webhook
-curl -X POST "https://api.telegram.org/bot8829006529:AAEedRLv8KKXx7DWBFbAfzBrFmtfj52S3so/setWebhook" \
+curl -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
   -d "url=https://fxaeon-bot.fly.dev/webhook"
 ```
 

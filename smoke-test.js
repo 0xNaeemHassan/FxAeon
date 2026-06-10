@@ -8,8 +8,16 @@
 const https = require('https');
 const http = require('http');
 
+function requireEnv(name) {
+  const v = process.env[name];
+  if (!v) {
+    throw new Error(`Missing required env var: ${name}`);
+  }
+  return v;
+}
+
 const BASE_URL = process.argv[2] || process.env.BOT_URL || 'http://localhost:8080';
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || '8829006529:AAEedRLv8KKXx7DWBFbAfzBrFmtfj52S3so';
+const TELEGRAM_TOKEN = requireEnv('TELEGRAM_TOKEN');
 const MINI_APP_URL = process.env.MINI_APP_URL || 'https://fxbot-mini-app.pages.dev';
 
 const green = (s) => `\x1b[32m${s}\x1b[0m`;
@@ -134,7 +142,7 @@ async function runTests() {
   // Alchemy RPC
   try {
     const res = await request(
-      'https://eth-mainnet.g.alchemy.com/v2/JIxO3Kr6uIQpBImDQEebV',
+      requireEnv('ALCHEMY_RPC_URL'),
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -177,8 +185,8 @@ async function runTests() {
 
   // Upstash
   try {
-    const res = await request('https://allowed-honeybee-114181.upstash.io', {
-      headers: { Authorization: 'Bearer gQAAAAAAAb4FAAIgcDI0ZjczYzM4YmQwZDE0NjFlYWVmYmVhNTZmMTFlYzcxMw' },
+    const res = await request(requireEnv('REDIS_URL'), {
+      headers: { Authorization: `Bearer ${requireEnv('REDIS_TOKEN')}` },
     });
     if (res.status === 200 || res.status === 401) {
       logPass('Upstash Redis reachable');
