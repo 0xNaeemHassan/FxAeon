@@ -19,7 +19,7 @@ const webhookLimiter = new RateLimiterRedis({
   points: 30, duration: 1,
 });
 
-export async function async rateLimiter(req: Request, res: Response, next: NextFunction) {
+export async function rateLimiter(req: Request, res: Response, next: NextFunction) {
   const key = req.ip || "unknown";
   let limiter = globalLimiter;
   if (req.path === "/webhook") limiter = webhookLimiter;

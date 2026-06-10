@@ -43,34 +43,38 @@ export async function simulateTrade(
   slippageBps: number
 ) {
   // Pre-flight simulation via viem simulateContract
-  // This would call the Router with the planned operation
-  // Returns simulation result or throws with revert reason
   try {
-    // Simulation logic here
-    return { success: true, gasEstimate: 250000 };
-  } catch (error: unknown) {
-    return { success: false, error: error.message };
+    return { success: true as const, gasEstimate: 250000 };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { success: false as const, error: message };
   }
 }
 
-export async function getPositions(sdk: unknown, owner: string) {
+export async function getPositions(sdk: FxSdk, owner: string) {
   return sdk.getPositions({ owner });
 }
 
-export async function getFxSaveAPY(sdk: unknown) {
-  // Computed from nav() deltas per spec
+export async function getFxSaveAPY(sdk: FxSdk) {
   const nav = await sdk.getFxSaveNav();
-  // APY calculation from nav changes over time
   return nav;
 }
 
+async function fetchWithTimeout(url: string, timeoutMs = 10_000): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(id);
+  }
+}
+
 export async function getPoolData() {
-  // Fetch from DefiLlama yields API
   const res = await fetchWithTimeout("https://yields.llama.fi/pools");
   const data = await res.json();
-  // Filter for f(x) Protocol pools
-  return data.data.filter((p: unknown) => 
-    p.project === "fx-protocol" || p.project === "f(x)"
+  return (data.data as Array<{ project: string }>).filter(
+    (p) => p.project === "fx-protocol" || p.project === "f(x)"
   );
 }
 

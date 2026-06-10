@@ -1,18 +1,18 @@
 import { Context } from "grammy";
 import { prisma } from "@fxbot/db";
 
-export async function async saveCommand(ctx: Context) {
+export async function saveCommand(ctx: Context) {
   const telegramId = ctx.from?.id.toString();
   if (!telegramId) return;
 
   const user = await prisma.user.findUnique({ where: { telegramId } });
-  async if(!user) {
+  if(!user) {
     await ctx.reply("Please connect your wallet first with /start");
     return;
   }
 
   const args = ctx.message?.text?.split(" ").slice(1) || [];
-  async if(args.length === 0) {
+  if(args.length === 0) {
     await ctx.reply(
       `Usage: /save <deposit|withdraw> <amount>\n\n` +
       `Example: /save deposit 1000\n` +

@@ -21,9 +21,19 @@ services:
         sync: false
       - key: PRIVY_APP_SECRET
         sync: false
-      - key: SENTRY_DSN
+      - key: ETH_RPC_URL
+        sync: false
+      - key: ALCHEMY_RPC_URL
         sync: false
       - key: REDIS_URL
         sync: false
-      - key: ENCRYPTION_KEY
+      - key: SENTRY_DSN
+        sync: false
+      - key: KMS_MASTER_KEY
+        sync: false
+      - key: SURPLUS_API_KEY
+        sync: false
+      - key: MINI_APP_URL
+        sync: false
+      - key: PRIVY_AUTHORIZATION_KEY
         sync: false

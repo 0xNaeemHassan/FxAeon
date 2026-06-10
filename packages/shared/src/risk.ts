@@ -37,6 +37,42 @@ export const RISK_PARAMETERS = {
   TRAILING_STOP_MAX_DISTANCE: 20,
 } as const;
 
+/**
+ * RISK_PARAMS — convenience alias with field names used by the bot.
+ * Maps semantic names to the canonical RISK_PARAMETERS values.
+ */
+export const RISK_PARAMS = {
+  MAX_LEVERAGE_LONG: RISK_PARAMETERS.MAX_LEVERAGE_XETH,        // 31x
+  MAX_LEVERAGE_SHORT: RISK_PARAMETERS.MAX_LEVERAGE_XUSD,       // 10x
+  MIN_LEVERAGE: 1,
+  LIQUIDATION_THRESHOLD: RISK_PARAMETERS.LIQUIDATION_THRESHOLD,
+  SLIPPAGE_DEFAULT_BPS: RISK_PARAMETERS.DEFAULT_SLIPPAGE_BPS,  // 50 = 0.5%
+  SLIPPAGE_MAX_BPS: RISK_PARAMETERS.MAX_SLIPPAGE_BPS,          // 500 = 5%
+  OPEN_RATIO_BASE_WSTETH: 30,   // basis-point fee for opening wstETH positions
+  OPEN_RATIO_BASE_WBTC: 30,     // basis-point fee for opening WBTC positions
+} as const;
+
+/**
+ * Health-level thresholds (percent).
+ * health < URGENT  → position at high liquidation risk
+ * health < WARNING → position needs attention
+ */
+export const HEALTH_LEVELS = {
+  URGENT: 85,
+  WARNING: 95,
+} as const;
+
+/**
+ * Convert a debt ratio (0–1 range) to a health percentage (0–100).
+ * health = 100 × (1 − debtRatio / liquidationThreshold)
+ * At debtRatio == 0.8 (liquidation), health == 0.
+ */
+export function computeHealthPercent(debtRatio: number): number {
+  const threshold = RISK_PARAMETERS.LIQUIDATION_THRESHOLD / 100; // 0.8
+  const health = 100 * (1 - debtRatio / threshold);
+  return Math.max(0, Math.min(100, health));
+}
+
 export type RiskParameter = keyof typeof RISK_PARAMETERS;
 
 export function getRiskParameter(name: RiskParameter): number {

@@ -63,7 +63,8 @@ simulateRouter.post("/trade", async (req, res) => {
       warnings: lev > 5 ? ["High leverage increases liquidation risk"] : [],
     });
   } catch (error: unknown) {
-    throw new SimulationError(error.message, { address, market, side, leverage });
+    const message = error instanceof Error ? error.message : String(error);
+    throw new SimulationError(message, { address, market, side, leverage });
   }
 });
 

@@ -10,7 +10,7 @@ RUN apk add --no-cache python3 make g++ openssl
 RUN npm install -g pnpm@9
 
 # Copy workspace config + per-package manifests (cache-friendly layer)
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/db/package.json ./packages/db/
 COPY apps/bot/package.json ./apps/bot/
@@ -18,7 +18,7 @@ COPY apps/bot/package.json ./apps/bot/
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
-# Copy source
+# Copy source (includes i18n JSON locale files needed at runtime)
 COPY packages/shared/ ./packages/shared/
 COPY packages/db/ ./packages/db/
 COPY apps/bot/ ./apps/bot/

@@ -5,7 +5,7 @@ export async function authMiddleware(ctx: Context, next: NextFunction): Promise<
   try {
     // Check if user is authenticated
     const userId = ctx.from?.id.toString();
-    async if(!userId) {
+    if(!userId) {
       await ctx.reply('❌ Authentication required. Please use /start to connect your wallet.');
       return;
     }
@@ -24,7 +24,7 @@ export async function authMiddleware(ctx: Context, next: NextFunction): Promise<
 }
 
 export async function requireWallet(ctx: Context, next: NextFunction): Promise<void> {
-  async if(!ctx.state?.walletAddress) {
+  if(!ctx.state?.walletAddress) {
     try {
       await ctx.reply('🔐 Please connect your wallet first using /start');
     } catch (error) {

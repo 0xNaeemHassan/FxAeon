@@ -5,17 +5,17 @@ function generateReferralCode(): string {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
-export async function async referCommand(ctx: Context) {
+export async function referCommand(ctx: Context) {
   const telegramId = ctx.from?.id.toString();
   if (!telegramId) return;
 
   let user = await prisma.user.findUnique({ where: { telegramId } });
-  async if(!user) {
+  if(!user) {
     await ctx.reply("Please connect your wallet first with /start");
     return;
   }
 
-  async if(!user.referralCode) {
+  if(!user.referralCode) {
     const code = generateReferralCode();
     user = await prisma.user.update({
       where: { telegramId },

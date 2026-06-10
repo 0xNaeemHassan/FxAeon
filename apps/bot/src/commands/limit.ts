@@ -2,18 +2,18 @@ import { Context } from "grammy";
 import { prisma } from "@fxbot/db";
 import { MARKETS } from "@fxbot/shared";
 
-export async function async limitCommand(ctx: Context) {
+export async function limitCommand(ctx: Context) {
   const telegramId = ctx.from?.id.toString();
   if (!telegramId) return;
 
   const user = await prisma.user.findUnique({ where: { telegramId } });
-  async if(!user) {
+  if(!user) {
     await ctx.reply("Please connect your wallet first with /start");
     return;
   }
 
   const args = ctx.message?.text?.split(" ").slice(1) || [];
-  async if(args.length < 4) {
+  if(args.length < 4) {
     await ctx.reply(
       `Usage: /limit <open|close> <market> <long|short> <at price>\n\n` +
       `Examples:\n` +

@@ -1,10 +1,10 @@
-import { NextFunction, Request, Response } from "express";
+import express, { NextFunction, Request, Response } from "express";
 import { rateLimiter } from "./rate-limiter";
 import { logger } from "./logger";
 import helmet from "helmet";
 import cors from "cors";
 
-export function applySecurityMiddleware(app: unknown) {
+export function applySecurityMiddleware(app: express.Application) {
   app.use(helmet({
     contentSecurityPolicy: {
       directives: {
@@ -40,7 +40,7 @@ export function applySecurityMiddleware(app: unknown) {
   });
 }
 
-export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction) {
+export function errorHandler(err: Error & { status?: number; code?: string }, req: Request, res: Response, _next: NextFunction) {
   logger.error({ error: err.message, stack: err.stack, path: req.path }, "Unhandled error");
   const isDev = process.env.NODE_ENV === "development";
   res.status(err.status || 500).json({
@@ -48,7 +48,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   });
 }
 
-export function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => Promise<any>) {
+export function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>) {
   return (req: Request, res: Response, next: NextFunction) => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };

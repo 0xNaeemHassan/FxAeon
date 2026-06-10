@@ -5,18 +5,18 @@ export default async function handler(ctx: unknown) {
 import { prisma } from "@fxbot/db";
 import { RISK_PARAMS } from "@fxbot/shared";
 
-export async function async settingsCommand(ctx: Context) {
+export async function settingsCommand(ctx: Context) {
   const telegramId = ctx.from?.id.toString();
   if (!telegramId) return;
 
   const user = await prisma.user.findUnique({ where: { telegramId } });
-  async if(!user) {
+  if(!user) {
     await ctx.reply("Please connect your wallet first with /start");
     return;
   }
 
   const args = ctx.message?.text?.split(" ").slice(1) || [];
-  async if(args.length === 0) {
+  if(args.length === 0) {
     await ctx.reply(
       `⚙️ *Settings*\n\n` +
       `Language: ${user.language}\n` +
@@ -34,7 +34,7 @@ export async function async settingsCommand(ctx: Context) {
   if (key === "lang" && ["en", "zh-CN", "ko", "ja", "ru", "es"].includes(value)) {
     await prisma.user.update({ where: { telegramId }, data: { language: value } });
     await ctx.reply(`Language set to ${value}`);
-  } else async if(key === "slippage") {
+  } else if(key === "slippage") {
     const bps = Math.round(parseFloat(value) * 100);
     if (bps > 0 && bps <= RISK_PARAMS.SLIPPAGE_MAX_BPS) {
       await prisma.user.update({ where: { telegramId }, data: { slippageBps: bps } });
@@ -42,7 +42,7 @@ export async function async settingsCommand(ctx: Context) {
     } else {
       await ctx.reply(`Slippage must be between 0.01% and ${RISK_PARAMS.SLIPPAGE_MAX_BPS / 100}%`);
     }
-  } else async if(key === "mev") {
+  } else if(key === "mev") {
     const mev = value === "on" ? "flashbots" : "off";
     await prisma.user.update({ where: { telegramId }, data: { mevProtection: mev } });
     await ctx.reply(`MEV Protection ${mev === "flashbots" ? "enabled (Flashbots)" : "disabled"}`);

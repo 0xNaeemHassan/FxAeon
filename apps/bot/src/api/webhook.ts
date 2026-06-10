@@ -19,7 +19,8 @@ webhookRouter.post("/privy", async (req, res) => {
     res.json({ received: true, processed: true });
   } catch (error: unknown) {
     console.error("Webhook processing error:", error);
-    res.status(500).json({ error: "Failed to process webhook", details: error.message });
+    const message = error instanceof Error ? error.message : String(error);
+    res.status(500).json({ error: "Failed to process webhook", details: message });
   }
 });
 
