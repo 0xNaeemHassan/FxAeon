@@ -1,6 +1,6 @@
 import express, { NextFunction, Request, Response } from "express";
-import { rateLimiter } from "./rate-limiter";
-import { logger } from "./logger";
+import { rateLimiter } from "./rate-limiter.js";
+import { logger } from "./logger.js";
 import helmet from "helmet";
 import cors from "cors";
 

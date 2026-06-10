@@ -2,7 +2,7 @@ import { Router } from "express";
 import { createPublicClient, http, parseEther, parseUnits } from "viem";
 import { mainnet } from "viem/chains";
 import { ADDRESSES, RISK_PARAMS } from "@fxbot/shared";
-import { SimulationError, ValidationError } from "../middleware/errors";
+import { SimulationError, ValidationError } from "../middleware/errors.js";
 
 export const simulateRouter = Router();
 

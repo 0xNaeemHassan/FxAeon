@@ -1,6 +1,6 @@
 // INPUT VALIDATION: All user inputs must be validated with Zod schemas
 import { Request, Response } from "express";
-import { txNotifier } from "../notifications/tx-notifier";
+import { txNotifier } from "../notifications/tx-notifier.js";
 
 export async function privyWebhookHandler(req: Request, res: Response) {
   try {

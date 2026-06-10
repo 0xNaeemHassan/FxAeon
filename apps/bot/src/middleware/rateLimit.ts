@@ -1,6 +1,6 @@
 import { Context, NextFunction } from 'grammy';
 import { createClient } from 'redis';
-import { SECURITY_CONFIG } from '../config';
+import { SECURITY_CONFIG } from '../config.js';
 
 const redis = createClient({ url: process.env.REDIS_URL });
 
