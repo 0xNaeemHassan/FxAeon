@@ -6,6 +6,8 @@
     "dev": "tsx watch src/main.ts",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "audit": "npm audit --audit-level=moderate",
     "audit:fix": "npm audit fix"
   },
