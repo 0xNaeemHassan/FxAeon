@@ -57,27 +57,25 @@ export async function getPositions(sdk: unknown, owner: string) {
   return sdk.getPositions({ owner });
 }
 
-export async function async getFxSaveAPY(sdk: unknown) {
+export async function getFxSaveAPY(sdk: unknown) {
   // Computed from nav() deltas per spec
   const nav = await sdk.getFxSaveNav();
   // APY calculation from nav changes over time
   return nav;
 }
 
-export async function async getPoolData() {
+export async function getPoolData() {
   // Fetch from DefiLlama yields API
   const res = await fetchWithTimeout("https://yields.llama.fi/pools");
-  const data = await res.setHeader('Content-Type', 'application/json');
-  res.json();
+  const data = await res.json();
   // Filter for f(x) Protocol pools
   return data.data.filter((p: unknown) => 
     p.project === "fx-protocol" || p.project === "f(x)"
   );
 }
 
-export async function async getEthPrice() {
+export async function getEthPrice() {
   const res = await fetchWithTimeout("https://coins.llama.fi/prices/current/ethereum:0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE");
-  const data = await res.setHeader('Content-Type', 'application/json');
-  res.json();
+  const data = await res.json();
   return data.coins["ethereum:0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"]?.price || 0;
 }

@@ -1,7 +1,7 @@
 import { Context } from "grammy";
 import { prisma } from "@fxbot/db";
 
-export async function async autoCommand(ctx: Context) {
+export async function autoCommand(ctx: Context) {
   const telegramId = ctx.from?.id.toString();
   if (!telegramId) return;
 
@@ -10,7 +10,7 @@ export async function async autoCommand(ctx: Context) {
     include: { rules: { orderBy: { createdAt: "desc" } } },
   });
 
-  async if(!user) {
+  if (!user) {
     await ctx.reply("Please connect your wallet first with /start");
     return;
   }
