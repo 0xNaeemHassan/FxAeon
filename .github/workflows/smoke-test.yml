@@ -2,7 +2,7 @@ name: Post-Deploy Smoke Test
 
 on:
   workflow_run:
-    workflows: ["Deploy Bot", "Deploy Mini App"]
+    workflows: ["Deploy", "Deploy Mini App to Cloudflare Pages"]
     types: [completed]
   workflow_dispatch:
     inputs:

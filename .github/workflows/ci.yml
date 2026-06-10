@@ -18,7 +18,7 @@ jobs:
         with:
           node-version: '22'
           cache: 'pnpm'
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --no-frozen-lockfile
       - run: pnpm lint
 
   typecheck:
@@ -32,8 +32,9 @@ jobs:
         with:
           node-version: '22'
           cache: 'pnpm'
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --no-frozen-lockfile
       - run: pnpm --filter @fxbot/shared build
+      - run: pnpm --filter @fxbot/db build
       - run: pnpm typecheck
 
   test:
@@ -59,7 +60,9 @@ jobs:
         with:
           node-version: '22'
           cache: 'pnpm'
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm --filter @fxbot/shared build
+      - run: pnpm --filter @fxbot/db build
       - run: pnpm test
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
@@ -77,7 +80,9 @@ jobs:
         with:
           node-version: '22'
           cache: 'pnpm'
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm --filter @fxbot/shared build
+      - run: pnpm --filter @fxbot/db build
       - run: pnpm --filter @fxbot/bot build
       - run: |
           timeout 10s pnpm --filter @fxbot/bot start &

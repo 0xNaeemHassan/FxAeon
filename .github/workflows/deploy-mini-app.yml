@@ -24,7 +24,7 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
 
       - name: Build shared package
         run: pnpm --filter @fxbot/shared build
@@ -38,8 +38,7 @@ jobs:
           NEXT_PUBLIC_ALCHEMY_RPC_URL: ${{ secrets.ALCHEMY_RPC_URL }}
 
       - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy apps/mini-app/dist --project-name=fxbot-mini-app
+        run: npx wrangler@3 pages deploy apps/mini-app/dist --project-name=fxbot-mini-app
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
