@@ -8,6 +8,7 @@ on:
 jobs:
   deploy-bot:
     runs-on: ubuntu-latest
+    if: ${{ vars.DEPLOY_BOT_ENABLED == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: superfly/flyctl-actions/setup-flyctl@master
@@ -26,18 +27,24 @@ jobs:
         with:
           node-version: '22'
           cache: 'pnpm'
-      - run: pnpm install
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @fxbot/shared build
       - run: pnpm --filter @fxbot/mini-app build
+        env:
+          NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID }}
+          NEXT_PUBLIC_TELEGRAM_BOT_USERNAME: ${{ secrets.TELEGRAM_BOT_USERNAME }}
+          NEXT_PUBLIC_MINI_APP_URL: ${{ secrets.MINI_APP_URL }}
+          NEXT_PUBLIC_ALCHEMY_RPC_URL: ${{ secrets.ALCHEMY_RPC_URL }}
       - name: Deploy to Cloudflare Pages
-        uses: cloudflare/pages-action@v1
+        uses: cloudflare/wrangler-action@v3
         with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: fxbot-mini-app
-          directory: apps/mini-app/dist
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          command: pages deploy apps/mini-app/dist --project-name=fxbot-mini-app
 
   deploy-db:
     runs-on: ubuntu-latest
+    if: ${{ vars.DEPLOY_DB_ENABLED == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v3
@@ -47,7 +54,7 @@ jobs:
         with:
           node-version: '22'
           cache: 'pnpm'
-      - run: pnpm install
+      - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @fxbot/db db:deploy
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
