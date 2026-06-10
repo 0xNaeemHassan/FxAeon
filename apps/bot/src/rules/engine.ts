@@ -13,24 +13,28 @@ export const ruleWorker = // NOTE: Use worker pool with max size in production
   new Worker("fxbot-rules", async (job) => {
   const { ruleId } = job.data;
   
+  let rule;
   try {
-    const rule = // NOTE: Wrap related DB operations in prisma.$transaction() for atomicity
-    await prisma.automationRule.findUnique({
+    // NOTE: Wrap related DB operations in prisma.$transaction() for atomicity
+    rule = await prisma.automationRule.findUnique({
+      where: { id: ruleId },
+      include: { user: true },
+    });
   } catch (error) {
     console.error('Error:', error);
+    return;
   }
-    where: { id: ruleId },
-    include: { user: true },
-  });
   
   if (!rule || rule.status !== "active") return;
   
   // Conflict resolution: Redis SETNX lock
   const lockKey = `rule:lock:${rule.userId}:${rule.type}`;
+  let lock;
   try {
-    const lock = await redis.set(lockKey, ruleId, "EX", 60, "NX");
+    lock = await redis.set(lockKey, ruleId, "EX", 60, "NX");
   } catch (error) {
     console.error('Error:', error);
+    return;
   }
   if (!lock) {
     if (process.env.NODE_ENV !== "production") console.log(`Rule ${ruleId} skipped — another rule holds lock`);
@@ -44,19 +48,21 @@ export const ruleWorker = // NOTE: Use worker pool with max size in production
       transport: http(process.env.ALCHEMY_RPC_URL!),
     });
     
+    let simResult;
     try {
-      const simResult = await simulateTrade(
+      simResult = await simulateTrade(
+        publicClient,
+        rule.user.walletAddress,
+        "wstETH", // Would be dynamic
+        "long",
+        2,
+        "1",
+        rule.user.slippageBps
+      );
     } catch (error) {
       console.error('Error:', error);
+      throw error;
     }
-      publicClient,
-      rule.user.walletAddress,
-      "wstETH", // Would be dynamic
-      "long",
-      2,
-      "1",
-      rule.user.slippageBps
-    );
     
     if (!simResult.success) {
       throw new Error(`Simulation failed: ${simResult.error}`);
@@ -71,28 +77,28 @@ export const ruleWorker = // NOTE: Use worker pool with max size in production
     
     try {
       // NOTE: Wrap related DB operations in prisma.$transaction() for atomicity
-    await prisma.automationRule.update({
+      await prisma.automationRule.update({
+        where: { id: ruleId },
+        data: { lastRun: new Date(), failureCount: 0 },
+      });
     } catch (error) {
       console.error('Error:', error);
     }
-      where: { id: ruleId },
-      data: { lastRun: new Date(), failureCount: 0 },
-    });
     
     // Log to audit
     try {
       // NOTE: Wrap related DB operations in prisma.$transaction() for atomicity
-    await prisma.auditLog.create({
+      await prisma.auditLog.create({
+        data: {
+          userId: rule.userId,
+          action: "rule_executed",
+          category: "automation",
+          data: { ruleId, type: rule.type },
+        },
+      });
     } catch (error) {
       console.error('Error:', error);
     }
-      data: {
-        userId: rule.userId,
-        action: "rule_executed",
-        category: "automation",
-        data: { ruleId, type: rule.type },
-      },
-    });
     
   } catch(error: unknown) {
     const newFailureCount = rule.failureCount + 1;
@@ -100,7 +106,7 @@ export const ruleWorker = // NOTE: Use worker pool with max size in production
     if (newFailureCount >= 3) {
       // Pause on 3rd failure
       // NOTE: Wrap related DB operations in prisma.$transaction() for atomicity
-    await prisma.automationRule.update({
+      await prisma.automationRule.update({
         where: { id: ruleId },
         data: { status: "failed", failureCount: newFailureCount },
       });
@@ -114,7 +120,7 @@ export const ruleWorker = // NOTE: Use worker pool with max size in production
       // Retry with backoff: 5min, 30min
       const delay = newFailureCount === 1 ? 5 * 60 * 1000 : 30 * 60 * 1000;
       // NOTE: Wrap related DB operations in prisma.$transaction() for atomicity
-    await prisma.automationRule.update({
+      await prisma.automationRule.update({
         where: { id: ruleId },
         data: { failureCount: newFailureCount },
       });
@@ -126,31 +132,33 @@ export const ruleWorker = // NOTE: Use worker pool with max size in production
 }, { connection: redis });
 
 // Schedule cron-based rules
-export async function async scheduleRule(rule: unknown) {
+export async function scheduleRule(rule: unknown) {
   if (rule.trigger.schedule) {
     // Parse cron and schedule with BullMQ repeat
     try {
       await ruleQueue.add("cron", { ruleId: rule.id }, {
+        repeat: { cron: rule.trigger.schedule },
+      });
     } catch (error) {
       console.error('Error:', error);
     }
-      repeat: { cron: rule.trigger.schedule },
-    });
   }
 }
 
 // Continuous watcher for price/health conditions
-export async function async startConditionWatcher() {
+export async function startConditionWatcher() {
   const _intervalId = setInterval(async () => {
+    let activeRules;
     try {
-      const activeRules = // NOTE: Wrap related DB operations in prisma.$transaction() for atomicity
-    await prisma.automationRule.findMany({
+      // NOTE: Wrap related DB operations in prisma.$transaction() for atomicity
+      activeRules = await prisma.automationRule.findMany({
+        where: { status: "active" },
+        include: { user: true },
+      });
     } catch (error) {
       console.error('Error:', error);
+      return;
     }
-      where: { status: "active" },
-      include: { user: true },
-    });
     
     for(const rule of activeRules) {
       if (rule.trigger.priceCondition || rule.trigger.healthCondition) {

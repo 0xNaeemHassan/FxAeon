@@ -2,7 +2,7 @@ import { Context } from 'grammy';
 
 export default async function handler(ctx: Context): Promise<void> {
   try {
-    await ctx.reply('⛽ *Gas Estimates*
+    await ctx.reply(`⛽ *Gas Estimates*
 
 Current gas prices:
 
@@ -11,7 +11,7 @@ Current gas prices:
 🚀 Fast: 30 gwei
 ⚡ Rapid: 50 gwei
 
-Use `/gas trade` for transaction estimate.', { parse_mode: 'Markdown' });
+Use \`/gas trade\` for transaction estimate.`, { parse_mode: 'Markdown' });
   } catch(error) {
     console.error('Gas error:', error);
     await ctx.reply('❌ Error fetching gas estimates. Please try again.');
