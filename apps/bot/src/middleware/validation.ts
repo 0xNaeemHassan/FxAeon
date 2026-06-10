@@ -29,7 +29,7 @@ export async function validateInput(ctx: Context, next: NextFunction): Promise<v
     await next();
   } catch (error) {
     if (error instanceof z.ZodError) {
-      await ctx.reply('❌ Invalid input: ' + error.errors.map(e => e.message).join(', '));
+      await ctx.reply('❌ Invalid input: ' + error.issues.map((e: { message: string }) => e.message).join(', '));
     } else {
       throw error;
     }

@@ -1,5 +1,4 @@
-import { Router } from "express";
-import { asyncHandler } from "../middleware";
+import { Router, Request, Response, NextFunction } from "express";
 import { healthRouter } from "./health";
 import { simulateRouter } from "./simulate-trade";
 import { webhookRouter } from "./webhook";
@@ -11,7 +10,7 @@ apiRouter.use("/simulate", simulateRouter);
 apiRouter.use("/webhook", webhookRouter);
 
 // Global error handler for API routes
-apiRouter.use((err: unknown, req: unknown, res: unknown, next: unknown) => {
+apiRouter.use((err: Error & { status?: number; code?: string }, req: Request, res: Response, _next: NextFunction) => {
   console.error("API Error:", err);
   res.status(err.status || 500).json({
     error: {

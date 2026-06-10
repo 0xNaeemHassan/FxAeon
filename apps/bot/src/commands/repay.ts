@@ -12,7 +12,7 @@ export async function repayCommand(ctx: Context) {
   }
 
   const args = ctx.message?.text?.split(" ").slice(1) || [];
-  const amount = args.length > 0 ? args[0] : undefined || "all";
+  const amount = (args.length > 0 ? args[0] : undefined) || "all";
 
   const miniAppUrl = process.env.MINI_APP_URL || "https://fxbot-mini-app.pages.dev";
   await ctx.reply(

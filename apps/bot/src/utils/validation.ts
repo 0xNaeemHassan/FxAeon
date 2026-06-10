@@ -27,7 +27,7 @@ export const batchSchema = z.object({
   transactions: z.array(z.object({
     type: z.enum(['open', 'close', 'adjust']),
     asset: z.enum(['xETH', 'xUSD']),
-    params: z.record(z.any()),
+    params: z.record(z.string(), z.any()),
   })).min(1).max(10),
 });
 

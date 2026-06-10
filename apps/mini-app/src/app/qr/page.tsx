@@ -8,6 +8,7 @@ import { Copy, Check, ArrowLeft } from 'lucide-react';
 
 function QRPageContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const address = searchParams.get('address') || '';
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -97,7 +98,6 @@ function QRPageContent() {
 }
 
 export default function QRPage() {
-  const router = useRouter();
   return (
     <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>}>
       <QRPageContent />

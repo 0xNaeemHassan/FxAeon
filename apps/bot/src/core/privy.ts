@@ -11,8 +11,17 @@ export async function verifyUser(token: string): Promise<{
   wallet?: string;
 } | null> {
   try {
-    const user = await privy.verifyAuthToken(token);
-    return { id: user.userId, wallet: user.linkedAccounts?.[0]?.address ?? undefined };
+    const claims = await privy.verifyAuthToken(token);
+    // AuthTokenClaims only has userId, appId, issuer, etc.
+    // Wallet address must be fetched separately via privy.getUser()
+    try {
+      const user = await privy.getUser(claims.userId);
+      const walletAccount = (user.linkedAccounts as Array<{ type: string; address?: string }>)
+        ?.find((a) => a.type === 'wallet');
+      return { id: claims.userId, wallet: walletAccount?.address };
+    } catch {
+      return { id: claims.userId };
+    }
   } catch {
     return null;
   }

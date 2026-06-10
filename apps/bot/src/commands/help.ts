@@ -54,57 +54,31 @@ const COMMAND_CATEGORIES = [
 
 export async function helpCommand(ctx: Context) {
   try {
-    let msg = `📚 *FxAeon Command Guide*
-
-`;
-    msg += `Tap any command below to use it, or type it directly.
-
-`;
+    let msg = `📚 fxBot Help — Command Guide\n\n`;
+    msg += `Tap any command below to use it, or type it directly.\n\n`;
 
     for (const category of COMMAND_CATEGORIES) {
-      msg += `${category.emoji} *${category.title}*
-`;
+      msg += `${category.emoji} ${category.title}\n`;
       for (const { cmd, desc } of category.commands) {
-        msg += `  ${cmd} — ${desc}
-`;
+        msg += `  ${cmd} — ${desc}\n`;
       }
-      msg += `
-`;
+      msg += `\n`;
     }
 
-    msg += `*Key Features:*
-`;
-    msg += `• Non-custodial — keys in Privy TEE
-`;
-    msg += `• Zero on-ramps — fund your own wallet
-`;
-    msg += `• MEV protection toggle (Flashbots, free)
-`;
-    msg += `• 8 languages: en, zh, ko, ja, ru, es, ar, de
-
-`;
+    msg += `Key Features:\n`;
+    msg += `• Non-custodial — keys in Privy TEE\n`;
+    msg += `• Zero on-ramps — fund your own wallet\n`;
+    msg += `• MEV protection toggle (Flashbots, free)\n`;
+    msg += `• 6 languages: en, zh-CN, ko, ja, ru, es\n\n`;
     msg += `Need help? Use /start to reconnect or contact support.`;
 
-    await ctx.reply(msg, { 
-      parse_mode: "Markdown",
-      reply_markup: {
-        inline_keyboard: [
-          [
-            { text: "⚡ Open Trade", callback_data: "nav_trade" },
-            { text: "📊 Portfolio", callback_data: "nav_portfolio" }
-          ],
-          [
-            { text: "⚙️ Settings", callback_data: "nav_settings" },
-            { text: "🛡️ Security", callback_data: "nav_security" }
-          ]
-        ]
-      }
-    });
+    await ctx.reply(msg);
   } catch (error) {
     console.error('[helpCommand] Error:', error);
     await ctx.reply(
-      `❌ Couldn't load the help menu. Try /start to reconnect.`,
-      { parse_mode: "Markdown" }
+      `❌ Couldn't load the help menu. Try /start to reconnect.`
     );
   }
 }
+
+export default helpCommand;

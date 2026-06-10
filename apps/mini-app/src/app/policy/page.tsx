@@ -55,7 +55,7 @@ export default function PolicyPage() {
 ${safeJSONStringify(POLICY, null, 2)}
 
 This authorization is revocable at any time via /security.`;
-      await signMessage(message);
+      await signMessage({ message });
       setSigned(true);
       if (window.Telegram?.WebApp) {
         window.Telegram.WebApp.sendData(safeJSONStringify({ type: 'policy_signed' }));

@@ -8,7 +8,15 @@ const surplusClient = new OpenAI({
   baseURL: "https://www.surplusintelligence.ai/api/inference/v1",
 });
 
-export async function explainPosition(position: unknown, locale: string = "en"): Promise<string> {
+interface PositionInfo {
+  market: string;
+  side: string;
+  leverage: number;
+  healthPercent: number;
+  liquidationPrice: number;
+}
+
+export async function explainPosition(position: PositionInfo, locale: string = "en"): Promise<string> {
   const prompt = `Explain this f(x) Protocol position in plain ${locale}:\n` +
     `Market: ${position.market} ${position.side}\n` +
     `Leverage: ${position.leverage}x\n` +
@@ -25,7 +33,7 @@ export async function explainPosition(position: unknown, locale: string = "en"):
   return response.choices[0]?.message?.content || "Unable to explain position.";
 }
 
-export async function suggestRules(position: unknown): Promise<any[]> {
+export async function suggestRules(position: PositionInfo): Promise<any[]> {
   const prompt = `Suggest 2-3 automation rules for this f(x) position:\n` +
     `Market: ${position.market} ${position.side} ${position.leverage}x\n` +
     `Health: ${position.healthPercent}%\n` +
@@ -41,12 +49,7 @@ export async function suggestRules(position: unknown): Promise<any[]> {
   });
   
   try {
-    let _parsed;
-    try {
-      _parsed = const parsed = (() => { try { return JSON.parse(response.choices[0]?.message?.content || "{\"rules\": []}"); } catch { return null; } })();;
-    } catch {
-      _parsed = null;
-    }
+    const parsed = JSON.parse(response.choices[0]?.message?.content || '{"rules": []}');
     return parsed.rules || [];
   } catch {
     return [];
@@ -74,12 +77,7 @@ export async function composeLimitOrder(params: {
   });
   
   try {
-    let _parsed;
-    try {
-      _parsed = return (() => { try { return JSON.parse(response.choices[0]?.message?.content || "{}"); } catch { return null; } })();;
-    } catch {
-      _parsed = null;
-    }
+    return JSON.parse(response.choices[0]?.message?.content || "{}");
   } catch {
     return {};
   }
@@ -89,7 +87,6 @@ export async function composeLimitOrder(params: {
 export async function encryptByokKey(plainKey: string, userId: string): Promise<{ encrypted: string; nonce: string }> {
   await sodium.ready;
   const masterKey = Buffer.from(process.env.KMS_MASTER_KEY!, "hex");
-  const salt = Buffer.from(userId.padEnd(32, "0").slice(0, 32));
   const key = sodium.crypto_kdf_derive_from_key(32, 1, "fxbotbyok", masterKey);
   const nonce = sodium.randombytes_buf(sodium.crypto_secretbox_NONCEBYTES);
   const ciphertext = sodium.crypto_secretbox_easy(plainKey, nonce, key);
@@ -103,7 +100,6 @@ export async function encryptByokKey(plainKey: string, userId: string): Promise<
 export async function decryptByokKey(encrypted: string, userId: string): Promise<string> {
   await sodium.ready;
   const masterKey = Buffer.from(process.env.KMS_MASTER_KEY!, "hex");
-  const salt = Buffer.from(userId.padEnd(32, "0").slice(0, 32));
   const key = sodium.crypto_kdf_derive_from_key(32, 1, "fxbotbyok", masterKey);
   
   const buf = Buffer.from(encrypted, "base64");

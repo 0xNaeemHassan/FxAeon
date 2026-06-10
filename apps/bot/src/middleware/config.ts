@@ -31,9 +31,7 @@ export function validateConfig(): Env {
     if (error instanceof z.ZodError) {
       const issues = error.issues.map(i => `${i.path.join(".")}: ${i.message}`);
       logger.fatal({ issues }, "Configuration validation failed");
-      throw new Error(`Invalid configuration:
-${issues.join("
-")}`);
+      throw new Error(`Invalid configuration:\n${issues.join("\n")}`);
     }
     throw error;
   }
