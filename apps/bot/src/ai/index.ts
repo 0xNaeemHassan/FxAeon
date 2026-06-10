@@ -83,10 +83,18 @@ export async function composeLimitOrder(params: {
   }
 }
 
+function getKmsMasterKey(): Buffer {
+  const hex = process.env.KMS_MASTER_KEY;
+  if (!hex || hex.length !== 64) {
+    throw new Error("KMS_MASTER_KEY (64 hex chars) is required for BYOK key storage");
+  }
+  return Buffer.from(hex, "hex");
+}
+
 // BYOK: Encrypt user-provided API key
 export async function encryptByokKey(plainKey: string, userId: string): Promise<{ encrypted: string; nonce: string }> {
   await sodium.ready;
-  const masterKey = Buffer.from(process.env.KMS_MASTER_KEY!, "hex");
+  const masterKey = getKmsMasterKey();
   const key = sodium.crypto_kdf_derive_from_key(32, 1, "fxbotbyok", masterKey);
   const nonce = sodium.randombytes_buf(sodium.crypto_secretbox_NONCEBYTES);
   const ciphertext = sodium.crypto_secretbox_easy(plainKey, nonce, key);
@@ -99,7 +107,7 @@ export async function encryptByokKey(plainKey: string, userId: string): Promise<
 
 export async function decryptByokKey(encrypted: string, userId: string): Promise<string> {
   await sodium.ready;
-  const masterKey = Buffer.from(process.env.KMS_MASTER_KEY!, "hex");
+  const masterKey = getKmsMasterKey();
   const key = sodium.crypto_kdf_derive_from_key(32, 1, "fxbotbyok", masterKey);
   
   const buf = Buffer.from(encrypted, "base64");
