@@ -7,7 +7,7 @@ const batchSchema = z.object({
   transactions: z.array(z.object({
     type: z.enum(['open', 'close', 'adjust']),
     asset: z.enum(['xETH', 'xUSD']),
-    params: z.record(z.any()),
+    params: z.record(z.string(), z.any()),
   })).min(1).max(10),
 });
 
@@ -27,7 +27,7 @@ router.post('/', async (req, res) => {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: error.errors });
+      res.status(400).json({ error: error.issues });
     } else {
       res.status(500).json({ error: 'Failed to execute batch' });
     }

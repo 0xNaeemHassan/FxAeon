@@ -37,6 +37,7 @@ function LimitPageContent() {
   const { ready } = usePrivy();
   const { wallets } = useWallets();
   const searchParams = useSearchParams();
+  const router = useRouter();
   
   const action = searchParams.get('action') || 'open';
   const market = searchParams.get('market') || 'wstETH';
@@ -228,7 +229,6 @@ function LimitPageContent() {
 }
 
 export default function LimitPage() {
-  const router = useRouter();
   return (
     <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>}>
       <LimitPageContent />

@@ -1,8 +1,8 @@
 import path from "path";
-import { Bot, GrammyError, HttpError, webhookCallback } from "grammy";
+import { Bot, Context, GrammyError, HttpError, webhookCallback } from "grammy";
 import { apiThrottler } from "@grammyjs/transformer-throttler";
-import { I18n } from "@grammyjs/i18n";
-import { conversations } from "@grammyjs/conversations";
+import { I18n, type I18nFlavor } from "@grammyjs/i18n";
+import { conversations, type ConversationFlavor } from "@grammyjs/conversations";
 import { prisma } from "@fxbot/db";
 import { ADDRESSES } from "@fxbot/shared";
 
@@ -33,7 +33,10 @@ import { limitOrderPolling } from "./notifications/limit-order-poller";
 import { healthMonitor } from "./notifications/health-monitor";
 import { txNotifier } from "./notifications/tx-notifier";
 
-const bot = new Bot(process.env.TELEGRAM_BOT_TOKEN!);
+// Custom Context type with all middleware flavors
+type BotContext = Context & I18nFlavor & ConversationFlavor<Context>;
+
+const bot = new Bot<BotContext>(process.env.TELEGRAM_BOT_TOKEN!);
 
 // Rate limiting: 30 msg/s global, 1 msg/s per user
 bot.api.config.use(apiThrottler({
@@ -43,7 +46,7 @@ bot.api.config.use(apiThrottler({
 }));
 
 // i18n
-const i18n = new I18n({
+const i18n = new I18n<BotContext>({
   defaultLocale: "en",
   directory: path.join(__dirname, "../src/i18n"),
   useSession: true,

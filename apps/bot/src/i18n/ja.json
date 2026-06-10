@@ -28,5 +28,42 @@
     "simulation_failed": "取引シミュレーション失敗: {reason}",
     "rate_limited": "リクエストが多すぎます。しばらくしてから再試行してください。",
     "tx_failed": "取引失敗: {hash}"
+  },
+  "limit": {
+    "usage": "Usage: /limit <open|close> <market> <long|short> at <price>\n\nExample: /limit open wstETH long at 2800",
+    "preview": "🎯 *Limit Order Preview*\n\nAction: {action} {market} {side}\nTrigger: ${price}\n\nTap to sign and submit:"
+  },
+  "orders": {
+    "title": "🎯 Your Limit Orders",
+    "no_orders": "No limit orders. Use /limit to place one.",
+    "order": "{status} {type} {side} @ ${price} ({tp}) — {statusText}"
+  },
+  "mint": {
+    "usage": "Usage: /mint <market> <collateral> <fxUSD amount>\n\nExample: /mint wstETH 1ETH 1500",
+    "preview": "🏦 *fxMINT Preview*\n\nCollateral: {collateral} {market}\nBorrow: {mintAmount} fxUSD\n\nTap to confirm:"
+  },
+  "save": {
+    "usage": "Usage: /save <deposit|withdraw> <amount>\n\nExample: /save deposit 1000",
+    "preview": "💰 *fxSAVE {action}*\n\nAmount: {amount} fxUSD\n\nTap to confirm:"
+  },
+  "security": {
+    "title": "🔒 Security Center",
+    "wallet": "Wallet: {wallet}",
+    "audits": "*Audits:*\n• Trail of Bits (Apr 2024, Jul 2024)\n• OpenZeppelin (Aug 2025)\n• Secbit (Oct 2025)",
+    "policies": "*Policies:*\n• Zero key custody — keys in Privy TEE\n• Automation policy: default-deny, user-revocable\n• Daily tx cap: 50"
+  },
+  "refer": {
+    "title": "🎁 Referral Program",
+    "code": "Your code: `{code}`",
+    "link": "Share link:\nhttps://t.me/fxAladdinBot?start=ref_{code}",
+    "earnings": "Referees: {count}\nLifetime earnings: ${earnings}"
+  },
+  "help": {
+    "title": "📚 fxBot Commands",
+    "trading": "*Trading:*\n/trade — Open leveraged position\n/limit — Place limit/stop orders\n/orders — View active orders\n/mint or /borrow — Borrow fxUSD\n/redeem — Redeem fxUSD\n/repay — Repay fxUSD debt",
+    "yield": "*Yield & Governance:*\n/save — fxSAVE deposit/withdraw\n/lock — Lock FXN → veFXN\n/vote — Gauge voting\n/claim — Claim rewards",
+    "portfolio": "*Portfolio:*\n/portfolio — View positions\n/deposit — Show wallet address + QR\n/withdraw — Send to external address\n/bridge — Bridge fxUSD",
+    "automation": "*Automation:*\n/auto — Create/manage rules\n/refer — Referral link + earnings",
+    "settings": "*Settings:*\n/settings — Language, slippage, MEV\n/security — Policies, audits\n/help — This menu"
   }
 }

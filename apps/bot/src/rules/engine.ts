@@ -7,7 +7,8 @@ import { simulateTrade } from "../fx";
 
 const redis = new IORedis(process.env.REDIS_URL!, { maxRetriesPerRequest: null });
 
-export const ruleQueue = new Queue("fxbot-rules", { connection: redis });
+// Cast redis to avoid ioredis version mismatch between direct dep and bullmq's peer dep
+export const ruleQueue = new Queue("fxbot-rules", { connection: redis as any });
 
 export const ruleWorker = new Worker("fxbot-rules", async (job) => {
   const { ruleId } = job.data;
@@ -85,7 +86,7 @@ export const ruleWorker = new Worker("fxbot-rules", async (job) => {
   } finally {
     await redis.del(lockKey);
   }
-}, { connection: redis });
+}, { connection: redis as any });
 
 // Schedule cron-based rules
 export async function scheduleRule(ruleId: string) {
@@ -94,7 +95,7 @@ export async function scheduleRule(ruleId: string) {
   
   if (rule.triggerSchedule) {
     await ruleQueue.add("cron", { ruleId: rule.id }, {
-      repeat: { cron: rule.triggerSchedule },
+      repeat: { pattern: rule.triggerSchedule },
     });
   }
 }

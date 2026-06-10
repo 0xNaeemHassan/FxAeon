@@ -33,8 +33,15 @@ export async function verifyTelegramAuth(initData: string, botToken: string): Pr
 }
 
 export async function createPrivyUser(telegramId: string) {
-  const user = await privy.createUser({
-    custom: { telegramId },
+  // Use importUser to create a new user linked to a Telegram ID
+  const user = await privy.importUser({
+    linkedAccounts: [
+      {
+        type: "telegram" as const,
+        telegramUserId: telegramId,
+      } as any,
+    ],
+    createEthereumWallet: true,
   });
   return user;
 }

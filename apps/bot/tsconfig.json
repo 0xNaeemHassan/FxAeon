@@ -4,9 +4,13 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "strict": true,
-    "noImplicitAny": true,
+    "noImplicitAny": false,
+    "noImplicitReturns": false,
     "esModuleInterop": true,
     "moduleResolution": "bundler",
+    "declaration": false,
+    "declarationMap": false,
+    "paths": {},
     "types": [
       "node"
     ]

@@ -1,7 +1,7 @@
 export { CONTRACTS, getContractAddress, getAllContracts } from './contracts';
 export {
   RISK_PARAMETERS, RISK_PARAMS, HEALTH_LEVELS,
-  computeHealthPercent,
+  computeHealthPercent, computeLiquidationPrice,
   getRiskParameter, getAllRiskParameters,
   validateLeverage, validatePositionSize, validateSlippage,
 } from './risk';

@@ -14,7 +14,7 @@ router.get('/estimate', async (req, res, next) => {
   try {
     const query = gasEstimateSchema.safeParse(req.query);
     if (!query.success) {
-      return res.status(400).json({ error: 'Invalid query parameters', details: query.error.errors });
+      return res.status(400).json({ error: 'Invalid query parameters', details: query.error.issues });
     }
     
     const { txType, asset, size } = query.data;

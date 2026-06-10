@@ -15,7 +15,7 @@ export function t(key: TranslationKey, locale: Locale = 'en'): string {
 }
 
 export function getLocaleFromUser(userLanguage?: string): Locale {
-  const langMap: Record<string, string> = {
+  const langMap: Record<string, Locale> = {
     'en': 'en', 'zh': 'zh', 'zh-CN': 'zh', 'zh-TW': 'zh',
     'es': 'es', 'ru': 'ru', 'ar': 'ar', 'de': 'de',
   };
