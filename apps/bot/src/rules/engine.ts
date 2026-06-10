@@ -3,7 +3,7 @@ import IORedis from "ioredis";
 import { prisma } from "@fxbot/db";
 import { createPublicClient, http } from "viem";
 import { mainnet } from "viem/chains";
-import { simulateTrade } from "../fx";
+import { simulateTrade } from "../fx/index.js";
 
 const redis = new IORedis(process.env.REDIS_URL!, { maxRetriesPerRequest: null });
 

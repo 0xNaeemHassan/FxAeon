@@ -1,5 +1,5 @@
 import { Context, NextFunction } from 'grammy';
-import { privy } from '../core/privy';
+import { privy } from '../core/privy.js';
 
 // Extend Context type to include state
 interface AuthState {

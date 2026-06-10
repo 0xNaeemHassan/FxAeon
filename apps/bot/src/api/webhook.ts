@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { txNotifier } from "../notifications/tx-notifier";
+import { txNotifier } from "../notifications/tx-notifier.js";
 
 export const webhookRouter = Router();
 

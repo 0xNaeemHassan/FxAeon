@@ -1,4 +1,7 @@
 import path from "path";
+import { fileURLToPath } from "url";
+import express from "express";
+import helmet from "helmet";
 import { Bot, Context, GrammyError, HttpError, webhookCallback } from "grammy";
 import { apiThrottler } from "@grammyjs/transformer-throttler";
 import { I18n, type I18nFlavor } from "@grammyjs/i18n";
@@ -6,32 +9,32 @@ import { conversations, type ConversationFlavor } from "@grammyjs/conversations"
 import { prisma } from "@fxbot/db";
 import { ADDRESSES } from "@fxbot/shared";
 
-import { startCommand } from "./commands/start";
-import { portfolioCommand } from "./commands/portfolio";
-import { tradeCommand } from "./commands/trade";
-import { limitCommand } from "./commands/limit";
-import { ordersCommand } from "./commands/orders";
-import { mintCommand } from "./commands/mint";
-import { redeemCommand } from "./commands/redeem";
-import { saveCommand } from "./commands/save";
-import { borrowCommand } from "./commands/borrow";
-import { repayCommand } from "./commands/repay";
-import { bridgeCommand } from "./commands/bridge";
-import { lockCommand } from "./commands/lock";
-import { voteCommand } from "./commands/vote";
-import { claimCommand } from "./commands/claim";
-import { referCommand } from "./commands/refer";
-import { autoCommand } from "./commands/auto";
-import { settingsCommand } from "./commands/settings";
-import { securityCommand } from "./commands/security";
-import { depositCommand } from "./commands/deposit";
-import { withdrawCommand } from "./commands/withdraw";
-import { helpCommand } from "./commands/help";
+import { startCommand } from "./commands/start.js";
+import { portfolioCommand } from "./commands/portfolio.js";
+import { tradeCommand } from "./commands/trade.js";
+import { limitCommand } from "./commands/limit.js";
+import { ordersCommand } from "./commands/orders.js";
+import { mintCommand } from "./commands/mint.js";
+import { redeemCommand } from "./commands/redeem.js";
+import { saveCommand } from "./commands/save.js";
+import { borrowCommand } from "./commands/borrow.js";
+import { repayCommand } from "./commands/repay.js";
+import { bridgeCommand } from "./commands/bridge.js";
+import { lockCommand } from "./commands/lock.js";
+import { voteCommand } from "./commands/vote.js";
+import { claimCommand } from "./commands/claim.js";
+import { referCommand } from "./commands/refer.js";
+import { autoCommand } from "./commands/auto.js";
+import { settingsCommand } from "./commands/settings.js";
+import { securityCommand } from "./commands/security.js";
+import { depositCommand } from "./commands/deposit.js";
+import { withdrawCommand } from "./commands/withdraw.js";
+import { helpCommand } from "./commands/help.js";
 
-import { privyWebhookHandler } from "./handlers/privy-webhooks";
-import { limitOrderPolling } from "./notifications/limit-order-poller";
-import { healthMonitor } from "./notifications/health-monitor";
-import { txNotifier } from "./notifications/tx-notifier";
+import { privyWebhookHandler } from "./handlers/privy-webhooks.js";
+import { limitOrderPolling } from "./notifications/limit-order-poller.js";
+import { healthMonitor } from "./notifications/health-monitor.js";
+import { txNotifier } from "./notifications/tx-notifier.js";
 
 // Custom Context type with all middleware flavors
 type BotContext = Context & I18nFlavor & ConversationFlavor<Context>;
@@ -48,7 +51,7 @@ bot.api.config.use(apiThrottler({
 // i18n
 const i18n = new I18n<BotContext>({
   defaultLocale: "en",
-  directory: path.join(__dirname, "../src/i18n"),
+  directory: path.join(path.dirname(fileURLToPath(import.meta.url)), "../src/i18n"),
   useSession: true,
 });
 bot.use(i18n);
@@ -102,8 +105,6 @@ txNotifier.start();
 if (process.env.NODE_ENV === "production") {
   // Webhook mode for production
   const port = parseInt(process.env.PORT || "8080", 10);
-  const express = require("express");
-  const helmet = require("helmet");
   const app = express();
   app.use(helmet());
   app.use(express.json());

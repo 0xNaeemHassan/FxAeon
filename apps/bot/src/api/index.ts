@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
-import { healthRouter } from "./health";
-import { simulateRouter } from "./simulate-trade";
-import { webhookRouter } from "./webhook";
+import { healthRouter } from "./health.js";
+import { simulateRouter } from "./simulate-trade.js";
+import { webhookRouter } from "./webhook.js";
 
 export const apiRouter = Router();
 

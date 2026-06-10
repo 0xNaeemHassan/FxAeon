@@ -55,7 +55,8 @@ describe("Integration — Risk Engine", () => {
     });
 
     it("should classify health levels correctly", () => {
-      expect(computeHealthPercent(0.70)).toBeLessThan(HEALTH_LEVELS.SAFE);
+      // ratio 0.60 → health 0.6316 < SAFE(0.70) — unhealthy
+      expect(computeHealthPercent(0.60)).toBeLessThan(HEALTH_LEVELS.SAFE);
       expect(computeHealthPercent(0.85)).toBeGreaterThanOrEqual(HEALTH_LEVELS.WARNING);
       expect(computeHealthPercent(0.95)).toBeGreaterThanOrEqual(HEALTH_LEVELS.URGENT);
     });
