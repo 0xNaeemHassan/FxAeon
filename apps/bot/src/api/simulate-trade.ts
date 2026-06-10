@@ -1,92 +1,105 @@
 import { Router } from "express";
-import { createPublicClient, http, parseEther, parseUnits } from "viem";
-import { mainnet } from "viem/chains";
-import { ADDRESSES, RISK_PARAMS } from "@fxbot/shared";
-import { SimulationError, ValidationError } from "../middleware/errors.js";
+import { z } from "zod";
+import { isAddress, formatEther } from "viem";
+import { RISK_PARAMS, MARKETS } from "@fxbot/shared";
+import { ValidationError, SimulationError } from "../middleware/errors.js";
+import {
+  createFxSdk,
+  createPublicClientForUser,
+  quoteOpenPosition,
+  simulateRoute,
+  collateralDecimals,
+} from "../fx/index.js";
 
 export const simulateRouter = Router();
 
+const tradeSchema = z.object({
+  address: z.string().refine(isAddress, "invalid address"),
+  market: z.enum(MARKETS),
+  side: z.enum(["long", "short"]),
+  leverage: z.coerce.number().min(RISK_PARAMS.MIN_LEVERAGE),
+  /** Collateral amount in wei units of the input token, as a decimal string. */
+  amountWei: z.string().regex(/^[0-9]+$/, "amountWei must be an integer wei string"),
+  slippageBps: z.coerce.number().int().min(1).max(1000).optional(),
+});
+
 simulateRouter.post("/trade", async (req, res) => {
-  const { address, market, side, leverage, amount, slippageBps } = req.body;
-  
-  // Validation
-  if (!address || !market || !side || !leverage || !amount) {
-    throw new ValidationError("Missing required parameters");
+  const parsed = tradeSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ValidationError(parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "));
   }
-  
-  const lev = parseFloat(leverage);
+  const { address, market, side, leverage, amountWei, slippageBps } = parsed.data;
+
   const maxLev = side === "long" ? RISK_PARAMS.MAX_LEVERAGE_LONG : RISK_PARAMS.MAX_LEVERAGE_SHORT;
-  if (lev < RISK_PARAMS.MIN_LEVERAGE || lev > maxLev) {
+  if (leverage > maxLev) {
     throw new ValidationError(`Leverage must be between ${RISK_PARAMS.MIN_LEVERAGE}x and ${maxLev}x`);
   }
-  
-  // Create public client
-  const publicClient = createPublicClient({
-    chain: mainnet,
-    transport: http(process.env.ALCHEMY_RPC_URL),
-  });
-  
+
   try {
-    // Simulate the trade via fx-sdk Router
-    // In production, this would call the actual fx-sdk simulate async function
-    const gasEstimate = 250000 + Math.floor(Math.random() * 50000);
-    const gasPrice = await publicClient.getGasPrice();
-    const estimatedGasCost = (gasEstimate * Number(gasPrice)) / 1e18;
-    
-    // Calculate position details
-    const collateralAmount = parseEther(amount);
-    const notionalValue = collateralAmount * BigInt(Math.floor(lev * 100)) / BigInt(100);
-    
-    // Calculate fees
-    const openFeeRate = market === "wstETH" ? RISK_PARAMS.OPEN_RATIO_BASE_WSTETH : RISK_PARAMS.OPEN_RATIO_BASE_WBTC;
-    const openFee = Number(notionalValue) * openFeeRate / 1e18;
-    
-    // Slippage check
-    const slippagePercent = (slippageBps || RISK_PARAMS.SLIPPAGE_DEFAULT_BPS) / 100;
-    
+    const sdk = createFxSdk();
+    const client = createPublicClientForUser("off");
+
+    // Real route quote from the f(x) SDK (Odos / Velora / FxRoute).
+    const quote = await quoteOpenPosition({
+      sdk,
+      userAddress: address,
+      market,
+      side,
+      leverage,
+      amountWei: BigInt(amountWei),
+      slippagePercent: (slippageBps ?? RISK_PARAMS.SLIPPAGE_DEFAULT_BPS) / 100,
+    });
+    const route = quote.routes[0];
+    if (!route) throw new SimulationError("no route available", { market, side, leverage });
+
+    // Real chained simulation (eth_simulateV1): approve -> Router.
+    const sim = await simulateRoute(client, address, route.txs);
+    const [gasPrice, feeHistory] = await Promise.all([
+      client.getGasPrice(),
+      client.getFeeHistory({ blockCount: 5, rewardPercentiles: [50] }).catch(() => null),
+    ]);
+    const totalGas = sim.success ? sim.totalGas : 0n;
+    const estimatedGasCostWei = totalGas * gasPrice;
+
     res.json({
-      success: true,
+      success: sim.success,
       simulation: {
         address,
         market,
         side,
-        leverage: lev,
-        collateral: amount,
-        notionalValue: (Number(notionalValue) / 1e18).toFixed(4),
-        openFee: openFee.toFixed(6),
-        gasEstimate,
-        estimatedGasCost: estimatedGasCost.toFixed(8),
-        gasPrice: gasPrice.toString(),
-        slippageTolerance: `${slippagePercent}%`,
-        totalCost: (openFee + estimatedGasCost).toFixed(6),
+        leverage,
+        collateralWei: amountWei,
+        collateralDecimals: collateralDecimals(market),
+        route: route.routeType,
+        executionPrice: route.executionPrice,
+        expectedColls: route.colls,
+        expectedDebts: route.debts,
+        slippage: quote.slippage,
+        txCount: route.txs.length,
+        ...(sim.success
+          ? {
+              gasUsed: sim.gasUsed.map(String),
+              totalGas: totalGas.toString(),
+              gasPriceWei: gasPrice.toString(),
+              baseFeeWei: feeHistory?.baseFeePerGas?.at(-1)?.toString(),
+              estimatedGasCostEth: formatEther(estimatedGasCostWei),
+            }
+          : { error: sim.error, failedTxIndex: sim.failedTxIndex }),
       },
-      warnings: lev > 5 ? ["High leverage increases liquidation risk"] : [],
+      warnings: leverage > 5 ? ["High leverage increases liquidation risk"] : [],
     });
   } catch (error: unknown) {
+    if (error instanceof SimulationError || error instanceof ValidationError) throw error;
     const message = error instanceof Error ? error.message : String(error);
     throw new SimulationError(message, { address, market, side, leverage });
   }
 });
 
-simulateRouter.post("/limit", async (req, res) => {
-  const { address, market, side, action, triggerPrice } = req.body;
-  
-  // Validate limit order parameters
-  const currentPrice = 3000; // Would fetch from oracle
-  const isTP = (side === "long" && triggerPrice > currentPrice) || (side === "short" && triggerPrice < currentPrice);
-  
-  res.json({
-    success: true,
-    simulation: {
-      address,
-      market,
-      side,
-      action,
-      triggerPrice,
-      currentPrice,
-      type: isTP ? "take-profit" : "stop-loss",
-      estimatedFillTime: isTP ? "When price reaches target" : "Immediate if condition met",
-      gasEstimate: 180000,
-    },
+// Limit orders: the on-chain manager integration is not implemented yet (W-09).
+// Be honest about it instead of returning fabricated numbers.
+simulateRouter.post("/limit", (_req, res) => {
+  res.status(501).json({
+    success: false,
+    error: "Limit order simulation is not implemented yet.",
   });
 });
