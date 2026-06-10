@@ -2,6 +2,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 import express from "express";
 import { Bot, Context, GrammyError, HttpError, webhookCallback } from "grammy";
+import { getTelegramWebhookSecret } from "./utils/webhookAuth.js";
+import type { RequestWithRawBody } from "./utils/webhookAuth.js";
 import { apiThrottler } from "@grammyjs/transformer-throttler";
 import { conversations, type ConversationFlavor } from "@grammyjs/conversations";
 import { prisma } from "@fxbot/db";
@@ -156,11 +158,22 @@ async function main() {
     // Apply full security middleware (helmet, cors, rate limiter, request logging)
     applySecurityMiddleware(app);
 
-    // Parse JSON bodies (needed for webhook + API routes)
-    app.use(express.json());
+    // Parse JSON bodies (needed for webhook + API routes).
+    // Capture the raw body so webhook signatures can be verified over the
+    // exact bytes received (AUDIT.md P0-5).
+    app.use(
+      express.json({
+        verify: (req, _res, buf) => {
+          (req as RequestWithRawBody).rawBody = buf;
+        },
+      })
+    );
 
-    // Telegram webhook endpoint — must be BEFORE apiRouter
-    app.post("/webhook", webhookCallback(bot, "express"));
+    // Telegram webhook endpoint — must be BEFORE apiRouter.
+    // secretToken: grammY rejects updates whose
+    // X-Telegram-Bot-Api-Secret-Token header does not match (AUDIT.md P0-5).
+    const telegramWebhookSecret = getTelegramWebhookSecret();
+    app.post("/webhook", webhookCallback(bot, "express", { secretToken: telegramWebhookSecret }));
 
     // Privy webhook
     app.post("/privy-webhook", privyWebhookHandler);
@@ -197,6 +210,7 @@ async function main() {
         await bot.api.setWebhook(webhookUrl, {
           allowed_updates: ["message", "callback_query", "inline_query"],
           drop_pending_updates: true,
+          secret_token: telegramWebhookSecret,
         });
         logger.info({ webhookUrl }, "Telegram webhook registered");
       } else {

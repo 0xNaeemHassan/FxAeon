@@ -1,19 +1,18 @@
 import { Router } from "express";
 import { txNotifier } from "../notifications/tx-notifier.js";
+import { verifyPrivyRequest, type RequestWithRawBody } from "../utils/webhookAuth.js";
 
 export const webhookRouter = Router();
 
 // Privy webhook endpoint
 webhookRouter.post("/privy", async (req, res) => {
-  const signature = req.headers["privy-signature"] as string;
-  
-  if (!signature) {
-    return res.status(401).json({ error: "Missing Privy signature" });
+  // Verify the SVIX HMAC signature over the raw body (AUDIT.md P0-5).
+  // Fails closed when PRIVY_WEBHOOK_SECRET is not configured.
+  const verdict = verifyPrivyRequest(req as RequestWithRawBody);
+  if (!verdict.ok) {
+    return res.status(401).json({ error: "Invalid webhook signature" });
   }
-  
-  // Verify webhook signature (in production, verify against Privy secret)
-  // const isValid = verifyPrivySignature(req.body, signature);
-  
+
   try {
     await txNotifier.handleWebhook(req.body);
     res.json({ received: true, processed: true });
