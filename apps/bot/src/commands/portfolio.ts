@@ -7,6 +7,7 @@
  * as "CRITICAL") — fixed here: risk grows toward 1.0 = liquidation.
  */
 import { Context, InlineKeyboard } from "grammy";
+import type { I18nFlavor } from "@grammyjs/i18n";
 import { prisma } from "@fxbot/db";
 import { HEALTH_LEVELS, MARKETS } from "@fxbot/shared";
 import { createFxSdk } from "../fx/index.js";
@@ -50,7 +51,7 @@ function positionsKeyboard(positions: OnChainPosition[]): InlineKeyboard {
   return kb;
 }
 
-export async function portfolioCommand(ctx: Context) {
+export async function portfolioCommand(ctx: Context & I18nFlavor) {
   const telegramId = ctx.from?.id.toString();
   if (!telegramId) return;
 
@@ -76,11 +77,7 @@ export async function portfolioCommand(ctx: Context) {
     }
 
     if (positions.length === 0) {
-      msg += `\nNo active positions${failures.length ? " in the markets we could read" : ""}.\n\n`;
-      msg += `💡 Get started:\n`;
-      msg += `• /trade — Open a leveraged position\n`;
-      msg += `• /mint — Borrow fxUSD (no leverage)\n`;
-      msg += `• /save — Deposit into fxSAVE for yield`;
+      msg += "\n" + ctx.t("portfolio-empty", { partial: failures.length ? "yes" : "no" });
       await ctx.reply(msg);
       return;
     }

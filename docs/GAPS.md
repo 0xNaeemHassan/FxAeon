@@ -61,10 +61,23 @@ description — this is the single list.
   by broadcast state first (simulation failures say "NOT sent"; reverts
   link the tx hash) with actionable causes; mini-app build errors no
   longer ignored; SECURITY.md audit table replaced with honest text.
-- **W-21 i18n** (all user-facing strings are English-only until then;
-  locale JSON untouched by design).
+- ~~W-21 i18n~~ — landed: single canonical Fluent catalog dir
+  (`apps/bot/src/i18n/locales/*.ftl`, 6 locales) wired through
+  `@grammyjs/i18n` keyed off `User.language` (60s per-user cache,
+  Telegram `language_code` fallback, fail-soft to English); the two stale
+  JSON locale dirs (dead code with pre-W-16 copy and the wrong bot
+  username) deleted; CI enforces key + variable parity across locales.
 
 ## Smaller honest notes
+
+- i18n coverage is partial by design (W-21): `/start`, `/help`, `/settings`,
+  the `/trade` usage screen and the `/portfolio` empty state are fully
+  translated. Still English-only: the remaining command flows (limit,
+  orders, mint, save, refer, security, deposit/withdraw/bridge, auto),
+  trade/close status edits, W-19 error-taxonomy strings, funding-state
+  lines, and notifications. The catalog + parity tests make extending
+  coverage mechanical; better to ship honest partial coverage than to
+  machine-translate execution-path error copy without review.
 
 - Mini-app TTI budget is a measured baseline, not the goal: the W-20 budget
   (TTI < 2.5s on 3G-Fast/mobile) was written while Lighthouse CI couldn't

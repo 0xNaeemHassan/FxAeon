@@ -1,9 +1,10 @@
 import { Context } from "grammy";
+import type { I18nFlavor } from "@grammyjs/i18n";
 import { prisma } from "@fxbot/db";
 import { MARKETS, RISK_PARAMS } from "@fxbot/shared";
 import { buildPreview, ladderMarketKeyboard } from "../handlers/tradeActions.js";
 
-export async function tradeCommand(ctx: Context) {
+export async function tradeCommand(ctx: Context & I18nFlavor) {
   const telegramId = ctx.from?.id.toString();
   if (!telegramId) return;
 
@@ -15,15 +16,11 @@ export async function tradeCommand(ctx: Context) {
       // W-17: bare /trade opens the inline ladder (market → side → leverage
       // → amount). The usage text stays for power users.
       await ctx.reply(
-        `⚡ Open a Leveraged Position\n\n` +
-        `Pick a market below, or type the full command.\n\n` +
-        `Usage:\n` +
-        `/trade <market> <long|short> <leverage> <amount>\n\n` +
-        `Example:\n` +
-        `/trade wstETH long 3x 1ETH\n\n` +
-        `Leverage Limits:\n` +
-        `• Long: ${RISK_PARAMS.MIN_LEVERAGE}x – ${RISK_PARAMS.MAX_LEVERAGE_LONG}x\n` +
-        `• Short: ${RISK_PARAMS.MIN_LEVERAGE}x – ${RISK_PARAMS.MAX_LEVERAGE_SHORT}x`,
+        ctx.t("trade-usage", {
+          minLev: RISK_PARAMS.MIN_LEVERAGE,
+          maxLong: RISK_PARAMS.MAX_LEVERAGE_LONG,
+          maxShort: RISK_PARAMS.MAX_LEVERAGE_SHORT,
+        }),
         { reply_markup: ladderMarketKeyboard() }
       );
       return;

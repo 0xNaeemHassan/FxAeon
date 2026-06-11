@@ -5,12 +5,15 @@ import { portfolioCommand } from "../src/commands/portfolio";
 import { settingsCommand } from "../src/commands/settings";
 import { helpCommand } from "../src/commands/help";
 import { RISK_PARAMS, ADDRESSES } from "@fxbot/shared";
+import { tEn } from "./helpers/i18n";
 
 describe("Commands", () => {
   const mockCtx = {
     from: { id: 123456, language_code: "en" },
     message: { text: "" },
     reply: vi.fn(),
+    t: tEn,
+    i18n: { useLocale: vi.fn() },
   } as any;
 
   beforeEach(() => {

@@ -32,6 +32,7 @@ import {
 } from "../src/handlers/tradeActions";
 import { createTradeIntent } from "../src/core/tradeIntent";
 import { startCommand } from "../src/commands/start";
+import { tEn } from "./helpers/i18n";
 
 const USER = {
   id: "user-1",
@@ -49,6 +50,7 @@ function mockCtx(callbackData?: string, messageText?: string) {
     message: messageText ? { text: messageText } : undefined,
     callbackQuery: callbackData ? { data: callbackData } : undefined,
     reply: vi.fn().mockResolvedValue({}),
+    t: tEn,
     editMessageText: vi.fn().mockResolvedValue(true),
     answerCallbackQuery: vi.fn().mockResolvedValue(true),
   } as any;

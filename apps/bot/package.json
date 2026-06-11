@@ -2,7 +2,7 @@
   "name": "@fxaeon/bot",
   "version": "1.0.0",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && mkdir -p dist/i18n && cp -r src/i18n/locales dist/i18n/",
     "dev": "tsx watch src/main.ts",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
