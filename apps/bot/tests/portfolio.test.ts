@@ -174,10 +174,10 @@ describe("close flow", () => {
   });
 
   it("executor failure is reported without inventing success", async () => {
-    executeRouteMock.mockResolvedValue({ ok: false, deduped: false, recordId: "r1", status: "failed", error: "sim reverted" });
+    executeRouteMock.mockResolvedValue({ ok: false, deduped: false, recordId: "r1", status: "failed", error: "simulation failed at tx 0: execution reverted" });
     const ctx = mockCtx("pcc_0_l_7_aabbccdd");
     await handleCloseConfirm(ctx);
-    expect(lastEdit(ctx)).toContain("sim reverted");
+    expect(lastEdit(ctx)).toContain("NOT sent");
     expect(lastEdit(ctx)).not.toContain("Position closed");
   });
 

@@ -4,10 +4,6 @@ const nextConfig = {
   distDir: 'dist',
   images: { unoptimized: true },
   transpilePackages: ['@fxbot/shared'],
-  typescript: {
-    // Type errors in Privy v3 optional APIs — safe to ignore for deploy
-    ignoreBuildErrors: true,
-  },
   eslint: {
     ignoreDuringBuilds: true,
   },

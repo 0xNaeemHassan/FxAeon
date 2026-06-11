@@ -57,9 +57,12 @@ description — this is the single list.
   typed platform helpers, lazy Privy, Lighthouse budget.
 - ~~W-18 portfolio~~ — landed (PR #52): on-chain reads as source of
   truth, fixed inverted risk meter, per-position Close flow.
-- **W-19 error taxonomy**, **W-21 i18n**
-  (all user-facing strings are English-only until then; locale JSON
-  untouched by design).
+- ~~W-19 error taxonomy~~ — landed: execution failures now classified
+  by broadcast state first (simulation failures say "NOT sent"; reverts
+  link the tx hash) with actionable causes; mini-app build errors no
+  longer ignored; SECURITY.md audit table replaced with honest text.
+- **W-21 i18n** (all user-facing strings are English-only until then;
+  locale JSON untouched by design).
 
 ## Smaller honest notes
 

@@ -35,11 +35,17 @@ If you discover a security vulnerability in FxAeon, please report it responsibly
 
 ## Audit History
 
-| Date | Auditor | Scope | Result |
-|------|---------|-------|--------|
-| 2026-06 | Internal | Bot commands, API endpoints | Passed |
-| 2026-06 | Internal | Mini App, Privy integration | Passed |
-| 2026-06 | Internal | Database, Redis, encryption | Passed |
+**No external security audit has been performed yet.**
+
+An internal code review (2026-06) is documented in
+[`docs/audit/AUDIT.md`](docs/audit/AUDIT.md). It found critical issues
+(including unverified transaction execution paths), which were remediated in
+the Phase 2 hardening waves — see [`docs/audit/DEFICIENCIES.md`](docs/audit/DEFICIENCIES.md)
+and [`docs/COMPLETED.md`](docs/COMPLETED.md) for the fix log. The threat model
+lives in [`docs/audit/THREAT_MODEL.md`](docs/audit/THREAT_MODEL.md).
+
+Treat this software as unaudited: do not deposit funds you cannot afford to
+lose.
 
 ## Disclosure Policy
 

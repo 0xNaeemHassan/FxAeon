@@ -35,6 +35,7 @@ import {
   verifyTradeIntent,
   type TradeIntent,
 } from "../core/tradeIntent.js";
+import { describeExecutionError } from "../core/errorTaxonomy.js";
 import { botLogger } from "../middleware/logger.js";
 
 type Side = "long" | "short";
@@ -279,9 +280,12 @@ export async function executeTradeIntent(ctx: Context, intent: TradeIntent): Pro
           `\n\n📊 /portfolio to track it.`
       );
     } else {
+      // W-19: classify the raw error into actionable copy (broadcast-state
+      // honesty: post-broadcast kinds keep the tx hash, pre-broadcast kinds
+      // may promise nothing was sent).
       await editSafe(
         ctx,
-        `${header}\n\n${statusLine(result.status, result.error)}\n\nNo funds moved unless a tx hash is shown above. You can retry with /trade.`
+        `${header}\n\n❌ Trade not completed.\n\n${describeExecutionError(result.error)}\n\nRetry with /trade.`
       );
     }
   } catch (error) {
