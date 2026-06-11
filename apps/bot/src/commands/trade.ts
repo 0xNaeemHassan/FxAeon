@@ -1,6 +1,7 @@
 import { Context } from "grammy";
 import { prisma } from "@fxbot/db";
 import { MARKETS, RISK_PARAMS } from "@fxbot/shared";
+import { buildPreview, ladderMarketKeyboard } from "../handlers/tradeActions.js";
 
 export async function tradeCommand(ctx: Context) {
   const telegramId = ctx.from?.id.toString();
@@ -11,17 +12,19 @@ export async function tradeCommand(ctx: Context) {
     const args = ctx.message?.text?.split(" ").slice(1) || [];
 
     if (args.length < 3) {
+      // W-17: bare /trade opens the inline ladder (market → side → leverage
+      // → amount). The usage text stays for power users.
       await ctx.reply(
         `⚡ Open a Leveraged Position\n\n` +
+        `Pick a market below, or type the full command.\n\n` +
         `Usage:\n` +
         `/trade <market> <long|short> <leverage> <amount>\n\n` +
         `Example:\n` +
         `/trade wstETH long 3x 1ETH\n\n` +
-        `Available Markets:\n` +
-        `${MARKETS.map(m => `• ${m}`).join("\n")}\n\n` +
         `Leverage Limits:\n` +
         `• Long: ${RISK_PARAMS.MIN_LEVERAGE}x – ${RISK_PARAMS.MAX_LEVERAGE_LONG}x\n` +
-        `• Short: ${RISK_PARAMS.MIN_LEVERAGE}x – ${RISK_PARAMS.MAX_LEVERAGE_SHORT}x`
+        `• Short: ${RISK_PARAMS.MIN_LEVERAGE}x – ${RISK_PARAMS.MAX_LEVERAGE_SHORT}x`,
+        { reply_markup: ladderMarketKeyboard() }
       );
       return;
     }
@@ -81,19 +84,15 @@ export async function tradeCommand(ctx: Context) {
       return;
     }
 
-    // Show trade preview
-    const slippage = (user.slippageBps / 100).toFixed(2);
-
-    await ctx.reply(
-      `⚡ Trade Preview\n\n` +
-      `Market: ${market} ${side.toUpperCase()}\n` +
-      `Leverage: ${leverage}x\n` +
-      `Collateral: ${amount} ETH\n` +
-      `Slippage: ${slippage}%\n` +
-      `MEV Protection: ${user.mevProtection ? "ON ✅" : "OFF ⚠️"}\n\n` +
-      `⚠️ Risk Warning:\n` +
-      `Leveraged trading carries risk of liquidation. Only trade what you can afford to lose.`
+    // W-17: signed preview with Confirm/Cancel inline buttons. Execution is
+    // server-side, simulation-gated, and idempotent (core/tradeIntent.ts +
+    // handlers/tradeActions.ts).
+    const { text, keyboard } = buildPreview(
+      { market: market as (typeof MARKETS)[number], side, leverage, amount },
+      user,
+      ctx.me?.username ?? "FxAeonBot"
     );
+    await ctx.reply(text, { reply_markup: keyboard });
   } catch (error) {
     console.error('[tradeCommand] Error:', error);
     await ctx.reply(

@@ -2,9 +2,27 @@
 
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { useSearchParams } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Suspense } from 'react';
 import { ArrowLeft, TrendingUp, TrendingDown, AlertTriangle, Check } from 'lucide-react';
+import { getWebApp, isTMA, showMainButton } from '@/lib/telegram';
+
+const MARKET_INDEX: Record<string, number> = { wstETH: 0, WBTC: 1 };
+const BOT_USERNAME = process.env.NEXT_PUBLIC_BOT_USERNAME || 'FxAeonBot';
+
+/**
+ * W-17: the Mini App never executes trades itself (see EXECUTION_LIVE
+ * kill-switch below). Confirmation happens in the bot chat: this deep link
+ * carries the params (`tq_*`, unsigned — the bot re-validates and re-signs
+ * them server-side) and opens a signed preview with inline Confirm/Cancel.
+ */
+function buildBotDeepLink(market: string, side: string, leverage: number, amount: string): string | null {
+  const mIdx = MARKET_INDEX[market];
+  const amt = parseFloat(amount);
+  if (mIdx === undefined || !Number.isFinite(leverage) || !(amt > 0)) return null;
+  const payload = `tq_${mIdx}_${side === 'short' ? 's' : 'l'}_${Math.round(leverage * 10)}_${Math.round(amt * 1e6)}`;
+  return `https://t.me/${BOT_USERNAME}?start=${payload}`;
+}
 
 function TradePageContent() {
   const { ready } = usePrivy();
@@ -31,6 +49,26 @@ function TradePageContent() {
   // bot. Execution stays disabled until real fx-sdk calldata + a passing
   // simulateContract gate exist (PLAN.md W-07). Do not re-enable without both.
   const EXECUTION_LIVE = false;
+
+  // W-17: native MainButton confirm — opens the bot chat with a deep link;
+  // the bot renders a signed preview and executes server-side on Confirm.
+  const deepLink = isValid ? buildBotDeepLink(market, side, leverage, amount) : null;
+  const openInBot = () => {
+    if (!deepLink) return;
+    const tg = getWebApp();
+    if (tg?.openTelegramLink) {
+      tg.openTelegramLink(deepLink);
+      tg.close();
+    } else {
+      window.open(deepLink, '_blank', 'noopener');
+    }
+  };
+
+  useEffect(() => {
+    if (!isTMA() || !deepLink) return;
+    return showMainButton('Confirm in Telegram', openInBot);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLink]);
 
   if (!ready) {
     return (
@@ -70,7 +108,7 @@ function TradePageContent() {
           </div>
           <div className="flex justify-between py-2 border-b border-gray-100 dark:border-slate-700">
             <span className="text-gray-600 dark:text-gray-400">Collateral</span>
-            <span className="font-medium">{amount} ETH</span>
+            <span className="font-medium">{amount} {market}</span>
           </div>
           <div className="flex justify-between py-2 border-b border-gray-100 dark:border-slate-700">
             <span className="text-gray-600 dark:text-gray-400">Wallet</span>
@@ -119,16 +157,17 @@ function TradePageContent() {
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-4">
               <p className="text-sm text-blue-700 dark:text-blue-400">
                 <AlertTriangle className="w-4 h-4 inline mr-1" />
-                Trade execution is not live yet. This is a preview only — no
-                transaction will be sent and no funds will move.
+                Trades execute in the bot chat — simulation-gated, nothing is
+                sent from this page. Tap below to review and confirm.
               </p>
             </div>
           )}
           <button type="button"
-            disabled
+            onClick={openInBot}
+            disabled={!deepLink}
             className="w-full btn-touch bg-primary text-white py-3 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Execution coming soon
+            Confirm in Telegram
           </button>
         </>
       )}

@@ -18,6 +18,7 @@ import {
 } from "./commands/index.js";
 
 import { handleWebAppData } from "./handlers/walletConnect.js";
+import { registerTradeActions } from "./handlers/tradeActions.js";
 import { apiRouter } from "./api/index.js";
 import { applySecurityMiddleware, errorHandler } from "./middleware/index.js";
 import { validateConfig } from "./middleware/config.js";
@@ -88,6 +89,18 @@ bot.command("help", helpCommand);
 
 // Mini App → bot data channel (W-16): wallet-connect onboarding completes here.
 bot.on("message:web_app_data", handleWebAppData);
+
+// Trade UX callbacks (W-17): ladder navigation, signed confirm, cancel.
+registerTradeActions(bot);
+
+// Honest fallback for any other callback_data: until W-17 there was NO
+// callback handler at all, so every inline button just spun forever. Buttons
+// that aren't wired yet now say so instead of pretending to load.
+bot.on("callback_query:data", async (ctx) => {
+  await ctx
+    .answerCallbackQuery({ text: "This button isn't wired up yet." })
+    .catch(() => undefined);
+});
 
 // ---------------------------------------------------------------------------
 // Error handling
