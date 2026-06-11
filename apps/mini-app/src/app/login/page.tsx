@@ -131,8 +131,16 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen items-center justify-center">
-          <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+        /* Contentful fallback: this is the page's static-export HTML (the
+           useSearchParams bailout), so it must paint text — a border-only
+           spinner alone paints nothing contentful (NO_FCP / blank cold start). */
+        <div className="flex min-h-screen flex-col items-center justify-center gap-3 p-4">
+          <h1 className="text-2xl font-bold tracking-tight">fxBot Wallet</h1>
+          <div
+            className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"
+            aria-hidden="true"
+          />
+          <p className="text-sm text-gray-500">Loading…</p>
         </div>
       }
     >

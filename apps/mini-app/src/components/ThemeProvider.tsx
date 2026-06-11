@@ -130,13 +130,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   }, [isDark, mounted]);
 
-  // Prevent flash of wrong theme
+  // Pre-hydration: the inline theme script in layout.tsx has already applied
+  // the `.dark` class to <html> before first paint, so children can render
+  // VISIBLY without a theme flash. (This used to return a
+  // `visibility:hidden` wrapper, which meant the app painted literally
+  // nothing until React hydrated — on a slow Mini App cold start users
+  // stared at a blank screen, and Lighthouse failed with NO_FCP.)
   if (!mounted) {
-    return (
-      <div style={{ visibility: 'hidden' }}>
-        {children}
-      </div>
-    );
+    return <div>{children}</div>;
   }
 
   return (
