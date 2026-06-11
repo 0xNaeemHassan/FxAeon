@@ -230,6 +230,18 @@ async function main() {
     // could never see a dead DB). (W-15)
     app.use("/api/v1/health", healthRouter);
 
+    // Lightweight build/info endpoint (no dependency checks, never blocks).
+    // The post-deploy smoke test asserts this returns 200.
+    app.get("/api/v1/info", (_req, res) => {
+      res.json({
+        name: "fxbot",
+        version: process.env.npm_package_version || "1.1.0",
+        env: env.NODE_ENV,
+        uptimeSeconds: Math.round(process.uptime()),
+        timestamp: new Date().toISOString(),
+      });
+    });
+
     // Error handler (must be last)
     app.use(errorHandler);
 

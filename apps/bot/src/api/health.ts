@@ -12,6 +12,7 @@ import Redis from "ioredis";
 import { withTimeout } from "../utils/resilience.js";
 import { snapshot } from "../core/metrics.js";
 import { asyncHandler } from "../middleware/errors.js";
+import { getRedisUrl } from "../utils/redisUrl.js";
 
 const CHECK_TIMEOUT_MS = 3_000;
 /** Chain head older than this ⇒ RPC (or chain view) considered stale. */
@@ -24,9 +25,17 @@ const WORKER_STALE_S = 11 * 60;
 let redis: Redis | null | undefined;
 function getRedis(): Redis | null {
   if (redis === undefined) {
-    redis = process.env.REDIS_URL
-      ? new Redis(process.env.REDIS_URL, { lazyConnect: false, maxRetriesPerRequest: 1 })
+    const redisUrl = getRedisUrl();
+    redis = redisUrl
+      ? new Redis(redisUrl, {
+          lazyConnect: false,
+          maxRetriesPerRequest: 1,
+          enableOfflineQueue: false,
+          connectTimeout: 2_000,
+          retryStrategy: (times) => Math.min(times * 500, 5_000),
+        })
       : null;
+    redis?.on("error", () => undefined); // reported via checkRedis(), don't crash on reconnect errors
   }
   return redis;
 }

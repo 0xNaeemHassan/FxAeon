@@ -17,14 +17,22 @@ services:
         sync: false
       - key: TELEGRAM_BOT_TOKEN
         sync: false
+      # REQUIRED in production (config fail-fast, W-05) — these two were
+      # missing from this blueprint, so blueprint-created services
+      # crash-looped at config validation until set by hand.
+      # Generate both with: openssl rand -hex 32
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
       - key: PRIVY_APP_ID
         sync: false
       - key: PRIVY_APP_SECRET
         sync: false
-      - key: ETH_RPC_URL
-        sync: false
       - key: ALCHEMY_RPC_URL
         sync: false
+      # Must be the Upstash TCP connection string
+      # (rediss://default:<password>@<host>:6379) — NOT the https:// REST URL.
       - key: REDIS_URL
         sync: false
       - key: SENTRY_DSN

@@ -134,7 +134,7 @@ export const features = {
   get enablePrivy() { return !!(process.env.PRIVY_APP_ID && process.env.PRIVY_APP_SECRET); },
   get enablePrivyWalletApi() { return !!(features.enablePrivy && process.env.PRIVY_AUTHORIZATION_KEY); },
   get enableBlockchain() { return !!process.env.ALCHEMY_RPC_URL; },
-  get enableRedis() { return !!process.env.REDIS_URL; },
+  get enableRedis() { return /^rediss?:\/\//i.test(process.env.REDIS_URL ?? ""); },
   get enableEncryption() { return !!process.env.KMS_MASTER_KEY; },
   get enableAi() { return !!process.env.SURPLUS_API_KEY; },
   enableByok: true,
