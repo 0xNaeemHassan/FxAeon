@@ -5,6 +5,10 @@ on:
     - cron: '0 3 * * *'  # Daily at 03:00 UTC
   workflow_dispatch:
 
+# Least-privilege token (W-14).
+permissions:
+  contents: read
+
 jobs:
   backup:
     runs-on: ubuntu-latest

@@ -5,32 +5,51 @@ on:
     - cron: '0 0 * * 1'  # Weekly on Monday
   workflow_dispatch:
 
+# Opens a PR instead of pushing to main (W-14): address changes MUST go
+# through human review — they feed packages/shared/src/addresses.ts and the
+# Privy allow-list, so an unreviewed change is a fund-safety risk.
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   monitor:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Check for new deployments
+        id: check
         run: |
-          curl -s https://raw.githubusercontent.com/AladdinDAO/fx-protocol-contracts/main/ignition/deployments/ethereum/deployed_addresses.json > /tmp/new_addresses.json
-          if [ -f docs/fx-addresses.json ]; then
-            diff docs/fx-addresses.json /tmp/new_addresses.json > /tmp/address_diff.txt || true
-            if [ -s /tmp/address_diff.txt ]; then
-              echo "⚠️ NEW DEPLOYMENTS DETECTED"
-              cat /tmp/address_diff.txt
-              # Send alert to Discord
-              curl -X POST ${{ secrets.DISCORD_WEBHOOK }}                 -H "Content-Type: application/json"                 -d '{"content": "🚨 fxBot Alert: New f(x) Protocol deployments detected. Manual review required."}'
-              cp /tmp/new_addresses.json docs/fx-addresses.json
-            else
-              echo "No changes detected"
-            fi
+          curl -sf --max-time 30 https://raw.githubusercontent.com/AladdinDAO/fx-protocol-contracts/main/ignition/deployments/ethereum/deployed_addresses.json > /tmp/new_addresses.json
+          # Refuse to act on an empty/invalid response.
+          node -e "JSON.parse(require('fs').readFileSync('/tmp/new_addresses.json','utf8'))"
+          if [ -f docs/fx-addresses.json ] && diff -q docs/fx-addresses.json /tmp/new_addresses.json >/dev/null; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No changes detected"
           else
             cp /tmp/new_addresses.json docs/fx-addresses.json
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
-      - name: Commit if changed
+      - name: Open PR for review
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
+          BRANCH="chore/fx-address-update-$(date +%Y%m%d)"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git checkout -b "$BRANCH"
           git add docs/fx-addresses.json
-          git diff --cached --quiet || git commit -m "Update f(x) addresses snapshot"
-          git push
+          git commit -m "chore: f(x) Protocol deployed-addresses snapshot changed"
+          git push -u origin "$BRANCH" --force
+          gh pr create \
+            --title "f(x) Protocol deployments changed — review required" \
+            --body "The upstream \`deployed_addresses.json\` in AladdinDAO/fx-protocol-contracts changed. **Do not merge blindly**: verify each new address against official f(x) docs/announcements, then update \`packages/shared/src/addresses.ts\` and the Privy policy allow-list if FxAeon uses the affected contracts." \
+            --base main --head "$BRANCH" || echo "PR already exists"
+      - name: Alert Discord
+        if: steps.check.outputs.changed == 'true' && env.WEBHOOK != ''
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          curl -X POST "$WEBHOOK" -H "Content-Type: application/json" \
+            -d '{"content": "🚨 FxAeon: new f(x) Protocol deployments detected — review the PR before merging."}'

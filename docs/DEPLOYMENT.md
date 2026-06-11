@@ -1,96 +1,68 @@
-# fxBot Deployment Guide (Production-Ready)
+# FxAeon Deployment Guide
 
-## Credentials Summary
+**Canonical production target: Render** (Docker web service from `render.yaml`,
+starter plan). Render auto-deploys every push to `main`. Fly.io support was
+removed in W-14; `docker-compose.yml` + `deploy.sh` are local/dev only.
 
-| Service | Value | Status |
-|---|---|---|
-| **Telegram Bot** | @FxAeonBot | Ready |
-| **Privy App ID** | `cmq6a73jc002k0cl5vgleejt2` | Ready |
-| **Alchemy RPC** | `https://eth-mainnet.g.alchemy.com/v2/<key>` (from Alchemy dashboard) | Ready |
-| **Supabase DB** | `gadzbgakqipnvkfozcfa.supabase.co` | Ready |
-| **Upstash Redis** | `allowed-honeybee-114181.upstash.io` | Ready |
+## Production (Render)
 
-## Quick Deploy (Docker)
+1. Render Blueprint picks up `render.yaml` (repo root). The service builds
+   `apps/bot/Dockerfile` with the repo root as Docker context.
+2. Set all `sync: false` env vars from `render.yaml` in the Render dashboard
+   (Environment tab). Secrets live **only** there and in GitHub Actions
+   secrets — never in files.
+3. Health check: Render pings `/api/v1/health`.
+4. Database migrations: run `pnpm --filter @fxbot/db db:deploy` against the
+   production `DATABASE_URL` (or enable the gated `deploy-db` job in
+   `.github/workflows/deploy.yml` via the `DEPLOY_DB_ENABLED` repo variable).
+   **Required for the next release:** the W-11 migration
+   `20260611_txrecord_idempotency`.
+5. Set the Telegram webhook once per host change:
 
 ```bash
-# 1. Clone and enter
-cd fxbot
+curl -sf -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
+  --data-urlencode "url=https://<render-host>/webhook" \
+  --data-urlencode "secret_token=${TELEGRAM_WEBHOOK_SECRET}"
+```
 
-# 2. Copy .env.example to .env and fill in real values (never commit .env)
+## Mini App (Cloudflare Pages)
 
-# 3. Build and start
-docker-compose up -d
+Deployed by `.github/workflows/deploy-mini-app.yml` on pushes touching
+`apps/mini-app/**` or `packages/shared/**` (wrangler → `fxbot-mini-app`).
 
-# 4. Set webhook (replace with your domain)
-export WEBHOOK_URL=https://your-domain.com/webhook
+## Local / dev (docker-compose)
+
+```bash
+cp .env.example .env   # fill in real values; never commit .env
+export TELEGRAM_BOT_TOKEN=... WEBHOOK_URL=https://<tunnel-host>/webhook
 ./deploy.sh
 ```
 
-## Manual Deploy (Fly.io)
+## CI/CD inventory (W-14)
 
-```bash
-# Install flyctl
-brew install flyctl
+| Workflow | Trigger | Notes |
+|---|---|---|
+| `ci.yml` | push/PR | lint, typecheck, tests, on-chain address verification |
+| `deploy.yml` | push to main | DB migrations only, gated by `DEPLOY_DB_ENABLED` (Render handles the bot deploy itself) |
+| `deploy-mini-app.yml` | path-filtered push | Cloudflare Pages |
+| `backup.yml` | daily 03:00 UTC | pg_dump → R2, 30-day retention |
+| `smoke-test.yml` | after deploys | hits prod/staging endpoints |
+| `fx-upgrade-monitor.yml` | weekly | upstream address diff → **opens a PR for human review** (never pushes to main) |
+| `gitleaks.yml` / `release.yml` | push / tags | secret scanning / GitHub releases |
 
-# Login
-flyctl auth login
+All workflows run with least-privilege `permissions:`; third-party actions are
+pinned by commit SHA.
 
-# Create app
-flyctl apps create fxaeon-bot
+## Verification checklist
 
-# Set secrets
-flyctl secrets set \
-  TELEGRAM_BOT_TOKEN=<from BotFather> \
-  PRIVY_APP_ID=<from Privy dashboard> \
-  PRIVY_APP_SECRET=<from Privy dashboard> \
-  DATABASE_URL=<from Supabase: Settings -> Database -> Connection string> \
-  REDIS_URL=<from Upstash: REST URL> \
-  REDIS_TOKEN=<from Upstash: REST token> \
-  ALCHEMY_RPC_URL=https://eth-mainnet.g.alchemy.com/v2/<key> \
-  ENCRYPTION_KEY=<openssl rand -hex 32> \
-  MINI_APP_URL=https://fxbot-mini-app.pages.dev
-
-# Deploy
-flyctl deploy
-
-# Set webhook
-curl -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
-  -d "url=https://fxaeon-bot.fly.dev/webhook"
-```
-
-## Mini App Deploy (Cloudflare Pages)
-
-```bash
-cd apps/mini-app
-
-# Build
-pnpm install
-pnpm build
-
-# Deploy to Cloudflare Pages
-# Upload dist/ folder via dashboard or wrangler
-```
-
-## Verification Checklist
-
-- [ ] `/start` in Telegram opens Mini App
+- [ ] `/start` in Telegram opens the Mini App
 - [ ] Wallet connects via Privy
 - [ ] `/portfolio` shows positions
-- [ ] `/deposit` shows QR code
-- [ ] `/settings` works
-- [ ] `/help` lists all commands
-- [ ] Health endpoint responds: `curl https://your-domain/api/v1/health`
+- [ ] Health endpoint responds: `curl https://<render-host>/api/v1/health`
 
-## Security Notes
+## Security notes
 
-1. **Rotate ENCRYPTION_KEY** — Generate a new 32-char key via `openssl rand -hex 32`
-2. **Enable 2FA** on Supabase, Upstash, Alchemy, Privy dashboards
-3. **Set IP allowlists** on Supabase and Upstash
-4. **Monitor Alchemy usage** to stay within free tier limits
-5. **Review Privy audit logs** weekly
-
-## Support
-
-- Bot: @FxAeonBot
-- Issues: GitHub issues
-- Emergency: Check ops/runbooks/
+1. Secrets only in Render env vars / GitHub Actions secrets.
+2. Enable 2FA on Supabase, Upstash, Alchemy, Privy, Render, Cloudflare.
+3. Set IP allowlists on Supabase and Upstash where possible.
+4. Review Privy dashboard audit logs weekly.
