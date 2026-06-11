@@ -171,16 +171,22 @@ model Referral {
 }
 
 model TxRecord {
-  id          String   @id @default(uuid())
-  userId      String
-  hash        String
-  status      String
-  type        String
-  data        Json
-  createdAt   DateTime @default(now())
+  id             String   @id @default(uuid())
+  userId         String
+  /// Null until the first tx of the route is broadcast (W-11 state machine).
+  hash           String?
+  /// One of core/txState.ts TX_STATES; transitions enforced in code.
+  status         String
+  type           String
+  data           Json
+  /// Unique per user intent — guarantees the same action never broadcasts twice.
+  idempotencyKey String?  @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
 
   @@index([userId])
   @@index([hash])
+  @@index([status])
   @@index([createdAt])
 }
 
