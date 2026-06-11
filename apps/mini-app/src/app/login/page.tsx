@@ -3,6 +3,7 @@
 import { useLogin, usePrivy } from '@privy-io/react-auth';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, useCallback, Suspense } from 'react';
+import { haptic } from '@/lib/telegram';
 
 function LoginPageContent() {
   const { ready, authenticated, user } = usePrivy();
@@ -49,6 +50,7 @@ function LoginPageContent() {
 
     // If inside Telegram WebApp, send wallet data and close
     if (wallet && window.Telegram?.WebApp?.initData) {
+      haptic('success');
       window.Telegram.WebApp.sendData(JSON.stringify({
         type: 'wallet_connected',
         address: wallet,

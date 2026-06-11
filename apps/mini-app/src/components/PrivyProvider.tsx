@@ -1,14 +1,20 @@
 'use client';
 
-import { PrivyProvider as BasePrivyProvider } from '@privy-io/react-auth';
-import { useEffect, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 
 /**
- * Client-only Privy wrapper.
- * During Next.js static export (SSG), pages are prerendered on the server.
- * Privy validates its app ID at init and throws if it's missing/invalid.
- * We skip rendering the provider on the server and only mount it client-side.
+ * Client-only, LAZY Privy wrapper (W-20).
+ *
+ * - SSG/pre-hydration: children render without Privy (Privy validates its app
+ *   id at init and throws during static export otherwise).
+ * - The Privy SDK is the heaviest dependency in the bundle; `lazy()` splits it
+ *   into its own chunk so first paint / TTI doesn't wait for it. While the
+ *   chunk loads, children render exactly as in the pre-mount state.
  */
+const BasePrivyProvider = lazy(() =>
+  import('@privy-io/react-auth').then((m) => ({ default: m.PrivyProvider }))
+);
+
 export function PrivyProvider({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
 
@@ -28,23 +34,25 @@ export function PrivyProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <BasePrivyProvider
-      appId={appId}
-      config={{
-        appearance: {
-          theme: 'light',
-          accentColor: '#00d4aa',
-          logo: 'https://fx.aladdin.club/favicon.ico',
-        },
-        embeddedWallets: {
-          ethereum: {
-            createOnLogin: 'users-without-wallets',
+    <Suspense fallback={<>{children}</>}>
+      <BasePrivyProvider
+        appId={appId}
+        config={{
+          appearance: {
+            theme: 'light',
+            accentColor: '#00d4aa',
+            logo: 'https://fx.aladdin.club/favicon.ico',
           },
-        },
-        loginMethods: ['email', 'wallet'],
-      }}
-    >
-      {children}
-    </BasePrivyProvider>
+          embeddedWallets: {
+            ethereum: {
+              createOnLogin: 'users-without-wallets',
+            },
+          },
+          loginMethods: ['email', 'wallet'],
+        }}
+      >
+        {children}
+      </BasePrivyProvider>
+    </Suspense>
   );
 }

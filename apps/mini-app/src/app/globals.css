@@ -3,6 +3,8 @@
 @tailwind utilities;
 
 :root {
+  /* Synced from Telegram WebApp by TelegramProvider (W-20); browser fallback. */
+  --tg-viewport-stable-height: 100dvh;
   --foreground-rgb: 15, 23, 42;
   --background-rgb: 248, 250, 252;
   --primary: 11, 92, 171;
@@ -590,4 +592,10 @@ body {
     transparent
   );
   margin: 16px 0;
+}
+
+/* W-20: full-height container that tracks Telegram's stable viewport
+   (no jump when the keyboard opens or the header collapses). */
+.tg-viewport {
+  min-height: var(--tg-viewport-stable-height, 100dvh);
 }
