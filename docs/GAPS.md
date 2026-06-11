@@ -55,8 +55,9 @@ description — this is the single list.
   of the W-11 executor and first callback_query handler in the bot.
 - ~~W-20 TMA platform~~ — landed (PR #50): telegram-web-app.js loaded,
   typed platform helpers, lazy Privy, Lighthouse budget.
-- **W-18 portfolio** (on-chain reads as source of truth),
-  **W-19 error taxonomy**, **W-21 i18n**
+- ~~W-18 portfolio~~ — landed (PR #52): on-chain reads as source of
+  truth, fixed inverted risk meter, per-position Close flow.
+- **W-19 error taxonomy**, **W-21 i18n**
   (all user-facing strings are English-only until then; locale JSON
   untouched by design).
 

@@ -173,7 +173,7 @@ export function buildPreview(
 // Execution with status edits on the same message
 // ---------------------------------------------------------------------------
 
-function statusLine(state: TxState, detail?: string): string {
+export function statusLine(state: TxState, detail?: string): string {
   switch (state) {
     case "prepared":
       return "⏳ Preparing…";
