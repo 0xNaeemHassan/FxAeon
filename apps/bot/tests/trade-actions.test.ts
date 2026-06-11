@@ -151,10 +151,13 @@ describe("confirm flow", () => {
   });
 
   it("surfaces executor failure without inventing success", async () => {
-    executeRouteMock.mockResolvedValue({ ok: false, deduped: false, recordId: "rec-1", status: "failed", error: "simulation reverted" });
+    executeRouteMock.mockResolvedValue({ ok: false, deduped: false, recordId: "rec-1", status: "failed", error: "simulation failed at tx 1: TRANSFER_FROM_FAILED" });
     const ctx = mockCtx(`tc_${createTradeIntent(intent)}`);
     await handleConfirmCallback(ctx);
-    expect(lastEdit(ctx)).toContain("simulation reverted");
+    // W-19: raw errors are classified into actionable copy with
+    // broadcast-state honesty (sim failure ⇒ nothing was sent).
+    expect(lastEdit(ctx)).toContain("NOT sent");
+    expect(lastEdit(ctx)).toContain("insufficient balance");
     expect(lastEdit(ctx)).not.toContain("Position opened");
   });
 

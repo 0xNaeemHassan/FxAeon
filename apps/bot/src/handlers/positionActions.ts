@@ -20,6 +20,7 @@ import {
 import { findUserPosition, type Side } from "../core/portfolio.js";
 import { executeRoute } from "../core/txExecutor.js";
 import { statusLine } from "./tradeActions.js";
+import { describeExecutionError } from "../core/errorTaxonomy.js";
 import { botLogger } from "../middleware/logger.js";
 
 async function editSafe(ctx: Context, text: string, keyboard?: InlineKeyboard): Promise<void> {
@@ -163,9 +164,10 @@ export async function handleCloseConfirm(ctx: Context): Promise<void> {
           `\n\n📊 /portfolio for the updated view.`
       );
     } else {
+      // W-19: actionable copy with broadcast-state honesty.
       await editSafe(
         ctx,
-        `${header}\n\n${statusLine(result.status, result.error)}\n\nThe position is unchanged unless a tx hash is shown above. You can retry from /portfolio.`
+        `${header}\n\n❌ Close not completed.\n\n${describeExecutionError(result.error)}\n\nRetry from /portfolio.`
       );
     }
   } catch (error) {

@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { Suspense } from 'react';
 import { ArrowLeft, TrendingUp, TrendingDown, AlertTriangle, Check } from 'lucide-react';
 import { getWebApp, isTMA, showMainButton } from '@/lib/telegram';
+import { RISK_PARAMS } from '@fxbot/shared';
 
 const MARKET_INDEX: Record<string, number> = { wstETH: 0, WBTC: 1 };
 const BOT_USERNAME = process.env.NEXT_PUBLIC_BOT_USERNAME || 'FxAeonBot';
@@ -40,8 +41,10 @@ function TradePageContent() {
 
   const wallet = wallets[0];
   const isLong = side === 'long';
-  const maxLev = isLong ? 7 : 3;
-  const isValid = leverage >= 1.1 && leverage <= maxLev;
+  // P3: leverage caps come from @fxbot/shared — single source of truth with
+  // the bot's validation (was hardcoded 1.1/7/3 here and could drift).
+  const maxLev = isLong ? RISK_PARAMS.MAX_LEVERAGE_LONG : RISK_PARAMS.MAX_LEVERAGE_SHORT;
+  const isValid = leverage >= RISK_PARAMS.MIN_LEVERAGE && leverage <= maxLev;
 
   // SAFETY KILL-SWITCH (see docs/audit/AUDIT.md P0-2):
   // The previous implementation broadcast an empty-calldata transaction to the
@@ -137,7 +140,7 @@ function TradePageContent() {
         <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 mb-4">
           <p className="text-sm text-yellow-700 dark:text-yellow-400">
             <AlertTriangle className="w-4 h-4 inline mr-1" />
-            Leverage must be between 1.1x and {maxLev}x for {side}
+            Leverage must be between {RISK_PARAMS.MIN_LEVERAGE}x and {maxLev}x for {side}
           </p>
         </div>
       )}
