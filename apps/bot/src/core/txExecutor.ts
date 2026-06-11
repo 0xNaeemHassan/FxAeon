@@ -20,6 +20,7 @@
 import { prisma } from "@fxbot/db";
 import type { PublicClient } from "viem";
 import { simulateRoute, type TradeTx } from "../fx/index.js";
+import { incr } from "./metrics.js";
 import { sendWalletTransaction } from "./privy.js";
 import { getEip1559Fees } from "./fees.js";
 import { assertTransition, isTxState, type TxState } from "./txState.js";
@@ -109,10 +110,12 @@ export async function executeRoute(params: ExecuteRouteParams): Promise<ExecuteR
   // ── Simulate before broadcast (fail-closed, non-negotiable). ────────────
   const sim = await simulateRoute(client, walletAddress, txs);
   if (!sim.success) {
+    incr("simulate.revert");
     return fail(
       `simulation failed${sim.failedTxIndex !== undefined ? ` at tx ${sim.failedTxIndex}` : ""}: ${sim.error}`
     );
   }
+  incr("simulate.ok");
   state = await setStatus(record.id, state, "simulated", onStatus, `gas ${sim.totalGas}`);
 
   // ── Fees from feeHistory. ───────────────────────────────────────────────

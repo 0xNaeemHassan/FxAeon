@@ -1,5 +1,6 @@
 import { Context } from "grammy";
 import { prisma } from "@fxbot/db";
+import { botLogger } from "../middleware/logger.js";
 
 export async function startCommand(ctx: Context) {
   const telegramId = ctx.from?.id.toString();
@@ -34,7 +35,7 @@ export async function startCommand(ctx: Context) {
         `We use Privy for secure, non-custodial key management. Your private keys never leave your device.`
       );
 
-      console.log(`[Onboarding] User ${telegramId} started onboarding flow${referredBy ? ` via ref ${referredBy}` : ''}`);
+      botLogger.info({ telegramId, referredBy: referredBy || undefined }, "onboarding started");
     } else {
       // Returning user — personalized welcome
       const walletShort = `${user.walletAddress.slice(0, 6)}...${user.walletAddress.slice(-4)}`;
