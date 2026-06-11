@@ -8,7 +8,7 @@
     "typecheck": "prisma generate && tsc --noEmit",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:deploy": "prisma migrate deploy",
+    "db:deploy": "bash scripts/deploy-prod.sh",
     "db:studio": "prisma studio"
   },
   "dependencies": {
