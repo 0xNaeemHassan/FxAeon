@@ -183,15 +183,25 @@ async function runTests() {
     logFail('Supabase unreachable: ' + e.message);
   }
 
-  // Upstash
+  // Upstash — this REST probe needs the https:// REST endpoint + REST token.
+  // The bot itself uses the rediss:// TCP string; if that's what REDIS_URL
+  // holds here, skip instead of failing (we can't speak RESP over HTTPS).
   try {
-    const res = await request(requireEnv('REDIS_URL'), {
-      headers: { Authorization: `Bearer ${requireEnv('REDIS_TOKEN')}` },
-    });
-    if (res.status === 200 || res.status === 401) {
-      logPass('Upstash Redis reachable');
+    const upstashUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.REDIS_URL;
+    const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.REDIS_TOKEN;
+    if (!upstashUrl || !upstashToken) {
+      logSkip('Upstash REST check skipped: REDIS_URL/REDIS_TOKEN not set');
+    } else if (!upstashUrl.startsWith('https://')) {
+      logSkip('Upstash REST check skipped: REDIS_URL is the TCP string (rediss://), not the REST endpoint');
     } else {
-      logFail(`Upstash status: ${res.status}`);
+      const res = await request(upstashUrl, {
+        headers: { Authorization: `Bearer ${upstashToken}` },
+      });
+      if (res.status === 200 || res.status === 401) {
+        logPass('Upstash Redis reachable');
+      } else {
+        logFail(`Upstash status: ${res.status}`);
+      }
     }
   } catch (e) {
     logFail('Upstash unreachable: ' + e.message);

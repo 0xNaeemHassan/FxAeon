@@ -25,6 +25,26 @@ curl -sf -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" 
   --data-urlencode "secret_token=${TELEGRAM_WEBHOOK_SECRET}"
 ```
 
+### Production troubleshooting (learned the hard way, 2026-06-11)
+
+Symptom: process "up", webhook registered, but the bot answers nothing.
+
+- **REDIS_URL must be the TCP string** (`rediss://default:<password>@<host>:6379`),
+  *not* the Upstash REST `https://` endpoint. The bot now refuses non-redis
+  URLs and runs with in-memory rate limits instead of hanging, but fix the
+  env var to get real Redis limits back.
+- **DATABASE_URL must be reachable from Render.** Supabase's direct host
+  (`db.<ref>.supabase.co:5432`) is IPv6-only; Render has no outbound IPv6, so
+  connections hang. Use the **Session pooler** connection string from
+  Supabase → Connect (IPv4-compatible, port 5432).
+- `TELEGRAM_WEBHOOK_SECRET` and `ENCRYPTION_KEY` are required in production
+  (config fail-fast) — both are listed in `render.yaml` so the Blueprint
+  prompts for them. Generate with `openssl rand -hex 32`.
+- Quick checks: `GET /api/v1/health` (deep, 503 when a dependency is down,
+  per-service status in the body) and `GET /api/v1/info` (always-fast build
+  info). The webhook re-registers itself on every boot from
+  `RENDER_EXTERNAL_URL` — no manual `setWebhook` needed on Render.
+
 ## Mini App (Cloudflare Pages)
 
 Deployed by `.github/workflows/deploy-mini-app.yml` on pushes touching
