@@ -3,7 +3,7 @@ import IORedis from "ioredis";
 import { prisma } from "@fxbot/db";
 import { createPublicClient, http } from "viem";
 import { mainnet } from "viem/chains";
-import { simulateTrade } from "../fx/index.js";
+import { createFxSdk, quoteOpenPosition, simulateRoute } from "../fx/index.js";
 
 const redis = new IORedis(process.env.REDIS_URL!, { maxRetriesPerRequest: null });
 
@@ -34,16 +34,27 @@ export const ruleWorker = new Worker("fxbot-rules", async (job) => {
       transport: http(process.env.ALCHEMY_RPC_URL!),
     });
     
-    const simResult = await simulateTrade(
+    // Quote + simulate the rule's intended trade with REAL calldata before
+    // marking the rule healthy. Execution itself is still disabled until the
+    // Privy Policy Engine lands (W-08) and workers are wired (W-12).
+    const sdk = createFxSdk();
+    const quote = await quoteOpenPosition({
+      sdk,
+      userAddress: rule.user.walletAddress,
+      market: "wstETH",
+      side: "long",
+      leverage: 2,
+      amountWei: 10n ** 17n, // 0.1 wstETH probe amount
+      slippagePercent: (rule.user.slippageBps ?? 50) / 100,
+    });
+    const route = quote.routes[0];
+    if (!route) throw new Error("Simulation failed: no route returned");
+    const simResult = await simulateRoute(
       publicClient,
-      rule.user.walletAddress,
-      "wstETH",
-      "long",
-      2,
-      "1",
-      rule.user.slippageBps
+      rule.user.walletAddress as `0x${string}`,
+      route.txs
     );
-    
+
     if (!simResult.success) {
       throw new Error(`Simulation failed: ${simResult.error}`);
     }
