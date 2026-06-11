@@ -38,6 +38,18 @@ export default function RootLayout({
           src="https://telegram.org/js/telegram-web-app.js"
           strategy="beforeInteractive"
         />
+        {/* Apply the theme BEFORE first paint so ThemeProvider doesn't need
+            to hide the app until hydration (the old `visibility:hidden`
+            anti-flash wrapper meant nothing painted until React loaded —
+            blank screen on slow cold starts, NO_FCP in Lighthouse).
+            Resolution order mirrors ThemeProvider: localStorage override →
+            Telegram colorScheme → prefers-color-scheme. Fail-soft: defaults
+            to light, ThemeProvider corrects after mount. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('fxaeon-theme');var d;if(t==='dark'){d=true}else if(t==='light'){d=false}else{var tg=window.Telegram&&window.Telegram.WebApp;d=tg&&tg.colorScheme?tg.colorScheme==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches}var r=document.documentElement;r.classList.toggle('dark',d);r.style.colorScheme=d?'dark':'light'}catch(e){}})();`,
+          }}
+        />
       </head>
       <body className={inter.className}>
         <TelegramProvider>
