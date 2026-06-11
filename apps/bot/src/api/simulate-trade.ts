@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { isAddress, formatEther } from "viem";
 import { RISK_PARAMS, MARKETS } from "@fxbot/shared";
-import { ValidationError, SimulationError } from "../middleware/errors.js";
+import { ValidationError, SimulationError, asyncHandler } from "../middleware/errors.js";
 import {
   createFxSdk,
   createPublicClientForUser,
@@ -23,7 +23,7 @@ const tradeSchema = z.object({
   slippageBps: z.coerce.number().int().min(1).max(1000).optional(),
 });
 
-simulateRouter.post("/trade", async (req, res) => {
+simulateRouter.post("/trade", asyncHandler(async (req, res) => {
   const parsed = tradeSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new ValidationError(parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "));
@@ -93,13 +93,12 @@ simulateRouter.post("/trade", async (req, res) => {
     const message = error instanceof Error ? error.message : String(error);
     throw new SimulationError(message, { address, market, side, leverage });
   }
-});
+}));
 
-// Limit orders: the on-chain manager integration is not implemented yet (W-09).
-// Be honest about it instead of returning fabricated numbers.
+// Limit orders moved to the real rail: /api/limit-orders/{prepare,submit,status,cancel-tx} (W-09).
 simulateRouter.post("/limit", (_req, res) => {
-  res.status(501).json({
+  res.status(410).json({
     success: false,
-    error: "Limit order simulation is not implemented yet.",
+    error: "Moved: use /api/limit-orders/prepare and /api/limit-orders/submit.",
   });
 });

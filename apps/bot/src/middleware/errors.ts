@@ -81,3 +81,17 @@ export const errorCodes = {
 export function getUserMessage(error: FxBotError): string {
   return errorCodes[error.code as keyof typeof errorCodes] || error.message;
 }
+
+import type { Request, Response, NextFunction, RequestHandler } from "express";
+
+/**
+ * Express 4 does not forward errors thrown in async handlers to error middleware —
+ * an unhandled rejection crashes the process instead. Wrap async routes with this.
+ */
+export function asyncHandler(
+  fn: (req: Request, res: Response, next: NextFunction) => Promise<void> | void
+): RequestHandler {
+  return (req, res, next) => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+}
