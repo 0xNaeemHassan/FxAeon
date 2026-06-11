@@ -22,7 +22,8 @@ describe("Commands", () => {
       mockCtx.message.text = "/start";
       await startCommand(mockCtx);
       expect(mockCtx.reply).toHaveBeenCalledWith(
-        expect.stringContaining("Welcome to fxBot")
+        expect.stringContaining("Welcome to fxBot"),
+        expect.objectContaining({ reply_markup: expect.anything() })
       );
     });
 
@@ -30,7 +31,8 @@ describe("Commands", () => {
       mockCtx.message.text = "/start ref_ABCD1234";
       await startCommand(mockCtx);
       expect(mockCtx.reply).toHaveBeenCalledWith(
-        expect.stringContaining("Connect Wallet")
+        expect.stringContaining("ABCD1234"),
+        expect.objectContaining({ reply_markup: expect.anything() })
       );
     });
   });

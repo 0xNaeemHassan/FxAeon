@@ -63,8 +63,14 @@ Run via `apps/bot/scripts/fork-verify.ts` against **Anvil forking mainnet**
 
 ## Test suite
 
-`apps/bot`: **179 tests across 20 files, all passing**; `tsc --noEmit` clean.
+`apps/bot`: **201 tests across 21 files, all passing**; `tsc --noEmit` clean.
 Coverage spans webhook auth, encryption, config fail-fast, fee math,
 tx state machine + idempotency, EIP-712 limit orders, notifications
 (prefs/quiet-hours/throttle/audit), resilience primitives, observability
 (masking, metrics, timing, scrubbing, digest).
+
+## Phase 5: P2 product waves (in progress)
+
+| Item | PR | What shipped | Verification |
+|------|----|--------------|--------------|
+| W-16 | — | Onboarding: `/start` shows a reply-keyboard **Create Wallet** web_app button (reply keyboard because `WebApp.sendData` only works for keyboard-launched Mini Apps); new `message:web_app_data` handler completes onboarding **server-side** — Privy user resolved from the authenticated Telegram id, wallet created via the W-08 default-deny policy path, client payload treated as a trigger only (forged `privyUserId`/`address` ignored); referral codes parsed from deep links, written fail-soft on signup (CSPRNG codes replace `Math.random`); funded-address empty states read live ETH/wstETH/WBTC balances fail-soft (3s timeout → no balance claims); `/refer` share link fixed (was hardcoded to the wrong bot, `fxAladdinBot`); additive `User.privyWalletId` column + migration `20260611_user_privy_wallet` with rollback. | 22 new tests; suite 201/201 |

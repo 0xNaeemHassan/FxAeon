@@ -12,6 +12,9 @@ model User {
   telegramId      String    @unique
   privyUserId     String    @unique
   walletAddress   String    @unique
+  /// Privy wallet API id of the policy-guarded embedded wallet (W-16).
+  /// Nullable: rows created before W-16 predate server-side wallet creation.
+  privyWalletId   String?   @unique
   language        String    @default("en")
   mevProtection   String    @default("off")
   slippageBps     Int       @default(50)
