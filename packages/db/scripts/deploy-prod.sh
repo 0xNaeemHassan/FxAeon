@@ -17,10 +17,19 @@ npx prisma db execute --url "$DATABASE_URL" --stdin <<'SQL'
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.tables
-             WHERE table_schema = 'public' AND table_name = '_prisma_migrations')
-     AND NOT EXISTS (SELECT 1 FROM information_schema.tables
-                     WHERE table_schema = 'public' AND table_name = 'TxRecord') THEN
-    DELETE FROM "_prisma_migrations" WHERE migration_name = '20260610_init';
+             WHERE table_schema = 'public' AND table_name = '_prisma_migrations') THEN
+    -- While the schema is provably absent, drop the wrongly-"applied" init row.
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables
+                   WHERE table_schema = 'public' AND table_name = 'TxRecord') THEN
+      DELETE FROM "_prisma_migrations" WHERE migration_name = '20260610_init';
+    END IF;
+    -- Clear FAILED rows (started but never finished, not marked rolled back):
+    -- the idempotent equivalent of `prisma migrate resolve --rolled-back` for
+    -- every stuck migration. On Postgres each migration runs in a transaction,
+    -- so a failed migration left no partial schema behind and is safe to
+    -- re-apply. No-op when there are no failed rows.
+    DELETE FROM "_prisma_migrations"
+      WHERE finished_at IS NULL AND rolled_back_at IS NULL;
   END IF;
 END $$;
 SQL
