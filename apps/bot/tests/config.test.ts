@@ -43,14 +43,16 @@ describe('config fail-fast (W-05)', () => {
     if (!r.success) {
       const paths = r.error.issues.map((i) => i.path.join('.'));
       expect(paths).toContain('PRIVY_APP_SECRET');
-      expect(paths).toContain('PRIVY_WEBHOOK_SECRET');
+      // PRIVY_WEBHOOK_SECRET no longer required (W-12): tx webhooks are a
+      // Privy enterprise feature; lifecycle comes from the W-11 receipt watcher.
+      expect(paths).not.toContain('PRIVY_WEBHOOK_SECRET');
     }
   });
 
   it('accepts complete Privy config in production', () => {
     const r = envSchema.safeParse({
       ...CORE, ...PROD_SECURITY, NODE_ENV: 'production',
-      PRIVY_APP_ID: 'app123', PRIVY_APP_SECRET: 'secret', PRIVY_WEBHOOK_SECRET: 'whsec_abc',
+      PRIVY_APP_ID: 'app123', PRIVY_APP_SECRET: 'secret',
     });
     expect(r.success).toBe(true);
   });

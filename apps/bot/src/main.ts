@@ -21,10 +21,9 @@ import { apiRouter } from "./api/index.js";
 import { applySecurityMiddleware, errorHandler } from "./middleware/index.js";
 import { validateConfig } from "./middleware/config.js";
 import { logger } from "./middleware/logger.js";
-import { privyWebhookHandler } from "./handlers/privy-webhooks.js";
 import { limitOrderPolling } from "./notifications/limit-order-poller.js";
 import { healthMonitor } from "./notifications/health-monitor.js";
-import { txNotifier } from "./notifications/tx-notifier.js";
+import { initNotify } from "./notifications/notify.js";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -137,11 +136,12 @@ async function configureTelegramBot() {
 // Background workers (with graceful error handling)
 // ---------------------------------------------------------------------------
 function startBackgroundWorkers() {
+  // Single pref-aware notification gate (W-12): workers push through notify().
+  initNotify((telegramId, message) => bot.api.sendMessage(telegramId, message));
   // Delay worker start to let connections settle
   setTimeout(() => {
     try { limitOrderPolling.start(); } catch (e) { logger.error(e, "Failed to start limit order polling"); }
     try { healthMonitor.start(); } catch (e) { logger.error(e, "Failed to start health monitor"); }
-    try { txNotifier.start(); } catch (e) { logger.error(e, "Failed to start tx notifier"); }
   }, 5000);
 }
 
@@ -174,9 +174,6 @@ async function main() {
     // X-Telegram-Bot-Api-Secret-Token header does not match (AUDIT.md P0-5).
     const telegramWebhookSecret = getTelegramWebhookSecret();
     app.post("/webhook", webhookCallback(bot, "express", { secretToken: telegramWebhookSecret }));
-
-    // Privy webhook
-    app.post("/privy-webhook", privyWebhookHandler);
 
     // API routes (health, simulate, webhook verification, etc.)
     app.use("/api", apiRouter);

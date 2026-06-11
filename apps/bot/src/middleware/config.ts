@@ -33,7 +33,6 @@ export const envSchema = z.object({
 
   // ── Webhook authentication ───────────────────────────────
   TELEGRAM_WEBHOOK_SECRET: z.string().min(32).optional(),
-  PRIVY_WEBHOOK_SECRET: z.string().min(1).optional(),
 
   // ── Webhook URL (production webhook mode) ────────────────
   RENDER_EXTERNAL_URL: z.string().url().optional(),
@@ -71,10 +70,9 @@ export const envSchema = z.object({
   if (cfg.PRIVY_APP_ID || cfg.PRIVY_APP_SECRET) {
     if (!cfg.PRIVY_APP_ID) fail("PRIVY_APP_ID", "required when PRIVY_APP_SECRET is set");
     if (!cfg.PRIVY_APP_SECRET) fail("PRIVY_APP_SECRET", "required when PRIVY_APP_ID is set");
-    if (!cfg.PRIVY_WEBHOOK_SECRET) {
-      fail("PRIVY_WEBHOOK_SECRET",
-        "required in production when Privy is configured — SVIX signing secret (whsec_…) from the Privy dashboard");
-    }
+    // PRIVY_WEBHOOK_SECRET intentionally NOT required: transaction webhooks
+    // are a Privy enterprise feature. Tx lifecycle is tracked by the W-11
+    // receipt watcher (we broadcast every tx ourselves).
   }
 });
 
