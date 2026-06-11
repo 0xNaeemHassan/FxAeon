@@ -29,6 +29,9 @@ services:
         sync: false
       - key: SENTRY_DSN
         sync: false
+      # Daily SLO digest target (W-15); digest disabled when unset.
+      - key: ADMIN_TELEGRAM_CHAT_ID
+        sync: false
       - key: KMS_MASTER_KEY
         sync: false
       - key: SURPLUS_API_KEY

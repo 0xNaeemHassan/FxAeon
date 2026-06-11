@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from "express";
+import { logger } from "../middleware/logger.js";
 import { healthRouter } from "./health.js";
 import { simulateRouter } from "./simulate-trade.js";
 import { webhookRouter } from "./webhook.js";
@@ -13,7 +14,7 @@ apiRouter.use("/limit-orders", limitOrdersRouter);
 
 // Global error handler for API routes
 apiRouter.use((err: Error & { status?: number; code?: string }, req: Request, res: Response, _next: NextFunction) => {
-  console.error("API Error:", err);
+  logger.error({ error: err }, "API error");
   res.status(err.status || 500).json({
     error: {
       message: err.message || "Internal server error",

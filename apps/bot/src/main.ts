@@ -21,6 +21,11 @@ import { apiRouter } from "./api/index.js";
 import { applySecurityMiddleware, errorHandler } from "./middleware/index.js";
 import { validateConfig } from "./middleware/config.js";
 import { logger } from "./middleware/logger.js";
+import { commandTiming } from "./middleware/timing.js";
+import { healthRouter } from "./api/health.js";
+import { initSentry, captureError } from "./observability/sentry.js";
+import { sloDigest } from "./observability/slo-digest.js";
+import { installVendorLogFilter } from "./observability/quiet-vendor.js";
 import { limitOrderPolling } from "./notifications/limit-order-poller.js";
 import { healthMonitor } from "./notifications/health-monitor.js";
 import { initNotify } from "./notifications/notify.js";
@@ -29,6 +34,11 @@ import { initNotify } from "./notifications/notify.js";
 // Configuration
 // ---------------------------------------------------------------------------
 const env = validateConfig();
+
+// Observability (W-15): Sentry only when SENTRY_DSN is set; always silence
+// the fx-sdk vendor debug line that dumps pool structs to stdout.
+installVendorLogFilter();
+initSentry();
 
 // ---------------------------------------------------------------------------
 // Bot setup
@@ -46,6 +56,9 @@ bot.api.config.use(apiThrottler({
 
 // Conversations
 bot.use(conversations());
+
+// Command timing + per-command metrics (W-15) — before handler registration.
+bot.use(commandTiming);
 
 // ---------------------------------------------------------------------------
 // Commands
@@ -79,6 +92,7 @@ bot.catch((err) => {
   const ctx = err.ctx;
   logger.error({ updateId: ctx.update.update_id }, "Error handling update");
   const e = err.error;
+  captureError(e, { source: "bot.catch" });
   if (e instanceof GrammyError) {
     logger.error({ description: e.description }, "Grammy error");
   } else if (e instanceof HttpError) {
@@ -142,6 +156,7 @@ function startBackgroundWorkers() {
   setTimeout(() => {
     try { limitOrderPolling.start(); } catch (e) { logger.error(e, "Failed to start limit order polling"); }
     try { healthMonitor.start(); } catch (e) { logger.error(e, "Failed to start health monitor"); }
+    try { sloDigest.start((chatId, msg) => bot.api.sendMessage(chatId, msg)); } catch (e) { logger.error(e, "Failed to start SLO digest"); }
   }, 5000);
 }
 
@@ -183,15 +198,10 @@ async function main() {
       res.json({ ok: true, timestamp: new Date().toISOString() });
     });
 
-    // Render expects /api/v1/health — add a direct alias
-    app.get("/api/v1/health", (_req, res) => {
-      res.json({
-        status: "healthy",
-        timestamp: new Date().toISOString(),
-        version: "1.1.0",
-        uptime: process.uptime(),
-      });
-    });
+    // Render's healthCheckPath is /api/v1/health — serve the REAL checks
+    // there (the previous alias returned a hardcoded "healthy", so Render
+    // could never see a dead DB). (W-15)
+    app.use("/api/v1/health", healthRouter);
 
     // Error handler (must be last)
     app.use(errorHandler);

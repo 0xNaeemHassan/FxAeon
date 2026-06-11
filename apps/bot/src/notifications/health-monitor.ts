@@ -11,6 +11,8 @@
 import { prisma } from "@fxbot/db";
 import { computeHealthPercent, HEALTH_LEVELS } from "@fxbot/shared";
 import { notify } from "./notify.js";
+import { heartbeat, incr } from "../core/metrics.js";
+import { workerLogger } from "../middleware/logger.js";
 
 const HEALTH_CHECK_INTERVAL_MS = 300_000; // 5 min
 
@@ -30,6 +32,8 @@ export function formatHealthMessage(
 
 export const healthMonitor = {
   async check(): Promise<void> {
+    heartbeat("health-monitor");
+    incr("healthcheck.run");
     try {
       const positions = await prisma.position.findMany({
         include: { user: true },
@@ -54,12 +58,13 @@ export const healthMonitor = {
         }
       }
     } catch (error) {
-      console.error("Health monitor error:", error);
+      workerLogger.error({ error }, "Health monitor error");
     }
   },
 
   start(): void {
     setInterval(() => void this.check(), HEALTH_CHECK_INTERVAL_MS);
-    console.log("Health monitor started (5min interval)");
+    heartbeat("health-monitor");
+    workerLogger.info("Health monitor started (5min interval)");
   },
 };
