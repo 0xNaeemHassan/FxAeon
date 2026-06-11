@@ -66,6 +66,14 @@ description — this is the single list.
 
 ## Smaller honest notes
 
+- Mini-app TTI budget is a measured baseline, not the goal: the W-20 budget
+  (TTI < 2.5s on 3G-Fast/mobile) was written while Lighthouse CI couldn't
+  actually run (pnpm conflict, then NO_FCP). First real runs (2026-06-11,
+  after the first-paint fix) measure best-of-3 TTI at ~3.2s (index) /
+  ~3.4s (login). The error budget is set at 4.0s to catch regressions;
+  getting to 2.5s needs real bundle work (React+Next baseline is ~105 kB
+  shared first-load JS).
+
 - In-process metrics reset on every deploy/restart; the daily digest says
   so. Fine for one Render instance; revisit only if instances > 1.
 - The fx-sdk vendored bundle still contains debug `console.log`s; we

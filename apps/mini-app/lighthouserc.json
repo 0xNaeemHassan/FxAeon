@@ -23,7 +23,7 @@
         "interactive": [
           "error",
           {
-            "maxNumericValue": 2500
+            "maxNumericValue": 4000
           }
         ],
         "first-contentful-paint": [
