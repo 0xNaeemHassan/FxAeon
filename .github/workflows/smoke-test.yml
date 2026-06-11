@@ -15,6 +15,10 @@ on:
           - production
           - staging
 
+# Least-privilege token (W-14).
+permissions:
+  contents: read
+
 jobs:
   smoke-test:
     runs-on: ubuntu-latest
@@ -37,7 +41,7 @@ jobs:
 
       - name: Notify on Failure
         if: failure()
-        uses: slackapi/slack-github-action@v1
+        uses: slackapi/slack-github-action@fcfb566f8b0aab22203f066d80ca1d7e4b5d05b3 # v1
         with:
           payload: |
             {

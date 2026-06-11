@@ -1,52 +1,25 @@
 name: Deploy
+# Canonical bot deploy target is RENDER (render.yaml blueprint): Render
+# auto-deploys the Docker service from pushes to main — no workflow needed.
+# The Mini App deploys to Cloudflare Pages via deploy-mini-app.yml.
+# This workflow only runs database migrations, gated behind a repo variable
+# so it can be enabled once DATABASE_URL is configured as a secret. (W-14)
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  deploy-bot:
-    runs-on: ubuntu-latest
-    if: ${{ vars.DEPLOY_BOT_ENABLED == 'true' }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: superfly/flyctl-actions/setup-flyctl@master
-      - run: flyctl deploy --config apps/bot/fly.toml --remote-only
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-
-  deploy-mini-app:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v3
-        with:
-          version: 9
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-      - run: pnpm install --no-frozen-lockfile
-      - run: pnpm --filter @fxbot/shared build
-      - run: pnpm --filter @fxbot/mini-app build
-        env:
-          NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID }}
-          NEXT_PUBLIC_TELEGRAM_BOT_USERNAME: ${{ secrets.TELEGRAM_BOT_USERNAME }}
-          NEXT_PUBLIC_MINI_APP_URL: ${{ secrets.MINI_APP_URL }}
-          NEXT_PUBLIC_ALCHEMY_RPC_URL: ${{ secrets.ALCHEMY_RPC_URL }}
-      - name: Deploy to Cloudflare Pages
-        run: npx wrangler@3 pages deploy apps/mini-app/dist --project-name=fxbot-mini-app
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
   deploy-db:
     runs-on: ubuntu-latest
     if: ${{ vars.DEPLOY_DB_ENABLED == 'true' }}
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v3
+      - uses: pnpm/action-setup@a3252b78c470c02df07e9d59298aecedc3ccdd6d # v3
         with:
           version: 9
       - uses: actions/setup-node@v4

@@ -8,13 +8,17 @@ on:
       - 'packages/shared/**'
   workflow_dispatch:
 
+# Least-privilege token (W-14).
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v3
+      - uses: pnpm/action-setup@a3252b78c470c02df07e9d59298aecedc3ccdd6d # v3
         with:
           version: 9
 
