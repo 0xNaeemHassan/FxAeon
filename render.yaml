@@ -9,7 +9,14 @@ services:
     dockerfilePath: ./apps/bot/Dockerfile
     dockerContext: .
     plan: starter
-    healthCheckPath: /api/v1/health
+    # Liveness only: Render uses this to gate deploys and to restart the
+    # service. It must answer 200 whenever the PROCESS can serve traffic.
+    # The deep dependency check lives at /api/v1/health (used by the smoke
+    # test + monitoring) — pointing Render at it caused a catch-22 on
+    # 2026-06-11: DB/Redis env vars were wrong -> deep health 503 -> Render
+    # restart-looped the old build AND refused to promote the build that
+    # contained the fix.
+    healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production

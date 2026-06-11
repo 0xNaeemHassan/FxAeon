@@ -11,7 +11,11 @@ removed in W-14; `docker-compose.yml` + `deploy.sh` are local/dev only.
 2. Set all `sync: false` env vars from `render.yaml` in the Render dashboard
    (Environment tab). Secrets live **only** there and in GitHub Actions
    secrets — never in files.
-3. Health check: Render pings `/api/v1/health`.
+3. Health check: Render pings `/health` (liveness only — deploy gating and
+   restarts must not depend on DB/Redis health; the deep per-dependency
+   check is `/api/v1/health`, used by monitoring and the smoke test).
+   If the service was created manually (not via this Blueprint), set
+   *Settings → Health Check Path* to `/health` in the dashboard too.
 4. Database migrations: run `pnpm --filter @fxbot/db db:deploy` against the
    production `DATABASE_URL` (or enable the gated `deploy-db` job in
    `.github/workflows/deploy.yml` via the `DEPLOY_DB_ENABLED` repo variable).
