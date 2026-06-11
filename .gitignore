@@ -85,3 +85,6 @@ __pycache__/
 .Python
 *.egg-info/
 .eggs/
+
+# Turbo cache
+.turbo/

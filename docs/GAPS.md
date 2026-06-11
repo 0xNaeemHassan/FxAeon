@@ -44,10 +44,14 @@ description — this is the single list.
 - **Render runtime behavior** of the new `/api/v1/health` (e.g. Render
   restarting on 503): observable only after the next production deploy.
 
-## Known product debt (parked, P2 — pending owner go-ahead)
+## Known product debt (P2 — in progress, owner go-ahead 2026-06-11)
 
-- **W-16 onboarding**, **W-17 trade-UX** (inline ladder, deep links,
-  status edits), **W-18 portfolio** (on-chain reads as source of truth),
+- ~~W-16 onboarding~~ — shipped: `/start` → Create-Wallet web_app button →
+  policy-guarded server-side wallet creation → referral write →
+  funded-address empty states. New operator note: run the
+  `20260611_user_privy_wallet` migration with the W-11 one.
+- **W-17 trade-UX** (inline ladder, deep links, status edits),
+  **W-18 portfolio** (on-chain reads as source of truth),
   **W-19 error taxonomy**, **W-20 TMA platform polish**, **W-21 i18n**
   (all user-facing strings are English-only until then; locale JSON
   untouched by design).

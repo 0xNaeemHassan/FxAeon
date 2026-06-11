@@ -17,6 +17,7 @@ import {
   helpCommand,
 } from "./commands/index.js";
 
+import { handleWebAppData } from "./handlers/walletConnect.js";
 import { apiRouter } from "./api/index.js";
 import { applySecurityMiddleware, errorHandler } from "./middleware/index.js";
 import { validateConfig } from "./middleware/config.js";
@@ -84,6 +85,9 @@ bot.command("security", securityCommand);
 bot.command("deposit", depositCommand);
 bot.command("withdraw", withdrawCommand);
 bot.command("help", helpCommand);
+
+// Mini App → bot data channel (W-16): wallet-connect onboarding completes here.
+bot.on("message:web_app_data", handleWebAppData);
 
 // ---------------------------------------------------------------------------
 // Error handling
