@@ -6,6 +6,7 @@ import { getTelegramWebhookSecret } from "./utils/webhookAuth.js";
 import type { RequestWithRawBody } from "./utils/webhookAuth.js";
 import { apiThrottler } from "@grammyjs/transformer-throttler";
 import { conversations, type ConversationFlavor } from "@grammyjs/conversations";
+import type { I18nFlavor } from "@grammyjs/i18n";
 import { prisma } from "@fxbot/db";
 
 import {
@@ -32,6 +33,7 @@ import { installVendorLogFilter } from "./observability/quiet-vendor.js";
 import { limitOrderPolling } from "./notifications/limit-order-poller.js";
 import { healthMonitor } from "./notifications/health-monitor.js";
 import { initNotify } from "./notifications/notify.js";
+import { i18n } from "./i18n/index.js";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -46,7 +48,7 @@ initSentry();
 // ---------------------------------------------------------------------------
 // Bot setup
 // ---------------------------------------------------------------------------
-type BotContext = Context & ConversationFlavor<Context>;
+type BotContext = Context & ConversationFlavor<Context> & I18nFlavor;
 
 const bot = new Bot<BotContext>(env.TELEGRAM_BOT_TOKEN);
 
@@ -56,6 +58,10 @@ bot.api.config.use(apiThrottler({
   group: { reservoir: 20, reservoirRefreshAmount: 20, reservoirRefreshInterval: 60_000 },
   out: { maxConcurrent: 1, minTime: 1000 },
 }));
+
+// i18n (W-21): translation context (ctx.t) keyed off User.language with a
+// per-user cache — must run before any handler that replies.
+bot.use(i18n.middleware());
 
 // Conversations
 bot.use(conversations());

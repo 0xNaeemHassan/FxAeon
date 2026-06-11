@@ -35,6 +35,7 @@ import {
 import { describeFunding } from "../src/core/funding";
 import { handleWebAppData } from "../src/handlers/walletConnect";
 import { startCommand } from "../src/commands/start";
+import { tEn } from "./helpers/i18n";
 
 const WALLET = { id: "wallet-id-1", address: "0xAbCd000000000000000000000000000000001234", policyIds: ["pol1"] };
 
@@ -156,6 +157,7 @@ describe("handleWebAppData", () => {
       from: { id: 123456 },
       message: { web_app_data: { data: typeof data === "string" ? data : JSON.stringify(data) } },
       reply: vi.fn(),
+      t: tEn,
     }) as any;
 
   beforeEach(() => {
@@ -234,7 +236,7 @@ describe("startCommand (W-16)", () => {
   });
 
   it("shows a reply-keyboard Create-Wallet web_app button to new users", async () => {
-    const ctx = { from: { id: 1 }, message: { text: "/start" }, reply: vi.fn() } as any;
+    const ctx = { from: { id: 1 }, message: { text: "/start" }, reply: vi.fn(), t: tEn } as any;
     await startCommand(ctx);
     const [, opts] = (ctx.reply as any).mock.calls[0];
     const btn = opts.reply_markup.keyboard[0][0];
@@ -243,7 +245,7 @@ describe("startCommand (W-16)", () => {
   });
 
   it("threads the referral code into the login url", async () => {
-    const ctx = { from: { id: 1 }, message: { text: "/start ref_GOODCODE" }, reply: vi.fn() } as any;
+    const ctx = { from: { id: 1 }, message: { text: "/start ref_GOODCODE" }, reply: vi.fn(), t: tEn } as any;
     await startCommand(ctx);
     const [text, opts] = (ctx.reply as any).mock.calls[0];
     expect(text).toContain("GOODCODE");
@@ -255,7 +257,7 @@ describe("startCommand (W-16)", () => {
       id: "u1", walletAddress: "0xAbCd000000000000000000000000000000005678",
     });
     (prisma.position.count as any).mockResolvedValue(2);
-    const ctx = { from: { id: 1 }, message: { text: "/start" }, reply: vi.fn() } as any;
+    const ctx = { from: { id: 1 }, message: { text: "/start" }, reply: vi.fn(), t: tEn } as any;
     await startCommand(ctx);
     const [text, opts] = (ctx.reply as any).mock.calls[0];
     expect(text).toContain("Welcome back");

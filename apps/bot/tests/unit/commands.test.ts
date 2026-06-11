@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import startHandler from '../../src/commands/start';
 import helpHandler from '../../src/commands/help';
+import { tEn } from '../helpers/i18n';
 
 describe('Command Handlers', () => {
   const mockCtx = {
     reply: vi.fn(),
     from: { id: 123456, username: 'testuser' },
+    t: tEn,
   } as any;
 
   // The old version of this file never cleared mocks, so the help assertion

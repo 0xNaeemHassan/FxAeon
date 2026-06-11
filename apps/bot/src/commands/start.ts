@@ -1,4 +1,5 @@
 import { Context } from "grammy";
+import type { I18nFlavor } from "@grammyjs/i18n";
 import { prisma } from "@fxbot/db";
 import { botLogger } from "../middleware/logger.js";
 import { parseReferralPayload } from "../core/onboarding.js";
@@ -52,7 +53,7 @@ async function handleTradeDeepLink(
   return true;
 }
 
-export async function startCommand(ctx: Context) {
+export async function startCommand(ctx: Context & I18nFlavor) {
   const telegramId = ctx.from?.id.toString();
   if (!telegramId) return;
 
@@ -80,17 +81,13 @@ export async function startCommand(ctx: Context) {
         : `${miniAppUrl}/login`;
 
       await ctx.reply(
-        `🚀 Welcome to fxBot\n\n` +
-          `The most advanced interface for f(x) Protocol — leveraged positions, ` +
-          `limit orders, and yield automation, all from Telegram.\n\n` +
-          `🔐 Non-custodial — your wallet is policy-locked to f(x) contracts only\n` +
-          `⚡ Simulation-gated — nothing broadcasts unless it simulates clean\n` +
-          `🤖 Honest by design — no fake numbers, ever\n\n` +
-          (referralCode ? `🎁 Referral code detected: ${referralCode}\n\n` : "") +
-          `👇 Tap the button below to create your wallet.`,
+        ctx.t("start-welcome-new") +
+          "\n\n" +
+          (referralCode ? ctx.t("start-referral-detected", { code: referralCode }) + "\n\n" : "") +
+          ctx.t("start-tap-button"),
         {
           reply_markup: {
-            keyboard: [[{ text: "🔐 Create Wallet", web_app: { url: loginUrl } }]],
+            keyboard: [[{ text: ctx.t("start-create-wallet"), web_app: { url: loginUrl } }]],
             resize_keyboard: true,
             one_time_keyboard: true,
           },
@@ -108,28 +105,27 @@ export async function startCommand(ctx: Context) {
     const walletShort = `${user.walletAddress.slice(0, 6)}...${user.walletAddress.slice(-4)}`;
     const positionCount = await prisma.position.count({ where: { userId: user.id } });
 
-    let welcomeMsg = `👋 Welcome back to fxBot!\n\nWallet: ${walletShort}\n`;
+    let welcomeMsg = ctx.t("start-welcome-back", { wallet: walletShort }) + "\n";
 
     if (positionCount > 0) {
-      welcomeMsg += `\n📊 You have ${positionCount} active position${positionCount > 1 ? "s" : ""}.\n\n`;
-      welcomeMsg += `Quick actions: /trade /portfolio /settings`;
+      welcomeMsg += "\n" + ctx.t("start-positions", { count: positionCount }) + "\n\n";
+      welcomeMsg += ctx.t("start-quick-actions");
     } else {
       // Funded-address empty states (W-16): balance-aware, fail-soft.
+      // NOTE: describeFunding() strings are still English-only (see GAPS.md).
       const funding = await getFundingState(user.walletAddress as `0x${string}`);
       const fundingLine = describeFunding(funding);
       if (fundingLine) {
         welcomeMsg += fundingLine;
       } else {
-        welcomeMsg += `\nNo active positions yet.\n\nGet started: /trade /portfolio /help`;
+        welcomeMsg += "\n" + ctx.t("start-no-positions");
       }
     }
 
     await ctx.reply(welcomeMsg, { reply_markup: { remove_keyboard: true } });
   } catch (error) {
     botLogger.error({ err: error }, "startCommand error");
-    await ctx.reply(
-      `❌ Oops, something went wrong\n\nPlease try again in a moment. If the issue persists, contact support.`
-    );
+    await ctx.reply(ctx.t("start-error"));
   }
 }
 

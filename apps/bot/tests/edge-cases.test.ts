@@ -6,12 +6,15 @@ import { settingsCommand } from "../src/commands/settings";
 import { referCommand } from "../src/commands/refer";
 import { autoCommand } from "../src/commands/auto";
 import { RISK_PARAMS } from "@fxbot/shared";
+import { tEn } from "./helpers/i18n";
 
 describe("Edge Cases — Commands", () => {
   const createMockCtx = (overrides = {}) => ({
     from: { id: 123456, language_code: "en" },
     message: { text: "" },
     reply: vi.fn(),
+    t: tEn,
+    i18n: { useLocale: vi.fn() },
     ...overrides,
   });
 

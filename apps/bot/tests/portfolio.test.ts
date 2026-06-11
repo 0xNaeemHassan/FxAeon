@@ -23,6 +23,7 @@ vi.mock("../src/core/txExecutor", () => ({
 import { portfolioCommand, getRiskBar } from "../src/commands/portfolio";
 import { fetchOnChainPositions, deriveDebtRatio, findUserPosition } from "../src/core/portfolio";
 import { handleClosePrompt, handleCloseConfirm, handleTpSlHint } from "../src/handlers/positionActions";
+import { tEn } from "./helpers/i18n";
 
 const USER = {
   id: "user-1",
@@ -53,6 +54,7 @@ function mockCtx(callbackData?: string) {
     message: { text: "/portfolio" },
     callbackQuery: callbackData ? { data: callbackData } : undefined,
     reply: vi.fn().mockResolvedValue({}),
+    t: tEn,
     editMessageText: vi.fn().mockResolvedValue(true),
     answerCallbackQuery: vi.fn().mockResolvedValue(true),
   } as any;
