@@ -11,6 +11,8 @@
  * 3 Cancelled; `expired: true` marks expiry (neither cancelled nor filled).
  */
 import { prisma } from "@fxbot/db";
+import { heartbeat } from "../core/metrics.js";
+import { workerLogger } from "../middleware/logger.js";
 import { fetchOrderUpdates } from "../fx/limitOrders.js";
 import { CircuitBreaker } from "../utils/resilience.js";
 import { notify } from "./notify.js";
@@ -39,6 +41,7 @@ let lastPollTs = Math.floor(Date.now() / 1000) - INITIAL_LOOKBACK_S;
 
 export const limitOrderPolling = {
   async poll(): Promise<void> {
+    heartbeat("limit-order-poller");
     try {
       const since = lastPollTs;
       const updates = (await relayBreaker.run(() => fetchOrderUpdates(since))) as OrderUpdate[];
@@ -84,7 +87,8 @@ export const limitOrderPolling = {
 
   start(): void {
     setInterval(() => void this.poll(), POLL_INTERVAL_MS);
-    console.log("Limit order polling started (30s interval, incremental /v1/order-updates)");
+    heartbeat("limit-order-poller");
+    workerLogger.info("Limit order polling started (30s interval, incremental /v1/order-updates)");
   },
 };
 

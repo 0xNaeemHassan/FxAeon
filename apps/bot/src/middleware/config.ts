@@ -38,6 +38,11 @@ export const envSchema = z.object({
   RENDER_EXTERNAL_URL: z.string().url().optional(),
   WEBHOOK_URL: z.string().url().optional(),
 
+  // ── Observability (W-15) ─────────────────────────────────
+  SENTRY_DSN: z.string().url().optional(),
+  /** Operator chat for the daily SLO digest; digest disabled when unset. */
+  ADMIN_TELEGRAM_CHAT_ID: z.string().optional(),
+
   // ── Optional services ────────────────────────────────────
   SURPLUS_API_KEY: z.string().optional(),
   MINI_APP_URL: z.string().url().default("https://fxbot-mini-app.pages.dev"),

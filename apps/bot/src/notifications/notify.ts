@@ -14,6 +14,7 @@
  * Strings are plain English here; catalog wiring is W-21 (i18n).
  */
 import { prisma } from "@fxbot/db";
+import { incr } from "../core/metrics.js";
 import { withTimeout, withRetry, CircuitBreaker } from "../utils/resilience.js";
 
 export type NotifyKind =
@@ -118,6 +119,7 @@ export async function notify(params: NotifyParams): Promise<NotifyOutcome> {
       })
     );
   } catch {
+    incr("notify.failed");
     return "failed";
   }
 
@@ -136,6 +138,7 @@ export async function notify(params: NotifyParams): Promise<NotifyOutcome> {
   } catch {
     // swallow — see above
   }
+  incr("notify.sent");
   return "sent";
 }
 
