@@ -84,7 +84,17 @@ export async function createWallet(privyUserId: string): Promise<CreatedWallet> 
 /** Send a transaction from a policy-guarded wallet (Privy enforces the policy server-side). */
 export async function sendWalletTransaction(
   walletId: string,
-  transaction: { to: `0x${string}`; data?: `0x${string}`; value?: `0x${string}` | number }
+  transaction: {
+    to: `0x${string}`;
+    data?: `0x${string}`;
+    value?: `0x${string}` | number;
+    nonce?: `0x${string}` | number;
+    chainId?: `0x${string}` | number;
+    type?: 0 | 1 | 2;
+    gasLimit?: `0x${string}` | number;
+    maxFeePerGas?: `0x${string}` | number;
+    maxPriorityFeePerGas?: `0x${string}` | number;
+  }
 ) {
   if (!features.enablePrivyWalletApi) {
     throw new Error('Privy wallet API is not configured (PRIVY_AUTHORIZATION_KEY missing)');
