@@ -41,8 +41,10 @@ describe("Commands", () => {
     it("should show usage for invalid args", async () => {
       mockCtx.message.text = "/trade";
       await tradeCommand(mockCtx);
+      // W-17: bare /trade now also attaches the inline market ladder.
       expect(mockCtx.reply).toHaveBeenCalledWith(
-        expect.stringContaining("Usage:")
+        expect.stringContaining("Usage:"),
+        expect.objectContaining({ reply_markup: expect.anything() })
       );
     });
 

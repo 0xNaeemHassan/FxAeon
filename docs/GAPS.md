@@ -50,9 +50,13 @@ description — this is the single list.
   policy-guarded server-side wallet creation → referral write →
   funded-address empty states. New operator note: run the
   `20260611_user_privy_wallet` migration with the W-11 one.
-- **W-17 trade-UX** (inline ladder, deep links, status edits),
-  **W-18 portfolio** (on-chain reads as source of truth),
-  **W-19 error taxonomy**, **W-20 TMA platform polish**, **W-21 i18n**
+- ~~W-17 trade-UX~~ — landed (PR #51): inline ladder, signed short-TTL
+  intents, server-side confirm with status edits; first production caller
+  of the W-11 executor and first callback_query handler in the bot.
+- ~~W-20 TMA platform~~ — landed (PR #50): telegram-web-app.js loaded,
+  typed platform helpers, lazy Privy, Lighthouse budget.
+- **W-18 portfolio** (on-chain reads as source of truth),
+  **W-19 error taxonomy**, **W-21 i18n**
   (all user-facing strings are English-only until then; locale JSON
   untouched by design).
 

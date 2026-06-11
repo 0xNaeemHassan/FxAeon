@@ -24,3 +24,7 @@ vi.mock("@fxbot/db", () => ({
     },
   },
 }));
+
+// W-17: trade intents are HMAC-signed; give tests a deterministic secret so
+// preview/confirm paths can sign without a real bot token.
+process.env.INTENT_SECRET ??= "test-intent-secret";

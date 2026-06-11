@@ -45,6 +45,7 @@ export interface TgWebApp {
   expand: () => void;
   close: () => void;
   sendData: (data: string) => void;
+  openTelegramLink?: (url: string) => void;
   onEvent: (event: string, cb: () => void) => void;
   offEvent: (event: string, cb: () => void) => void;
   BackButton: TgButton;
