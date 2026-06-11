@@ -19,6 +19,7 @@ import {
 
 import { handleWebAppData } from "./handlers/walletConnect.js";
 import { registerTradeActions } from "./handlers/tradeActions.js";
+import { registerPositionActions } from "./handlers/positionActions.js";
 import { apiRouter } from "./api/index.js";
 import { applySecurityMiddleware, errorHandler } from "./middleware/index.js";
 import { validateConfig } from "./middleware/config.js";
@@ -92,6 +93,9 @@ bot.on("message:web_app_data", handleWebAppData);
 
 // Trade UX callbacks (W-17): ladder navigation, signed confirm, cancel.
 registerTradeActions(bot);
+
+// Portfolio position actions (W-18): close prompt/confirm, TP/SL hint.
+registerPositionActions(bot);
 
 // Honest fallback for any other callback_data: until W-17 there was NO
 // callback handler at all, so every inline button just spun forever. Buttons

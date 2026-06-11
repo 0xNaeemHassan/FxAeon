@@ -1,24 +1,53 @@
-import { Context } from "grammy";
+/**
+ * /portfolio — W-18: on-chain reads are the source of truth.
+ *
+ * Previously this rendered `prisma.position` rows that nothing ever wrote,
+ * so users always saw an empty portfolio. It now reads PoolManager state via
+ * the f(x) SDK, and the old risk meter was inverted (low debt ratio showed
+ * as "CRITICAL") — fixed here: risk grows toward 1.0 = liquidation.
+ */
+import { Context, InlineKeyboard } from "grammy";
 import { prisma } from "@fxbot/db";
-import { computeHealthPercent, HEALTH_LEVELS } from "@fxbot/shared";
+import { HEALTH_LEVELS, MARKETS } from "@fxbot/shared";
+import { createFxSdk } from "../fx/index.js";
+import { fetchOnChainPositions, type OnChainPosition } from "../core/portfolio.js";
+import { botLogger } from "../middleware/logger.js";
 
-function getHealthBar(health: number): string {
-  const filled = Math.round(health * 10);
-  const empty = 10 - filled;
-  
-  if (health < HEALTH_LEVELS.URGENT) {
-    return "🔴 " + "█".repeat(Math.max(1, filled)) + "░".repeat(empty) + " CRITICAL";
-  } else if (health < HEALTH_LEVELS.WARNING) {
-    return "🟡 " + "█".repeat(filled) + "░".repeat(empty) + " WARNING";
-  } else {
-    return "🟢 " + "█".repeat(filled) + "░".repeat(empty) + " HEALTHY";
-  }
+/** Risk meter: fills toward liquidation (1.0). HIGHER = riskier. */
+export function getRiskBar(health: number): string {
+  const clamped = Math.max(0, Math.min(1, health));
+  const filled = Math.round(clamped * 10);
+  const bar = "█".repeat(filled) + "░".repeat(10 - filled);
+  if (health >= HEALTH_LEVELS.URGENT) return `🔴 ${bar} CRITICAL`;
+  if (health >= HEALTH_LEVELS.WARNING) return `🟡 ${bar} WARNING`;
+  return `🟢 ${bar} HEALTHY`;
 }
 
-function getHealthEmoji(health: number): string {
-  if (health < HEALTH_LEVELS.URGENT) return "🔴";
-  if (health < HEALTH_LEVELS.WARNING) return "🟡";
-  return "🟢";
+function fmtAmount(n: number): string {
+  if (n === 0) return "0";
+  if (n < 0.0001) return n.toExponential(2);
+  return n >= 100 ? n.toFixed(2) : Number(n.toPrecision(5)).toString();
+}
+
+function positionBlock(i: number, pos: OnChainPosition): string {
+  return (
+    `${i + 1}. ${pos.market} ${pos.side.toUpperCase()} ${pos.leverage.toFixed(2)}x  (#${pos.positionId})\n` +
+    `   ${getRiskBar(pos.health)}\n` +
+    `   Collateral: ${fmtAmount(pos.collateral)} ${pos.collateralToken}\n` +
+    `   Debt: ${fmtAmount(pos.debt)} ${pos.debtToken}\n`
+  );
+}
+
+function positionsKeyboard(positions: OnChainPosition[]): InlineKeyboard {
+  const kb = new InlineKeyboard();
+  positions.slice(0, 6).forEach((pos, i) => {
+    const mIdx = MARKETS.indexOf(pos.market);
+    const sideKey = pos.side === "short" ? "s" : "l";
+    kb.text(`🔻 Close #${i + 1}`, `pc_${mIdx}_${sideKey}_${pos.positionId}`)
+      .text(`🎯 TP/SL #${i + 1}`, `pt_${mIdx}_${sideKey}`)
+      .row();
+  });
+  return kb;
 }
 
 export async function portfolioCommand(ctx: Context) {
@@ -26,130 +55,53 @@ export async function portfolioCommand(ctx: Context) {
   if (!telegramId) return;
 
   try {
-    const user = await prisma.user.findUnique({ 
-      where: { telegramId }, 
-      include: { positions: true } 
-    });
+    const user = await prisma.user.findUnique({ where: { telegramId } });
 
     if (!user) {
       await ctx.reply(
-        `🔐 *Wallet Not Connected*
-
-` +
-        `You need to connect a wallet first.
-
-` +
-        `Use /start to begin the setup process.`,
-        { 
-          parse_mode: "Markdown",
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: "🔐 Connect Wallet", callback_data: "nav_start" }]
-            ]
-          }
-        }
+        `🔐 Wallet Not Connected\n\n` +
+          `You need to connect a wallet first.\n\n` +
+          `Use /start to begin the setup process.`
       );
       return;
     }
 
     const walletShort = `${user.walletAddress.slice(0, 6)}...${user.walletAddress.slice(-4)}`;
-    
-    let msg = `📊 *Portfolio Overview*
+    const { positions, failures } = await fetchOnChainPositions(createFxSdk(), user.walletAddress);
 
-`;
-    msg += `Wallet: \`${walletShort}\`
-`;
-    msg += `Positions: ${user.positions.length}
+    let msg = `📊 Portfolio (on-chain)\n\nWallet: ${walletShort}\n`;
 
-`;
+    if (failures.length > 0) {
+      msg += `\n⚠️ Couldn't read: ${failures.join(", ")} — those markets may have positions not shown here. Try again shortly.\n`;
+    }
 
-    if (user.positions.length === 0) {
-      msg += `*No active positions*
-
-`;
-      msg += `Get started with your first trade or mint some fxUSD.
-
-`;
-      msg += `💡 *New to f(x) Protocol?*
-`;
-      msg += `• /trade — Open a leveraged position
-`;
-      msg += `• /mint — Borrow fxUSD (no leverage)
-`;
+    if (positions.length === 0) {
+      msg += `\nNo active positions${failures.length ? " in the markets we could read" : ""}.\n\n`;
+      msg += `💡 Get started:\n`;
+      msg += `• /trade — Open a leveraged position\n`;
+      msg += `• /mint — Borrow fxUSD (no leverage)\n`;
       msg += `• /save — Deposit into fxSAVE for yield`;
-      
-      await ctx.reply(msg, {
-        parse_mode: "Markdown",
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: "⚡ Trade", callback_data: "nav_trade" },
-              { text: "💰 Mint fxUSD", callback_data: "nav_mint" }
-            ],
-            [
-              { text: "📖 Learn More", callback_data: "help_trading" }
-            ]
-          ]
-        }
-      });
+      await ctx.reply(msg);
       return;
     }
 
-    // Show positions with health bars
-    msg += `*Active Positions:*
-
-`;
-    
-    for (let i = 0; i < user.positions.length; i++) {
-      const pos = user.positions[i];
-      const health = computeHealthPercent(pos.debtRatio);
-      const healthBar = getHealthBar(health);
-      
-      msg += `${i + 1}. *${pos.market} ${pos.side.toUpperCase()}* ${pos.leverage}x
-`;
-      msg += `   ${healthBar}
-`;
-      msg += `   Collateral: ${pos.collateral} | Debt: ${pos.debt}
-`;
-      msg += `   Liq. Price: $${pos.liquidationPrice.toFixed(2)}
-
-`;
-    }
-
-    // Add risk summary
-    const avgHealth = user.positions.reduce((sum, p) => sum + computeHealthPercent(p.debtRatio), 0) / user.positions.length;
-    const riskLevel = avgHealth < HEALTH_LEVELS.URGENT ? "🔴 HIGH" : avgHealth < HEALTH_LEVELS.WARNING ? "🟡 MEDIUM" : "🟢 LOW";
-    
-    msg += `*Risk Summary:* ${riskLevel}
-`;
-    msg += `Avg Health: ${(avgHealth * 100).toFixed(1)}%
-
-`;
-    msg += `Use /trade to adjust positions or /auto to set up stop-losses.`;
-
-    await ctx.reply(msg, { 
-      parse_mode: "Markdown",
-      reply_markup: {
-        inline_keyboard: [
-          [
-            { text: "⚡ New Trade", callback_data: "nav_trade" },
-            { text: "🤖 Automation", callback_data: "nav_auto" }
-          ],
-          [
-            { text: "💰 Deposit", callback_data: "nav_deposit" },
-            { text: "📤 Withdraw", callback_data: "nav_withdraw" }
-          ]
-        ]
-      }
+    msg += `Positions: ${positions.length}\n\nActive Positions:\n\n`;
+    positions.forEach((pos, i) => {
+      msg += positionBlock(i, pos) + "\n";
     });
-  } catch (error) {
-    console.error('[portfolioCommand] Error:', error);
-    await ctx.reply(
-      `❌ *Couldn't load portfolio*
 
-` +
-      `Please try again. If the issue persists, your funds are safe — this is just a display issue.`,
-      { parse_mode: "Markdown" }
+    const maxHealth = Math.max(...positions.map((p) => p.health));
+    const riskLevel =
+      maxHealth >= HEALTH_LEVELS.URGENT ? "🔴 HIGH" : maxHealth >= HEALTH_LEVELS.WARNING ? "🟡 MEDIUM" : "🟢 LOW";
+    msg += `Risk: ${riskLevel} (riskiest position at ${(maxHealth * 100).toFixed(0)}% of liquidation threshold)\n\n`;
+    msg += `Close or protect a position below, or /trade to open another.`;
+
+    await ctx.reply(msg, { reply_markup: positionsKeyboard(positions) });
+  } catch (error) {
+    botLogger.error({ err: error }, "portfolioCommand error");
+    await ctx.reply(
+      `❌ Couldn't load portfolio\n\n` +
+        `On-chain read failed — your funds are unaffected, this is a display issue. Please try again.`
     );
   }
 }
