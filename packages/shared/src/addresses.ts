@@ -7,10 +7,10 @@
  *   (ROUTER = Router#Diamond, pool managers, FXUSD, FXUSD_BASE_POOL, PEG_KEEPER).
  * - Pools & tokens confirmed live on mainnet with matching token symbols
  *   (Blockscout).
- * - ⚠️ LIMIT_ORDER_MANAGER is a live TransparentUpgradeableProxy but is NOT in
- *   the ignition manifest; its identity is unverified against an official f(x)
- *   source (PLAN.md owner action A2). Do not build limit-order signing against
- *   it until confirmed.
+ * - LIMIT_ORDER_MANAGER verified official (A2 resolved 2026-06-11): listed as
+ *   LimitOrderManager#LimitOrderManagerProxy in AladdinDAO/fx-protocol-contracts
+ *   ignition/deployments/upgrade-20251014/deployed_addresses.json and in the
+ *   official f(x) docs ("LimitOrderManager contracts").
  *
  * Rules:
  * - Never add or change an address without a verification citation in the PR.

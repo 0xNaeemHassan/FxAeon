@@ -18,6 +18,8 @@ export const envSchema = z.object({
   PRIVY_APP_ID: z.string().min(1).optional(),
   PRIVY_APP_SECRET: z.string().min(1).optional(),
   PRIVY_AUTHORIZATION_KEY: z.string().min(1).optional(),
+  /** Pinned Privy Policy Engine policy ID (created once via walletPolicy.ts). */
+  PRIVY_POLICY_ID: z.string().min(1).optional(),
 
   // ── Blockchain / RPC ─────────────────────────────────────
   ALCHEMY_RPC_URL: z.string().url().optional(),
@@ -117,6 +119,11 @@ export function validateConfig(): Env {
 export function getConfig(): Env {
   if (!validatedEnv) return validateConfig();
   return validatedEnv;
+}
+
+/** Test hook — clear the cached env so tests can vary process.env. */
+export function __resetConfigForTests(): void {
+  validatedEnv = null;
 }
 
 /** Feature flags derived from available env vars */
