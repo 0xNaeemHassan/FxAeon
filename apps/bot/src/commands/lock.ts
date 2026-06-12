@@ -22,19 +22,14 @@ export async function lockCommand(ctx: Context) {
   }
 
   const [amount, duration] = args;
-  const miniAppUrl = process.env.MINI_APP_URL || "https://fxbot-mini-app.pages.dev";
   await ctx.reply(
     `🔒 *Lock FXN → veFXN*\n\n` +
     `Amount: ${amount} FXN\n` +
     `Duration: ${duration}\n\n` +
-    `Tap to confirm:`,
-    {
-      parse_mode: "Markdown",
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "✅ Confirm Lock", web_app: { url: `${miniAppUrl}/lock?amount=${amount}&duration=${duration}` } }],
-        ],
-      },
-    }
+    `
+
+⚠️ On-chain execution for this action is not live yet — the confirm step was removed because it led to a dead screen. It will return when the f(x) SDK integration ships.
+Live today: /trade (leveraged positions), /portfolio, /deposit.`,
+    { parse_mode: "Markdown" }
   );
 }

@@ -14,12 +14,6 @@ const nextConfig = {
       '.js': ['.ts', '.tsx', '.js', '.jsx'],
       '.mjs': ['.mts', '.mjs'],
     };
-    // Privy optional peer deps not needed for this app
-    config.resolve.fallback = {
-      ...config.resolve.fallback,
-      '@stripe/crypto': false,
-      '@farcaster/mini-app-solana': false,
-    };
     return config;
   },
 };

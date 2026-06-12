@@ -27,6 +27,7 @@ import { validateConfig } from "./middleware/config.js";
 import { logger } from "./middleware/logger.js";
 import { commandTiming } from "./middleware/timing.js";
 import { healthRouter } from "./api/health.js";
+import { createMiniAppRouter } from "./api/miniapp.js";
 import { initSentry, captureError } from "./observability/sentry.js";
 import { initAdminAlerts, reportErrorToAdmin } from "./observability/admin-alerts.js";
 import { sloDigest } from "./observability/slo-digest.js";
@@ -242,6 +243,19 @@ async function main() {
     // there (the previous alias returned a hardcoded "healthy", so Render
     // could never see a dead DB). (W-15)
     app.use("/api/v1/health", healthRouter);
+
+    // Mini App data API (initData-authenticated): /me, /onboard, /settings.
+    // This is what lets the Mini App show the user's REAL policy wallet,
+    // live balances and positions instead of placeholders.
+    app.use(
+      "/api/v1/miniapp",
+      createMiniAppRouter({
+        botToken: env.TELEGRAM_BOT_TOKEN,
+        sendMessage: (chatId, text, opts) =>
+          bot.api.sendMessage(chatId, text, opts),
+        miniAppUrl: env.MINI_APP_URL || "https://fxbot-mini-app.pages.dev",
+      })
+    );
 
     // Lightweight build/info endpoint (no dependency checks, never blocks).
     // The post-deploy smoke test asserts this returns 200.

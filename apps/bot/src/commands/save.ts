@@ -23,18 +23,13 @@ export async function saveCommand(ctx: Context) {
   }
 
   const [action, amount] = args;
-  const miniAppUrl = process.env.MINI_APP_URL || "https://fxbot-mini-app.pages.dev";
   await ctx.reply(
     `💰 *fxSAVE ${action.toUpperCase()}*\n\n` +
     `Amount: ${amount} fxUSD\n\n` +
-    `Tap to confirm:`,
-    {
-      parse_mode: "Markdown",
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "✅ Confirm", web_app: { url: `${miniAppUrl}/save?action=${action}&amount=${amount}` } }],
-        ],
-      },
-    }
+    `
+
+⚠️ On-chain execution for this action is not live yet — the confirm step was removed because it led to a dead screen. It will return when the f(x) SDK integration ships.
+Live today: /trade (leveraged positions), /portfolio, /deposit.`,
+    { parse_mode: "Markdown" }
   );
 }
