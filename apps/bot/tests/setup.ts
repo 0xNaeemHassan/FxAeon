@@ -5,6 +5,7 @@ vi.mock("@fxbot/db", () => ({
   prisma: {
     user: {
       findUnique: vi.fn().mockResolvedValue(null),
+      findMany: vi.fn().mockResolvedValue([]),
       create: vi.fn().mockResolvedValue({ id: "test-id", telegramId: "123456" }),
       update: vi.fn().mockResolvedValue({}),
     },
