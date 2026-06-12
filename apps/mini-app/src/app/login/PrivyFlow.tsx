@@ -20,12 +20,13 @@ import {
 import {
   usePrivy,
   useLoginWithTelegram,
+  useLogout,
   useCreateWallet,
   useImportWallet,
   useSessionSigners,
   useWallets,
 } from '@privy-io/react-auth';
-import { isTMA, canSendData, getWebApp, haptic, showMainButton } from '@/lib/telegram';
+import { canSendData, getWebApp, haptic } from '@/lib/telegram';
 import { apiAvailable, onboard, OnboardResult } from '@/lib/api';
 import { PRIVY_SIGNER_ID } from '@/lib/privyConfig';
 import PrivyClientProvider from '@/components/PrivyClientProvider';
@@ -65,6 +66,7 @@ type Phase =
 function PrivyLoginFlow({ referral }: { referral?: string }) {
   const { ready, authenticated, user } = usePrivy();
   const { login } = useLoginWithTelegram();
+  const { logout } = useLogout();
   const { createWallet } = useCreateWallet();
   const { importWallet } = useImportWallet();
   const { addSessionSigners } = useSessionSigners();
@@ -91,6 +93,19 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
   }, [user]);
   const walletAddress = embedded?.address ?? walletOnAccount?.address;
 
+  /**
+   * The bot resolves "which wallet belongs to this chat user" by looking up
+   * the Privy user via their TELEGRAM id (server-side, unforgeable). A wallet
+   * created on a Privy session that is NOT telegram-linked (e.g. a stale
+   * email-auth session from an earlier build) is therefore invisible to the
+   * bot — the exact "Almost there — your wallet isn't finished yet" loop.
+   * Guard every wallet-affecting step on this.
+   */
+  const telegramLinked = useMemo(
+    () => Boolean(user?.linkedAccounts?.some((a) => a.type === 'telegram')),
+    [user]
+  );
+
   const fail = useCallback((e: unknown, fallback: string) => {
     haptic('error');
     setError(e instanceof Error && e.message ? e.message : fallback);
@@ -99,6 +114,21 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
 
   /** Final step: tell the bot. Works on every launch type (see header). */
   const linkToBot = useCallback(async () => {
+    // Prefer the authenticated API path: it links synchronously and lets us
+    // show the rich "done" screen (address, referral, delegation state).
+    if (apiAvailable()) {
+      setPhase('linking');
+      try {
+        const r = await onboard(referral);
+        haptic('success');
+        setResult(r);
+        setPhase('done');
+        return;
+      } catch {
+        /* fall through to sendData — the bot can still link server-side */
+      }
+    }
+    // Keyboard-button launches have no initData; sendData is their channel.
     if (canSendData()) {
       haptic('success');
       try {
@@ -107,46 +137,43 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
         );
         return; // Telegram closes the app; the bot confirms in chat.
       } catch {
-        /* fall through to API path */
+        /* fall through */
       }
-    }
-    if (apiAvailable()) {
-      setPhase('linking');
-      try {
-        const r = await onboard(referral);
-        haptic('success');
-        setResult(r);
-        setPhase('done');
-      } catch (e) {
-        fail(e, 'Linking your wallet to the bot failed — your wallet is safe, retry in a moment.');
-      }
-      return;
     }
     // Wallet exists but no channel back to the bot from this launch type.
     setResult(null);
     setPhase('done');
-  }, [referral, fail]);
+  }, [referral]);
 
   const startLogin = useCallback(async () => {
     setError('');
     setPhase('authenticating');
     try {
-      if (!authenticated) await login();
+      if (authenticated && !telegramLinked) {
+        // Stale non-Telegram session (e.g. email login from an old build):
+        // a wallet made here would be invisible to the bot. Start clean.
+        await logout();
+      }
+      if (!authenticated || !telegramLinked) await login();
       setPhase('choose');
     } catch (e) {
-      fail(e, 'Telegram login failed — close and reopen the app, then try again.');
+      fail(
+        e,
+        'Telegram sign-in failed — close and reopen the app, then try again. If it keeps happening, the bot operator needs to enable Telegram login for the wallet service.'
+      );
     }
-  }, [authenticated, login, fail]);
+  }, [authenticated, telegramLinked, login, logout, fail]);
 
-  // Already authenticated with an existing wallet? Skip straight ahead.
+  // Already authenticated with an existing wallet? Skip straight ahead —
+  // but only for a telegram-linked session (see telegramLinked above).
   useEffect(() => {
     if (!ready) return;
-    if (phase === 'choose' && walletAddress) {
+    if (phase === 'choose' && telegramLinked && walletAddress) {
       setDelegated(Boolean(walletOnAccount?.delegated));
       setPhase(walletOnAccount?.delegated ? 'linking' : 'delegate');
       if (walletOnAccount?.delegated) void linkToBot();
     }
-  }, [ready, phase, walletAddress, walletOnAccount, linkToBot]);
+  }, [ready, phase, telegramLinked, walletAddress, walletOnAccount, linkToBot]);
 
   /**
    * Attach the bot-trading session signer right after create/import. The
@@ -168,6 +195,10 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
   );
 
   const handleCreate = useCallback(async () => {
+    if (!telegramLinked) {
+      fail(null, 'Session lost its Telegram link — close and reopen the app, then try again.');
+      return;
+    }
     setPhase('creating');
     try {
       const wallet = await createWallet();
@@ -182,9 +213,13 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
     } catch (e) {
       fail(e, 'Wallet creation failed — nothing was created. Try again.');
     }
-  }, [createWallet, grantBotTrading, linkToBot, fail]);
+  }, [telegramLinked, createWallet, grantBotTrading, linkToBot, fail]);
 
   const handleImport = useCallback(async () => {
+    if (!telegramLinked) {
+      fail(null, 'Session lost its Telegram link — close and reopen the app, then try again.');
+      return;
+    }
     const key = importKey.trim();
     if (!/^(0x)?[0-9a-fA-F]{64}$/.test(key)) {
       setError('That doesn’t look like a private key (64 hex characters).');
@@ -208,7 +243,7 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
       setImportKey('');
       fail(e, 'Import failed. The key never left the secure channel — check it and try again.');
     }
-  }, [importKey, importWallet, grantBotTrading, linkToBot, fail]);
+  }, [telegramLinked, importKey, importWallet, grantBotTrading, linkToBot, fail]);
 
   const handleDelegate = useCallback(async () => {
     if (!walletAddress || !PRIVY_SIGNER_ID) {
@@ -229,12 +264,9 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
     }
   }, [walletAddress, addSessionSigners, linkToBot, fail]);
 
-  // Native MainButton mirrors the primary CTA inside Telegram.
-  useEffect(() => {
-    if (!isTMA()) return;
-    if (phase === 'intro') return showMainButton('Set up my wallet', startLogin);
-    if (phase === 'done') return showMainButton('Done — back to chat', () => getWebApp()?.close());
-  }, [phase, startLogin]);
+  // NOTE: no native MainButton mirror here — rendering it alongside the
+  // in-page CTA showed TWO "Set up my wallet" buttons inside Telegram.
+  // The in-page button is the single source of truth on every launch type.
 
   if (!ready) return <FullScreenSpinner />;
 
