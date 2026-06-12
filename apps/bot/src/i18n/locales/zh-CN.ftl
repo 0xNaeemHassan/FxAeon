@@ -60,7 +60,7 @@ help-body =
       /bridge — 跨链 fxUSD (ETH ↔ Base)
     
     🤖 自动化
-      /auto — 创建/管理自动化规则
+      /auto — 止损/止盈自动化 (/auto sl wstETH long 2500)
       /refer — 您的推荐链接 + 收益
     
     ⚙️ 设置

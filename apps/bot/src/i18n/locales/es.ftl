@@ -63,7 +63,7 @@ help-body =
       /bridge — Puente de fxUSD (ETH ↔ Base)
     
     🤖 Automatización
-      /auto — Crear/gestionar reglas de automatización
+      /auto — Reglas stop-loss / take-profit (/auto sl wstETH long 2500)
       /refer — Tu enlace de referido + ganancias
     
     ⚙️ Configuración

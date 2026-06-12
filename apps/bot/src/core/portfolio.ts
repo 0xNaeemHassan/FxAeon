@@ -103,6 +103,21 @@ export async function fetchOnChainPositions(
  * Find one of the user's own on-chain positions. Used by the close flow so a
  * tampered callback can never touch anything but the presser's own position.
  */
+/**
+ * All of the user's open positions for one market+side. Used by /auto so a
+ * stop-loss / take-profit rule can close every matching position — always
+ * read fresh from the chain, never from cached state.
+ */
+export async function listUserPositions(
+  sdk: FxSdk,
+  userAddress: string,
+  market: Market,
+  side: Side
+): Promise<OnChainPosition[]> {
+  const raw = await getPositions(sdk, userAddress, market, side);
+  return raw.filter((p) => p.rawColls > 0n).map((p) => toOnChainPosition(market, side, p));
+}
+
 export async function findUserPosition(
   sdk: FxSdk,
   userAddress: string,

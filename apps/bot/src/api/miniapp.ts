@@ -18,7 +18,10 @@ import { Router, Request, Response, NextFunction } from "express";
 import { prisma } from "@fxbot/db";
 import { onboardUser, syncWalletState } from "../core/onboarding.js";
 import { getFundingState } from "../core/funding.js";
-import { getMarketOverview } from "../market/coingecko.js";
+import { getMarketOverview, getSpotPrices } from "../market/coingecko.js";
+import { createFxSdk } from "../fx/index.js";
+import { fetchOnChainPositions } from "../core/portfolio.js";
+import { trackPositions, computePnl, snapshotKey } from "../core/pnl.js";
 import { botLogger } from "../middleware/logger.js";
 
 /** Max age of initData before we reject it (replay window). */
@@ -143,16 +146,50 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
   router.get("/me", async (req: AuthedRequest, res: Response) => {
     const telegramId = req.tgUser!.telegramId;
     try {
-      const user = await prisma.user.findUnique({
-        where: { telegramId },
-        include: { positions: true },
-      });
+      const user = await prisma.user.findUnique({ where: { telegramId } });
       if (!user) {
         res.json({ onboarded: false });
         return;
       }
       // Live on-chain balances; fail-soft ({known:false}) on RPC trouble.
       const funding = await getFundingState(user.walletAddress as `0x${string}`);
+
+      // Positions read on-chain (W-18: the chain is the source of truth —
+      // the old prisma.position table was never written and always rendered
+      // an empty portfolio). Fail-soft: positionsKnown=false on RPC trouble.
+      let positionsKnown = true;
+      let apiPositions: Array<Record<string, unknown>> = [];
+      try {
+        const { positions, failures } = await fetchOnChainPositions(createFxSdk(), user.walletAddress);
+        positionsKnown = failures.length === 0;
+        let prices: Record<string, number | null> | null = null;
+        try {
+          const spot = await getSpotPrices();
+          if (!spot.stale) prices = spot.prices;
+        } catch { /* prices unavailable — omit USD/PnL fields */ }
+        const snapshots = await trackPositions(user.id, positions, prices, failures);
+        apiPositions = positions.map((p) => {
+          const pnl = computePnl(p, snapshots.get(snapshotKey(p)), prices);
+          return {
+            tokenId: String(p.positionId),
+            market: p.market,
+            side: p.side,
+            collateral: String(p.collateral),
+            collateralToken: p.collateralToken,
+            debt: String(p.debt),
+            debtToken: p.debtToken,
+            leverage: p.leverage,
+            // Health for display: 1 = healthy, 0 = at liquidation.
+            healthPercent: Math.max(0, Math.min(1, 1 - p.health)),
+            pnlUsd: pnl ? pnl.pnlUsd : null,
+            pnlSince: pnl ? pnl.since.toISOString() : null,
+          };
+        });
+      } catch (e) {
+        positionsKnown = false;
+        botLogger.warn({ err: e, telegramId }, "miniapp /me: on-chain positions read failed");
+      }
+
       res.json({
         onboarded: true,
         walletAddress: user.walletAddress,
@@ -163,16 +200,8 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
         slippageBps: user.slippageBps,
         mevProtection: user.mevProtection,
         funding,
-        positions: user.positions.map((p) => ({
-          tokenId: p.tokenId,
-          market: p.market,
-          side: p.side,
-          collateral: p.collateral,
-          debt: p.debt,
-          leverage: p.leverage,
-          healthPercent: p.healthPercent,
-          liquidationPrice: p.liquidationPrice,
-        })),
+        positionsKnown,
+        positions: apiPositions,
       });
     } catch (e) {
       botLogger.error({ err: e, telegramId }, "miniapp /me failed");

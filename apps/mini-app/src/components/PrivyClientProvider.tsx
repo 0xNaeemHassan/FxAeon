@@ -25,10 +25,22 @@
  * build, children render without the provider and pages show honest
  * "wallet service not configured" copy instead of crashing.
  */
+import { useState } from 'react';
 import { PrivyProvider } from '@privy-io/react-auth';
 import { PRIVY_APP_ID } from '@/lib/privyConfig';
+import { restoreTelegramLaunchHash } from '@/lib/telegram';
 
 export default function PrivyClientProvider({ children }: { children: React.ReactNode }) {
+  // P0 login fix: Privy's seamless Telegram Mini-App login triggers at SDK
+  // mount IF `#tgWebAppData=…` is still on the URL. Our entry router drops
+  // it, so restore it from WebApp.initData BEFORE the provider mounts. A
+  // useState initializer runs synchronously during the first render — ahead
+  // of every child/provider effect — which is exactly the ordering needed.
+  // (See restoreTelegramLaunchHash for the full story.)
+  useState(() => {
+    restoreTelegramLaunchHash();
+    return true;
+  });
   if (!PRIVY_APP_ID) return <>{children}</>;
   return (
     <PrivyProvider

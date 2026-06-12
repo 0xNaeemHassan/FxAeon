@@ -108,8 +108,14 @@ function PositionCard({ p }: { p: ApiPosition }) {
           <p className="mt-0.5 font-medium">{fmt(p.collateral)}</p>
         </div>
         <div>
-          <p className="text-mut">Liq. price</p>
-          <p className="mt-0.5 font-medium">${p.liquidationPrice.toLocaleString('en-US')}</p>
+          <p className="text-mut">PnL</p>
+          {typeof p.pnlUsd === 'number' ? (
+            <p className={`mt-0.5 font-medium ${p.pnlUsd >= 0 ? 'text-mint' : 'text-danger'}`}>
+              {p.pnlUsd >= 0 ? '+' : '-'}${Math.abs(p.pnlUsd).toLocaleString('en-US', { maximumFractionDigits: 2 })}
+            </p>
+          ) : (
+            <p className="mt-0.5 font-medium text-mut">—</p>
+          )}
         </div>
         <div>
           <p className="text-mut">Health</p>
@@ -306,6 +312,13 @@ export default function PortfolioPage() {
 
         {/* Positions */}
         <SectionTitle>Positions</SectionTitle>
+        {me.positionsKnown === false && (
+          <Card className="mb-2.5 border-[rgba(255,193,77,0.3)]">
+            <p className="text-[12.5px] text-mut">
+              Some on-chain reads failed — positions shown may be incomplete. Refresh to retry.
+            </p>
+          </Card>
+        )}
         {positions.length > 0 ? (
           <div className="flex flex-col gap-2.5">
             {positions.map((p) => (
