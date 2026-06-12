@@ -47,19 +47,21 @@ help-body =
       /limit — Place limit/stop orders
       /orders — View active orders
       /mint — Borrow fxUSD (no leverage)
-      /redeem — Redeem fxUSD for collateral
+      /redeem — Redeem fxSAVE back to fxUSD
       /repay — Repay fxUSD debt
     
     💰 Yield & Governance
       /save — fxSAVE deposit/withdraw
       /lock — Lock FXN → veFXN
       /vote — Gauge voting
-      /claim — Claim rewards
+      /claim — Claim matured fxSAVE redemption
     
     📊 Portfolio
       /portfolio — View positions, balances, health
+      /history — Your on-chain action history
+      /gas — Live gas prices
       /deposit — Show wallet address + QR
-      /withdraw — Send to external address
+      /withdraw — Why external sends are off (security)
       /bridge — Bridge fxUSD (ETH ↔ Base)
     
     🤖 Automation

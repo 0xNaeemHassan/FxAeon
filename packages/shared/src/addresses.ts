@@ -20,6 +20,12 @@
 export const ADDRESSES = {
   // Core Protocol
   ROUTER: "0x33636D49FbefBE798e15e7F356E8DBef543CC708",
+  // FxMintRouter (Diamond) — the deposit-and-mint / repay-and-withdraw entry
+  // point used by fx-sdk depositAndMint()/repayAndWithdraw(). Verified
+  // 2026-06-12: listed as Upgrade20251030#FxMintRouter in
+  // AladdinDAO/fx-protocol-contracts ignition/deployments/upgrade-20251030/
+  // deployed_addresses.json; verified Diamond source on Blockscout.
+  FX_MINT_ROUTER: "0xB753366082466c4B5984312f0c4Bb97554be067E",
   LONG_POOL_MANAGER: "0x250893CA4Ba5d05626C785e8da758026928FCD24",
   SHORT_POOL_MANAGER: "0xaCDc0AB51178d0Ae8F70c1EAd7d3cF5421FDd66D",
   

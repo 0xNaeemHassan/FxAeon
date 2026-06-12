@@ -16,11 +16,14 @@ import {
   voteCommand, claimCommand, referCommand, autoCommand,
   settingsCommand, securityCommand, depositCommand, withdrawCommand,
   helpCommand,
+  gasCommand,
+  historyCommand,
 } from "./commands/index.js";
 
 import { handleWebAppData } from "./handlers/walletConnect.js";
 import { registerTradeActions } from "./handlers/tradeActions.js";
 import { registerPositionActions } from "./handlers/positionActions.js";
+import { handleActionCallback } from "./handlers/earnActions.js";
 import { apiRouter } from "./api/index.js";
 import { applySecurityMiddleware, errorHandler } from "./middleware/index.js";
 import { validateConfig } from "./middleware/config.js";
@@ -95,6 +98,8 @@ bot.command("security", securityCommand);
 bot.command("deposit", depositCommand);
 bot.command("withdraw", withdrawCommand);
 bot.command("help", helpCommand);
+bot.command("gas", gasCommand);
+bot.command("history", historyCommand);
 
 // Mini App → bot data channel (W-16): wallet-connect onboarding completes here.
 bot.on("message:web_app_data", handleWebAppData);
@@ -104,6 +109,9 @@ registerTradeActions(bot);
 
 // Portfolio position actions (W-18): close prompt/confirm, TP/SL hint.
 registerPositionActions(bot);
+
+// Earn & borrow callbacks: signed action-intent confirms (a1_…) + cancel (a1c).
+bot.callbackQuery(/^a1(_|c$)/, handleActionCallback);
 
 // Honest fallback for any other callback_data: until W-17 there was NO
 // callback handler at all, so every inline button just spun forever. Buttons
@@ -150,7 +158,7 @@ async function configureTelegramBot() {
     { command: "limit", description: "Set a limit order" },
     { command: "orders", description: "View active orders" },
     { command: "mint", description: "Mint fxUSD" },
-    { command: "redeem", description: "Redeem fxUSD" },
+    { command: "redeem", description: "Redeem fxSAVE to fxUSD" },
     { command: "save", description: "Earn yield on fxUSD" },
     { command: "borrow", description: "Borrow against collateral" },
     { command: "repay", description: "Repay a loan" },
@@ -159,11 +167,13 @@ async function configureTelegramBot() {
     { command: "bridge", description: "Bridge assets cross-chain" },
     { command: "lock", description: "Lock governance tokens" },
     { command: "vote", description: "Vote on proposals" },
-    { command: "claim", description: "Claim rewards" },
+    { command: "claim", description: "Claim matured fxSAVE redemption" },
     { command: "refer", description: "Referral program" },
     { command: "auto", description: "Automation settings" },
     { command: "settings", description: "Bot settings" },
     { command: "security", description: "Security settings" },
+    { command: "gas", description: "Live gas prices" },
+    { command: "history", description: "Your on-chain history" },
     { command: "help", description: "Help & commands" },
   ]);
   logger.info("Bot command menu registered");

@@ -30,6 +30,7 @@ function mockPrivy(overrides: Record<string, unknown> = {}): PrivyClient {
         rules: buildFxAeonPolicyRules(),
         createdAt: new Date(),
       })),
+      updatePolicy: vi.fn(async (input: Record<string, unknown>) => input),
       createPolicy: vi.fn(async (input: Record<string, unknown>) => ({
         ...input,
         id: "pol-created-1",
@@ -72,7 +73,7 @@ describe("policy rules — default-deny shape", () => {
     expect(methods).toEqual(new Set(["eth_sendTransaction", "eth_signTypedData_v4"]));
   });
 
-  it("transaction rules only target Router, fxSAVE, LimitOrderManager and approve-constrained tokens", () => {
+  it("transaction rules only target Router, FxMintRouter, fxSAVE, LimitOrderManager and approve-constrained tokens", () => {
     const txRules = rules.filter((r) => r.method === "eth_sendTransaction");
     const toValues = txRules.flatMap((r) =>
       r.conditions
@@ -81,21 +82,24 @@ describe("policy rules — default-deny shape", () => {
     );
     expect(toValues).toContain(ADDRESSES.ROUTER);
     expect(toValues).toContain(ADDRESSES.FXSAVE);
+    expect(toValues).toContain(ADDRESSES.FX_MINT_ROUTER);
     expect(toValues).toContain(ADDRESSES.LIMIT_ORDER_MANAGER);
     // Every allowed `to` is one of the verified addresses — nothing else.
     const allowed = new Set<string>([
       ADDRESSES.ROUTER,
       ADDRESSES.FXSAVE,
+      ADDRESSES.FX_MINT_ROUTER,
       ADDRESSES.LIMIT_ORDER_MANAGER,
       ADDRESSES.WSTETH,
       ADDRESSES.WBTC,
       ADDRESSES.FXUSD,
       ADDRESSES.STETH,
+      ADDRESSES.USDC,
     ]);
     for (const v of toValues) expect(allowed.has(v)).toBe(true);
   });
 
-  it("token rule is calldata-constrained: approve() spender must be Router or fxSAVE", () => {
+  it("token rule is calldata-constrained: approve() spender must be Router, fxSAVE or FxMintRouter", () => {
     const tokenRule = rules.find((r) => r.name.includes("ERC-20 approve"));
     expect(tokenRule).toBeDefined();
     const calldata = tokenRule!.conditions.find((c) => c.fieldSource === "ethereum_calldata");
@@ -103,7 +107,7 @@ describe("policy rules — default-deny shape", () => {
     expect(calldata).toMatchObject({
       field: "approve.spender",
       operator: "in",
-      value: [ADDRESSES.ROUTER, ADDRESSES.FXSAVE],
+      value: [ADDRESSES.ROUTER, ADDRESSES.FXSAVE, ADDRESSES.FX_MINT_ROUTER],
     });
     // ABI fragment must actually describe approve(address,uint256)
     const abi = (calldata as { abi: Array<{ name: string; inputs: Array<{ name: string; type: string }> }> }).abi;
@@ -137,6 +141,34 @@ describe("ensureFxAeonPolicy", () => {
     expect(id).toBe("pol-pinned");
     expect(privy.walletApi.getPolicy).toHaveBeenCalledWith({ id: "pol-pinned" });
     expect(privy.walletApi.createPolicy).not.toHaveBeenCalled();
+  });
+
+  it("does not touch a pinned policy that already has all canonical rules", async () => {
+    process.env.PRIVY_POLICY_ID = "pol-pinned";
+    const privy = mockPrivy();
+    await ensureFxAeonPolicy(privy);
+    expect(privy.walletApi.updatePolicy).not.toHaveBeenCalled();
+  });
+
+  it("syncs a stale pinned policy: missing rules trigger updatePolicy with the full canonical set", async () => {
+    process.env.PRIVY_POLICY_ID = "pol-stale";
+    // Simulate a policy created before the FxMintRouter release.
+    const stale = buildFxAeonPolicyRules().filter((r) => !r.name.includes("FxMintRouter"));
+    expect(stale.length).toBeLessThan(buildFxAeonPolicyRules().length);
+    const privy = mockPrivy({
+      getPolicy: vi.fn(async () => ({
+        id: "pol-stale",
+        chainType: "ethereum",
+        rules: stale,
+      })),
+    });
+    const id = await ensureFxAeonPolicy(privy);
+    expect(id).toBe("pol-stale");
+    expect(privy.walletApi.updatePolicy).toHaveBeenCalledTimes(1);
+    expect(privy.walletApi.updatePolicy).toHaveBeenCalledWith({
+      id: "pol-stale",
+      rules: buildFxAeonPolicyRules(),
+    });
   });
 
   it("rejects a pinned policy with the wrong chain type", async () => {
