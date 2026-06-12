@@ -11,6 +11,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Bot, KeyRound, Link2, ShieldCheck, ShieldOff, Wallet } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import {
   usePrivy,
   useLoginWithTelegram,
@@ -19,13 +20,14 @@ import {
   useExportWallet,
   useWallets,
 } from '@privy-io/react-auth';
-import { haptic } from '@/lib/telegram';
+import { haptic, isTMA } from '@/lib/telegram';
 import { apiAvailable, walletSync } from '@/lib/api';
 import { privyConfigured, PRIVY_SIGNER_ID } from '@/lib/privyConfig';
 import PrivyClientProvider from '@/components/PrivyClientProvider';
 import { AddressChip, Button, Card, SectionTitle } from '@/components/ui';
 
 function PrivyWalletControls() {
+  const router = useRouter();
   const { ready, authenticated, user } = usePrivy();
   const { login } = useLoginWithTelegram();
   const { addSessionSigners, removeSessionSigners } = useSessionSigners();
@@ -70,13 +72,20 @@ function PrivyWalletControls() {
     setBusy('login');
     setError('');
     try {
-      await login();
+      if (isTMA()) {
+        // Inside Telegram the login WIDGET popup cannot deliver its result
+        // (the \u201cauth failed or was canceled\u201d dead end) — the /login flow
+        // handles seamless sign-in and every fallback honestly.
+        router.push('/login');
+        return;
+      }
+      await login(); // plain browser: the widget popup works there
     } catch {
       setError('Telegram login failed — close and reopen the app, then try again.');
     } finally {
       setBusy('none');
     }
-  }, [login]);
+  }, [login, router]);
 
   const toggleDelegation = useCallback(async () => {
     if (!address || !PRIVY_SIGNER_ID) return;

@@ -28,7 +28,7 @@ import {
   useSessionSigners,
   useWallets,
 } from '@privy-io/react-auth';
-import { canSendData, getInitData, getWebApp, haptic } from '@/lib/telegram';
+import { canSendData, getInitData, getWebApp, haptic, isTMA } from '@/lib/telegram';
 import { apiAvailable, onboard, OnboardResult } from '@/lib/api';
 import { PRIVY_SIGNER_ID } from '@/lib/privyConfig';
 import PrivyClientProvider from '@/components/PrivyClientProvider';
@@ -180,7 +180,22 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
       }
       // The bot resolves users by Telegram id — link it now (seamless in TMA).
       const initDataRaw = getInitData();
-      linkTelegram(initDataRaw ? { launchParams: { initDataRaw } } : undefined);
+      if (initDataRaw) {
+        linkTelegram({ launchParams: { initDataRaw } });
+        return;
+      }
+      if (isTMA()) {
+        // Keyboard-button launches carry no signed initData, and the only
+        // alternative (the Telegram login WIDGET popup) cannot deliver its
+        // result inside Telegram's webview — be honest instead of dead-ending.
+        fail(
+          null,
+          'Signed in! One more step: this launch type can\u2019t verify your Telegram identity. ' +
+            'Close the app and reopen it from the bot\u2019s menu button — your account links automatically.'
+        );
+        return;
+      }
+      linkTelegram(); // plain browser: the widget popup works there
     },
     onError: (err) => {
       if (err === 'exited_auth_flow' || err === 'generic_connect_wallet_error') {
@@ -199,20 +214,54 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
 
   const startLogin = useCallback(async () => {
     setError('');
+    if (ready && authenticated && telegramLinked) {
+      // Seamless auto-login already completed at provider mount — go on.
+      setPhase('choose');
+      return;
+    }
     setPhase('authenticating');
     try {
+      const initDataRaw = getInitData();
       if (authenticated && !telegramLinked) {
         // Session without a Telegram link (e.g. Google sign-in): a wallet
         // made here would be invisible to the bot. Link Telegram instead of
         // throwing the session away — seamless inside Telegram.
-        const initDataRaw = getInitData();
         if (initDataRaw) {
           linkTelegram({ launchParams: { initDataRaw } });
           return; // continues via the useLinkAccount callbacks
         }
-        // No initData (keyboard launch / stale session) — start clean.
+        if (isTMA()) {
+          // No signed initData (keyboard launch) and the widget popup is a
+          // dead end inside Telegram's webview — say so instead of failing.
+          fail(
+            null,
+            'This launch type can\u2019t verify your Telegram identity. Close the app and ' +
+              'reopen it from the bot\u2019s menu button — sign-in is automatic there.'
+          );
+          return;
+        }
+        // Plain browser with a stale non-Telegram session — start clean.
         await logout();
       }
+      if (isTMA()) {
+        if (!initDataRaw) {
+          fail(
+            null,
+            'This launch type can\u2019t sign in securely (no signed launch data). Close the ' +
+              'app and reopen it from the bot\u2019s menu button — sign-in is automatic there.'
+          );
+          return;
+        }
+        // Inside Telegram, sign-in is AUTOMATIC: the Privy SDK consumes the
+        // launch hash (restored by PrivyClientProvider) and authenticates
+        // with no popup. NEVER call the login widget here — its popup cannot
+        // post results back inside Telegram's webview (the
+        // \u201cTelegram auth failed or was canceled by the client\u201d bug). The
+        // effects below advance the flow when `authenticated` flips, and a
+        // watchdog surfaces an honest error if it never does.
+        return;
+      }
+      // Plain browser: the Telegram login widget popup works normally there.
       if (!authenticated || !telegramLinked) await login();
       setPhase('choose');
     } catch (e) {
@@ -235,7 +284,34 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
         'Telegram sign-in failed — close and reopen the app, then try again. You can also use “More sign-in options” below.'
       );
     }
-  }, [authenticated, telegramLinked, login, logout, linkTelegram, fail]);
+  }, [ready, authenticated, telegramLinked, login, logout, linkTelegram, fail]);
+
+  // Seamless auto-login lands here: the SDK authenticates in the background
+  // (no popup) and `authenticated` flips while we sit in 'authenticating'.
+  useEffect(() => {
+    if (!ready || phase !== 'authenticating') return;
+    if (authenticated && telegramLinked) {
+      haptic('success');
+      setPhase('choose');
+    }
+  }, [ready, phase, authenticated, telegramLinked]);
+
+  // Watchdog: inside Telegram sign-in is automatic — if it hasn't completed
+  // after a generous wait, it's a configuration problem (e.g. seamless
+  // Telegram login disabled in the Privy dashboard). Be honest about it.
+  useEffect(() => {
+    if (phase !== 'authenticating' || authenticated) return;
+    if (!isTMA() || !getInitData()) return;
+    const t = setTimeout(() => {
+      fail(
+        null,
+        'Automatic Telegram sign-in didn\u2019t complete. Try \u201cMore sign-in options\u201d below — ' +
+          'and if this keeps happening, the operator should check that seamless Telegram login ' +
+          'is enabled in the Privy dashboard.'
+      );
+    }, 15_000);
+    return () => clearTimeout(t);
+  }, [phase, authenticated, fail]);
 
   // Already authenticated with an existing wallet? Skip straight ahead —
   // but only for a telegram-linked session (see telegramLinked above).

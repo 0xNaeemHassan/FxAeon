@@ -95,6 +95,43 @@ export function getInitData(): string {
   return getWebApp()?.initData ?? '';
 }
 
+/**
+ * Restore the Telegram launch hash (`#tgWebAppData=…`) onto the current URL.
+ *
+ * WHY (P0 login fix): Privy's seamless Mini-App login is AUTOMATIC — at
+ * provider mount the SDK looks for `#tgWebAppData=…` in `location.hash`,
+ * verifies the signed launch params server-side and logs the user in with no
+ * popup. Telegram puts that hash on the INITIAL document URL only; our entry
+ * router (`app/page.tsx`) client-navigates to /login, which drops it, so by
+ * the time the Privy provider mounts the hash is gone and the SDK silently
+ * skips seamless auth. Every other path then falls back to the Telegram
+ * login WIDGET (`window.Telegram.Login.auth`) — a popup that cannot post its
+ * result back inside Telegram's own webview. That is the exact
+ * "Telegram auth failed or was canceled by the client" dead end (the
+ * official "logged in successfully" notification fires because the popup
+ * half DOES complete server-side).
+ *
+ * `WebApp.initData` is the same signed payload, available on every page, so
+ * we rebuild the hash from it right before the provider mounts. The SDK
+ * consumes and cleans the hash; this is idempotent and a no-op outside
+ * Telegram or on keyboard launches (empty initData).
+ */
+export function restoreTelegramLaunchHash(): void {
+  if (typeof window === 'undefined') return;
+  const initData = getWebApp()?.initData;
+  if (!initData) return;
+  if (window.location.hash.startsWith('#tgWebAppData')) return;
+  try {
+    window.history.replaceState(
+      window.history.state,
+      '',
+      `${window.location.pathname}${window.location.search}#tgWebAppData=${encodeURIComponent(initData)}`
+    );
+  } catch {
+    /* best-effort — worst case the flow falls back to explicit sign-in */
+  }
+}
+
 /** Signal readiness + expand to full height. Safe to call repeatedly. */
 export function initTelegram(): void {
   const tg = getWebApp();

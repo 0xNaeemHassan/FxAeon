@@ -12,6 +12,7 @@ import { prisma } from "@fxbot/db";
 import { HEALTH_LEVELS, MARKETS } from "@fxbot/shared";
 import { createFxSdk } from "../fx/index.js";
 import { fetchOnChainPositions, type OnChainPosition } from "../core/portfolio.js";
+import { trackPositions, computePnl, snapshotKey, type SnapshotMap } from "../core/pnl.js";
 import { getSpotPrices } from "../market/coingecko.js";
 import { botLogger } from "../middleware/logger.js";
 
@@ -56,10 +57,24 @@ export function positionUsd(
   return { collateralUsd, debtUsd, netUsd: collateralUsd - debtUsd };
 }
 
+function pnlLine(
+  pos: OnChainPosition,
+  snapshots: SnapshotMap,
+  prices: Record<string, number | null> | null
+): string {
+  const pnl = computePnl(pos, snapshots.get(snapshotKey(pos)), prices);
+  if (!pnl) return "";
+  const sign = pnl.pnlUsd >= 0 ? "+" : "-";
+  const pct = pnl.pnlPct === null ? "" : ` (${sign}${Math.abs(pnl.pnlPct).toFixed(1)}%)`;
+  const date = pnl.since.toISOString().slice(0, 10);
+  return `   PnL since ${date}: ${sign}${fmtUsd(Math.abs(pnl.pnlUsd)).slice(pnl.pnlUsd < 0 ? 1 : 0)}${pct}\n`;
+}
+
 function positionBlock(
   i: number,
   pos: OnChainPosition,
-  prices: Record<string, number | null> | null
+  prices: Record<string, number | null> | null,
+  snapshots: SnapshotMap
 ): string {
   const usd = prices ? positionUsd(pos, prices) : null;
   return (
@@ -71,7 +86,8 @@ function positionBlock(
     `   Debt: ${fmtAmount(pos.debt)} ${pos.debtToken}` +
     (usd ? ` (~${fmtUsd(usd.debtUsd)})` : "") +
     `\n` +
-    (usd ? `   Net equity: ~${fmtUsd(usd.netUsd)}\n` : "")
+    (usd ? `   Net equity: ~${fmtUsd(usd.netUsd)}\n` : "") +
+    pnlLine(pos, snapshots, prices)
   );
 }
 
@@ -127,9 +143,12 @@ export async function portfolioCommand(ctx: Context & I18nFlavor) {
       /* prices unavailable — render amounts only */
     }
 
+    // Entry snapshots: first-seen tracking for honest PnL estimates.
+    const snapshots = await trackPositions(user.id, positions, prices, failures);
+
     msg += `Positions: ${positions.length}\n\nActive Positions:\n\n`;
     positions.forEach((pos, i) => {
-      msg += positionBlock(i, pos, prices) + "\n";
+      msg += positionBlock(i, pos, prices, snapshots) + "\n";
     });
 
     if (prices) {

@@ -145,26 +145,16 @@ describe("miniapp router", () => {
       language: "en",
       slippageBps: 50,
       mevProtection: "off",
-      positions: [
-        {
-          tokenId: "1",
-          market: "wstETH",
-          side: "long",
-          collateral: "1.0",
-          debt: "1500",
-          leverage: 3,
-          healthPercent: 0.5,
-          liquidationPrice: 1800,
-        },
-      ],
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
     const r = await fetch(`${base}/me`, { headers: auth });
     const body = await r.json();
     expect(body.onboarded).toBe(true);
     expect(body.walletAddress).toBe("0xAbCd000000000000000000000000000000001234");
-    expect(body.positions).toHaveLength(1);
-    expect(body.positions[0].market).toBe("wstETH");
+    // Positions are read ON-CHAIN now (the old prisma.position table was
+    // never written). With no RPC in tests the read fails soft:
+    expect(body.positions).toEqual([]);
+    expect(body.positionsKnown).toBe(false);
     expect(body.funding).toEqual({ known: false });
   });
 

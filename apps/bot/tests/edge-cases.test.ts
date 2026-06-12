@@ -222,14 +222,15 @@ describe("Edge Cases — Commands", () => {
   });
 
   describe("/auto edge cases", () => {
-    it("should handle empty rules list gracefully", async () => {
+    it("shows usage (stop-loss / take-profit syntax) when no rules exist", async () => {
       const ctx = createMockCtx({
         message: { text: "/auto" },
       });
       await autoCommand(ctx as any);
       expect(ctx.reply).toHaveBeenCalledWith(
-        expect.stringContaining("No automation rules")
+        expect.stringContaining("stop-loss / take-profit")
       );
+      expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("/auto sl wstETH long 2500"));
     });
   });
 });

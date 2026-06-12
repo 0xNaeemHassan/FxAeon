@@ -39,6 +39,7 @@ model User {
   aiKeys          AiKey?
   transactions    Transaction[]
   priceAlerts     PriceAlert[]
+  positionSnapshots PositionSnapshot[]
 
   @@index([telegramId])
   @@index([walletAddress])
@@ -177,6 +178,32 @@ model PriceAlert {
 
   @@index([userId])
   @@index([status])
+}
+
+/// First-seen entry state of an on-chain position — the honest basis for
+/// PnL estimates. Created when a position is first observed (right after a
+/// bot-executed open, or on first /portfolio render for positions opened
+/// elsewhere) and closed out when the position disappears from the chain.
+model PositionSnapshot {
+  id              String    @id @default(uuid())
+  userId          String
+  market          String
+  side            String
+  positionId      Int
+  /// Collateral (human units) when first seen.
+  entryCollateral Float
+  /// Debt (human units, fxUSD) when first seen.
+  entryDebt       Float
+  /// Collateral spot USD when first seen — null if the feed was down (PnL
+  /// stays unavailable for that position rather than guessed).
+  entrySpotUsd    Float?
+  entryAt         DateTime  @default(now())
+  closedAt        DateTime?
+
+  user            User      @relation(fields: [userId], references: [id])
+
+  @@unique([userId, market, side, positionId])
+  @@index([userId])
 }
 
 model AiKey {

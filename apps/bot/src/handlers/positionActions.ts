@@ -18,6 +18,7 @@ import {
   quoteClosePosition,
 } from "../fx/index.js";
 import { findUserPosition, type Side } from "../core/portfolio.js";
+import { markSnapshotClosed } from "../core/pnl.js";
 import { executeRoute } from "../core/txExecutor.js";
 import { requireDelegatedWallet } from "../core/delegation.js";
 import { statusLine } from "./tradeActions.js";
@@ -155,6 +156,7 @@ export async function handleCloseConfirm(ctx: Context): Promise<void> {
     });
 
     if (result.ok) {
+      await markSnapshotClosed(user.id, target.market, target.side, target.positionId);
       const hash = result.hashes[result.hashes.length - 1];
       await editSafe(
         ctx,
@@ -188,10 +190,12 @@ export async function handleTpSlHint(ctx: Context): Promise<void> {
   await ctx
     .reply(
       `🎯 Take-profit / stop-loss\n\n` +
-        `Price-trigger rules are managed via /auto, e.g.:\n` +
+        `Set a price-trigger rule right here in chat:\n` +
         `• /auto tp ${example} <price> — take profit\n` +
         `• /auto sl ${example} <price> — stop loss\n\n` +
-        `Note: rule setup currently completes in the Mini App (policy signing).`
+        `Rules are checked every minute and close the full position through the ` +
+        `same simulate-first path as the Close button. Requires bot trading ` +
+        `(Settings → Wallet).`
     )
     .catch(() => undefined);
 }
