@@ -53,6 +53,8 @@ help-body =
     📊 ポートフォリオ
       /portfolio — ポジション・残高・健全性を表示
       /price — ライブ市場概況（価格・時価総額・24h/7d）
+      /alert — ワンショット価格アラート（例: /alert btc > 65000）
+      /alerts — 価格アラートの管理
       /deposit — ウォレットアドレス + QRを表示
       /withdraw — 外部アドレスへ送金
       /bridge — fxUSDをブリッジ (ETH ↔ Base)
