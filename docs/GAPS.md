@@ -14,31 +14,24 @@ description — this is the single list.
    gated `deploy.yml` migration job runs on `main` pushes
    (`DEPLOY_DB_ENABLED=true`) and reports "3 migrations found … No pending
    migrations to apply" against production.
-3. **Fix `DATABASE_URL` on Render** — production deep health
-   (`/api/v1/health`) reports `database: unhealthy` steadily (not a cold
-   start). Most likely the known IPv6 issue: use the Supabase **Session
-   pooler** connection string (IPv4-compatible), not the direct
-   `db.<ref>.supabase.co` host. See DEPLOYMENT.md → Production
-   troubleshooting.
-4. **Set `REDIS_URL` on Render** to the Upstash TCP string
-   (`rediss://default:<password>@<host>:6379`) — deep health reports
-   `redis: skipped`, so the bot is running on in-memory rate limits.
-5. **Apply the 3 updated workflow files** (delivered out-of-band via Slack,
-   2026-06-12 — the GitHub App token still lacks the `workflows` scope):
-   `deploy-mini-app.yml` (fixes a broken `@fxbot/mini-app` build filter —
-   package is `@fxaeon/mini-app` — and skips neutrally without a CF token),
-   `smoke-test.yml` (skips with a warning instead of testing localhost when
-   `PRODUCTION_URL` is unset), `lighthouse-ci.yml` (stale note removed).
-6. **Set GitHub repo secrets for the smoke test**: `PRODUCTION_URL`
-   (deployed bot base URL) — without it the post-deploy smoke test
-   skips. Optional: `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN`
-   for the Redis REST probe, `SLACK_WEBHOOK_URL` for failure pings,
+3. ~~Fix `DATABASE_URL` on Render~~ — **done** (verified 2026-06-12):
+   switched to the Supabase Session pooler string; deep health reports
+   `database: healthy` steadily.
+4. ~~Set `REDIS_URL` on Render~~ — **done** (verified 2026-06-12): the
+   Upstash `rediss://` TCP string is in place; deep health reports
+   `redis: healthy` and `/api/v1/health` returns overall `healthy`.
+5. ~~Apply the 3 updated workflow files~~ — **done** (applied to `main`
+   2026-06-12; CI/Deploy/Secret Scan green on the apply commit).
+6. ~~Set GitHub repo secrets for the smoke test~~ — **done** (2026-06-12):
+   `PRODUCTION_URL`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`
+   are set; the post-deploy smoke test now runs for real. Still optional:
+   `SLACK_WEBHOOK_URL` for failure pings,
    `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` if the wrangler deploy
    path should run (Cloudflare Pages Git integration already deploys the
    mini-app without it).
-7. **Set `ADMIN_TELEGRAM_CHAT_ID`** in Render to receive the daily SLO
-   digest, and **`SENTRY_DSN`** if Sentry is wanted. Both optional;
-   features stay off when unset.
+7. ~~Set `ADMIN_TELEGRAM_CHAT_ID`~~ — **done** (2026-06-12); the daily
+   SLO digest will go to that chat. **`SENTRY_DSN`** still unset —
+   optional; error tracking stays off until provided.
 8. **Trigger `fx-upgrade-monitor` once** via *Run workflow* to confirm
    the PR-based flow end-to-end.
 
