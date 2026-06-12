@@ -1,36 +1,49 @@
+/**
+ * /mint — deposit collateral and mint (borrow) fxUSD against it, via the
+ * official FxMintRouter. Live on-chain execution with signed confirm
+ * (handlers/earnActions.ts). /borrow is an alias.
+ */
 import { Context } from "grammy";
 import { prisma } from "@fxbot/db";
-import { MARKETS } from "@fxbot/shared";
+import { MARKETS, type Market } from "@fxbot/shared";
+import { buildMintPreview } from "../handlers/earnActions.js";
+
+const USAGE =
+  `Usage: /mint <collateral amount> <fxUSD amount> [market]\n\n` +
+  `Example: /mint 1 1500 wstETH — deposit 1 wstETH, mint 1500 fxUSD\n` +
+  `Markets: ${MARKETS.join(", ")} (default wstETH)\n\n` +
+  `Minting borrows fxUSD against your collateral — liquidation risk applies. ` +
+  `Repay with /repay.`;
+
+function resolveMarket(raw: string | undefined): Market | null {
+  if (!raw) return "wstETH";
+  const hit = (MARKETS as readonly string[]).find((m) => m.toLowerCase() === raw.toLowerCase());
+  return (hit as Market) ?? null;
+}
 
 export async function mintCommand(ctx: Context) {
   const telegramId = ctx.from?.id.toString();
   if (!telegramId) return;
-
   const user = await prisma.user.findUnique({ where: { telegramId } });
-  if(!user) {
+  if (!user) {
     await ctx.reply("Please connect your wallet first with /start");
     return;
   }
 
-  const args = ctx.message?.text?.split(" ").slice(1) || [];
-  if(args.length < 2) {
-    await ctx.reply(
-      `Usage: /mint <market> <collateral> <fxUSD amount>\n\n` +
-      `Example: /mint wstETH 1ETH 1500\n\n` +
-      `Borrow fxUSD against ETH/WBTC collateral (no leverage).`
-    );
+  const args = ctx.message?.text?.split(/\s+/).slice(1) ?? [];
+  if (args.length < 2) {
+    await ctx.reply(USAGE);
     return;
   }
 
-  const [market, collateral, mintAmount] = args;
-  await ctx.reply(
-    `🏦 *fxMINT Preview*\n\n` +
-    `Collateral: ${collateral} ${market}\n` +
-    `Borrow: ${mintAmount} fxUSD\n\n` +
-    `
+  const collateral = Number(args[0].replace(/,/g, ""));
+  const fxUsd = Number(args[1].replace(/,/g, ""));
+  const market = resolveMarket(args[2]);
+  if (!Number.isFinite(collateral) || collateral <= 0 || !Number.isFinite(fxUsd) || fxUsd <= 0 || !market) {
+    await ctx.reply(USAGE);
+    return;
+  }
 
-⚠️ On-chain execution for this action is not live yet — the confirm step was removed because it led to a dead screen. It will return when the f(x) SDK integration ships.
-Live today: /trade (leveraged positions), /portfolio, /deposit.`,
-    { parse_mode: "Markdown" }
-  );
+  const { text, keyboard } = buildMintPreview(market, collateral, fxUsd);
+  await ctx.reply(text, { reply_markup: keyboard });
 }

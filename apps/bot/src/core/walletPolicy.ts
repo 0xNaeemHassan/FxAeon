@@ -43,11 +43,21 @@ const ERC20_APPROVE_ABI = [
   },
 ] as const;
 
-/** Tokens the bot ever needs to approve (trade collateral + fxUSD). */
-const APPROVABLE_TOKENS = [ADDRESSES.WSTETH, ADDRESSES.WBTC, ADDRESSES.FXUSD, ADDRESSES.STETH];
+/** Tokens the bot ever needs to approve (trade collateral + fxUSD + USDC for fxSAVE). */
+const APPROVABLE_TOKENS = [
+  ADDRESSES.WSTETH,
+  ADDRESSES.WBTC,
+  ADDRESSES.FXUSD,
+  ADDRESSES.STETH,
+  ADDRESSES.USDC,
+];
 
-/** The only contracts ever allowed to be approved as spender. */
-const ALLOWED_SPENDERS = [ADDRESSES.ROUTER, ADDRESSES.FXSAVE];
+/**
+ * The only contracts ever allowed to be approved as spender.
+ * FX_MINT_ROUTER is the fx-sdk depositAndMint/repayAndWithdraw entry point
+ * (verified official — see packages/shared/src/addresses.ts provenance note).
+ */
+const ALLOWED_SPENDERS = [ADDRESSES.ROUTER, ADDRESSES.FXSAVE, ADDRESSES.FX_MINT_ROUTER];
 
 export function buildFxAeonPolicyRules(): WalletApiPolicyRuleType[] {
   return [
@@ -57,6 +67,19 @@ export function buildFxAeonPolicyRules(): WalletApiPolicyRuleType[] {
       method: "eth_sendTransaction",
       conditions: [
         { fieldSource: "ethereum_transaction", field: "to", operator: "eq", value: ADDRESSES.ROUTER },
+      ],
+    },
+    {
+      name: "Allow FxMintRouter transactions (deposit-and-mint / repay-and-withdraw)",
+      action: "ALLOW",
+      method: "eth_sendTransaction",
+      conditions: [
+        {
+          fieldSource: "ethereum_transaction",
+          field: "to",
+          operator: "eq",
+          value: ADDRESSES.FX_MINT_ROUTER,
+        },
       ],
     },
     {
@@ -133,6 +156,21 @@ export async function ensureFxAeonPolicy(privy: PrivyClient): Promise<string> {
     }
     if (policy.rules.length === 0) {
       throw new Error(`PRIVY_POLICY_ID ${configured} has no rules — refusing to create unguarded wallets`);
+    }
+    // Keep the pinned policy in sync with the code-defined rule set: when a
+    // release adds rules (e.g. FxMintRouter for /mint), existing wallets must
+    // gain them too — otherwise new features fail at signing for every wallet
+    // created before the release. Rules are compared by name; sync replaces
+    // the full rule set with the canonical one (code is the source of truth).
+    const expected = buildFxAeonPolicyRules();
+    const existingNames = new Set(policy.rules.map((r) => r.name));
+    const missing = expected.filter((r) => !existingNames.has(r.name));
+    if (missing.length > 0) {
+      await privy.walletApi.updatePolicy({ id: policy.id, rules: expected });
+      console.warn(
+        `[walletPolicy] Updated pinned policy ${policy.id} with ${missing.length} new rule(s): ` +
+          missing.map((r) => `"${r.name}"`).join(", ")
+      );
     }
     cachedPolicyId = policy.id;
     return policy.id;

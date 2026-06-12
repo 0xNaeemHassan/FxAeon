@@ -19,3 +19,5 @@ export { securityCommand } from "./security.js";
 export { depositCommand } from "./deposit.js";
 export { withdrawCommand } from "./withdraw.js";
 export { helpCommand } from "./help.js";
+export { gasCommand } from "./gas.js";
+export { historyCommand } from "./history.js";
