@@ -11,14 +11,12 @@ unification, smoke-test secrets, `ADMIN_TELEGRAM_CHAT_ID`) are **done and
 verified 2026-06-12** — see git history of this file for the full audit
 trail. Still open:
 
-1. **Trigger `fx-upgrade-monitor` once** via *Run workflow* to confirm
-   the PR-based flow end-to-end.
-2. **Nightly DB backup secrets** (workflow fixed 2026-06-12: pg_dump 17 +
-   fail-fast secret guard): add repo secrets `CLOUDFLARE_ACCOUNT_ID`,
-   `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` (R2 token with Object
-   Read & Write on the `fxbot-backups` bucket), then *Run workflow* on
-   **Backup** and confirm a `.sql.gz` object lands in the bucket.
-3. **`SENTRY_DSN`** still unset — optional; error tracking stays off
+Items 8–9 (`fx-upgrade-monitor` end-to-end run; nightly backup R2
+secrets + first green **Backup** run with pg_dump 17) are **done and
+verified 2026-06-12** — both workflows ran green on `main@99c05f5`.
+Still open:
+
+1. **`SENTRY_DSN`** still unset — optional; error tracking stays off
    until provided.
 
 ## Not verified (and why)
@@ -38,8 +36,10 @@ trail. Still open:
   the funding step for an unfunded account (expected). A full fork trade
   needs whale-impersonated collateral funding; deferred — the simulation
   gate, which is what protects real funds, is what mattered to prove.
-- **Render runtime behavior** of the new `/api/v1/health` (e.g. Render
-  restarting on 503): observable only after the next production deploy.
+- **Render restart-on-503 behavior** of `/api/v1/health`: the endpoint is
+  now verified in production (post-deploy smoke tests pass against the
+  live service, 2026-06-12), but the restart path only proves itself the
+  first time a real dependency outage drives a sustained 503.
 
 ## Known product debt (P2 — in progress, owner go-ahead 2026-06-11)
 

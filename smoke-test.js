@@ -33,6 +33,7 @@ let skip = 0;
 function logPass(msg) { console.log(green('  [PASS]'), msg); pass++; }
 function logFail(msg) { console.log(red('  [FAIL]'), msg); fail++; }
 function logSkip(msg) { console.log(yellow('  [SKIP]'), msg); skip++; }
+function logWarn(msg) { console.log(yellow('  [WARN]'), msg); }
 function logInfo(msg) { console.log(blue('  [INFO]'), msg); }
 function logStep(msg) { console.log(cyan('\n▶'), msg); }
 
@@ -169,18 +170,25 @@ async function runTests() {
     logFail('Privy JWKS unreachable: ' + e.message);
   }
 
-  // Supabase
+  // Database + Redis (via the bot's deep health endpoint — the bot's DB is
+  // Render Postgres; probing it through /api/v1/health tests the actual
+  // production dependency instead of an external API)
   try {
-    const res = await request('https://gadzbgakqipnvkfozcfa.supabase.co/rest/v1/', {
-      headers: { apikey: 'test' },
-    });
-    if (res.status === 200 || res.status === 401) {
-      logPass('Supabase API reachable');
+    const res = await request(`${BASE_URL}/api/v1/health`);
+    const body = JSON.parse(res.data);
+    const services = body.services || {};
+    if (services.database === 'healthy') {
+      logPass('Database reachable (deep health check)');
     } else {
-      logFail(`Supabase status: ${res.status}`);
+      logFail(`Database status: ${services.database || 'unknown'}${services.databaseHint ? ' — ' + services.databaseHint : ''}`);
+    }
+    if (services.redis === 'healthy') {
+      logPass('Redis reachable (deep health check)');
+    } else if (services.redis) {
+      logWarn(`Redis status: ${services.redis} (degraded, non-fatal)`);
     }
   } catch (e) {
-    logFail('Supabase unreachable: ' + e.message);
+    logFail('Deep health check unreachable: ' + e.message);
   }
 
   // Upstash — this REST probe needs the https:// REST endpoint + REST token.
