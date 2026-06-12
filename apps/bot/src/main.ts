@@ -24,6 +24,7 @@ import { handleWebAppData } from "./handlers/walletConnect.js";
 import { registerTradeActions } from "./handlers/tradeActions.js";
 import { registerPositionActions } from "./handlers/positionActions.js";
 import { handleActionCallback } from "./handlers/earnActions.js";
+import { handleWithdrawCallback } from "./commands/withdraw.js";
 import { apiRouter } from "./api/index.js";
 import { applySecurityMiddleware, errorHandler } from "./middleware/index.js";
 import { validateConfig } from "./middleware/config.js";
@@ -112,6 +113,7 @@ registerPositionActions(bot);
 
 // Earn & borrow callbacks: signed action-intent confirms (a1_…) + cancel (a1c).
 bot.callbackQuery(/^a1(_|c$)/, handleActionCallback);
+bot.callbackQuery(/^wd_/, handleWithdrawCallback);
 
 // Honest fallback for any other callback_data: until W-17 there was NO
 // callback handler at all, so every inline button just spun forever. Buttons

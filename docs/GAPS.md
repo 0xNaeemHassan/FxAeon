@@ -60,10 +60,14 @@ description — this is the single list.
 
 ## Known product debt (P2 — in progress, owner go-ahead 2026-06-11)
 
-- ~~W-16 onboarding~~ — shipped: `/start` → Create-Wallet web_app button →
-  policy-guarded server-side wallet creation → referral write →
-  funded-address empty states. New operator note: run the
-  `20260611_user_privy_wallet` migration with the W-11 one.
+- ~~W-16 onboarding~~ — shipped, then REWORKED to user-owned wallets:
+  `/start` → Set-Up-Wallet web_app button → the user creates/imports their
+  own embedded wallet via Privy in the Mini App (+ optional revocable
+  bot-trading session signer) → backend links it read-only → referral write.
+  Operator notes: run `20260611_user_privy_wallet` AND
+  `20260612_user_owned_wallets` migrations; create a key-quorum signer in
+  the Privy dashboard and set `NEXT_PUBLIC_PRIVY_SIGNER_ID`;
+  `PRIVY_POLICY_ID` is no longer used.
 - ~~W-17 trade-UX~~ — landed (PR #51): inline ladder, signed short-TTL
   intents, server-side confirm with status edits; first production caller
   of the W-11 executor and first callback_query handler in the bot.

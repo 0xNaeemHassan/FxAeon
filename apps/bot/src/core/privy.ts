@@ -1,19 +1,24 @@
 /**
- * Single Privy client module (W-08).
+ * Single Privy client module — user-owned wallet edition.
  *
- * Replaces two previous parallel modules:
- * - the old core/privy.ts whose createWallet returned a fabricated '0x...' address
- *   (audit P0-8), and
- * - the unwired src/privy/index.ts which created wallets with NO policy attached
- *   and crashed at import time if env vars were missing.
+ * FxAeon no longer creates server-side "policy wallets". That model (W-08)
+ * clashed with f(x) Protocol's self-custody values: the server created the
+ * wallet, attached a default-deny policy, and the user could neither import
+ * an existing key nor use the wallet outside the bot.
  *
- * Every wallet created here is guarded by the default-deny Privy policy from
- * core/walletPolicy.ts. There is intentionally NO code path that creates an
- * unguarded wallet.
+ * The model now is:
+ *  - Users CREATE or IMPORT their embedded wallet client-side in the Mini App
+ *    via the Privy SDK. Keys live in Privy's TEE; the user can export them at
+ *    any time. The wallet is theirs — full stop.
+ *  - For chat-based execution the user explicitly grants the bot a SESSION
+ *    SIGNER (delegated actions) in the Mini App. The grant is scoped to this
+ *    app's key quorum, revocable at any time, and visible in the Mini App.
+ *  - The server NEVER creates wallets and NEVER holds keys. It signs only via
+ *    `walletApi` for wallets where the user granted delegation; Privy rejects
+ *    everything else server-side.
  */
 import { PrivyClient } from '@privy-io/server-auth';
 import { getConfig, features } from '../middleware/config.js';
-import { createPolicyGuardedWallet, type CreatedWallet } from './walletPolicy.js';
 
 let client: PrivyClient | null = null;
 
@@ -55,9 +60,57 @@ export async function verifyUser(token: string): Promise<{
 }
 
 /**
- * Create a Privy user for a Telegram ID WITHOUT an auto-created wallet.
- * (importUser's `createEthereumWallet: true` would create a wallet with no
- * policy attached — wallets must only be created via createWallet below.)
+ * A user's embedded wallet as seen from the server. `delegated` is the single
+ * source of truth for whether the bot may sign for this wallet right now.
+ */
+export interface UserWallet {
+  /** Privy wallet API id. Null until the wallet is delegated or on the unified stack. */
+  id: string | null;
+  address: `0x${string}`;
+  /** True when the user imported an existing private key (vs created fresh). */
+  imported: boolean;
+  /** True while the user's session-signer grant for this app is active. */
+  delegated: boolean;
+}
+
+interface LinkedWalletAccount {
+  type: string;
+  chainType?: string;
+  walletClientType?: string;
+  address?: string;
+  id?: string | null;
+  imported?: boolean;
+  delegated?: boolean;
+}
+
+/**
+ * Resolve the embedded Ethereum wallet of a Privy user — the wallet the USER
+ * created or imported in the Mini App. Returns null when the user hasn't
+ * finished wallet setup yet. Never creates anything.
+ */
+export async function getUserWallet(privyUserId: string): Promise<UserWallet | null> {
+  const privy = getPrivy();
+  const user = await privy.getUser(privyUserId);
+  const account = (user.linkedAccounts as LinkedWalletAccount[]).find(
+    (a) =>
+      a.type === 'wallet' &&
+      a.walletClientType === 'privy' &&
+      (a.chainType === undefined || a.chainType === 'ethereum') &&
+      typeof a.address === 'string' &&
+      a.address.startsWith('0x')
+  );
+  if (!account) return null;
+  return {
+    id: account.id ?? null,
+    address: account.address as `0x${string}`,
+    imported: account.imported === true,
+    delegated: account.delegated === true,
+  };
+}
+
+/**
+ * Create a Privy user for a Telegram ID WITHOUT a wallet. Wallets are created
+ * or imported BY THE USER in the Mini App — never server-side.
  */
 export async function createPrivyUser(telegramId: string) {
   const privy = getPrivy();
@@ -72,16 +125,19 @@ export async function createPrivyUser(telegramId: string) {
   });
 }
 
-/**
- * Create the user's embedded wallet, guarded by the default-deny policy.
- * Fail-closed: throws if the wallet API is not configured or the policy could
- * not be attached. Idempotent per Privy user (safe to retry).
- */
-export async function createWallet(privyUserId: string): Promise<CreatedWallet> {
-  return createPolicyGuardedWallet(getPrivy(), privyUserId);
+/** Raised when the bot tries to sign for a wallet without an active delegation grant. */
+export class WalletNotDelegatedError extends Error {
+  constructor(message = 'wallet not delegated — the user has not granted (or has revoked) bot trading access') {
+    super(message);
+    this.name = 'WalletNotDelegatedError';
+  }
 }
 
-/** Send a transaction from a policy-guarded wallet (Privy enforces the policy server-side). */
+/**
+ * Send a transaction from a user's wallet via the session-signer grant.
+ * Privy enforces server-side that this app's key quorum is an active signer
+ * on the wallet; without the user's grant the call fails — fail-closed.
+ */
 export async function sendWalletTransaction(
   walletId: string,
   transaction: {
@@ -106,7 +162,7 @@ export async function sendWalletTransaction(
   });
 }
 
-/** Sign EIP-712 typed data with a policy-guarded wallet (policy restricts the domain). */
+/** Sign EIP-712 typed data with a user's wallet via the session-signer grant. */
 export async function signWalletTypedData(
   walletId: string,
   typedData: {

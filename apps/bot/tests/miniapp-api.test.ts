@@ -9,13 +9,13 @@ import type { Server } from "node:http";
 import { prisma } from "@fxbot/db";
 
 // Mock privy + funding before importing the router (onboarding path).
-const createWalletMock = vi.fn();
+const getUserWalletMock = vi.fn();
 const createPrivyUserMock = vi.fn();
 const getUserByTelegramUserIdMock = vi.fn();
 vi.mock("../src/core/privy", () => ({
   getPrivy: () => ({ getUserByTelegramUserId: getUserByTelegramUserIdMock }),
   createPrivyUser: (...a: unknown[]) => createPrivyUserMock(...a),
-  createWallet: (...a: unknown[]) => createWalletMock(...a),
+  getUserWallet: (...a: unknown[]) => getUserWalletMock(...a),
 }));
 vi.mock("../src/core/funding", () => ({
   getFundingState: vi.fn().mockResolvedValue({ known: false }),
@@ -168,14 +168,16 @@ describe("miniapp router", () => {
     expect(body.funding).toEqual({ known: false });
   });
 
-  it("POST /onboard creates a wallet and mirrors it into the chat", async () => {
+  it("POST /onboard links the USER's wallet and mirrors it into the chat", async () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
     getUserByTelegramUserIdMock.mockResolvedValueOnce(null);
     createPrivyUserMock.mockResolvedValueOnce({ id: "privy-1" });
-    createWalletMock.mockResolvedValueOnce({
+    // The wallet is READ from the user's Privy account — never created here.
+    getUserWalletMock.mockResolvedValueOnce({
       id: "w1",
       address: "0xAbCd000000000000000000000000000000001234",
-      policyIds: ["p1"],
+      imported: false,
+      delegated: true,
     });
     vi.mocked(prisma.user.create).mockResolvedValueOnce({
       id: "u1",
@@ -199,6 +201,22 @@ describe("miniapp router", () => {
     expect(chatId).toBe("777000111");
     expect(text).toContain("Wallet created");
     expect(opts.reply_markup.remove_keyboard).toBe(true);
+  });
+
+  it("POST /onboard returns 409 NO_WALLET until Mini App setup is finished", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
+    getUserByTelegramUserIdMock.mockResolvedValueOnce(null);
+    createPrivyUserMock.mockResolvedValueOnce({ id: "privy-1" });
+    getUserWalletMock.mockResolvedValueOnce(null);
+    const r409 = await fetch(`${base}/onboard`, {
+      method: "POST",
+      headers: { ...auth, "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(r409.status).toBe(409);
+    expect((await r409.json()).error.code).toBe("NO_WALLET");
+    expect(prisma.user.create).not.toHaveBeenCalled();
+    expect(sendMessage).not.toHaveBeenCalled();
   });
 
   it("POST /onboard is idempotent for existing users (no chat spam)", async () => {

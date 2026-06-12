@@ -4,8 +4,8 @@
  * Everything here returns executor-ready TradeTx[] lists and NEVER lets an
  * unexpected contract slip through: `assertKnownTargets` fails closed if the
  * SDK ever builds a tx to an address outside the audited allow-list (the same
- * set the Privy wallet policy allows — see core/walletPolicy.ts). Defense in
- * depth: even if the policy were too permissive, the bot refuses to broadcast.
+ * set of verified f(x) contracts). Defense in depth: even though the user's
+ * wallet is unrestricted, the bot itself refuses to broadcast elsewhere.
  */
 import type { FxSdk } from "@aladdindao/fx-sdk";
 import { createPublicClient, erc20Abi, formatUnits, http } from "viem";

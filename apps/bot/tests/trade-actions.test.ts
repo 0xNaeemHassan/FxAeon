@@ -39,6 +39,8 @@ const USER = {
   telegramId: "123456",
   walletAddress: "0xAbCd000000000000000000000000000000001234",
   privyWalletId: "wallet-1",
+  walletDelegated: true,
+  walletImported: false,
   slippageBps: 50,
   mevProtection: "off",
 };
@@ -145,11 +147,13 @@ describe("confirm flow", () => {
   });
 
   it("requires a fully onboarded wallet", async () => {
-    (prisma.user.findUnique as any).mockResolvedValue({ ...USER, privyWalletId: null });
+    (prisma.user.findUnique as any).mockResolvedValue({ ...USER, privyWalletId: null, walletDelegated: false });
     const ctx = mockCtx(`tc_${createTradeIntent(intent)}`);
     await handleConfirmCallback(ctx);
     expect(executeRouteMock).not.toHaveBeenCalled();
-    expect(lastEdit(ctx)).toContain("/start");
+    // Self-custody model: a wallet without an active session-signer grant is
+    // routed to the Mini App to enable bot trading — nothing executes.
+    expect(lastEdit(ctx)).toContain("Bot trading is off");
   });
 
   it("surfaces executor failure without inventing success", async () => {

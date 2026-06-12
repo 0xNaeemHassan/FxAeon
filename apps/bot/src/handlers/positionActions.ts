@@ -19,6 +19,7 @@ import {
 } from "../fx/index.js";
 import { findUserPosition, type Side } from "../core/portfolio.js";
 import { executeRoute } from "../core/txExecutor.js";
+import { requireDelegatedWallet } from "../core/delegation.js";
 import { statusLine } from "./tradeActions.js";
 import { describeExecutionError } from "../core/errorTaxonomy.js";
 import { botLogger } from "../middleware/logger.js";
@@ -103,8 +104,9 @@ export async function handleCloseConfirm(ctx: Context): Promise<void> {
     await editSafe(ctx, `❌ This button is no longer valid. Use /portfolio to start over.`);
     return;
   }
-  if (!user.privyWalletId) {
-    await editSafe(ctx, `🔐 Wallet not ready — run /start to finish onboarding.`);
+  const gate = await requireDelegatedWallet(user);
+  if (!gate.ok) {
+    await editSafe(ctx, gate.message);
     return;
   }
 
@@ -138,7 +140,7 @@ export async function handleCloseConfirm(ctx: Context): Promise<void> {
     let lastStatus = "";
     const result = await executeRoute({
       userId: user.id,
-      walletId: user.privyWalletId,
+      walletId: gate.walletId,
       walletAddress: user.walletAddress as `0x${string}`,
       idempotencyKey: `close:${user.id}:${target.market}:${target.side}:${target.positionId}:${target.nonce}`,
       txs: route.txs,

@@ -7,12 +7,12 @@ start-welcome-new =
     
     f(x) Protocol向けの最先端インターフェース — レバレッジポジション、指値注文、利回り自動化をすべてTelegramから。
     
-    🔐 ノンカストディアル — ウォレットはポリシーによりf(x)コントラクトのみに制限
+    🔐 セルフカストディ — ウォレットを自分で作成またはインポート。鍵はあなただけのもの
     ⚡ シミュレーション必須 — シミュレーションを通過しない限り何も送信されません
     🤖 誠実な設計 — 偽の数字は一切ありません
 start-referral-detected = 🎁 紹介コードを検出しました: { $code }
-start-tap-button = 👇 下のボタンをタップしてウォレットを作成してください。
-start-create-wallet = 🔐 ウォレットを作成
+start-tap-button = 👇 下のボタンをタップしてウォレットを作成またはインポートしてください。
+start-create-wallet = 🔐 ウォレットを設定
 start-welcome-back =
     👋 fxBotへおかえりなさい！
     

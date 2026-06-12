@@ -7,12 +7,12 @@ start-welcome-new =
     
     La interfaz más avanzada para f(x) Protocol — posiciones apalancadas, órdenes límite y automatización de rendimiento, todo desde Telegram.
     
-    🔐 Sin custodia — tu billetera está bloqueada por política solo a contratos de f(x)
+    🔐 Autocustodia — crea o importa TU billetera; solo tú tienes las claves
     ⚡ Validado por simulación — nada se difunde si no simula correctamente
     🤖 Honesto por diseño — nunca números falsos
 start-referral-detected = 🎁 Código de referido detectado: { $code }
-start-tap-button = 👇 Toca el botón de abajo para crear tu billetera.
-start-create-wallet = 🔐 Crear billetera
+start-tap-button = 👇 Toca el botón de abajo para crear o importar tu billetera.
+start-create-wallet = 🔐 Configurar billetera
 start-welcome-back =
     👋 ¡Bienvenido de nuevo a fxBot!
     

@@ -11,6 +11,7 @@ import { Globe, Sliders, Shield, Check, PlugZap, Send } from 'lucide-react';
 import { isTMA, getInitData, haptic } from '@/lib/telegram';
 import { apiConfigured, getMe, saveSettings } from '@/lib/api';
 import { AppShell, Button, Card, EmptyState, SectionTitle, Skeleton } from '@/components/ui';
+import WalletSection from '@/components/WalletSection';
 
 const BOT_USERNAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || 'FxAeonBot';
 
@@ -128,6 +129,8 @@ export default function SettingsPage() {
   return (
     <AppShell title="Settings" subtitle="Synced with your bot account">
       <div className="stagger flex flex-col">
+        <WalletSection />
+
         <SectionTitle>
           <span className="flex items-center gap-1.5">
             <Globe className="h-3.5 w-3.5" /> Language

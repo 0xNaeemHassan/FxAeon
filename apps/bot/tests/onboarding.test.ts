@@ -1,19 +1,20 @@
 /**
- * W-16 onboarding tests: referral parsing/codes, server-side onboarding
- * (idempotency, referral write, untrusted payload handling), /start keyboard,
- * and the web_app_data handler.
+ * Onboarding tests (user-owned wallets): referral parsing/codes, server-side
+ * wallet LINKING (the user creates/imports the wallet in the Mini App; the
+ * backend only reads it from Privy), idempotency, untrusted payload handling,
+ * /start keyboard, and the web_app_data handler.
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { prisma } from "@fxbot/db";
 
 // Mock privy core BEFORE importing modules under test.
-const createWalletMock = vi.fn();
+const getUserWalletMock = vi.fn();
 const createPrivyUserMock = vi.fn();
 const getUserByTelegramUserIdMock = vi.fn();
 vi.mock("../src/core/privy", () => ({
   getPrivy: () => ({ getUserByTelegramUserId: getUserByTelegramUserIdMock }),
   createPrivyUser: (...a: unknown[]) => createPrivyUserMock(...a),
-  createWallet: (...a: unknown[]) => createWalletMock(...a),
+  getUserWallet: (...a: unknown[]) => getUserWalletMock(...a),
 }));
 
 // Funding reads hit RPC — stub to "unknown" so copy stays balance-free.
@@ -37,7 +38,8 @@ import { handleWebAppData } from "../src/handlers/walletConnect";
 import { startCommand } from "../src/commands/start";
 import { tEn } from "./helpers/i18n";
 
-const WALLET = { id: "wallet-id-1", address: "0xAbCd000000000000000000000000000000001234", policyIds: ["pol1"] };
+// What getUserWallet returns: the USER's own embedded wallet, read from Privy.
+const WALLET = { id: "wallet-id-1", address: "0xAbCd000000000000000000000000000000001234", imported: false, delegated: true };
 
 describe("referral code utils", () => {
   it("generates 8-char codes from the unambiguous alphabet", () => {
@@ -75,24 +77,25 @@ describe("onboardUser", () => {
     );
     getUserByTelegramUserIdMock.mockResolvedValue(null);
     createPrivyUserMock.mockResolvedValue({ id: "privy-user-1" });
-    createWalletMock.mockResolvedValue(WALLET);
+    getUserWalletMock.mockResolvedValue(WALLET);
   });
 
-  it("is idempotent: existing DB user short-circuits, no wallet call", async () => {
+  it("is idempotent: existing DB user short-circuits (sync only, no create)", async () => {
     (prisma.user.findUnique as any).mockResolvedValueOnce({
-      id: "u1", telegramId: "123", walletAddress: "0xexisting", referralCode: "AAAA2222",
+      id: "u1", telegramId: "123", walletAddress: WALLET.address, referralCode: "AAAA2222",
+      privyUserId: "privy-user-1", privyWalletId: "wallet-id-1", walletDelegated: true, walletImported: false,
     });
     const res = await onboardUser("123");
     expect(res.status).toBe("existing");
-    expect(createWalletMock).not.toHaveBeenCalled();
     expect(prisma.user.create).not.toHaveBeenCalled();
   });
 
-  it("creates privy user + policy wallet + db row for new users", async () => {
+  it("links the USER's wallet + db row for new users (never creates one)", async () => {
     const res = await onboardUser("123");
-    expect(res.status).toBe("created");
+    expect(res.status).toBe("linked");
     expect(createPrivyUserMock).toHaveBeenCalledWith("123");
-    expect(createWalletMock).toHaveBeenCalledWith("privy-user-1");
+    // Read-only: the wallet comes FROM the user's Privy account.
+    expect(getUserWalletMock).toHaveBeenCalledWith("privy-user-1");
     expect(prisma.user.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -100,17 +103,26 @@ describe("onboardUser", () => {
           privyUserId: "privy-user-1",
           privyWalletId: "wallet-id-1",
           walletAddress: WALLET.address,
+          walletDelegated: true,
+          walletImported: false,
         }),
       })
     );
-    expect(res.user.walletAddress).toBe(WALLET.address);
+    if (res.status === "linked") expect(res.user.walletAddress).toBe(WALLET.address);
+  });
+
+  it("returns no_wallet (and writes nothing) until the user finishes Mini App setup", async () => {
+    getUserWalletMock.mockResolvedValue(null);
+    const res = await onboardUser("123");
+    expect(res.status).toBe("no_wallet");
+    expect(prisma.user.create).not.toHaveBeenCalled();
   });
 
   it("reuses an existing Privy user instead of importing", async () => {
     getUserByTelegramUserIdMock.mockResolvedValue({ id: "privy-existing" });
     await onboardUser("123");
     expect(createPrivyUserMock).not.toHaveBeenCalled();
-    expect(createWalletMock).toHaveBeenCalledWith("privy-existing");
+    expect(getUserWalletMock).toHaveBeenCalledWith("privy-existing");
   });
 
   it("writes the referral when the code resolves to a real user", async () => {
@@ -139,14 +151,14 @@ describe("onboardUser", () => {
   it("unknown referral codes never block onboarding", async () => {
     (prisma as any).referral = { create: vi.fn() };
     const res = await onboardUser("123", "NOSUCHCD");
-    expect(res.status).toBe("created");
+    expect(res.status).toBe("linked");
     expect(res.referrerCode).toBeUndefined();
     expect((prisma as any).referral.create).not.toHaveBeenCalled();
   });
 
-  it("fails closed when wallet creation fails (no db row)", async () => {
-    createWalletMock.mockRejectedValue(new Error("policy missing"));
-    await expect(onboardUser("123")).rejects.toThrow("policy missing");
+  it("fails closed when the Privy wallet read fails (no db row)", async () => {
+    getUserWalletMock.mockRejectedValue(new Error("privy down"));
+    await expect(onboardUser("123")).rejects.toThrow("privy down");
     expect(prisma.user.create).not.toHaveBeenCalled();
   });
 });
@@ -168,14 +180,14 @@ describe("handleWebAppData", () => {
     );
     getUserByTelegramUserIdMock.mockResolvedValue(null);
     createPrivyUserMock.mockResolvedValue({ id: "privy-user-1" });
-    createWalletMock.mockResolvedValue(WALLET);
+    getUserWalletMock.mockResolvedValue(WALLET);
   });
 
   it("onboards on a valid wallet_connected payload", async () => {
     const ctx = makeCtx({ type: "wallet_connected", address: "0xclient", privyUserId: "spoofed" });
     await handleWebAppData(ctx);
     // Server-side resolution: client-supplied privyUserId is ignored.
-    expect(createWalletMock).toHaveBeenCalledWith("privy-user-1");
+    expect(getUserWalletMock).toHaveBeenCalledWith("privy-user-1");
     expect(ctx.reply).toHaveBeenCalledWith(
       expect.stringContaining("Wallet created"),
       expect.objectContaining({ reply_markup: { remove_keyboard: true } })
@@ -189,7 +201,7 @@ describe("handleWebAppData", () => {
     const ctx = makeCtx("{not json");
     await handleWebAppData(ctx);
     expect(ctx.reply).not.toHaveBeenCalled();
-    expect(createWalletMock).not.toHaveBeenCalled();
+    expect(getUserWalletMock).not.toHaveBeenCalled();
   });
 
   it("ignores unexpected payload types", async () => {
@@ -202,15 +214,25 @@ describe("handleWebAppData", () => {
     const ctx = makeCtx({ type: "wallet_connected", referral: "bad code!" });
     await handleWebAppData(ctx);
     expect(ctx.reply).not.toHaveBeenCalled();
-    expect(createWalletMock).not.toHaveBeenCalled();
+    expect(getUserWalletMock).not.toHaveBeenCalled();
   });
 
-  it("replies honestly when wallet creation fails", async () => {
-    createWalletMock.mockRejectedValue(new Error("privy down"));
+  it("asks the user to finish Mini App setup when no wallet exists yet", async () => {
+    getUserWalletMock.mockResolvedValue(null);
     const ctx = makeCtx({ type: "wallet_connected" });
     await handleWebAppData(ctx);
     expect(ctx.reply).toHaveBeenCalledWith(
-      expect.stringContaining("Wallet creation failed"),
+      expect.stringContaining("isn't finished yet"),
+      expect.anything()
+    );
+  });
+
+  it("replies honestly when the wallet link fails", async () => {
+    getUserWalletMock.mockRejectedValue(new Error("privy down"));
+    const ctx = makeCtx({ type: "wallet_connected" });
+    await handleWebAppData(ctx);
+    expect(ctx.reply).toHaveBeenCalledWith(
+      expect.stringContaining("Wallet linking failed"),
       expect.anything()
     );
   });
@@ -218,6 +240,7 @@ describe("handleWebAppData", () => {
   it("tells already-onboarded users they are set up", async () => {
     (prisma.user.findUnique as any).mockResolvedValue({
       id: "u1", telegramId: "123456", walletAddress: "0xAbCd000000000000000000000000000000005678", referralCode: "AAAA2222",
+      privyUserId: "privy-user-1", privyWalletId: "wallet-id-1", walletDelegated: true, walletImported: false,
     });
     const ctx = makeCtx({ type: "wallet_connected" });
     await handleWebAppData(ctx);
@@ -225,7 +248,7 @@ describe("handleWebAppData", () => {
       expect.stringContaining("already set up"),
       expect.anything()
     );
-    expect(createWalletMock).not.toHaveBeenCalled();
+    expect(prisma.user.create).not.toHaveBeenCalled();
   });
 });
 
@@ -235,12 +258,12 @@ describe("startCommand (W-16)", () => {
     (prisma.user.findUnique as any).mockResolvedValue(null);
   });
 
-  it("shows a reply-keyboard Create-Wallet web_app button to new users", async () => {
+  it("shows a reply-keyboard Set-Up-Wallet web_app button to new users", async () => {
     const ctx = { from: { id: 1 }, message: { text: "/start" }, reply: vi.fn(), t: tEn } as any;
     await startCommand(ctx);
     const [, opts] = (ctx.reply as any).mock.calls[0];
     const btn = opts.reply_markup.keyboard[0][0];
-    expect(btn.text).toContain("Create Wallet");
+    expect(btn.text).toContain("Set Up Wallet");
     expect(btn.web_app.url).toMatch(/\/login$/);
   });
 

@@ -12,9 +12,15 @@ model User {
   telegramId      String    @unique
   privyUserId     String    @unique
   walletAddress   String    @unique
-  /// Privy wallet API id of the policy-guarded embedded wallet (W-16).
-  /// Nullable: rows created before W-16 predate server-side wallet creation.
+  /// Privy wallet API id of the user's embedded wallet. Nullable: rows
+  /// created before W-16 predate wallet ids; also null until Privy exposes
+  /// the id (it always does once the user delegates).
   privyWalletId   String?   @unique
+  /// True while the user's session-signer grant (bot trading) is active.
+  walletDelegated Boolean   @default(false)
+  /// True when the user imported an existing private key instead of creating
+  /// a fresh embedded wallet.
+  walletImported  Boolean   @default(false)
   language        String    @default("en")
   mevProtection   String    @default("off")
   slippageBps     Int       @default(50)

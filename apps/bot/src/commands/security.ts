@@ -19,10 +19,10 @@ export async function securityCommand(ctx: Context) {
     `• Trail of Bits (Apr 2024, Jul 2024)\n` +
     `• OpenZeppelin (Aug 2025)\n` +
     `• Secbit (Oct 2025)\n\n` +
-    `*Policies:*\n` +
-    `• Zero key custody — keys in Privy TEE\n` +
-    `• Automation policy: default-deny, user-revocable\n` +
-    `• Daily tx cap: 50 (configurable)\n\n` +
+    `*Self-custody:*\n` +
+    `• Your wallet, your keys — created or imported by YOU, exportable any time (Mini App → Settings)\n` +
+    `• Bot trading = a revocable session-signer grant; the bot can't sign without it\n` +
+    `• Simulation-gated execution: nothing broadcasts unless it simulates clean\n\n` +
     `[View full audit reports](https://fxprotocol.gitbook.io/fx-docs/risk-management/audit-reports)\n\n` +
     `Export your data: /security export`,
     { parse_mode: "Markdown" }

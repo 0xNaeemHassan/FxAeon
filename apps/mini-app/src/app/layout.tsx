@@ -4,13 +4,14 @@ import { Inter, Space_Grotesk } from 'next/font/google';
 import './globals.css';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { TelegramProvider } from '@/components/TelegramProvider';
+import PrivyClientProvider from '@/components/PrivyClientProvider';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 const grotesk = Space_Grotesk({ subsets: ['latin'], variable: '--font-display' });
 
 export const metadata: Metadata = {
   title: 'FxAeon — f(x) Protocol Trading',
-  description: 'Non-custodial DeFi trading for f(x) Protocol',
+  description: 'Self-custodial DeFi trading for f(x) Protocol',
 };
 
 export const viewport: Viewport = {
@@ -40,7 +41,9 @@ export default function RootLayout({
       </head>
       <body className={inter.className}>
         <TelegramProvider>
-          <ErrorBoundary>{children}</ErrorBoundary>
+          <PrivyClientProvider>
+            <ErrorBoundary>{children}</ErrorBoundary>
+          </PrivyClientProvider>
         </TelegramProvider>
       </body>
     </html>

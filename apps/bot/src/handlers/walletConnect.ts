@@ -1,11 +1,12 @@
 /**
- * Mini App → bot wallet-connect handler (W-16).
+ * Mini App → bot wallet-connect handler.
  *
  * Receives `message:web_app_data` sent by the Mini App login page via
  * `Telegram.WebApp.sendData()`. The payload is user-controlled, so it is
  * validated strictly and used ONLY as a trigger — the actual Privy user and
- * the policy-guarded wallet are resolved server-side from the authenticated
- * `ctx.from.id` (see core/onboarding.ts).
+ * THEIR self-custodial wallet are resolved server-side from the authenticated
+ * `ctx.from.id` (see core/onboarding.ts). The wallet itself was created or
+ * imported BY THE USER in the Mini App; the server only links it.
  *
  * Note: `sendData` only works for Mini Apps launched from a reply-keyboard
  * `web_app` button (Telegram platform constraint) — which is exactly what
@@ -43,6 +44,19 @@ export async function handleWebAppData(ctx: Context) {
       telegramId,
       payload.referral?.toUpperCase() ?? undefined
     );
+
+    if (result.status === "no_wallet") {
+      // The signal fired before wallet setup finished (or the user closed the
+      // app mid-flow). Honest state, no DB row was written.
+      await ctx.reply(
+        `⏳ Almost there — your wallet isn't finished yet.\n\n` +
+          `Open the app again and complete wallet setup (create a new wallet ` +
+          `or import an existing one). Your keys stay with you either way.`,
+        { reply_markup: { remove_keyboard: true } }
+      );
+      return;
+    }
+
     const addr = result.user.walletAddress;
     const short = `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
@@ -60,7 +74,7 @@ export async function handleWebAppData(ctx: Context) {
     };
 
     if (result.status === "existing") {
-      // Clear the stale Create-Wallet reply keyboard, then show next steps.
+      // Clear the stale wallet-setup reply keyboard, then show next steps.
       await ctx.reply(`✅ You're already set up.\n\nWallet: ${short}`, {
         reply_markup: { remove_keyboard: true },
       });
@@ -68,12 +82,17 @@ export async function handleWebAppData(ctx: Context) {
       return;
     }
 
+    const tradingLine = result.user.walletDelegated
+      ? `⚡ Bot trading is ON — you can trade right here in chat. Revoke any time in the app (Settings → Wallet).`
+      : `💤 Bot trading is OFF — enable it in the app (Settings → Wallet) to trade from chat. The Mini App works either way.`;
+
     const funding = await getFundingState(addr as `0x${string}`);
     await ctx.reply(
-      `🎉 Wallet created!\n\n` +
+      `🎉 Wallet ${result.user.walletImported ? "imported" : "created"} — and it's YOURS.\n\n` +
         `Address: ${addr}\n\n` +
-        `🔐 Your wallet is protected by a default-deny policy — it can ONLY ` +
-        `interact with verified f(x) Protocol contracts. Nothing else, ever.` +
+        `🔐 Self-custody via Privy: keys live in a secure enclave, only you can ` +
+        `export them, and nothing moves without your say-so.\n` +
+        tradingLine +
         (result.referrerCode ? `\n\n🎁 Referral applied: ${result.referrerCode}` : "") +
         describeFunding(funding),
       { reply_markup: { remove_keyboard: true } }
@@ -82,8 +101,8 @@ export async function handleWebAppData(ctx: Context) {
   } catch (e) {
     botLogger.error({ err: e, telegramId }, "onboarding failed");
     await ctx.reply(
-      `❌ Wallet creation failed.\n\n` +
-        `Nothing was created and no funds are involved. Please try /start again ` +
+      `❌ Wallet linking failed.\n\n` +
+        `Nothing was changed and no funds are involved. Please try /start again ` +
         `in a moment — if this keeps happening, the wallet service may be down.`,
       { reply_markup: { remove_keyboard: true } }
     );

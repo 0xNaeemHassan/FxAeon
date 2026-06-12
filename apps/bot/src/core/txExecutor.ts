@@ -4,7 +4,7 @@
  * The ONLY sanctioned path from a quoted route to the chain:
  *
  *   idempotency check → simulate (fail-closed) → EIP-1559 fees from feeHistory
- *   → broadcast via the policy-guarded Privy wallet → receipt watch.
+ *   → broadcast via the user's delegated Privy wallet (session signer) → receipt watch.
  *
  * Guarantees:
  * - Idempotent: the same idempotencyKey never broadcasts twice. Double-taps,

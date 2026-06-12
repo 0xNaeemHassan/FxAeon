@@ -46,6 +46,8 @@ export interface Me {
   language?: string;
   slippageBps?: number;
   mevProtection?: 'on' | 'off';
+  walletDelegated?: boolean;
+  walletImported?: boolean;
   funding?: Funding;
   positions?: ApiPosition[];
 }
@@ -56,6 +58,8 @@ export interface OnboardResult {
   walletAddress: string;
   walletShort: string;
   referralApplied: string | null;
+  walletDelegated?: boolean;
+  walletImported?: boolean;
 }
 
 /** True when authenticated API calls are possible in this launch context. */
@@ -102,6 +106,16 @@ export const getMe = () => call<Me>('/me');
 
 export const onboard = (referral?: string) =>
   call<OnboardResult>('/onboard', { method: 'POST', body: referral ? { referral } : {} });
+
+/**
+ * Re-sync wallet state (delegation grant / wallet id) from Privy after the
+ * user grants or revokes bot trading in the Mini App.
+ */
+export const walletSync = () =>
+  call<{ ok: boolean; walletDelegated: boolean; walletAddress: string }>('/wallet/sync', {
+    method: 'POST',
+    body: {},
+  });
 
 export const saveSettings = (settings: {
   language?: string;

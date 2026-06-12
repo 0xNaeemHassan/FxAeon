@@ -29,6 +29,7 @@ import {
   quoteOpenPosition,
 } from "../fx/index.js";
 import { executeRoute } from "../core/txExecutor.js";
+import { requireDelegatedWallet } from "../core/delegation.js";
 import type { TxState } from "../core/txState.js";
 import {
   createTradeIntent,
@@ -207,11 +208,9 @@ export async function executeTradeIntent(ctx: Context, intent: TradeIntent): Pro
     await editSafe(ctx, `${header}\n\n🔐 Wallet Required\n\nConnect your wallet first with /start`);
     return;
   }
-  if (!user.privyWalletId) {
-    await editSafe(
-      ctx,
-      `${header}\n\n🔐 Wallet not ready\n\nYour wallet isn't fully set up yet — run /start to finish onboarding.`
-    );
+  const gate = await requireDelegatedWallet(user);
+  if (!gate.ok) {
+    await editSafe(ctx, `${header}\n\n${gate.message}`);
     return;
   }
 
@@ -252,7 +251,7 @@ export async function executeTradeIntent(ctx: Context, intent: TradeIntent): Pro
     let lastStatus = "";
     const result = await executeRoute({
       userId: user.id,
-      walletId: user.privyWalletId,
+      walletId: gate.walletId,
       walletAddress: user.walletAddress as `0x${string}`,
       // Nonce comes from the signed intent: double-taps and Telegram retries
       // hit the executor's idempotency check instead of broadcasting twice.
