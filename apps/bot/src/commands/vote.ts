@@ -14,13 +14,8 @@ export async function voteCommand(ctx: Context) {
   await ctx.reply(
     `🗳️ *Gauge Voting*\n\n` +
     `Vote on f(x) gauge weights with your veFXN.\n\n` +
-    `Available gauges will be shown in the Mini App.`,
-    {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "🗳️ Open Voting", web_app: { url: `${process.env.MINI_APP_URL}/vote` } }],
-        ],
-      },
-    }
+    `⚠️ Gauge voting is not live yet — the voting screen was removed because it led to a dead screen. It will return when the f(x) SDK integration ships.
+Live today: /trade (leveraged positions), /portfolio, /deposit.`,
+    { parse_mode: "Markdown" }
   );
 }

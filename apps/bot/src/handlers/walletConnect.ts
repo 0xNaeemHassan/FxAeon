@@ -46,11 +46,25 @@ export async function handleWebAppData(ctx: Context) {
     const addr = result.user.walletAddress;
     const short = `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
+    const miniAppUrl = process.env.MINI_APP_URL || "https://fxbot-mini-app.pages.dev";
+    // Inline web_app launches DO get signed initData, so these buttons open
+    // the Mini App with full authenticated state (real wallet + balances).
+    const nextSteps = {
+      inline_keyboard: [
+        [
+          { text: "📊 Portfolio", web_app: { url: `${miniAppUrl}/portfolio` } },
+          { text: "💰 Deposit", web_app: { url: `${miniAppUrl}/qr?address=${addr}` } },
+        ],
+        [{ text: "⚡ Set up a trade", web_app: { url: `${miniAppUrl}/trade` } }],
+      ],
+    };
+
     if (result.status === "existing") {
-      await ctx.reply(
-        `✅ You're already set up.\n\nWallet: ${short}\n\nTry /portfolio or /trade.`,
-        { reply_markup: { remove_keyboard: true } }
-      );
+      // Clear the stale Create-Wallet reply keyboard, then show next steps.
+      await ctx.reply(`✅ You're already set up.\n\nWallet: ${short}`, {
+        reply_markup: { remove_keyboard: true },
+      });
+      await ctx.reply(`What's next?`, { reply_markup: nextSteps });
       return;
     }
 
@@ -64,6 +78,7 @@ export async function handleWebAppData(ctx: Context) {
         describeFunding(funding),
       { reply_markup: { remove_keyboard: true } }
     );
+    await ctx.reply(`What's next?`, { reply_markup: nextSteps });
   } catch (e) {
     botLogger.error({ err: e, telegramId }, "onboarding failed");
     await ctx.reply(

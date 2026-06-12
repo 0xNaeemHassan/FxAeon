@@ -1,130 +1,69 @@
 'use client';
 
-import { usePrivy } from '@privy-io/react-auth';
-import { useState } from 'react';
-import { Shield, Check, AlertTriangle } from 'lucide-react';
+/**
+ * Security explainer — how the default-deny policy protects the wallet.
+ * Purely informational: the policy is enforced server-side inside Privy's TEE
+ * from the moment the wallet is created. (The old screen had a Privy
+ * "Sign Policy" button that did nothing real — removed.)
+ */
+import { ShieldCheck, Check, Lock } from 'lucide-react';
+import { AppShell, Card } from '@/components/ui';
 
-function safeJSONStringify(obj: unknown, _replacer?: unknown, space?: number): string {
-  try { return JSON.stringify(obj, null, space); } catch { return '{}'; }
-}
-
-const POLICY = {
-  name: "fxBot-automation-policy",
-  chain_type: "ethereum",
-  rules: [
-    {
-      name: "allow-fx-router-calls",
-      method: "eth_sendTransaction",
-      action: "ALLOW",
-      conditions: [
-        { field_source: "ethereum_transaction", field: "to", operator: "eq", value: "0x33636D49FbefBE798e15e7F356E8DBef543CC708" },
-        { field_source: "ethereum_transaction", field: "value", operator: "lte", value: "0" }
-      ]
-    },
-    {
-      name: "allow-fxsave-harvest",
-      method: "eth_sendTransaction",
-      action: "ALLOW",
-      conditions: [
-        { field_source: "ethereum_transaction", field: "to", operator: "eq", value: "0x7743e50F534a7f9F1791DdE7dCD89F7783Eefc39" },
-        { field_source: "ethereum_calldata", field: "function_selector", operator: "eq", value: "0x4641257d" }
-      ]
-    },
-    {
-      name: "allow-limit-order-eip712-sign",
-      method: "eth_signTypedData_v4",
-      action: "ALLOW",
-      conditions: [
-        { field_source: "typed_data", field: "domain.name", operator: "eq", value: "f(x) Limit Order Manager" },
-        { field_source: "typed_data", field: "domain.verifyingContract", operator: "eq", value: "0x112873b395B98287F3A4db266a58e2D01779Ad96" }
-      ]
-    },
-    { name: "deny-all-else", action: "DENY" }
-  ]
-};
+const RULES = [
+  {
+    title: 'f(x) Router calls only',
+    body: 'Transactions may only target the verified f(x) Protocol router contract.',
+  },
+  {
+    title: 'fxSAVE harvest only',
+    body: 'The single allowed automation call is harvesting fxSAVE yield.',
+  },
+  {
+    title: 'f(x) limit-order signing only',
+    body: 'EIP-712 signatures are restricted to the f(x) Limit Order Manager domain.',
+  },
+  {
+    title: 'Everything else: DENIED',
+    body: 'Any other contract, token approval or signature request is rejected by default.',
+  },
+];
 
 export default function PolicyPage() {
-  const { signMessage } = usePrivy();
-  const [error, setError] = useState<string | null>(null);
-  const [signed, setSigned] = useState(false);
-
-  const handleSign = async () => {
-    try {
-      const message = `I authorize fxBot to execute the following policy:
-
-${safeJSONStringify(POLICY, null, 2)}
-
-This authorization is revocable at any time via /security.`;
-      await signMessage({ message });
-      setSigned(true);
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.sendData(safeJSONStringify({ type: 'policy_signed' }));
-        window.Telegram?.WebApp?.initData ? window.Telegram.WebApp.close() : window.history.back();
-      }
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Signing failed');
-    }
-  };
-
   return (
-    <div className="flex min-h-screen flex-col p-4">
-        {/* Error Display */}
-        {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-700 text-sm">{error}</p>
-            <button type="button"
-              onClick={() => setError(null)}
-              className="mt-2 text-red-600 text-sm hover:underline"
-            >
-              Dismiss
-            </button>
-          </div>
-        )}
+    <AppShell title="Wallet security" subtitle="Default-deny, enforced in hardware">
+      <div className="stagger flex flex-col gap-3.5">
+        <Card className="flex items-start gap-3">
+          <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)]">
+            <Lock className="h-5 w-5 text-mint" />
+          </span>
+          <p className="text-[13px] leading-relaxed text-mut">
+            Your wallet&apos;s keys live in a trusted execution environment (TEE). Every
+            transaction is checked against the policy below <em>before</em> signing — FxAeon
+            itself can&apos;t bypass it.
+          </p>
+        </Card>
 
-      <div className="flex items-center gap-2 mb-4">
-        <Shield className="w-6 h-6 text-primary" />
-        <h1 className="text-xl font-bold">Automation Policy</h1>
+        {RULES.map((r) => (
+          <Card key={r.title} className="flex items-start gap-3">
+            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--mint-dim)]">
+              <Check className="h-4 w-4 text-mint" strokeWidth={2.5} />
+            </span>
+            <span>
+              <p className="text-[14px] font-medium">{r.title}</p>
+              <p className="mt-0.5 text-[12.5px] leading-relaxed text-mut">{r.body}</p>
+            </span>
+          </Card>
+        ))}
+
+        <Card className="flex items-start gap-2.5 border-[rgba(46,230,168,0.25)]">
+          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-mint" />
+          <p className="text-[12.5px] leading-relaxed text-mut">
+            The policy is attached automatically when your wallet is created and is enforced on
+            every action. Check <span className="font-mono text-mint">/security</span> in the bot
+            for your wallet&apos;s live policy status.
+          </p>
+        </Card>
       </div>
-
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
-        <div className="flex items-start gap-2">
-          <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5" />
-          <div className="text-sm text-yellow-800">
-            <p className="font-medium">Trustless Automation</p>
-            <p>This policy runs inside Privy&apos;s TEE. You can revoke it anytime.</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-gray-50 rounded-lg p-4 mb-4 overflow-auto max-h-64">
-        <pre className="text-xs text-gray-700">{safeJSONStringify(POLICY, null, 2)}</pre>
-      </div>
-
-      <div className="space-y-2 mb-6">
-        <div className="flex items-center gap-2 text-sm">
-          <Check className="w-4 h-4 text-green-500" />
-          <span>Only f(x) Router calls allowed</span>
-        </div>
-        <div className="flex items-center gap-2 text-sm">
-          <Check className="w-4 h-4 text-green-500" />
-          <span>Only fxSAVE harvest allowed</span>
-        </div>
-        <div className="flex items-center gap-2 text-sm">
-          <Check className="w-4 h-4 text-green-500" />
-          <span>Only f(x) Limit Order EIP-712 signing</span>
-        </div>
-        <div className="flex items-center gap-2 text-sm">
-          <Check className="w-4 h-4 text-green-500" />
-          <span>Everything else DENIED by default</span>
-        </div>
-      </div>
-
-      <button type="button" onClick={handleSign}
-        disabled={signed}
-        className="w-full bg-primary text-white py-3 rounded-lg font-medium hover:bg-primary/90 disabled:opacity-50"
-      >
-        {signed ? 'Signed ✓' : 'Sign Policy'}
-      </button>
-    </div>
+    </AppShell>
   );
 }

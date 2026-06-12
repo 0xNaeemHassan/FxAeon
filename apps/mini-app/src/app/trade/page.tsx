@@ -1,212 +1,209 @@
 'use client';
 
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+/**
+ * Trade builder — pick market, side, leverage and size, then confirm in the
+ * bot chat. The Mini App NEVER executes trades itself (kill-switch, see
+ * docs/audit/AUDIT.md P0-2): the deep link carries unsigned params (`tq_*`),
+ * and the bot re-validates, signs and shows an inline Confirm/Cancel preview
+ * before anything touches the chain.
+ */
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { Suspense } from 'react';
-import { ArrowLeft, TrendingUp, TrendingDown, AlertTriangle, Check } from 'lucide-react';
-import { getWebApp, isTMA, showMainButton } from '@/lib/telegram';
+import { TrendingUp, TrendingDown, ArrowRight, ShieldCheck } from 'lucide-react';
+import { getWebApp, haptic, isTMA, showMainButton } from '@/lib/telegram';
 import { RISK_PARAMS } from '@fxbot/shared';
+import { AppShell, Button, Card, FullScreenSpinner, SectionTitle } from '@/components/ui';
 
 const MARKET_INDEX: Record<string, number> = { wstETH: 0, WBTC: 1 };
-const BOT_USERNAME = process.env.NEXT_PUBLIC_BOT_USERNAME || 'FxAeonBot';
+const MARKETS = Object.keys(MARKET_INDEX);
+const BOT_USERNAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || 'FxAeonBot';
 
-/**
- * W-17: the Mini App never executes trades itself (see EXECUTION_LIVE
- * kill-switch below). Confirmation happens in the bot chat: this deep link
- * carries the params (`tq_*`, unsigned — the bot re-validates and re-signs
- * them server-side) and opens a signed preview with inline Confirm/Cancel.
- */
-function buildBotDeepLink(market: string, side: string, leverage: number, amount: string): string | null {
+function buildBotDeepLink(
+  market: string,
+  side: string,
+  leverage: number,
+  amount: number
+): string | null {
   const mIdx = MARKET_INDEX[market];
-  const amt = parseFloat(amount);
-  if (mIdx === undefined || !Number.isFinite(leverage) || !(amt > 0)) return null;
-  const payload = `tq_${mIdx}_${side === 'short' ? 's' : 'l'}_${Math.round(leverage * 10)}_${Math.round(amt * 1e6)}`;
+  if (mIdx === undefined || !Number.isFinite(leverage) || !(amount > 0)) return null;
+  const payload = `tq_${mIdx}_${side === 'short' ? 's' : 'l'}_${Math.round(leverage * 10)}_${Math.round(amount * 1e6)}`;
   return `https://t.me/${BOT_USERNAME}?start=${payload}`;
 }
 
-function TradePageContent() {
-  const { ready } = usePrivy();
-  const { wallets } = useWallets();
+function TradeContent() {
   const searchParams = useSearchParams();
-  
-  const market = searchParams.get('market') || 'wstETH';
-  const side = searchParams.get('side') || 'long';
-  const leverage = parseFloat(searchParams.get('lev') || '3');
-  const amount = searchParams.get('amt') || '1';
-  
-  const [step] = useState(1); // 1: confirm, 2: simulating, 3: signing, 4: done
-  const [error] = useState('');
-  const [txHash] = useState('');
 
-  const wallet = wallets[0];
+  const [market, setMarket] = useState(
+    MARKET_INDEX[searchParams.get('market') ?? ''] !== undefined
+      ? (searchParams.get('market') as string)
+      : 'wstETH'
+  );
+  const [side, setSide] = useState<'long' | 'short'>(
+    searchParams.get('side') === 'short' ? 'short' : 'long'
+  );
+  const [leverage, setLeverage] = useState(() => {
+    const v = parseFloat(searchParams.get('lev') || '3');
+    return Number.isFinite(v) ? v : 3;
+  });
+  const [amount, setAmount] = useState(searchParams.get('amt') || '');
+
   const isLong = side === 'long';
-  // P3: leverage caps come from @fxbot/shared — single source of truth with
-  // the bot's validation (was hardcoded 1.1/7/3 here and could drift).
   const maxLev = isLong ? RISK_PARAMS.MAX_LEVERAGE_LONG : RISK_PARAMS.MAX_LEVERAGE_SHORT;
-  const isValid = leverage >= RISK_PARAMS.MIN_LEVERAGE && leverage <= maxLev;
+  const minLev = RISK_PARAMS.MIN_LEVERAGE;
 
-  // SAFETY KILL-SWITCH (see docs/audit/AUDIT.md P0-2):
-  // The previous implementation broadcast an empty-calldata transaction to the
-  // Router (user pays gas for a no-op) and reported a fake success back to the
-  // bot. Execution stays disabled until real fx-sdk calldata + a passing
-  // simulateContract gate exist (PLAN.md W-07). Do not re-enable without both.
-  const EXECUTION_LIVE = false;
+  // Side switches can lower the cap — clamp instead of erroring.
+  useEffect(() => {
+    setLeverage((l) => Math.min(Math.max(l, minLev), maxLev));
+  }, [maxLev, minLev]);
 
-  // W-17: native MainButton confirm — opens the bot chat with a deep link;
-  // the bot renders a signed preview and executes server-side on Confirm.
-  const deepLink = isValid ? buildBotDeepLink(market, side, leverage, amount) : null;
+  const amt = parseFloat(amount);
+  const valid = Number.isFinite(amt) && amt > 0 && leverage >= minLev && leverage <= maxLev;
+  const deepLink = useMemo(
+    () => (valid ? buildBotDeepLink(market, side, leverage, amt) : null),
+    [valid, market, side, leverage, amt]
+  );
+
   const openInBot = () => {
     if (!deepLink) return;
+    haptic('success');
     const tg = getWebApp();
     if (tg?.openTelegramLink) {
       tg.openTelegramLink(deepLink);
       tg.close();
     } else {
-      window.open(deepLink, '_blank', 'noopener');
+      window.open(deepLink, '_blank');
     }
   };
 
+  // Native MainButton mirrors the confirm CTA inside Telegram.
   useEffect(() => {
-    if (!isTMA() || !deepLink) return;
-    return showMainButton('Confirm in Telegram', openInBot);
+    if (!isTMA() || !valid) return;
+    return showMainButton(`Review ${leverage}x ${side} in chat`, openInBot);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deepLink]);
+  }, [valid, leverage, side, market, amount]);
 
-  if (!ready) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
-      </div>
-    );
-  }
+  const fill = ((leverage - minLev) / (maxLev - minLev)) * 100;
+  const exposure = valid ? (amt * leverage).toLocaleString('en-US', { maximumFractionDigits: 4 }) : null;
 
   return (
-    <div className="flex min-h-screen flex-col p-4 bg-gray-50 dark:bg-slate-900">
-      <button type="button" onClick={() => window.history.back()} 
-        className="flex items-center text-gray-600 dark:text-gray-400 mb-4"
-      >
-        <ArrowLeft className="w-5 h-5 mr-1" /> Back
-      </button>
-
-      <div className="card p-4 mb-4">
-        <div className="flex items-center justify-between mb-3">
-          <h1 className="text-xl font-bold">{isLong ? 'Open Long' : 'Open Short'}</h1>
-          <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-            isLong ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-          }`}>
-            {isLong ? <TrendingUp className="w-4 h-4 inline mr-1" /> : <TrendingDown className="w-4 h-4 inline mr-1" />}
-            {side.toUpperCase()}
-          </div>
+    <AppShell title="Trade" subtitle="Leveraged positions on f(x) Protocol">
+      <div className="stagger flex flex-col gap-3.5">
+        {/* Market */}
+        <div className="grid grid-cols-2 gap-2.5">
+          {MARKETS.map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => {
+                haptic('selection');
+                setMarket(m);
+              }}
+              className={`glass glass-press p-4 text-left ${
+                market === m ? 'border-[rgba(46,230,168,0.45)] bg-[var(--mint-dim)]' : ''
+              }`}
+            >
+              <p className="text-display text-[17px] font-semibold">{m}</p>
+              <p className="mt-0.5 text-[11px] text-mut">
+                up to {m === market && !isLong ? RISK_PARAMS.MAX_LEVERAGE_SHORT : RISK_PARAMS.MAX_LEVERAGE_LONG}x
+              </p>
+            </button>
+          ))}
         </div>
 
-        <div className="space-y-3">
-          <div className="flex justify-between py-2 border-b border-gray-100 dark:border-slate-700">
-            <span className="text-gray-600 dark:text-gray-400">Market</span>
-            <span className="font-medium">{market}</span>
-          </div>
-          <div className="flex justify-between py-2 border-b border-gray-100 dark:border-slate-700">
-            <span className="text-gray-600 dark:text-gray-400">Leverage</span>
-            <span className="font-medium">{leverage}x</span>
-          </div>
-          <div className="flex justify-between py-2 border-b border-gray-100 dark:border-slate-700">
-            <span className="text-gray-600 dark:text-gray-400">Collateral</span>
-            <span className="font-medium">{amount} {market}</span>
-          </div>
-          <div className="flex justify-between py-2 border-b border-gray-100 dark:border-slate-700">
-            <span className="text-gray-600 dark:text-gray-400">Wallet</span>
-            <span className="font-mono text-sm">
-              {wallet?.address
-                ? `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`
-                : 'Not connected'}
+        {/* Side */}
+        <div className="glass flex gap-1 p-1">
+          {(['long', 'short'] as const).map((s) => {
+            const active = side === s;
+            const Icon = s === 'long' ? TrendingUp : TrendingDown;
+            return (
+              <button
+                key={s}
+                type="button"
+                onClick={() => {
+                  haptic('selection');
+                  setSide(s);
+                }}
+                className={`glass-press flex flex-1 items-center justify-center gap-1.5 rounded-2xl py-2.5 text-[14px] font-medium capitalize transition-colors ${
+                  active
+                    ? s === 'long'
+                      ? 'bg-[var(--mint-dim)] text-mint'
+                      : 'bg-[rgba(255,107,107,0.12)] text-danger'
+                    : 'text-mut'
+                }`}
+              >
+                <Icon className="h-4 w-4" /> {s}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Leverage */}
+        <Card>
+          <div className="flex items-baseline justify-between">
+            <span className="text-[12px] uppercase tracking-wide text-mut">Leverage</span>
+            <span className="text-display text-[24px] font-semibold text-gradient">
+              {leverage.toFixed(1)}x
             </span>
           </div>
-        </div>
-      </div>
-
-      {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 mb-4">
-          <div className="flex items-start gap-2">
-            <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
-            <div>
-              <p className="text-sm font-medium text-red-700 dark:text-red-400">Error</p>
-              <p className="text-sm text-red-600 dark:text-red-300">{error}</p>
-            </div>
+          <input
+            type="range"
+            className="lever mt-4"
+            min={minLev}
+            max={maxLev}
+            step={0.1}
+            value={leverage}
+            style={{ ['--fill' as string]: `${fill}%` }}
+            onChange={(e) => {
+              haptic('selection');
+              setLeverage(parseFloat(e.target.value));
+            }}
+          />
+          <div className="mt-1.5 flex justify-between text-[11px] text-mut">
+            <span>{minLev}x</span>
+            <span>{maxLev}x max ({side})</span>
           </div>
-        </div>
-      )}
+        </Card>
 
-      {!isValid && (
-        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 mb-4">
-          <p className="text-sm text-yellow-700 dark:text-yellow-400">
-            <AlertTriangle className="w-4 h-4 inline mr-1" />
-            Leverage must be between {RISK_PARAMS.MIN_LEVERAGE}x and {maxLev}x for {side}
-          </p>
-        </div>
-      )}
-
-      {!wallet && (
-        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 mb-4">
-          <p className="text-sm text-yellow-700 dark:text-yellow-400">
-            <AlertTriangle className="w-4 h-4 inline mr-1" />
-            No wallet connected. Please log in first.
-          </p>
-        </div>
-      )}
-
-      {step === 1 && (
-        <>
-          {!EXECUTION_LIVE && (
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-4">
-              <p className="text-sm text-blue-700 dark:text-blue-400">
-                <AlertTriangle className="w-4 h-4 inline mr-1" />
-                Trades execute in the bot chat — simulation-gated, nothing is
-                sent from this page. Tap below to review and confirm.
-              </p>
-            </div>
+        {/* Amount */}
+        <Card>
+          <label htmlFor="amt" className="text-[12px] uppercase tracking-wide text-mut">
+            Collateral ({market})
+          </label>
+          <div className="mt-2 flex items-center gap-2">
+            <input
+              id="amt"
+              inputMode="decimal"
+              placeholder="0.0"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+              className="text-display w-full bg-transparent text-[28px] font-semibold outline-none placeholder:text-[rgba(255,255,255,0.18)]"
+            />
+            <span className="text-[13px] font-medium text-mut">{market}</span>
+          </div>
+          {exposure && (
+            <p className="mt-2 text-[12px] text-mut">
+              Total exposure ≈ <span className="text-mint">{exposure} {market}</span>
+            </p>
           )}
-          <button type="button"
-            onClick={openInBot}
-            disabled={!deepLink}
-            className="w-full btn-touch bg-primary text-white py-3 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Confirm in Telegram
-          </button>
-        </>
-      )}
+        </Card>
 
-      {(step === 2 || step === 3) && (
-        <div className="text-center py-4">
-          <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-2" />
-          <p className="text-gray-600 dark:text-gray-400">
-            {step === 2 ? 'Preparing transaction...' : 'Waiting for signature...'}
-          </p>
-        </div>
-      )}
-
-      {step === 4 && (
-        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 text-center">
-          <Check className="w-8 h-8 text-green-500 mx-auto mb-2" />
-          <p className="text-green-700 dark:text-green-400 font-medium">Transaction Submitted!</p>
-          <p className="text-sm text-green-600 dark:text-green-300 mt-1 break-all font-mono">{txHash}</p>
-          <a 
-            href={`https://etherscan.io/tx/${txHash}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-2 text-sm text-green-700 dark:text-green-400 underline inline-block"
-          >
-            View on Etherscan ↗
-          </a>
-        </div>
-      )}
-    </div>
+        {/* Confirm */}
+        <Button onClick={openInBot} disabled={!valid} className="mt-1">
+          Review &amp; confirm in chat <ArrowRight className="h-4 w-4" />
+        </Button>
+        <p className="flex items-center justify-center gap-1.5 text-center text-[11.5px] text-mut">
+          <ShieldCheck className="h-3.5 w-3.5 text-mint" />
+          The bot shows a signed preview — nothing executes until you confirm there.
+        </p>
+      </div>
+    </AppShell>
   );
 }
 
 export default function TradePage() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>}>
-      <TradePageContent />
+    <Suspense fallback={<FullScreenSpinner />}>
+      <TradeContent />
     </Suspense>
   );
 }

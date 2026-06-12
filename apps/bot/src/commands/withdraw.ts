@@ -22,19 +22,14 @@ export async function withdrawCommand(ctx: Context) {
   }
 
   const [amount, address, token = "ETH"] = args;
-  const miniAppUrl = process.env.MINI_APP_URL || "https://fxbot-mini-app.pages.dev";
   await ctx.reply(
     `📤 *Withdraw*\n\n` +
     `Amount: ${amount} ${token}\n` +
     `To: \`${address}\`\n\n` +
-    `Tap to confirm:`,
-    {
-      parse_mode: "Markdown",
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "✅ Confirm Withdraw", web_app: { url: `${miniAppUrl}/withdraw?amount=${amount}&to=${address}&token=${token}` } }],
-        ],
-      },
-    }
+    `
+
+⚠️ On-chain execution for this action is not live yet — the confirm step was removed because it led to a dead screen. It will return when the f(x) SDK integration ships.
+Live today: /trade (leveraged positions), /portfolio, /deposit.`,
+    { parse_mode: "Markdown" }
   );
 }

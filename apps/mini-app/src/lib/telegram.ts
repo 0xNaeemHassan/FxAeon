@@ -37,6 +37,8 @@ interface TgMainButton extends TgButton {
 
 export interface TgWebApp {
   initData: string;
+  /** 'android' | 'ios' | 'tdesktop' | ... — 'unknown' outside Telegram. */
+  platform: string;
   colorScheme: 'light' | 'dark';
   themeParams: TgThemeParams;
   viewportStableHeight: number;
@@ -63,9 +65,34 @@ export function getWebApp(): TgWebApp | null {
   return (window as any).Telegram?.WebApp ?? null;
 }
 
-/** True when running inside Telegram (initData present). */
+/**
+ * True when running inside Telegram.
+ *
+ * IMPORTANT (this was the root cause of the broken onboarding loop):
+ * keyboard-button Mini App launches — the ONLY launches where sendData()
+ * works — receive an EMPTY initData. Detecting Telegram via initData
+ * therefore fails exactly when it matters most. The platform field is
+ * 'unknown' outside Telegram and a real value inside, for every launch type.
+ */
 export function isTMA(): boolean {
-  return Boolean(getWebApp()?.initData);
+  const tg = getWebApp();
+  if (!tg) return false;
+  return Boolean(tg.initData) || (Boolean(tg.platform) && tg.platform !== 'unknown');
+}
+
+/**
+ * True when this launch can use WebApp.sendData() (keyboard-button launches:
+ * inside Telegram with empty initData). Inline/menu/direct launches must use
+ * the authenticated bot API instead.
+ */
+export function canSendData(): boolean {
+  const tg = getWebApp();
+  return Boolean(tg) && isTMA() && !tg!.initData;
+}
+
+/** Signed initData for API auth — empty string for keyboard launches. */
+export function getInitData(): string {
+  return getWebApp()?.initData ?? '';
 }
 
 /** Signal readiness + expand to full height. Safe to call repeatedly. */

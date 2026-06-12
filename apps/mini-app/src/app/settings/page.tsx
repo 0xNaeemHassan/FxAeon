@@ -1,10 +1,18 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+/**
+ * Settings — loads the user's REAL preferences from the bot and saves them
+ * back through the authenticated API. (The old screen kept everything in
+ * local state and "saved" via a sendData payload the bot rejected — a dead
+ * button by design.)
+ */
+import { useEffect, useState } from 'react';
+import { Globe, Sliders, Shield, Check, PlugZap, Send } from 'lucide-react';
+import { isTMA, getInitData, haptic } from '@/lib/telegram';
+import { apiConfigured, getMe, saveSettings } from '@/lib/api';
+import { AppShell, Button, Card, EmptyState, SectionTitle, Skeleton } from '@/components/ui';
 
-import { usePrivy } from '@privy-io/react-auth';
-import { useState } from 'react';
-import { ArrowLeft, Globe, Sliders, Shield, Zap, Bell, Key } from 'lucide-react';
+const BOT_USERNAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || 'FxAeonBot';
 
 const LANGUAGES = [
   { code: 'en', name: 'English' },
@@ -15,212 +23,210 @@ const LANGUAGES = [
   { code: 'es', name: 'Español' },
 ];
 
-export default function SettingsPage() {
-  const router = useRouter();
-  const { user, logout } = usePrivy();
-  const [error, setError] = useState<string | null>(null);
-  const [lang, setLang] = useState('en');
-  const [slippage, setSlippage] = useState(0.5);
-  const [mevProtection, setMevProtection] = useState(false);
-  const [notifications, setNotifications] = useState({
-    tx: true,
-    orders: true,
-    health: true,
-    rewards: false,
-    governance: false,
-    rules: true,
-  });
-  const [byokKey, setByokKey] = useState('');
-  const [showByok, setShowByok] = useState(false);
+const SLIPPAGE_PRESETS = [10, 50, 100, 200]; // bps
 
-  const handleSave = () => {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.sendData(JSON.stringify({
-        type: 'settings_updated',
-        language: lang,
-        slippage,
-        mevProtection,
-        notifications,
-      }));
+export default function SettingsPage() {
+  const [mounted, setMounted] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [lang, setLang] = useState('en');
+  const [slippageBps, setSlippageBps] = useState(50);
+  const [mev, setMev] = useState<'on' | 'off'>('off');
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    if (!isTMA() || !getInitData() || !apiConfigured()) {
+      setLoading(false);
+      return;
+    }
+    getMe()
+      .then((me) => {
+        if (me.onboarded) {
+          setLang(me.language ?? 'en');
+          setSlippageBps(me.slippageBps ?? 50);
+          setMev((me.mevProtection as 'on' | 'off') ?? 'off');
+        }
+      })
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [mounted]);
+
+  const save = async () => {
+    setSaving(true);
+    setError('');
+    try {
+      await saveSettings({ language: lang, slippageBps, mevProtection: mev });
+      haptic('success');
+      setDirty(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2200);
+    } catch (e) {
+      haptic('error');
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
     }
   };
 
-  return (
-    <div className="flex min-h-screen flex-col p-4 bg-gray-50">
-        {/* Error Display */}
-        {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-700 text-sm">{error}</p>
-            <button type="button"
-              onClick={() => setError(null)}
-              className="mt-2 text-red-600 text-sm hover:underline"
-            >
-              Dismiss
-            </button>
-          </div>
-        )}
+  const touch = () => {
+    setDirty(true);
+    setSaved(false);
+  };
 
-      <button type="button" onClick={() => { window.Telegram?.WebApp?.initData ? window.Telegram.WebApp.close() : router.back(); }} 
-        className="flex items-center text-gray-600 mb-4"
-      >
-        <ArrowLeft className="w-5 h-5 mr-1" /> Back
-      </button>
+  if (!mounted) return <AppShell title="Settings">{null}</AppShell>;
 
-      <h1 className="text-xl font-bold mb-4">Settings</h1>
+  if (!isTMA()) {
+    return (
+      <AppShell title="Settings" tabs={false}>
+        <EmptyState
+          icon={Send}
+          title="Open FxAeon in Telegram"
+          body="Settings sync with your bot account."
+          action={
+            <a href={`https://t.me/${BOT_USERNAME}`}>
+              <Button>Open @{BOT_USERNAME}</Button>
+            </a>
+          }
+        />
+      </AppShell>
+    );
+  }
 
-      {/* Language */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-3">
-        <div className="flex items-center gap-2 mb-3">
-          <Globe className="w-5 h-5 text-primary" />
-          <h2 className="font-medium">Language</h2>
+  if (!getInitData() || !apiConfigured()) {
+    return (
+      <AppShell title="Settings">
+        <EmptyState
+          icon={PlugZap}
+          title="Settings can’t sync from this screen"
+          body={
+            !getInitData()
+              ? 'This launch type doesn’t carry Telegram credentials. Use /settings in the chat instead.'
+              : 'This build isn’t connected to the trading backend yet. Use /settings in the chat instead.'
+          }
+        />
+      </AppShell>
+    );
+  }
+
+  if (loading) {
+    return (
+      <AppShell title="Settings">
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-40" />
+          <Skeleton className="h-28" />
+          <Skeleton className="h-20" />
         </div>
-        <div className="grid grid-cols-2 gap-2">
+      </AppShell>
+    );
+  }
+
+  return (
+    <AppShell title="Settings" subtitle="Synced with your bot account">
+      <div className="stagger flex flex-col">
+        <SectionTitle>
+          <span className="flex items-center gap-1.5">
+            <Globe className="h-3.5 w-3.5" /> Language
+          </span>
+        </SectionTitle>
+        <div className="grid grid-cols-3 gap-2">
           {LANGUAGES.map((l) => (
-            <button type="button" key={l.code}
-              onClick={() => setLang(l.code)}
-              className={`p-2 rounded-lg text-sm font-medium transition-colors ${
-                lang === l.code
-                  ? 'bg-primary text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            <button
+              key={l.code}
+              type="button"
+              onClick={() => {
+                haptic('selection');
+                setLang(l.code);
+                touch();
+              }}
+              className={`glass glass-press rounded-2xl px-2 py-2.5 text-[13px] ${
+                lang === l.code ? 'border-[rgba(46,230,168,0.45)] bg-[var(--mint-dim)] text-mint' : 'text-mut'
               }`}
             >
               {l.name}
             </button>
           ))}
         </div>
-      </div>
 
-      {/* Slippage */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-3">
-        <div className="flex items-center gap-2 mb-3">
-          <Sliders className="w-5 h-5 text-primary" />
-          <h2 className="font-medium">Slippage Tolerance</h2>
-        </div>
-        <div className="flex gap-2 mb-2">
-          {[0.1, 0.5, 1.0, 2.0].map((s) => (
-            <button type="button" key={s}
-              onClick={() => setSlippage(s)}
-              className={`flex-1 p-2 rounded-lg text-sm font-medium transition-colors ${
-                slippage === s
-                  ? 'bg-primary text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+        <SectionTitle>
+          <span className="flex items-center gap-1.5">
+            <Sliders className="h-3.5 w-3.5" /> Max slippage
+          </span>
+        </SectionTitle>
+        <div className="grid grid-cols-4 gap-2">
+          {SLIPPAGE_PRESETS.map((bps) => (
+            <button
+              key={bps}
+              type="button"
+              onClick={() => {
+                haptic('selection');
+                setSlippageBps(bps);
+                touch();
+              }}
+              className={`glass glass-press rounded-2xl py-2.5 text-[13px] font-medium ${
+                slippageBps === bps
+                  ? 'border-[rgba(46,230,168,0.45)] bg-[var(--mint-dim)] text-mint'
+                  : 'text-mut'
               }`}
             >
-              {s}%
+              {(bps / 100).toFixed(bps % 100 === 0 ? 0 : 1)}%
             </button>
           ))}
         </div>
-        <input
-          type="range"
-          min="0.1"
-          max="2.0"
-          step="0.1"
-          value={slippage}
-          onChange={(e) => setSlippage(parseFloat(e.target.value))}
-          className="w-full"
-        />
-        <p className="text-xs text-gray-500 mt-1">Current: {slippage}%</p>
-      </div>
 
-      {/* MEV Protection */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-3">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <Zap className="w-5 h-5 text-yellow-500" />
-            <h2 className="font-medium">MEV Protection</h2>
+        <SectionTitle>
+          <span className="flex items-center gap-1.5">
+            <Shield className="h-3.5 w-3.5" /> MEV protection
+          </span>
+        </SectionTitle>
+        <Card className="flex items-center justify-between">
+          <div>
+            <p className="text-[14px] font-medium">Private transactions</p>
+            <p className="mt-0.5 text-[12px] text-mut">Route through a private relay</p>
           </div>
-          <button type="button" onClick={() => setMevProtection(!mevProtection)}
-            className={`relative w-12 h-6 rounded-full transition-colors ${
-              mevProtection ? 'bg-green-500' : 'bg-gray-300'
+          <button
+            type="button"
+            role="switch"
+            aria-checked={mev === 'on'}
+            onClick={() => {
+              haptic('selection');
+              setMev(mev === 'on' ? 'off' : 'on');
+              touch();
+            }}
+            className={`relative h-7 w-12 rounded-full transition-colors ${
+              mev === 'on' ? 'bg-mint' : 'bg-[rgba(255,255,255,0.12)]'
             }`}
           >
-            <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
-              mevProtection ? 'translate-x-7' : 'translate-x-1'
-            }`} />
-          </button>
-        </div>
-        <p className="text-xs text-gray-500">
-          {mevProtection 
-            ? 'Flashbots Protect enabled. Slower but sandwich-protected.' 
-            : 'Default public mempool. Faster but exposed to MEV.'}
-        </p>
-      </div>
-
-      {/* Notifications */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-3">
-        <div className="flex items-center gap-2 mb-3">
-          <Bell className="w-5 h-5 text-primary" />
-          <h2 className="font-medium">Notifications</h2>
-        </div>
-        <div className="space-y-2">
-          {Object.entries(notifications).map(([key, value]) => (
-            <div key={key} className="flex items-center justify-between">
-              <span className="text-sm capitalize">{key.replace('_', ' ')}</span>
-              <button type="button" onClick={() => setNotifications(prev => ({ ...prev, [key]: !value }))}
-                className={`relative w-10 h-5 rounded-full transition-colors ${
-                  value ? 'bg-green-500' : 'bg-gray-300'
-                }`}
-              >
-                <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
-                  value ? 'translate-x-5' : 'translate-x-0.5'
-                }`} />
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* BYOK */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-3">
-        <div className="flex items-center gap-2 mb-3">
-          <Key className="w-5 h-5 text-primary" />
-          <h2 className="font-medium">AI Provider (BYOK)</h2>
-        </div>
-        <button type="button" onClick={() => setShowByok(!showByok)}
-          className="text-sm text-primary underline mb-2"
-        >
-          {showByok ? 'Hide' : 'Add your own API key'}
-        </button>
-        {showByok && (
-          <div className="space-y-2">
-            <input
-              type="password"
-              placeholder="OpenAI / Anthropic / Surplus key"
-              value={byokKey}
-              onChange={(e) => setByokKey(e.target.value)}
-              className="w-full p-2 border border-gray-200 rounded-lg text-sm"
+            <span
+              className={`absolute top-0.5 h-6 w-6 rounded-full bg-white transition-transform ${
+                mev === 'on' ? 'translate-x-[22px]' : 'translate-x-0.5'
+              }`}
             />
-            <p className="text-xs text-gray-500">
-              Encrypted with libsodium. Never logged or shared.
-            </p>
-          </div>
+          </button>
+        </Card>
+
+        {error && (
+          <Card className="mt-4 border-[rgba(255,107,107,0.35)]">
+            <p className="text-[13px] text-danger">{error}</p>
+          </Card>
         )}
-      </div>
 
-      {/* Security */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Shield className="w-5 h-5 text-primary" />
-          <h2 className="font-medium">Security</h2>
+        <div className="mt-6">
+          <Button onClick={save} disabled={!dirty} loading={saving}>
+            {saved ? (
+              <>
+                <Check className="h-4 w-4" /> Saved
+              </>
+            ) : (
+              'Save changes'
+            )}
+          </Button>
         </div>
-        <div className="space-y-2 text-sm">
-          <p className="text-gray-600">Wallet: {user?.wallet?.address?.slice(0, 6)}...{user?.wallet?.address?.slice(-4)}</p>
-          <p className="text-gray-600">Auth: Telegram + Privy TEE</p>
-          <p className="text-gray-600">Daily tx cap: 50</p>
-        </div>
       </div>
-
-      <button type="button" onClick={handleSave}
-        className="w-full bg-primary text-white py-3 rounded-lg font-medium hover:bg-primary/90 mb-3"
-      >
-        Save Settings
-      </button>
-
-      <button type="button" onClick={logout}
-        className="w-full bg-red-50 text-red-600 py-3 rounded-lg font-medium hover:bg-red-100"
-      >
-        Disconnect Wallet
-      </button>
-    </div>
+    </AppShell>
   );
 }

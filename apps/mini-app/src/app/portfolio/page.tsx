@@ -1,196 +1,294 @@
 'use client';
 
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+/**
+ * Home — the user's real account state, served by the authenticated bot API.
+ * No placeholder numbers: every value on this screen is read from the chain
+ * or the bot's database, and every state has a next step.
+ */
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
-import { ArrowLeft, TrendingUp, TrendingDown, AlertTriangle, Shield, Wallet } from 'lucide-react';
+import {
+  Wallet,
+  QrCode,
+  CandlestickChart,
+  ShieldCheck,
+  RefreshCw,
+  Send,
+  PlugZap,
+  LineChart,
+} from 'lucide-react';
+import { isTMA, getInitData } from '@/lib/telegram';
+import { apiConfigured, getMe, Me, ApiPosition } from '@/lib/api';
+import {
+  AppShell,
+  AddressChip,
+  ActionTile,
+  Button,
+  Card,
+  EmptyState,
+  SectionTitle,
+  Skeleton,
+  Stat,
+} from '@/components/ui';
 
-interface Position {
-  tokenId: string;
-  market: string;
-  side: 'long' | 'short';
-  collateral: string;
-  debt: string;
-  leverage: number;
-  healthPercent: number;
-  liquidationPrice: number;
+const BOT_USERNAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || 'FxAeonBot';
+
+function fmt(value?: string): string {
+  if (value === undefined) return '—';
+  const n = Number(value);
+  if (!Number.isFinite(n)) return value;
+  if (n === 0) return '0';
+  if (n < 0.0001) return '<0.0001';
+  return n.toLocaleString('en-US', { maximumFractionDigits: 4 });
+}
+
+function PositionCard({ p }: { p: ApiPosition }) {
+  const long = p.side === 'long';
+  const healthTone =
+    p.healthPercent >= 0.5 ? 'text-mint' : p.healthPercent >= 0.25 ? 'text-warn' : 'text-danger';
+  return (
+    <Card className="glass-press">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <span
+            className={`rounded-lg px-2 py-0.5 text-[11px] font-semibold uppercase ${
+              long ? 'bg-[var(--mint-dim)] text-mint' : 'bg-[rgba(255,107,107,0.12)] text-danger'
+            }`}
+          >
+            {p.side}
+          </span>
+          <span className="text-display text-[16px] font-semibold">{p.market}</span>
+        </div>
+        <span className="text-display text-[15px] font-semibold text-gradient">
+          {p.leverage}x
+        </span>
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2 text-[12px]">
+        <div>
+          <p className="text-mut">Collateral</p>
+          <p className="mt-0.5 font-medium">{fmt(p.collateral)}</p>
+        </div>
+        <div>
+          <p className="text-mut">Liq. price</p>
+          <p className="mt-0.5 font-medium">${p.liquidationPrice.toLocaleString('en-US')}</p>
+        </div>
+        <div>
+          <p className="text-mut">Health</p>
+          <p className={`mt-0.5 font-medium ${healthTone}`}>
+            {Math.round(p.healthPercent * 100)}%
+          </p>
+        </div>
+      </div>
+    </Card>
+  );
 }
 
 export default function PortfolioPage() {
-  const { ready, authenticated } = usePrivy();
-  const { wallets } = useWallets();
   const router = useRouter();
-  const [positions, setPositions] = useState<Position[]>([]);
+  const [mounted, setMounted] = useState(false);
+  const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
-  const [fxSaveBalance, setFxSaveBalance] = useState('0.00');
-  const [fxnBalance, setFxnBalance] = useState('0.00');
+  const [error, setError] = useState('');
 
-  const wallet = wallets[0];
-
-  useEffect(() => {
-    if (ready && !authenticated) {
-      router.replace('/login');
-      return;
-    }
-  }, [ready, authenticated, router]);
-
-  useEffect(() => {
-    if (!wallet) {
-      setLoading(false);
-      return;
-    }
-    
-    const fetchData = async () => {
-      try {
-        // TODO: Replace with real fx-sdk calls when contracts are integrated
-        // For now show actual empty state — no mock data
-        setPositions([]);
-        setFxSaveBalance('0.00');
-        setFxnBalance('0.00');
-      } catch (e) {
-        console.error('Failed to fetch portfolio data:', e);
-      } finally {
-        setLoading(false);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await getMe();
+      if (!data.onboarded) {
+        router.replace('/login');
+        return;
       }
-    };
-    
-    fetchData();
-  }, [wallet]);
-
-  const handleBack = () => {
-    if (window.Telegram?.WebApp?.initData) {
-      window.Telegram.WebApp.close();
-    } else {
-      router.back();
+      setMe(data);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [router]);
 
-  const getHealthColor = (health: number) => {
-    if (health >= 0.95) return 'text-red-500';
-    if (health >= 0.85) return 'text-yellow-500';
-    return 'text-green-500';
-  };
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
-  const getHealthBg = (health: number) => {
-    if (health >= 0.95) return 'bg-red-50 border-red-200';
-    if (health >= 0.85) return 'bg-yellow-50 border-yellow-200';
-    return 'bg-green-50 border-green-200';
-  };
+  useEffect(() => {
+    if (!mounted) return;
+    if (isTMA() && getInitData() && apiConfigured()) void load();
+    else setLoading(false);
+  }, [mounted, load]);
 
-  if (!ready) {
+  if (!mounted) return <AppShell title="Portfolio">{null}</AppShell>;
+
+  // -- Honest degraded states (no fake zeros) ------------------------------
+  if (!isTMA()) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
-      </div>
+      <AppShell title="Portfolio" tabs={false}>
+        <EmptyState
+          icon={Send}
+          title="Open FxAeon in Telegram"
+          body="Your portfolio lives in the Telegram app."
+          action={
+            <a href={`https://t.me/${BOT_USERNAME}`}>
+              <Button>Open @{BOT_USERNAME}</Button>
+            </a>
+          }
+        />
+      </AppShell>
     );
   }
 
+  if (!getInitData() || !apiConfigured()) {
+    return (
+      <AppShell title="Portfolio">
+        <EmptyState
+          icon={PlugZap}
+          title="Live data isn’t available from this screen"
+          body={
+            !getInitData()
+              ? 'This launch type doesn’t carry Telegram credentials. Use /portfolio in the chat, or open the app from a bot button.'
+              : 'This build isn’t connected to the trading backend yet. Use /portfolio in the chat for live data.'
+          }
+        />
+      </AppShell>
+    );
+  }
+
+  if (loading) {
+    return (
+      <AppShell title="Portfolio">
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-36" />
+          <div className="grid grid-cols-3 gap-2.5">
+            <Skeleton className="h-20" />
+            <Skeleton className="h-20" />
+            <Skeleton className="h-20" />
+          </div>
+          <Skeleton className="h-24" />
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (error || !me) {
+    return (
+      <AppShell title="Portfolio">
+        <EmptyState
+          icon={RefreshCw}
+          title="Couldn’t load your account"
+          body={error || 'Unknown error'}
+          action={<Button onClick={() => void load()}>Retry</Button>}
+        />
+      </AppShell>
+    );
+  }
+
+  const funding = me.funding;
+  const positions = me.positions ?? [];
+  const noFunds =
+    funding?.known &&
+    Number(funding.eth ?? 0) === 0 &&
+    Number(funding.wstEth ?? 0) === 0 &&
+    Number(funding.wbtc ?? 0) === 0;
+
   return (
-    <div className="flex min-h-screen flex-col p-4 bg-gray-50 dark:bg-slate-900">
-      <button type="button" onClick={handleBack}
-        className="flex items-center text-gray-600 dark:text-gray-300 mb-4"
-      >
-        <ArrowLeft className="w-5 h-5 mr-1" /> Back
-      </button>
-
-      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-4 mb-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Wallet className="w-5 h-5 text-primary" />
-          <h1 className="text-xl font-bold dark:text-white">Portfolio</h1>
-        </div>
-        {wallet?.address ? (
-          <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">
-            {wallet.address.slice(0, 6)}...{wallet.address.slice(-4)}
-          </p>
-        ) : (
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            No wallet connected
-          </p>
-        )}
-      </div>
-
-      {/* Balances */}
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-3">
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">fxSAVE Balance</p>
-          <p className="text-lg font-bold text-primary">{fxSaveBalance} fxUSD</p>
-          <p className="text-xs text-green-600">~7.1% APY</p>
-        </div>
-        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-3">
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">FXN Balance</p>
-          <p className="text-lg font-bold dark:text-white">{fxnBalance} FXN</p>
-          <p className="text-xs text-gray-400">Governance token</p>
-        </div>
-      </div>
-
-      {/* Positions */}
-      <h2 className="font-medium text-gray-700 dark:text-gray-300 mb-2">Positions</h2>
-      
-      {loading ? (
-        <div className="text-center py-8">
-          <div className="animate-spin h-6 w-6 border-4 border-primary border-t-transparent rounded-full mx-auto mb-2" />
-          <p className="text-sm text-gray-500 dark:text-gray-400">Loading positions...</p>
-        </div>
-      ) : positions.length === 0 ? (
-        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-6 text-center">
-          <p className="text-gray-500 dark:text-gray-400 mb-2">No active positions</p>
-          <p className="text-sm text-gray-400 dark:text-gray-500">
-            Open a leveraged position on f(x) Protocol to get started
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {positions.map((pos) => (
-            <div key={pos.tokenId} className={`rounded-xl border p-4 ${getHealthBg(pos.healthPercent)}`}>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  {pos.side === 'long' ? (
-                    <TrendingUp className="w-5 h-5 text-green-600" />
-                  ) : (
-                    <TrendingDown className="w-5 h-5 text-red-600" />
-                  )}
-                  <span className="font-medium">{pos.market} {pos.side.toUpperCase()}</span>
-                </div>
-                <span className="text-sm font-bold">{pos.leverage}x</span>
-              </div>
-              
-              <div className="space-y-1 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Collateral</span>
-                  <span>{pos.collateral} ETH</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Debt</span>
-                  <span>{pos.debt} fxUSD</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Health</span>
-                  <span className={getHealthColor(pos.healthPercent)}>
-                    {(pos.healthPercent * 100).toFixed(1)}%
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Liquidation</span>
-                  <span className="text-red-500">${pos.liquidationPrice}</span>
-                </div>
-              </div>
-
-              {pos.healthPercent >= 0.85 && (
-                <div className="flex items-center gap-1 mt-2 text-xs text-red-600">
-                  <AlertTriangle className="w-4 h-4" />
-                  <span>Health warning — consider reducing leverage</span>
-                </div>
-              )}
+    <AppShell>
+      <div className="stagger flex flex-col">
+        {/* Wallet hero */}
+        <Card glow className="relative overflow-hidden p-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-[12px] text-mut">
+              <Wallet className="h-4 w-4 text-mint" />
+              Policy wallet
             </div>
-          ))}
-        </div>
-      )}
+            <span className="flex items-center gap-1 rounded-full bg-[var(--mint-dim)] px-2.5 py-1 text-[10.5px] font-medium text-mint">
+              <ShieldCheck className="h-3 w-3" /> default-deny
+            </span>
+          </div>
+          <div className="mt-4">
+            <AddressChip address={me.walletAddress!} />
+          </div>
+          {me.referralCode && (
+            <p className="mt-3 text-[11.5px] text-mut">
+              Referral code <span className="font-mono text-mint">{me.referralCode}</span>
+            </p>
+          )}
+        </Card>
 
-      {/* Security badge */}
-      <div className="mt-4 flex items-center justify-center gap-1 text-xs text-gray-400">
-        <Shield className="w-4 h-4" />
-        <span>Non-custodial · Keys in Privy TEE</span>
+        {/* Balances */}
+        <SectionTitle
+          right={
+            <button
+              type="button"
+              onClick={() => void load()}
+              className="text-mut transition-colors hover:text-mint"
+              aria-label="Refresh"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+            </button>
+          }
+        >
+          Balances
+        </SectionTitle>
+        {funding?.known ? (
+          <div className="grid grid-cols-3 gap-2.5">
+            <Stat label="ETH" value={fmt(funding.eth)} accent={Number(funding.eth) > 0} />
+            <Stat label="wstETH" value={fmt(funding.wstEth)} accent={Number(funding.wstEth) > 0} />
+            <Stat label="WBTC" value={fmt(funding.wbtc)} accent={Number(funding.wbtc) > 0} />
+          </div>
+        ) : (
+          <Card>
+            <p className="text-[12.5px] text-mut">
+              On-chain balances are temporarily unavailable (RPC). Pull to refresh or try again
+              shortly.
+            </p>
+          </Card>
+        )}
+        {noFunds && (
+          <Card className="mt-2.5 border-[rgba(46,230,168,0.25)]">
+            <p className="text-[13px] leading-relaxed">
+              <span className="font-medium text-mint">Fund your wallet to start trading.</span>{' '}
+              <span className="text-mut">
+                Send ETH, wstETH or WBTC to your address — then open your first position.
+              </span>
+            </p>
+            <div className="mt-3">
+              <ActionTile icon={QrCode} label="Show deposit address" href="/qr" />
+            </div>
+          </Card>
+        )}
+
+        {/* Positions */}
+        <SectionTitle>Positions</SectionTitle>
+        {positions.length > 0 ? (
+          <div className="flex flex-col gap-2.5">
+            {positions.map((p) => (
+              <PositionCard key={p.tokenId} p={p} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            icon={LineChart}
+            title="No open positions"
+            body="Open a leveraged wstETH or WBTC position — it takes about 30 seconds."
+            action={<Button onClick={() => router.push('/trade')}>Set up a trade</Button>}
+          />
+        )}
+
+        {/* Quick actions */}
+        <SectionTitle>Quick actions</SectionTitle>
+        <div className="grid grid-cols-2 gap-2.5">
+          <ActionTile icon={CandlestickChart} label="Trade" hint="Leverage up to 10x" href="/trade" />
+          <ActionTile icon={QrCode} label="Deposit" hint="ETH · wstETH · WBTC" href="/qr" />
+        </div>
+        <div className="mt-2.5">
+          <ActionTile
+            icon={ShieldCheck}
+            label="How your wallet is protected"
+            hint="Default-deny security policy"
+            href="/policy"
+          />
+        </div>
       </div>
-    </div>
+    </AppShell>
   );
 }

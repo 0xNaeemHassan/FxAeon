@@ -1,106 +1,123 @@
 'use client';
 
-import { useState } from 'react';
-import { Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+/**
+ * Deposit — the user's policy-wallet address as QR + copy. The address comes
+ * from the bot (?address=... on bot-launched buttons) or is fetched live via
+ * the authenticated API when opened from inside the app.
+ */
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
-import { Copy, Check, ArrowLeft } from 'lucide-react';
+import { Copy, Check, AlertTriangle, PlugZap } from 'lucide-react';
+import { isTMA, getInitData, haptic } from '@/lib/telegram';
+import { apiConfigured, getMe } from '@/lib/api';
+import { AppShell, Button, Card, EmptyState, FullScreenSpinner, Skeleton } from '@/components/ui';
 
-function QRPageContent() {
+const TOKENS = ['ETH', 'wstETH', 'WBTC', 'fxUSD'];
+
+function QRContent() {
   const searchParams = useSearchParams();
-  const router = useRouter();
-  const address = searchParams.get('address') || '';
+  const paramAddress = searchParams.get('address') || '';
+  const [address, setAddress] = useState(paramAddress);
+  const [loading, setLoading] = useState(!paramAddress);
   const [copied, setCopied] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [unavailable, setUnavailable] = useState('');
 
-  const copyAddress = async () => {
+  useEffect(() => {
+    if (paramAddress) return;
+    if (!isTMA() || !getInitData() || !apiConfigured()) {
+      setLoading(false);
+      setUnavailable(
+        'No wallet address was passed in. Use /deposit in the bot chat, or open this screen from a bot button.'
+      );
+      return;
+    }
+    getMe()
+      .then((me) => {
+        if (me.onboarded && me.walletAddress) setAddress(me.walletAddress);
+        else setUnavailable('No wallet yet — send /start to the bot to create one.');
+      })
+      .catch((e: Error) => setUnavailable(e.message))
+      .finally(() => setLoading(false));
+  }, [paramAddress]);
+
+  const copy = async () => {
     if (!address) return;
-    setIsLoading(true);
     try {
-      await navigator?.clipboard.writeText(address);
+      await navigator.clipboard.writeText(address);
+      haptic('success');
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      setError('Failed to copy address');
-    } finally {
-      setIsLoading(false);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      /* clipboard unavailable */
     }
   };
 
   return (
-    <div className="flex min-h-screen flex-col p-4">
-      {/* Error Display */}
-      {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <p className="text-red-700 text-sm">{error}</p>
-          <button
-            type="button"
-            onClick={() => setError(null)}
-            className="mt-2 text-red-600 text-sm hover:underline"
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
+    <AppShell title="Deposit" subtitle="Fund your policy wallet">
+      <div className="stagger flex flex-col gap-3.5">
+        {loading ? (
+          <Skeleton className="h-72" />
+        ) : address ? (
+          <>
+            <Card className="flex flex-col items-center gap-4 p-6">
+              <div className="anim-scale-in rounded-2xl bg-white p-3.5">
+                <QRCodeSVG value={address} size={208} level="M" />
+              </div>
+              <div className="flex flex-wrap justify-center gap-1.5">
+                {TOKENS.map((t) => (
+                  <span
+                    key={t}
+                    className="rounded-full bg-[var(--mint-dim)] px-2.5 py-1 text-[11px] font-medium text-mint"
+                  >
+                    {t}
+                  </span>
+                ))}
+              </div>
+            </Card>
 
-      <button type="button" onClick={() => { window.Telegram?.WebApp?.initData ? window.Telegram.WebApp.close() : router.back(); }} 
-        className="flex items-center text-gray-600 mb-6"
-      >
-        <ArrowLeft className="w-5 h-5 mr-1" /> Back
-      </button>
+            <Card>
+              <p className="text-[11px] uppercase tracking-wide text-mut">Address</p>
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <p className="break-all font-mono text-[12.5px] leading-relaxed">{address}</p>
+                <button
+                  type="button"
+                  onClick={copy}
+                  aria-label="Copy address"
+                  className="glass glass-press shrink-0 rounded-xl p-2.5"
+                >
+                  {copied ? (
+                    <Check className="h-4.5 w-4.5 h-[18px] w-[18px] text-mint" />
+                  ) : (
+                    <Copy className="h-[18px] w-[18px] text-mut" />
+                  )}
+                </button>
+              </div>
+              <Button onClick={copy} variant="ghost" className="mt-3">
+                {copied ? 'Copied!' : 'Copy address'}
+              </Button>
+            </Card>
 
-      <h1 className="text-xl font-bold mb-2">Deposit Address</h1>
-      <p className="text-sm text-gray-600 mb-6">
-        Send ETH, wstETH, WBTC, or fxUSD to this address
-      </p>
-
-      {address ? (
-        <div className="flex flex-col items-center">
-          <div className="bg-white p-4 rounded-xl border-2 border-gray-100 mb-6">
-            <QRCodeSVG value={address} size={240} level="M" includeMargin={true} />
-          </div>
-
-          <div className="w-full bg-gray-50 rounded-lg p-4 mb-4">
-            <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Address</p>
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-mono text-gray-900 break-all mr-3">{address}</p>
-              <button
-                type="button"
-                onClick={copyAddress}
-                disabled={isLoading}
-                className="flex-shrink-0 p-2 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
-                aria-label="Copy address"
-              >
-                {copied ? (
-                  <Check className="w-5 h-5 text-green-600" />
-                ) : (
-                  <Copy className="w-5 h-5 text-gray-600" />
-                )}
-              </button>
-            </div>
-          </div>
-
-          <div className="w-full bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <p className="text-sm text-yellow-800">
-              <strong>Important:</strong> Only send supported tokens. Sending unsupported tokens may result in permanent loss.
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-col items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-          <p className="text-gray-500">Loading address...</p>
-        </div>
-      )}
-    </div>
+            <Card className="flex items-start gap-2.5 border-[rgba(255,194,75,0.3)]">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
+              <p className="text-[12.5px] leading-relaxed text-mut">
+                <span className="font-medium text-warn">Ethereum mainnet only.</span> Send only the
+                tokens above — anything else may be permanently lost.
+              </p>
+            </Card>
+          </>
+        ) : (
+          <EmptyState icon={PlugZap} title="Address unavailable" body={unavailable} />
+        )}
+      </div>
+    </AppShell>
   );
 }
 
 export default function QRPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>}>
-      <QRPageContent />
+    <Suspense fallback={<FullScreenSpinner />}>
+      <QRContent />
     </Suspense>
   );
 }

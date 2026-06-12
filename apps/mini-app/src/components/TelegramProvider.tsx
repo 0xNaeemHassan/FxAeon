@@ -1,20 +1,22 @@
 'use client';
 
 /**
- * Telegram Mini App platform glue (W-20).
+ * Telegram Mini App platform glue (W-20, rebuilt in the E2E overhaul).
  *
  * - calls WebApp.ready() + expand() on mount
- * - maps themeParams → CSS custom properties (and re-applies on themeChanged)
  * - keeps --tg-viewport-stable-height in sync (viewportChanged)
- * - shows the NATIVE BackButton on sub-pages and wires it to router.back()
- *   (root pages "/", "/login", "/portfolio" keep it hidden)
+ * - tracks an in-app navigation stack so the NATIVE BackButton does the
+ *   right thing on every launch type:
+ *     · in-app history → router.back()
+ *     · launched directly onto a sub-page (inline/menu button) → close()
+ *   The old version keyed off initData, which is EMPTY for keyboard
+ *   launches, so the back button silently did nothing.
  *
  * Everything is a no-op outside Telegram, so the app still works in a browser.
  */
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  applyThemeParams,
   bindViewportHeight,
   getWebApp,
   initTelegram,
@@ -22,32 +24,41 @@ import {
   showBackButton,
 } from '@/lib/telegram';
 
+/** Screens that act as app roots — BackButton hidden (Telegram shows ✕). */
 const ROOT_PATHS = new Set(['/', '/login', '/portfolio']);
 
 export function TelegramProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  // Visited-path stack for back-vs-close decisions.
+  const stack = useRef<string[]>([]);
 
-  // One-time platform init + theme/viewport bindings.
+  // One-time platform init + viewport binding. (The app ships a single
+  // deliberate dark theme — Telegram themeParams are not mapped onto it.)
   useEffect(() => {
     initTelegram();
-    applyThemeParams();
-    const unbindViewport = bindViewportHeight();
-
-    const tg = getWebApp();
-    const onThemeChanged = () => applyThemeParams();
-    tg?.onEvent('themeChanged', onThemeChanged);
-
-    return () => {
-      unbindViewport();
-      tg?.offEvent('themeChanged', onThemeChanged);
-    };
+    return bindViewportHeight();
   }, []);
 
-  // Native BackButton on sub-pages.
+  // Maintain the nav stack.
+  useEffect(() => {
+    const path = pathname ?? '/';
+    const s = stack.current;
+    if (s.length >= 2 && s[s.length - 2] === path) {
+      s.pop(); // back navigation
+    } else if (s[s.length - 1] !== path) {
+      s.push(path); // forward navigation
+    }
+  }, [pathname]);
+
+  // Native BackButton on sub-pages: back through in-app history, close when
+  // the sub-page was the entry point.
   useEffect(() => {
     if (!isTMA() || ROOT_PATHS.has(pathname ?? '/')) return;
-    return showBackButton(() => router.back());
+    return showBackButton(() => {
+      if (stack.current.length > 1) router.back();
+      else getWebApp()?.close();
+    });
   }, [pathname, router]);
 
   return <>{children}</>;
