@@ -273,9 +273,19 @@ export function Skeleton({ className = '' }: { className?: string }) {
 }
 
 export function FullScreenSpinner() {
+  // Contentful loading state: the brand text paints pre-hydration, so slow
+  // cold starts show content instead of a blank screen. A border-only
+  // spinner does NOT count as a contentful paint (Lighthouse NO_FCP).
   return (
-    <div className="flex min-h-[var(--tg-viewport-stable-height)] items-center justify-center">
-      <span className="h-9 w-9 animate-spin rounded-full border-[3px] border-mint border-t-transparent" />
+    <div className="flex min-h-[var(--tg-viewport-stable-height)] flex-col items-center justify-center gap-3">
+      <h1 className="text-display text-2xl font-semibold">
+        Fx<span className="text-gradient">Aeon</span>
+      </h1>
+      <span
+        className="h-7 w-7 animate-spin rounded-full border-[3px] border-mint border-t-transparent"
+        aria-hidden="true"
+      />
+      <p className="text-[12.5px] text-mut">Loading f(x) Protocol trading…</p>
     </div>
   );
 }
