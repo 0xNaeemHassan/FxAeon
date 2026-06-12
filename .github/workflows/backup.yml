@@ -14,10 +14,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # AWS CLI is pre-installed on GitHub runners — no install step needed
+      - name: Check required secrets
+        run: |
+          missing=""
+          [ -z "${{ secrets.DATABASE_URL }}" ] && missing="$missing DATABASE_URL"
+          [ -z "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ] && missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          [ -z "${{ secrets.R2_ACCESS_KEY_ID }}" ] && missing="$missing R2_ACCESS_KEY_ID"
+          [ -z "${{ secrets.R2_SECRET_ACCESS_KEY }}" ] && missing="$missing R2_SECRET_ACCESS_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Backup cannot run — missing repo secrets:$missing. Create an R2 bucket 'fxbot-backups' + an R2 API token (Object Read & Write), then add these under Settings → Secrets → Actions."
+            exit 1
+          fi
+      # Server runs Postgres 17 — the runner's default pg_dump 16 aborts on
+      # version mismatch, so install the matching client from PGDG.
+      - name: Install postgresql-client-17
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | \
+            sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
       - name: Backup Postgres to R2
         run: |
-          pg_dump ${{ secrets.DATABASE_URL }} | gzip | \
+          set -euo pipefail
+          /usr/lib/postgresql/17/bin/pg_dump ${{ secrets.DATABASE_URL }} | gzip | \
           aws s3 cp - s3://fxbot-backups/$(date +%Y%m%d).sql.gz \
             --endpoint-url=https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com \
             --region auto
@@ -26,11 +48,12 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
       - name: Prune old backups (30-day retention)
         run: |
+          set -euo pipefail
           aws s3 ls s3://fxbot-backups \
             --endpoint-url=https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com \
             --region auto | \
           awk '{print $4}' | sort | head -n -30 | \
-          xargs -I {} aws s3 rm s3://fxbot-backups/{} \
+          xargs -r -I {} aws s3 rm s3://fxbot-backups/{} \
             --endpoint-url=https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com \
             --region auto
         env:
