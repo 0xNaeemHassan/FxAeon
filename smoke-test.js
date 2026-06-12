@@ -194,13 +194,18 @@ async function runTests() {
     } else if (!upstashUrl.startsWith('https://')) {
       logSkip('Upstash REST check skipped: REDIS_URL is the TCP string (rediss://), not the REST endpoint');
     } else {
-      const res = await request(upstashUrl, {
+      // A bare GET to the REST root always returns 400 ("command is empty"),
+      // which used to fail this check even with a healthy Redis. PING is the
+      // documented no-op probe.
+      const res = await request(`${upstashUrl.replace(/\/$/, '')}/ping`, {
         headers: { Authorization: `Bearer ${upstashToken}` },
       });
-      if (res.status === 200 || res.status === 401) {
-        logPass('Upstash Redis reachable');
+      if (res.status === 200) {
+        logPass('Upstash Redis reachable (PING ok)');
+      } else if (res.status === 401) {
+        logFail('Upstash reachable but token rejected (401) — check REDIS_TOKEN/UPSTASH_REDIS_REST_TOKEN');
       } else {
-        logFail(`Upstash status: ${res.status}`);
+        logFail(`Upstash PING returned ${res.status}`);
       }
     }
   } catch (e) {
