@@ -20,7 +20,8 @@ import {
 } from '@privy-io/react-auth';
 import { haptic } from '@/lib/telegram';
 import { apiAvailable, walletSync } from '@/lib/api';
-import { privyConfigured, PRIVY_SIGNER_ID } from '@/components/PrivyClientProvider';
+import { privyConfigured, PRIVY_SIGNER_ID } from '@/lib/privyConfig';
+import PrivyClientProvider from '@/components/PrivyClientProvider';
 import { AddressChip, Button, Card, SectionTitle } from '@/components/ui';
 
 function PrivyWalletControls() {
@@ -195,7 +196,9 @@ export default function WalletSection() {
     <section className="flex flex-col gap-3">
       <SectionTitle>Wallet</SectionTitle>
       {privyConfigured() ? (
-        <PrivyWalletControls />
+        <PrivyClientProvider>
+          <PrivyWalletControls />
+        </PrivyClientProvider>
       ) : (
         <Card>
           <p className="text-[13px] leading-relaxed text-mut">

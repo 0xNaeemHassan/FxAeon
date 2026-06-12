@@ -11,7 +11,14 @@ import { Globe, Sliders, Shield, Check, PlugZap, Send } from 'lucide-react';
 import { isTMA, getInitData, haptic } from '@/lib/telegram';
 import { apiConfigured, getMe, saveSettings } from '@/lib/api';
 import { AppShell, Button, Card, EmptyState, SectionTitle, Skeleton } from '@/components/ui';
-import WalletSection from '@/components/WalletSection';
+import dynamic from 'next/dynamic';
+
+// PERF (W-20): Settings → Wallet is the only Privy surface outside /login.
+// Loading it dynamically keeps the heavy SDK out of this page's bundle.
+const WalletSection = dynamic(() => import('@/components/WalletSection'), {
+  ssr: false,
+  loading: () => <Skeleton className="h-24" />,
+});
 
 const BOT_USERNAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || 'FxAeonBot';
 
