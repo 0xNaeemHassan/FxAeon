@@ -38,6 +38,7 @@ model User {
   notifications   NotificationPref?
   aiKeys          AiKey?
   transactions    Transaction[]
+  priceAlerts     PriceAlert[]
 
   @@index([telegramId])
   @@index([walletAddress])
@@ -153,6 +154,29 @@ model NotificationPref {
   lastRulesAlert    DateTime?
 
   user              User     @relation(fields: [userId], references: [id])
+}
+
+/// One-shot price alerts (/alert). Evaluated by the price-alert poller
+/// against the shared CoinGecko snapshot; fires once, then status=triggered.
+model PriceAlert {
+  id          String    @id @default(uuid())
+  userId      String
+  /// Display symbol from market/coingecko SUPPORTED_ASSETS (e.g. "BTC").
+  symbol      String
+  /// "above" | "below" (absolute USD) or "pct" (24h move, signed threshold).
+  kind        String
+  /// USD price for above/below; signed percent for pct (e.g. -5 = drops 5%).
+  threshold   Float
+  status      String    @default("active") // active | triggered | cancelled
+  createdAt   DateTime  @default(now())
+  triggeredAt DateTime?
+  /// Price observed when the alert fired.
+  triggerPrice Float?
+
+  user        User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
 }
 
 model AiKey {

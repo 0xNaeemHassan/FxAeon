@@ -22,3 +22,4 @@ export { helpCommand } from "./help.js";
 export { gasCommand } from "./gas.js";
 export { priceCommand } from "./price.js";
 export { historyCommand } from "./history.js";
+export { alertCommand, alertsCommand, handleAlertDeleteCallback } from "./alert.js";

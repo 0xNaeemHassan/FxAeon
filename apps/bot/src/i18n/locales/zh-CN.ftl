@@ -53,6 +53,8 @@ help-body =
     📊 投资组合
       /portfolio — 查看头寸、余额、健康度
       /price — 实时市场概览（价格、市值、24h/7d）
+      /alert — 一次性价格提醒（如 /alert btc > 65000）
+      /alerts — 管理价格提醒
       /deposit — 显示钱包地址 + 二维码
       /withdraw — 转账到外部地址
       /bridge — 跨链 fxUSD (ETH ↔ Base)

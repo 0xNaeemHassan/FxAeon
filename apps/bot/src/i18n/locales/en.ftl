@@ -61,6 +61,8 @@ help-body =
       /history — Your on-chain action history
       /gas — Live gas prices
       /price — Live market overview (prices, mcap, 24h/7d)
+      /alert — One-shot price alert (e.g. /alert btc > 65000)
+      /alerts — Manage your price alerts
       /deposit — Show wallet address + QR
       /withdraw — Why external sends are off (security)
       /bridge — Bridge fxUSD (ETH ↔ Base)

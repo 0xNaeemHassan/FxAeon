@@ -56,6 +56,8 @@ help-body =
     📊 Portafolio
       /portfolio — Ver posiciones, saldos y salud
       /price — Resumen de mercado en vivo (precios, mcap, 24h/7d)
+      /alert — Alerta de precio de un solo uso (ej. /alert btc > 65000)
+      /alerts — Gestiona tus alertas de precio
       /deposit — Mostrar dirección de billetera + QR
       /withdraw — Enviar a dirección externa
       /bridge — Puente de fxUSD (ETH ↔ Base)

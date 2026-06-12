@@ -22,6 +22,14 @@ vi.mock("@fxbot/db", () => ({
     auditLog: {
       create: vi.fn().mockResolvedValue({}),
     },
+    priceAlert: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findUnique: vi.fn().mockResolvedValue(null),
+      count: vi.fn().mockResolvedValue(0),
+      create: vi.fn().mockResolvedValue({}),
+      update: vi.fn().mockResolvedValue({}),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
   },
 }));
 

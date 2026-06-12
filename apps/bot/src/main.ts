@@ -19,6 +19,9 @@ import {
   gasCommand,
   priceCommand,
   historyCommand,
+  alertCommand,
+  alertsCommand,
+  handleAlertDeleteCallback,
 } from "./commands/index.js";
 
 import { handleWebAppData } from "./handlers/walletConnect.js";
@@ -39,6 +42,7 @@ import { sloDigest } from "./observability/slo-digest.js";
 import { installVendorLogFilter } from "./observability/quiet-vendor.js";
 import { limitOrderPolling } from "./notifications/limit-order-poller.js";
 import { healthMonitor } from "./notifications/health-monitor.js";
+import { priceAlertPoller } from "./notifications/price-alert-poller.js";
 import { initNotify } from "./notifications/notify.js";
 import { i18n } from "./i18n/index.js";
 
@@ -103,6 +107,8 @@ bot.command("help", helpCommand);
 bot.command("gas", gasCommand);
 bot.command("price", priceCommand);
 bot.command("history", historyCommand);
+bot.command("alert", alertCommand);
+bot.command("alerts", alertsCommand);
 
 // Mini App → bot data channel (W-16): wallet-connect onboarding completes here.
 bot.on("message:web_app_data", handleWebAppData);
@@ -116,6 +122,9 @@ registerPositionActions(bot);
 // Earn & borrow callbacks: signed action-intent confirms (a1_…) + cancel (a1c).
 bot.callbackQuery(/^a1(_|c$)/, handleActionCallback);
 bot.callbackQuery(/^wd_/, handleWithdrawCallback);
+
+// Price-alert delete buttons (/alerts list).
+bot.callbackQuery(/^aldel_/, handleAlertDeleteCallback);
 
 // Honest fallback for any other callback_data: until W-17 there was NO
 // callback handler at all, so every inline button just spun forever. Buttons
@@ -178,6 +187,8 @@ async function configureTelegramBot() {
     { command: "security", description: "Security settings" },
     { command: "gas", description: "Live gas prices" },
     { command: "price", description: "Market overview (live prices)" },
+    { command: "alert", description: "Set a one-shot price alert" },
+    { command: "alerts", description: "Manage your price alerts" },
     { command: "history", description: "Your on-chain history" },
     { command: "help", description: "Help & commands" },
   ]);
@@ -213,6 +224,7 @@ function startBackgroundWorkers() {
     try { limitOrderPolling.start(); } catch (e) { logger.error(e, "Failed to start limit order polling"); }
     try { healthMonitor.start(); } catch (e) { logger.error(e, "Failed to start health monitor"); }
     try { sloDigest.start((chatId, msg) => bot.api.sendMessage(chatId, msg)); } catch (e) { logger.error(e, "Failed to start SLO digest"); }
+    try { priceAlertPoller.start(); } catch (e) { logger.error(e, "Failed to start price-alert poller"); }
   }, 5000);
 }
 
