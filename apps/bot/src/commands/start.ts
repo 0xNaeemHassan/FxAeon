@@ -2,6 +2,7 @@ import { Context } from "grammy";
 import type { I18nFlavor } from "@grammyjs/i18n";
 import { prisma } from "@fxbot/db";
 import { botLogger } from "../middleware/logger.js";
+import { reportErrorToAdmin } from "../observability/admin-alerts.js";
 import { parseReferralPayload } from "../core/onboarding.js";
 import { describeFunding, getFundingState } from "../core/funding.js";
 import { looksLikeTradeIntent, verifyTradeIntent } from "../core/tradeIntent.js";
@@ -124,8 +125,12 @@ export async function startCommand(ctx: Context & I18nFlavor) {
 
     await ctx.reply(welcomeMsg, { reply_markup: { remove_keyboard: true } });
   } catch (error) {
-    botLogger.error({ err: error }, "startCommand error");
-    await ctx.reply(ctx.t("start-error"));
+    const errorId = reportErrorToAdmin(error, {
+      source: "startCommand",
+      command: "start",
+      telegramId,
+    });
+    await ctx.reply(`${ctx.t("start-error")}\n\nError ID: ${errorId}`);
   }
 }
 

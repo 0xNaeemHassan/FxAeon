@@ -40,11 +40,45 @@ function getRedis(): Redis | null {
   return redis;
 }
 
+/**
+ * Classify a Prisma/DB error into a short, secret-free hint that names the
+ * usual production misconfigurations. `SELECT 1` succeeding while ORM
+ * queries fail is exactly the Supabase-pooler trap, so the deep check now
+ * exercises the same code path commands use (prisma.user.count()).
+ */
+export function classifyDbError(err: unknown): string {
+  const e = err as { code?: string; message?: string };
+  const msg = e?.message ?? String(err);
+  if (e?.code === "P2021" || /does not exist in the current database|relation .* does not exist/i.test(msg)) {
+    return "schema-missing: tables not found — DATABASE_URL points at a database where migrations never ran";
+  }
+  if (/prepared statement .* (already exists|does not exist)/i.test(msg) || e?.code === "26000") {
+    return "pgbouncer: transaction pooler without pgbouncer=true — add ?pgbouncer=true (and use port 6543) or switch to the session pooler (5432)";
+  }
+  if (e?.code === "P1000" || /authentication failed/i.test(msg)) {
+    return "auth-failed: wrong DB password in DATABASE_URL";
+  }
+  if (e?.code === "P1001" || /can't reach database/i.test(msg)) {
+    return "unreachable: host/port wrong or network blocked (Render⇄Supabase needs the IPv4 session pooler host)";
+  }
+  if (/timed out|timeout/i.test(msg)) {
+    return "timeout: query exceeded health-check budget (pool exhausted or DB overloaded)";
+  }
+  return `unknown: ${msg.slice(0, 140)}`;
+}
+
+let lastDbError: string | null = null;
+
 async function checkDb(): Promise<"healthy" | "unhealthy"> {
   try {
-    await withTimeout(prisma.$queryRaw`SELECT 1`, CHECK_TIMEOUT_MS, "db health check");
+    // ORM-level probe: raw `SELECT 1` can succeed while model queries fail
+    // (missing schema, pgbouncer prepared-statement errors). Exercise the
+    // exact path every command handler uses.
+    await withTimeout(prisma.user.count(), CHECK_TIMEOUT_MS, "db health check");
+    lastDbError = null;
     return "healthy";
-  } catch {
+  } catch (err) {
+    lastDbError = classifyDbError(err);
     return "unhealthy";
   }
 }
@@ -115,6 +149,8 @@ healthRouter.get("/", asyncHandler(async (_req, res) => {
     uptimeSeconds: metrics.uptimeSeconds,
     services: {
       database: dbStatus,
+      // Secret-free root-cause hint for operators (null when healthy).
+      databaseHint: lastDbError,
       redis: redisStatus,
       rpc: rpc.status,
       rpcHeadLagSeconds: rpc.headLagSeconds,
