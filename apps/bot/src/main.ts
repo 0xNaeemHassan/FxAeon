@@ -28,6 +28,7 @@ import { logger } from "./middleware/logger.js";
 import { commandTiming } from "./middleware/timing.js";
 import { healthRouter } from "./api/health.js";
 import { initSentry, captureError } from "./observability/sentry.js";
+import { initAdminAlerts, reportErrorToAdmin } from "./observability/admin-alerts.js";
 import { sloDigest } from "./observability/slo-digest.js";
 import { installVendorLogFilter } from "./observability/quiet-vendor.js";
 import { limitOrderPolling } from "./notifications/limit-order-poller.js";
@@ -120,6 +121,13 @@ bot.catch((err) => {
   logger.error({ updateId: ctx.update.update_id }, "Error handling update");
   const e = err.error;
   captureError(e, { source: "bot.catch" });
+  // Full sanitized stack to the admin chat — production debugging without
+  // log access. Deduped (5 min window) and fail-soft.
+  reportErrorToAdmin(e, {
+    source: "bot.catch",
+    telegramId: ctx.from?.id?.toString(),
+    updateId: ctx.update.update_id,
+  });
   if (e instanceof GrammyError) {
     logger.error({ description: e.description }, "Grammy error");
   } else if (e instanceof HttpError) {
@@ -179,6 +187,11 @@ async function configureTelegramBot() {
 function startBackgroundWorkers() {
   // Single pref-aware notification gate (W-12): workers push through notify().
   initNotify((telegramId, message) => bot.api.sendMessage(telegramId, message));
+  // Admin error alerts: sanitized stack traces → ADMIN_TELEGRAM_CHAT_ID.
+  initAdminAlerts(
+    (chatId, message) => bot.api.sendMessage(chatId, message),
+    env.ADMIN_TELEGRAM_CHAT_ID
+  );
   // Delay worker start to let connections settle
   setTimeout(() => {
     try { limitOrderPolling.start(); } catch (e) { logger.error(e, "Failed to start limit order polling"); }
