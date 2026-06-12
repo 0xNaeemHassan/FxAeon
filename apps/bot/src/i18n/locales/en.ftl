@@ -10,12 +10,12 @@ start-welcome-new =
     
     The most advanced interface for f(x) Protocol — leveraged positions, limit orders, and yield automation, all from Telegram.
     
-    🔐 Non-custodial — your wallet is policy-locked to f(x) contracts only
+    🔐 Self-custody — create or import YOUR wallet; only you hold the keys
     ⚡ Simulation-gated — nothing broadcasts unless it simulates clean
     🤖 Honest by design — no fake numbers, ever
 start-referral-detected = 🎁 Referral code detected: { $code }
-start-tap-button = 👇 Tap the button below to create your wallet.
-start-create-wallet = 🔐 Create Wallet
+start-tap-button = 👇 Tap the button below to create or import your wallet.
+start-create-wallet = 🔐 Set Up Wallet
 start-welcome-back =
     👋 Welcome back to fxBot!
     

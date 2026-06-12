@@ -28,6 +28,7 @@ import {
   type SaveToken,
 } from "../fx/earn.js";
 import { executeRoute } from "../core/txExecutor.js";
+import { requireDelegatedWallet } from "../core/delegation.js";
 import type { TxState } from "../core/txState.js";
 import {
   createActionIntent,
@@ -88,14 +89,12 @@ async function requireWalletUser(ctx: Context, header: string): Promise<DbUser |
     await editSafe(ctx, `${header}\n\n🔐 Wallet Required\n\nConnect your wallet first with /start`);
     return null;
   }
-  if (!user.privyWalletId) {
-    await editSafe(
-      ctx,
-      `${header}\n\n🔐 Wallet not ready\n\nYour wallet isn't fully set up yet — run /start to finish onboarding.`
-    );
+  const gate = await requireDelegatedWallet(user);
+  if (!gate.ok) {
+    await editSafe(ctx, `${header}\n\n${gate.message}`);
     return null;
   }
-  return user;
+  return { ...user, privyWalletId: gate.walletId };
 }
 
 interface RunRouteParams {

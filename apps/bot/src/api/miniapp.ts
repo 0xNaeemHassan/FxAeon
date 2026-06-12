@@ -16,7 +16,7 @@
 import { createHmac } from "node:crypto";
 import { Router, Request, Response, NextFunction } from "express";
 import { prisma } from "@fxbot/db";
-import { onboardUser } from "../core/onboarding.js";
+import { onboardUser, syncWalletState } from "../core/onboarding.js";
 import { getFundingState } from "../core/funding.js";
 import { botLogger } from "../middleware/logger.js";
 
@@ -138,6 +138,8 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
       res.json({
         onboarded: true,
         walletAddress: user.walletAddress,
+        walletDelegated: user.walletDelegated,
+        walletImported: user.walletImported,
         referralCode: user.referralCode,
         language: user.language,
         slippageBps: user.slippageBps,
@@ -160,7 +162,11 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
     }
   });
 
-  // -- POST /onboard: wallet creation for initData launch contexts ---------
+  // -- POST /onboard: link the user's self-custodial wallet ----------------
+  // The wallet was created or imported BY THE USER in the Mini App via the
+  // Privy SDK. This endpoint only links it server-side: the Privy user is
+  // resolved from the verified Telegram id and the wallet is read from
+  // Privy's user record — nothing in the request body is trusted.
   router.post("/onboard", async (req: AuthedRequest, res: Response) => {
     const telegramId = req.tgUser!.telegramId;
     const referral =
@@ -170,18 +176,34 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
         : undefined;
     try {
       const result = await onboardUser(telegramId, referral);
+
+      if (result.status === "no_wallet") {
+        // Wallet setup not finished client-side yet — honest 409, no DB write.
+        res.status(409).json({
+          error: {
+            code: "NO_WALLET",
+            message: "Finish creating or importing your wallet first, then retry.",
+          },
+        });
+        return;
+      }
+
       const addr = result.user.walletAddress;
       const short = `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
       // Mirror the state change into the chat so the bot and Mini App always
       // tell the same story (and clear the old reply keyboard).
-      if (result.status === "created") {
+      if (result.status === "linked") {
+        const tradingLine = result.user.walletDelegated
+          ? `⚡ Bot trading is ON — trade right here in chat. Revoke any time in the app.`
+          : `💤 Bot trading is OFF — enable it in the app (Settings → Wallet) to trade from chat.`;
         await deps
           .sendMessage(
             telegramId,
-            `🎉 Wallet created!\n\nAddress: ${addr}\n\n` +
-              `🔐 Protected by a default-deny policy — it can ONLY interact ` +
-              `with verified f(x) Protocol contracts.\n\nNext: fund it with /deposit, then /trade.`,
+            `🎉 Wallet ${result.user.walletImported ? "imported" : "created"} — and it's YOURS.\n\n` +
+              `Address: ${addr}\n\n` +
+              `🔐 Self-custody via Privy: only you can export the key, and you ` +
+              `decide what the bot may do.\n${tradingLine}\n\nNext: fund it with /deposit, then /trade.`,
             {
               reply_markup: {
                 remove_keyboard: true,
@@ -195,14 +217,40 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
 
       res.json({
         onboarded: true,
-        created: result.status === "created",
+        created: result.status === "linked",
         walletAddress: addr,
         walletShort: short,
+        walletDelegated: result.user.walletDelegated,
+        walletImported: result.user.walletImported,
         referralApplied: result.referrerCode ?? null,
       });
     } catch (e) {
       botLogger.error({ err: e, telegramId }, "miniapp /onboard failed");
-      res.status(500).json({ error: { code: "ONBOARD_FAILED", message: "Wallet creation failed — nothing was created. Try again in a moment." } });
+      res.status(500).json({ error: { code: "ONBOARD_FAILED", message: "Wallet linking failed — nothing was changed. Try again in a moment." } });
+    }
+  });
+
+  // -- POST /wallet/sync: refresh delegation/import state from Privy --------
+  // Called by the Mini App right after the user grants or revokes the bot's
+  // session signer so chat commands immediately reflect the new state.
+  router.post("/wallet/sync", async (req: AuthedRequest, res: Response) => {
+    const telegramId = req.tgUser!.telegramId;
+    try {
+      const user = await prisma.user.findUnique({ where: { telegramId } });
+      if (!user) {
+        res.status(404).json({ error: { code: "NOT_ONBOARDED", message: "Finish wallet setup first" } });
+        return;
+      }
+      const synced = await syncWalletState(user);
+      res.json({
+        ok: true,
+        walletAddress: user.walletAddress,
+        walletDelegated: synced.walletDelegated,
+        walletImported: synced.walletImported,
+      });
+    } catch (e) {
+      botLogger.error({ err: e, telegramId }, "miniapp /wallet/sync failed");
+      res.status(500).json({ error: { code: "INTERNAL", message: "Failed to sync wallet state" } });
     }
   });
 

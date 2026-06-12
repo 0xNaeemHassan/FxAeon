@@ -21,7 +21,7 @@ export type ExecutionErrorKind =
   | "insufficient_funds"
   | "slippage"
   | "nonce"
-  | "policy"
+  | "delegation"
   | "rate_limited"
   | "network"
   | "unknown";
@@ -42,7 +42,8 @@ export function classifyExecutionError(raw: string | undefined): ExecutionErrorK
   if (INSUFFICIENT_RE.test(raw)) return "insufficient_funds";
   if (SLIPPAGE_RE.test(raw)) return "slippage";
   if (/nonce too low|replacement transaction underpriced|already known|same nonce/i.test(raw)) return "nonce";
-  if (/policy|not allowed by|denied by wallet/i.test(raw)) return "policy";
+  if (/delegat|session signer|not authorized|unauthorized signer|policy|not allowed by|denied by wallet|missing.*authorization|signer.*not.*found/i.test(raw))
+    return "delegation";
   if (/rate limit|too many requests|429/i.test(raw)) return "rate_limited";
   if (/timeout|timed out|ETIMEDOUT|ECONNRESET|ECONNREFUSED|fetch failed|network error|socket hang up|503|502/i.test(raw))
     return "network";
@@ -78,8 +79,8 @@ export function describeExecutionError(raw: string | undefined): string {
       return `Price moved more than your slippage tolerance allows. Retry, or raise slippage in /settings (higher slippage = worse worst-case price).${txLine}`;
     case "nonce":
       return "The network is still processing another transaction from your wallet. Wait ~30s and try again.";
-    case "policy":
-      return "Your wallet's security policy blocked this action. Check /settings, or contact support if this looks wrong.";
+    case "delegation":
+      return "The bot doesn't have permission to sign for your wallet (bot trading is off or was revoked). Open the Mini App → Settings → Wallet and enable bot trading, then retry. Nothing was sent.";
     case "rate_limited":
       return "Hitting a temporary rate limit. Wait a minute and try again.";
     case "network":

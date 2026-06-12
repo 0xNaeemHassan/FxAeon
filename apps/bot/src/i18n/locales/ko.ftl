@@ -7,12 +7,12 @@ start-welcome-new =
     
     f(x) Protocol을 위한 가장 진보된 인터페이스 — 레버리지 포지션, 지정가 주문, 수익 자동화를 모두 Telegram에서.
     
-    🔐 논커스터디얼 — 지갑은 정책에 따라 f(x) 컨트랙트로만 제한됩니다
+    🔐 셀프 커스터디 — 지갑을 직접 생성하거나 가져오세요. 키는 오직 본인만 보유합니다
     ⚡ 시뮬레이션 검증 — 시뮬레이션을 통과하지 않으면 아무것도 전송되지 않습니다
     🤖 정직한 설계 — 가짜 숫자는 절대 없습니다
 start-referral-detected = 🎁 추천 코드가 감지되었습니다: { $code }
-start-tap-button = 👇 아래 버튼을 눌러 지갑을 생성하세요.
-start-create-wallet = 🔐 지갑 생성
+start-tap-button = 👇 아래 버튼을 눌러 지갑을 생성하거나 가져오세요.
+start-create-wallet = 🔐 지갑 설정
 start-welcome-back =
     👋 fxBot에 다시 오신 것을 환영합니다!
     

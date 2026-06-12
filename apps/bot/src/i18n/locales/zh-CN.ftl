@@ -7,12 +7,12 @@ start-welcome-new =
     
     f(x) Protocol 最先进的交易界面 — 杠杆头寸、限价订单、收益自动化，全部在 Telegram 中完成。
     
-    🔐 非托管 — 您的钱包由策略锁定，仅可与 f(x) 合约交互
+    🔐 自托管 — 创建或导入您自己的钱包；私钥只属于您
     ⚡ 模拟验证 — 模拟未通过的交易绝不会广播
     🤖 诚实设计 — 绝无虚假数据
 start-referral-detected = 🎁 检测到推荐码: { $code }
-start-tap-button = 👇 点击下方按钮创建您的钱包。
-start-create-wallet = 🔐 创建钱包
+start-tap-button = 👇 点击下方按钮创建或导入您的钱包。
+start-create-wallet = 🔐 设置钱包
 start-welcome-back =
     👋 欢迎回到 fxBot！
     
