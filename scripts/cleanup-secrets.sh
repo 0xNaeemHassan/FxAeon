@@ -1,8 +1,8 @@
 #!/bin/bash
-# fxBot Secret Cleanup Script
+# FxAeon Secret Cleanup Script
 # Run this before committing to git
 
-echo "=== fxBot Secret Cleanup ==="
+echo "=== FxAeon Secret Cleanup ==="
 echo ""
 
 # Files that should NEVER be in git

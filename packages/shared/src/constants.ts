@@ -1,4 +1,4 @@
-export const APP_NAME = 'fxBot';
+export const APP_NAME = 'FxAeon';
 export const APP_VERSION = '1.1.0';
 export const SUPPORTED_ASSETS = ['xETH', 'xUSD'] as const;
 export const SUPPORTED_LEVERAGE = [1, 2, 3, 5, 10, 15, 20, 31] as const;

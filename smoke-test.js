@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * fxBot Post-Deployment Smoke Test
+ * FxAeon Post-Deployment Smoke Test
  * Tests critical user journeys after deployment
  * Usage: node smoke-test.js [BASE_URL]
  */
@@ -56,7 +56,7 @@ function sleep(ms) {
 
 async function runTests() {
   console.log('╔══════════════════════════════════════════════════════════════╗');
-  console.log('║           fxBot Post-Deployment Smoke Test                   ║');
+  console.log('║           FxAeon Post-Deployment Smoke Test                   ║');
   console.log('╚══════════════════════════════════════════════════════════════╝');
   console.log('Base URL:', BASE_URL);
   console.log('Mini App:', MINI_APP_URL);

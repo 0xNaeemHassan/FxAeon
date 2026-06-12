@@ -9,9 +9,9 @@
 
 ### 1. Rotate secrets
 ```bash
-# Fly.io secrets
-flyctl secrets set PRIVY_APP_SECRET=new_secret --app fxbot
-flyctl secrets set KMS_MASTER_KEY=new_key --app fxbot
+# Render env vars (dashboard -> Environment) — rotate:
+PRIVY_APP_SECRET  (new value from dashboard.privy.io)
+KMS_MASTER_KEY    (openssl rand -hex 32)
 ```
 
 ### 2. Revoke all delegations

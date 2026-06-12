@@ -25,11 +25,11 @@ Complete setup guide to get your FxAeon Telegram DeFi bot running.
 - **Cost**: Free up to 300M compute units/month
 - **Setup time**: 3 minutes
 
-### 4. Supabase (FREE tier)
-- **What**: PostgreSQL database
-- **How**: Sign up at [supabase.com](https://supabase.com), create new project
-- **What you get**: Database URL (looks like `postgresql://...supabase.co:5432/postgres`)
-- **Cost**: Free up to 500MB database, 2GB bandwidth
+### 4. PostgreSQL (FREE tier available)
+- **What**: PostgreSQL 17 database (production runs Postgres 17)
+- **How**: Render Postgres (pairs with the bot's Render service), Supabase, or Neon — any managed Postgres works
+- **What you get**: Database URL (`postgresql://user:pass@host:5432/db`)
+- **Cost**: Free tiers available on all three
 - **Setup time**: 5 minutes
 
 ### 5. Upstash Redis (FREE tier)
@@ -46,10 +46,10 @@ Complete setup guide to get your FxAeon Telegram DeFi bot running.
 - **Cost**: Free unlimited requests
 - **Setup time**: 5 minutes
 
-### 7. Fly.io (FREE tier - optional)
-- **What**: Host your bot backend (alternative to Docker/VPS)
-- **How**: Sign up at [fly.io](https://fly.io), install `flyctl`
-- **Cost**: Free $5/month credit (enough for small bot)
+### 7. Render (bot hosting — canonical)
+- **What**: Hosts the bot as a Docker web service (`render.yaml` blueprint, auto-deploys `main`)
+- **How**: Sign up at [render.com](https://render.com), create a Blueprint from this repo
+- **Cost**: Starter plan ~$7/month (free tier sleeps, which breaks webhooks)
 - **Setup time**: 10 minutes
 
 ---
@@ -158,7 +158,7 @@ Copy the output into `ENCRYPTION_KEY` in your `.env` files.
 ```bash
 cd packages/db
 pnpm db:generate  # Generate Prisma client
-pnpm db:deploy    # Deploy migrations to Supabase
+pnpm db:deploy    # Apply migrations to your Postgres
 ```
 
 ### Step 6: Build Everything
@@ -182,18 +182,17 @@ Or connect your GitHub repo to Cloudflare Pages for auto-deployment.
 
 ### Step 8: Deploy Bot
 
-**Option A: Docker (recommended for self-hosting)**
+**Option A: Render (canonical — see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md))**
+```text
+1. Render dashboard -> New -> Blueprint -> select this repo (picks up render.yaml)
+2. Set all `sync: false` env vars in the service's Environment tab
+3. Every push to main auto-deploys; /health gates the deploy
+```
+
+**Option B: Docker (local / self-hosting)**
 ```bash
 # From project root
 docker-compose up -d
-```
-
-**Option B: Fly.io**
-```bash
-cd apps/bot
-flyctl apps create fxaeon-bot
-flyctl secrets set TELEGRAM_BOT_TOKEN=... PRIVY_APP_ID=... ...
-flyctl deploy
 ```
 
 **Option C: VPS / Server**
@@ -215,7 +214,7 @@ pm2 start dist/main.js --name fxaeon-bot
 curl -X POST "https://api.telegram.org/botYOUR_BOT_TOKEN/setWebhook"   -d "url=https://your-bot-domain.com/webhook"   -d "max_connections=40"
 ```
 
-Replace `your-bot-domain.com` with your actual domain (Fly.io app URL, VPS IP, etc.)
+Replace `your-bot-domain.com` with your actual domain (Render URL, VPS IP, etc.). On Render this happens automatically at boot using `RENDER_EXTERNAL_URL` + `TELEGRAM_WEBHOOK_SECRET`.
 
 ### Step 10: Verify Everything Works
 
@@ -223,8 +222,8 @@ Replace `your-bot-domain.com` with your actual domain (Fly.io app URL, VPS IP, e
 # Run health check
 ./health-check.sh https://your-bot-domain.com
 
-# Or use Node version
-node health-check.js https://your-bot-domain.com
+# Post-deploy smoke test (same one CI runs)
+BOT_URL=https://your-bot-domain.com TELEGRAM_TOKEN=... node smoke-test.js
 ```
 
 You should see all checks passing.
@@ -236,7 +235,7 @@ You should see all checks passing.
 - [ ] Created Telegram bot via @BotFather
 - [ ] Signed up for Privy and got App ID + Secret
 - [ ] Signed up for Alchemy and got API key
-- [ ] Created Supabase project and got database URL
+- [ ] Provisioned Postgres 17 and got database URL
 - [ ] Created Upstash Redis and got URL + token
 - [ ] Cloned the repo
 - [ ] Installed dependencies (`pnpm install`)
@@ -245,7 +244,7 @@ You should see all checks passing.
 - [ ] Set up database (`pnpm db:deploy`)
 - [ ] Built the project (`pnpm run build`)
 - [ ] Deployed Mini App to Cloudflare Pages
-- [ ] Deployed bot (Docker / Fly.io / VPS)
+- [ ] Deployed bot (Render blueprint / Docker / VPS)
 - [ ] Set Telegram webhook
 - [ ] Ran health check and confirmed all green
 
@@ -258,10 +257,10 @@ You should see all checks passing.
 | Telegram Bot | Free | Free |
 | Privy | 1,000 users | ~$10-50 |
 | Alchemy | 300M CU | ~$0-49 |
-| Supabase | 500MB | ~$25 |
+| Postgres (Render/Supabase/Neon) | free tiers | ~$7-25 |
 | Upstash Redis | 10K req/day | ~$10 |
 | Cloudflare Pages | Unlimited | Free |
-| Fly.io / VPS | $5 credit | ~$5-20 |
+| Render (bot) | — | ~$7 |
 | **Total** | **$0** | **~$50-150** |
 
 ---
@@ -270,8 +269,8 @@ You should see all checks passing.
 
 **Bot not responding?**
 - Check webhook is set: `curl https://api.telegram.org/botTOKEN/getWebhookInfo`
-- Check bot is running: `curl https://your-domain/api/v1/health`
-- Check logs: `docker logs fxaeon-bot` or `flyctl logs`
+- Check bot is running: `curl https://your-domain/health`
+- Check logs: Render dashboard -> Logs, or `docker logs fxaeon-bot`
 
 **Mini App not loading?**
 - Check Cloudflare Pages deployment status
@@ -279,8 +278,8 @@ You should see all checks passing.
 - Check browser console for errors
 
 **Database connection failed?**
-- Verify Supabase connection string
-- Check IP allowlist in Supabase (add your server IP)
+- Verify the Postgres connection string
+- Check your provider's IP allowlist (add the server's IP)
 - Test connection: `psql YOUR_DATABASE_URL -c "SELECT 1"`
 
 **Wallet connection not working?**

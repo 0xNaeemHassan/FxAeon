@@ -6,37 +6,20 @@ description — this is the single list.
 
 ## Operator actions required before/at next deploy
 
-1. ~~Apply the workflow hardening files~~ — **done** (verified 2026-06-12):
-   all 7 hardened workflows live under `.github/workflows/` on `main`
-   (least-privilege `permissions:`, SHA-pinned third-party actions,
-   PR-based `fx-upgrade-monitor`).
-2. ~~Run the new DB migrations~~ — **done** (verified 2026-06-12): the
-   gated `deploy.yml` migration job runs on `main` pushes
-   (`DEPLOY_DB_ENABLED=true`) and reports "3 migrations found … No pending
-   migrations to apply" against production.
-3. ~~Fix `DATABASE_URL` on Render~~ — **done** (verified 2026-06-12):
-   switched to the Supabase Session pooler string. Follow-up the same day:
-   the Render env and the GitHub `DATABASE_URL` secret pointed at *two
-   different* databases (deep health's new `databaseHint` reported
-   `schema-missing`); both now unified to the same Session pooler string
-   so migrations and the runtime hit the same database.
-4. ~~Set `REDIS_URL` on Render~~ — **done** (verified 2026-06-12): the
-   Upstash `rediss://` TCP string is in place; deep health reports
-   `redis: healthy` and `/api/v1/health` returns overall `healthy`.
-5. ~~Apply the 3 updated workflow files~~ — **done** (applied to `main`
-   2026-06-12; CI/Deploy/Secret Scan green on the apply commit).
-6. ~~Set GitHub repo secrets for the smoke test~~ — **done** (2026-06-12):
-   `PRODUCTION_URL`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`
-   are set; the post-deploy smoke test now runs for real. Still optional:
-   `SLACK_WEBHOOK_URL` for failure pings,
-   `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` if the wrangler deploy
-   path should run (Cloudflare Pages Git integration already deploys the
-   mini-app without it).
-7. ~~Set `ADMIN_TELEGRAM_CHAT_ID`~~ — **done** (2026-06-12); the daily
-   SLO digest will go to that chat. **`SENTRY_DSN`** still unset —
-   optional; error tracking stays off until provided.
-8. **Trigger `fx-upgrade-monitor` once** via *Run workflow* to confirm
+Items 1–7 (workflow hardening, DB migrations, `DATABASE_URL`/`REDIS_URL`
+unification, smoke-test secrets, `ADMIN_TELEGRAM_CHAT_ID`) are **done and
+verified 2026-06-12** — see git history of this file for the full audit
+trail. Still open:
+
+1. **Trigger `fx-upgrade-monitor` once** via *Run workflow* to confirm
    the PR-based flow end-to-end.
+2. **Nightly DB backup secrets** (workflow fixed 2026-06-12: pg_dump 17 +
+   fail-fast secret guard): add repo secrets `CLOUDFLARE_ACCOUNT_ID`,
+   `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` (R2 token with Object
+   Read & Write on the `fxbot-backups` bucket), then *Run workflow* on
+   **Backup** and confirm a `.sql.gz` object lands in the bucket.
+3. **`SENTRY_DSN`** still unset — optional; error tracking stays off
+   until provided.
 
 ## Not verified (and why)
 

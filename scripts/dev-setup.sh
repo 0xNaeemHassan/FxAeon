@@ -1,10 +1,10 @@
 #!/bin/bash
 set -e
 
-# fxBot Local Development Setup
+# FxAeon Local Development Setup
 # Usage: ./scripts/dev-setup.sh
 
-echo "=== fxBot Development Setup ==="
+echo "=== FxAeon Development Setup ==="
 echo ""
 
 # Check prerequisites

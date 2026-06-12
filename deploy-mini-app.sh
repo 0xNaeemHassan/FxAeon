@@ -1,14 +1,14 @@
 #!/bin/bash
 set -e
 
-# fxBot Mini App - Cloudflare Pages Deployment Script
+# FxAeon Mini App - Cloudflare Pages deployment (manual fallback; CI deploys on push to main)
 # Usage: ./deploy-mini-app.sh [environment]
 #   environment: preview (default) | production
 
 ENVIRONMENT="${1:-preview}"
 PROJECT_NAME="${CF_PAGES_PROJECT:-fxbot-mini-app}"
 
-echo "=== fxBot Mini App - Cloudflare Pages Deploy ==="
+echo "=== FxAeon Mini App - Cloudflare Pages Deploy ==="
 echo "Environment: $ENVIRONMENT"
 echo "Project: $PROJECT_NAME"
 echo ""

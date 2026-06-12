@@ -1,10 +1,10 @@
 #!/bin/bash
 set -e
 
-# fxBot Database Migration Verification
+# FxAeon Database Migration Verification
 # Usage: ./scripts/verify-migrations.sh
 
-echo "=== fxBot Database Migration Verification ==="
+echo "=== FxAeon Database Migration Verification ==="
 echo ""
 
 # Check database connection

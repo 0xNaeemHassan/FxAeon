@@ -1,4 +1,4 @@
-# fxBot HTTP API
+# FxAeon HTTP API
 
 The bot exposes a small HTTP surface from the single Express server in
 `apps/bot/src/main.ts` (webhook mode, production only). There is **no public

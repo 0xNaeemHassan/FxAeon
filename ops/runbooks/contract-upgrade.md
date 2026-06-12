@@ -11,9 +11,9 @@
 3. Update `packages/shared/src/contracts.ts`
 4. Update ABIs in `packages/shared/src/abis.ts`
 5. Run test suite: `pnpm test`
-6. Deploy updated bot: `fly deploy --app fxbot`
+6. Deploy updated bot: merge to `main` (Render auto-deploys)
 7. Monitor for 1 hour post-deploy
 
 ## Rollback
 - If issues detected, revert to previous commit
-- `git revert HEAD && fly deploy --app fxbot`
+- `git revert HEAD && git push` (Render auto-deploys the revert)
