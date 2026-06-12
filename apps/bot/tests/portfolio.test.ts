@@ -30,6 +30,8 @@ const USER = {
   telegramId: "123456",
   walletAddress: "0xAbCd000000000000000000000000000000001234",
   privyWalletId: "wallet-1",
+  walletDelegated: true,
+  walletImported: false,
   slippageBps: 50,
   mevProtection: "off",
 };

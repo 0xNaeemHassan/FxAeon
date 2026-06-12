@@ -18,7 +18,9 @@ describe("classifyExecutionError", () => {
     expect(classifyExecutionError("err: insufficient funds for gas * price + value")).toBe("insufficient_funds");
     expect(classifyExecutionError("Too little received")).toBe("slippage");
     expect(classifyExecutionError("nonce too low")).toBe("nonce");
-    expect(classifyExecutionError("request denied by wallet policy")).toBe("policy");
+    expect(classifyExecutionError("request denied by wallet policy")).toBe("delegation");
+    expect(classifyExecutionError("wallet is not delegated to this app")).toBe("delegation");
+    expect(classifyExecutionError("no active session signer for wallet")).toBe("delegation");
     expect(classifyExecutionError("429 too many requests")).toBe("rate_limited");
     expect(classifyExecutionError("fetch failed: ETIMEDOUT")).toBe("network");
     expect(classifyExecutionError("???")).toBe("unknown");

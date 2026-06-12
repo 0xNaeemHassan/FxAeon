@@ -22,13 +22,13 @@ fxBot is a non-custodial Telegram interface for f(x) Protocol DeFi trading. The 
 | `/settings` | Language, slippage, MEV toggle, notifications, BYOK |
 | `/auto` | Create/pause/delete automation rules |
 | `/qr` | Show deposit address as QR code |
-| `/import` | Import existing wallet via Privy `importWallet` |
-| `/policy` | Read and sign Privy Policy Engine authorization |
+| `/login` | Create or import the USER's own embedded wallet (Privy `createWallet` / `importWallet`), optional bot-trading session-signer grant |
+| `/policy` | Self-custody + session-signer security explainer |
 
 ### 3. Backend Layer (Node 22 on Fly.io Free Tier)
 - **Webhook Handler**: Processes Telegram updates
 - **Command Router**: 20 commands with validation
-- **Privy Server SDK**: Key management, transaction signing, policy enforcement
+- **Privy Server SDK**: Signs via the user's revocable session-signer grant (no server-created wallets, no policy lock)
 - **fx-sdk Wrapper**: `@aladdindao/fx-sdk@1.0.5` for protocol interactions
 - **viem**: EIP-712 signing, `simulateContract` for pre-flight checks
 - **Rule Engine**: BullMQ + Redis for scheduled/conditional automation
@@ -67,16 +67,14 @@ fxBot is a non-custodial Telegram interface for f(x) Protocol DeFi trading. The 
 ## Security Model
 
 ```
-User (Telegram + email/passkey)
+User (Telegram) — creates/imports their OWN wallet in the Mini App
     ↓
-Privy TEE (SOC 2 Type II) — keys generated/stored here
+Privy TEE (SOC 2 Type II) — user-owned keys, exportable by the user only
     ↓
-Policy Engine evaluates EVERY action before signing
+Session signer (key quorum) — the bot may sign ONLY while the user's
+revocable grant is active (`walletDelegated`); revoke in Settings → Wallet
     ↓
-3 ALLOW rules only:
-  1. f(x) Router calls (0x33636D...)
-  2. fxSAVE harvest (0x7743e5...)
-  3. EIP-712 limit order signing (f(x) Limit Order Manager)
+Simulation gate — every chat action is simulated before broadcast
     ↓
 Default-deny: everything else REJECTED
 ```
