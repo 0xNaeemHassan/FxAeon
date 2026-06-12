@@ -15,8 +15,11 @@ description — this is the single list.
    (`DEPLOY_DB_ENABLED=true`) and reports "3 migrations found … No pending
    migrations to apply" against production.
 3. ~~Fix `DATABASE_URL` on Render~~ — **done** (verified 2026-06-12):
-   switched to the Supabase Session pooler string; deep health reports
-   `database: healthy` steadily.
+   switched to the Supabase Session pooler string. Follow-up the same day:
+   the Render env and the GitHub `DATABASE_URL` secret pointed at *two
+   different* databases (deep health's new `databaseHint` reported
+   `schema-missing`); both now unified to the same Session pooler string
+   so migrations and the runtime hit the same database.
 4. ~~Set `REDIS_URL` on Render~~ — **done** (verified 2026-06-12): the
    Upstash `rediss://` TCP string is in place; deep health reports
    `redis: healthy` and `/api/v1/health` returns overall `healthy`.
