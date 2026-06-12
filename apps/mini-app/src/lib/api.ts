@@ -33,10 +33,15 @@ export interface ApiPosition {
   market: string;
   side: 'long' | 'short';
   collateral: string;
+  collateralToken?: string;
   debt: string;
+  debtToken?: string;
   leverage: number;
+  /** 1 = healthy, 0 = at liquidation (derived on-chain). */
   healthPercent: number;
-  liquidationPrice: number;
+  /** Unrealized PnL estimate since first tracked — null when unpriced. */
+  pnlUsd?: number | null;
+  pnlSince?: string | null;
 }
 
 export interface Me {
@@ -49,6 +54,8 @@ export interface Me {
   walletDelegated?: boolean;
   walletImported?: boolean;
   funding?: Funding;
+  /** False when an on-chain read failed — positions may be incomplete. */
+  positionsKnown?: boolean;
   positions?: ApiPosition[];
 }
 

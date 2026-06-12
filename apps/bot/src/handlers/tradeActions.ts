@@ -37,6 +37,9 @@ import {
   type TradeIntent,
 } from "../core/tradeIntent.js";
 import { describeExecutionError } from "../core/errorTaxonomy.js";
+import { listUserPositions } from "../core/portfolio.js";
+import { trackPositions } from "../core/pnl.js";
+import { getSpotPrices } from "../market/coingecko.js";
 import { botLogger } from "../middleware/logger.js";
 
 type Side = "long" | "short";
@@ -268,6 +271,20 @@ export async function executeTradeIntent(ctx: Context, intent: TradeIntent): Pro
     });
 
     if (result.ok) {
+      // Snapshot the TRUE entry state for PnL tracking — fresh on-chain read
+      // right after the open. Best-effort: a failed read just means the
+      // snapshot is taken on the next /portfolio instead.
+      try {
+        const fresh = await listUserPositions(sdk, user.walletAddress, intent.market, intent.side);
+        let spot: Record<string, number | null> | null = null;
+        try {
+          const snap = await getSpotPrices();
+          if (!snap.stale) spot = snap.prices;
+        } catch { /* feed down — snapshot without entry spot */ }
+        await trackPositions(user.id, fresh, spot);
+      } catch (e) {
+        botLogger.warn({ error: String(e) }, "trade-ux: post-open snapshot failed");
+      }
       const hash = result.hashes[result.hashes.length - 1];
       await editSafe(
         ctx,

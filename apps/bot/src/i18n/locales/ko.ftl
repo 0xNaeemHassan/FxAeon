@@ -60,7 +60,7 @@ help-body =
       /bridge — fxUSD 브리지 (ETH ↔ Base)
     
     🤖 자동화
-      /auto — 자동화 규칙 생성/관리
+      /auto — 손절/익절 자동화 규칙 (/auto sl wstETH long 2500)
       /refer — 추천 링크 + 수익
     
     ⚙️ 설정

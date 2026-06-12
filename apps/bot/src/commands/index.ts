@@ -13,7 +13,7 @@ export { lockCommand } from "./lock.js";
 export { voteCommand } from "./vote.js";
 export { claimCommand } from "./claim.js";
 export { referCommand } from "./refer.js";
-export { autoCommand } from "./auto.js";
+export { autoCommand, registerAutoActions } from "./auto.js";
 export { settingsCommand } from "./settings.js";
 export { securityCommand } from "./security.js";
 export { depositCommand } from "./deposit.js";

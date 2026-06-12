@@ -22,6 +22,7 @@ import {
   alertCommand,
   alertsCommand,
   handleAlertDeleteCallback,
+  registerAutoActions,
 } from "./commands/index.js";
 
 import { handleWebAppData } from "./handlers/walletConnect.js";
@@ -43,6 +44,7 @@ import { installVendorLogFilter } from "./observability/quiet-vendor.js";
 import { limitOrderPolling } from "./notifications/limit-order-poller.js";
 import { healthMonitor } from "./notifications/health-monitor.js";
 import { priceAlertPoller } from "./notifications/price-alert-poller.js";
+import { automationPoller } from "./notifications/automation-poller.js";
 import { initNotify } from "./notifications/notify.js";
 import { i18n } from "./i18n/index.js";
 
@@ -118,6 +120,7 @@ registerTradeActions(bot);
 
 // Portfolio position actions (W-18): close prompt/confirm, TP/SL hint.
 registerPositionActions(bot);
+registerAutoActions(bot);
 
 // Earn & borrow callbacks: signed action-intent confirms (a1_…) + cancel (a1c).
 bot.callbackQuery(/^a1(_|c$)/, handleActionCallback);
@@ -182,7 +185,7 @@ async function configureTelegramBot() {
     { command: "vote", description: "Vote on proposals" },
     { command: "claim", description: "Claim matured fxSAVE redemption" },
     { command: "refer", description: "Referral program" },
-    { command: "auto", description: "Automation settings" },
+    { command: "auto", description: "Stop-loss / take-profit automation" },
     { command: "settings", description: "Bot settings" },
     { command: "security", description: "Security settings" },
     { command: "gas", description: "Live gas prices" },
@@ -225,6 +228,7 @@ function startBackgroundWorkers() {
     try { healthMonitor.start(); } catch (e) { logger.error(e, "Failed to start health monitor"); }
     try { sloDigest.start((chatId, msg) => bot.api.sendMessage(chatId, msg)); } catch (e) { logger.error(e, "Failed to start SLO digest"); }
     try { priceAlertPoller.start(); } catch (e) { logger.error(e, "Failed to start price-alert poller"); }
+    try { automationPoller.start(); } catch (e) { logger.error(e, "Failed to start automation poller"); }
   }, 5000);
 }
 
