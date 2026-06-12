@@ -63,6 +63,7 @@ jobs:
           NEXT_PUBLIC_TELEGRAM_BOT_USERNAME: ${{ secrets.TELEGRAM_BOT_USERNAME }}
           NEXT_PUBLIC_MINI_APP_URL: ${{ secrets.MINI_APP_URL }}
           NEXT_PUBLIC_ALCHEMY_RPC_URL: ${{ secrets.ALCHEMY_RPC_URL }}
+          NEXT_PUBLIC_BOT_API_URL: ${{ secrets.PRODUCTION_URL }}
 
       - name: Deploy to Cloudflare Pages
         run: npx wrangler@3 pages deploy apps/mini-app/dist --project-name=fxbot-mini-app
