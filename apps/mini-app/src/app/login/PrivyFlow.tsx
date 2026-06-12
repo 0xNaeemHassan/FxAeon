@@ -19,14 +19,16 @@ import {
 } from 'lucide-react';
 import {
   usePrivy,
+  useLogin,
   useLoginWithTelegram,
+  useLinkAccount,
   useLogout,
   useCreateWallet,
   useImportWallet,
   useSessionSigners,
   useWallets,
 } from '@privy-io/react-auth';
-import { canSendData, getWebApp, haptic } from '@/lib/telegram';
+import { canSendData, getInitData, getWebApp, haptic } from '@/lib/telegram';
 import { apiAvailable, onboard, OnboardResult } from '@/lib/api';
 import { PRIVY_SIGNER_ID } from '@/lib/privyConfig';
 import PrivyClientProvider from '@/components/PrivyClientProvider';
@@ -145,24 +147,95 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
     setPhase('done');
   }, [referral]);
 
+  /**
+   * Link Telegram to an already-authenticated session (e.g. the user signed
+   * in with Google via the Privy modal). Seamless when launched inside
+   * Telegram: the signed initData IS the proof, no popup, no widget. Without
+   * the link the bot cannot see the account (see telegramLinked above), so
+   * this is required before any wallet step.
+   */
+  const { linkTelegram } = useLinkAccount({
+    onSuccess: () => setPhase('choose'),
+    onError: (err) => {
+      fail(
+        typeof err === 'string' ? new Error(err) : err,
+        'Could not link your Telegram account — close and reopen the app, then try again.'
+      );
+    },
+  });
+
+  /**
+   * Fallback: the standard Privy modal, showing every login method enabled
+   * in the Privy dashboard (Google, external wallets, …). Used when Telegram
+   * sign-in fails or the user explicitly asks for more options.
+   * NOTE: Google may refuse to run inside some in-app webviews
+   * ("disallowed_useragent") — that is a Google policy, not a bug here.
+   */
+  const { login: openPrivyModal } = useLogin({
+    onComplete: ({ user: loggedIn }) => {
+      const hasTelegram = loggedIn.linkedAccounts?.some((a) => a.type === 'telegram');
+      if (hasTelegram) {
+        setPhase('choose');
+        return;
+      }
+      // The bot resolves users by Telegram id — link it now (seamless in TMA).
+      const initDataRaw = getInitData();
+      linkTelegram(initDataRaw ? { launchParams: { initDataRaw } } : undefined);
+    },
+    onError: (err) => {
+      if (err === 'exited_auth_flow' || err === 'generic_connect_wallet_error') {
+        setPhase('intro');
+        return;
+      }
+      fail(new Error(String(err)), 'Sign-in failed — please try again.');
+    },
+  });
+
+  const startAltLogin = useCallback(() => {
+    setError('');
+    setPhase('authenticating');
+    openPrivyModal();
+  }, [openPrivyModal]);
+
   const startLogin = useCallback(async () => {
     setError('');
     setPhase('authenticating');
     try {
       if (authenticated && !telegramLinked) {
-        // Stale non-Telegram session (e.g. email login from an old build):
-        // a wallet made here would be invisible to the bot. Start clean.
+        // Session without a Telegram link (e.g. Google sign-in): a wallet
+        // made here would be invisible to the bot. Link Telegram instead of
+        // throwing the session away — seamless inside Telegram.
+        const initDataRaw = getInitData();
+        if (initDataRaw) {
+          linkTelegram({ launchParams: { initDataRaw } });
+          return; // continues via the useLinkAccount callbacks
+        }
+        // No initData (keyboard launch / stale session) — start clean.
         await logout();
       }
       if (!authenticated || !telegramLinked) await login();
       setPhase('choose');
     } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e ?? '');
+      if (/bot domain invalid/i.test(msg)) {
+        // Telegram's login WIDGET needs the domain registered via BotFather
+        // /setdomain. Seamless in-app login doesn't — so this only appears
+        // when seamless auth isn't available. Offer the alternatives.
+        fail(
+          new Error(
+            'Telegram sign-in is not fully configured (the bot has no login domain registered). ' +
+              'Use “More sign-in options” below, or ask the operator to run BotFather → /setdomain.'
+          ),
+          ''
+        );
+        return;
+      }
       fail(
         e,
-        'Telegram sign-in failed — close and reopen the app, then try again. If it keeps happening, the bot operator needs to enable Telegram login for the wallet service.'
+        'Telegram sign-in failed — close and reopen the app, then try again. You can also use “More sign-in options” below.'
       );
     }
-  }, [authenticated, telegramLinked, login, logout, fail]);
+  }, [authenticated, telegramLinked, login, logout, linkTelegram, fail]);
 
   // Already authenticated with an existing wallet? Skip straight ahead —
   // but only for a telegram-linked session (see telegramLinked above).
@@ -475,8 +548,11 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
           <Button onClick={startLogin} loading={phase === 'authenticating'} className="anim-glow">
             {phase === 'authenticating' ? 'Connecting…' : 'Set up my wallet'}
           </Button>
+          <Button variant="ghost" onClick={startAltLogin} className="mt-2">
+            More sign-in options (Google, wallet…)
+          </Button>
           <p className="mt-3 text-center text-[11.5px] text-mut">
-            Telegram login · Keys secured by hardware enclaves · Exportable any time
+            Telegram login by default · Keys secured by hardware enclaves · Exportable any time
           </p>
         </div>
       </div>

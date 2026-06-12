@@ -55,6 +55,7 @@ help-body =
     
     📊 Portafolio
       /portfolio — Ver posiciones, saldos y salud
+      /price — Resumen de mercado en vivo (precios, mcap, 24h/7d)
       /deposit — Mostrar dirección de billetera + QR
       /withdraw — Enviar a dirección externa
       /bridge — Puente de fxUSD (ETH ↔ Base)

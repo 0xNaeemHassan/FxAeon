@@ -10,10 +10,11 @@
  *   chat commands reflect the new state immediately.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Bot, KeyRound, ShieldCheck, ShieldOff } from 'lucide-react';
+import { Bot, KeyRound, Link2, ShieldCheck, ShieldOff, Wallet } from 'lucide-react';
 import {
   usePrivy,
   useLoginWithTelegram,
+  useLinkAccount,
   useSessionSigners,
   useExportWallet,
   useWallets,
@@ -99,6 +100,42 @@ function PrivyWalletControls() {
     }
   }, [address, delegated, addSessionSigners, removeSessionSigners, syncBot]);
 
+  // ── Linked accounts (Google, external wallets) ───────────────────────────
+  // Account-level links on the Privy user: extra sign-in routes + recovery.
+  // Honest scope: bot chat-trading always executes through the EMBEDDED
+  // wallet (session signer) — an external wallet is a linked identity and a
+  // funding source, not a trading wallet for the bot.
+  const [linkBusy, setLinkBusy] = useState(false);
+  const { linkGoogle, linkWallet } = useLinkAccount({
+    onSuccess: () => {
+      setLinkBusy(false);
+      haptic('success');
+    },
+    onError: (err) => {
+      setLinkBusy(false);
+      if (err !== 'exited_auth_flow' && err !== 'exited_link_flow') {
+        setError(`Linking failed: ${String(err)}`);
+      }
+    },
+  });
+
+  const googleAccount = useMemo(
+    () =>
+      user?.linkedAccounts?.find((a) => a.type === 'google_oauth') as
+        | { email?: string }
+        | undefined,
+    [user]
+  );
+  const externalWallets = useMemo(
+    () =>
+      (user?.linkedAccounts ?? []).filter(
+        (a) =>
+          a.type === 'wallet' &&
+          (a as { walletClientType?: string }).walletClientType !== 'privy'
+      ) as Array<{ address: string }>,
+    [user]
+  );
+
   const handleExport = useCallback(async () => {
     if (!address) return;
     setBusy('export');
@@ -180,6 +217,58 @@ function PrivyWalletControls() {
           <Button variant="ghost" onClick={handleExport} loading={busy === 'export'} className="mt-3">
             Export key
           </Button>
+        </span>
+      </Card>
+      <Card className="flex items-start gap-3">
+        <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)]">
+          <Link2 className="h-[18px] w-[18px] text-mint" strokeWidth={2} />
+        </span>
+        <span className="flex-1">
+          <p className="text-[14px] font-medium">Connected accounts</p>
+          <p className="mt-0.5 text-[12.5px] leading-relaxed text-mut">
+            Extra sign-in routes for this account. Bot trading always runs through your
+            embedded wallet above — an external wallet is for identity and funding.
+          </p>
+          <div className="mt-2 flex flex-col gap-1.5">
+            <p className="text-[12.5px] text-mut">
+              Google:{' '}
+              {googleAccount?.email ? (
+                <span className="text-[var(--text)]">{googleAccount.email}</span>
+              ) : (
+                'not linked'
+              )}
+            </p>
+            {externalWallets.map((w) => (
+              <AddressChip key={w.address} address={w.address} />
+            ))}
+          </div>
+          <div className="mt-3 flex flex-col gap-2">
+            {!googleAccount && (
+              <Button
+                variant="ghost"
+                loading={linkBusy}
+                onClick={() => {
+                  setError('');
+                  setLinkBusy(true);
+                  linkGoogle();
+                }}
+              >
+                Link Google account
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              loading={linkBusy}
+              onClick={() => {
+                setError('');
+                setLinkBusy(true);
+                linkWallet();
+              }}
+            >
+              <Wallet className="h-4 w-4" />
+              Connect external wallet
+            </Button>
+          </div>
         </span>
       </Card>
       {error && (

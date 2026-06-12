@@ -60,6 +60,7 @@ help-body =
       /portfolio — View positions, balances, health
       /history — Your on-chain action history
       /gas — Live gas prices
+      /price — Live market overview (prices, mcap, 24h/7d)
       /deposit — Show wallet address + QR
       /withdraw — Why external sends are off (security)
       /bridge — Bridge fxUSD (ETH ↔ Base)

@@ -17,6 +17,7 @@ import {
   settingsCommand, securityCommand, depositCommand, withdrawCommand,
   helpCommand,
   gasCommand,
+  priceCommand,
   historyCommand,
 } from "./commands/index.js";
 
@@ -100,6 +101,7 @@ bot.command("deposit", depositCommand);
 bot.command("withdraw", withdrawCommand);
 bot.command("help", helpCommand);
 bot.command("gas", gasCommand);
+bot.command("price", priceCommand);
 bot.command("history", historyCommand);
 
 // Mini App → bot data channel (W-16): wallet-connect onboarding completes here.
@@ -175,6 +177,7 @@ async function configureTelegramBot() {
     { command: "settings", description: "Bot settings" },
     { command: "security", description: "Security settings" },
     { command: "gas", description: "Live gas prices" },
+    { command: "price", description: "Market overview (live prices)" },
     { command: "history", description: "Your on-chain history" },
     { command: "help", description: "Help & commands" },
   ]);
