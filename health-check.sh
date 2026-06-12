@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# fxBot Health Check Verification Script
+# FxAeon Health Check Verification Script
 # Usage: ./health-check.sh [BASE_URL]
 #   BASE_URL: defaults to http://localhost:8080
 
@@ -36,7 +36,7 @@ log_warn() {
     echo -e "${YELLOW}[WARN]${NC} $1"
 }
 
-echo "=== fxBot Health Check ==="
+echo "=== FxAeon Health Check ==="
 echo "Base URL: $BASE_URL"
 echo "Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo ""

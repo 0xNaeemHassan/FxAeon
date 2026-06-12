@@ -1,14 +1,14 @@
-# fxBot System Architecture
+# FxAeon System Architecture
 
 ## Overview
 
-fxBot is a non-custodial Telegram interface for f(x) Protocol DeFi trading. The system is designed around the principle of **zero key custody** — user private keys never leave Privy's TEE (Trusted Execution Environment).
+FxAeon is a non-custodial Telegram interface for f(x) Protocol DeFi trading. The system is designed around the principle of **zero key custody** — user private keys never leave Privy's TEE (Trusted Execution Environment).
 
 ## Architecture Layers
 
 ### 1. Telegram Layer
-- **Bot**: `@fxAladdinBot` built with grammY + TypeScript
-- **Inline Mode**: Price queries (`@fxAladdinBot wsteth`) in any chat
+- **Bot**: [@FxAeonBot](https://t.me/FxAeonBot) built with grammY + TypeScript
+- **Inline Mode**: Price queries (`@FxAeonBot wsteth`) in any chat
 - **Mini App**: Next.js 15 webview for complex interactions (signing, settings, portfolio)
 - **Rate Limiting**: 30 msg/s global, 1 msg/s per user via transformer-throttler
 
@@ -25,7 +25,7 @@ fxBot is a non-custodial Telegram interface for f(x) Protocol DeFi trading. The 
 | `/login` | Create or import the USER's own embedded wallet (Privy `createWallet` / `importWallet`), optional bot-trading session-signer grant |
 | `/policy` | Self-custody + session-signer security explainer |
 
-### 3. Backend Layer (Node 22 on Fly.io Free Tier)
+### 3. Backend Layer (Node 22, Docker on Render)
 - **Webhook Handler**: Processes Telegram updates
 - **Command Router**: 20 commands with validation
 - **Privy Server SDK**: Signs via the user's revocable session-signer grant (no server-created wallets, no policy lock)
@@ -62,7 +62,7 @@ fxBot is a non-custodial Telegram interface for f(x) Protocol DeFi trading. The 
 - **Sentry**: 5k events/month (free) — error tracking
 - **PostHog**: 1M events/month (free) — onboarding analytics (hashed IDs)
 - **Discord Webhook**: Ops alerts for critical events
-- **GitHub Actions**: CI (lint, test, typecheck), deploy (Fly.io + Cloudflare Pages), backup (daily pg_dump → R2), fx upgrade monitor (weekly diff)
+- **GitHub Actions**: CI (lint, test, typecheck), deploy (Render + Cloudflare Pages), backup (daily pg_dump → R2), fx upgrade monitor (weekly diff)
 
 ## Security Model
 
@@ -106,7 +106,7 @@ Default-deny: everything else REJECTED
 
 | Service | Provider | Plan | Monthly Cost |
 |---|---|---|---|
-| Backend | Fly.io | Free (3 shared CPUs, 256MB) | $0 |
+| Backend | Render | Starter (Docker web service) | ~$7 |
 | Database | Supabase | Free (500MB) | $0 |
 | Cache/Queue | Upstash | Free (10k cmd/day) | $0 |
 | RPC | Alchemy | Free (30M CU) | $0 |

@@ -1,4 +1,4 @@
-# fxBot Mini App
+# FxAeon Mini App
 
 Telegram Mini App for f(x) Protocol DeFi trading.
 
