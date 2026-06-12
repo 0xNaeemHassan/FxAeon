@@ -30,7 +30,23 @@ jobs:
         with:
           node-version: '22'
 
+      # Without a real target URL the old behavior tested http://localhost:8080
+      # and failed every run with misleading "unreachable" errors. Skip
+      # honestly instead — set the PRODUCTION_URL (or STAGING_URL) repo secret
+      # to enable the full run.
+      - name: Resolve target URL
+        id: target
+        run: |
+          TARGET="${{ inputs.environment == 'staging' && secrets.STAGING_URL || secrets.PRODUCTION_URL }}"
+          if [ -z "$TARGET" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::PRODUCTION_URL/STAGING_URL secret not set — smoke test skipped. Set the secret to the deployed bot base URL to enable it."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run Smoke Tests
+        if: steps.target.outputs.configured == 'true'
         run: node smoke-test.js "${{ inputs.environment == 'staging' && secrets.STAGING_URL || secrets.PRODUCTION_URL }}"
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -38,9 +54,23 @@ jobs:
           ALCHEMY_RPC_URL: ${{ secrets.ALCHEMY_RPC_URL }}
           REDIS_URL: ${{ secrets.REDIS_URL }}
           REDIS_TOKEN: ${{ secrets.REDIS_TOKEN }}
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+
+      # Only attempt the Slack ping when a webhook is actually configured;
+      # otherwise the notify step itself fails and muddies the signal.
+      - name: Check Slack webhook
+        id: slack
+        if: failure()
+        run: |
+          if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Notify on Failure
-        if: failure()
+        if: failure() && steps.slack.outputs.configured == 'true'
         uses: slackapi/slack-github-action@fcfb566f8b0aab22203f066d80ca1d7e4b5d05b3 # v1
         with:
           payload: |

@@ -1,5 +1,10 @@
 name: Deploy Mini App to Cloudflare Pages
 
+# NOTE: Cloudflare Pages ALSO auto-deploys this project via its Git
+# integration. This workflow is the explicit, secrets-driven path; it
+# skips cleanly (neutral, not red) when CLOUDFLARE_API_TOKEN is not
+# configured so the Git-integration deploy remains the source of truth.
+
 on:
   push:
     branches: [main]
@@ -13,8 +18,24 @@ permissions:
   contents: read
 
 jobs:
+  check-secrets:
+    runs-on: ubuntu-latest
+    outputs:
+      has-cf-token: ${{ steps.check.outputs.has-cf-token }}
+    steps:
+      - id: check
+        run: |
+          if [ -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]; then
+            echo "has-cf-token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-cf-token=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::CLOUDFLARE_API_TOKEN not set — skipping wrangler deploy (Cloudflare Pages Git integration handles deploys)."
+          fi
+
   deploy:
     runs-on: ubuntu-latest
+    needs: check-secrets
+    if: needs.check-secrets.outputs.has-cf-token == 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -28,13 +49,15 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Build shared package
         run: pnpm --filter @fxbot/shared build
 
       - name: Build Mini App
-        run: pnpm --filter @fxbot/mini-app build
+        # Package is @fxaeon/mini-app (the old @fxbot/mini-app filter matched
+        # nothing, so wrangler would have shipped a stale/empty dist).
+        run: pnpm --filter @fxaeon/mini-app build
         env:
           NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID }}
           NEXT_PUBLIC_TELEGRAM_BOT_USERNAME: ${{ secrets.TELEGRAM_BOT_USERNAME }}
