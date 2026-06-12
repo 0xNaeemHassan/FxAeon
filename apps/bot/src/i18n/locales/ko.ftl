@@ -52,6 +52,7 @@ help-body =
     
     📊 포트폴리오
       /portfolio — 포지션, 잔액, 건전성 보기
+      /price — 실시간 시장 개요 (가격·시총·24h/7d)
       /deposit — 지갑 주소 + QR 표시
       /withdraw — 외부 주소로 전송
       /bridge — fxUSD 브리지 (ETH ↔ Base)

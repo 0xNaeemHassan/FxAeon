@@ -52,6 +52,7 @@ help-body =
     
     📊 投资组合
       /portfolio — 查看头寸、余额、健康度
+      /price — 实时市场概览（价格、市值、24h/7d）
       /deposit — 显示钱包地址 + 二维码
       /withdraw — 转账到外部地址
       /bridge — 跨链 fxUSD (ETH ↔ Base)

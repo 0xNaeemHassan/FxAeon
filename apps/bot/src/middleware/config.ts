@@ -43,6 +43,8 @@ export const envSchema = z.object({
 
   // ── Optional services ────────────────────────────────────
   SURPLUS_API_KEY: z.string().optional(),
+  /** CoinGecko demo API key for /price; works unauthenticated at lower limits. */
+  COINGECKO_API_KEY: z.string().optional(),
   MINI_APP_URL: z.string().url().default("https://fxbot-mini-app.pages.dev"),
   DAILY_TX_CAP: z.string().default("50"),
 }).superRefine((cfg, ctx) => {

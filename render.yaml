@@ -51,6 +51,9 @@ services:
         sync: false
       - key: SURPLUS_API_KEY
         sync: false
+      # CoinGecko demo key for /price (optional — unauthenticated works at lower limits)
+      - key: COINGECKO_API_KEY
+        sync: false
       - key: MINI_APP_URL
         sync: false
       - key: PRIVY_AUTHORIZATION_KEY
