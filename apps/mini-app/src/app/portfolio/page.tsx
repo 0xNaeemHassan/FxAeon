@@ -18,7 +18,7 @@ import {
   LineChart,
 } from 'lucide-react';
 import { isTMA, getInitData } from '@/lib/telegram';
-import { apiConfigured, getMe, Me, ApiPosition } from '@/lib/api';
+import { apiConfigured, getMe, getMarket, Me, ApiPosition, MarketSnapshot } from '@/lib/api';
 import {
   AppShell,
   AddressChip,
@@ -40,6 +40,45 @@ function fmt(value?: string): string {
   if (n === 0) return '0';
   if (n < 0.0001) return '<0.0001';
   return n.toLocaleString('en-US', { maximumFractionDigits: 4 });
+}
+
+function fmtMarketPrice(n: number): string {
+  if (n >= 1000) return `$${Math.round(n).toLocaleString('en-US')}`;
+  if (n >= 10) return `$${n.toFixed(2)}`;
+  return `$${n.toPrecision(4)}`;
+}
+
+/**
+ * Live markets strip — real CoinGecko data via the authenticated bot API
+ * (the same cached snapshot the bot's /price uses). Renders nothing while
+ * unavailable: no fake numbers, and the portfolio stays the hero.
+ */
+function MarketsCard({ market }: { market: MarketSnapshot }) {
+  const rows = market.rows.filter((r) => r.data !== null);
+  if (rows.length === 0) return null;
+  return (
+    <Card>
+      <div className="flex flex-col divide-y divide-[rgba(255,255,255,0.06)]">
+        {rows.map((r) => {
+          const d = r.data!;
+          const ch = d.change24hPct;
+          const tone = ch === null ? 'text-mut' : ch >= 0 ? 'text-mint' : 'text-danger';
+          return (
+            <div key={r.symbol} className="flex items-center justify-between py-1.5 first:pt-0 last:pb-0 text-[12.5px]">
+              <span className="w-16 font-medium">{r.symbol}</span>
+              <span className="font-mono">{fmtMarketPrice(d.priceUsd)}</span>
+              <span className={`w-16 text-right font-medium ${tone}`}>
+                {ch === null ? '—' : `${ch >= 0 ? '+' : ''}${ch.toFixed(2)}%`}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      {market.stale && (
+        <p className="mt-2 text-[10.5px] text-mut">Prices may be a few minutes old (upstream hiccup).</p>
+      )}
+    </Card>
+  );
 }
 
 function PositionCard({ p }: { p: ApiPosition }) {
@@ -87,6 +126,7 @@ export default function PortfolioPage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [me, setMe] = useState<Me | null>(null);
+  const [market, setMarket] = useState<MarketSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -100,6 +140,13 @@ export default function PortfolioPage() {
         return;
       }
       setMe(data);
+      // Markets are decoration, not account state — never block or fail the
+      // page on them.
+      try {
+        setMarket(await getMarket());
+      } catch {
+        setMarket(null);
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -272,6 +319,14 @@ export default function PortfolioPage() {
             body="Open a leveraged wstETH or WBTC position — it takes about 30 seconds."
             action={<Button onClick={() => router.push('/trade')}>Set up a trade</Button>}
           />
+        )}
+
+        {/* Markets */}
+        {market && (
+          <>
+            <SectionTitle>Markets</SectionTitle>
+            <MarketsCard market={market} />
+          </>
         )}
 
         {/* Quick actions */}

@@ -18,6 +18,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import { prisma } from "@fxbot/db";
 import { onboardUser, syncWalletState } from "../core/onboarding.js";
 import { getFundingState } from "../core/funding.js";
+import { getMarketOverview } from "../market/coingecko.js";
 import { botLogger } from "../middleware/logger.js";
 
 /** Max age of initData before we reject it (replay window). */
@@ -119,6 +120,23 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
     }
     req.tgUser = verified;
     next();
+  });
+
+  // -- GET /market: live market snapshot (same cached CoinGecko data as
+  // /price — auth'd like everything else so it can't be scraped as a free
+  // price proxy). 503 with no body fabrication when upstream + cache fail.
+  router.get("/market", async (_req: AuthedRequest, res: Response) => {
+    try {
+      const overview = await getMarketOverview();
+      res.json({
+        fetchedAt: overview.fetchedAt.toISOString(),
+        stale: overview.stale,
+        rows: overview.rows,
+      });
+    } catch (err) {
+      botLogger.error({ err }, "miniapp /market failed");
+      res.status(503).json({ error: "market data unavailable" });
+    }
   });
 
   // -- GET /me: the single source of truth for the Mini App ---------------

@@ -102,7 +102,26 @@ async function call<T>(
   return (await res.json()) as T;
 }
 
+export interface MarketRow {
+  symbol: string;
+  data: {
+    priceUsd: number;
+    marketCapUsd: number | null;
+    change24hPct: number | null;
+    change7dPct: number | null;
+  } | null;
+}
+
+export interface MarketSnapshot {
+  fetchedAt: string;
+  stale: boolean;
+  rows: MarketRow[];
+}
+
 export const getMe = () => call<Me>('/me');
+
+/** Live market snapshot — same cached CoinGecko data the bot's /price uses. */
+export const getMarket = () => call<MarketSnapshot>('/market');
 
 export const onboard = (referral?: string) =>
   call<OnboardResult>('/onboard', { method: 'POST', body: referral ? { referral } : {} });

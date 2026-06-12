@@ -30,6 +30,16 @@ export const SUPPORTED_ASSETS: ReadonlyArray<{ symbol: string; id: string }> = [
   { symbol: "ETHFI", id: "ether-fi" },
 ];
 
+/**
+ * Non-display assets fetched in the SAME single request so other features
+ * (portfolio USD estimates) get live prices without extra API calls.
+ * Not shown by /price.
+ */
+export const EXTRA_ASSETS: ReadonlyArray<{ symbol: string; id: string }> = [
+  { symbol: "wstETH", id: "wrapped-steth" },
+  { symbol: "WBTC", id: "wrapped-bitcoin" },
+];
+
 export interface AssetMarketData {
   priceUsd: number;
   marketCapUsd: number | null;
@@ -60,6 +70,8 @@ const STALE_MAX_AGE_MS = 10 * 60_000;
 
 interface CacheEntry {
   rows: MarketRow[];
+  /** Symbol → spot price USD for SUPPORTED_ASSETS ∪ EXTRA_ASSETS (null = unknown). */
+  spot: Record<string, number | null>;
   fetchedAt: number;
 }
 
@@ -78,10 +90,11 @@ function num(v: unknown): number | null {
 }
 
 async function fetchFromCoinGecko(): Promise<CacheEntry> {
-  const ids = SUPPORTED_ASSETS.map((a) => a.id).join(",");
+  const allAssets = [...SUPPORTED_ASSETS, ...EXTRA_ASSETS];
+  const ids = allAssets.map((a) => a.id).join(",");
   const url =
     `${BASE_URL}/coins/markets?vs_currency=usd&ids=${encodeURIComponent(ids)}` +
-    `&price_change_percentage=24h,7d&per_page=${SUPPORTED_ASSETS.length}`;
+    `&price_change_percentage=24h,7d&per_page=${allAssets.length}`;
 
   const headers: Record<string, string> = { accept: "application/json" };
   // Read from process.env directly (not getConfig) so this module never
@@ -121,7 +134,13 @@ async function fetchFromCoinGecko(): Promise<CacheEntry> {
       };
     });
 
-    return { rows, fetchedAt: Date.now() };
+    const spot: Record<string, number | null> = {};
+    for (const { symbol, id } of allAssets) {
+      const c = byId.get(id);
+      spot[symbol] = c ? num(c.current_price) : null;
+    }
+
+    return { rows, spot, fetchedAt: Date.now() };
   } finally {
     clearTimeout(timer);
   }
@@ -149,6 +168,39 @@ export async function getMarketOverview(): Promise<MarketOverview> {
   } catch (err) {
     if (cache && now - cache.fetchedAt < STALE_MAX_AGE_MS) {
       return { rows: cache.rows, fetchedAt: new Date(cache.fetchedAt), stale: true };
+    }
+    throw err;
+  }
+}
+
+export interface SpotPrices {
+  /** Symbol → spot USD price; null when CoinGecko omitted the asset. */
+  prices: Record<string, number | null>;
+  fetchedAt: Date;
+  stale: boolean;
+}
+
+/**
+ * Spot USD prices for SUPPORTED_ASSETS ∪ EXTRA_ASSETS from the same cached
+ * snapshot /price uses — never costs an extra upstream request beyond the
+ * shared one. Same failure ladder as getMarketOverview.
+ */
+export async function getSpotPrices(): Promise<SpotPrices> {
+  const now = Date.now();
+  if (cache && now - cache.fetchedAt < CACHE_TTL_MS) {
+    return { prices: cache.spot, fetchedAt: new Date(cache.fetchedAt), stale: false };
+  }
+  if (!inflight) {
+    inflight = fetchFromCoinGecko().finally(() => {
+      inflight = null;
+    });
+  }
+  try {
+    cache = await inflight;
+    return { prices: cache.spot, fetchedAt: new Date(cache.fetchedAt), stale: false };
+  } catch (err) {
+    if (cache && now - cache.fetchedAt < STALE_MAX_AGE_MS) {
+      return { prices: cache.spot, fetchedAt: new Date(cache.fetchedAt), stale: true };
     }
     throw err;
   }

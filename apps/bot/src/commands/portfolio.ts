@@ -12,6 +12,7 @@ import { prisma } from "@fxbot/db";
 import { HEALTH_LEVELS, MARKETS } from "@fxbot/shared";
 import { createFxSdk } from "../fx/index.js";
 import { fetchOnChainPositions, type OnChainPosition } from "../core/portfolio.js";
+import { getSpotPrices } from "../market/coingecko.js";
 import { botLogger } from "../middleware/logger.js";
 
 /** Risk meter: fills toward liquidation (1.0). HIGHER = riskier. */
@@ -30,12 +31,47 @@ function fmtAmount(n: number): string {
   return n >= 100 ? n.toFixed(2) : Number(n.toPrecision(5)).toString();
 }
 
-function positionBlock(i: number, pos: OnChainPosition): string {
+function fmtUsd(n: number): string {
+  const abs = Math.abs(n);
+  const s = abs >= 1000 ? Math.round(abs).toLocaleString("en-US") : abs.toFixed(2);
+  return `${n < 0 ? "-" : ""}$${s}`;
+}
+
+/**
+ * USD estimates from live CoinGecko spot prices (same cached snapshot
+ * /price uses). Returns null when a needed price is unavailable — we omit
+ * the estimate rather than guess.
+ */
+export function positionUsd(
+  pos: OnChainPosition,
+  prices: Record<string, number | null>
+): { collateralUsd: number; debtUsd: number; netUsd: number } | null {
+  const colPrice = prices[pos.collateralToken];
+  if (typeof colPrice !== "number") return null;
+  // Debt is fxUSD; use its live price when available, $1.00 otherwise.
+  const debtPrice = pos.debtToken === "fxUSD" ? (prices["FXUSD"] ?? 1) : prices[pos.debtToken];
+  if (typeof debtPrice !== "number") return null;
+  const collateralUsd = pos.collateral * colPrice;
+  const debtUsd = pos.debt * debtPrice;
+  return { collateralUsd, debtUsd, netUsd: collateralUsd - debtUsd };
+}
+
+function positionBlock(
+  i: number,
+  pos: OnChainPosition,
+  prices: Record<string, number | null> | null
+): string {
+  const usd = prices ? positionUsd(pos, prices) : null;
   return (
     `${i + 1}. ${pos.market} ${pos.side.toUpperCase()} ${pos.leverage.toFixed(2)}x  (#${pos.positionId})\n` +
     `   ${getRiskBar(pos.health)}\n` +
-    `   Collateral: ${fmtAmount(pos.collateral)} ${pos.collateralToken}\n` +
-    `   Debt: ${fmtAmount(pos.debt)} ${pos.debtToken}\n`
+    `   Collateral: ${fmtAmount(pos.collateral)} ${pos.collateralToken}` +
+    (usd ? ` (~${fmtUsd(usd.collateralUsd)})` : "") +
+    `\n` +
+    `   Debt: ${fmtAmount(pos.debt)} ${pos.debtToken}` +
+    (usd ? ` (~${fmtUsd(usd.debtUsd)})` : "") +
+    `\n` +
+    (usd ? `   Net equity: ~${fmtUsd(usd.netUsd)}\n` : "")
   );
 }
 
@@ -82,10 +118,29 @@ export async function portfolioCommand(ctx: Context & I18nFlavor) {
       return;
     }
 
+    // Live USD estimates — fail-soft: a price outage only hides the ~$ lines.
+    let prices: Record<string, number | null> | null = null;
+    try {
+      const spot = await getSpotPrices();
+      if (!spot.stale) prices = spot.prices;
+    } catch {
+      /* prices unavailable — render amounts only */
+    }
+
     msg += `Positions: ${positions.length}\n\nActive Positions:\n\n`;
     positions.forEach((pos, i) => {
-      msg += positionBlock(i, pos) + "\n";
+      msg += positionBlock(i, pos, prices) + "\n";
     });
+
+    if (prices) {
+      const totals = positions
+        .map((p) => positionUsd(p, prices))
+        .filter((u): u is NonNullable<typeof u> => u !== null);
+      if (totals.length === positions.length) {
+        const net = totals.reduce((s, u) => s + u.netUsd, 0);
+        msg += `Total net equity: ~${fmtUsd(net)} (live CoinGecko estimate)\n\n`;
+      }
+    }
 
     const maxHealth = Math.max(...positions.map((p) => p.health));
     const riskLevel =
