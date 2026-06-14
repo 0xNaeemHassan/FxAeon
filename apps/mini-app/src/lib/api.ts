@@ -20,6 +20,18 @@ export class ApiUnavailableError extends Error {
   }
 }
 
+/** A structured API error that preserves the server's machine-readable code. */
+export class ApiError extends Error {
+  code: string;
+  status: number;
+  constructor(message: string, code: string, status: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.code = code;
+    this.status = status;
+  }
+}
+
 export interface Funding {
   known: boolean;
   funded?: boolean;
@@ -142,13 +154,15 @@ async function call<T>(
 
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
+    let code = 'HTTP_ERROR';
     try {
       const data = await res.json();
       if (data?.error?.message) message = data.error.message;
+      if (data?.error?.code) code = data.error.code;
     } catch {
       /* keep default */
     }
-    throw new Error(message);
+    throw new ApiError(message, code, res.status);
   }
   return (await res.json()) as T;
 }
@@ -192,3 +206,63 @@ export const saveSettings = (settings: {
   slippageBps?: number;
   mevProtection?: 'on' | 'off';
 }) => call<{ ok: boolean }>('/settings', { method: 'POST', body: settings });
+
+// ---------------------------------------------------------------------------
+// In-app trade execution (screens 2/3/5). Both endpoints route through the
+// bot's real simulate-gated, session-signer engine — see core/miniappTrade.ts.
+// ---------------------------------------------------------------------------
+
+/** Real gas estimate from a live simulateCalls + EIP-1559 feeHistory. */
+export interface GasEstimate {
+  units: string;
+  maxFeeGwei: number;
+  priorityGwei: number;
+  estCostWei: string;
+  estCostEth: number;
+  /** null when no ETH price is available — never fabricated. */
+  estCostUsd: number | null;
+}
+
+/** A real review-quote: only SDK/chain-derived numbers, no fabricated fields. */
+export interface TradeQuote {
+  market: string;
+  side: 'long' | 'short';
+  leverage: number;
+  collateral: number;
+  collateralToken: string;
+  /** Notional exposure = collateral × leverage. */
+  exposure: number;
+  executionPrice: string;
+  positionId: number;
+  slippagePct: number;
+  mevProtection: 'on' | 'off';
+  routeType: string;
+  gas: GasEstimate;
+}
+
+export interface TradeParams {
+  market: string;
+  side: 'long' | 'short';
+  leverage: number;
+  amount: number;
+}
+
+export interface TradeExecuteResult {
+  ok: true;
+  deduped: boolean;
+  status: string;
+  txHash: string | null;
+  hashes: string[];
+  recordId: string;
+}
+
+/** Build a real review-quote + gas estimate (read-only, nothing broadcast). */
+export const tradeQuote = (params: TradeParams) =>
+  call<{ ok: true; quote: TradeQuote }>('/trade/quote', { method: 'POST', body: params });
+
+/**
+ * Execute the open for real. `nonce` makes it idempotent: a double-tap or
+ * retry with the same nonce dedupes to a single broadcast.
+ */
+export const tradeExecute = (params: TradeParams, nonce: string) =>
+  call<TradeExecuteResult>('/trade/execute', { method: 'POST', body: { ...params, nonce } });
