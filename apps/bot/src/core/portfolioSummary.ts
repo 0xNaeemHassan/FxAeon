@@ -32,13 +32,40 @@ export function valuePosition(
   return { collateralUsd, debtUsd, netUsd: collateralUsd - debtUsd };
 }
 
+/**
+ * USD value of an fxSAVE (stability-pool) holding from its underlying assets.
+ * fxSAVE is an ERC-4626 vault over fxUSD, so the SDK's `assetsWei` already is
+ * the position's redeemable fxUSD — we only convert fxUSD→USD (its live price,
+ * or $1.00 when the feed is down, matching the debt convention above).
+ *
+ * Returns 0 when there is no position (shares ≈ 0), and null when there IS a
+ * position but its underlying value can't be priced — so the caller shows an
+ * honest "—" instead of dropping a real holding from Total Value.
+ */
+export function valueSavings(
+  shares: string | number | null | undefined,
+  assets: string | number | null | undefined,
+  prices: Record<string, number | null> | null
+): number | null {
+  const sharesNum = Number(shares ?? 0);
+  if (!(sharesNum > 0)) return 0; // no stability-pool position
+  if (!prices) return null;
+  const assetsNum = assets === null || assets === undefined ? NaN : Number(assets);
+  if (!Number.isFinite(assetsNum)) return null; // SDK couldn't value the shares
+  const fxUsdPrice = prices["FXUSD"] ?? 1;
+  if (typeof fxUsdPrice !== "number") return null;
+  return assetsNum * fxUsdPrice;
+}
+
 export interface PortfolioSummary {
-  /** Wallet cash + position net equity. null when anything needed is unpriced. */
+  /** Wallet cash + position net equity + stability-pool value. null when anything needed is unpriced. */
   totalValueUsd: number | null;
   /** Wallet token balances in USD. null when unknown or a balance is unpriced. */
   walletUsd: number | null;
   /** Sum of position net equity in USD. null when any position is unpriced. */
   positionsUsd: number | null;
+  /** fxSAVE (stability-pool) value in USD. 0 when no position, null when unpriced. */
+  savingsUsd: number | null;
   /** Sum of per-position unrealized PnL. null unless EVERY open position has it. */
   netPnlUsd: number | null;
   /** netPnlUsd as a % of entry position equity. null when not derivable. */
@@ -54,12 +81,15 @@ export function summarizePortfolio(
   funding: FundingState,
   positions: OnChainPosition[],
   pnls: Array<{ pnlUsd: number } | null>,
-  prices: Record<string, number | null> | null
+  prices: Record<string, number | null> | null,
+  /** fxSAVE value in USD (0 = no position, null = unpriced). See valueSavings. */
+  savingsUsd: number | null = 0
 ): PortfolioSummary {
   const empty: PortfolioSummary = {
     totalValueUsd: null,
     walletUsd: null,
     positionsUsd: null,
+    savingsUsd: null,
     netPnlUsd: null,
     netPnlPct: null,
   };
@@ -95,19 +125,24 @@ export function summarizePortfolio(
   }
 
   // -- unrealized PnL (only when complete across all open positions) ------
-  let netPnlUsd: number | null = positions.length > 0 ? 0 : null;
+  let netPnlUsd: number | null = null;
   if (positions.length > 0) {
+    let sum = 0;
+    let complete = true;
     for (const pnl of pnls) {
       if (!pnl) {
-        netPnlUsd = null;
+        complete = false;
         break;
       }
-      netPnlUsd += pnl.pnlUsd;
+      sum += pnl.pnlUsd;
     }
+    netPnlUsd = complete ? sum : null;
   }
 
   const totalValueUsd =
-    walletUsd !== null && positionsUsd !== null ? walletUsd + positionsUsd : null;
+    walletUsd !== null && positionsUsd !== null && savingsUsd !== null
+      ? walletUsd + positionsUsd + savingsUsd
+      : null;
 
   // PnL % vs entry position equity (current position equity minus PnL).
   let netPnlPct: number | null = null;
@@ -116,5 +151,5 @@ export function summarizePortfolio(
     if (Math.abs(basis) > 1e-6) netPnlPct = (netPnlUsd / Math.abs(basis)) * 100;
   }
 
-  return { totalValueUsd, walletUsd, positionsUsd, netPnlUsd, netPnlPct };
+  return { totalValueUsd, walletUsd, positionsUsd, savingsUsd, netPnlUsd, netPnlPct };
 }

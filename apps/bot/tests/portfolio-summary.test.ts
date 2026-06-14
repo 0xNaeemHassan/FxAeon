@@ -4,7 +4,7 @@
  * never a partial sum dressed up as complete.
  */
 import { describe, it, expect } from "vitest";
-import { summarizePortfolio, valuePosition } from "../src/core/portfolioSummary";
+import { summarizePortfolio, valuePosition, valueSavings } from "../src/core/portfolioSummary";
 import type { OnChainPosition } from "../src/core/portfolio";
 import type { FundingState } from "../src/core/funding";
 
@@ -90,5 +90,50 @@ describe("summarizePortfolio", () => {
     const s = summarizePortfolio(funded, [pos()], [{ pnlUsd: 1 }], null);
     expect(s.totalValueUsd).toBeNull();
     expect(s.walletUsd).toBeNull();
+    expect(s.savingsUsd).toBeNull();
+  });
+
+  it("includes the stability-pool value in the total", () => {
+    // 1 ETH cash (3000) + position equity (6000) + 1500 fxSAVE = 10500.
+    const s = summarizePortfolio(funded, [pos()], [{ pnlUsd: 250 }], prices, 1500);
+    expect(s.savingsUsd).toBe(1500);
+    expect(s.totalValueUsd).toBe(10500);
+  });
+
+  it("total is null when a held stability-pool position can't be priced", () => {
+    const s = summarizePortfolio(funded, [], [], prices, null);
+    expect(s.savingsUsd).toBeNull();
+    expect(s.totalValueUsd).toBeNull();
+  });
+
+  it("a zero savings position does not affect the total", () => {
+    const withZero = summarizePortfolio(funded, [pos()], [{ pnlUsd: 250 }], prices, 0);
+    const noArg = summarizePortfolio(funded, [pos()], [{ pnlUsd: 250 }], prices);
+    expect(withZero.totalValueUsd).toBe(9000);
+    expect(noArg.totalValueUsd).toBe(9000);
+  });
+});
+
+describe("valueSavings", () => {
+  it("values fxSAVE shares from their underlying fxUSD assets", () => {
+    // 1234.5 fxUSD underlying × $1.00 (FXUSD price)
+    expect(valueSavings("100", "1234.5", prices)).toBeCloseTo(1234.5, 4);
+  });
+
+  it("returns 0 when there is no position (zero shares)", () => {
+    expect(valueSavings("0", null, prices)).toBe(0);
+    expect(valueSavings(0, "0", null)).toBe(0);
+  });
+
+  it("falls back to $1.00 for fxUSD when the FXUSD price is absent", () => {
+    expect(valueSavings("5", "500", { ETH: 3000 })).toBe(500);
+  });
+
+  it("returns null when shares are held but the assets value is unknown", () => {
+    expect(valueSavings("100", null, prices)).toBeNull();
+  });
+
+  it("returns null when shares are held but prices are unavailable", () => {
+    expect(valueSavings("100", "1000", null)).toBeNull();
   });
 });

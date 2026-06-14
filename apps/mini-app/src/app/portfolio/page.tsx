@@ -27,10 +27,13 @@ import {
   TrendingDown,
   User,
   Wallet,
+  Landmark,
+  Clock,
+  CheckCircle2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { isTMA, getInitData, haptic } from '@/lib/telegram';
-import { apiConfigured, getMe, getMarket, Me, ApiPosition, MarketSnapshot } from '@/lib/api';
+import { apiConfigured, getMe, getMarket, Me, ApiPosition, SavingsPosition, MarketSnapshot } from '@/lib/api';
 import {
   AppShell,
   AddressChip,
@@ -176,6 +179,63 @@ function PositionCard({ p }: { p: ApiPosition }) {
           </span>
         ) : (
           <span className="text-[13px] font-medium text-mut">—</span>
+        )}
+        <ChevronRight className="h-4 w-4 text-mut" />
+      </div>
+    </button>
+  );
+}
+
+/** The user's real fxSAVE (stability pool) holding — value + redeem status. */
+function SavingsCard({ s }: { s: SavingsPosition }) {
+  const t = useT();
+  const router = useRouter();
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        haptic('light');
+        router.push('/trade');
+      }}
+      className="glass glass-press flex w-full items-center gap-3 p-3.5 text-left"
+    >
+      <span
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
+        style={{ background: 'linear-gradient(135deg, var(--mint), var(--cyan))' }}
+      >
+        <Landmark className="h-5 w-5 text-white" strokeWidth={2} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-display text-[15px] font-semibold">{t('portfolio.savingsTitle')}</span>
+          <span className="rounded-full bg-[var(--mint-dim)] px-1.5 py-[1px] text-[9px] font-bold text-mint">
+            fxSAVE
+          </span>
+        </div>
+        <p className="mt-0.5 truncate text-[12px] text-mut">
+          <span className="text-success">●</span> {t('portfolio.savingsShares', { shares: fmt(s.shares) })}
+        </p>
+        {s.pendingRedeem && (
+          <p className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-warn">
+            {s.redeemReady ? (
+              <>
+                <CheckCircle2 className="h-3 w-3 text-success" />
+                <span className="text-success">{t('portfolio.savingsRedeemReady')}</span>
+              </>
+            ) : (
+              <>
+                <Clock className="h-3 w-3" />
+                {t('portfolio.savingsRedeemPending')}
+              </>
+            )}
+          </p>
+        )}
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5">
+        {typeof s.valueUsd === 'number' ? (
+          <span className="text-[14px] font-semibold">${usd2(s.valueUsd)}</span>
+        ) : (
+          <span className="text-[12px] font-medium text-mut">{t('portfolio.savingsValuePending')}</span>
         )}
         <ChevronRight className="h-4 w-4 text-mut" />
       </div>
@@ -413,11 +473,22 @@ export default function PortfolioPage() {
               )}
             </>
           ) : (
-            <EmptyState
-              icon={Wallet}
-              title={t('portfolio.fxusdEmptyTitle')}
-              body={t('portfolio.fxusdEmptyBody')}
-            />
+            <>
+              {me.savingsKnown === false && (
+                <Card className="mb-2.5 border border-[rgba(255,193,77,0.3)]">
+                  <p className="text-[12.5px] text-mut">{t('portfolio.savingsIncomplete')}</p>
+                </Card>
+              )}
+              {me.savings ? (
+                <SavingsCard s={me.savings} />
+              ) : (
+                <EmptyState
+                  icon={Wallet}
+                  title={t('portfolio.fxusdEmptyTitle')}
+                  body={t('portfolio.fxusdEmptyBody')}
+                />
+              )}
+            </>
           )}
         </div>
 

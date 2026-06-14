@@ -20,11 +20,13 @@ import { onboardUser, syncWalletState } from "../core/onboarding.js";
 import { getFundingState } from "../core/funding.js";
 import { getMarketOverview, getSpotPrices } from "../market/coingecko.js";
 import { createFxSdk } from "../fx/index.js";
-import { fetchOnChainPositions } from "../core/portfolio.js";
-import { trackPositions, computePnl, snapshotKey } from "../core/pnl.js";
+import { fetchOnChainPositions, type OnChainPosition } from "../core/portfolio.js";
+import { getSaveOverview } from "../fx/earn.js";
+import { trackPositions, computePnl, snapshotKey, type PnlEstimate } from "../core/pnl.js";
 import {
   summarizePortfolio,
   valuePosition,
+  valueSavings,
   type PortfolioSummary,
 } from "../core/portfolioSummary.js";
 import { botLogger } from "../middleware/logger.js";
@@ -159,31 +161,36 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
       // Live on-chain balances; fail-soft ({known:false}) on RPC trouble.
       const funding = await getFundingState(user.walletAddress as `0x${string}`);
 
+      // One SDK + one live-price read, shared by the position and the
+      // stability-pool (fxSAVE) valuations below. SDK creation is fail-soft
+      // (it throws when RPC config is missing) so /me still returns the rest
+      // of the account instead of 500ing.
+      let sdk: ReturnType<typeof createFxSdk> | null = null;
+      try {
+        sdk = createFxSdk();
+      } catch (e) {
+        botLogger.warn({ err: e, telegramId }, "miniapp /me: SDK init failed");
+      }
+      let prices: Record<string, number | null> | null = null;
+      try {
+        const spot = await getSpotPrices();
+        if (!spot.stale) prices = spot.prices;
+      } catch { /* prices unavailable — omit USD/PnL fields */ }
+
       // Positions read on-chain (W-18: the chain is the source of truth —
       // the old prisma.position table was never written and always rendered
       // an empty portfolio). Fail-soft: positionsKnown=false on RPC trouble.
       let positionsKnown = true;
       let apiPositions: Array<Record<string, unknown>> = [];
-      // Real portfolio totals for the Mini App "Total Value" hero (Screen 4).
-      // Null by default so the UI shows an honest "—" until everything needed
-      // is priced — never a fabricated or partial number.
-      let summary: PortfolioSummary = {
-        totalValueUsd: null,
-        walletUsd: null,
-        positionsUsd: null,
-        netPnlUsd: null,
-        netPnlPct: null,
-      };
+      let positions: OnChainPosition[] = [];
+      let pnls: Array<PnlEstimate | null> = [];
       try {
-        const { positions, failures } = await fetchOnChainPositions(createFxSdk(), user.walletAddress);
-        positionsKnown = failures.length === 0;
-        let prices: Record<string, number | null> | null = null;
-        try {
-          const spot = await getSpotPrices();
-          if (!spot.stale) prices = spot.prices;
-        } catch { /* prices unavailable — omit USD/PnL fields */ }
-        const snapshots = await trackPositions(user.id, positions, prices, failures);
-        const pnls = positions.map((p) => computePnl(p, snapshots.get(snapshotKey(p)), prices));
+        if (!sdk) throw new Error("SDK unavailable");
+        const read = await fetchOnChainPositions(sdk, user.walletAddress);
+        positions = read.positions;
+        positionsKnown = read.failures.length === 0;
+        const snapshots = await trackPositions(user.id, positions, prices, read.failures);
+        pnls = positions.map((p) => computePnl(p, snapshots.get(snapshotKey(p)), prices));
         apiPositions = positions.map((p, i) => {
           const pnl = pnls[i];
           const valuation = prices ? valuePosition(p, prices) : null;
@@ -204,14 +211,52 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
             pnlSince: pnl ? pnl.since.toISOString() : null,
           };
         });
-        // Only claim a total when positions read cleanly; a partial read
-        // (failures) means we can't be sure positionsUsd is the full picture.
-        if (positionsKnown) {
-          summary = summarizePortfolio(funding, positions, pnls, prices);
-        }
       } catch (e) {
         positionsKnown = false;
         botLogger.warn({ err: e, telegramId }, "miniapp /me: on-chain positions read failed");
+      }
+
+      // Stability pool (fxSAVE) — the user's real savings position. Read
+      // independently and fail-soft: savingsKnown=false on RPC trouble so the
+      // Total Value hero never silently drops or fakes the holding.
+      let savingsKnown = true;
+      let savings: Record<string, unknown> | null = null;
+      let savingsUsd: number | null = 0;
+      try {
+        if (!sdk) throw new Error("SDK unavailable");
+        const o = await getSaveOverview(sdk, user.walletAddress);
+        savingsUsd = valueSavings(o.shares, o.assets, prices);
+        if (Number(o.shares) > 0) {
+          savings = {
+            shares: o.shares,
+            assets: o.assets,
+            valueUsd: savingsUsd,
+            pendingRedeem: o.redeem.hasPendingRedeem,
+            redeemReady: o.redeem.isCooldownComplete,
+            pendingShares: o.redeem.pendingShares,
+            redeemableAt: o.redeem.redeemableAt,
+            cooldownHours: o.redeem.cooldownHours,
+          };
+        }
+      } catch (e) {
+        savingsKnown = false;
+        savingsUsd = null; // unknown holding → don't claim a complete total
+        botLogger.warn({ err: e, telegramId }, "miniapp /me: fxSAVE read failed");
+      }
+
+      // Real portfolio totals for the Mini App "Total Value" hero (Screen 4).
+      // Only claim a total when BOTH the position and savings reads were clean
+      // and complete — otherwise the UI shows an honest "—".
+      let summary: PortfolioSummary = {
+        totalValueUsd: null,
+        walletUsd: null,
+        positionsUsd: null,
+        savingsUsd: null,
+        netPnlUsd: null,
+        netPnlPct: null,
+      };
+      if (positionsKnown && savingsKnown) {
+        summary = summarizePortfolio(funding, positions, pnls, prices, savingsUsd);
       }
 
       res.json({
@@ -226,6 +271,8 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
         funding,
         positionsKnown,
         positions: apiPositions,
+        savingsKnown,
+        savings,
         summary,
       });
     } catch (e) {

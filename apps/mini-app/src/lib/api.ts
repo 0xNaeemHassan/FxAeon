@@ -55,8 +55,31 @@ export interface PortfolioSummary {
   totalValueUsd: number | null;
   walletUsd: number | null;
   positionsUsd: number | null;
+  /** fxSAVE (stability pool) value in USD. 0 = no position, null = unpriced. */
+  savingsUsd: number | null;
   netPnlUsd: number | null;
   netPnlPct: number | null;
+}
+
+/**
+ * The user's fxSAVE (stability pool) holding — real on-chain savings.
+ * Present in `Me.savings` only when shares > 0; null when there's no position.
+ */
+export interface SavingsPosition {
+  /** fxSAVE share balance (formatted, 18 dec). */
+  shares: string;
+  /** Underlying redeemable fxUSD, or null when the SDK couldn't value it. */
+  assets: string | null;
+  /** USD value (assets × fxUSD price), or null when unpriced. */
+  valueUsd: number | null;
+  /** A withdrawal is queued in the cooldown. */
+  pendingRedeem: boolean;
+  /** The queued withdrawal's cooldown is over — claimable now. */
+  redeemReady: boolean;
+  pendingShares: string;
+  /** Unix seconds the pending redemption becomes claimable, or null. */
+  redeemableAt: number | null;
+  cooldownHours: number;
 }
 
 export interface Me {
@@ -72,6 +95,10 @@ export interface Me {
   /** False when an on-chain read failed — positions may be incomplete. */
   positionsKnown?: boolean;
   positions?: ApiPosition[];
+  /** False when the fxSAVE read failed — savings state is unknown. */
+  savingsKnown?: boolean;
+  /** The user's stability-pool holding, or null when they have none. */
+  savings?: SavingsPosition | null;
   /** Priced portfolio totals — present once positions read cleanly. */
   summary?: PortfolioSummary;
 }
