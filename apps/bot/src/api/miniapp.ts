@@ -22,6 +22,11 @@ import { getMarketOverview, getSpotPrices } from "../market/coingecko.js";
 import { createFxSdk } from "../fx/index.js";
 import { fetchOnChainPositions } from "../core/portfolio.js";
 import { trackPositions, computePnl, snapshotKey } from "../core/pnl.js";
+import {
+  summarizePortfolio,
+  valuePosition,
+  type PortfolioSummary,
+} from "../core/portfolioSummary.js";
 import { botLogger } from "../middleware/logger.js";
 
 /** Max age of initData before we reject it (replay window). */
@@ -159,6 +164,16 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
       // an empty portfolio). Fail-soft: positionsKnown=false on RPC trouble.
       let positionsKnown = true;
       let apiPositions: Array<Record<string, unknown>> = [];
+      // Real portfolio totals for the Mini App "Total Value" hero (Screen 4).
+      // Null by default so the UI shows an honest "—" until everything needed
+      // is priced — never a fabricated or partial number.
+      let summary: PortfolioSummary = {
+        totalValueUsd: null,
+        walletUsd: null,
+        positionsUsd: null,
+        netPnlUsd: null,
+        netPnlPct: null,
+      };
       try {
         const { positions, failures } = await fetchOnChainPositions(createFxSdk(), user.walletAddress);
         positionsKnown = failures.length === 0;
@@ -168,8 +183,10 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
           if (!spot.stale) prices = spot.prices;
         } catch { /* prices unavailable — omit USD/PnL fields */ }
         const snapshots = await trackPositions(user.id, positions, prices, failures);
-        apiPositions = positions.map((p) => {
-          const pnl = computePnl(p, snapshots.get(snapshotKey(p)), prices);
+        const pnls = positions.map((p) => computePnl(p, snapshots.get(snapshotKey(p)), prices));
+        apiPositions = positions.map((p, i) => {
+          const pnl = pnls[i];
+          const valuation = prices ? valuePosition(p, prices) : null;
           return {
             tokenId: String(p.positionId),
             market: p.market,
@@ -181,10 +198,17 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
             leverage: p.leverage,
             // Health for display: 1 = healthy, 0 = at liquidation.
             healthPercent: Math.max(0, Math.min(1, 1 - p.health)),
+            // Position size (collateral notional) in USD — null when unpriced.
+            sizeUsd: valuation ? valuation.collateralUsd : null,
             pnlUsd: pnl ? pnl.pnlUsd : null,
             pnlSince: pnl ? pnl.since.toISOString() : null,
           };
         });
+        // Only claim a total when positions read cleanly; a partial read
+        // (failures) means we can't be sure positionsUsd is the full picture.
+        if (positionsKnown) {
+          summary = summarizePortfolio(funding, positions, pnls, prices);
+        }
       } catch (e) {
         positionsKnown = false;
         botLogger.warn({ err: e, telegramId }, "miniapp /me: on-chain positions read failed");
@@ -202,6 +226,7 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
         funding,
         positionsKnown,
         positions: apiPositions,
+        summary,
       });
     } catch (e) {
       botLogger.error({ err: e, telegramId }, "miniapp /me failed");
