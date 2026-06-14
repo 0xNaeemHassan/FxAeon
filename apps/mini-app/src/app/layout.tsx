@@ -4,6 +4,7 @@ import { Inter, Space_Grotesk } from 'next/font/google';
 import './globals.css';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { TelegramProvider } from '@/components/TelegramProvider';
+import { LocaleProvider } from '@/lib/i18n';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 const grotesk = Space_Grotesk({ subsets: ['latin'], variable: '--font-display' });
@@ -42,9 +43,11 @@ export default function RootLayout({
         {/* PERF (W-20): no PrivyClientProvider here — the Privy SDK is heavy
             and only /login + Settings → Wallet need it. Those surfaces mount
             their own provider via next/dynamic. */}
-        <TelegramProvider>
-          <ErrorBoundary>{children}</ErrorBoundary>
-        </TelegramProvider>
+        <LocaleProvider>
+          <TelegramProvider>
+            <ErrorBoundary>{children}</ErrorBoundary>
+          </TelegramProvider>
+        </LocaleProvider>
       </body>
     </html>
   );

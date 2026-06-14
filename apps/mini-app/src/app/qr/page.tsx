@@ -12,10 +12,12 @@ import { Copy, Check, AlertTriangle, PlugZap } from 'lucide-react';
 import { isTMA, getInitData, haptic } from '@/lib/telegram';
 import { apiConfigured, getMe } from '@/lib/api';
 import { AppShell, Button, Card, EmptyState, FullScreenSpinner, Skeleton } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 
 const TOKENS = ['ETH', 'wstETH', 'WBTC', 'fxUSD'];
 
 function QRContent() {
+  const t = useT();
   const searchParams = useSearchParams();
   const paramAddress = searchParams.get('address') || '';
   const [address, setAddress] = useState(paramAddress);
@@ -27,19 +29,17 @@ function QRContent() {
     if (paramAddress) return;
     if (!isTMA() || !getInitData() || !apiConfigured()) {
       setLoading(false);
-      setUnavailable(
-        'No wallet address was passed in. Use /deposit in the bot chat, or open this screen from a bot button.'
-      );
+      setUnavailable(t('deposit.noAddress'));
       return;
     }
     getMe()
       .then((me) => {
         if (me.onboarded && me.walletAddress) setAddress(me.walletAddress);
-        else setUnavailable('No wallet yet — send /start to the bot to create one.');
+        else setUnavailable(t('deposit.noWallet'));
       })
       .catch((e: Error) => setUnavailable(e.message))
       .finally(() => setLoading(false));
-  }, [paramAddress]);
+  }, [paramAddress, t]);
 
   const copy = async () => {
     if (!address) return;
@@ -54,7 +54,7 @@ function QRContent() {
   };
 
   return (
-    <AppShell title="Deposit" subtitle="Fund your policy wallet">
+    <AppShell title={t('deposit.title')} subtitle={t('deposit.subtitle')}>
       <div className="stagger flex flex-col gap-3.5">
         {loading ? (
           <Skeleton className="h-72" />
@@ -77,7 +77,7 @@ function QRContent() {
             </Card>
 
             <Card>
-              <p className="text-[11px] uppercase tracking-wide text-mut">Address</p>
+              <p className="text-[11px] uppercase tracking-wide text-mut">{t('deposit.address')}</p>
               <div className="mt-2 flex items-center justify-between gap-3">
                 <p className="break-all font-mono text-[12.5px] leading-relaxed">{address}</p>
                 <button
@@ -94,20 +94,20 @@ function QRContent() {
                 </button>
               </div>
               <Button onClick={copy} variant="ghost" className="mt-3">
-                {copied ? 'Copied!' : 'Copy address'}
+                {copied ? t('common.copied') : t('common.copyAddress')}
               </Button>
             </Card>
 
             <Card className="flex items-start gap-2.5 border-[rgba(255,194,75,0.3)]">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
               <p className="text-[12.5px] leading-relaxed text-mut">
-                <span className="font-medium text-warn">Ethereum mainnet only.</span> Send only the
-                tokens above — anything else may be permanently lost.
+                <span className="font-medium text-warn">{t('deposit.mainnetOnlyBold')}</span>{' '}
+                {t('deposit.mainnetOnlyBody')}
               </p>
             </Card>
           </>
         ) : (
-          <EmptyState icon={PlugZap} title="Address unavailable" body={unavailable} />
+          <EmptyState icon={PlugZap} title={t('deposit.unavailableTitle')} body={unavailable} />
         )}
       </div>
     </AppShell>

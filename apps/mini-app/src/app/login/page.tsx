@@ -24,6 +24,7 @@ import { Send } from 'lucide-react';
 import { isTMA } from '@/lib/telegram';
 import { privyConfigured } from '@/lib/privyConfig';
 import { Button, FullScreenSpinner } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 
 const BOT_USERNAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || 'FxAeonBot';
 
@@ -36,6 +37,7 @@ const PrivyFlow = dynamic(() => import('./PrivyFlow'), {
 });
 
 function LoginContent() {
+  const t = useT();
   const searchParams = useSearchParams();
   const [mounted, setMounted] = useState(false);
 
@@ -55,10 +57,10 @@ function LoginContent() {
         <span className="anim-float flex h-16 w-16 items-center justify-center rounded-3xl bg-[var(--mint-dim)]">
           <Send className="h-8 w-8 text-mint" strokeWidth={1.6} />
         </span>
-        <h1 className="text-display text-2xl font-semibold">FxAeon runs inside Telegram</h1>
-        <p className="text-[13.5px] text-mut">Open the bot and send /start to set up your wallet.</p>
+        <h1 className="text-display text-2xl font-semibold">{t('loginGate.tgTitle')}</h1>
+        <p className="text-[13.5px] text-mut">{t('loginGate.tgBody')}</p>
         <a href={`https://t.me/${BOT_USERNAME}`} className="w-full">
-          <Button>Open @{BOT_USERNAME}</Button>
+          <Button>{t('common.openBot', { bot: BOT_USERNAME })}</Button>
         </a>
       </main>
     );
@@ -67,12 +69,8 @@ function LoginContent() {
   if (!privyConfigured()) {
     return (
       <main className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col items-center justify-center gap-5 px-6 text-center">
-        <h1 className="text-display text-2xl font-semibold">Wallet service not configured</h1>
-        <p className="text-[13.5px] text-mut">
-          This build is missing its Privy app id, so wallet setup can’t run. If you’re the
-          operator: set NEXT_PUBLIC_PRIVY_APP_ID (and NEXT_PUBLIC_PRIVY_SIGNER_ID for bot
-          trading) and redeploy.
-        </p>
+        <h1 className="text-display text-2xl font-semibold">{t('loginGate.notConfTitle')}</h1>
+        <p className="text-[13.5px] text-mut">{t('loginGate.notConfBody')}</p>
       </main>
     );
   }

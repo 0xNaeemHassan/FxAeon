@@ -96,6 +96,18 @@ export function getInitData(): string {
 }
 
 /**
+ * Telegram's UI language for the launching user (e.g. 'en', 'ru', 'zh-hans').
+ * Read from initDataUnsafe — present on launches that carry a user, '' otherwise.
+ * Used only as a first-paint locale hint; the saved User.language wins once loaded.
+ */
+export function getTelegramLanguage(): string {
+  const tg = getWebApp() as unknown as {
+    initDataUnsafe?: { user?: { language_code?: string } };
+  } | null;
+  return tg?.initDataUnsafe?.user?.language_code ?? '';
+}
+
+/**
  * Restore the Telegram launch hash (`#tgWebAppData=…`) onto the current URL.
  *
  * WHY (P0 login fix): Privy's seamless Mini-App login is AUTOMATIC — at

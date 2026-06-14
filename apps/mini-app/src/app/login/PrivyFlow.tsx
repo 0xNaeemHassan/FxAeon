@@ -33,24 +33,13 @@ import { apiAvailable, onboard, OnboardResult } from '@/lib/api';
 import { PRIVY_SIGNER_ID } from '@/lib/privyConfig';
 import PrivyClientProvider from '@/components/PrivyClientProvider';
 import { AddressChip, Button, Card, FullScreenSpinner } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 
 const VALUE_PROPS = [
-  {
-    icon: KeyRound,
-    title: 'Your wallet, your keys',
-    body: 'Create a new wallet or import your own. Keys live in a secure enclave — exportable by you, invisible to us.',
-  },
-  {
-    icon: Zap,
-    title: 'Trade from chat',
-    body: 'Open leveraged wstETH and WBTC positions with a message. Confirm in one tap.',
-  },
-  {
-    icon: ShieldCheck,
-    title: 'You stay in control',
-    body: 'Bot trading is a permission YOU grant — and can revoke any time. Nothing signs without it.',
-  },
-];
+  { icon: KeyRound, titleKey: 'intro.prop1Title', bodyKey: 'intro.prop1Body' },
+  { icon: Zap, titleKey: 'intro.prop2Title', bodyKey: 'intro.prop2Body' },
+  { icon: ShieldCheck, titleKey: 'intro.prop3Title', bodyKey: 'intro.prop3Body' },
+] as const;
 
 type Phase =
   | 'intro'
@@ -66,6 +55,7 @@ type Phase =
   | 'error';
 
 function PrivyLoginFlow({ referral }: { referral?: string }) {
+  const t = useT();
   const { ready, authenticated, user } = usePrivy();
   const { login } = useLoginWithTelegram();
   const { logout } = useLogout();
@@ -588,21 +578,19 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
     <main className="mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col px-6 pb-8 pt-10">
       <div className="stagger flex flex-1 flex-col">
         <h1 className="text-display text-[34px] font-semibold leading-tight">
-          Trade f(x) like it’s <span className="text-gradient">a message</span>
+          {t('intro.titleLead')} <span className="text-gradient">{t('intro.titleAccent')}</span>
         </h1>
-        <p className="mt-2 text-[14px] leading-relaxed text-mut">
-          Create or import your own wallet — self-custody, no email, no compromise.
-        </p>
+        <p className="mt-2 text-[14px] leading-relaxed text-mut">{t('intro.subtitle')}</p>
 
         <div className="mt-7 flex flex-col gap-3">
-          {VALUE_PROPS.map(({ icon: Icon, title, body }) => (
-            <Card key={title} className="flex items-start gap-3">
+          {VALUE_PROPS.map(({ icon: Icon, titleKey, bodyKey }) => (
+            <Card key={titleKey} className="flex items-start gap-3">
               <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)]">
                 <Icon className="h-[18px] w-[18px] text-mint" strokeWidth={2} />
               </span>
               <span>
-                <p className="text-[14px] font-medium">{title}</p>
-                <p className="mt-0.5 text-[12.5px] leading-relaxed text-mut">{body}</p>
+                <p className="text-[14px] font-medium">{t(titleKey)}</p>
+                <p className="mt-0.5 text-[12.5px] leading-relaxed text-mut">{t(bodyKey)}</p>
               </span>
             </Card>
           ))}
@@ -610,7 +598,8 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
 
         {referral && (
           <p className="mt-4 text-center text-[12.5px] text-mut">
-            🎁 Referral <span className="font-mono text-mint">{referral}</span> will be applied
+            {t('intro.referralPre')} <span className="font-mono text-mint">{referral}</span>{' '}
+            {t('intro.referralPost')}
           </p>
         )}
 
@@ -622,14 +611,12 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
 
         <div className="mt-auto pt-7">
           <Button onClick={startLogin} loading={phase === 'authenticating'} className="anim-glow">
-            {phase === 'authenticating' ? 'Connecting…' : 'Set up my wallet'}
+            {phase === 'authenticating' ? t('intro.ctaConnecting') : t('intro.ctaSetup')}
           </Button>
           <Button variant="ghost" onClick={startAltLogin} className="mt-2">
-            More sign-in options (Google, wallet…)
+            {t('intro.ctaMore')}
           </Button>
-          <p className="mt-3 text-center text-[11.5px] text-mut">
-            Telegram login by default · Keys secured by hardware enclaves · Exportable any time
-          </p>
+          <p className="mt-3 text-center text-[11.5px] text-mut">{t('intro.footer')}</p>
         </div>
       </div>
     </main>

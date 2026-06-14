@@ -11,6 +11,7 @@ import { Globe, Sliders, Shield, Check, PlugZap, Send } from 'lucide-react';
 import { isTMA, getInitData, haptic } from '@/lib/telegram';
 import { apiConfigured, getMe, saveSettings } from '@/lib/api';
 import { AppShell, Button, Card, EmptyState, SectionTitle, Skeleton } from '@/components/ui';
+import { useLocale } from '@/lib/i18n';
 import dynamic from 'next/dynamic';
 
 // PERF (W-20): Settings → Wallet is the only Privy surface outside /login.
@@ -34,6 +35,7 @@ const LANGUAGES = [
 const SLIPPAGE_PRESETS = [10, 50, 100, 200]; // bps
 
 export default function SettingsPage() {
+  const { t, setLocale } = useLocale();
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -56,6 +58,7 @@ export default function SettingsPage() {
       .then((me) => {
         if (me.onboarded) {
           setLang(me.language ?? 'en');
+          setLocale(me.language ?? 'en');
           setSlippageBps(me.slippageBps ?? 50);
           setMev((me.mevProtection as 'on' | 'off') ?? 'off');
         }
@@ -86,18 +89,18 @@ export default function SettingsPage() {
     setSaved(false);
   };
 
-  if (!mounted) return <AppShell title="Settings">{null}</AppShell>;
+  if (!mounted) return <AppShell title={t('settings.title')}>{null}</AppShell>;
 
   if (!isTMA()) {
     return (
-      <AppShell title="Settings" tabs={false}>
+      <AppShell title={t('settings.title')} tabs={false}>
         <EmptyState
           icon={Send}
-          title="Open FxAeon in Telegram"
-          body="Settings sync with your bot account."
+          title={t('settings.openInTgTitle')}
+          body={t('settings.openInTgBody')}
           action={
             <a href={`https://t.me/${BOT_USERNAME}`}>
-              <Button>Open @{BOT_USERNAME}</Button>
+              <Button>{t('common.openBot', { bot: BOT_USERNAME })}</Button>
             </a>
           }
         />
@@ -107,15 +110,11 @@ export default function SettingsPage() {
 
   if (!getInitData() || !apiConfigured()) {
     return (
-      <AppShell title="Settings">
+      <AppShell title={t('settings.title')}>
         <EmptyState
           icon={PlugZap}
-          title="Settings can’t sync from this screen"
-          body={
-            !getInitData()
-              ? 'This launch type doesn’t carry Telegram credentials. Use /settings in the chat instead.'
-              : 'This build isn’t connected to the trading backend yet. Use /settings in the chat instead.'
-          }
+          title={t('settings.cantSyncTitle')}
+          body={!getInitData() ? t('settings.cantSyncNoInit') : t('settings.cantSyncNoBackend')}
         />
       </AppShell>
     );
@@ -123,7 +122,7 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <AppShell title="Settings">
+      <AppShell title={t('settings.title')}>
         <div className="flex flex-col gap-3">
           <Skeleton className="h-40" />
           <Skeleton className="h-28" />
@@ -134,13 +133,13 @@ export default function SettingsPage() {
   }
 
   return (
-    <AppShell title="Settings" subtitle="Synced with your bot account">
+    <AppShell title={t('settings.title')} subtitle={t('settings.subtitle')}>
       <div className="stagger flex flex-col">
         <WalletSection />
 
         <SectionTitle>
           <span className="flex items-center gap-1.5">
-            <Globe className="h-3.5 w-3.5" /> Language
+            <Globe className="h-3.5 w-3.5" /> {t('settings.language')}
           </span>
         </SectionTitle>
         <div className="grid grid-cols-3 gap-2">
@@ -151,6 +150,7 @@ export default function SettingsPage() {
               onClick={() => {
                 haptic('selection');
                 setLang(l.code);
+                setLocale(l.code);
                 touch();
               }}
               className={`glass glass-press rounded-2xl px-2 py-2.5 text-[13px] ${
@@ -164,7 +164,7 @@ export default function SettingsPage() {
 
         <SectionTitle>
           <span className="flex items-center gap-1.5">
-            <Sliders className="h-3.5 w-3.5" /> Max slippage
+            <Sliders className="h-3.5 w-3.5" /> {t('settings.maxSlippage')}
           </span>
         </SectionTitle>
         <div className="grid grid-cols-4 gap-2">
@@ -190,13 +190,13 @@ export default function SettingsPage() {
 
         <SectionTitle>
           <span className="flex items-center gap-1.5">
-            <Shield className="h-3.5 w-3.5" /> MEV protection
+            <Shield className="h-3.5 w-3.5" /> {t('settings.mevProtection')}
           </span>
         </SectionTitle>
         <Card className="flex items-center justify-between">
           <div>
-            <p className="text-[14px] font-medium">Private transactions</p>
-            <p className="mt-0.5 text-[12px] text-mut">Route through a private relay</p>
+            <p className="text-[14px] font-medium">{t('settings.privateTx')}</p>
+            <p className="mt-0.5 text-[12px] text-mut">{t('settings.privateTxSub')}</p>
           </div>
           <button
             type="button"
@@ -229,10 +229,10 @@ export default function SettingsPage() {
           <Button onClick={save} disabled={!dirty} loading={saving}>
             {saved ? (
               <>
-                <Check className="h-4 w-4" /> Saved
+                <Check className="h-4 w-4" /> {t('common.saved')}
               </>
             ) : (
-              'Save changes'
+              t('common.save')
             )}
           </Button>
         </div>

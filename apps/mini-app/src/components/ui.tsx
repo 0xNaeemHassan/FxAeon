@@ -17,6 +17,7 @@ import {
   LucideIcon,
 } from 'lucide-react';
 import { haptic } from '@/lib/telegram';
+import { useT } from '@/lib/i18n';
 
 /* ------------------------------------------------------------------ shell */
 
@@ -45,22 +46,23 @@ export function AppShell({
   );
 }
 
-const TABS: { href: string; label: string; icon: LucideIcon }[] = [
-  { href: '/portfolio', label: 'Home', icon: Home },
-  { href: '/trade', label: 'Trade', icon: CandlestickChart },
-  { href: '/qr', label: 'Deposit', icon: QrCode },
-  { href: '/settings', label: 'Settings', icon: Settings },
+const TABS: { href: string; labelKey: string; icon: LucideIcon }[] = [
+  { href: '/portfolio', labelKey: 'nav.home', icon: Home },
+  { href: '/trade', labelKey: 'nav.trade', icon: CandlestickChart },
+  { href: '/qr', labelKey: 'nav.deposit', icon: QrCode },
+  { href: '/settings', labelKey: 'nav.settings', icon: Settings },
 ];
 
 export function TabBar() {
   const pathname = usePathname();
+  const t = useT();
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40">
       <div className="tabbar-safe mx-auto w-full max-w-md px-5 pb-3">
         <div className="glass flex items-center justify-between rounded-3xl px-2 py-2"
           style={{ background: 'rgba(10,13,15,0.82)' }}
         >
-          {TABS.map(({ href, label, icon: Icon }) => {
+          {TABS.map(({ href, labelKey, icon: Icon }) => {
             const active = pathname === href;
             return (
               <Link
@@ -72,7 +74,7 @@ export function TabBar() {
                 }`}
               >
                 <Icon className="h-[18px] w-[18px]" strokeWidth={active ? 2.4 : 1.8} />
-                {label}
+                {t(labelKey)}
               </Link>
             );
           })}
@@ -273,6 +275,7 @@ export function Skeleton({ className = '' }: { className?: string }) {
 }
 
 export function FullScreenSpinner() {
+  const t = useT();
   // Contentful loading state: the brand text paints pre-hydration, so slow
   // cold starts show content instead of a blank screen. A border-only
   // spinner does NOT count as a contentful paint (Lighthouse NO_FCP).
@@ -285,7 +288,7 @@ export function FullScreenSpinner() {
         className="h-7 w-7 animate-spin rounded-full border-[3px] border-mint border-t-transparent"
         aria-hidden="true"
       />
-      <p className="text-[12.5px] text-mut">Loading f(x) Protocol trading…</p>
+      <p className="text-[12.5px] text-mut">{t('common.loading')}</p>
     </div>
   );
 }

@@ -31,6 +31,8 @@ import {
   Stat,
 } from '@/components/ui';
 
+import { useT, useLocale } from '@/lib/i18n';
+
 const BOT_USERNAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || 'FxAeonBot';
 
 function fmt(value?: string): string {
@@ -54,6 +56,7 @@ function fmtMarketPrice(n: number): string {
  * unavailable: no fake numbers, and the portfolio stays the hero.
  */
 function MarketsCard({ market }: { market: MarketSnapshot }) {
+  const t = useT();
   const rows = market.rows.filter((r) => r.data !== null);
   if (rows.length === 0) return null;
   return (
@@ -75,13 +78,14 @@ function MarketsCard({ market }: { market: MarketSnapshot }) {
         })}
       </div>
       {market.stale && (
-        <p className="mt-2 text-[10.5px] text-mut">Prices may be a few minutes old (upstream hiccup).</p>
+        <p className="mt-2 text-[10.5px] text-mut">{t('portfolio.pricesStale')}</p>
       )}
     </Card>
   );
 }
 
 function PositionCard({ p }: { p: ApiPosition }) {
+  const t = useT();
   const long = p.side === 'long';
   const healthTone =
     p.healthPercent >= 0.5 ? 'text-success' : p.healthPercent >= 0.25 ? 'text-warn' : 'text-danger';
@@ -94,7 +98,7 @@ function PositionCard({ p }: { p: ApiPosition }) {
               long ? 'bg-[var(--success-dim)] text-success' : 'bg-[rgba(255,90,95,0.12)] text-danger'
             }`}
           >
-            {p.side}
+            {t(`portfolio.${p.side}`)}
           </span>
           <span className="text-display text-[16px] font-semibold">{p.market}</span>
         </div>
@@ -104,11 +108,11 @@ function PositionCard({ p }: { p: ApiPosition }) {
       </div>
       <div className="mt-3 grid grid-cols-3 gap-2 text-[12px]">
         <div>
-          <p className="text-mut">Collateral</p>
+          <p className="text-mut">{t('portfolio.colCollateral')}</p>
           <p className="mt-0.5 font-medium">{fmt(p.collateral)}</p>
         </div>
         <div>
-          <p className="text-mut">PnL</p>
+          <p className="text-mut">{t('portfolio.colPnl')}</p>
           {typeof p.pnlUsd === 'number' ? (
             <p className={`mt-0.5 font-medium ${p.pnlUsd >= 0 ? 'text-success' : 'text-danger'}`}>
               {p.pnlUsd >= 0 ? '+' : '-'}${Math.abs(p.pnlUsd).toLocaleString('en-US', { maximumFractionDigits: 2 })}
@@ -118,7 +122,7 @@ function PositionCard({ p }: { p: ApiPosition }) {
           )}
         </div>
         <div>
-          <p className="text-mut">Health</p>
+          <p className="text-mut">{t('portfolio.colHealth')}</p>
           <p className={`mt-0.5 font-medium ${healthTone}`}>
             {Math.round(p.healthPercent * 100)}%
           </p>
@@ -129,6 +133,8 @@ function PositionCard({ p }: { p: ApiPosition }) {
 }
 
 export default function PortfolioPage() {
+  const t = useT();
+  const { setLocale } = useLocale();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [me, setMe] = useState<Me | null>(null);
@@ -146,6 +152,7 @@ export default function PortfolioPage() {
         return;
       }
       setMe(data);
+      setLocale(data.language);
       // Markets are decoration, not account state — never block or fail the
       // page on them.
       try {
@@ -170,19 +177,19 @@ export default function PortfolioPage() {
     else setLoading(false);
   }, [mounted, load]);
 
-  if (!mounted) return <AppShell title="Portfolio">{null}</AppShell>;
+  if (!mounted) return <AppShell title={t('portfolio.title')}>{null}</AppShell>;
 
   // -- Honest degraded states (no fake zeros) ------------------------------
   if (!isTMA()) {
     return (
-      <AppShell title="Portfolio" tabs={false}>
+      <AppShell title={t('portfolio.title')} tabs={false}>
         <EmptyState
           icon={Send}
-          title="Open FxAeon in Telegram"
-          body="Your portfolio lives in the Telegram app."
+          title={t('portfolio.openInTgTitle')}
+          body={t('portfolio.openInTgBody')}
           action={
             <a href={`https://t.me/${BOT_USERNAME}`}>
-              <Button>Open @{BOT_USERNAME}</Button>
+              <Button>{t('common.openBot', { bot: BOT_USERNAME })}</Button>
             </a>
           }
         />
@@ -192,15 +199,11 @@ export default function PortfolioPage() {
 
   if (!getInitData() || !apiConfigured()) {
     return (
-      <AppShell title="Portfolio">
+      <AppShell title={t('portfolio.title')}>
         <EmptyState
           icon={PlugZap}
-          title="Live data isn’t available from this screen"
-          body={
-            !getInitData()
-              ? 'This launch type doesn’t carry Telegram credentials. Use /portfolio in the chat, or open the app from a bot button.'
-              : 'This build isn’t connected to the trading backend yet. Use /portfolio in the chat for live data.'
-          }
+          title={t('portfolio.degradedTitle')}
+          body={!getInitData() ? t('portfolio.degradedNoInit') : t('portfolio.degradedNoBackend')}
         />
       </AppShell>
     );
@@ -208,7 +211,7 @@ export default function PortfolioPage() {
 
   if (loading) {
     return (
-      <AppShell title="Portfolio">
+      <AppShell title={t('portfolio.title')}>
         <div className="flex flex-col gap-3">
           <Skeleton className="h-36" />
           <div className="grid grid-cols-3 gap-2.5">
@@ -224,12 +227,12 @@ export default function PortfolioPage() {
 
   if (error || !me) {
     return (
-      <AppShell title="Portfolio">
+      <AppShell title={t('portfolio.title')}>
         <EmptyState
           icon={RefreshCw}
-          title="Couldn’t load your account"
-          body={error || 'Unknown error'}
-          action={<Button onClick={() => void load()}>Retry</Button>}
+          title={t('portfolio.loadFailTitle')}
+          body={error || t('common.unknownError')}
+          action={<Button onClick={() => void load()}>{t('common.retry')}</Button>}
         />
       </AppShell>
     );
@@ -251,10 +254,10 @@ export default function PortfolioPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-[12px] text-mut">
               <Wallet className="h-4 w-4 text-mint" />
-              Policy wallet
+              {t('portfolio.walletLabel')}
             </div>
             <span className="flex items-center gap-1 rounded-full bg-[var(--mint-dim)] px-2.5 py-1 text-[10.5px] font-medium text-mint">
-              <ShieldCheck className="h-3 w-3" /> default-deny
+              <ShieldCheck className="h-3 w-3" /> {t('portfolio.selfCustodyBadge')}
             </span>
           </div>
           <div className="mt-4">
@@ -262,7 +265,7 @@ export default function PortfolioPage() {
           </div>
           {me.referralCode && (
             <p className="mt-3 text-[11.5px] text-mut">
-              Referral code <span className="font-mono text-mint">{me.referralCode}</span>
+              {t('portfolio.referralCode')} <span className="font-mono text-mint">{me.referralCode}</span>
             </p>
           )}
         </Card>
@@ -280,7 +283,7 @@ export default function PortfolioPage() {
             </button>
           }
         >
-          Balances
+          {t('portfolio.balances')}
         </SectionTitle>
         {funding?.known ? (
           <div className="grid grid-cols-3 gap-2.5">
@@ -290,33 +293,26 @@ export default function PortfolioPage() {
           </div>
         ) : (
           <Card>
-            <p className="text-[12.5px] text-mut">
-              On-chain balances are temporarily unavailable (RPC). Pull to refresh or try again
-              shortly.
-            </p>
+            <p className="text-[12.5px] text-mut">{t('portfolio.balancesUnavailable')}</p>
           </Card>
         )}
         {noFunds && (
           <Card className="mt-2.5 border-[rgba(124, 92, 255,0.25)]">
             <p className="text-[13px] leading-relaxed">
-              <span className="font-medium text-mint">Fund your wallet to start trading.</span>{' '}
-              <span className="text-mut">
-                Send ETH, wstETH or WBTC to your address — then open your first position.
-              </span>
+              <span className="font-medium text-mint">{t('portfolio.fundTitle')}</span>{' '}
+              <span className="text-mut">{t('portfolio.fundBody')}</span>
             </p>
             <div className="mt-3">
-              <ActionTile icon={QrCode} label="Show deposit address" href="/qr" />
+              <ActionTile icon={QrCode} label={t('portfolio.showDeposit')} href="/qr" />
             </div>
           </Card>
         )}
 
         {/* Positions */}
-        <SectionTitle>Positions</SectionTitle>
+        <SectionTitle>{t('portfolio.positions')}</SectionTitle>
         {me.positionsKnown === false && (
           <Card className="mb-2.5 border-[rgba(255,193,77,0.3)]">
-            <p className="text-[12.5px] text-mut">
-              Some on-chain reads failed — positions shown may be incomplete. Refresh to retry.
-            </p>
+            <p className="text-[12.5px] text-mut">{t('portfolio.positionsIncomplete')}</p>
           </Card>
         )}
         {positions.length > 0 ? (
@@ -328,31 +324,31 @@ export default function PortfolioPage() {
         ) : (
           <EmptyState
             icon={LineChart}
-            title="No open positions"
-            body="Open a leveraged wstETH or WBTC position — it takes about 30 seconds."
-            action={<Button onClick={() => router.push('/trade')}>Set up a trade</Button>}
+            title={t('portfolio.noPositionsTitle')}
+            body={t('portfolio.noPositionsBody')}
+            action={<Button onClick={() => router.push('/trade')}>{t('portfolio.setupTrade')}</Button>}
           />
         )}
 
         {/* Markets */}
         {market && (
           <>
-            <SectionTitle>Markets</SectionTitle>
+            <SectionTitle>{t('portfolio.markets')}</SectionTitle>
             <MarketsCard market={market} />
           </>
         )}
 
         {/* Quick actions */}
-        <SectionTitle>Quick actions</SectionTitle>
+        <SectionTitle>{t('portfolio.quickActions')}</SectionTitle>
         <div className="grid grid-cols-2 gap-2.5">
-          <ActionTile icon={CandlestickChart} label="Trade" hint="Leverage up to 10x" href="/trade" />
-          <ActionTile icon={QrCode} label="Deposit" hint="ETH · wstETH · WBTC" href="/qr" />
+          <ActionTile icon={CandlestickChart} label={t('nav.trade')} hint={t('portfolio.qaTradeHint')} href="/trade" />
+          <ActionTile icon={QrCode} label={t('nav.deposit')} hint={t('portfolio.qaDepositHint')} href="/qr" />
         </div>
         <div className="mt-2.5">
           <ActionTile
             icon={ShieldCheck}
-            label="How your wallet is protected"
-            hint="Default-deny security policy"
+            label={t('portfolio.qaSecurity')}
+            hint={t('portfolio.qaSecurityHint')}
             href="/policy"
           />
         </div>
