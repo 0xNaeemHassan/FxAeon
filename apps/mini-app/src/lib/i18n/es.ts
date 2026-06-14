@@ -139,6 +139,14 @@ const es: Messages = {
     'Ninguna transacción se construye ni se envía antes de que toques Confirmar. Las vistas previas caducan a los ~10 minutos.',
   'policy.footer':
     'Gestiona todo en Ajustes → Billetera: exporta tu clave, activa o revoca el trading del bot. Consulta /security en el bot para ver el estado en vivo.',
+  // -- login sign-in card (PrivyFlow intro) --
+  'loginCard.signIn': 'Inicia sesión en FxAeon',
+  'loginCard.subtitle': 'Monedero auto-custodiado con tecnología de Privy',
+  'loginCard.telegram': 'Continuar con Telegram',
+  'loginCard.email': 'Continuar con correo',
+  'loginCard.wallet': 'Conectar un monedero existente',
+  'loginCard.terms': 'Al continuar aceptas nuestros Términos y Privacidad',
+  'loginCard.poweredBy': 'Con tecnología de',
 };
 
 export default es;

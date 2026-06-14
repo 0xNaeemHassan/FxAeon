@@ -138,6 +138,14 @@ const zhCN: Messages = {
     '在你点击“确认”之前，不会构建或发送任何交易。预览将在约 10 分钟后失效。',
   'policy.footer':
     '在设置 → 钱包中管理一切：导出私钥、启用或撤销机器人交易。在机器人中查看 /security 了解实时状态。',
+  // -- login sign-in card (PrivyFlow intro) --
+  'loginCard.signIn': '登录 FxAeon',
+  'loginCard.subtitle': '由 Privy 提供支持的自托管钱包',
+  'loginCard.telegram': '使用 Telegram 继续',
+  'loginCard.email': '使用邮箱继续',
+  'loginCard.wallet': '连接已有钱包',
+  'loginCard.terms': '继续即表示您接受我们的条款和隐私政策',
+  'loginCard.poweredBy': '技术支持',
 };
 
 export default zhCN;

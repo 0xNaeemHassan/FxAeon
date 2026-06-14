@@ -149,6 +149,14 @@ const en: Messages = {
     'No transaction is built or sent before you tap Confirm. Previews expire after ~10 minutes.',
   'policy.footer':
     'Manage everything in Settings → Wallet: export your key, enable or revoke bot trading. Check /security in the bot for the live status.',
+  // -- login sign-in card (PrivyFlow intro) --
+  'loginCard.signIn': 'Sign in to FxAeon',
+  'loginCard.subtitle': 'Self-custodial wallet powered by Privy',
+  'loginCard.telegram': 'Continue with Telegram',
+  'loginCard.email': 'Continue with Email',
+  'loginCard.wallet': 'Connect existing wallet',
+  'loginCard.terms': 'By continuing you accept our Terms and Privacy',
+  'loginCard.poweredBy': 'Powered by',
 };
 
 export default en;
