@@ -30,6 +30,16 @@ import {
   type PortfolioSummary,
 } from "../core/portfolioSummary.js";
 import { botLogger } from "../middleware/logger.js";
+import {
+  validateTradeBody,
+  buildTradeQuote,
+  executeTrade,
+} from "../core/miniappTrade.js";
+
+/** Idempotency nonce from the client: a short opaque token, one per Confirm. */
+function validNonce(v: unknown): v is string {
+  return typeof v === "string" && /^[A-Za-z0-9_-]{8,100}$/.test(v);
+}
 
 /** Max age of initData before we reject it (replay window). */
 const MAX_INITDATA_AGE_SECONDS = 6 * 60 * 60;
@@ -410,6 +420,96 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
     } catch (e) {
       botLogger.error({ err: e, telegramId }, "miniapp /settings failed");
       res.status(500).json({ error: { code: "INTERNAL", message: "Failed to save settings" } });
+    }
+  });
+
+  // -- POST /trade/quote: real review-quote + gas for an open --------------
+  // Screens 2 & 3 (review-quote, gas-sheet). Returns ONLY real numbers (SDK
+  // execution price + a real simulateCalls gas estimate + EIP-1559 fees) or an
+  // honest error — never a fabricated quote. Read-only: nothing is broadcast.
+  router.post("/trade/quote", async (req: AuthedRequest, res: Response) => {
+    const telegramId = req.tgUser!.telegramId;
+    const valid = validateTradeBody(req.body);
+    if (!valid.ok) {
+      res.status(400).json({ error: { code: valid.code, message: valid.message } });
+      return;
+    }
+    try {
+      const user = await prisma.user.findUnique({ where: { telegramId } });
+      if (!user) {
+        res.status(404).json({ error: { code: "NOT_ONBOARDED", message: "Finish wallet setup first" } });
+        return;
+      }
+      const result = await buildTradeQuote(
+        { walletAddress: user.walletAddress, slippageBps: user.slippageBps, mevProtection: user.mevProtection },
+        valid.params
+      );
+      if (!result.ok) {
+        res.status(422).json({ error: { code: result.code, message: result.message } });
+        return;
+      }
+      res.json({ ok: true, quote: result.quote });
+    } catch (e) {
+      botLogger.error({ err: e, telegramId }, "miniapp /trade/quote failed");
+      res.status(500).json({ error: { code: "INTERNAL", message: "Failed to build quote" } });
+    }
+  });
+
+  // -- POST /trade/execute: open the position for real ---------------------
+  // Screen 5 (position-opened). Routes through the SAME sanctioned engine the
+  // bot chat uses: session-signer gate → server-side re-quote (client calldata
+  // is never trusted) → executeRoute (idempotent → fail-closed simulate →
+  // broadcast → receipt). `nonce` dedupes double-taps to one broadcast.
+  router.post("/trade/execute", async (req: AuthedRequest, res: Response) => {
+    const telegramId = req.tgUser!.telegramId;
+    const valid = validateTradeBody(req.body);
+    if (!valid.ok) {
+      res.status(400).json({ error: { code: valid.code, message: valid.message } });
+      return;
+    }
+    const nonce = (req.body ?? {}).nonce;
+    if (!validNonce(nonce)) {
+      res.status(400).json({ error: { code: "BAD_NONCE", message: "Missing or malformed idempotency nonce." } });
+      return;
+    }
+    try {
+      const user = await prisma.user.findUnique({ where: { telegramId } });
+      if (!user) {
+        res.status(404).json({ error: { code: "NOT_ONBOARDED", message: "Finish wallet setup first" } });
+        return;
+      }
+      const result = await executeTrade(
+        {
+          id: user.id,
+          privyUserId: user.privyUserId,
+          walletAddress: user.walletAddress,
+          privyWalletId: user.privyWalletId,
+          walletDelegated: user.walletDelegated,
+          walletImported: user.walletImported,
+          slippageBps: user.slippageBps,
+          mevProtection: user.mevProtection,
+        },
+        valid.params,
+        nonce
+      );
+      if (!result.ok) {
+        // 409 for the session-signer gate (actionable: enable bot trading),
+        // 422 for an execution failure that was caught before/at broadcast.
+        const status = result.code === "BOT_TRADING_OFF" ? 409 : 422;
+        res.status(status).json({ error: { code: result.code, message: result.message } });
+        return;
+      }
+      res.json({
+        ok: true,
+        deduped: result.deduped,
+        status: result.status,
+        txHash: result.txHash,
+        hashes: result.hashes,
+        recordId: result.recordId,
+      });
+    } catch (e) {
+      botLogger.error({ err: e, telegramId }, "miniapp /trade/execute failed");
+      res.status(500).json({ error: { code: "INTERNAL", message: "Failed to execute trade" } });
     }
   });
 
