@@ -39,9 +39,24 @@ export interface ApiPosition {
   leverage: number;
   /** 1 = healthy, 0 = at liquidation (derived on-chain). */
   healthPercent: number;
+  /** Position size (collateral notional) in USD — null when unpriced. */
+  sizeUsd?: number | null;
   /** Unrealized PnL estimate since first tracked — null when unpriced. */
   pnlUsd?: number | null;
   pnlSince?: string | null;
+}
+
+/**
+ * Real portfolio totals for the Total Value hero. Every field is null unless
+ * EVERY component it depends on was priceable from the live spot snapshot —
+ * the UI shows an honest "—" rather than a fabricated or partial number.
+ */
+export interface PortfolioSummary {
+  totalValueUsd: number | null;
+  walletUsd: number | null;
+  positionsUsd: number | null;
+  netPnlUsd: number | null;
+  netPnlPct: number | null;
 }
 
 export interface Me {
@@ -57,6 +72,8 @@ export interface Me {
   /** False when an on-chain read failed — positions may be incomplete. */
   positionsKnown?: boolean;
   positions?: ApiPosition[];
+  /** Priced portfolio totals — present once positions read cleanly. */
+  summary?: PortfolioSummary;
 }
 
 export interface OnboardResult {

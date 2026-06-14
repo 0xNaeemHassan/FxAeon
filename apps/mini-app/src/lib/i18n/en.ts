@@ -88,6 +88,15 @@ const en: Messages = {
   'portfolio.colHealth': 'Health',
   'portfolio.long': 'long',
   'portfolio.short': 'short',
+  'portfolio.totalValue': 'Total Value',
+  'portfolio.valueUnavailable': 'Live valuation unavailable',
+  'portfolio.pnlUnrealized': 'unrealized PnL',
+  'portfolio.tabPositions': 'Positions',
+  'portfolio.tabFxusd': 'fxUSD',
+  'portfolio.fxusdEmptyTitle': 'No fxUSD positions',
+  'portfolio.fxusdEmptyBody': 'fxUSD Stability Pool tracking is coming soon. Your leveraged positions appear under Positions.',
+  'portfolio.size': 'size',
+  'portfolio.newPosition': 'New Position',
 
   // -- trade --
   'trade.title': 'Trade',
