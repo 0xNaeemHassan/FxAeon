@@ -115,9 +115,9 @@ export function Button({
 }) {
   const styles =
     variant === 'primary'
-      ? 'bg-mint text-[#06231a] font-semibold shadow-[0_8px_24px_rgba(46,230,168,0.25)]'
+      ? 'bg-mint text-white font-semibold shadow-[0_8px_24px_rgba(124,92,255,0.32)]'
       : variant === 'danger'
-        ? 'bg-[rgba(255,107,107,0.14)] text-danger border border-[rgba(255,107,107,0.3)]'
+        ? 'bg-[rgba(255, 90, 95,0.14)] text-danger border border-[rgba(255, 90, 95,0.3)]'
         : 'glass text-[var(--text)]';
   return (
     <button
@@ -226,7 +226,7 @@ export function AddressChip({ address }: { address: string }) {
     >
       {short}
       {copied ? (
-        <Check className="h-3.5 w-3.5 text-mint" />
+        <Check className="h-3.5 w-3.5 text-success" />
       ) : (
         <Copy className="h-3.5 w-3.5" />
       )}

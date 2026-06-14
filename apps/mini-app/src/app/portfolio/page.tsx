@@ -62,7 +62,7 @@ function MarketsCard({ market }: { market: MarketSnapshot }) {
         {rows.map((r) => {
           const d = r.data!;
           const ch = d.change24hPct;
-          const tone = ch === null ? 'text-mut' : ch >= 0 ? 'text-mint' : 'text-danger';
+          const tone = ch === null ? 'text-mut' : ch >= 0 ? 'text-success' : 'text-danger';
           return (
             <div key={r.symbol} className="flex items-center justify-between py-1.5 first:pt-0 last:pb-0 text-[12.5px]">
               <span className="w-16 font-medium">{r.symbol}</span>
@@ -84,14 +84,14 @@ function MarketsCard({ market }: { market: MarketSnapshot }) {
 function PositionCard({ p }: { p: ApiPosition }) {
   const long = p.side === 'long';
   const healthTone =
-    p.healthPercent >= 0.5 ? 'text-mint' : p.healthPercent >= 0.25 ? 'text-warn' : 'text-danger';
+    p.healthPercent >= 0.5 ? 'text-success' : p.healthPercent >= 0.25 ? 'text-warn' : 'text-danger';
   return (
     <Card className="glass-press">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <span
             className={`rounded-lg px-2 py-0.5 text-[11px] font-semibold uppercase ${
-              long ? 'bg-[var(--mint-dim)] text-mint' : 'bg-[rgba(255,107,107,0.12)] text-danger'
+              long ? 'bg-[var(--success-dim)] text-success' : 'bg-[rgba(255,90,95,0.12)] text-danger'
             }`}
           >
             {p.side}
@@ -110,7 +110,7 @@ function PositionCard({ p }: { p: ApiPosition }) {
         <div>
           <p className="text-mut">PnL</p>
           {typeof p.pnlUsd === 'number' ? (
-            <p className={`mt-0.5 font-medium ${p.pnlUsd >= 0 ? 'text-mint' : 'text-danger'}`}>
+            <p className={`mt-0.5 font-medium ${p.pnlUsd >= 0 ? 'text-success' : 'text-danger'}`}>
               {p.pnlUsd >= 0 ? '+' : '-'}${Math.abs(p.pnlUsd).toLocaleString('en-US', { maximumFractionDigits: 2 })}
             </p>
           ) : (
@@ -297,7 +297,7 @@ export default function PortfolioPage() {
           </Card>
         )}
         {noFunds && (
-          <Card className="mt-2.5 border-[rgba(46,230,168,0.25)]">
+          <Card className="mt-2.5 border-[rgba(124, 92, 255,0.25)]">
             <p className="text-[13px] leading-relaxed">
               <span className="font-medium text-mint">Fund your wallet to start trading.</span>{' '}
               <span className="text-mut">

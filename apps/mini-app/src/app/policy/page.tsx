@@ -44,8 +44,8 @@ export default function PolicyPage() {
 
         {RULES.map((r) => (
           <Card key={r.title} className="flex items-start gap-3">
-            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--mint-dim)]">
-              <Check className="h-4 w-4 text-mint" strokeWidth={2.5} />
+            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--success-dim)]">
+              <Check className="h-4 w-4 text-success" strokeWidth={2.5} />
             </span>
             <span>
               <p className="text-[14px] font-medium">{r.title}</p>
@@ -54,7 +54,7 @@ export default function PolicyPage() {
           </Card>
         ))}
 
-        <Card className="flex items-start gap-2.5 border-[rgba(46,230,168,0.25)]">
+        <Card className="flex items-start gap-2.5 border-[rgba(124, 92, 255,0.25)]">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-mint" />
           <p className="text-[12.5px] leading-relaxed text-mut">
             Manage everything in Settings → Wallet: export your key, enable or revoke bot
