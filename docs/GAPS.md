@@ -108,3 +108,17 @@ Still open:
 - Old git history still contains the pre-rotation secrets (W-01). They are
   rotated and dead; rewriting history was judged not worth breaking
   clones. gitleaks prevents re-introduction.
+- Session-signer broadcast policy (`apps/bot/src/core/signerPolicy.ts`, Pillar
+  A §3.4) enforces a fail-closed allow-list inside `executeRoute`: `tx.to` must
+  be a verified `ADDRESSES` contract, and any ERC20 approve/transfer recipient
+  must be a registry contract or the user's own wallet. The allow-list is
+  derived from the registry at runtime; `apps/bot/policy/signer.policy.json` is
+  the generated artifact (CI `gen-signer-policy.mjs --check` keeps it in sync).
+  Default mode is `enforce`. The `SIGNER_POLICY_MODE=observe` valve exists for
+  one scenario: if a *new, legitimate* f(x) peripheral ever shows up in an
+  fx-sdk route, flip to `observe` (the route is logged + counted via
+  `policy.observe` but still broadcasts), add the verified address to
+  `ADDRESSES`, regenerate the policy, then flip back — rather than bricking
+  trades on an unrecognised-but-valid contract. Hard `enforce` is the right
+  default because every target the bot builds today is already in the registry
+  (the earn path's older `assertKnownTargets` proved this in production).

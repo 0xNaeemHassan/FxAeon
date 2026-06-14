@@ -24,6 +24,8 @@ import { incr } from "./metrics.js";
 import { sendWalletTransaction } from "./privy.js";
 import { getEip1559Fees } from "./fees.js";
 import { assertTransition, isTxState, type TxState } from "./txState.js";
+import { assertRouteAllowed, resolvePolicyMode, SignerPolicyError } from "./signerPolicy.js";
+import { logger } from "../middleware/logger.js";
 
 const toHex = (v: bigint): `0x${string}` => `0x${v.toString(16)}`;
 
@@ -106,6 +108,28 @@ export async function executeRoute(params: ExecuteRouteParams): Promise<ExecuteR
     state = await setStatus(record.id, state, "failed", onStatus, error);
     return { ok: false, deduped: false, recordId: record.id, status: state, error };
   };
+
+  // ── Signer policy: only verified f(x) targets may ever be broadcast. ────
+  // Runs before simulation so a disallowed route is rejected without spending
+  // an RPC call. Fail-closed in "enforce" mode; "observe" logs and proceeds.
+  try {
+    const violations = assertRouteAllowed(txs, { walletAddress });
+    if (violations.length > 0) {
+      logger.warn(
+        { recordId: record.id, type, violations },
+        "signer policy observed disallowed tx(s) but mode=observe — broadcasting anyway"
+      );
+    }
+  } catch (err) {
+    if (err instanceof SignerPolicyError) {
+      logger.error(
+        { recordId: record.id, type, mode: resolvePolicyMode(), violations: err.violations },
+        "signer policy refused route — not broadcasting"
+      );
+      return fail(`blocked by signer policy: ${err.message}`);
+    }
+    throw err;
+  }
 
   // ── Simulate before broadcast (fail-closed, non-negotiable). ────────────
   const sim = await simulateRoute(client, walletAddress, txs);

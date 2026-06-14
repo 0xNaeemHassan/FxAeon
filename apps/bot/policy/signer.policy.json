@@ -1,0 +1,139 @@
+{
+  "$schema": "./signer.policy.schema.json",
+  "version": 1,
+  "chainId": 1,
+  "description": "Broadcast allow-list for the bot's session signer. Enforced in apps/bot/src/core/signerPolicy.ts (mode: SIGNER_POLICY_MODE). Generated from packages/shared/src/addresses.ts — do not edit by hand; run `node scripts/gen-signer-policy.mjs`.",
+  "rules": {
+    "allowedTargetsOnly": true,
+    "erc20": {
+      "approve": "0x095ea7b3",
+      "increaseAllowance": "0x39509351",
+      "transfer": "0xa9059cbb",
+      "transferFrom": "0x23b872dd",
+      "spenderMustBeAllowed": true,
+      "recipientMustBeAllowed": true
+    }
+  },
+  "allowedTargets": [
+    {
+      "label": "ETH",
+      "address": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    {
+      "label": "FX_MINT_ROUTER",
+      "address": "0xb753366082466c4b5984312f0c4bb97554be067e"
+    },
+    {
+      "label": "FXBTC_CREDIT_NOTE",
+      "address": "0xb25a554033c59e33e48c5dc05a7192fb1bbddfc6"
+    },
+    {
+      "label": "FXETH_CREDIT_NOTE",
+      "address": "0x7c5350bac0eb97f86a366ee4f9619a560480f05a"
+    },
+    {
+      "label": "FXN",
+      "address": "0x365accfca291e7d3914637abf1f7635db165bb09"
+    },
+    {
+      "label": "FXSAVE",
+      "address": "0x7743e50f534a7f9f1791dde7dcd89f7783eefc39"
+    },
+    {
+      "label": "FXSAVE_OFT_ADAPTER",
+      "address": "0xcad2b9c980322f460db51cc8e45539f677c73f86"
+    },
+    {
+      "label": "FXUSD",
+      "address": "0x085780639cc2cacd35e474e71f4d000e2405d8f6"
+    },
+    {
+      "label": "FXUSD_BASE_POOL",
+      "address": "0x65c9a641afceb9c0e6034e558a319488fa0fa3be"
+    },
+    {
+      "label": "FXUSD_OFT_ADAPTER",
+      "address": "0xa07d8cc424421cc2bce0544a65481376f010a438"
+    },
+    {
+      "label": "FXUSD_REGENERACY",
+      "address": "0xf729422d68c2cf00574fb5712972454cf402a9b1"
+    },
+    {
+      "label": "GAUGE_REWARDER",
+      "address": "0x5ac1a882e6cedc58511b7e42b02bab42e2c02956"
+    },
+    {
+      "label": "LIMIT_ORDER_MANAGER",
+      "address": "0x112873b395b98287f3a4db266a58e2d01779ad96"
+    },
+    {
+      "label": "LONG_POOL_MANAGER",
+      "address": "0x250893ca4ba5d05626c785e8da758026928fcd24"
+    },
+    {
+      "label": "PEG_KEEPER",
+      "address": "0x50562fe7e870420f5aae480b7f94eb4ace2fcd70"
+    },
+    {
+      "label": "ROUTER",
+      "address": "0x33636d49fbefbe798e15e7f356e8dbef543cc708"
+    },
+    {
+      "label": "SHORT_POOL_MANAGER",
+      "address": "0xacdc0ab51178d0ae8f70c1ead7d3cf5421fdd66d"
+    },
+    {
+      "label": "SPOT_PRICE_ORACLE",
+      "address": "0xc2312caf0de62ec9b4adc785c79851cb989c9abc"
+    },
+    {
+      "label": "STETH",
+      "address": "0xae7ab96520de3a18e5e111b5eaab095312d7fe84"
+    },
+    {
+      "label": "TREASURY",
+      "address": "0x0084c2e1b1823564e597ff4848a88d61ac63d703"
+    },
+    {
+      "label": "USDC",
+      "address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+    },
+    {
+      "label": "USDT",
+      "address": "0xdac17f958d2ee523a2206206994597c13d831ec7"
+    },
+    {
+      "label": "VEFXN",
+      "address": "0xec6b8a3f3605b083f7044c0f31f2cac0caf1d469"
+    },
+    {
+      "label": "WBTC",
+      "address": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599"
+    },
+    {
+      "label": "WBTC_LONG_POOL",
+      "address": "0xab709e26fa6b0a30c119d8c55b887ded24952473"
+    },
+    {
+      "label": "WBTC_SHORT_POOL",
+      "address": "0xa0cc8162c523998856d59065faa254f87d20a5b0"
+    },
+    {
+      "label": "WETH",
+      "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+    },
+    {
+      "label": "WSTETH",
+      "address": "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0"
+    },
+    {
+      "label": "WSTETH_LONG_POOL",
+      "address": "0x6ecfa38fee8a5277b91efda204c235814f0122e8"
+    },
+    {
+      "label": "WSTETH_SHORT_POOL",
+      "address": "0x25707b9e6690b52c60ae6744d711cf9c1dfc1876"
+    }
+  ]
+}
