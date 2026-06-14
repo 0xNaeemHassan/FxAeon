@@ -156,6 +156,12 @@ describe("miniapp router", () => {
     expect(body.positions).toEqual([]);
     expect(body.positionsKnown).toBe(false);
     expect(body.funding).toEqual({ known: false });
+    // The fxSAVE (stability pool) read also fails soft with no RPC: no holding
+    // is invented, and the total stays unclaimed rather than partial.
+    expect(body.savingsKnown).toBe(false);
+    expect(body.savings).toBeNull();
+    expect(body.summary.savingsUsd).toBeNull();
+    expect(body.summary.totalValueUsd).toBeNull();
   });
 
   it("POST /onboard links the USER's wallet and mirrors it into the chat", async () => {
