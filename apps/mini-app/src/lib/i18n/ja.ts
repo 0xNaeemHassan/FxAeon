@@ -139,6 +139,14 @@ const ja: Messages = {
     'あなたが「確認」をタップするまで、トランザクションは作成も送信もされません。プレビューは約10分で失効します。',
   'policy.footer':
     'すべては 設定 → ウォレット で管理：鍵のエクスポート、ボット取引の有効化や取り消し。最新の状態はボットで /security を確認してください。',
+  // -- login sign-in card (PrivyFlow intro) --
+  'loginCard.signIn': 'FxAeon にサインイン',
+  'loginCard.subtitle': 'Privy による自己管理型ウォレット',
+  'loginCard.telegram': 'Telegram で続行',
+  'loginCard.email': 'メールで続行',
+  'loginCard.wallet': '既存のウォレットを接続',
+  'loginCard.terms': '続行すると、利用規約とプライバシーに同意したものとみなされます',
+  'loginCard.poweredBy': 'Powered by',
 };
 
 export default ja;

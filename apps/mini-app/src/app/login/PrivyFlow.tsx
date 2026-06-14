@@ -8,14 +8,15 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ShieldCheck,
-  Zap,
-  KeyRound,
   Check,
   PartyPopper,
   Plus,
   Download,
   Bot,
+  Send,
+  Mail,
+  Wallet,
+  Lock,
 } from 'lucide-react';
 import {
   usePrivy,
@@ -33,13 +34,8 @@ import { apiAvailable, onboard, OnboardResult } from '@/lib/api';
 import { PRIVY_SIGNER_ID } from '@/lib/privyConfig';
 import PrivyClientProvider from '@/components/PrivyClientProvider';
 import { AddressChip, Button, Card, FullScreenSpinner } from '@/components/ui';
+import FxLogo from '@/components/FxLogo';
 import { useT } from '@/lib/i18n';
-
-const VALUE_PROPS = [
-  { icon: KeyRound, titleKey: 'intro.prop1Title', bodyKey: 'intro.prop1Body' },
-  { icon: Zap, titleKey: 'intro.prop2Title', bodyKey: 'intro.prop2Body' },
-  { icon: ShieldCheck, titleKey: 'intro.prop3Title', bodyKey: 'intro.prop3Body' },
-] as const;
 
 type Phase =
   | 'intro'
@@ -196,10 +192,20 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
     },
   });
 
-  const startAltLogin = useCallback(() => {
+  // "Continue with Email": open the Privy modal scoped to the email method.
+  // Telegram is still linked afterwards (in openPrivyModal's onComplete) so the
+  // bot can resolve this account — see telegramLinked above.
+  const startEmailLogin = useCallback(() => {
     setError('');
     setPhase('authenticating');
-    openPrivyModal();
+    openPrivyModal({ loginMethods: ['email'] });
+  }, [openPrivyModal]);
+
+  // "Connect existing wallet": open the Privy modal scoped to external wallets.
+  const startWalletLogin = useCallback(() => {
+    setError('');
+    setPhase('authenticating');
+    openPrivyModal({ loginMethods: ['wallet'] });
   }, [openPrivyModal]);
 
   const startLogin = useCallback(async () => {
@@ -573,50 +579,73 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
     );
   }
 
-  // ── Intro ─────────────────────────────────────────────────────────────────
+  // ── Intro: the "Sign in to FxAeon" card ─────────────────────────────────
+  const authBusy = phase === 'authenticating';
   return (
-    <main className="mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col px-6 pb-8 pt-10">
-      <div className="stagger flex flex-1 flex-col">
-        <h1 className="text-display text-[34px] font-semibold leading-tight">
-          {t('intro.titleLead')} <span className="text-gradient">{t('intro.titleAccent')}</span>
-        </h1>
-        <p className="mt-2 text-[14px] leading-relaxed text-mut">{t('intro.subtitle')}</p>
+    <main className="mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col justify-center px-6 py-10">
+      <div className="stagger flex flex-col">
+        <div
+          className="glass anim-scale-in mx-auto w-full max-w-sm rounded-[28px] p-7"
+          style={{ borderColor: 'rgba(124,92,255,0.30)' }}
+        >
+          {/* Brand mark + wordmark */}
+          <div className="flex flex-col items-center text-center">
+            <FxLogo size={54} className="anim-float" />
+            <p className="text-display mt-2.5 text-[20px] font-semibold tracking-tight">
+              Fx<span className="text-gradient">Aeon</span>
+            </p>
+          </div>
 
-        <div className="mt-7 flex flex-col gap-3">
-          {VALUE_PROPS.map(({ icon: Icon, titleKey, bodyKey }) => (
-            <Card key={titleKey} className="flex items-start gap-3">
-              <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)]">
-                <Icon className="h-[18px] w-[18px] text-mint" strokeWidth={2} />
-              </span>
-              <span>
-                <p className="text-[14px] font-medium">{t(titleKey)}</p>
-                <p className="mt-0.5 text-[12.5px] leading-relaxed text-mut">{t(bodyKey)}</p>
-              </span>
+          {/* Heading */}
+          <h1 className="text-display mt-5 text-center text-[23px] font-semibold leading-tight">
+            {t('loginCard.signIn')}
+          </h1>
+          <p className="mt-1.5 text-center text-[13px] leading-relaxed text-mut">
+            {t('loginCard.subtitle')}
+          </p>
+
+          {/* Sign-in methods */}
+          <div className="mt-6 flex flex-col gap-2.5">
+            <Button onClick={startLogin} loading={authBusy} className="anim-glow">
+              {!authBusy && <Send className="h-[18px] w-[18px]" strokeWidth={2} />}
+              {t('loginCard.telegram')}
+            </Button>
+            <Button variant="ghost" onClick={startEmailLogin} disabled={authBusy}>
+              <Mail className="h-[18px] w-[18px] text-mint" strokeWidth={2} />
+              {t('loginCard.email')}
+            </Button>
+            <Button variant="ghost" onClick={startWalletLogin} disabled={authBusy}>
+              <Wallet className="h-[18px] w-[18px] text-mint" strokeWidth={2} />
+              {t('loginCard.wallet')}
+            </Button>
+          </div>
+
+          {referral && (
+            <p className="mt-4 text-center text-[12px] text-mut">
+              {t('intro.referralPre')} <span className="font-mono text-mint">{referral}</span>{' '}
+              {t('intro.referralPost')}
+            </p>
+          )}
+
+          {phase === 'error' && (
+            <Card className="mt-4 border-[rgba(255,194,75,0.35)]">
+              <p className="text-[13px] leading-relaxed text-warn">{error}</p>
             </Card>
-          ))}
+          )}
+
+          {/* Terms */}
+          <p className="mt-5 text-center text-[11px] leading-relaxed text-mut">
+            {t('loginCard.terms')}
+          </p>
         </div>
 
-        {referral && (
-          <p className="mt-4 text-center text-[12.5px] text-mut">
-            {t('intro.referralPre')} <span className="font-mono text-mint">{referral}</span>{' '}
-            {t('intro.referralPost')}
-          </p>
-        )}
-
-        {phase === 'error' && (
-          <Card className="mt-4 border-[rgba(255,194,75,0.35)]">
-            <p className="text-[13px] leading-relaxed text-warn">{error}</p>
-          </Card>
-        )}
-
-        <div className="mt-auto pt-7">
-          <Button onClick={startLogin} loading={phase === 'authenticating'} className="anim-glow">
-            {phase === 'authenticating' ? t('intro.ctaConnecting') : t('intro.ctaSetup')}
-          </Button>
-          <Button variant="ghost" onClick={startAltLogin} className="mt-2">
-            {t('intro.ctaMore')}
-          </Button>
-          <p className="mt-3 text-center text-[11.5px] text-mut">{t('intro.footer')}</p>
+        {/* Powered by Privy */}
+        <div className="mt-5 flex justify-center">
+          <span className="glass inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] text-mut">
+            <Lock className="h-3 w-3 text-mint" strokeWidth={2.2} />
+            {t('loginCard.poweredBy')}{' '}
+            <span className="font-semibold text-[var(--text)]">privy</span>
+          </span>
         </div>
       </div>
     </main>

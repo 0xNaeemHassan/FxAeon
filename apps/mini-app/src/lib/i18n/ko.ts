@@ -139,6 +139,14 @@ const ko: Messages = {
     '당신이 확인을 탭하기 전에는 어떤 트랜잭션도 생성되거나 전송되지 않습니다. 미리보기는 약 10분 후 만료됩니다.',
   'policy.footer':
     '모든 것은 설정 → 지갑에서 관리하세요: 키 내보내기, 봇 거래 활성화 또는 철회. 실시간 상태는 봇에서 /security를 확인하세요.',
+  // -- login sign-in card (PrivyFlow intro) --
+  'loginCard.signIn': 'FxAeon 로그인',
+  'loginCard.subtitle': 'Privy 기반 자기수탁 지갑',
+  'loginCard.telegram': 'Telegram으로 계속하기',
+  'loginCard.email': '이메일로 계속하기',
+  'loginCard.wallet': '기존 지갑 연결',
+  'loginCard.terms': '계속하면 약관 및 개인정보 보호정책에 동의하는 것입니다',
+  'loginCard.poweredBy': '제공',
 };
 
 export default ko;
