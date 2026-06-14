@@ -51,6 +51,14 @@ export const ADDRESSES = {
   FXETH_CREDIT_NOTE: "0x7c5350BaC0eB97F86A366Ee4F9619a560480F05A",
   FXBTC_CREDIT_NOTE: "0xB25a554033C59e33e48c5dc05A7192Fb1bbDdfc6",
   FXUSD_REGENERACY: "0xf729422D68c2cf00574fb5712972454cf402A9b1",
+
+  // LayerZero V2 OFT adapters (Ethereum side) — used by /bridge to move fxUSD /
+  // fxSAVE to Base. Source-of-truth is fx-sdk's BRIDGE_OFT_BY_TOKEN; mirrored
+  // here so verify-addresses.mjs confirms they have mainnet bytecode. Verified
+  // 2026-06: both have deployed code on Ethereum mainnet.
+  FXUSD_OFT_ADAPTER: "0xA07d8cc424421cC2bce0544a65481376f010A438",
+  FXSAVE_OFT_ADAPTER: "0xCaD2b9C980322f460db51CC8E45539F677C73F86",
+
   
   // ERC20 Tokens
   WSTETH: "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0",

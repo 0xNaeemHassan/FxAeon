@@ -47,6 +47,14 @@ export const envSchema = z.object({
   COINGECKO_API_KEY: z.string().optional(),
   MINI_APP_URL: z.string().url().default("https://fxbot-mini-app.pages.dev"),
   DAILY_TX_CAP: z.string().default("50"),
+  /**
+   * Cross-chain bridge (Ethereum → Base) on-chain execution kill-switch.
+   * OFF by default: the /bridge command always shows a REAL on-chain LayerZero
+   * quote, but only broadcasts when this is "true". Flip to "true" ONLY after
+   * (a) fork-verifying the OFT approve+send route and (b) adding the OFT
+   * adapter to the Privy default-deny policy allow-list (W-08). See docs/GAPS.md.
+   */
+  BRIDGE_EXECUTION_ENABLED: z.string().default("false"),
 }).superRefine((cfg, ctx) => {
   // ── Production fail-fast (PLAN.md W-05) ────────────────────────────────
   // A money-touching bot must not boot into a silently-degraded state.
@@ -143,4 +151,8 @@ export const features = {
   enableAutomation: true,
   enableReferrals: true,
   enableHealthAlerts: true,
+  /** Bridge broadcast gate — real quotes always show, execution opt-in only. */
+  get enableBridgeExecution() {
+    return (process.env.BRIDGE_EXECUTION_ENABLED ?? "false").toLowerCase() === "true";
+  },
 };

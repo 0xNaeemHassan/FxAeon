@@ -24,7 +24,8 @@ export type ActionKind =
   | "sw" // fxSAVE withdraw: p1 = mode ("i" instant | "c" cooldown), p2 = shares micro (0 = all)
   | "sc" // fxSAVE claim:    no params
   | "mt" // deposit & mint:  p1 = market idx, p2 = collateral micro, p3 = fxUSD micro
-  | "rp"; // repay:          p1 = market idx, p2 = positionId, p3 = repay micro (0 = all)
+  | "rp" // repay:           p1 = market idx, p2 = positionId, p3 = repay micro (0 = all)
+  | "br"; // bridge Eth→Base: p1 = token ("f" fxUSD | "s" fxSAVE), p2 = amount micro
 
 export interface ActionIntent {
   kind: ActionKind;
@@ -40,7 +41,7 @@ export type VerifyActionResult =
   | { ok: false; reason: "malformed" | "tampered" | "expired" };
 
 const VERSION = "a1";
-const KINDS: ReadonlySet<string> = new Set(["sd", "sw", "sc", "mt", "rp"]);
+const KINDS: ReadonlySet<string> = new Set(["sd", "sw", "sc", "mt", "rp", "br"]);
 export const ACTION_INTENT_TTL_MS = 10 * 60 * 1000;
 
 /** Micro-unit (1e6) fixed-point for human amounts, base36-packed. */

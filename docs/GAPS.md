@@ -18,6 +18,15 @@ Still open:
 
 1. **`SENTRY_DSN`** still unset — optional; error tracking stays off
    until provided.
+2. **`/bridge` execution (Ethereum → Base)** is wired but **operator-gated
+   OFF** (`BRIDGE_EXECUTION_ENABLED=false`). The command always shows a REAL
+   on-chain LayerZero quote; broadcast is disabled until an operator:
+   (a) **fork-verifies** the OFT `approve` + `send` route end-to-end, and
+   (b) **adds the OFT adapter** (`ADDRESSES.FXUSD_OFT_ADAPTER` /
+   `FXSAVE_OFT_ADAPTER`) to the Privy default-deny policy allow-list (W-08) —
+   otherwise the policy engine rejects the `send` anyway. Then set
+   `BRIDGE_EXECUTION_ENABLED=true`. Base → Ethereum stays disabled (the
+   mainnet-only executor can't sign on Base).
 
 ## Not verified (and why)
 

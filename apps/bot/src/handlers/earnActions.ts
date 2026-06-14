@@ -25,10 +25,15 @@ import {
   quoteSaveClaim,
   quoteSaveDeposit,
   quoteSaveWithdraw,
+  quoteBridge,
+  BRIDGE_TOKEN_DECIMALS,
   type SaveToken,
+  type BridgeToken,
 } from "../fx/earn.js";
 import { executeRoute } from "../core/txExecutor.js";
 import { requireDelegatedWallet } from "../core/delegation.js";
+import { features } from "../middleware/config.js";
+import { formatEther } from "viem";
 import type { TxState } from "../core/txState.js";
 import {
   createActionIntent,
@@ -250,6 +255,39 @@ export function buildRepayPreview(
   return { text, keyboard: confirmKeyboard(intent) };
 }
 
+export function buildBridgePreview(params: {
+  token: BridgeToken;
+  amount: number;
+  /** Real LayerZero native fee (wei) from the on-chain quote. */
+  nativeFeeWei: bigint;
+}): { text: string; keyboard?: InlineKeyboard } {
+  const { token, amount, nativeFeeWei } = params;
+  const feeEth = Number(formatEther(nativeFeeWei));
+  const lines = [
+    `🌉 Bridge Preview — Ethereum → Base`,
+    ``,
+    `Send: ${amount} ${token}`,
+    `Route: LayerZero V2 OFT`,
+    `LayerZero fee: ≈ ${feeEth.toFixed(6)} ETH (paid from your wallet)`,
+    `Recipient: your wallet on Base`,
+  ];
+  if (!features.enableBridgeExecution) {
+    lines.push(
+      ``,
+      `⚠️ On-chain execution is operator-gated and currently OFF, so nothing is`,
+      `sent. The quote above is real (live LayerZero fee). The operator enables`,
+      `broadcasts after fork-verification + Privy policy allow-listing.`
+    );
+    return { text: lines.join("\n") };
+  }
+  const intent = createActionIntent("br", {
+    p1: token === "fxUSD" ? "f" : "s",
+    p2: packAmount(amount),
+  });
+  lines.push(PREVIEW_FOOTER);
+  return { text: lines.join("\n"), keyboard: confirmKeyboard(intent) };
+}
+
 // ---------------------------------------------------------------------------
 // Execution per intent kind
 // ---------------------------------------------------------------------------
@@ -411,6 +449,40 @@ async function executeRepay(ctx: Context, intent: ActionIntent): Promise<void> {
   });
 }
 
+async function executeBridge(ctx: Context, intent: ActionIntent): Promise<void> {
+  const token: BridgeToken = intent.p1 === "s" ? "fxSAVE" : "fxUSD";
+  const amount = unpackAmount(intent.p2);
+  const header = `🌉 Bridge — ${amount} ${token} → Base`;
+  // Hard gate: never broadcast a bridge unless the operator has enabled it.
+  if (!features.enableBridgeExecution) {
+    await editSafe(ctx, `${header}\n\n❌ Bridge execution is disabled by the operator.`);
+    return;
+  }
+  const user = await requireWalletUser(ctx, header);
+  if (!user || amount <= 0) {
+    if (user) await editSafe(ctx, `${header}\n\n❌ Invalid amount.`);
+    return;
+  }
+  const sdk = createFxSdk();
+  await runRoute({
+    ctx,
+    user,
+    header,
+    txType: "bridge_eth_to_base",
+    idempotencyKey: `bridge:${user.id}:${intent.nonce}`,
+    quote: async () => {
+      const { txs } = await quoteBridge({
+        sdk,
+        userAddress: user.walletAddress as `0x${string}`,
+        token,
+        amountWei: parseUnits(String(amount), BRIDGE_TOKEN_DECIMALS),
+      });
+      return { txs };
+    },
+    successText: `✅ Bridge sent on Ethereum. Funds arrive on Base once LayerZero delivers (usually a few minutes).`,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Callback routing
 // ---------------------------------------------------------------------------
@@ -446,5 +518,7 @@ export async function handleActionCallback(ctx: Context): Promise<void> {
       return executeMint(ctx, intent);
     case "rp":
       return executeRepay(ctx, intent);
+    case "br":
+      return executeBridge(ctx, intent);
   }
 }
