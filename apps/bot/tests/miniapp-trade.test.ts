@@ -18,17 +18,20 @@ const GWEI = 1_000_000_000n;
 const quoteOpenPositionMock = vi.fn();
 const simulateRouteMock = vi.fn();
 const createFxSdkMock = vi.fn(() => ({}));
+const publicClientMock = vi.fn(() => ({}) as unknown);
 vi.mock("../src/fx/index", () => ({
   collateralDecimals: () => 18,
   createFxSdk: (...a: unknown[]) => createFxSdkMock(...a),
-  createPublicClientForUser: () => ({}),
+  createPublicClientForUser: (...a: unknown[]) => publicClientMock(...a),
   quoteOpenPosition: (...a: unknown[]) => quoteOpenPositionMock(...a),
   simulateRoute: (...a: unknown[]) => simulateRouteMock(...a),
 }));
 
-const getEip1559FeesMock = vi.fn();
+const getEip1559FeeTiersMock = vi.fn();
 vi.mock("../src/core/fees", () => ({
-  getEip1559Fees: (...a: unknown[]) => getEip1559FeesMock(...a),
+  getEip1559FeeTiers: (...a: unknown[]) => getEip1559FeeTiersMock(...a),
+  // real passthrough — the selector is trivial and worth exercising
+  selectFeeTier: (tiers: Record<string, unknown>, key: string) => tiers[key],
 }));
 
 const executeRouteMock = vi.fn();
@@ -57,9 +60,20 @@ vi.mock("../src/core/funding", () => ({
 
 import {
   validateTradeBody,
-  computeGasEstimate,
+  gasTierCost,
+  buildGasEstimate,
+  buildReceiptInfo,
   maxLeverageFor,
 } from "../src/core/miniappTrade";
+
+// Shared fee-tier fixture: market tier = 20 gwei maxFee so that 250k gas
+// ⇒ 0.005 ETH ⇒ $17.5 at $3500/ETH (keeps the legacy gas assertions intact).
+const FEE_TIERS = {
+  nextBaseFee: 9n * GWEI,
+  slow: { maxFeePerGas: 19n * GWEI, maxPriorityFeePerGas: 1n * GWEI, nextBaseFee: 9n * GWEI },
+  market: { maxFeePerGas: 20n * GWEI, maxPriorityFeePerGas: 2n * GWEI, nextBaseFee: 9n * GWEI },
+  fast: { maxFeePerGas: 22n * GWEI, maxPriorityFeePerGas: 4n * GWEI, nextBaseFee: 9n * GWEI },
+};
 import { createMiniAppRouter } from "../src/api/miniapp";
 
 // ---------------------------------------------------------------------------
@@ -100,10 +114,10 @@ describe("validateTradeBody", () => {
   });
 });
 
-describe("computeGasEstimate", () => {
+describe("gasTierCost", () => {
   it("computes wei/eth/usd from real units + fees", () => {
-    const g = computeGasEstimate(250_000n, 20n * GWEI, 1n * GWEI, 3500);
-    expect(g.units).toBe("250000");
+    const g = gasTierCost(250_000n, { maxFeePerGas: 20n * GWEI, maxPriorityFeePerGas: 1n * GWEI, nextBaseFee: 9n * GWEI }, "market", 3500);
+    expect(g.key).toBe("market");
     expect(g.maxFeeGwei).toBe(20);
     expect(g.priorityGwei).toBe(1);
     expect(g.estCostWei).toBe("5000000000000000"); // 0.005 ETH
@@ -112,9 +126,47 @@ describe("computeGasEstimate", () => {
   });
 
   it("leaves USD null when no ETH price is known (no fabrication)", () => {
-    const g = computeGasEstimate(250_000n, 20n * GWEI, 1n * GWEI, null);
+    const g = gasTierCost(250_000n, { maxFeePerGas: 20n * GWEI, maxPriorityFeePerGas: 1n * GWEI, nextBaseFee: 9n * GWEI }, "slow", null);
     expect(g.estCostUsd).toBeNull();
     expect(g.estCostEth).toBeCloseTo(0.005, 12);
+  });
+});
+
+describe("buildGasEstimate", () => {
+  it("emits exactly [slow, market, fast], monotonic cost, market default", () => {
+    const est = buildGasEstimate(250_000n, FEE_TIERS, 3500);
+    expect(est.units).toBe("250000");
+    expect(est.recommended).toBe("market");
+    expect(est.tiers.map((t) => t.key)).toEqual(["slow", "market", "fast"]);
+    expect(est.tiers[0].estCostEth).toBeLessThanOrEqual(est.tiers[1].estCostEth);
+    expect(est.tiers[1].estCostEth).toBeLessThanOrEqual(est.tiers[2].estCostEth);
+  });
+});
+
+describe("buildReceiptInfo", () => {
+  it("derives block #, gas paid and confirmations from a real receipt", () => {
+    const info = buildReceiptInfo(
+      { blockNumber: 1000n, gasUsed: 120_000n, effectiveGasPrice: 18n * GWEI },
+      1002n,
+      3500
+    );
+    expect(info.blockNumber).toBe(1000);
+    expect(info.gasUsed).toBe("120000");
+    expect(info.effectiveGasPriceGwei).toBe(18);
+    expect(info.gasPaidWei).toBe("2160000000000000"); // 120000 * 18 gwei
+    expect(info.gasPaidEth).toBeCloseTo(0.00216, 12);
+    expect(info.gasPaidUsd).toBeCloseTo(7.56, 9);
+    expect(info.confirmations).toBe(3); // 1002 - 1000 + 1
+  });
+
+  it("floors confirmations at 1 and leaves USD null without a price", () => {
+    const info = buildReceiptInfo(
+      { blockNumber: 1000n, gasUsed: 100_000n, effectiveGasPrice: 10n * GWEI },
+      999n,
+      null
+    );
+    expect(info.confirmations).toBe(1);
+    expect(info.gasPaidUsd).toBeNull();
   });
 });
 
@@ -185,8 +237,9 @@ describe("router /trade/quote + /trade/execute", () => {
     createFxSdkMock.mockReturnValue({});
     quoteOpenPositionMock.mockResolvedValue({ positionId: 0, slippage: 0.5, routes: [ROUTE] });
     simulateRouteMock.mockResolvedValue({ success: true, gasUsed: [100_000n, 150_000n], totalGas: 250_000n });
-    getEip1559FeesMock.mockResolvedValue({ maxFeePerGas: 20n * GWEI, maxPriorityFeePerGas: 1n * GWEI });
+    getEip1559FeeTiersMock.mockResolvedValue(FEE_TIERS);
     getSpotPricesMock.mockResolvedValue({ stale: false, prices: { ETH: 3500 } });
+    publicClientMock.mockReturnValue({});
     requireDelegatedWalletMock.mockResolvedValue({ ok: true, walletId: "w1" });
     executeRouteMock.mockResolvedValue({ ok: true, deduped: false, recordId: "r1", status: "confirmed", hashes: ["0xfeed"] });
     vi.mocked(prisma.user.findUnique).mockResolvedValue(DB_USER as never);
@@ -230,9 +283,15 @@ describe("router /trade/quote + /trade/execute", () => {
     expect(body.ok).toBe(true);
     expect(body.quote.executionPrice).toBe("3500.0");
     expect(body.quote.exposure).toBe(3);
+    expect(body.quote.collateralAfter).toBeCloseTo(1, 9); // colls 1e18 @ 18 dp
+    expect(body.quote.debtAfter).toBe(0);
+    // Real Slow/Market/Fast tiers, market is the default.
     expect(body.quote.gas.units).toBe("250000");
-    expect(body.quote.gas.estCostEth).toBeCloseTo(0.005, 9);
-    expect(body.quote.gas.estCostUsd).toBeCloseTo(17.5, 6);
+    expect(body.quote.gas.recommended).toBe("market");
+    expect(body.quote.gas.tiers.map((t: { key: string }) => t.key)).toEqual(["slow", "market", "fast"]);
+    const market = body.quote.gas.tiers.find((t: { key: string }) => t.key === "market");
+    expect(market.estCostEth).toBeCloseTo(0.005, 9);
+    expect(market.estCostUsd).toBeCloseTo(17.5, 6);
   });
 
   it("422s with SIMULATION_FAILED when the route would revert (fail-closed)", async () => {
@@ -275,6 +334,60 @@ describe("router /trade/quote + /trade/execute", () => {
     // Idempotency key carries the user id + nonce.
     expect(executeRouteMock.mock.calls[0][0].idempotencyKey).toBe("miniapp-trade:u1:nonce-abc-123");
     expect(executeRouteMock.mock.calls[0][0].type).toBe("open_long");
+  });
+
+  it("broadcasts with the server-derived FAST tier when the user picks fast", async () => {
+    const r = await fetch(`${base}/trade/execute`, {
+      method: "POST",
+      headers: auth,
+      body: JSON.stringify({ market: "wstETH", side: "long", leverage: 3, amount: 1, nonce: "nonce-fast-1", feeTier: "fast" }),
+    });
+    expect(r.status).toBe(200);
+    // The fee numbers come from the server's re-derived tiers, not the client.
+    expect(executeRouteMock.mock.calls[0][0].fees).toEqual(FEE_TIERS.fast);
+  });
+
+  it("defaults to the MARKET tier when feeTier is absent or junk", async () => {
+    const r = await fetch(`${base}/trade/execute`, {
+      method: "POST",
+      headers: auth,
+      body: JSON.stringify({ market: "wstETH", side: "long", leverage: 3, amount: 1, nonce: "nonce-def-1", feeTier: "ludicrous" }),
+    });
+    expect(r.status).toBe(200);
+    expect(executeRouteMock.mock.calls[0][0].fees).toEqual(FEE_TIERS.market);
+  });
+
+  it("returns real receipt detail (block #, gas paid, confirmations) on the result", async () => {
+    publicClientMock.mockReturnValue({
+      getTransactionReceipt: vi.fn().mockResolvedValue({
+        blockNumber: 21_000_000n,
+        gasUsed: 180_000n,
+        effectiveGasPrice: 15n * GWEI,
+      }),
+      getBlockNumber: vi.fn().mockResolvedValue(21_000_004n),
+    });
+    const r = await fetch(`${base}/trade/execute`, {
+      method: "POST",
+      headers: auth,
+      body: JSON.stringify({ market: "wstETH", side: "long", leverage: 3, amount: 1, nonce: "nonce-rcpt-1" }),
+    });
+    expect(r.status).toBe(200);
+    const body = await r.json();
+    expect(body.receipt.blockNumber).toBe(21_000_000);
+    expect(body.receipt.gasUsed).toBe("180000");
+    expect(body.receipt.confirmations).toBe(5); // 21000004 - 21000000 + 1
+    expect(body.receipt.gasPaidEth).toBeCloseTo(0.0027, 9); // 180000 * 15 gwei
+  });
+
+  it("keeps receipt null (fail-soft) when the receipt can't be read", async () => {
+    publicClientMock.mockReturnValue({}); // no receipt methods
+    const r = await fetch(`${base}/trade/execute`, {
+      method: "POST",
+      headers: auth,
+      body: JSON.stringify({ market: "wstETH", side: "long", leverage: 3, amount: 1, nonce: "nonce-rcpt-2" }),
+    });
+    expect(r.status).toBe(200);
+    expect((await r.json()).receipt).toBeNull();
   });
 
   it("400s on a missing/malformed nonce", async () => {

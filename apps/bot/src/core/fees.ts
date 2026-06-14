@@ -63,3 +63,75 @@ export async function getEip1559Fees(
     nextBaseFee,
   };
 }
+
+// ── Slow / Market / Fast tiers (real, from feeHistory percentiles) ──────────
+//
+// MetaMask-style speed tiers: the *only* honest difference between tiers is the
+// priority tip (how generously you bid for faster inclusion). We read the
+// 10th / 50th / 90th percentile priority fees from recent blocks and clamp each
+// to the same [0.1, 10] gwei band. The base-fee buffer (2× nextBaseFee) is
+// identical across tiers — it protects against base-fee swings, not speed.
+// Nothing is fabricated; if feeHistory has no usable base fee we throw.
+
+export type FeeTierKey = "slow" | "market" | "fast";
+
+export interface Eip1559FeeTiers {
+  nextBaseFee: bigint;
+  slow: Eip1559Fees;
+  market: Eip1559Fees;
+  fast: Eip1559Fees;
+}
+
+/** Pure tier math, split out so it can be unit-tested without a chain. */
+export function computeFeeTiers(
+  nextBaseFee: bigint,
+  tips: { slow: bigint; market: bigint; fast: bigint }
+): Eip1559FeeTiers {
+  if (nextBaseFee <= 0n) throw new Error("computeFeeTiers: nextBaseFee must be positive");
+  // Clamp first, then enforce monotonicity so slow ≤ market ≤ fast even when a
+  // quiet mempool flattens the percentiles below the floor.
+  const slowTip = clampBigint(tips.slow, MIN_PRIORITY_FEE_WEI, MAX_PRIORITY_FEE_WEI);
+  const marketTip = clampBigint(
+    tips.market > slowTip ? tips.market : slowTip,
+    MIN_PRIORITY_FEE_WEI,
+    MAX_PRIORITY_FEE_WEI
+  );
+  const fastTip = clampBigint(
+    tips.fast > marketTip ? tips.fast : marketTip,
+    MIN_PRIORITY_FEE_WEI,
+    MAX_PRIORITY_FEE_WEI
+  );
+  const mk = (tip: bigint): Eip1559Fees => ({
+    maxPriorityFeePerGas: tip,
+    maxFeePerGas: 2n * nextBaseFee + tip,
+    nextBaseFee,
+  });
+  return { nextBaseFee, slow: mk(slowTip), market: mk(marketTip), fast: mk(fastTip) };
+}
+
+export async function getEip1559FeeTiers(
+  client: Pick<PublicClient, "getFeeHistory">,
+  opts: { blockCount?: number } = {}
+): Promise<Eip1559FeeTiers> {
+  const history = await client.getFeeHistory({
+    blockCount: opts.blockCount ?? 10,
+    rewardPercentiles: [10, 50, 90],
+  });
+  const nextBaseFee = history.baseFeePerGas.at(-1);
+  if (nextBaseFee === undefined || nextBaseFee <= 0n) {
+    throw new Error("feeHistory returned no usable baseFeePerGas — refusing to guess fees");
+  }
+  // Median of each percentile column across the sampled blocks.
+  const tipAt = (col: number): bigint => {
+    const rewards = (history.reward ?? [])
+      .map((perBlock) => perBlock[col])
+      .filter((r): r is bigint => typeof r === "bigint");
+    return rewards.length > 0 ? medianBigint(rewards) : MIN_PRIORITY_FEE_WEI;
+  };
+  return computeFeeTiers(nextBaseFee, { slow: tipAt(0), market: tipAt(1), fast: tipAt(2) });
+}
+
+/** Select one tier by key (server-authoritative — the client only sends intent). */
+export function selectFeeTier(tiers: Eip1559FeeTiers, key: FeeTierKey): Eip1559Fees {
+  return tiers[key];
+}

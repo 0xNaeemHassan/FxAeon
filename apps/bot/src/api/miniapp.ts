@@ -472,6 +472,10 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
       res.status(400).json({ error: { code: "BAD_NONCE", message: "Missing or malformed idempotency nonce." } });
       return;
     }
+    // Client sends only the tier intent; the server re-derives the real fees.
+    const rawTier = (req.body ?? {}).feeTier;
+    const feeTier: "slow" | "market" | "fast" =
+      rawTier === "slow" || rawTier === "fast" ? rawTier : "market";
     try {
       const user = await prisma.user.findUnique({ where: { telegramId } });
       if (!user) {
@@ -490,7 +494,8 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
           mevProtection: user.mevProtection,
         },
         valid.params,
-        nonce
+        nonce,
+        feeTier
       );
       if (!result.ok) {
         // 409 for the session-signer gate (actionable: enable bot trading),
@@ -506,6 +511,7 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
         txHash: result.txHash,
         hashes: result.hashes,
         recordId: result.recordId,
+        receipt: result.receipt,
       });
     } catch (e) {
       botLogger.error({ err: e, telegramId }, "miniapp /trade/execute failed");

@@ -13,6 +13,9 @@ import {
 } from "../src/core/txState.js";
 import {
   getEip1559Fees,
+  getEip1559FeeTiers,
+  computeFeeTiers,
+  selectFeeTier,
   medianBigint,
   clampBigint,
   MIN_PRIORITY_FEE_WEI,
@@ -153,6 +156,46 @@ describe("EIP-1559 fees from feeHistory", () => {
   });
 });
 
+describe("Slow/Market/Fast fee tiers", () => {
+  it("reads p10/p50/p90 priority tips and shares the base-fee buffer", async () => {
+    // 3 blocks, each [p10, p50, p90] priority rewards.
+    const client = {
+      getFeeHistory: vi.fn(async () => ({
+        baseFeePerGas: [10n * GWEI, 11n * GWEI, 12n * GWEI],
+        gasUsedRatio: [],
+        oldestBlock: 0n,
+        reward: [
+          [1n * GWEI, 2n * GWEI, 5n * GWEI],
+          [1n * GWEI, 3n * GWEI, 7n * GWEI],
+          [1n * GWEI, 2n * GWEI, 6n * GWEI],
+        ],
+      })),
+    };
+    const tiers = await getEip1559FeeTiers(client as never);
+    expect(tiers.nextBaseFee).toBe(12n * GWEI);
+    expect(tiers.slow.maxPriorityFeePerGas).toBe(1n * GWEI); // median(1,1,1)
+    expect(tiers.market.maxPriorityFeePerGas).toBe(2n * GWEI); // median(2,3,2)
+    expect(tiers.fast.maxPriorityFeePerGas).toBe(6n * GWEI); // median(5,7,6)
+    // maxFee = 2*nextBaseFee + tip, same base buffer across tiers.
+    expect(tiers.fast.maxFeePerGas).toBe(2n * 12n * GWEI + 6n * GWEI);
+    expect(selectFeeTier(tiers, "fast")).toBe(tiers.fast);
+  });
+
+  it("computeFeeTiers clamps and keeps slow ≤ market ≤ fast", () => {
+    const t = computeFeeTiers(10n * GWEI, { slow: 0n, market: 0n, fast: 500n * GWEI });
+    expect(t.slow.maxPriorityFeePerGas).toBe(MIN_PRIORITY_FEE_WEI);
+    expect(t.market.maxPriorityFeePerGas).toBe(MIN_PRIORITY_FEE_WEI);
+    expect(t.fast.maxPriorityFeePerGas).toBe(MAX_PRIORITY_FEE_WEI);
+    expect(t.slow.maxPriorityFeePerGas <= t.market.maxPriorityFeePerGas).toBe(true);
+    expect(t.market.maxPriorityFeePerGas <= t.fast.maxPriorityFeePerGas).toBe(true);
+  });
+
+  it("refuses to guess when feeHistory has no usable base fee", async () => {
+    const bad = { getFeeHistory: vi.fn(async () => ({ baseFeePerGas: [], reward: [] })) };
+    await expect(getEip1559FeeTiers(bad as never)).rejects.toThrow(/refusing to guess/);
+  });
+});
+
 describe("executeRoute", () => {
   const fee = feeClient([10n * GWEI, 12n * GWEI], [[2n * GWEI]]);
 
@@ -169,6 +212,17 @@ describe("executeRoute", () => {
     expect(firstTx).toMatchObject({ type: 2, chainId: 1 });
     expect(BigInt(firstTx.gasLimit)).toBe(60_000n); // 50k * 1.2
     expect(BigInt(firstTx.maxPriorityFeePerGas)).toBe(2n * GWEI);
+  });
+
+  it("uses a supplied fee override (chosen tier) instead of reading feeHistory", async () => {
+    // No getFeeHistory on the client → if it tried to read fees it would throw.
+    const client = { ...receiptClient(["success"]) };
+    const override = { maxFeePerGas: 99n * GWEI, maxPriorityFeePerGas: 7n * GWEI, nextBaseFee: 40n * GWEI };
+    const res = await executeRoute({ ...baseParams(client), fees: override });
+    expect(res.ok).toBe(true);
+    const firstTx = sendTxMock.mock.calls[0][1];
+    expect(BigInt(firstTx.maxFeePerGas)).toBe(99n * GWEI);
+    expect(BigInt(firstTx.maxPriorityFeePerGas)).toBe(7n * GWEI);
   });
 
   it("is idempotent: an existing in-flight/confirmed key never re-broadcasts", async () => {

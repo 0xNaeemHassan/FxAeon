@@ -213,14 +213,25 @@ export const saveSettings = (settings: {
 // ---------------------------------------------------------------------------
 
 /** Real gas estimate from a live simulateCalls + EIP-1559 feeHistory. */
-export interface GasEstimate {
-  units: string;
+export type FeeTierKey = 'slow' | 'market' | 'fast';
+
+/** One real speed tier (Slow/Market/Fast), all numbers chain-derived. */
+export interface GasTier {
+  key: FeeTierKey;
   maxFeeGwei: number;
   priorityGwei: number;
   estCostWei: string;
   estCostEth: number;
   /** null when no ETH price is available — never fabricated. */
   estCostUsd: number | null;
+}
+
+export interface GasEstimate {
+  units: string;
+  /** [slow, market, fast] — real fee-history percentile tiers. */
+  tiers: GasTier[];
+  /** Default selection; the broadcast uses whichever tier the user confirms. */
+  recommended: FeeTierKey;
 }
 
 /** A real review-quote: only SDK/chain-derived numbers, no fabricated fields. */
@@ -232,7 +243,12 @@ export interface TradeQuote {
   collateralToken: string;
   /** Notional exposure = collateral × leverage. */
   exposure: number;
+  /** SDK execution price — the entry price. */
   executionPrice: string;
+  /** Resulting position collateral (human units of the collateral token). */
+  collateralAfter: number;
+  /** Resulting position debt in fxUSD (human units). */
+  debtAfter: number;
   positionId: number;
   slippagePct: number;
   mevProtection: 'on' | 'off';
@@ -247,6 +263,17 @@ export interface TradeParams {
   amount: number;
 }
 
+/** Real on-chain receipt detail for the result screen (null when unread). */
+export interface TradeReceipt {
+  blockNumber: number;
+  gasUsed: string;
+  effectiveGasPriceGwei: number;
+  gasPaidWei: string;
+  gasPaidEth: number;
+  gasPaidUsd: number | null;
+  confirmations: number;
+}
+
 export interface TradeExecuteResult {
   ok: true;
   deduped: boolean;
@@ -254,6 +281,7 @@ export interface TradeExecuteResult {
   txHash: string | null;
   hashes: string[];
   recordId: string;
+  receipt: TradeReceipt | null;
 }
 
 /** Build a real review-quote + gas estimate (read-only, nothing broadcast). */
@@ -264,5 +292,5 @@ export const tradeQuote = (params: TradeParams) =>
  * Execute the open for real. `nonce` makes it idempotent: a double-tap or
  * retry with the same nonce dedupes to a single broadcast.
  */
-export const tradeExecute = (params: TradeParams, nonce: string) =>
-  call<TradeExecuteResult>('/trade/execute', { method: 'POST', body: { ...params, nonce } });
+export const tradeExecute = (params: TradeParams, nonce: string, feeTier: FeeTierKey = 'market') =>
+  call<TradeExecuteResult>('/trade/execute', { method: 'POST', body: { ...params, nonce, feeTier } });

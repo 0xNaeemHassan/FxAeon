@@ -42,6 +42,7 @@ import {
   ApiError,
   type TradeQuote,
   type TradeExecuteResult,
+  type FeeTierKey,
 } from '@/lib/api';
 
 const MARKET_INDEX: Record<string, number> = { wstETH: 0, WBTC: 1 };
@@ -118,6 +119,7 @@ function TradeContent() {
   const [quoteErr, setQuoteErr] = useState<string | null>(null);
   const [quoting, setQuoting] = useState(false);
   const [gasOpen, setGasOpen] = useState(false);
+  const [feeTier, setFeeTier] = useState<FeeTierKey>('market');
   const [ttl, setTtl] = useState(QUOTE_TTL_SEC);
   const [nonce, setNonce] = useState<string>('');
   const [execErr, setExecErr] = useState<{ code: string; message: string } | null>(null);
@@ -166,6 +168,7 @@ function TradeContent() {
     haptic('selection');
     setNonce(makeNonce());
     setQuote(null);
+    setFeeTier('market');
     setExecErr(null);
     setResult(null);
     setStep('review');
@@ -189,7 +192,7 @@ function TradeContent() {
     setStep('executing');
     setExecErr(null);
     try {
-      const res = await tradeExecute(params, nonce);
+      const res = await tradeExecute(params, nonce, feeTier);
       setResult(res);
       setStep('done');
       haptic('success');
@@ -199,7 +202,7 @@ function TradeContent() {
       setStep('done');
       haptic('error');
     }
-  }, [quote, nonce, params]);
+  }, [quote, nonce, params, feeTier]);
 
   // Native MainButton mirrors the active CTA inside Telegram.
   useEffect(() => {
@@ -331,6 +334,10 @@ function TradeContent() {
   // ── Review (screen 2) + gas detail (screen 3) ─────────────────────────
   if (step === 'review') {
     const minReceived = quote ? quote.exposure * (1 - quote.slippagePct / 100) : 0;
+    const tiers = quote?.gas.tiers ?? [];
+    const selectedTier = tiers.find((tt) => tt.key === feeTier) ?? tiers.find((tt) => tt.key === 'market') ?? tiers[0] ?? null;
+    const tierCost = (tr: { estCostUsd: number | null; estCostEth: number }) =>
+      tr.estCostUsd != null ? `~$${fmt(tr.estCostUsd, 2)}` : `~${fmt(tr.estCostEth, 5)} ETH`;
     return (
       <AppShell>
         <div className="stagger flex flex-col gap-3.5">
@@ -412,6 +419,12 @@ function TradeContent() {
 
               {/* Real, on-chain-derived details only (no fabricated rows) */}
               <Card className="flex flex-col gap-0">
+                <Row label={t('trade.review.entryPrice')} value={`$${fmt(Number(quote.executionPrice), 2)}`} />
+                <Divider />
+                <Row label={t('trade.review.positionSize')} value={`${fmt(quote.collateralAfter)} ${quote.market}`} />
+                <Divider />
+                <Row label={t('trade.review.borrowed')} value={`${fmt(quote.debtAfter, 2)} fxUSD`} />
+                <Divider />
                 <Row label={t('trade.review.slippage')} value={`${quote.slippagePct.toFixed(2)}%`} />
                 <Divider />
                 <Row
@@ -423,7 +436,7 @@ function TradeContent() {
                   }
                 />
                 <Divider />
-                {/* Network fee → expands the real EIP-1559 detail (screen 3) */}
+                {/* Network fee → expands the real Slow/Market/Fast picker (screen 3) */}
                 <button
                   type="button"
                   onClick={() => {
@@ -436,29 +449,58 @@ function TradeContent() {
                     <Fuel className="h-3.5 w-3.5" /> {t('trade.review.networkFee')}
                   </span>
                   <span className="flex items-center gap-1 text-[13px] font-semibold">
-                    {quote.gas.estCostUsd != null ? `~$${fmt(quote.gas.estCostUsd, 2)}` : `~${fmt(quote.gas.estCostEth, 5)} ETH`}
-                    <span className="text-[11px] font-normal text-mut">({t('trade.review.gasMarket')})</span>
+                    {selectedTier ? tierCost(selectedTier) : '—'}
+                    <span className="text-[11px] font-normal text-mut">({t(`trade.gas.tier.${feeTier}`)})</span>
                     <ChevronDown className={`h-4 w-4 text-mut transition-transform ${gasOpen ? 'rotate-180' : ''}`} />
                   </span>
                 </button>
                 {gasOpen && (
                   <div className="mt-1 rounded-2xl bg-[rgba(255,255,255,0.03)] p-3">
-                    <p className="text-[11px] uppercase tracking-wide text-mut">{t('trade.gas.subtitle')}</p>
-                    <div className="mt-2 flex flex-col gap-0">
-                      <Row small label={t('trade.gas.maxBaseFee')} value={`${fmt(quote.gas.maxFeeGwei, 2)} gwei`} />
-                      <Row small label={t('trade.gas.priorityFee')} value={`${fmt(quote.gas.priorityGwei, 2)} gwei`} />
-                      <Row small label={t('trade.gas.gasLimit')} value={Number(quote.gas.units).toLocaleString('en-US')} />
-                      <Row
-                        small
-                        label={t('trade.gas.maxCost')}
-                        value={
-                          quote.gas.estCostUsd != null
-                            ? `$${fmt(quote.gas.estCostUsd, 2)} (${fmt(quote.gas.estCostEth, 5)} ETH)`
-                            : `${fmt(quote.gas.estCostEth, 6)} ETH`
-                        }
-                      />
+                    <p className="text-[11px] uppercase tracking-wide text-mut">{t('trade.gas.speedTitle')}</p>
+                    {/* Speed tiers — pick one; the server re-derives and broadcasts the chosen tier */}
+                    <div className="mt-2 grid grid-cols-3 gap-2">
+                      {tiers.map((tr) => {
+                        const active = tr.key === feeTier;
+                        return (
+                          <button
+                            key={tr.key}
+                            type="button"
+                            onClick={() => {
+                              haptic('selection');
+                              setFeeTier(tr.key);
+                            }}
+                            className={`glass-press flex flex-col items-center gap-0.5 rounded-2xl border px-2 py-2.5 text-center transition-colors ${
+                              active ? 'border-[rgba(124,92,255,0.5)] bg-[var(--mint-dim)]' : 'border-transparent'
+                            }`}
+                          >
+                            <span className={`text-[12px] font-semibold ${active ? 'text-mint' : 'text-text'}`}>
+                              {t(`trade.gas.tier.${tr.key}`)}
+                            </span>
+                            <span className="text-[11px] text-mut">
+                              {tr.estCostUsd != null ? `$${fmt(tr.estCostUsd, 2)}` : `${fmt(tr.estCostEth, 4)} Ξ`}
+                            </span>
+                            <span className="text-[10px] text-mut">{fmt(tr.priorityGwei, 2)} gwei</span>
+                          </button>
+                        );
+                      })}
                     </div>
-                    <p className="mt-2 text-[11px] leading-snug text-mut">{t('trade.gas.singleTierNote')}</p>
+                    {selectedTier && (
+                      <div className="mt-3 flex flex-col gap-0">
+                        <Row small label={t('trade.gas.maxBaseFee')} value={`${fmt(selectedTier.maxFeeGwei, 2)} gwei`} />
+                        <Row small label={t('trade.gas.priorityFee')} value={`${fmt(selectedTier.priorityGwei, 2)} gwei`} />
+                        <Row small label={t('trade.gas.gasLimit')} value={Number(quote.gas.units).toLocaleString('en-US')} />
+                        <Row
+                          small
+                          label={t('trade.gas.maxCost')}
+                          value={
+                            selectedTier.estCostUsd != null
+                              ? `$${fmt(selectedTier.estCostUsd, 2)} (${fmt(selectedTier.estCostEth, 5)} ETH)`
+                              : `${fmt(selectedTier.estCostEth, 6)} ETH`
+                          }
+                        />
+                      </div>
+                    )}
+                    <p className="mt-2 text-[11px] leading-snug text-mut">{t('trade.gas.tierNote')}</p>
                   </div>
                 )}
                 <Divider />
@@ -574,6 +616,39 @@ function TradeContent() {
                 }
               />
             </Card>
+
+            {/* Real on-chain receipt detail — only shown once the chain confirms */}
+            {result?.receipt && (
+              <Card className="w-full">
+                <Row
+                  label={t('trade.result.block')}
+                  value={
+                    <a
+                      href={`https://etherscan.io/block/${result.receipt.blockNumber}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1 text-cyan"
+                    >
+                      #{result.receipt.blockNumber.toLocaleString('en-US')} <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  }
+                />
+                <Divider />
+                <Row
+                  label={t('trade.result.gasPaid')}
+                  value={
+                    result.receipt.gasPaidUsd != null
+                      ? `$${fmt(result.receipt.gasPaidUsd, 2)} (${fmt(result.receipt.gasPaidEth, 5)} ETH)`
+                      : `${fmt(result.receipt.gasPaidEth, 6)} ETH`
+                  }
+                />
+                <Divider />
+                <Row
+                  label={t('trade.result.confirmations')}
+                  value={result.receipt.confirmations.toLocaleString('en-US')}
+                />
+              </Card>
+            )}
 
             {/* Honest progress: Submitted → Broadcast → Confirmed */}
             <div className="flex w-full items-center justify-between px-2">

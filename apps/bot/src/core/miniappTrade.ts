@@ -32,7 +32,12 @@ import {
 } from "../fx/index.js";
 import { executeRoute } from "./txExecutor.js";
 import { requireDelegatedWallet, type DelegationGateUser } from "./delegation.js";
-import { getEip1559Fees } from "./fees.js";
+import {
+  getEip1559FeeTiers,
+  selectFeeTier,
+  type Eip1559Fees,
+  type FeeTierKey,
+} from "./fees.js";
 import { listUserPositions } from "./portfolio.js";
 import { trackPositions } from "./pnl.js";
 import { getSpotPrices } from "../market/coingecko.js";
@@ -91,9 +96,9 @@ export function validateTradeBody(body: unknown): ValidationResult {
   return { ok: true, params: { market: market as Market, side, leverage, amount } };
 }
 
-export interface GasEstimate {
-  /** Total gas units across the route (approve + router call). */
-  units: string;
+/** One speed option (Slow/Market/Fast). All numbers are chain-derived. */
+export interface GasTier {
+  key: FeeTierKey;
   maxFeeGwei: number;
   priorityGwei: number;
   /** Estimated total fee (units × maxFeePerGas) in wei / ETH / USD. */
@@ -102,25 +107,51 @@ export interface GasEstimate {
   estCostUsd: number | null;
 }
 
+export interface GasEstimate {
+  /** Total gas units across the route (approve + router call). */
+  units: string;
+  /** [slow, market, fast] — real percentile tiers, nothing fabricated. */
+  tiers: GasTier[];
+  /** Default selection; the broadcast honors whichever tier the user confirms. */
+  recommended: FeeTierKey;
+}
+
 /**
- * Pure gas-cost math, split out so it can be unit-tested without a chain.
- * estCostUsd is null when no ETH price is available (honest unknown).
+ * Pure per-tier gas-cost math, split out so it can be unit-tested without a
+ * chain. estCostUsd is null when no ETH price is available (honest unknown).
  */
-export function computeGasEstimate(
+export function gasTierCost(
   totalGas: bigint,
-  maxFeePerGas: bigint,
-  maxPriorityFeePerGas: bigint,
+  fee: Eip1559Fees,
+  key: FeeTierKey,
   ethPriceUsd: number | null
-): GasEstimate {
-  const estCostWei = totalGas * maxFeePerGas;
+): GasTier {
+  const estCostWei = totalGas * fee.maxFeePerGas;
   const estCostEth = Number(formatUnits(estCostWei, 18));
   return {
-    units: totalGas.toString(),
-    maxFeeGwei: Number(maxFeePerGas) / Number(GWEI),
-    priorityGwei: Number(maxPriorityFeePerGas) / Number(GWEI),
+    key,
+    maxFeeGwei: Number(fee.maxFeePerGas) / Number(GWEI),
+    priorityGwei: Number(fee.maxPriorityFeePerGas) / Number(GWEI),
     estCostWei: estCostWei.toString(),
     estCostEth,
     estCostUsd: ethPriceUsd != null ? estCostEth * ethPriceUsd : null,
+  };
+}
+
+/** Build the full Slow/Market/Fast gas estimate from real fee tiers. */
+export function buildGasEstimate(
+  totalGas: bigint,
+  tiers: { slow: Eip1559Fees; market: Eip1559Fees; fast: Eip1559Fees },
+  ethPriceUsd: number | null
+): GasEstimate {
+  return {
+    units: totalGas.toString(),
+    tiers: [
+      gasTierCost(totalGas, tiers.slow, "slow", ethPriceUsd),
+      gasTierCost(totalGas, tiers.market, "market", ethPriceUsd),
+      gasTierCost(totalGas, tiers.fast, "fast", ethPriceUsd),
+    ],
+    recommended: "market",
   };
 }
 
@@ -132,8 +163,12 @@ export interface TradeQuote {
   collateralToken: Market;
   /** Notional exposure = collateral × leverage (display). */
   exposure: number;
-  /** SDK execution price for the route (string from the SDK). */
+  /** SDK execution price for the route (string from the SDK) — the entry price. */
   executionPrice: string;
+  /** Resulting position collateral (human units of the collateral token). */
+  collateralAfter: number;
+  /** Resulting position debt in fxUSD (human units). */
+  debtAfter: number;
   positionId: number;
   slippagePct: number;
   mevProtection: "on" | "off";
@@ -206,9 +241,9 @@ export async function buildTradeQuote(
     };
   }
 
-  let fees;
+  let tiers;
   try {
-    fees = await getEip1559Fees(client);
+    tiers = await getEip1559FeeTiers(client);
   } catch (e) {
     botLogger.warn({ err: e }, "miniapp quote: fee estimation failed");
     return { ok: false, code: "FEE_UNAVAILABLE", message: "Couldn't estimate network fees right now. Try again shortly." };
@@ -230,13 +265,24 @@ export async function buildTradeQuote(
       collateralToken: params.market,
       exposure: params.amount * params.leverage,
       executionPrice: route.executionPrice,
+      collateralAfter: safeFormat(route.colls, collateralDecimals(params.market)),
+      debtAfter: safeFormat(route.debts, 18),
       positionId,
       slippagePct,
       mevProtection: user.mevProtection === "flashbots" ? "on" : "off",
       routeType: route.routeType,
-      gas: computeGasEstimate(sim.totalGas, fees.maxFeePerGas, fees.maxPriorityFeePerGas, ethPrice),
+      gas: buildGasEstimate(sim.totalGas, tiers, ethPrice),
     },
   };
+}
+
+/** Parse a decimal-string wei amount to a human number; 0 on bad input. */
+function safeFormat(weiStr: string, decimals: number): number {
+  try {
+    return Number(formatUnits(BigInt(weiStr), decimals));
+  } catch {
+    return 0;
+  }
 }
 
 export interface ExecuteUser extends DelegationGateUser {
@@ -246,9 +292,75 @@ export interface ExecuteUser extends DelegationGateUser {
   mevProtection: string;
 }
 
+/** On-chain receipt detail for the result screen — all read post-confirmation. */
+export interface TradeReceiptInfo {
+  blockNumber: number;
+  gasUsed: string;
+  effectiveGasPriceGwei: number;
+  gasPaidWei: string;
+  gasPaidEth: number;
+  gasPaidUsd: number | null;
+  /** current head − inclusion block + 1 (≥ 1). */
+  confirmations: number;
+}
+
 export type ExecuteResult =
-  | { ok: true; deduped: boolean; status: string; txHash: string | null; hashes: string[]; recordId: string }
+  | {
+      ok: true;
+      deduped: boolean;
+      status: string;
+      txHash: string | null;
+      hashes: string[];
+      recordId: string;
+      /** Real receipt detail, or null when it couldn't be read (fail-soft). */
+      receipt: TradeReceiptInfo | null;
+    }
   | { ok: false; code: string; message: string };
+
+/** Pure receipt math (block #, gas paid, confirmations) — chain-free testable. */
+export function buildReceiptInfo(
+  receipt: { blockNumber: bigint; gasUsed: bigint; effectiveGasPrice: bigint },
+  currentBlock: bigint,
+  ethPriceUsd: number | null
+): TradeReceiptInfo {
+  const gasPaidWei = receipt.gasUsed * receipt.effectiveGasPrice;
+  const gasPaidEth = Number(formatUnits(gasPaidWei, 18));
+  const conf = Number(currentBlock - receipt.blockNumber) + 1;
+  return {
+    blockNumber: Number(receipt.blockNumber),
+    gasUsed: receipt.gasUsed.toString(),
+    effectiveGasPriceGwei: Number(receipt.effectiveGasPrice) / Number(GWEI),
+    gasPaidWei: gasPaidWei.toString(),
+    gasPaidEth,
+    gasPaidUsd: ethPriceUsd != null ? gasPaidEth * ethPriceUsd : null,
+    confirmations: conf < 1 ? 1 : conf,
+  };
+}
+
+interface ReceiptReader {
+  getTransactionReceipt: (args: { hash: `0x${string}` }) => Promise<{
+    blockNumber: bigint;
+    gasUsed: bigint;
+    effectiveGasPrice: bigint;
+  } | null>;
+  getBlockNumber: () => Promise<bigint>;
+}
+
+/** Read the confirmed receipt fail-soft — never block or alter the trade result. */
+export async function readTradeReceipt(
+  client: ReceiptReader,
+  hash: `0x${string}`,
+  ethPriceUsd: number | null
+): Promise<TradeReceiptInfo | null> {
+  try {
+    const receipt = await client.getTransactionReceipt({ hash });
+    if (!receipt) return null;
+    const head = await client.getBlockNumber().catch(() => receipt.blockNumber);
+    return buildReceiptInfo(receipt, head, ethPriceUsd);
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Execute an open from the Mini App. Gate on the session-signer grant, rebuild
@@ -259,7 +371,8 @@ export type ExecuteResult =
 export async function executeTrade(
   user: ExecuteUser,
   params: ValidatedTradeParams,
-  nonce: string
+  nonce: string,
+  feeTier: FeeTierKey = "market"
 ): Promise<ExecuteResult> {
   const gate = await requireDelegatedWallet(user);
   if (!gate.ok) {
@@ -297,6 +410,15 @@ export async function executeTrade(
 
   const client = createPublicClientForUser(user.mevProtection === "flashbots" ? "flashbots" : "off");
 
+  // Re-derive the chosen speed tier server-side (never trust client fee
+  // numbers). Fail-soft: if tiers can't be read, executeRoute reads its own.
+  let chosenFees: Eip1559Fees | undefined;
+  try {
+    chosenFees = selectFeeTier(await getEip1559FeeTiers(client), feeTier);
+  } catch (e) {
+    botLogger.warn({ err: e, feeTier }, "miniapp execute: fee-tier read failed; using default");
+  }
+
   const result = await executeRoute({
     userId: user.id,
     walletId: gate.walletId,
@@ -305,6 +427,7 @@ export async function executeTrade(
     txs: route.txs,
     type: params.side === "long" ? "open_long" : "open_short",
     client,
+    fees: chosenFees,
   });
 
   if (!result.ok) {
@@ -316,12 +439,16 @@ export async function executeTrade(
   }
 
   // Best-effort: snapshot the true entry state for PnL right after the open.
+  let ethPrice: number | null = null;
   try {
     const fresh = await listUserPositions(sdk, user.walletAddress, params.market, params.side);
     let spot: Record<string, number | null> | null = null;
     try {
       const snap = await getSpotPrices();
-      if (!snap.stale) spot = snap.prices;
+      if (!snap.stale) {
+        spot = snap.prices;
+        ethPrice = snap.prices["ETH"] ?? null;
+      }
     } catch { /* feed down — snapshot without entry spot */ }
     await trackPositions(user.id, fresh, spot);
   } catch (e) {
@@ -329,6 +456,14 @@ export async function executeTrade(
   }
 
   const txHash = result.hashes.length > 0 ? result.hashes[result.hashes.length - 1] : null;
+
+  // Read the real receipt (block #, gas paid, confirmations) for screen 5.
+  // Fail-soft: a missing receipt never changes the already-final trade result.
+  let receipt: TradeReceiptInfo | null = null;
+  if (txHash && result.status === "confirmed") {
+    receipt = await readTradeReceipt(client as unknown as ReceiptReader, txHash as `0x${string}`, ethPrice);
+  }
+
   return {
     ok: true,
     deduped: result.deduped,
@@ -336,5 +471,6 @@ export async function executeTrade(
     txHash,
     hashes: result.hashes,
     recordId: result.recordId,
+    receipt,
   };
 }
