@@ -22,7 +22,7 @@ import type { PublicClient } from "viem";
 import { simulateRoute, type TradeTx } from "../fx/index.js";
 import { incr } from "./metrics.js";
 import { sendWalletTransaction } from "./privy.js";
-import { getEip1559Fees } from "./fees.js";
+import { getEip1559Fees, type Eip1559Fees } from "./fees.js";
 import { assertTransition, isTxState, type TxState } from "./txState.js";
 import { assertRouteAllowed, resolvePolicyMode, SignerPolicyError } from "./signerPolicy.js";
 import { logger } from "../middleware/logger.js";
@@ -46,6 +46,12 @@ export interface ExecuteRouteParams {
   /** TxRecord.type, e.g. 'open_long' | 'close' | 'fxsave_deposit'. */
   type: string;
   client: PublicClient;
+  /**
+   * Optional server-derived EIP-1559 fees (e.g. a chosen Slow/Market/Fast
+   * tier). Must be computed server-side — never accept client fee numbers.
+   * When omitted, fees are read fresh from feeHistory (the Market tier).
+   */
+  fees?: Eip1559Fees;
   /** Optional status hook (W-12 wires Telegram notifications here). */
   onStatus?: (status: TxState, detail?: string) => void;
   /** Receipt polling overrides (tests). */
@@ -142,10 +148,10 @@ export async function executeRoute(params: ExecuteRouteParams): Promise<ExecuteR
   incr("simulate.ok");
   state = await setStatus(record.id, state, "simulated", onStatus, `gas ${sim.totalGas}`);
 
-  // ── Fees from feeHistory. ───────────────────────────────────────────────
+  // ── Fees: use the server-derived tier if supplied, else read feeHistory. ─
   let fees;
   try {
-    fees = await getEip1559Fees(client);
+    fees = params.fees ?? (await getEip1559Fees(client));
   } catch (err) {
     return fail(`fee estimation failed: ${err instanceof Error ? err.message : String(err)}`);
   }
