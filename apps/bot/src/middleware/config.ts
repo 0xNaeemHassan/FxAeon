@@ -55,6 +55,15 @@ export const envSchema = z.object({
    * adapter to the Privy default-deny policy allow-list (W-08). See docs/GAPS.md.
    */
   BRIDGE_EXECUTION_ENABLED: z.string().default("false"),
+  /**
+   * Session-signer broadcast policy mode (PLAN.md Pillar A §3.4).
+   * "enforce" (default): a route that targets anything outside the verified
+   * f(x) ADDRESSES registry — or approves/sends to a non-allow-listed address —
+   * is refused before broadcast (fail-closed). "observe": such a route is
+   * counted + logged but still broadcast (operational safety valve for a new,
+   * verified f(x) peripheral — see docs/GAPS.md). "off": disabled (tests only).
+   */
+  SIGNER_POLICY_MODE: z.enum(["enforce", "observe", "off"]).default("enforce"),
 }).superRefine((cfg, ctx) => {
   // ── Production fail-fast (PLAN.md W-05) ────────────────────────────────
   // A money-touching bot must not boot into a silently-degraded state.
