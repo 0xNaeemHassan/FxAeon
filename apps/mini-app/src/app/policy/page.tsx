@@ -7,39 +7,24 @@
  */
 import { ShieldCheck, Check, Lock } from 'lucide-react';
 import { AppShell, Card } from '@/components/ui';
-
-const RULES = [
-  {
-    title: 'Your keys, full stop',
-    body: 'You create or import the wallet yourself. The key sits in a hardware enclave, exportable by you any time — FxAeon never sees it.',
-  },
-  {
-    title: 'Bot trading is a grant, not a default',
-    body: 'The bot can only sign while your session-signer grant is active. Revoke it in Settings → Wallet and chat execution stops instantly.',
-  },
-  {
-    title: 'Simulation-gated execution',
-    body: 'Every chat-confirmed action is simulated first. If it would fail, nothing is broadcast — fail closed, always.',
-  },
-  {
-    title: 'Explicit confirms only',
-    body: 'No transaction is built or sent before you tap Confirm. Previews expire after ~10 minutes.',
-  },
-];
+import { useT } from '@/lib/i18n';
 
 export default function PolicyPage() {
+  const t = useT();
+  const RULES = [
+    { title: t('policy.rule1Title'), body: t('policy.rule1Body') },
+    { title: t('policy.rule2Title'), body: t('policy.rule2Body') },
+    { title: t('policy.rule3Title'), body: t('policy.rule3Body') },
+    { title: t('policy.rule4Title'), body: t('policy.rule4Body') },
+  ];
   return (
-    <AppShell title="Wallet security" subtitle="Self-custody, enforced in hardware">
+    <AppShell title={t('policy.title')} subtitle={t('policy.subtitle')}>
       <div className="stagger flex flex-col gap-3.5">
         <Card className="flex items-start gap-3">
           <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)]">
             <Lock className="h-5 w-5 text-mint" />
           </span>
-          <p className="text-[13px] leading-relaxed text-mut">
-            Your wallet&apos;s keys live in a trusted execution environment (TEE). FxAeon
-            holds no custody and no policy lock — what the bot CAN do is decided by you,
-            through a revocable permission.
-          </p>
+          <p className="text-[13px] leading-relaxed text-mut">{t('policy.intro')}</p>
         </Card>
 
         {RULES.map((r) => (
@@ -56,11 +41,7 @@ export default function PolicyPage() {
 
         <Card className="flex items-start gap-2.5 border-[rgba(124, 92, 255,0.25)]">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-mint" />
-          <p className="text-[12.5px] leading-relaxed text-mut">
-            Manage everything in Settings → Wallet: export your key, enable or revoke bot
-            trading. Check <span className="font-mono text-mint">/security</span> in the bot
-            for the live status.
-          </p>
+          <p className="text-[12.5px] leading-relaxed text-mut">{t('policy.footer')}</p>
         </Card>
       </div>
     </AppShell>

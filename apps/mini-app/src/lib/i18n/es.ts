@@ -1,0 +1,144 @@
+import type { Messages } from './config';
+
+/** Español */
+const es: Messages = {
+  'nav.home': 'Inicio',
+  'nav.trade': 'Operar',
+  'nav.deposit': 'Depositar',
+  'nav.settings': 'Ajustes',
+
+  'common.openBot': 'Abrir @{bot}',
+  'common.openInTelegram': 'Abrir en Telegram',
+  'common.copyAddress': 'Copiar dirección',
+  'common.copied': '¡Copiado!',
+  'common.save': 'Guardar cambios',
+  'common.saved': 'Guardado',
+  'common.back': 'Atrás',
+  'common.retry': 'Reintentar',
+  'common.loading': 'Cargando el trading de f(x) Protocol…',
+  'common.unknownError': 'Error desconocido',
+
+  'splash.tagline':
+    'Trading apalancado sin custodia en f(x) Protocol, creado para Telegram. Esta app funciona dentro del bot de FxAeon.',
+
+  'loginGate.tgTitle': 'FxAeon funciona dentro de Telegram',
+  'loginGate.tgBody': 'Abre el bot y envía /start para configurar tu billetera.',
+  'loginGate.notConfTitle': 'Servicio de billetera no configurado',
+  'loginGate.notConfBody':
+    'A esta versión le falta su Privy app id, por lo que la configuración de la billetera no puede ejecutarse. Si eres el operador: define NEXT_PUBLIC_PRIVY_APP_ID (y NEXT_PUBLIC_PRIVY_SIGNER_ID para el trading del bot) y vuelve a desplegar.',
+
+  'intro.titleLead': 'Opera en f(x) como si fuera',
+  'intro.titleAccent': 'un mensaje',
+  'intro.subtitle': 'Crea o importa tu propia billetera — autocustodia, sin correo, sin concesiones.',
+  'intro.prop1Title': 'Tu billetera, tus claves',
+  'intro.prop1Body':
+    'Crea una billetera nueva o importa la tuya. Las claves viven en un enclave seguro — exportables por ti, invisibles para nosotros.',
+  'intro.prop2Title': 'Opera desde el chat',
+  'intro.prop2Body':
+    'Abre posiciones apalancadas de wstETH y WBTC con un mensaje. Confirma con un toque.',
+  'intro.prop3Title': 'Tú mantienes el control',
+  'intro.prop3Body':
+    'El trading del bot es un permiso que TÚ concedes — y puedes revocar cuando quieras. Nada se firma sin él.',
+  'intro.referralPre': '🎁 Referido',
+  'intro.referralPost': 'se aplicará',
+  'intro.ctaSetup': 'Configurar mi billetera',
+  'intro.ctaConnecting': 'Conectando…',
+  'intro.ctaMore': 'Más opciones de inicio (Google, billetera…)',
+  'intro.footer': 'Inicio con Telegram por defecto · Claves protegidas por enclaves de hardware · Exportables en cualquier momento',
+
+  'portfolio.title': 'Cartera',
+  'portfolio.openInTgTitle': 'Abre FxAeon en Telegram',
+  'portfolio.openInTgBody': 'Tu cartera vive en la app de Telegram.',
+  'portfolio.degradedTitle': 'No hay datos en vivo en esta pantalla',
+  'portfolio.degradedNoInit':
+    'Este tipo de apertura no lleva credenciales de Telegram. Usa /portfolio en el chat o abre la app desde un botón del bot.',
+  'portfolio.degradedNoBackend':
+    'Esta versión aún no está conectada al backend de trading. Usa /portfolio en el chat para ver datos en vivo.',
+  'portfolio.loadFailTitle': 'No se pudo cargar tu cuenta',
+  'portfolio.walletLabel': 'Tu billetera',
+  'portfolio.selfCustodyBadge': 'autocustodia',
+  'portfolio.referralCode': 'Código de referido',
+  'portfolio.balances': 'Saldos',
+  'portfolio.balancesUnavailable':
+    'Los saldos en cadena no están disponibles temporalmente (RPC). Desliza para actualizar o inténtalo en un momento.',
+  'portfolio.fundTitle': 'Financia tu billetera para empezar a operar.',
+  'portfolio.fundBody': 'Envía ETH, wstETH o WBTC a tu dirección — luego abre tu primera posición.',
+  'portfolio.showDeposit': 'Ver dirección de depósito',
+  'portfolio.positions': 'Posiciones',
+  'portfolio.positionsIncomplete':
+    'Algunas lecturas en cadena fallaron — las posiciones mostradas pueden estar incompletas. Actualiza para reintentar.',
+  'portfolio.noPositionsTitle': 'Sin posiciones abiertas',
+  'portfolio.noPositionsBody': 'Abre una posición apalancada de wstETH o WBTC — tarda unos 30 segundos.',
+  'portfolio.setupTrade': 'Preparar una operación',
+  'portfolio.markets': 'Mercados',
+  'portfolio.pricesStale': 'Los precios pueden tener unos minutos (problema en la fuente).',
+  'portfolio.quickActions': 'Acciones rápidas',
+  'portfolio.qaTradeHint': 'Apalancamiento hasta 10x',
+  'portfolio.qaDepositHint': 'ETH · wstETH · WBTC',
+  'portfolio.qaSecurity': 'Cómo se protege tu billetera',
+  'portfolio.qaSecurityHint': 'Autocustodia, tus claves',
+  'portfolio.colCollateral': 'Colateral',
+  'portfolio.colPnl': 'PnL',
+  'portfolio.colHealth': 'Salud',
+  'portfolio.long': 'largo',
+  'portfolio.short': 'corto',
+
+  'trade.title': 'Operar',
+  'trade.subtitle': 'Posiciones apalancadas en f(x) Protocol',
+  'trade.upTo': 'hasta {n}x',
+  'trade.long': 'largo',
+  'trade.short': 'corto',
+  'trade.leverage': 'Apalancamiento',
+  'trade.maxSuffix': 'máx. {n}x ({side})',
+  'trade.collateral': 'Colateral ({market})',
+  'trade.totalExposure': 'Exposición total ≈',
+  'trade.reviewConfirm': 'Revisar y confirmar en el chat',
+  'trade.confirmNote': 'El bot muestra una vista previa firmada — nada se ejecuta hasta que confirmes allí.',
+  'trade.reviewInChat': 'Revisar {lev}x {side} en el chat',
+
+  'settings.title': 'Ajustes',
+  'settings.subtitle': 'Sincronizado con tu cuenta del bot',
+  'settings.openInTgTitle': 'Abre FxAeon en Telegram',
+  'settings.openInTgBody': 'Los ajustes se sincronizan con tu cuenta del bot.',
+  'settings.cantSyncTitle': 'Los ajustes no se pueden sincronizar desde esta pantalla',
+  'settings.cantSyncNoInit':
+    'Este tipo de apertura no lleva credenciales de Telegram. Usa /settings en el chat.',
+  'settings.cantSyncNoBackend':
+    'Esta versión aún no está conectada al backend de trading. Usa /settings en el chat.',
+  'settings.language': 'Idioma',
+  'settings.maxSlippage': 'Deslizamiento máx.',
+  'settings.mevProtection': 'Protección MEV',
+  'settings.privateTx': 'Transacciones privadas',
+  'settings.privateTxSub': 'Enrutar a través de un relay privado',
+
+  'deposit.title': 'Depositar',
+  'deposit.subtitle': 'Financia tu billetera',
+  'deposit.address': 'Dirección',
+  'deposit.mainnetOnlyBold': 'Solo Ethereum mainnet.',
+  'deposit.mainnetOnlyBody': 'Envía solo los tokens de arriba — cualquier otra cosa podría perderse para siempre.',
+  'deposit.unavailableTitle': 'Dirección no disponible',
+  'deposit.noAddress':
+    'No se pasó ninguna dirección de billetera. Usa /deposit en el chat del bot o abre esta pantalla desde un botón del bot.',
+  'deposit.noWallet': 'Aún no hay billetera — envía /start al bot para crear una.',
+
+  'policy.title': 'Seguridad de la billetera',
+  'policy.subtitle': 'Autocustodia, garantizada por hardware',
+  'policy.intro':
+    'Las claves de tu billetera viven en un entorno de ejecución confiable (TEE). FxAeon no tiene custodia ni bloqueo por política — lo que el bot PUEDE hacer lo decides tú, mediante un permiso revocable.',
+  'policy.rule1Title': 'Tus claves, punto final',
+  'policy.rule1Body':
+    'Tú creas o importas la billetera. La clave reside en un enclave de hardware, exportable por ti en cualquier momento — FxAeon nunca la ve.',
+  'policy.rule2Title': 'El trading del bot es una concesión, no algo por defecto',
+  'policy.rule2Body':
+    'El bot solo puede firmar mientras tu concesión de firmante de sesión esté activa. Revócala en Ajustes → Billetera y la ejecución desde el chat se detiene al instante.',
+  'policy.rule3Title': 'Ejecución validada por simulación',
+  'policy.rule3Body':
+    'Cada acción confirmada en el chat se simula primero. Si fallara, no se transmite nada — siempre falla de forma segura.',
+  'policy.rule4Title': 'Solo confirmaciones explícitas',
+  'policy.rule4Body':
+    'Ninguna transacción se construye ni se envía antes de que toques Confirmar. Las vistas previas caducan a los ~10 minutos.',
+  'policy.footer':
+    'Gestiona todo en Ajustes → Billetera: exporta tu clave, activa o revoca el trading del bot. Consulta /security en el bot para ver el estado en vivo.',
+};
+
+export default es;

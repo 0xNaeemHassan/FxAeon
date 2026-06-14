@@ -15,10 +15,12 @@ import { Send } from 'lucide-react';
 import { isTMA, getInitData } from '@/lib/telegram';
 import { apiAvailable, getMe } from '@/lib/api';
 import { Button, FullScreenSpinner } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 
 const BOT_USERNAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || 'FxAeonBot';
 
 export default function HomePage() {
+  const t = useT();
   const router = useRouter();
   const [browser, setBrowser] = useState(false);
 
@@ -55,12 +57,9 @@ export default function HomePage() {
           <h1 className="text-display text-3xl font-semibold">
             Fx<span className="text-gradient">Aeon</span>
           </h1>
-          <p className="text-[14px] leading-relaxed text-mut">
-            Non-custodial leveraged trading on f(x) Protocol, built for Telegram.
-            This app runs inside the FxAeon bot.
-          </p>
+          <p className="text-[14px] leading-relaxed text-mut">{t('splash.tagline')}</p>
           <a href={`https://t.me/${BOT_USERNAME}`} className="w-full">
-            <Button>Open in Telegram</Button>
+            <Button>{t('common.openInTelegram')}</Button>
           </a>
         </div>
       </main>

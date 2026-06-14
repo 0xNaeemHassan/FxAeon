@@ -13,6 +13,7 @@ import { TrendingUp, TrendingDown, ArrowRight, ShieldCheck } from 'lucide-react'
 import { getWebApp, haptic, isTMA, showMainButton } from '@/lib/telegram';
 import { RISK_PARAMS } from '@fxbot/shared';
 import { AppShell, Button, Card, FullScreenSpinner, SectionTitle } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 
 const MARKET_INDEX: Record<string, number> = { wstETH: 0, WBTC: 1 };
 const MARKETS = Object.keys(MARKET_INDEX);
@@ -31,6 +32,7 @@ function buildBotDeepLink(
 }
 
 function TradeContent() {
+  const t = useT();
   const searchParams = useSearchParams();
 
   const [market, setMarket] = useState(
@@ -78,7 +80,7 @@ function TradeContent() {
   // Native MainButton mirrors the confirm CTA inside Telegram.
   useEffect(() => {
     if (!isTMA() || !valid) return;
-    return showMainButton(`Review ${leverage}x ${side} in chat`, openInBot);
+    return showMainButton(t('trade.reviewInChat', { lev: leverage, side: t(`trade.${side}`) }), openInBot);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [valid, leverage, side, market, amount]);
 
@@ -86,7 +88,7 @@ function TradeContent() {
   const exposure = valid ? (amt * leverage).toLocaleString('en-US', { maximumFractionDigits: 4 }) : null;
 
   return (
-    <AppShell title="Trade" subtitle="Leveraged positions on f(x) Protocol">
+    <AppShell title={t('trade.title')} subtitle={t('trade.subtitle')}>
       <div className="stagger flex flex-col gap-3.5">
         {/* Market */}
         <div className="grid grid-cols-2 gap-2.5">
@@ -104,7 +106,7 @@ function TradeContent() {
             >
               <p className="text-display text-[17px] font-semibold">{m}</p>
               <p className="mt-0.5 text-[11px] text-mut">
-                up to {m === market && !isLong ? RISK_PARAMS.MAX_LEVERAGE_SHORT : RISK_PARAMS.MAX_LEVERAGE_LONG}x
+                {t('trade.upTo', { n: m === market && !isLong ? RISK_PARAMS.MAX_LEVERAGE_SHORT : RISK_PARAMS.MAX_LEVERAGE_LONG })}
               </p>
             </button>
           ))}
@@ -131,7 +133,7 @@ function TradeContent() {
                     : 'text-mut'
                 }`}
               >
-                <Icon className="h-4 w-4" /> {s}
+                <Icon className="h-4 w-4" /> {t(`trade.${s}`)}
               </button>
             );
           })}
@@ -140,7 +142,7 @@ function TradeContent() {
         {/* Leverage */}
         <Card>
           <div className="flex items-baseline justify-between">
-            <span className="text-[12px] uppercase tracking-wide text-mut">Leverage</span>
+            <span className="text-[12px] uppercase tracking-wide text-mut">{t('trade.leverage')}</span>
             <span className="text-display text-[24px] font-semibold text-gradient">
               {leverage.toFixed(1)}x
             </span>
@@ -160,14 +162,14 @@ function TradeContent() {
           />
           <div className="mt-1.5 flex justify-between text-[11px] text-mut">
             <span>{minLev}x</span>
-            <span>{maxLev}x max ({side})</span>
+            <span>{t('trade.maxSuffix', { n: maxLev, side: t(`trade.${side}`) })}</span>
           </div>
         </Card>
 
         {/* Amount */}
         <Card>
           <label htmlFor="amt" className="text-[12px] uppercase tracking-wide text-mut">
-            Collateral ({market})
+            {t('trade.collateral', { market })}
           </label>
           <div className="mt-2 flex items-center gap-2">
             <input
@@ -182,18 +184,18 @@ function TradeContent() {
           </div>
           {exposure && (
             <p className="mt-2 text-[12px] text-mut">
-              Total exposure ≈ <span className="text-mint">{exposure} {market}</span>
+              {t('trade.totalExposure')} <span className="text-mint">{exposure} {market}</span>
             </p>
           )}
         </Card>
 
         {/* Confirm */}
         <Button onClick={openInBot} disabled={!valid} className="mt-1">
-          Review &amp; confirm in chat <ArrowRight className="h-4 w-4" />
+          {t('trade.reviewConfirm')} <ArrowRight className="h-4 w-4" />
         </Button>
         <p className="flex items-center justify-center gap-1.5 text-center text-[11.5px] text-mut">
           <ShieldCheck className="h-3.5 w-3.5 text-mint" />
-          The bot shows a signed preview — nothing executes until you confirm there.
+          {t('trade.confirmNote')}
         </p>
       </div>
     </AppShell>

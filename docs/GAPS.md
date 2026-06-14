@@ -122,3 +122,18 @@ Still open:
   trades on an unrecognised-but-valid contract. Hard `enforce` is the right
   default because every target the bot builds today is already in the registry
   (the earn path's older `assertKnownTargets` proved this in production).
+
+- Mini-app i18n (`apps/mini-app/src/lib/i18n/`) covers the recurring surfaces
+  every user sees per session — bottom nav, portfolio, trade, deposit,
+  settings, security/policy, the browser/login gate screens, and the
+  onboarding intro (value-props + CTAs) — fully translated into the same six
+  locales the bot ships (en/es/zh-CN/ru/ja/ko, selected via Settings, seeded
+  from the saved User.language then the Telegram UI language). The engine is
+  additive: any unkeyed string falls back to English, so nothing can break.
+  DEFERRED on purpose: the deep transient error/edge-case strings inside the
+  Privy onboarding flow (`PrivyFlow.tsx` — the many `fail(null, '…')` paths,
+  create/import/delegate phase copy) remain English. They are low-frequency,
+  security-sensitive wallet instructions where an unreviewed machine
+  translation is riskier than English; they should be translated with native
+  review before shipping. Adding them later is mechanical: extract to
+  `lib/i18n/en.ts`, mirror the keys in the five locale files, swap to `t()`.
