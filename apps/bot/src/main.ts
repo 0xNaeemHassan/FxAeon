@@ -306,17 +306,38 @@ async function main() {
     app.listen(port, async () => {
       logger.info({ port }, "Express server listening");
 
+      // Start background workers FIRST so nothing in the webhook/menu
+      // registration path (which makes external Telegram API calls that can
+      // hang or rate-limit) can ever block limit-order/price-alert/automation/
+      // health worker startup. Worker start is internally delayed 5s anyway.
+      startBackgroundWorkers();
+
       // Register webhook with Telegram
       // Render provides RENDER_EXTERNAL_URL; fall back to WEBHOOK_URL env var
       const webhookDomain = process.env.RENDER_EXTERNAL_URL || process.env.WEBHOOK_URL;
       if (webhookDomain) {
         const webhookUrl = `${webhookDomain}/webhook`;
-        await bot.api.setWebhook(webhookUrl, {
-          allowed_updates: ["message", "callback_query", "inline_query"],
-          drop_pending_updates: true,
-          secret_token: telegramWebhookSecret,
-        });
-        logger.info({ webhookUrl }, "Telegram webhook registered");
+        // Guard webhook registration: on Render's spin-down/up cycle this runs
+        // on every cold start, and Telegram rate-limits repeated setWebhook
+        // calls (429 "Too Many Requests"). An unhandled throw here used to
+        // abort the rest of this async listener callback — meaning
+        // startBackgroundWorkers() never ran and limit-order/price-alert/
+        // automation/health workers silently never started. Fail soft instead:
+        // the webhook stays registered from a prior boot, and the workers must
+        // start regardless.
+        try {
+          await bot.api.setWebhook(webhookUrl, {
+            allowed_updates: ["message", "callback_query", "inline_query"],
+            drop_pending_updates: true,
+            secret_token: telegramWebhookSecret,
+          });
+          logger.info({ webhookUrl }, "Telegram webhook registered");
+        } catch (e) {
+          logger.error(
+            e,
+            "Failed to (re)register Telegram webhook — continuing startup so background workers still start"
+          );
+        }
       } else {
         logger.warn(
           "No RENDER_EXTERNAL_URL or WEBHOOK_URL set — Telegram webhook NOT registered! " +
@@ -328,9 +349,6 @@ async function main() {
       await configureTelegramBot().catch((e) =>
         logger.error(e, "Failed to configure Telegram bot menu")
       );
-
-      // Start background workers (delayed)
-      startBackgroundWorkers();
     });
   } else {
     // ------ Polling mode (development) ------
