@@ -87,7 +87,7 @@ function QRContent() {
                   className="glass glass-press shrink-0 rounded-xl p-2.5"
                 >
                   {copied ? (
-                    <Check className="h-4.5 w-4.5 h-[18px] w-[18px] text-mint" />
+                    <Check className="h-4.5 w-4.5 h-[18px] w-[18px] text-success" />
                   ) : (
                     <Copy className="h-[18px] w-[18px] text-mut" />
                   )}

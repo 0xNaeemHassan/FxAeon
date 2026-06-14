@@ -99,7 +99,7 @@ function TradeContent() {
                 setMarket(m);
               }}
               className={`glass glass-press p-4 text-left ${
-                market === m ? 'border-[rgba(46,230,168,0.45)] bg-[var(--mint-dim)]' : ''
+                market === m ? 'border-[rgba(124, 92, 255,0.45)] bg-[var(--mint-dim)]' : ''
               }`}
             >
               <p className="text-display text-[17px] font-semibold">{m}</p>
@@ -127,7 +127,7 @@ function TradeContent() {
                   active
                     ? s === 'long'
                       ? 'bg-[var(--mint-dim)] text-mint'
-                      : 'bg-[rgba(255,107,107,0.12)] text-danger'
+                      : 'bg-[rgba(255, 90, 95,0.12)] text-danger'
                     : 'text-mut'
                 }`}
               >

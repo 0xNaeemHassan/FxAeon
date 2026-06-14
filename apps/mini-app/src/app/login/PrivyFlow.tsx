@@ -424,11 +424,11 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
     return (
       <main className="mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col justify-center gap-5 px-6">
         <div className="stagger flex flex-col items-center gap-4 text-center">
-          <span className="anim-glow flex h-16 w-16 items-center justify-center rounded-3xl bg-[var(--mint-dim)]">
+          <span className="anim-glow flex h-16 w-16 items-center justify-center rounded-3xl bg-[var(--success-dim)]">
             {result?.created ?? true ? (
-              <PartyPopper className="h-8 w-8 text-mint" strokeWidth={1.6} />
+              <PartyPopper className="h-8 w-8 text-success" strokeWidth={1.6} />
             ) : (
-              <Check className="h-8 w-8 text-mint" strokeWidth={2} />
+              <Check className="h-8 w-8 text-success" strokeWidth={2} />
             )}
           </span>
           <h1 className="text-display text-2xl font-semibold">

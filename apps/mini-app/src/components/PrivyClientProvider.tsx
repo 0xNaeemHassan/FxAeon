@@ -48,7 +48,7 @@ export default function PrivyClientProvider({ children }: { children: React.Reac
       config={{
         appearance: {
           theme: 'dark',
-          accentColor: '#2ee6a8',
+          accentColor: '#7c5cff',
           // Ethereum-only app; hide Solana-flavored wallet options.
           walletChainType: 'ethereum-only',
         },

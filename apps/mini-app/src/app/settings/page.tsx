@@ -154,7 +154,7 @@ export default function SettingsPage() {
                 touch();
               }}
               className={`glass glass-press rounded-2xl px-2 py-2.5 text-[13px] ${
-                lang === l.code ? 'border-[rgba(46,230,168,0.45)] bg-[var(--mint-dim)] text-mint' : 'text-mut'
+                lang === l.code ? 'border-[rgba(124, 92, 255,0.45)] bg-[var(--mint-dim)] text-mint' : 'text-mut'
               }`}
             >
               {l.name}
@@ -179,7 +179,7 @@ export default function SettingsPage() {
               }}
               className={`glass glass-press rounded-2xl py-2.5 text-[13px] font-medium ${
                 slippageBps === bps
-                  ? 'border-[rgba(46,230,168,0.45)] bg-[var(--mint-dim)] text-mint'
+                  ? 'border-[rgba(124, 92, 255,0.45)] bg-[var(--mint-dim)] text-mint'
                   : 'text-mut'
               }`}
             >
@@ -220,7 +220,7 @@ export default function SettingsPage() {
         </Card>
 
         {error && (
-          <Card className="mt-4 border-[rgba(255,107,107,0.35)]">
+          <Card className="mt-4 border-[rgba(255, 90, 95,0.35)]">
             <p className="text-[13px] text-danger">{error}</p>
           </Card>
         )}

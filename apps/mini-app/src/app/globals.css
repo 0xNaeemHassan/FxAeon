@@ -4,22 +4,34 @@
 
 /* ---------------------------------------------------------------------------
  * FxAeon design system — one deliberate dark theme.
- * Deep near-black canvas, glass surfaces, mint signal color, restrained glow.
+ * Deep violet-black canvas, glass surfaces, FxAeon Violet signal color,
+ * restrained glow. Palette matches the FxAeon brand visuals (tokens.css).
+ *
+ * Token naming note: the brand accent token is historically called `--mint`
+ * (and the Tailwind class `mint`); it now carries FxAeon Violet so the whole
+ * app re-skins without renaming hundreds of class references. Green is its
+ * own `--success` token, reserved for positive finance signals (PnL up, long,
+ * healthy collateral) — never the brand accent.
  * ------------------------------------------------------------------------- */
 
 :root {
-  --bg: #07090b;
+  --bg: #0a0a12;
   --surface: rgba(255, 255, 255, 0.04);
   --surface-2: rgba(255, 255, 255, 0.07);
+  --card: #13131f;
   --line: rgba(255, 255, 255, 0.08);
   --line-strong: rgba(255, 255, 255, 0.14);
-  --text: #f2f5f4;
-  --mut: #8b9492;
-  --mint: #2ee6a8;
-  --mint-dim: rgba(46, 230, 168, 0.12);
-  --cyan: #67e3f9;
-  --danger: #ff6b6b;
-  --warn: #ffc24b;
+  --text: #f5f5fa;
+  --mut: #9498b3;
+  /* Brand accent — FxAeon Violet (see naming note above). */
+  --mint: #7c5cff;
+  --mint-dim: rgba(124, 92, 255, 0.14);
+  --cyan: #a88bff;
+  /* Positive / up / long / healthy. */
+  --success: #22d39a;
+  --success-dim: rgba(34, 211, 154, 0.14);
+  --danger: #ff5a5f;
+  --warn: #ffb547;
   --tg-viewport-stable-height: 100dvh;
 }
 
@@ -49,14 +61,14 @@ body::before {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(420px 320px at 85% -5%, rgba(46, 230, 168, 0.13), transparent 65%),
-    radial-gradient(380px 300px at -10% 25%, rgba(103, 227, 249, 0.07), transparent 60%),
+    radial-gradient(420px 320px at 85% -5%, rgba(124, 92, 255, 0.18), transparent 65%),
+    radial-gradient(380px 300px at -10% 25%, rgba(168, 139, 255, 0.10), transparent 60%),
     var(--bg);
 }
 
 ::selection {
   background: var(--mint-dim);
-  color: var(--mint);
+  color: var(--cyan);
 }
 
 /* --- composable pieces ---------------------------------------------------*/
@@ -83,7 +95,7 @@ body::before {
 }
 
 .text-gradient {
-  background: linear-gradient(100deg, #eafff6 10%, var(--mint) 55%, var(--cyan) 100%);
+  background: linear-gradient(100deg, #f3efff 8%, var(--mint) 52%, var(--cyan) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -132,10 +144,10 @@ body::before {
 @keyframes glow-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(46, 230, 168, 0.35);
+    box-shadow: 0 0 0 0 rgba(124, 92, 255, 0.40);
   }
   50% {
-    box-shadow: 0 0 26px 2px rgba(46, 230, 168, 0.18);
+    box-shadow: 0 0 30px 3px rgba(124, 92, 255, 0.22);
   }
 }
 
@@ -219,18 +231,18 @@ input[type='range'].lever::-webkit-slider-thumb {
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: #0c1311;
+  background: #14101f;
   border: 2px solid var(--mint);
-  box-shadow: 0 0 14px rgba(46, 230, 168, 0.45);
+  box-shadow: 0 0 16px rgba(124, 92, 255, 0.50);
   cursor: pointer;
 }
 input[type='range'].lever::-moz-range-thumb {
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: #0c1311;
+  background: #14101f;
   border: 2px solid var(--mint);
-  box-shadow: 0 0 14px rgba(46, 230, 168, 0.45);
+  box-shadow: 0 0 16px rgba(124, 92, 255, 0.50);
   cursor: pointer;
 }
 
