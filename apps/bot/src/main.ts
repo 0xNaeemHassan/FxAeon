@@ -23,6 +23,9 @@ import {
   alertsCommand,
   handleAlertDeleteCallback,
   registerAutoActions,
+  speedUpCommand,
+  cancelTxCommand,
+  handleTxControlCallback,
 } from "./commands/index.js";
 
 import { handleWebAppData } from "./handlers/walletConnect.js";
@@ -107,6 +110,8 @@ bot.command("deposit", depositCommand);
 bot.command("withdraw", withdrawCommand);
 bot.command("help", helpCommand);
 bot.command("gas", gasCommand);
+bot.command("speedup", speedUpCommand);
+bot.command("cancel", cancelTxCommand);
 bot.command("price", priceCommand);
 bot.command("history", historyCommand);
 bot.command("alert", alertCommand);
@@ -125,6 +130,7 @@ registerAutoActions(bot);
 // Earn & borrow callbacks: signed action-intent confirms (a1_…) + cancel (a1c).
 bot.callbackQuery(/^a1(_|c$)/, handleActionCallback);
 bot.callbackQuery(/^wd_/, handleWithdrawCallback);
+bot.callbackQuery(/^tx_/, handleTxControlCallback);
 
 // Price-alert delete buttons (/alerts list).
 bot.callbackQuery(/^aldel_/, handleAlertDeleteCallback);
@@ -189,6 +195,8 @@ async function configureTelegramBot() {
     { command: "settings", description: "Bot settings" },
     { command: "security", description: "Security settings" },
     { command: "gas", description: "Live gas prices" },
+    { command: "speedup", description: "Speed up a stuck transaction" },
+    { command: "cancel", description: "Cancel a stuck transaction" },
     { command: "price", description: "Market overview (live prices)" },
     { command: "alert", description: "Set a one-shot price alert" },
     { command: "alerts", description: "Manage your price alerts" },
