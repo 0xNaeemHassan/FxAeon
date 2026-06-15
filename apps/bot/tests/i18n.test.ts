@@ -8,7 +8,7 @@ import * as path from "path";
 import { i18n, normalizeLocale, SUPPORTED_LOCALES } from "../src/i18n";
 
 const LOCALES_DIR = path.join(__dirname, "../src/i18n/locales");
-const LOCALES = ["en", "es", "ja", "ko", "ru", "zh-CN"];
+const LOCALES = ["en", "es", "ja", "ko", "ru", "zh-CN", "tr", "pt"];
 
 /** Top-level Fluent message IDs in a catalog ("key = ..." at column 0). */
 function messageIds(ftl: string): string[] {
@@ -126,7 +126,11 @@ describe("normalizeLocale", () => {
     expect(normalizeLocale("zh-TW")).toBe("zh-CN");
     expect(normalizeLocale("es-MX")).toBe("es");
     expect(normalizeLocale("ru-RU")).toBe("ru");
-    expect(normalizeLocale("pt-BR")).toBe("en"); // unsupported → en
+    expect(normalizeLocale("pt-BR")).toBe("pt"); // region variants fold to base
+    expect(normalizeLocale("pt-PT")).toBe("pt");
+    expect(normalizeLocale("tr")).toBe("tr");
+    expect(normalizeLocale("tr-TR")).toBe("tr");
+    expect(normalizeLocale("fr")).toBe("en"); // still unsupported → en
     expect(normalizeLocale(undefined)).toBe("en");
   });
 });

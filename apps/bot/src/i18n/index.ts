@@ -18,7 +18,7 @@ import { prisma } from "@fxbot/db";
  * `src/i18n/locales` into `dist/i18n/locales` (see package.json).
  */
 
-export const SUPPORTED_LOCALES = ["en", "es", "ja", "ko", "ru", "zh-CN"] as const;
+export const SUPPORTED_LOCALES = ["en", "es", "ja", "ko", "ru", "zh-CN", "tr", "pt"] as const;
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 
 /** Map a User.language value or Telegram language_code to a supported locale. */

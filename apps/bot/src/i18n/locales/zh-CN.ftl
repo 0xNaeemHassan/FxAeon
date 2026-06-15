@@ -72,7 +72,7 @@ help-body =
     • 非托管 — 密钥保存在 Privy TEE 中
     • 无入金通道 — 自行为钱包充值
     • 可切换 MEV 保护（Flashbots，免费）
-    • 6 种语言: en, zh-CN, ko, ja, ru, es
+    • 8 种语言: en, zh-CN, ko, ja, ru, es, tr, pt
     
     需要帮助？使用 /start 重新连接或联系客服。
 help-error = ❌ 无法加载帮助菜单。请尝试 /start 重新连接。
