@@ -35,7 +35,7 @@
     "zod": "^4.4.3",
     "express": "^4.19.0",
     "ethers": "^6.9.0",
-    "redis": "^4.6.0",
+    "redis": "^6.0.0",
     "@grammyjs/menu": "^1.2.0",
     "@prisma/client": "^5.7.0",
     "prisma": "^5.7.0",
