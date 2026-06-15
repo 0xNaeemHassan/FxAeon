@@ -15,6 +15,7 @@ import { MARKETS, type Market } from "@fxbot/shared";
 import {
   createFxSdk,
   createPublicClientForUser,
+  mevModeForUser,
   quoteClosePosition,
 } from "../fx/index.js";
 import { findUserPosition, type Side } from "../core/portfolio.js";
@@ -147,6 +148,7 @@ export async function handleCloseConfirm(ctx: Context): Promise<void> {
       txs: route.txs,
       type: target.side === "long" ? "close_long" : "close_short",
       client: createPublicClientForUser(user.mevProtection === "flashbots" ? "flashbots" : "off"),
+      mev: mevModeForUser(user.mevProtection),
       onStatus: (status, detail) => {
         const line = statusLine(status, detail);
         if (line === lastStatus) return;

@@ -23,6 +23,7 @@ vi.mock("../src/fx/index", () => ({
   collateralDecimals: () => 18,
   createFxSdk: (...a: unknown[]) => createFxSdkMock(...a),
   createPublicClientForUser: (...a: unknown[]) => publicClientMock(...a),
+  mevModeForUser: (m: string) => (m === "flashbots" ? "flashbots" : "off"),
   quoteOpenPosition: (...a: unknown[]) => quoteOpenPositionMock(...a),
   simulateRoute: (...a: unknown[]) => simulateRouteMock(...a),
 }));

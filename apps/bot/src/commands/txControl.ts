@@ -21,7 +21,7 @@ import { formatGwei } from "viem";
 import { executeReplacement, readPending, type PendingTx } from "../core/txReplace.js";
 import { requireDelegatedWallet } from "../core/delegation.js";
 import { describeExecutionError } from "../core/errorTaxonomy.js";
-import { createPublicClientForUser } from "../fx/index.js";
+import { createPublicClientForUser, mevModeForUser } from "../fx/index.js";
 import { botLogger } from "../middleware/logger.js";
 
 type Kind = "speedup" | "cancel";
@@ -160,6 +160,7 @@ export async function handleTxControlCallback(ctx: Context): Promise<void> {
       walletId: gate.walletId,
       walletAddress: user.walletAddress as `0x${string}`,
       client: createPublicClientForUser(user.mevProtection === "flashbots" ? "flashbots" : "off"),
+      mev: mevModeForUser(user.mevProtection),
       kind: req.kind,
     });
 

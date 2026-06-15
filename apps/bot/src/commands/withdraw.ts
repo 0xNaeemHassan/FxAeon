@@ -25,7 +25,7 @@ import { ADDRESSES } from "@fxbot/shared";
 import { executeRoute } from "../core/txExecutor.js";
 import { requireDelegatedWallet } from "../core/delegation.js";
 import { describeExecutionError } from "../core/errorTaxonomy.js";
-import { createPublicClientForUser } from "../fx/index.js";
+import { createPublicClientForUser, mevModeForUser } from "../fx/index.js";
 import { botLogger } from "../middleware/logger.js";
 
 interface WithdrawToken {
@@ -227,6 +227,7 @@ export async function handleWithdrawCallback(ctx: Context) {
       txs: [tx],
       type: "withdraw",
       client: createPublicClientForUser(user.mevProtection === "flashbots" ? "flashbots" : "off"),
+      mev: mevModeForUser(user.mevProtection),
       onStatus: (status, detail) => {
         const line = `${status}${detail ? ` — ${detail}` : ""}`;
         if (line === lastStatus) return;

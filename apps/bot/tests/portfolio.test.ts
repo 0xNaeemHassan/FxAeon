@@ -11,6 +11,7 @@ const quoteClosePositionMock = vi.fn();
 vi.mock("../src/fx/index", () => ({
   createFxSdk: vi.fn(() => ({})),
   createPublicClientForUser: vi.fn(() => ({})),
+  mevModeForUser: (m) => (m === "flashbots" ? "flashbots" : "off"),
   getPositions: (...a: unknown[]) => getPositionsMock(...a),
   quoteClosePosition: (...a: unknown[]) => quoteClosePositionMock(...a),
 }));

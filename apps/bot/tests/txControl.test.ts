@@ -13,6 +13,7 @@ vi.mock("../src/core/txReplace.js", async (importOriginal) => {
 });
 vi.mock("../src/fx/index.js", () => ({
   createPublicClientForUser: () => ({}),
+  mevModeForUser: (m: string) => (m === "flashbots" ? "flashbots" : "off"),
 }));
 vi.mock("../src/core/delegation.js", () => ({
   requireDelegatedWallet: vi.fn(async () => ({ ok: true, walletId: "wal-1" })),
