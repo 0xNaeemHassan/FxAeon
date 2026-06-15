@@ -1,0 +1,14 @@
+[
+  {
+    "name": "React framework runtime (gzip)",
+    "path": "apps/mini-app/dist/_next/static/chunks/framework-*.js",
+    "limit": "75 kB",
+    "gzip": true
+  },
+  {
+    "name": "All client JS — regression tripwire (gzip)",
+    "path": "apps/mini-app/dist/_next/static/chunks/**/*.js",
+    "limit": "2500 kB",
+    "gzip": true
+  }
+]
