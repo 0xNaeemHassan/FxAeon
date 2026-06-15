@@ -21,7 +21,7 @@ import type { PublicClient } from "viem";
 import { prisma, Prisma } from "@fxbot/db";
 import { type Eip1559Fees, getEip1559Fees } from "./fees.js";
 import type { TradeTx } from "../fx/index.js";
-import { sendWalletTransaction } from "./privy.js";
+import { broadcastTransaction, type MevMode } from "./broadcast.js";
 import { assertRouteAllowed, SignerPolicyError, resolvePolicyMode } from "./signerPolicy.js";
 import { waitForReceipt } from "./txExecutor.js";
 import { logger } from "../middleware/logger.js";
@@ -159,9 +159,12 @@ export async function executeReplacement(params: {
   walletAddress: `0x${string}`;
   client: PublicClient;
   kind: "speedup" | "cancel";
+  /** MEV-protection mode for the replacement broadcast (default "off"). */
+  mev?: MevMode;
   watch?: { pollMs?: number; timeoutMs?: number };
 }): Promise<ReplaceResult> {
   const { recordId, walletId, walletAddress, client, kind } = params;
+  const mev: MevMode = params.mev ?? "off";
   const record = await prisma.txRecord.findUnique({ where: { id: recordId } });
   if (!record) return { ok: false, reason: "no such tx record" };
   if (record.status !== "broadcast") {
@@ -188,18 +191,21 @@ export async function executeReplacement(params: {
 
   let hash: `0x${string}`;
   try {
-    const sent = await sendWalletTransaction(walletId, {
-      to: plan.tx.to,
-      data: plan.tx.data,
-      value: plan.tx.value > 0n ? toHex(plan.tx.value) : undefined,
-      nonce: toHex(BigInt(plan.nonce)),
-      chainId: 1,
-      type: 2,
-      gasLimit: toHex(plan.gasLimit),
-      maxFeePerGas: toHex(plan.fees.maxFeePerGas),
-      maxPriorityFeePerGas: toHex(plan.fees.maxPriorityFeePerGas),
-    });
-    hash = sent.hash as `0x${string}`;
+    // Same MEV-protection guarantees as a first broadcast: when the user opted
+    // in, the replacement is signed and submitted privately to Flashbots too.
+    hash = await broadcastTransaction(
+      walletId,
+      {
+        to: plan.tx.to,
+        data: plan.tx.data,
+        value: plan.tx.value > 0n ? toHex(plan.tx.value) : undefined,
+        nonce: toHex(BigInt(plan.nonce)),
+        gasLimit: toHex(plan.gasLimit),
+        maxFeePerGas: toHex(plan.fees.maxFeePerGas),
+        maxPriorityFeePerGas: toHex(plan.fees.maxPriorityFeePerGas),
+      },
+      mev
+    );
   } catch (err) {
     return { ok: false, reason: `replacement broadcast failed: ${err instanceof Error ? err.message : String(err)}` };
   }

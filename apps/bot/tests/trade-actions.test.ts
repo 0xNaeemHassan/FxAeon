@@ -9,6 +9,7 @@ const quoteOpenPositionMock = vi.fn();
 vi.mock("../src/fx/index", () => ({
   createFxSdk: vi.fn(() => ({})),
   createPublicClientForUser: vi.fn(() => ({})),
+  mevModeForUser: (m) => (m === "flashbots" ? "flashbots" : "off"),
   collateralDecimals: vi.fn(() => 18),
   quoteOpenPosition: (...a: unknown[]) => quoteOpenPositionMock(...a),
 }));

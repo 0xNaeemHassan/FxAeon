@@ -30,7 +30,7 @@ import { markSnapshotClosed } from "../core/pnl.js";
 import { requireDelegatedWallet } from "../core/delegation.js";
 import { executeRoute } from "../core/txExecutor.js";
 import { describeExecutionError } from "../core/errorTaxonomy.js";
-import { createFxSdk, createPublicClientForUser, quoteClosePosition } from "../fx/index.js";
+import { createFxSdk, createPublicClientForUser, mevModeForUser, quoteClosePosition } from "../fx/index.js";
 import { notify } from "./notify.js";
 import { heartbeat, incr } from "../core/metrics.js";
 import { workerLogger } from "../middleware/logger.js";
@@ -114,6 +114,7 @@ async function closeMatchingPositions(
         txs: route.txs,
         type: side === "long" ? "close_long" : "close_short",
         client: createPublicClientForUser(user.mevProtection === "flashbots" ? "flashbots" : "off"),
+        mev: mevModeForUser(user.mevProtection),
       });
       outcomes.push(
         result.ok

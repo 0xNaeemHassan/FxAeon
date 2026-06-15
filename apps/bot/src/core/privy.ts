@@ -162,6 +162,37 @@ export async function sendWalletTransaction(
   });
 }
 
+/**
+ * Sign (but do NOT broadcast) a transaction from a user's wallet via the
+ * session-signer grant. Used for private/MEV-protected submission: we sign
+ * here, then broadcast the raw tx ourselves to Flashbots Protect (see
+ * core/broadcast.ts). Because Privy never broadcasts this tx it cannot fill in
+ * nonce / gas / fees — the caller MUST pass them all explicitly.
+ */
+export async function signWalletTransaction(
+  walletId: string,
+  transaction: {
+    to: `0x${string}`;
+    data?: `0x${string}`;
+    value?: `0x${string}` | number;
+    nonce?: `0x${string}` | number;
+    chainId?: `0x${string}` | number;
+    type?: 0 | 1 | 2;
+    gasLimit?: `0x${string}` | number;
+    maxFeePerGas?: `0x${string}` | number;
+    maxPriorityFeePerGas?: `0x${string}` | number;
+  }
+): Promise<{ signedTransaction: `0x${string}`; encoding: string }> {
+  if (!features.enablePrivyWalletApi) {
+    throw new Error('Privy wallet API is not configured (PRIVY_AUTHORIZATION_KEY missing)');
+  }
+  const res = await getPrivy().walletApi.ethereum.signTransaction({ walletId, transaction });
+  return {
+    signedTransaction: res.signedTransaction as `0x${string}`,
+    encoding: res.encoding,
+  };
+}
+
 /** Sign EIP-712 typed data with a user's wallet via the session-signer grant. */
 export async function signWalletTypedData(
   walletId: string,

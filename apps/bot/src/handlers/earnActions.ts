@@ -16,6 +16,7 @@ import {
   collateralDecimals,
   createFxSdk,
   createPublicClientForUser,
+  mevModeForUser,
   getPositions,
 } from "../fx/index.js";
 import {
@@ -129,6 +130,7 @@ async function runRoute(params: RunRouteParams): Promise<void> {
       txs,
       type: txType,
       client,
+      mev: mevModeForUser(user.mevProtection),
       onStatus: (status, detail) => {
         const line = statusLine(status, detail);
         if (line === lastStatus) return;

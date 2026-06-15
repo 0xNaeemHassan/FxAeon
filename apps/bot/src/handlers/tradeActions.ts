@@ -26,6 +26,7 @@ import {
   collateralDecimals,
   createFxSdk,
   createPublicClientForUser,
+  mevModeForUser,
   quoteOpenPosition,
 } from "../fx/index.js";
 import { executeRoute } from "../core/txExecutor.js";
@@ -262,6 +263,7 @@ export async function executeTradeIntent(ctx: Context, intent: TradeIntent): Pro
       txs: route.txs,
       type: intent.side === "long" ? "open_long" : "open_short",
       client,
+      mev: mevModeForUser(user.mevProtection),
       onStatus: (status, detail) => {
         const line = statusLine(status, detail);
         if (line === lastStatus) return;

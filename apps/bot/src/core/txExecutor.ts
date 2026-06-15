@@ -21,7 +21,7 @@ import { prisma, Prisma } from "@fxbot/db";
 import type { PublicClient } from "viem";
 import { simulateRoute, type TradeTx } from "../fx/index.js";
 import { incr } from "./metrics.js";
-import { sendWalletTransaction } from "./privy.js";
+import { broadcastTransaction, type MevMode } from "./broadcast.js";
 import { getEip1559Fees, type Eip1559Fees } from "./fees.js";
 import type { PendingTx } from "./txReplace.js";
 import { assertTransition, isTxState, type TxState } from "./txState.js";
@@ -47,6 +47,12 @@ export interface ExecuteRouteParams {
   /** TxRecord.type, e.g. 'open_long' | 'close' | 'fxsave_deposit'. */
   type: string;
   client: PublicClient;
+  /**
+   * MEV-protection mode for the BROADCAST (not reads). "flashbots" signs via
+   * Privy and submits the raw tx privately to Flashbots Protect; "off" (the
+   * default) broadcasts via Privy's public RPC. Pass the user's setting.
+   */
+  mev?: MevMode;
   /**
    * Optional server-derived EIP-1559 fees (e.g. a chosen Slow/Market/Fast
    * tier). Must be computed server-side — never accept client fee numbers.
@@ -78,6 +84,7 @@ async function setStatus(
 
 export async function executeRoute(params: ExecuteRouteParams): Promise<ExecuteRouteResult> {
   const { userId, walletId, walletAddress, idempotencyKey, txs, type, client, onStatus } = params;
+  const mev: MevMode = params.mev ?? "off";
   if (txs.length === 0) {
     throw new Error("executeRoute: empty tx list");
   }
@@ -182,18 +189,25 @@ export async function executeRoute(params: ExecuteRouteParams): Promise<ExecuteR
     const gasLimit = (sim.gasUsed[i] * 120n) / 100n; // 20% headroom; refunded if unused.
     let hash: `0x${string}`;
     try {
-      const sent = await sendWalletTransaction(walletId, {
-        to: tx.to,
-        data: tx.data,
-        value: tx.value > 0n ? toHex(tx.value) : undefined,
-        nonce: nonce !== undefined ? toHex(BigInt(nonce)) : undefined,
-        chainId: 1,
-        type: 2,
-        gasLimit: toHex(gasLimit),
-        maxFeePerGas: toHex(fees.maxFeePerGas),
-        maxPriorityFeePerGas: toHex(fees.maxPriorityFeePerGas),
-      });
-      hash = sent.hash as `0x${string}`;
+      // MEV-protected sends require a nonce (we sign+broadcast ourselves). If
+      // the best-effort nonce lookup above failed, don't silently downgrade a
+      // user who asked for protection — surface it via the same error path.
+      if (mev === "flashbots" && nonce === undefined) {
+        throw new Error("could not determine nonce for MEV-protected (private) broadcast");
+      }
+      hash = await broadcastTransaction(
+        walletId,
+        {
+          to: tx.to,
+          data: tx.data,
+          value: tx.value > 0n ? toHex(tx.value) : undefined,
+          nonce: nonce !== undefined ? toHex(BigInt(nonce)) : undefined,
+          gasLimit: toHex(gasLimit),
+          maxFeePerGas: toHex(fees.maxFeePerGas),
+          maxPriorityFeePerGas: toHex(fees.maxPriorityFeePerGas),
+        },
+        mev
+      );
     } catch (err) {
       // Nothing left our hands for THIS tx (Privy errored before returning a
       // hash). Prior txs in the route may have landed — record keeps them.

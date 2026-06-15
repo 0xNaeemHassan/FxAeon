@@ -27,6 +27,7 @@ import {
   collateralDecimals,
   createFxSdk,
   createPublicClientForUser,
+  mevModeForUser,
   quoteOpenPosition,
   simulateRoute,
 } from "../fx/index.js";
@@ -427,6 +428,7 @@ export async function executeTrade(
     txs: route.txs,
     type: params.side === "long" ? "open_long" : "open_short",
     client,
+    mev: mevModeForUser(user.mevProtection),
     fees: chosenFees,
   });
 

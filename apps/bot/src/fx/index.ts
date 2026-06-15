@@ -39,7 +39,12 @@ export function collateralDecimals(market: Market): number {
 }
 
 // ── Clients ─────────────────────────────────────────────────────────────────
-const FLASHBOTS_RPC = "https://rpc.flashbots.net/fast?originId=fxbot";
+/**
+ * Flashbots Protect "fast" RPC. Transactions sent here are submitted privately
+ * to block builders (never the public mempool), which is what actually defends
+ * against sandwich/front-running MEV. See core/broadcast.ts for the send path.
+ */
+export const FLASHBOTS_RPC = "https://rpc.flashbots.net/fast?originId=fxbot";
 
 export function getChainForUser(mevProtection: "off" | "flashbots") {
   if (mevProtection === "flashbots") {
@@ -59,10 +64,18 @@ export function createFxSdk(rpcUrl?: string): FxSdk {
 }
 
 export function createPublicClientForUser(mevProtection: "off" | "flashbots"): PublicClient {
-  // NOTE: reads always go to the standard RPC; the Flashbots RPC is only
-  // relevant for broadcasts (it does not serve historical reads well).
+  // Reads (simulation, fee history, receipts) ALWAYS go to the standard RPC —
+  // the Flashbots Protect RPC submits txs privately and does not serve
+  // historical reads. MEV protection is applied at BROADCAST time, not here:
+  // broadcasts route through core/broadcast.ts which, when the user enabled
+  // protection, signs via Privy and sends the raw tx to FLASHBOTS_RPC.
   void mevProtection;
   return createPublicClient({ chain: mainnet, transport: http(requireRpcUrl()) });
+}
+
+/** Map the stored user setting to the broadcast MEV mode. */
+export function mevModeForUser(mevProtection: string): "off" | "flashbots" {
+  return mevProtection === "flashbots" ? "flashbots" : "off";
 }
 
 // ── Reads ───────────────────────────────────────────────────────────────────
