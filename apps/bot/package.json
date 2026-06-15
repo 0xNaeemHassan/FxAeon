@@ -16,7 +16,7 @@
     "@fxbot/db": "workspace:*",
     "@aladdindao/fx-sdk": "1.0.5",
     "@privy-io/chains": "^0.3.0",
-    "grammy": "^1.25.0",
+    "grammy": "^1.44.0",
     "@grammyjs/conversations": "^2.1.1",
     "@grammyjs/i18n": "^1.0.1",
     "@grammyjs/runner": "^2.0.1",
