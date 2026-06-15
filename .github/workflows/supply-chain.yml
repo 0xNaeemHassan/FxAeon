@@ -1,0 +1,71 @@
+# Supply-chain checks: dependency vulnerability gate + SBOM generation.
+name: Supply chain
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, Monday 06:30 UTC — catch newly-disclosed CVEs in pinned deps.
+    - cron: '30 6 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: pnpm audit (high+)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+        with:
+          version: 9
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Fail the build only on HIGH/CRITICAL advisories. Moderate/low are
+      # surfaced (non-blocking) so a single transitive low-sev CVE can't wedge
+      # every PR — matches the repo's "realistic gates" philosophy.
+      - name: Audit (report, non-blocking)
+        run: pnpm audit --audit-level=low || true
+      - name: Audit gate (high + critical)
+        run: pnpm audit --audit-level=high
+
+  signer-policy-sync:
+    # Belt-and-suspenders: the unit test (apps/bot/tests/signer-policy.test.ts)
+    # already asserts the JSON artifact mirrors the ADDRESSES registry, but this
+    # explicit gate makes a drift in the money-path allow-list impossible to
+    # merge even if the test suite is skipped/changed. See docs/adr/signer-policy.md.
+    name: Signer policy in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Verify signer.policy.json matches the verified registry
+        run: node scripts/gen-signer-policy.mjs --check
+
+  sbom:
+    name: SBOM (CycloneDX)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - name: Generate SBOM
+        uses: anchore/sbom-action@d8a2c0130026bf585de5c176ab8f7ce62d75bf04 # v0.20.7
+        with:
+          format: cyclonedx-json
+          artifact-name: fxaeon.cdx.json
+          output-file: fxaeon.cdx.json
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sbom-cyclonedx
+          path: fxaeon.cdx.json
+          retention-days: 30

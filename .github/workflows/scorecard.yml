@@ -1,0 +1,49 @@
+# OpenSSF Scorecard — supply-chain posture scoring.
+# Results are uploaded to the Security tab (code-scanning) and, on the default
+# branch, published so a Scorecard badge can be added to the README.
+name: Scorecard
+
+on:
+  branch_protection_rule:
+  schedule:
+    # Weekly, Monday 07:00 UTC.
+    - cron: '0 7 * * 1'
+  push:
+    branches: [main]
+
+# Least-privilege by default; the job below elevates only what it needs.
+permissions: read-all
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    permissions:
+      # Needed to upload the SARIF results to the code-scanning dashboard.
+      security-events: write
+      # Needed to publish results and get a badge (publish_results: true).
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Run analysis
+        uses: ossf/scorecard-action@05b42c624433fc40578a4040d5cf5e36ddca8cde # v2.4.2
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: SARIF file
+          path: results.sarif
+          retention-days: 5
+
+      - name: Upload to code-scanning
+        uses: github/codeql-action/upload-sarif@3599b3baa15b485a2e49ef411a7a4bb2452e7f93 # v3.30.5
+        with:
+          sarif_file: results.sarif
