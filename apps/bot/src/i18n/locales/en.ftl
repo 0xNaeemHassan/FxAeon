@@ -82,7 +82,7 @@ help-body =
     • Non-custodial — keys in Privy TEE
     • Zero on-ramps — fund your own wallet
     • MEV protection toggle (Flashbots, free)
-    • 6 languages: en, zh-CN, ko, ja, ru, es
+    • 8 languages: en, zh-CN, ko, ja, ru, es, tr, pt
     
     Need help? Use /start to reconnect or contact support.
 help-error = ❌ Couldn't load the help menu. Try /start to reconnect.

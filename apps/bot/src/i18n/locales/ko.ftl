@@ -72,7 +72,7 @@ help-body =
     • 논커스터디얼 — 키는 Privy TEE에 보관
     • 온램프 없음 — 본인 지갑에 직접 입금
     • MEV 보호 전환 (Flashbots, 무료)
-    • 6개 언어: en, zh-CN, ko, ja, ru, es
+    • 8개 언어: en, zh-CN, ko, ja, ru, es, tr, pt
     
     도움이 필요하신가요? /start 로 재연결하거나 지원팀에 문의하세요.
 help-error = ❌ 도움말 메뉴를 불러오지 못했습니다. /start 로 재연결해 보세요.

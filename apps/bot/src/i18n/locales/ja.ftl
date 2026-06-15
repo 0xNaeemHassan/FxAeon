@@ -72,7 +72,7 @@ help-body =
     • ノンカストディアル — 鍵はPrivyのTEE内
     • オンランプなし — 自分のウォレットに入金
     • MEV保護の切り替え（Flashbots、無料）
-    • 6言語対応: en, zh-CN, ko, ja, ru, es
+    • 8言語対応: en, zh-CN, ko, ja, ru, es, tr, pt
     
     お困りですか？ /start で再接続するか、サポートにお問い合わせください。
 help-error = ❌ ヘルプメニューを読み込めませんでした。/start で再接続してください。

@@ -75,7 +75,7 @@ help-body =
     • Sin custodia — claves en TEE de Privy
     • Sin on-ramps — fondea tu propia billetera
     • Protección MEV activable (Flashbots, gratis)
-    • 6 idiomas: en, zh-CN, ko, ja, ru, es
+    • 8 idiomas: en, zh-CN, ko, ja, ru, es, tr, pt
     
     ¿Necesitas ayuda? Usa /start para reconectar o contacta con soporte.
 help-error = ❌ No se pudo cargar el menú de ayuda. Prueba /start para reconectar.
