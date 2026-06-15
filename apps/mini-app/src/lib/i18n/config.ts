@@ -3,7 +3,7 @@
  * SUPPORTED_LOCALES (apps/bot/src/i18n/index.ts) so a user's saved
  * `User.language` resolves to the same set on both sides.
  */
-export const LOCALES = ['en', 'es', 'zh-CN', 'ru', 'ja', 'ko'] as const;
+export const LOCALES = ['en', 'es', 'zh-CN', 'ru', 'ja', 'ko', 'tr', 'pt'] as const;
 export type Locale = (typeof LOCALES)[number];
 export const DEFAULT_LOCALE: Locale = 'en';
 
