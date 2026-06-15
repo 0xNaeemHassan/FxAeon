@@ -60,6 +60,8 @@ help-body =
       /portfolio — View positions, balances, health
       /history — Your on-chain action history
       /gas — Live gas prices
+      /speedup — Speed up a stuck (pending) transaction
+      /cancel — Cancel a stuck (pending) transaction
       /price — Live market overview (prices, mcap, 24h/7d)
       /alert — One-shot price alert (e.g. /alert btc > 65000)
       /alerts — Manage your price alerts

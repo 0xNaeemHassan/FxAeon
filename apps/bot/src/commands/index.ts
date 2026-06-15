@@ -23,3 +23,4 @@ export { gasCommand } from "./gas.js";
 export { priceCommand } from "./price.js";
 export { historyCommand } from "./history.js";
 export { alertCommand, alertsCommand, handleAlertDeleteCallback } from "./alert.js";
+export { speedUpCommand, cancelTxCommand, handleTxControlCallback } from "./txControl.js";

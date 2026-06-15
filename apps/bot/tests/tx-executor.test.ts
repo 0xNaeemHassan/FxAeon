@@ -56,6 +56,8 @@ function receiptClient(outcomes: Array<"success" | "reverted" | "pending">) {
       if (o === "pending") throw new Error("receipt not found");
       return { status: o === "success" ? "success" : "reverted" };
     }),
+    // Nonce capture for speed-up/cancel — increments per call like a real RPC.
+    getTransactionCount: vi.fn(async () => 5),
   };
 }
 

@@ -17,12 +17,13 @@
  *   we broadcast every tx ourselves, so polling eth_getTransactionReceipt on
  *   our own RPC yields the same lifecycle with zero extra infra.
  */
-import { prisma } from "@fxbot/db";
+import { prisma, Prisma } from "@fxbot/db";
 import type { PublicClient } from "viem";
 import { simulateRoute, type TradeTx } from "../fx/index.js";
 import { incr } from "./metrics.js";
 import { sendWalletTransaction } from "./privy.js";
 import { getEip1559Fees, type Eip1559Fees } from "./fees.js";
+import type { PendingTx } from "./txReplace.js";
 import { assertTransition, isTxState, type TxState } from "./txState.js";
 import { assertRouteAllowed, resolvePolicyMode, SignerPolicyError } from "./signerPolicy.js";
 import { logger } from "../middleware/logger.js";
@@ -163,16 +164,32 @@ export async function executeRoute(params: ExecuteRouteParams): Promise<ExecuteR
     if (i === 0) {
       state = await setStatus(record.id, state, "broadcasting", onStatus, `tx ${i + 1}/${txs.length}`);
     }
+    // Pin the nonce up front so a stuck tx can later be sped up / cancelled by
+    // rebroadcasting at the SAME nonce (W-11 follow-on). Sequential txs are
+    // awaited to a receipt before the next, so the pending count is correct.
+    // Best-effort: a nonce-lookup blip must never abort a trade — we fall back
+    // to Privy's auto-nonce and simply don't offer speed-up/cancel for that tx.
+    let nonce: number | undefined;
+    try {
+      nonce = Number(await client.getTransactionCount({ address: walletAddress, blockTag: "pending" }));
+    } catch (err) {
+      logger.warn(
+        { recordId: record.id, err: err instanceof Error ? err.message : String(err) },
+        "nonce lookup failed — broadcasting with auto-nonce; speed-up/cancel unavailable for this tx"
+      );
+      nonce = undefined;
+    }
+    const gasLimit = (sim.gasUsed[i] * 120n) / 100n; // 20% headroom; refunded if unused.
     let hash: `0x${string}`;
     try {
       const sent = await sendWalletTransaction(walletId, {
         to: tx.to,
         data: tx.data,
         value: tx.value > 0n ? toHex(tx.value) : undefined,
+        nonce: nonce !== undefined ? toHex(BigInt(nonce)) : undefined,
         chainId: 1,
         type: 2,
-        // 20% headroom over the simulated per-tx gas; refunded if unused.
-        gasLimit: toHex((sim.gasUsed[i] * 120n) / 100n),
+        gasLimit: toHex(gasLimit),
         maxFeePerGas: toHex(fees.maxFeePerGas),
         maxPriorityFeePerGas: toHex(fees.maxPriorityFeePerGas),
       });
@@ -193,9 +210,26 @@ export async function executeRoute(params: ExecuteRouteParams): Promise<ExecuteR
     }
 
     hashes.push(hash);
+    // Persist the full replaceable pending tx so /speedup and /cancel can
+    // rebroadcast it at the same nonce later. Cleared once confirmed/reverted.
+    // Only when the nonce was captured — otherwise the tx isn't replaceable.
+    const nextData: Record<string, unknown> = { ...(record.data as object), hashes };
+    if (nonce !== undefined) {
+      const pending: PendingTx = {
+        hash,
+        nonce,
+        to: tx.to,
+        data: tx.data,
+        value: tx.value.toString(),
+        gasLimit: gasLimit.toString(),
+        maxFeePerGas: fees.maxFeePerGas.toString(),
+        maxPriorityFeePerGas: fees.maxPriorityFeePerGas.toString(),
+      };
+      nextData.pending = pending;
+    }
     await prisma.txRecord.update({
       where: { id: record.id },
-      data: { hash, data: { ...(record.data as object), hashes } },
+      data: { hash, data: nextData as unknown as Prisma.InputJsonValue },
     });
     if (state === "broadcasting") {
       state = await setStatus(record.id, state, "broadcast", onStatus, hash);
@@ -221,6 +255,11 @@ export async function executeRoute(params: ExecuteRouteParams): Promise<ExecuteR
     }
   }
 
+  // All txs landed — clear the replaceable pending tx (nothing to speed up).
+  const fresh = await prisma.txRecord.findUnique({ where: { id: record.id } });
+  const cleared = { ...((fresh?.data as object) ?? {}) } as Record<string, unknown>;
+  delete cleared.pending;
+  await prisma.txRecord.update({ where: { id: record.id }, data: { data: cleared as Prisma.InputJsonValue } });
   state = await setStatus(record.id, state, "confirmed", onStatus, hashes[hashes.length - 1]);
   return { ok: true, deduped: false, recordId: record.id, status: state, hashes };
 }
