@@ -22,6 +22,8 @@ import zhCN from './zh-CN';
 import ru from './ru';
 import ja from './ja';
 import ko from './ko';
+import tr from './tr';
+import pt from './pt';
 import type { Messages } from './config';
 
 const DICT: Record<Locale, Messages> = {
@@ -31,6 +33,8 @@ const DICT: Record<Locale, Messages> = {
   ru,
   ja,
   ko,
+  tr,
+  pt,
 };
 
 const STORAGE_KEY = 'fxaeon.locale';

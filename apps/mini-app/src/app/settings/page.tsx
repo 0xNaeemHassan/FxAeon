@@ -30,6 +30,8 @@ const LANGUAGES = [
   { code: 'ja', name: '日本語' },
   { code: 'ru', name: 'Русский' },
   { code: 'es', name: 'Español' },
+  { code: 'tr', name: 'Türkçe' },
+  { code: 'pt', name: 'Português' },
 ];
 
 const SLIPPAGE_PRESETS = [10, 50, 100, 200]; // bps
