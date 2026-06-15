@@ -1,0 +1,23 @@
+# CODEOWNERS — default reviewers for FxAeon.
+# https://docs.github.com/en/repositories/managing-your-repositories-settings-and-features/customizing-your-repository/about-code-owners
+#
+# Order matters: the LAST matching pattern wins. Keep the catch-all first.
+
+# Default owner for everything.
+*                                   @0xNaeemHassan
+
+# Money paths & security-critical surfaces get explicit ownership so they can
+# never be merged without a maintainer review (pair with branch protection
+# "Require review from Code Owners").
+/packages/shared/src/addresses.ts   @0xNaeemHassan
+/packages/shared/src/abis.ts        @0xNaeemHassan
+/packages/shared/src/risk.ts        @0xNaeemHassan
+/apps/bot/src/core/                  @0xNaeemHassan
+/apps/bot/policy/                    @0xNaeemHassan
+/apps/bot/src/fx/                    @0xNaeemHassan
+/scripts/gen-signer-policy.mjs       @0xNaeemHassan
+/scripts/verify-addresses.mjs        @0xNaeemHassan
+
+# CI / release / supply-chain config.
+/.github/                            @0xNaeemHassan
+/render.yaml                         @0xNaeemHassan
