@@ -88,3 +88,8 @@ __pycache__/
 
 # Turbo cache
 .turbo/
+
+# Playwright (mini-app E2E)
+**/playwright-report/
+**/test-results/
+**/.last-run.json

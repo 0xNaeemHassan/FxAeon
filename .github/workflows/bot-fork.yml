@@ -1,0 +1,56 @@
+name: Bot fork integration
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'apps/bot/**'
+      - 'packages/shared/**'
+      - 'packages/db/**'
+      - '.github/workflows/bot-fork.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/bot/**'
+      - 'packages/shared/**'
+      - 'packages/db/**'
+      - '.github/workflows/bot-fork.yml'
+
+# Least-privilege token (W-14).
+permissions:
+  contents: read
+
+jobs:
+  fork:
+    name: Anvil mainnet-fork money path
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v3
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install Foundry (anvil)
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @fxbot/shared build
+      - run: pnpm --filter @fxbot/db build
+
+      # The fork suite self-skips when no upstream RPC is available, so a fork
+      # job without the secret is a green no-op rather than a failure. Provide
+      # MAINNET_RPC_URL (e.g. an Alchemy key) to actually exercise the path;
+      # globalSetup starts anvil from it.
+      - name: Run money-path fork suite
+        run: pnpm --filter @fxaeon/bot test:fork
+        env:
+          FORK_BACKEND_RPC_URL: ${{ secrets.ALCHEMY_RPC_URL || secrets.MAINNET_RPC_URL }}
