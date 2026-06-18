@@ -185,6 +185,10 @@ const tr: Messages = {
   'settings.mevProtection': 'MEV koruması',
   'settings.privateTx': 'Özel işlemler',
   'settings.privateTxSub': 'Özel bir röle üzerinden yönlendir',
+  'settings.session': 'Oturum',
+  'settings.logoutTitle': 'Oturumu kapat',
+  'settings.logoutBody': 'Cüzdanını bu Mini App oturumundan bağlantısını kes. Anahtarların yine senin kontrolünde kalır.',
+  'settings.logout': 'Oturumu kapat',
 
   // -- deposit / qr --
   'deposit.title': 'Yatır',

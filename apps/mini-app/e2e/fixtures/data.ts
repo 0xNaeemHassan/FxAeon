@@ -105,7 +105,12 @@ export const marketSnapshot: MarketSnapshot = {
   fetchedAt: '2026-01-01T00:00:00.000Z',
   stale: false,
   rows: [
+    // Order matches the product sort: BTC, ETH, FXN, fxUSD, FRAX, then others.
+    { symbol: 'BTC', data: { priceUsd: 104500.0, marketCapUsd: 2_000_000_000_000, change24hPct: 1.05, change7dPct: 2.3 } },
+    { symbol: 'ETH', data: { priceUsd: 3500.42, marketCapUsd: 420_000_000_000, change24hPct: 1.23, change7dPct: -0.54 } },
+    { symbol: 'FXN', data: { priceUsd: 12.5, marketCapUsd: 1_900_000, change24hPct: -2.1, change7dPct: -5.4 } },
     { symbol: 'fxUSD', data: { priceUsd: 1.0009, marketCapUsd: 75_000_000, change24hPct: 0.02, change7dPct: 0.11 } },
+    { symbol: 'FRAX', data: { priceUsd: 0.285, marketCapUsd: 27_000_000, change24hPct: -2.2, change7dPct: -28.0 } },
     { symbol: 'wstETH', data: { priceUsd: 3500.42, marketCapUsd: 9_800_000_000, change24hPct: 1.23, change7dPct: -0.54 } },
     { symbol: 'WBTC', data: { priceUsd: 65000.0, marketCapUsd: 12_400_000_000, change24hPct: -0.81, change7dPct: 2.06 } },
   ],

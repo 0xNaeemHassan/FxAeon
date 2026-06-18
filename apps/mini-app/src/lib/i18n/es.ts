@@ -174,6 +174,10 @@ const es: Messages = {
   'settings.mevProtection': 'Protección MEV',
   'settings.privateTx': 'Transacciones privadas',
   'settings.privateTxSub': 'Enrutar a través de un relay privado',
+  'settings.session': 'Sesión',
+  'settings.logoutTitle': 'Cerrar sesión',
+  'settings.logoutBody': 'Desconecta tu wallet de esta sesión. Tus claves permanecen bajo tu custodia.',
+  'settings.logout': 'Cerrar sesión',
 
   'deposit.title': 'Depositar',
   'deposit.subtitle': 'Financia tu billetera',

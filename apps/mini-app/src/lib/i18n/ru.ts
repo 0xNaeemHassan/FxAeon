@@ -174,6 +174,10 @@ const ru: Messages = {
   'settings.mevProtection': 'Защита от MEV',
   'settings.privateTx': 'Приватные транзакции',
   'settings.privateTxSub': 'Через приватный релей',
+  'settings.session': 'Сессия',
+  'settings.logoutTitle': 'Выйти',
+  'settings.logoutBody': 'Отключить кошелёк от этой сессии Mini App. Ваши ключи остаются под вашим контролем.',
+  'settings.logout': 'Выйти',
 
   'deposit.title': 'Пополнить',
   'deposit.subtitle': 'Пополните кошелёк',
