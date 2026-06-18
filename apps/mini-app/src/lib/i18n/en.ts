@@ -185,6 +185,10 @@ const en: Messages = {
   'settings.mevProtection': 'MEV protection',
   'settings.privateTx': 'Private transactions',
   'settings.privateTxSub': 'Route through a private relay',
+  'settings.session': 'Session',
+  'settings.logoutTitle': 'Sign out',
+  'settings.logoutBody': 'Disconnect your wallet from this Mini App session. Your keys stay in your custody.',
+  'settings.logout': 'Sign out',
 
   // -- deposit / qr --
   'deposit.title': 'Deposit',

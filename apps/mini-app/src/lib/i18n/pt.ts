@@ -185,6 +185,10 @@ const pt: Messages = {
   'settings.mevProtection': 'Proteção MEV',
   'settings.privateTx': 'Transações privadas',
   'settings.privateTxSub': 'Rotear por um relay privado',
+  'settings.session': 'Sessão',
+  'settings.logoutTitle': 'Sair',
+  'settings.logoutBody': 'Desconecte sua carteira desta sessão do Mini App. Suas chaves permanecem sob sua custódia.',
+  'settings.logout': 'Sair',
 
   // -- deposit / qr --
   'deposit.title': 'Depositar',

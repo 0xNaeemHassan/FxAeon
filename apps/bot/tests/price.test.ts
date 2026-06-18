@@ -3,8 +3,8 @@ import { priceCommand, formatPrice, formatMarketCap, formatChange, renderMarketT
 import { SUPPORTED_ASSETS, getMarketOverview, clearMarketCache } from "../src/market/coingecko";
 
 const ORDERED_SYMBOLS = [
-  "BTC", "ETH", "FXN", "CRV", "CVX", "FRAX", "AAVE",
-  "MORPHO", "FXUSD", "SDT", "LDO", "PENDLE", "FLUID", "ETHFI",
+  "BTC", "ETH", "FXN", "fxUSD", "FRAX", "CRV", "CVX", "AAVE",
+  "MORPHO", "SDT", "LDO", "PENDLE", "FLUID", "ETHFI",
 ];
 
 function cgCoin(id: string, over: Record<string, unknown> = {}) {

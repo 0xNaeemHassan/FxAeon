@@ -33,7 +33,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { isTMA, getInitData, haptic } from '@/lib/telegram';
-import { apiConfigured, getMe, getMarket, Me, ApiPosition, SavingsPosition, MarketSnapshot } from '@/lib/api';
+import { apiConfigured, getMe, getMarket, Me, ApiPosition, SavingsPosition, MarketSnapshot, MarketRow } from '@/lib/api';
 import {
   AppShell,
   AddressChip,
@@ -47,6 +47,7 @@ import {
 } from '@/components/ui';
 
 import { useT, useLocale } from '@/lib/i18n';
+import TokenIcon from '@/components/TokenIcon';
 
 const BOT_USERNAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || 'FxAeonBot';
 
@@ -112,17 +113,11 @@ function ProfileAvatar() {
   );
 }
 
-/** Circular token mark with a leverage badge, like the mockup's coin icons. */
+/** Circular token mark with a real logo and a leverage badge. */
 function TokenGlyph({ symbol, leverage }: { symbol: string; leverage: number }) {
-  const label = symbol.replace(/^[wx]/i, '').slice(0, 4).toUpperCase() || symbol.toUpperCase();
   return (
     <span className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center">
-      <span
-        className="flex h-11 w-11 items-center justify-center rounded-full text-[11px] font-bold text-white"
-        style={{ background: 'linear-gradient(135deg, var(--mint), var(--cyan))' }}
-      >
-        {label}
-      </span>
+      <TokenIcon symbol={symbol} size={44} />
       <span className="absolute -bottom-1 -left-1 rounded-full border-2 border-[var(--card)] bg-[var(--bg)] px-1.5 py-[1px] text-[9px] font-bold text-mint">
         {leverage % 1 === 0 ? leverage : leverage.toFixed(1)}x
       </span>
@@ -199,12 +194,7 @@ function SavingsCard({ s }: { s: SavingsPosition }) {
       }}
       className="glass glass-press flex w-full items-center gap-3 p-3.5 text-left"
     >
-      <span
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
-        style={{ background: 'linear-gradient(135deg, var(--mint), var(--cyan))' }}
-      >
-        <Landmark className="h-5 w-5 text-white" strokeWidth={2} />
-      </span>
+      <TokenIcon symbol="fxSAVE" size={44} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="text-display text-[15px] font-semibold">{t('portfolio.savingsTitle')}</span>
@@ -243,9 +233,36 @@ function SavingsCard({ s }: { s: SavingsPosition }) {
   );
 }
 
+/** Canonical display order for the Markets table. fxUSD must sit right below FXN. */
+const MARKET_ORDER: Record<string, number> = {
+  BTC: 0,
+  ETH: 1,
+  FXN: 2,
+  fxUSD: 3,
+  FRAX: 4,
+  CRV: 5,
+  CVX: 6,
+  AAVE: 7,
+  MORPHO: 8,
+  SDT: 9,
+  LDO: 10,
+  PENDLE: 11,
+  FLUID: 12,
+  ETHFI: 13,
+  wstETH: 14,
+  WBTC: 15,
+};
+
+function marketSort(a: MarketRow, b: MarketRow): number {
+  const oa = MARKET_ORDER[a.symbol] ?? 100;
+  const ob = MARKET_ORDER[b.symbol] ?? 100;
+  if (oa !== ob) return oa - ob;
+  return a.symbol.localeCompare(b.symbol);
+}
+
 function MarketsCard({ market }: { market: MarketSnapshot }) {
   const t = useT();
-  const rows = market.rows.filter((r) => r.data !== null);
+  const rows = market.rows.filter((r) => r.data !== null).sort(marketSort);
   if (rows.length === 0) return null;
   return (
     <Card>
@@ -255,8 +272,11 @@ function MarketsCard({ market }: { market: MarketSnapshot }) {
           const ch = d.change24hPct;
           const tone = ch === null ? 'text-mut' : ch >= 0 ? 'text-success' : 'text-danger';
           return (
-            <div key={r.symbol} className="flex items-center justify-between py-1.5 first:pt-0 last:pb-0 text-[12.5px]">
-              <span className="w-16 font-medium">{r.symbol}</span>
+            <div key={r.symbol} className="flex items-center justify-between py-2 first:pt-0 last:pb-0 text-[12.5px]">
+              <span className="flex w-20 items-center gap-2 font-medium">
+                <TokenIcon symbol={r.symbol} size={20} />
+                {r.symbol}
+              </span>
               <span className="font-mono">{fmtMarketPrice(d.priceUsd)}</span>
               <span className={`w-16 text-right font-medium ${tone}`}>
                 {ch === null ? '—' : `${ch >= 0 ? '+' : ''}${ch.toFixed(2)}%`}

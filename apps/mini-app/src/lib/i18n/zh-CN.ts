@@ -173,6 +173,10 @@ const zhCN: Messages = {
   'settings.mevProtection': 'MEV 保护',
   'settings.privateTx': '私密交易',
   'settings.privateTxSub': '通过私有中继转发',
+  'settings.session': '会话',
+  'settings.logoutTitle': '退出登录',
+  'settings.logoutBody': '从此 Mini App 会话中断开钱包。你的密钥仍由你保管。',
+  'settings.logout': '退出登录',
 
   'deposit.title': '充值',
   'deposit.subtitle': '为你的钱包充值',

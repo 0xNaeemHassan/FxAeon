@@ -174,6 +174,10 @@ const ko: Messages = {
   'settings.mevProtection': 'MEV 보호',
   'settings.privateTx': '비공개 트랜잭션',
   'settings.privateTxSub': '비공개 릴레이를 통해 전송',
+  'settings.session': '세션',
+  'settings.logoutTitle': '로그아웃',
+  'settings.logoutBody': '이 Mini App 세션에서 지갑 연결을 해제합니다. 키는 여전히 사용자의 관리 하에 있습니다.',
+  'settings.logout': '로그아웃',
 
   'deposit.title': '입금',
   'deposit.subtitle': '지갑에 입금',

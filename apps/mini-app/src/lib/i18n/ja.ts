@@ -174,6 +174,10 @@ const ja: Messages = {
   'settings.mevProtection': 'MEV 保護',
   'settings.privateTx': 'プライベート取引',
   'settings.privateTxSub': 'プライベートリレー経由で送信',
+  'settings.session': 'セッション',
+  'settings.logoutTitle': 'ログアウト',
+  'settings.logoutBody': 'この Mini App セッションからウォレットを切断します。秘密鍵はあなたの管理下にあります。',
+  'settings.logout': 'ログアウト',
 
   'deposit.title': '入金',
   'deposit.subtitle': 'ウォレットに入金',

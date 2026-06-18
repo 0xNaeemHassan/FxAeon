@@ -1,0 +1,66 @@
+name: Mini App E2E
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'apps/mini-app/**'
+      - 'packages/shared/**'
+      - '.github/workflows/e2e-mini-app.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/mini-app/**'
+      - 'packages/shared/**'
+      - '.github/workflows/e2e-mini-app.yml'
+
+# Least-privilege token (W-14).
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: Playwright E2E + visual regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v3
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - run: pnpm install --frozen-lockfile
+
+      # The Mini App transpiles @fxbot/shared; build it first.
+      - run: pnpm --filter @fxbot/shared build
+
+      # Pin Chromium to the version @playwright/test ships so snapshots match
+      # the committed baselines byte-for-byte.
+      - name: Install Playwright Chromium
+        run: pnpm --filter @fxaeon/mini-app exec playwright install --with-deps chromium
+
+      - name: Run E2E + visual tests
+        run: pnpm --filter @fxaeon/mini-app test:e2e
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playwright-report
+          path: apps/mini-app/playwright-report
+          retention-days: 7
+
+      # On a visual diff, publish the actual/expected/diff images for review.
+      - name: Upload visual diffs on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playwright-visual-diffs
+          path: apps/mini-app/test-results
+          retention-days: 7

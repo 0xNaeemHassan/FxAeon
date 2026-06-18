@@ -17,12 +17,15 @@ export const SUPPORTED_ASSETS: ReadonlyArray<{ symbol: string; id: string }> = [
   { symbol: "BTC", id: "bitcoin" },
   { symbol: "ETH", id: "ethereum" },
   { symbol: "FXN", id: "fxn-token" },
+  // fxUSD is the protocol's own stablecoin; keep it directly under FXN.
+  { symbol: "fxUSD", id: "f-x-protocol-fxusd" },
+  // FRAX = Frax governance token (formerly FXS), NOT the legacy stablecoin.
+  // The legacy stablecoin is now Frax USD (frxUSD, id: frax-usd).
+  { symbol: "FRAX", id: "frax" },
   { symbol: "CRV", id: "curve-dao-token" },
   { symbol: "CVX", id: "convex-finance" },
-  { symbol: "FRAX", id: "frax" },
   { symbol: "AAVE", id: "aave" },
   { symbol: "MORPHO", id: "morpho" },
-  { symbol: "FXUSD", id: "f-x-protocol-fxusd" },
   { symbol: "SDT", id: "stake-dao" },
   { symbol: "LDO", id: "lido-dao" },
   { symbol: "PENDLE", id: "pendle" },
