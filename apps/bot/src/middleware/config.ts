@@ -45,6 +45,8 @@ export const envSchema = z.object({
   SURPLUS_API_KEY: z.string().optional(),
   /** CoinGecko demo API key for /price; works unauthenticated at lower limits. */
   COINGECKO_API_KEY: z.string().optional(),
+  /** Etherscan API key for /gas (gas oracle, ETH price, gas estimates). */
+  ETHERSCAN_API_KEY: z.string().optional(),
   MINI_APP_URL: z.string().url().default("https://fxbot-mini-app.pages.dev"),
   DAILY_TX_CAP: z.string().default("50"),
   /**
@@ -160,6 +162,8 @@ export const features = {
   enableAutomation: true,
   enableReferrals: true,
   enableHealthAlerts: true,
+  /** Etherscan gas oracle + ETH price for /gas. */
+  get enableEtherscan() { return !!process.env.ETHERSCAN_API_KEY; },
   /** Bridge broadcast gate — real quotes always show, execution opt-in only. */
   get enableBridgeExecution() {
     return (process.env.BRIDGE_EXECUTION_ENABLED ?? "false").toLowerCase() === "true";
