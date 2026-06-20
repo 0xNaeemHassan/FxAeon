@@ -3,7 +3,7 @@ import { priceCommand, formatPrice, formatMarketCap, formatChange, renderMarketT
 import { SUPPORTED_ASSETS, getMarketOverview, clearMarketCache } from "../src/market/coingecko";
 
 const ORDERED_SYMBOLS = [
-  "BTC", "ETH", "FXN", "fxUSD", "FRAX", "CRV", "CVX", "AAVE",
+  "BTC", "ETH", "FXN", "FXUSD", "FRAX", "CRV", "CVX", "AAVE",
   "MORPHO", "SDT", "LDO", "PENDLE", "FLUID", "ETHFI",
 ];
 
