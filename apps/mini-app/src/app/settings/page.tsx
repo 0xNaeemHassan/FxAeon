@@ -5,6 +5,12 @@
  * back through the authenticated API. (The old screen kept everything in
  * local state and "saved" via a sendData payload the bot rejected — a dead
  * button by design.)
+ *
+ * Privy context: the root layout intentionally omits PrivyClientProvider
+ * (the SDK is heavy). The useLogout() hook MUST run inside a Privy context,
+ * so the logout section is isolated into a component rendered inside the
+ * same PrivyClientProvider that WalletSection uses. This prevents the hook
+ * from running outside the provider and crashing the Settings tab.
  */
 import { useEffect, useState } from 'react';
 import { Globe, Sliders, Shield, Check, PlugZap, Send, LogOut } from 'lucide-react';
@@ -13,11 +19,19 @@ import { apiConfigured, getMe, saveSettings } from '@/lib/api';
 import { AppShell, Button, Card, EmptyState, SectionTitle, Skeleton } from '@/components/ui';
 import { useLocale } from '@/lib/i18n';
 import dynamic from 'next/dynamic';
-import { useLogout } from '@privy-io/react-auth';
+import { privyConfigured } from '@/lib/privyConfig';
 
 // PERF (W-20): Settings → Wallet is the only Privy surface outside /login.
 // Loading it dynamically keeps the heavy SDK out of this page's bundle.
 const WalletSection = dynamic(() => import('@/components/WalletSection'), {
+  ssr: false,
+  loading: () => <Skeleton className="h-24" />,
+});
+
+// Logout section — dynamically loaded so the Privy SDK chunk isn't in the
+// Settings page's critical bundle. The component is rendered inside a
+// PrivyClientProvider so useLogout() has the context it needs.
+const LogoutSection = dynamic(() => import('@/components/LogoutSection'), {
   ssr: false,
   loading: () => <Skeleton className="h-24" />,
 });
@@ -39,7 +53,6 @@ const SLIPPAGE_PRESETS = [10, 50, 100, 200]; // bps
 
 export default function SettingsPage() {
   const { t, setLocale } = useLocale();
-  const { logout } = useLogout();
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -49,7 +62,6 @@ export default function SettingsPage() {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => setMounted(true), []);
 
@@ -92,19 +104,6 @@ export default function SettingsPage() {
   const touch = () => {
     setDirty(true);
     setSaved(false);
-  };
-
-  const handleLogout = async () => {
-    setLoggingOut(true);
-    setError('');
-    try {
-      await logout();
-      haptic('success');
-    } catch (e) {
-      setError((e as Error).message || 'Logout failed.');
-    } finally {
-      setLoggingOut(false);
-    }
   };
 
   if (!mounted) return <AppShell title={t('settings.title')}>{null}</AppShell>;
@@ -255,27 +254,7 @@ export default function SettingsPage() {
           </Button>
         </div>
 
-        <SectionTitle>{t('settings.session')}</SectionTitle>
-        <Card className="border-[rgba(255,90,95,0.25)]">
-          <div className="flex items-start gap-3">
-            <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[rgba(255,90,95,0.12)]">
-              <LogOut className="h-[18px] w-[18px] text-danger" strokeWidth={2} />
-            </span>
-            <span className="flex-1">
-              <p className="text-[14px] font-medium">{t('settings.logoutTitle')}</p>
-              <p className="mt-0.5 text-[12.5px] leading-relaxed text-mut">{t('settings.logoutBody')}</p>
-              <Button
-                variant="danger"
-                onClick={handleLogout}
-                loading={loggingOut}
-                className="mt-3"
-              >
-                <LogOut className="h-4 w-4" />
-                {t('settings.logout')}
-              </Button>
-            </span>
-          </div>
-        </Card>
+        <LogoutSection />
       </div>
     </AppShell>
   );
