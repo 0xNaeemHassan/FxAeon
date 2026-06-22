@@ -39,7 +39,7 @@
     "redis": "^6.0.0",
     "@grammyjs/menu": "^1.2.0",
     "@prisma/client": "^5.7.0",
-    "prisma": "^5.7.0",
+    "prisma": "^7.8.0",
     "alchemy-sdk": "^3.0.0",
     "@privy-io/react-auth": "^3.30.0",
     "@sentry/node": "^7.100.0",
