@@ -21,7 +21,7 @@
     "@commitlint/cli": "^21.0.2",
     "@commitlint/config-conventional": "^21.0.2",
     "@size-limit/file": "^12.1.0",
-    "@types/node": "^20.0.0",
+    "@types/node": "^26.0.0",
     "husky": "^9.1.7",
     "size-limit": "^12.1.0",
     "turbo": "^2.9.18",
