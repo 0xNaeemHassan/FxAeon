@@ -4,6 +4,8 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
+    "prepare": "prisma generate",
+    "postinstall": "prisma generate",
     "build": "prisma generate && tsc",
     "typecheck": "prisma generate && tsc --noEmit",
     "db:generate": "prisma generate",
