@@ -27,7 +27,7 @@
 **Required:**
 - Inline keyboard ladder: market → side → leverage (respect 7x/3x caps) → amount presets (25/50/100% of balance) → **[Open Long 3x ▸]** web_app deep link carrying a *signed* param payload.
 - Preview must show **real** numbers: oracle price, simulated gas, liq price from pool params — all from one shared quote endpoint (no `currentPrice = 3000`).
-- Single source of truth for position math in `@fxbot/shared`, used by bot preview *and* mini-app confirm (today they would diverge).
+- Single source of truth for position math in `@fxaeon/shared`, used by bot preview *and* mini-app confirm (today they would diverge).
 - Post-broadcast: edit the original message with status transitions instead of sending new messages.
 
 ## 3. /limit flow

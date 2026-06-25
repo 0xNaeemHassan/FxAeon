@@ -6,8 +6,8 @@
  * single-flighted). Falls back to a conservative estimate only if both
  * Etherscan and the env-based RPC are unreachable.
  */
-import { getGasOracle, type EtherscanGasOracle } from '@fxbot/shared';
-import { getRiskParameter } from '@fxbot/shared';
+import { getGasOracle, type EtherscanGasOracle } from '@fxaeon/shared';
+import { getRiskParameter } from '@fxaeon/shared';
 
 export interface GasEstimate {
   estimatedGas: number;
