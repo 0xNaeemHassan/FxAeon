@@ -48,7 +48,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           if [ -n "$(git status --porcelain apps/mini-app/e2e/__screenshots__)" ]; then
             git add apps/mini-app/e2e/__screenshots__
-            git commit -m "test(visual): regenerate Playwright baselines" --no-verify
+            git commit -m "test(mini-app): regenerate Playwright baselines"
             git push origin HEAD:${{ github.event.inputs.branch }}
           else
             echo "No baseline changes."
