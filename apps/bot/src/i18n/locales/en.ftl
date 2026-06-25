@@ -6,7 +6,7 @@
 ## /start
 
 start-welcome-new =
-    🚀 Welcome to fxBot
+    🚀 Welcome to FxAeon
     
     The most advanced interface for f(x) Protocol — leveraged positions, limit orders, and yield automation, all from Telegram.
     
@@ -17,7 +17,7 @@ start-referral-detected = 🎁 Referral code detected: { $code }
 start-tap-button = 👇 Tap the button below to create or import your wallet.
 start-create-wallet = 🔐 Set Up Wallet
 start-welcome-back =
-    👋 Welcome back to fxBot!
+    👋 Welcome back to FxAeon!
     
     Wallet: { $wallet }
 start-positions =
@@ -38,7 +38,7 @@ start-error =
 ## /help
 
 help-body =
-    📚 fxBot Help — Command Guide
+    📚 FxAeon Help — Command Guide
     
     Tap any command below to use it, or type it directly.
     

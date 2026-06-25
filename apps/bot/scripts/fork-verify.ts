@@ -15,7 +15,7 @@
  */
 import { createPublicClient, http, encodeFunctionData, parseAbi, parseEther } from "viem";
 import { mainnet } from "viem/chains";
-import { ADDRESSES } from "@fxbot/shared";
+import { ADDRESSES } from "@fxaeon/shared";
 import { getEip1559Fees, MIN_PRIORITY_FEE_WEI, MAX_PRIORITY_FEE_WEI } from "../src/core/fees.js";
 import { simulateRoute, quoteOpenPosition } from "../src/fx/index.js";
 

@@ -18,7 +18,7 @@
  * watcher, exactly like a first broadcast. Nothing here bypasses the policy.
  */
 import type { PublicClient } from "viem";
-import { prisma, Prisma } from "@fxbot/db";
+import { prisma, Prisma } from "@fxaeon/db";
 import { type Eip1559Fees, getEip1559Fees } from "./fees.js";
 import type { TradeTx } from "../fx/index.js";
 import { broadcastTransaction, type MevMode } from "./broadcast.js";

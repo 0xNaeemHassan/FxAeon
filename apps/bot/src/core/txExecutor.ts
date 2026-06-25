@@ -17,7 +17,7 @@
  *   we broadcast every tx ourselves, so polling eth_getTransactionReceipt on
  *   our own RPC yields the same lifecycle with zero extra infra.
  */
-import { prisma, Prisma } from "@fxbot/db";
+import { prisma, Prisma } from "@fxaeon/db";
 import type { PublicClient } from "viem";
 import { simulateRoute, type TradeTx } from "../fx/index.js";
 import { incr } from "./metrics.js";

@@ -13,7 +13,7 @@
  * SAME cached CoinGecko snapshot /price uses — zero extra API cost.
  */
 import { Context, InlineKeyboard } from "grammy";
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 import { SUPPORTED_ASSETS, getMarketOverview } from "../market/coingecko.js";
 import { formatPrice } from "./price.js";
 import { botLogger } from "../middleware/logger.js";

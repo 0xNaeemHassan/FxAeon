@@ -13,7 +13,7 @@
  *
  * Strings are plain English here; catalog wiring is W-21 (i18n).
  */
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 import { incr } from "../core/metrics.js";
 import { withTimeout, withRetry, CircuitBreaker } from "../utils/resilience.js";
 
@@ -24,7 +24,8 @@ export type NotifyKind =
   | "health_urgent" // bypasses prefs and quiet hours; short throttle only
   | "rewards"
   | "governance"
-  | "rules";
+  | "rules"
+  | "arb"; // NAV-vs-market arbitrage opportunity
 
 export type NotifyOutcome =
   | "sent"
@@ -45,13 +46,14 @@ interface NotifyParams {
 /** Pref column + throttle window per kind. */
 const KIND_CONFIG: Record<
   NotifyKind,
-  { prefField: "tx" | "orders" | "health" | "rewards" | "governance" | "rules" | null; lastField:
+  { prefField: "tx" | "orders" | "health" | "rewards" | "governance" | "rules" | "arb" | null; lastField:
       | "lastTxAlert"
       | "lastOrderAlert"
       | "lastHealthAlert"
       | "lastRewardsAlert"
       | "lastGovernanceAlert"
-      | "lastRulesAlert"; throttleMs: number; bypassQuietHours: boolean }
+      | "lastRulesAlert"
+      | "lastArbAlert"; throttleMs: number; bypassQuietHours: boolean }
 > = {
   tx: { prefField: "tx", lastField: "lastTxAlert", throttleMs: 0, bypassQuietHours: false },
   orders: { prefField: "orders", lastField: "lastOrderAlert", throttleMs: 0, bypassQuietHours: false },
@@ -60,10 +62,11 @@ const KIND_CONFIG: Record<
   rewards: { prefField: "rewards", lastField: "lastRewardsAlert", throttleMs: 60 * 60_000, bypassQuietHours: false },
   governance: { prefField: "governance", lastField: "lastGovernanceAlert", throttleMs: 60 * 60_000, bypassQuietHours: false },
   rules: { prefField: "rules", lastField: "lastRulesAlert", throttleMs: 0, bypassQuietHours: false },
+  arb: { prefField: "arb", lastField: "lastArbAlert", throttleMs: 30 * 60_000, bypassQuietHours: false },
 };
 
 /** Schema defaults — used when a user has no NotificationPref row. */
-const PREF_DEFAULTS = { tx: true, orders: true, health: true, rewards: false, governance: false, rules: true };
+const PREF_DEFAULTS = { tx: true, orders: true, health: true, rewards: false, governance: false, rules: true, arb: false };
 
 type SendFn = (telegramId: string, message: string) => Promise<unknown>;
 let sendFn: SendFn | null = null;

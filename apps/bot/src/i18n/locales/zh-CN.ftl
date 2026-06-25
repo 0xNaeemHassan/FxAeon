@@ -3,7 +3,7 @@
 ## /start
 
 start-welcome-new =
-    🚀 欢迎使用 fxBot
+    🚀 欢迎使用 FxAeon
     
     f(x) Protocol 最先进的交易界面 — 杠杆头寸、限价订单、收益自动化，全部在 Telegram 中完成。
     
@@ -14,7 +14,7 @@ start-referral-detected = 🎁 检测到推荐码: { $code }
 start-tap-button = 👇 点击下方按钮创建或导入您的钱包。
 start-create-wallet = 🔐 设置钱包
 start-welcome-back =
-    👋 欢迎回到 fxBot！
+    👋 欢迎回到 FxAeon！
     
     钱包: { $wallet }
 start-positions =
@@ -32,7 +32,7 @@ start-error =
 ## /help
 
 help-body =
-    📚 fxBot 帮助 — 命令指南
+    📚 FxAeon 帮助 — 命令指南
     
     点击下方任意命令即可使用，也可以直接输入。
     

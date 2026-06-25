@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { isAddress, formatEther } from "viem";
-import { RISK_PARAMS, MARKETS } from "@fxbot/shared";
+import { RISK_PARAMS, MARKETS } from "@fxaeon/shared";
 import { ValidationError, SimulationError, asyncHandler } from "../middleware/errors.js";
 import {
   createFxSdk,

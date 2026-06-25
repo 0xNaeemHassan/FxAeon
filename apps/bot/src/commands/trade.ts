@@ -1,7 +1,7 @@
 import { Context } from "grammy";
 import type { I18nFlavor } from "@grammyjs/i18n";
-import { prisma } from "@fxbot/db";
-import { MARKETS, RISK_PARAMS } from "@fxbot/shared";
+import { prisma } from "@fxaeon/db";
+import { MARKETS, RISK_PARAMS } from "@fxaeon/shared";
 import { buildPreview, ladderMarketKeyboard } from "../handlers/tradeActions.js";
 
 export async function tradeCommand(ctx: Context & I18nFlavor) {

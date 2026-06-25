@@ -19,7 +19,7 @@
  *   on Confirm dedupe inside executeRoute instead of broadcasting twice.
  */
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { MARKETS, type Market } from "@fxbot/shared";
+import { MARKETS, type Market } from "@fxaeon/shared";
 
 export interface TradeIntent {
   market: Market;

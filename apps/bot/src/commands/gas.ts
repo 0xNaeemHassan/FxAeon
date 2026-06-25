@@ -18,7 +18,7 @@ import {
   formatUsdCost,
   formatGasUsedRatio,
   type GasOracleSnapshot,
-} from "@fxbot/shared";
+} from "@fxaeon/shared";
 
 /** Typical gas used by an approve + Router call route (observed range). */
 const TYPICAL_TRADE_GAS = 600_000;

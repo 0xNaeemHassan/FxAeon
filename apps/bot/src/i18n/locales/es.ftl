@@ -3,7 +3,7 @@
 ## /start
 
 start-welcome-new =
-    🚀 Bienvenido a fxBot
+    🚀 Bienvenido a FxAeon
     
     La interfaz más avanzada para f(x) Protocol — posiciones apalancadas, órdenes límite y automatización de rendimiento, todo desde Telegram.
     
@@ -14,7 +14,7 @@ start-referral-detected = 🎁 Código de referido detectado: { $code }
 start-tap-button = 👇 Toca el botón de abajo para crear o importar tu billetera.
 start-create-wallet = 🔐 Configurar billetera
 start-welcome-back =
-    👋 ¡Bienvenido de nuevo a fxBot!
+    👋 ¡Bienvenido de nuevo a FxAeon!
     
     Billetera: { $wallet }
 start-positions =
@@ -35,7 +35,7 @@ start-error =
 ## /help
 
 help-body =
-    📚 Ayuda de fxBot — Guía de comandos
+    📚 Ayuda de FxAeon — Guía de comandos
     
     Toca cualquier comando para usarlo, o escríbelo directamente.
     

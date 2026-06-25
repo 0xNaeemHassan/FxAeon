@@ -4,8 +4,8 @@
  * (handlers/earnActions.ts). /borrow is an alias.
  */
 import { Context } from "grammy";
-import { prisma } from "@fxbot/db";
-import { MARKETS, type Market } from "@fxbot/shared";
+import { prisma } from "@fxaeon/db";
+import { MARKETS, type Market } from "@fxaeon/shared";
 import { buildMintPreview } from "../handlers/earnActions.js";
 
 const USAGE =

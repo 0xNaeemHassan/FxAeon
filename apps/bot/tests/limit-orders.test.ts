@@ -10,7 +10,7 @@
 import { describe, it, expect } from "vitest";
 import { keccak256, toHex, toFunctionSelector, decodeFunctionData } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { ADDRESSES } from "@fxbot/shared";
+import { ADDRESSES } from "@fxaeon/shared";
 import {
   type FxLimitOrder,
   LIMIT_ORDER_DOMAIN,

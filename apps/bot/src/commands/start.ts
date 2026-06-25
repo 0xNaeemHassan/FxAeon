@@ -1,13 +1,13 @@
 import { Context } from "grammy";
 import type { I18nFlavor } from "@grammyjs/i18n";
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 import { botLogger } from "../middleware/logger.js";
 import { reportErrorToAdmin } from "../observability/admin-alerts.js";
 import { parseReferralPayload } from "../core/onboarding.js";
 import { describeFunding, getFundingState } from "../core/funding.js";
 import { looksLikeTradeIntent, verifyTradeIntent } from "../core/tradeIntent.js";
 import { buildPreview } from "../handlers/tradeActions.js";
-import { MARKETS, RISK_PARAMS } from "@fxbot/shared";
+import { MARKETS, RISK_PARAMS } from "@fxaeon/shared";
 
 /**
  * Render a trade preview from a /start deep link. Returns true when the

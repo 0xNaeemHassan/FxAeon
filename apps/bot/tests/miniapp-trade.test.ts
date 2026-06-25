@@ -10,7 +10,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vites
 import { createHmac } from "node:crypto";
 import express from "express";
 import type { Server } from "node:http";
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 
 const GWEI = 1_000_000_000n;
 

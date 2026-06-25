@@ -6,7 +6,7 @@
  * BRIDGE_EXECUTION_ENABLED operator flag (see handlers/earnActions.ts).
  */
 import { Context } from "grammy";
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 import { parseUnits } from "viem";
 import { createFxSdk } from "../fx/index.js";
 import { quoteBridgeFee, BRIDGE_TOKEN_DECIMALS, type BridgeToken } from "../fx/earn.js";

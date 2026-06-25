@@ -4,7 +4,7 @@
  * honesty on failure), TP/SL hint.
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 
 const getPositionsMock = vi.fn();
 const quoteClosePositionMock = vi.fn();

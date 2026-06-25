@@ -9,9 +9,9 @@
  * Callback data: the action-intent token itself (`a1_…`), plus `a1c` = cancel.
  */
 import { Context, InlineKeyboard } from "grammy";
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 import { parseUnits } from "viem";
-import { MARKETS, type Market } from "@fxbot/shared";
+import { MARKETS, type Market } from "@fxaeon/shared";
 import {
   collateralDecimals,
   createFxSdk,
@@ -337,7 +337,7 @@ async function executeSaveWithdraw(ctx: Context, intent: ActionIntent): Promise<
     txType: "fxsave_withdraw",
     idempotencyKey: `save:${user.id}:${intent.nonce}`,
     quote: async () => {
-      let sharesWei =
+      const sharesWei =
         amount === 0
           ? (await sdk.getFxSaveBalance({ userAddress: user.walletAddress })).balanceWei
           : parseUnits(String(amount), 18);

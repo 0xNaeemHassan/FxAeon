@@ -4,7 +4,7 @@
  * Chain + Privy + executeReplacement are mocked.
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 
 const executeReplacementMock = vi.fn();
 vi.mock("../src/core/txReplace.js", async (importOriginal) => {

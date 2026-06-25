@@ -3,7 +3,7 @@
 ## /start
 
 start-welcome-new =
-    🚀 fxBotへようこそ
+    🚀 FxAeonへようこそ
     
     f(x) Protocol向けの最先端インターフェース — レバレッジポジション、指値注文、利回り自動化をすべてTelegramから。
     
@@ -14,7 +14,7 @@ start-referral-detected = 🎁 紹介コードを検出しました: { $code }
 start-tap-button = 👇 下のボタンをタップしてウォレットを作成またはインポートしてください。
 start-create-wallet = 🔐 ウォレットを設定
 start-welcome-back =
-    👋 fxBotへおかえりなさい！
+    👋 FxAeonへおかえりなさい！
     
     ウォレット: { $wallet }
 start-positions =
@@ -32,7 +32,7 @@ start-error =
 ## /help
 
 help-body =
-    📚 fxBot ヘルプ — コマンドガイド
+    📚 FxAeon ヘルプ — コマンドガイド
     
     下のコマンドをタップするか、直接入力してください。
     

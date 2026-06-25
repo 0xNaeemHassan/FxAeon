@@ -18,7 +18,7 @@
  *     WETH on the fork and we read the resulting balance back from chain state.
  *
  * What is substituted (and only this):
- *   - `@fxbot/db` prisma  → an in-memory TxRecord store, so idempotency and the
+ *   - `@fxaeon/db` prisma  → an in-memory TxRecord store, so idempotency and the
  *     persisted state machine behave exactly as in prod without a database.
  *   - `src/core/privy.js`  → the broadcast seam signs+sends with a funded Anvil
  *     dev key instead of calling Privy's hosted wallet API. broadcast.ts itself
@@ -39,7 +39,7 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { mainnet } from "viem/chains";
-import { ADDRESSES } from "@fxbot/shared";
+import { ADDRESSES } from "@fxaeon/shared";
 
 // ── Fork discovery: probe at collection time so describe.skipIf can react ────
 const RPC = process.env.FORK_RPC_URL || "http://127.0.0.1:8545";
@@ -67,7 +67,7 @@ async function probeChainId(url: string, timeoutMs = 3_000): Promise<number | nu
 const FORK_CHAIN_ID = await probeChainId(RPC);
 const FORK_UP = FORK_CHAIN_ID === 1;
 if (!FORK_UP) {
-  // eslint-disable-next-line no-console
+   
   console.warn(
     `[fork] no mainnet fork at ${RPC} (chainId=${FORK_CHAIN_ID ?? "unreachable"}). ` +
       "Skipping money-path fork suite. Start anvil --fork-url <rpc> --port 8545 to run it."
@@ -116,7 +116,7 @@ const { txStore, prismaMock } = vi.hoisted(() => {
   return { txStore: store, prismaMock: prisma };
 });
 
-vi.mock("@fxbot/db", () => ({ prisma: prismaMock, Prisma: {} }));
+vi.mock("@fxaeon/db", () => ({ prisma: prismaMock, Prisma: {} }));
 
 // ── Privy broadcast seam → sign + send with a funded Anvil dev key ───────────
 // broadcast.ts (the real send logic) imports these two from core/privy.js. We

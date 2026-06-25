@@ -15,7 +15,7 @@
  */
 import { createHmac } from "node:crypto";
 import { Router, Request, Response, NextFunction } from "express";
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 import { onboardUser, syncWalletState } from "../core/onboarding.js";
 import { getFundingState } from "../core/funding.js";
 import { getMarketOverview, getSpotPrices } from "../market/coingecko.js";
@@ -218,6 +218,8 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
             // Position size (collateral notional) in USD — null when unpriced.
             sizeUsd: valuation ? valuation.collateralUsd : null,
             pnlUsd: pnl ? pnl.pnlUsd : null,
+            pnlPct: pnl ? pnl.pnlPct : null,
+            entryPrice: snapshots.get(snapshotKey(p))?.entrySpotUsd ?? null,
             pnlSince: pnl ? pnl.since.toISOString() : null,
           };
         });

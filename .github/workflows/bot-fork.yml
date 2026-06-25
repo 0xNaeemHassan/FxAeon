@@ -41,8 +41,8 @@ jobs:
           version: stable
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @fxbot/shared build
-      - run: pnpm --filter @fxbot/db build
+      - run: pnpm --filter @fxaeon/shared build
+      - run: pnpm --filter @fxaeon/db build
 
       # The fork suite self-skips when no upstream RPC is available, so a fork
       # job without the secret is a green no-op rather than a failure. Provide

@@ -10,8 +10,8 @@
  */
 import { randomBytes } from "node:crypto";
 import { Context, InlineKeyboard, type Bot } from "grammy";
-import { prisma } from "@fxbot/db";
-import { MARKETS, type Market } from "@fxbot/shared";
+import { prisma } from "@fxaeon/db";
+import { MARKETS, type Market } from "@fxaeon/shared";
 import {
   createFxSdk,
   createPublicClientForUser,
@@ -203,7 +203,7 @@ export async function handleTpSlHint(ctx: Context): Promise<void> {
 }
 
 /** Register /portfolio position-action callbacks. Call once from main.ts. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 export function registerPositionActions(bot: Bot<any>): void {
   bot.callbackQuery(/^pc_/, (ctx) => handleClosePrompt(ctx as unknown as Context));
   bot.callbackQuery(/^pcc_/, (ctx) => handleCloseConfirm(ctx as unknown as Context));

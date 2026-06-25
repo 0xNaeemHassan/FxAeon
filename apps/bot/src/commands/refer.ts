@@ -1,5 +1,5 @@
 import { Context } from "grammy";
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 import { generateReferralCode } from "../core/onboarding.js";
 
 export async function referCommand(ctx: Context) {

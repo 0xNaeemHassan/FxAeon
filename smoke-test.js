@@ -51,7 +51,7 @@ function request(url, options = {}) {
   });
 }
 
-function sleep(ms) {
+function _sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 

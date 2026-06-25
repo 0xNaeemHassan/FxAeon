@@ -8,8 +8,8 @@
  * data (no fabricated liquidation price).
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { prisma } from "@fxbot/db";
-import { HEALTH_LEVELS } from "@fxbot/shared";
+import { prisma } from "@fxaeon/db";
+import { HEALTH_LEVELS } from "@fxaeon/shared";
 
 const getPositionsMock = vi.fn();
 vi.mock("../src/fx/index", () => ({
@@ -78,7 +78,7 @@ describe("formatHealthMessage", () => {
   });
 
   it("warning message uses the warning header", () => {
-    expect(formatHealthMessage("warning", pos)).toContain("Position health warning");
+    expect(formatHealthMessage("warning", pos)).toContain("Approaching the Rebalance Line");
   });
 });
 

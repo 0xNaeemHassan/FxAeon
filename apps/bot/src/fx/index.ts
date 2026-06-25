@@ -20,7 +20,7 @@ import {
 import { createPublicClient, http, type PublicClient } from "viem";
 import { mainnet } from "viem/chains";
 import { addRpcUrlOverrideToChain } from "@privy-io/chains";
-import { ADDRESSES, type Market } from "@fxbot/shared";
+import { ADDRESSES, type Market } from "@fxaeon/shared";
 
 // ── Market mapping ──────────────────────────────────────────────────────────
 // Internal markets are collateral-denominated ("wstETH" | "WBTC"); the SDK

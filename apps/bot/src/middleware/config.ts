@@ -42,7 +42,6 @@ export const envSchema = z.object({
   ADMIN_TELEGRAM_CHAT_ID: z.string().optional(),
 
   // ── Optional services ────────────────────────────────────
-  SURPLUS_API_KEY: z.string().optional(),
   /** CoinGecko demo API key for /price; works unauthenticated at lower limits. */
   COINGECKO_API_KEY: z.string().optional(),
   /** Etherscan API key for /gas (gas oracle, ETH price, gas estimates). */
@@ -155,7 +154,6 @@ export const features = {
   get enableBlockchain() { return !!process.env.ALCHEMY_RPC_URL; },
   get enableRedis() { return /^rediss?:\/\//i.test(process.env.REDIS_URL ?? ""); },
   get enableEncryption() { return !!process.env.KMS_MASTER_KEY; },
-  get enableAi() { return !!process.env.SURPLUS_API_KEY; },
   enableByok: true,
   enableFlashbots: true,
   enableNotifications: true,

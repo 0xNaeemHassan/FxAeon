@@ -1,5 +1,5 @@
 import { Context } from "grammy";
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 
 export async function depositCommand(ctx: Context) {
   const telegramId = ctx.from?.id.toString();

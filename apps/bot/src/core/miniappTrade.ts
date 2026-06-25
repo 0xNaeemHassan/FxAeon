@@ -22,7 +22,7 @@
  * gas figure.
  */
 import { parseUnits, formatUnits } from "viem";
-import { MARKETS, RISK_PARAMS, type Market } from "@fxbot/shared";
+import { MARKETS, RISK_PARAMS, type Market } from "@fxaeon/shared";
 import {
   collateralDecimals,
   createFxSdk,

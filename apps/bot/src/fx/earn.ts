@@ -22,7 +22,7 @@ import {
   isAddress,
 } from "viem";
 import { mainnet } from "viem/chains";
-import { ADDRESSES, type Market } from "@fxbot/shared";
+import { ADDRESSES, type Market } from "@fxaeon/shared";
 import { getConfig } from "../middleware/config.js";
 import { collateralAddress, toSdkMarket, type TradeTx } from "./index.js";
 

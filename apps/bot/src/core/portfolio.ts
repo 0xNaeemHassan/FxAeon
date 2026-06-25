@@ -13,7 +13,7 @@
  */
 import { formatUnits } from "viem";
 import type { FxSdk, PositionInfo } from "@aladdindao/fx-sdk";
-import { MARKETS, computeHealthPercent, type Market } from "@fxbot/shared";
+import { MARKETS, computeHealthPercent, type Market } from "@fxaeon/shared";
 import { getPositions } from "../fx/index.js";
 
 export type Side = "long" | "short";

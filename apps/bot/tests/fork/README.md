@@ -22,7 +22,7 @@ idempotency → signer-policy allow-list → eth_simulateV1 (fail-closed)
   on the fork and reads the resulting balance back from chain state.
 
 **Substituted (and only this):**
-- `@fxbot/db` prisma → an in-memory `TxRecord` store, so idempotency and the
+- `@fxaeon/db` prisma → an in-memory `TxRecord` store, so idempotency and the
   persisted state machine behave exactly as in prod without a database.
 - `src/core/privy.js` → the broadcast seam signs+sends with a funded Anvil dev
   key instead of Privy's hosted wallet API. `broadcast.ts` (the real send logic

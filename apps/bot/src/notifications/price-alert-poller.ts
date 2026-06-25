@@ -17,7 +17,7 @@
  * - Stale snapshots (upstream down, ≤10min old) are NOT used to fire alerts:
  *   acting on old prices is worse than waiting one cycle.
  */
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 import { getMarketOverview, type MarketRow } from "../market/coingecko.js";
 import { describeAlert } from "../commands/alert.js";
 import { formatPrice } from "../commands/price.js";

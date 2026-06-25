@@ -20,7 +20,7 @@ import {
   formatEthCost,
   formatUsdCost,
   formatGasUsedRatio,
-} from "@fxbot/shared";
+} from "@fxaeon/shared";
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 

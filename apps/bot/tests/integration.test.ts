@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { computeLiquidationPrice, computeHealthPercent, RISK_PARAMS, HEALTH_LEVELS, ADDRESSES } from "@fxbot/shared";
+import { computeLiquidationPrice, computeHealthPercent, RISK_PARAMS, HEALTH_LEVELS, ADDRESSES } from "@fxaeon/shared";
 
 describe("Integration — Risk Engine", () => {
   describe("Liquidation price computation", () => {

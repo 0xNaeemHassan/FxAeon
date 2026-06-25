@@ -69,7 +69,7 @@ export async function setup(): Promise<void> {
   if ((await chainId(DEFAULT_URL)) === 1) {
     process.env.FORK_RPC_URL = DEFAULT_URL;
     process.env.ALCHEMY_RPC_URL = DEFAULT_URL;
-    // eslint-disable-next-line no-console
+     
     console.log(`[fork] reusing live fork at ${DEFAULT_URL}`);
     return;
   }
@@ -77,7 +77,7 @@ export async function setup(): Promise<void> {
   // 2) Try to start one ourselves.
   const upstream = upstreamRpc();
   if (!upstream || !(await anvilOnPath())) {
-    // eslint-disable-next-line no-console
+     
     console.log(
       "[fork] no fork available (no FORK_RPC_URL, and cannot start anvil — " +
         "set FORK_BACKEND_RPC_URL/MAINNET_RPC_URL and install foundry). Fork suite will skip."
@@ -86,7 +86,7 @@ export async function setup(): Promise<void> {
   }
 
   const port = DEFAULT_PORT;
-  // eslint-disable-next-line no-console
+   
   console.log(`[fork] starting anvil --fork-url <upstream> on 127.0.0.1:${port}`);
   started = spawn(
     "anvil",
@@ -103,13 +103,13 @@ export async function setup(): Promise<void> {
     if ((await chainId(url)) === 1) {
       process.env.FORK_RPC_URL = url;
       process.env.ALCHEMY_RPC_URL = url;
-      // eslint-disable-next-line no-console
+       
       console.log(`[fork] anvil ready at ${url}`);
       return;
     }
     await new Promise((r) => setTimeout(r, 1_000));
   }
-  // eslint-disable-next-line no-console
+   
   console.warn("[fork] anvil did not become ready in time — fork suite will skip.");
 }
 

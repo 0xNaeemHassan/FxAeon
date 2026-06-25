@@ -27,7 +27,7 @@ import {
   type PublicClient,
 } from "viem";
 import { z } from "zod";
-import { ADDRESSES } from "@fxbot/shared";
+import { ADDRESSES } from "@fxaeon/shared";
 
 /* ------------------------------------------------------------------ */
 /* EIP-712 constants (verified — see file header)                      */

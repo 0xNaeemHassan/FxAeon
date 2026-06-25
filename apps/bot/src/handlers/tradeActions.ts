@@ -19,9 +19,9 @@
  * executor idempotency key, so double-taps dedupe instead of re-broadcasting.
  */
 import { Context, InlineKeyboard, type Bot } from "grammy";
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 import { parseUnits } from "viem";
-import { MARKETS, RISK_PARAMS, type Market } from "@fxbot/shared";
+import { MARKETS, RISK_PARAMS, type Market } from "@fxaeon/shared";
 import {
   collateralDecimals,
   createFxSdk,
@@ -406,7 +406,7 @@ export async function handleCancelCallback(ctx: Context): Promise<void> {
 }
 
 /** Register all trade-ux callback handlers. Call once from main.ts. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 export function registerTradeActions(bot: Bot<any>): void {
   // Handlers are written against the base Context (they only use callback
   // fields all flavors share); narrow grammY callback contexts are fine.

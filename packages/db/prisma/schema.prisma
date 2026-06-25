@@ -145,6 +145,7 @@ model NotificationPref {
   rewards           Boolean  @default(false)
   governance        Boolean  @default(false)
   rules             Boolean  @default(true)
+  arb               Boolean  @default(false)
   quietHoursStart   String?
   quietHoursEnd     String?
   lastHealthAlert   DateTime?
@@ -153,6 +154,7 @@ model NotificationPref {
   lastRewardsAlert  DateTime?
   lastGovernanceAlert DateTime?
   lastRulesAlert    DateTime?
+  lastArbAlert      DateTime?
 
   user              User     @relation(fields: [userId], references: [id])
 }

@@ -8,8 +8,8 @@
  */
 import { Context, InlineKeyboard } from "grammy";
 import type { I18nFlavor } from "@grammyjs/i18n";
-import { prisma } from "@fxbot/db";
-import { HEALTH_LEVELS, MARKETS } from "@fxbot/shared";
+import { prisma } from "@fxaeon/db";
+import { HEALTH_LEVELS, MARKETS } from "@fxaeon/shared";
 import { createFxSdk } from "../fx/index.js";
 import { fetchOnChainPositions, type OnChainPosition } from "../core/portfolio.js";
 import { trackPositions, computePnl, snapshotKey, type SnapshotMap } from "../core/pnl.js";
@@ -62,12 +62,20 @@ function pnlLine(
   snapshots: SnapshotMap,
   prices: Record<string, number | null> | null
 ): string {
-  const pnl = computePnl(pos, snapshots.get(snapshotKey(pos)), prices);
+  const snap = snapshots.get(snapshotKey(pos));
+  const pnl = computePnl(pos, snap, prices);
   if (!pnl) return "";
-  const sign = pnl.pnlUsd >= 0 ? "+" : "-";
+  const up = pnl.pnlUsd >= 0;
+  const sign = up ? "+" : "-";
   const pct = pnl.pnlPct === null ? "" : ` (${sign}${Math.abs(pnl.pnlPct).toFixed(1)}%)`;
   const date = pnl.since.toISOString().slice(0, 10);
-  return `   PnL since ${date}: ${sign}${fmtUsd(Math.abs(pnl.pnlUsd)).slice(pnl.pnlUsd < 0 ? 1 : 0)}${pct}\n`;
+  // Entry price card (fixes "positions show as unreadable NFTs"): show the
+  // entry spot price captured at first-seen so the PnL is human-readable.
+  const entry =
+    snap && typeof snap.entrySpotUsd === "number"
+      ? ` | Entry: ${fmtUsd(snap.entrySpotUsd)}`
+      : "";
+  return `   ${up ? "🟢" : "🔴"} PnL since ${date}: ${sign}${fmtUsd(Math.abs(pnl.pnlUsd)).slice(up ? 0 : 1)}${pct}${entry}\n`;
 }
 
 function positionBlock(

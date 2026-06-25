@@ -19,7 +19,7 @@ export interface TelegramShimOptions {
 }
 
 /** Serializable init script — runs in the browser before page scripts. */
-export function telegramInitScript(opts: TelegramShimOptions = {}): (o: TelegramShimOptions) => void {
+export function telegramInitScript(_opts: TelegramShimOptions = {}): (o: TelegramShimOptions) => void {
   return (o: TelegramShimOptions) => {
     const initData =
       o.initData ??

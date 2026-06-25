@@ -13,8 +13,8 @@
  * Failure honesty: a failed market/side read for a user is logged and
  * counted — we never alert (or stay silent) based on data we don't have.
  */
-import { prisma } from "@fxbot/db";
-import { HEALTH_LEVELS } from "@fxbot/shared";
+import { prisma } from "@fxaeon/db";
+import { HEALTH_LEVELS } from "@fxaeon/shared";
 import { createFxSdk } from "../fx/index.js";
 import { fetchOnChainPositions, type OnChainPosition } from "../core/portfolio.js";
 import { notify } from "./notify.js";
@@ -37,12 +37,19 @@ export function formatHealthMessage(
   level: HealthLevel,
   pos: Pick<OnChainPosition, "market" | "side" | "positionId" | "leverage" | "health">
 ): string {
-  const head = level === "urgent" ? "🔴 URGENT: liquidation risk" : "🟡 Position health warning";
+  const head =
+    level === "urgent"
+      ? "🔴 URGENT: Rebalance Line breach imminent"
+      : "🟡 Approaching the Rebalance Line";
+  const tail =
+    level === "urgent"
+      ? "Crossing the Rebalance Line lets the protocol auto-sell part of your collateral to de-risk. Add collateral or reduce exposure NOW — /portfolio has a Close button."
+      : "If your position crosses the Rebalance Line, the protocol can auto-sell part of your collateral. Add collateral or trim exposure — /portfolio has a Close button.";
   return (
     `${head}\n` +
     `${pos.market} ${pos.side.toUpperCase()} #${pos.positionId} (${pos.leverage.toFixed(2)}x) ` +
     `is at ${(pos.health * 100).toFixed(1)}% of its liquidation threshold.\n` +
-    `Add collateral or reduce exposure — /portfolio has a Close button.`
+    tail
   );
 }
 

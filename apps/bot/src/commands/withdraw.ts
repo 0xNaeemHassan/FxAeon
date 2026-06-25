@@ -19,9 +19,9 @@
  */
 import { Context, InlineKeyboard } from "grammy";
 import { randomBytes } from "node:crypto";
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 import { encodeFunctionData, erc20Abi, formatUnits, isAddress, parseUnits } from "viem";
-import { ADDRESSES } from "@fxbot/shared";
+import { ADDRESSES } from "@fxaeon/shared";
 import { executeRoute } from "../core/txExecutor.js";
 import { requireDelegatedWallet } from "../core/delegation.js";
 import { describeExecutionError } from "../core/errorTaxonomy.js";

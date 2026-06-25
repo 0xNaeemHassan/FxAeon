@@ -3,7 +3,7 @@
  * Chain + Privy are mocked; the live-fork pass is Phase 4 (Anvil).
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 import {
   TX_STATES,
   isTerminal,

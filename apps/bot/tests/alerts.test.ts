@@ -3,7 +3,7 @@
  * portfolio USD estimator that rides the same CoinGecko snapshot.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 import { parseAlertArgs, describeAlert, alertCommand, MAX_ACTIVE_ALERTS } from "../src/commands/alert.js";
 import {
   shouldTrigger,

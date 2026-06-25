@@ -35,8 +35,8 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # The Mini App transpiles @fxbot/shared; build it first.
-      - run: pnpm --filter @fxbot/shared build
+      # The Mini App transpiles @fxaeon/shared; build it first.
+      - run: pnpm --filter @fxaeon/shared build
 
       # Pin Chromium to the version @playwright/test ships so snapshots match
       # the committed baselines byte-for-byte.

@@ -13,7 +13,7 @@
  * Privy enforces the same rule server-side regardless — this check only
  * exists so users get clear copy BEFORE a broadcast attempt, not a raw error.
  */
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 import { syncWalletState } from "./onboarding.js";
 import { botLogger } from "../middleware/logger.js";
 

@@ -7,7 +7,7 @@
  */
 import { createPublicClient, http, erc20Abi, formatUnits } from "viem";
 import { mainnet } from "viem/chains";
-import { ADDRESSES } from "@fxbot/shared";
+import { ADDRESSES } from "@fxaeon/shared";
 import { getConfig } from "../middleware/config.js";
 
 const RPC_TIMEOUT_MS = 3_000;

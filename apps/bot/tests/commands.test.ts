@@ -4,7 +4,7 @@ import { tradeCommand } from "../src/commands/trade";
 import { portfolioCommand } from "../src/commands/portfolio";
 import { settingsCommand } from "../src/commands/settings";
 import { helpCommand } from "../src/commands/help";
-import { RISK_PARAMS, ADDRESSES } from "@fxbot/shared";
+import { RISK_PARAMS, ADDRESSES } from "@fxaeon/shared";
 import { tEn } from "./helpers/i18n";
 
 describe("Commands", () => {
@@ -25,7 +25,7 @@ describe("Commands", () => {
       mockCtx.message.text = "/start";
       await startCommand(mockCtx);
       expect(mockCtx.reply).toHaveBeenCalledWith(
-        expect.stringContaining("Welcome to fxBot"),
+        expect.stringContaining("Welcome to FxAeon"),
         expect.objectContaining({ reply_markup: expect.anything() })
       );
     });

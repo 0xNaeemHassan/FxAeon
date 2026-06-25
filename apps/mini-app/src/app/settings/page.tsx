@@ -13,13 +13,12 @@
  * from running outside the provider and crashing the Settings tab.
  */
 import { useEffect, useState } from 'react';
-import { Globe, Sliders, Shield, Check, PlugZap, Send, LogOut } from 'lucide-react';
+import { Globe, Sliders, Shield, Check, PlugZap, Send } from 'lucide-react';
 import { isTMA, getInitData, haptic } from '@/lib/telegram';
 import { apiConfigured, getMe, saveSettings } from '@/lib/api';
 import { AppShell, Button, Card, EmptyState, SectionTitle, Skeleton } from '@/components/ui';
 import { useLocale } from '@/lib/i18n';
 import dynamic from 'next/dynamic';
-import { privyConfigured } from '@/lib/privyConfig';
 
 // PERF (W-20): Settings → Wallet is the only Privy surface outside /login.
 // Loading it dynamically keeps the heavy SDK out of this page's bundle.
@@ -82,7 +81,7 @@ export default function SettingsPage() {
       })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [mounted]);
+  }, [mounted, setLocale]);
 
   const save = async () => {
     setSaving(true);
