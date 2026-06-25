@@ -9,7 +9,7 @@
  * valued with live CoinGecko spot — and simply omitted when either side
  * can't be priced. No fabricated entries, ever.
  */
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 import type { OnChainPosition } from "./portfolio.js";
 import { workerLogger } from "../middleware/logger.js";
 
@@ -166,4 +166,33 @@ export async function markSnapshotClosed(
   } catch (error) {
     workerLogger.warn({ error: String(error), userId }, "pnl: mark closed failed");
   }
+}
+
+
+/**
+ * One-line PnL card for chat / mini-app — fixes the "positions show as
+ * unreadable NFTs" problem by rendering human PnL, e.g.
+ *   🟢 wstETH LONG #3 · 2.00x
+ *   +12.0% PnL | +$420.00 | Entry: $3,400
+ */
+export function formatPnlCard(
+  pos: Pick<OnChainPosition, "market" | "side" | "positionId" | "leverage">,
+  estimate: PnlEstimate | null,
+  snap?: SnapshotRecord
+): string {
+  const dir = pos.side.toLowerCase() === "short" ? "SHORT" : "LONG";
+  const header = `${pos.market} ${dir} #${pos.positionId} · ${pos.leverage.toFixed(2)}x`;
+  if (!estimate) return `⚪ ${header}\nPnL: n/a (entry snapshot pending)`;
+  const up = estimate.pnlUsd >= 0;
+  const emoji = up ? "🟢" : "🔴";
+  const usd = `${up ? "+" : "−"}$${Math.abs(estimate.pnlUsd).toFixed(2)}`;
+  const pct =
+    estimate.pnlPct === null
+      ? ""
+      : `${estimate.pnlPct >= 0 ? "+" : "−"}${Math.abs(estimate.pnlPct).toFixed(1)}% PnL | `;
+  const entry =
+    snap && typeof snap.entrySpotUsd === "number"
+      ? ` | Entry: $${snap.entrySpotUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })}`
+      : "";
+  return `${emoji} ${header}\n${pct}${usd}${entry}`;
 }

@@ -32,7 +32,7 @@ import {
   Fuel,
 } from 'lucide-react';
 import { getWebApp, haptic, isTMA, showMainButton } from '@/lib/telegram';
-import { RISK_PARAMS } from '@fxbot/shared';
+import { RISK_PARAMS } from '@fxaeon/shared';
 import { AppShell, Button, Card, FullScreenSpinner } from '@/components/ui';
 import { useT } from '@/lib/i18n';
 import {

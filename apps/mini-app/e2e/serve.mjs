@@ -35,7 +35,7 @@ const BUILD_ENV = {
 
 function buildIfNeeded() {
   if (existsSync(join(DIST, 'index.html')) && process.env.E2E_BUILD !== '1') return;
-  // eslint-disable-next-line no-console
+   
   console.log('[e2e] building mini-app static export…');
   const res = spawnSync('corepack', ['pnpm', 'build'], {
     cwd: ROOT,
@@ -43,7 +43,7 @@ function buildIfNeeded() {
     env: { ...process.env, ...BUILD_ENV },
   });
   if (res.status !== 0) {
-    // eslint-disable-next-line no-console
+     
     console.error('[e2e] build failed');
     process.exit(res.status ?? 1);
   }
@@ -118,6 +118,6 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  // eslint-disable-next-line no-console
+   
   console.log(`[e2e] serving ${DIST} at http://localhost:${PORT}`);
 });

@@ -4,9 +4,9 @@
  * through the signed-confirm flow (handlers/earnActions.ts).
  */
 import { Context } from "grammy";
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 import { formatUnits } from "viem";
-import { MARKETS, type Market } from "@fxbot/shared";
+import { MARKETS, type Market } from "@fxaeon/shared";
 import { createFxSdk, getPositions } from "../fx/index.js";
 import { buildRepayPreview } from "../handlers/earnActions.js";
 

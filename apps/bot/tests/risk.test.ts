@@ -5,7 +5,7 @@ import {
   computeLiquidationPrice, 
   computeHealthPercent,
   HEALTH_LEVELS 
-} from "@fxbot/shared";
+} from "@fxaeon/shared";
 
 describe("Risk Parameters", () => {
   it("should have correct locked values from spec", () => {

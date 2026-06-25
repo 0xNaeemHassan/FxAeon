@@ -27,7 +27,6 @@ import {
   TrendingDown,
   User,
   Wallet,
-  Landmark,
   Clock,
   CheckCircle2,
 } from 'lucide-react';
@@ -169,9 +168,17 @@ function PositionCard({ p }: { p: ApiPosition }) {
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         {typeof p.pnlUsd === 'number' ? (
-          <span className={`text-[14px] font-semibold ${p.pnlUsd >= 0 ? 'text-success' : 'text-danger'}`}>
-            {signedUsd(p.pnlUsd)}
-          </span>
+          <div className="flex flex-col items-end leading-tight">
+            <span className={`text-[14px] font-semibold ${p.pnlUsd >= 0 ? 'text-success' : 'text-danger'}`}>
+              {typeof p.pnlPct === 'number'
+                ? `${p.pnlPct >= 0 ? '+' : '−'}${Math.abs(p.pnlPct).toFixed(1)}% PnL`
+                : signedUsd(p.pnlUsd)}
+            </span>
+            <span className="text-[11px] font-medium text-mut">
+              {signedUsd(p.pnlUsd)}
+              {typeof p.entryPrice === 'number' ? ` · Entry ${fmtMarketPrice(p.entryPrice)}` : ''}
+            </span>
+          </div>
         ) : (
           <span className="text-[13px] font-medium text-mut">—</span>
         )}
@@ -324,7 +331,7 @@ export default function PortfolioPage() {
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  }, [router, setLocale]);
 
   useEffect(() => {
     setMounted(true);

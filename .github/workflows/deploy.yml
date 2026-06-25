@@ -25,6 +25,6 @@ jobs:
           node-version: '22'
           cache: 'pnpm'
       - run: pnpm install --no-frozen-lockfile
-      - run: pnpm --filter @fxbot/db db:deploy
+      - run: pnpm --filter @fxaeon/db db:deploy
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

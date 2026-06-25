@@ -17,8 +17,8 @@
 import { Router } from "express";
 import { z } from "zod";
 import { isAddress, type Address, type Hex } from "viem";
-import { prisma } from "@fxbot/db";
-import { ADDRESSES } from "@fxbot/shared";
+import { prisma } from "@fxaeon/db";
+import { ADDRESSES } from "@fxaeon/shared";
 import { ValidationError, SimulationError, asyncHandler } from "../middleware/errors.js";
 import { createPublicClientForUser } from "../fx/index.js";
 import {

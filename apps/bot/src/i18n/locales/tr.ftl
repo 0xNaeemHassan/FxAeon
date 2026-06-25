@@ -4,7 +4,7 @@
 ## /start
 
 start-welcome-new =
-    🚀 fxBot'a hoş geldiniz
+    🚀 FxAeon'a hoş geldiniz
     
     f(x) Protocol için en gelişmiş arayüz — kaldıraçlı pozisyonlar, limit emirleri ve getiri otomasyonu, hepsi Telegram üzerinden.
     
@@ -15,7 +15,7 @@ start-referral-detected = 🎁 Referans kodu algılandı: { $code }
 start-tap-button = 👇 Cüzdanınızı oluşturmak veya içe aktarmak için aşağıdaki düğmeye dokunun.
 start-create-wallet = 🔐 Cüzdanı Kur
 start-welcome-back =
-    👋 fxBot'a tekrar hoş geldiniz!
+    👋 FxAeon'a tekrar hoş geldiniz!
     
     Cüzdan: { $wallet }
 start-positions =
@@ -36,7 +36,7 @@ start-error =
 ## /help
 
 help-body =
-    📚 fxBot Yardım — Komut Kılavuzu
+    📚 FxAeon Yardım — Komut Kılavuzu
     
     Kullanmak için aşağıdaki herhangi bir komuta dokunun veya doğrudan yazın.
     

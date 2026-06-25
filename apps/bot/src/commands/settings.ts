@@ -1,7 +1,7 @@
 import { Context } from "grammy";
 import type { I18nFlavor } from "@grammyjs/i18n";
-import { prisma } from "@fxbot/db";
-import { RISK_PARAMS } from "@fxbot/shared";
+import { prisma } from "@fxaeon/db";
+import { RISK_PARAMS } from "@fxaeon/shared";
 import { SUPPORTED_LOCALES, invalidateLocaleCache } from "../i18n/index.js";
 
 export async function settingsCommand(ctx: Context & I18nFlavor) {

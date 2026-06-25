@@ -5,7 +5,7 @@ import { limitCommand } from "../src/commands/limit";
 import { settingsCommand } from "../src/commands/settings";
 import { referCommand } from "../src/commands/refer";
 import { autoCommand } from "../src/commands/auto";
-import { RISK_PARAMS } from "@fxbot/shared";
+import { RISK_PARAMS } from "@fxaeon/shared";
 import { tEn } from "./helpers/i18n";
 
 describe("Edge Cases — Commands", () => {

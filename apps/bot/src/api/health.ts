@@ -7,7 +7,7 @@
  * restarts/alerts instead of believing a hardcoded "healthy".
  */
 import { Router } from "express";
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 import Redis from "ioredis";
 import { withTimeout } from "../utils/resilience.js";
 import { snapshot } from "../core/metrics.js";

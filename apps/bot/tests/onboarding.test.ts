@@ -5,7 +5,7 @@
  * /start keyboard, and the web_app_data handler.
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 
 // Mock privy core BEFORE importing modules under test.
 const getUserWalletMock = vi.fn();

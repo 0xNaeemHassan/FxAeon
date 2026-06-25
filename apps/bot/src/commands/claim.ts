@@ -4,7 +4,7 @@
  * (handlers/earnActions.ts). Other reward types are not live and say so.
  */
 import { Context } from "grammy";
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 import { createFxSdk } from "../fx/index.js";
 import { getSaveClaimable } from "../fx/earn.js";
 import { buildClaimPreview } from "../handlers/earnActions.js";

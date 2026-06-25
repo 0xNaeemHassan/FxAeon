@@ -3,7 +3,7 @@ const nextConfig = {
   output: 'export',
   distDir: 'dist',
   images: { unoptimized: true },
-  transpilePackages: ['@fxbot/shared'],
+  transpilePackages: ['@fxaeon/shared'],
   eslint: {
     ignoreDuringBuilds: true,
   },

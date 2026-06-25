@@ -19,7 +19,7 @@ import {
   quoteBridgeFee,
 } from "../src/fx/earn.js";
 import { __resetConfigForTests } from "../src/middleware/config.js";
-import { ADDRESSES } from "@fxbot/shared";
+import { ADDRESSES } from "@fxaeon/shared";
 
 beforeEach(() => {
   process.env.TELEGRAM_BOT_TOKEN = "test-token";

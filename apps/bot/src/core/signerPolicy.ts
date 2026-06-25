@@ -33,7 +33,7 @@
  *    to ADDRESSES, then flip back — rather than bricking trades. See docs/GAPS.md.
  *  - "off" — disabled (testing only).
  */
-import { ADDRESSES } from "@fxbot/shared";
+import { ADDRESSES } from "@fxaeon/shared";
 import { incr } from "./metrics.js";
 
 export type PolicyMode = "enforce" | "observe" | "off";

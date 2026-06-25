@@ -18,7 +18,7 @@
  *   blocks onboarding, it is simply not recorded.
  */
 import { randomBytes } from "node:crypto";
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 import { getPrivy, createPrivyUser, getUserWallet } from "./privy.js";
 import { botLogger } from "../middleware/logger.js";
 

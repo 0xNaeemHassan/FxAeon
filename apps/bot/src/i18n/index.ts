@@ -2,7 +2,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { I18n } from "@grammyjs/i18n";
 import type { Context } from "grammy";
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 
 /**
  * W-21: single canonical locale dir (`./locales/*.ftl`, Fluent format) wired

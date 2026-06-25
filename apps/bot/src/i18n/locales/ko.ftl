@@ -3,7 +3,7 @@
 ## /start
 
 start-welcome-new =
-    🚀 fxBot에 오신 것을 환영합니다
+    🚀 FxAeon에 오신 것을 환영합니다
     
     f(x) Protocol을 위한 가장 진보된 인터페이스 — 레버리지 포지션, 지정가 주문, 수익 자동화를 모두 Telegram에서.
     
@@ -14,7 +14,7 @@ start-referral-detected = 🎁 추천 코드가 감지되었습니다: { $code }
 start-tap-button = 👇 아래 버튼을 눌러 지갑을 생성하거나 가져오세요.
 start-create-wallet = 🔐 지갑 설정
 start-welcome-back =
-    👋 fxBot에 다시 오신 것을 환영합니다!
+    👋 FxAeon에 다시 오신 것을 환영합니다!
     
     지갑: { $wallet }
 start-positions =
@@ -32,7 +32,7 @@ start-error =
 ## /help
 
 help-body =
-    📚 fxBot 도움말 — 명령어 가이드
+    📚 FxAeon 도움말 — 명령어 가이드
     
     아래 명령어를 탭하거나 직접 입력하세요.
     

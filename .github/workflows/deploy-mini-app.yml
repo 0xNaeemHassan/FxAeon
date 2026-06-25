@@ -50,11 +50,11 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build shared package
-        run: pnpm --filter @fxbot/shared build
+        run: pnpm --filter @fxaeon/shared build
 
       - name: Build Mini App
-        # Package is @fxaeon/mini-app (the old @fxbot/mini-app filter matched
-        # nothing, so wrangler would have shipped a stale/empty dist).
+        # Package is @fxaeon/mini-app (an earlier wrong filter matched nothing,
+        # so wrangler would have shipped a stale/empty dist).
         run: pnpm --filter @fxaeon/mini-app build
         env:
           NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID }}

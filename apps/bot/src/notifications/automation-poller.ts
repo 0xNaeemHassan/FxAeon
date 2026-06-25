@@ -20,8 +20,8 @@
  *   pause it with a notification — silent zombie rules are not a thing.
  * - A revoked bot-trading grant pauses the rule and tells the user why.
  */
-import { prisma } from "@fxbot/db";
-import type { Market } from "@fxbot/shared";
+import { prisma } from "@fxaeon/db";
+import type { Market } from "@fxaeon/shared";
 import { getSpotPrices } from "../market/coingecko.js";
 import { formatPrice } from "../commands/price.js";
 import type { PriceTrigger } from "../commands/auto.js";

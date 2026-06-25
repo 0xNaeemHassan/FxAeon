@@ -16,7 +16,7 @@
  */
 import { Context, InlineKeyboard } from "grammy";
 import { randomBytes } from "node:crypto";
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 import { formatGwei } from "viem";
 import { executeReplacement, readPending, type PendingTx } from "../core/txReplace.js";
 import { requireDelegatedWallet } from "../core/delegation.js";

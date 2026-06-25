@@ -15,8 +15,8 @@
  * at least one matching open position.
  */
 import { Context, InlineKeyboard, type Bot } from "grammy";
-import { prisma } from "@fxbot/db";
-import { MARKETS, type Market } from "@fxbot/shared";
+import { prisma } from "@fxaeon/db";
+import { MARKETS, type Market } from "@fxaeon/shared";
 import { getSpotPrices } from "../market/coingecko.js";
 import { formatPrice } from "./price.js";
 import { requireDelegatedWallet } from "../core/delegation.js";
@@ -244,7 +244,7 @@ export async function autoCommand(ctx: Context): Promise<void> {
 }
 
 /** Register the rule-delete callback. Call once from main.ts. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 export function registerAutoActions(bot: Bot<any>): void {
   bot.callbackQuery(/^ardel_[0-9a-f-]{36}$/, async (ctx) => {
     await ctx.answerCallbackQuery().catch(() => undefined);

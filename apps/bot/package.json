@@ -2,7 +2,7 @@
   "name": "@fxaeon/bot",
   "version": "1.0.0",
   "scripts": {
-    "build": "tsc && mkdir -p dist/i18n && cp -r src/i18n/locales dist/i18n/",
+    "build": "tsc && node scripts/copy-locales.cjs",
     "dev": "tsx watch src/main.ts",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
@@ -13,8 +13,8 @@
     "audit:fix": "npm audit fix"
   },
   "dependencies": {
-    "@fxbot/shared": "workspace:*",
-    "@fxbot/db": "workspace:*",
+    "@fxaeon/shared": "workspace:*",
+    "@fxaeon/db": "workspace:*",
     "@aladdindao/fx-sdk": "1.0.5",
     "@privy-io/chains": "^0.3.0",
     "grammy": "^1.44.0",

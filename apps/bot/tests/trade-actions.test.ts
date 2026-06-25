@@ -3,7 +3,7 @@
  * dedupe), cancel, and /start trade deep links.
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 
 const quoteOpenPositionMock = vi.fn();
 vi.mock("../src/fx/index", () => ({

@@ -41,7 +41,7 @@ jobs:
           node-version: '22'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @fxbot/shared build
+      - run: pnpm --filter @fxaeon/shared build
       - name: Build Mini App (static export)
         run: pnpm --filter @fxaeon/mini-app build
         env:

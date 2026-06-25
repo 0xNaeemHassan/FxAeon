@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { gasCommand } from "../src/commands/gas";
-import { clearEtherscanCache } from "@fxbot/shared";
+import { clearEtherscanCache } from "@fxaeon/shared";
 
 // Mock viem — /gas fallback calls createPublicClient
 vi.mock("viem", () => ({

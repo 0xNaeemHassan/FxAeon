@@ -2,7 +2,7 @@
  * W-12 — resilience primitives, the notify() gate, and poller status mapping.
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 import { withTimeout, withRetry, CircuitBreaker } from "../src/utils/resilience.js";
 import { notify, initNotify, inQuietHours, __resetNotifyForTests } from "../src/notifications/notify.js";
 import { mapRelayStatus } from "../src/notifications/limit-order-poller.js";

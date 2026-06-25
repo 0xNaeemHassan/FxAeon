@@ -55,6 +55,10 @@ export interface ApiPosition {
   sizeUsd?: number | null;
   /** Unrealized PnL estimate since first tracked — null when unpriced. */
   pnlUsd?: number | null;
+  /** Unrealized PnL percent vs entry equity; null when unknown. */
+  pnlPct?: number | null;
+  /** Entry spot price (USD) captured at first-seen; null when unknown. */
+  entryPrice?: number | null;
   pnlSince?: string | null;
 }
 

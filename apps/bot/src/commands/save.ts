@@ -3,7 +3,7 @@
  * confirm previews (see handlers/earnActions.ts). Live on-chain execution.
  */
 import { Context } from "grammy";
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 import { createFxSdk } from "../fx/index.js";
 import { getSaveOverview } from "../fx/earn.js";
 import {
@@ -13,7 +13,8 @@ import {
 
 const USAGE =
   `Usage:\n` +
-  `/save deposit <amount> [usdc] — deposit fxUSD (or USDC) into fxSAVE\n` +
+  `/save <amount> [usdc] — one-click deposit into fxSAVE (approve + mint + stake)\n` +
+  `/save deposit <amount> [usdc] — same, explicit form\n` +
   `/save withdraw <amount|all> [instant] — withdraw back to fxUSD\n\n` +
   `Withdraw modes: 2-step (no fee — request, then /claim after the cooldown) ` +
   `or add "instant" (small fee + slippage).`;
@@ -71,6 +72,16 @@ export async function saveCommand(ctx: Context) {
   }
 
   const action = args[0]?.toLowerCase();
+
+  // One-click shortcut: `/save <amount> [usdc]` is shorthand for
+  // `/save deposit <amount> [token]` — bundles approval + mint + stake.
+  const shortcutAmount = parseAmount(args[0] ?? "");
+  if (shortcutAmount !== null && shortcutAmount !== "all") {
+    const token = args[1]?.toLowerCase() === "usdc" ? ("usdc" as const) : ("fxUSD" as const);
+    const { text, keyboard } = buildSaveDepositPreview(token, shortcutAmount);
+    await ctx.reply(text, { reply_markup: keyboard });
+    return;
+  }
 
   if (action === "deposit") {
     const amount = parseAmount(args[1]);

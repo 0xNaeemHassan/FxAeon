@@ -10,7 +10,7 @@
  * Relay execution.status: 0 New, 1 Partially filled, 2 Fully filled,
  * 3 Cancelled; `expired: true` marks expiry (neither cancelled nor filled).
  */
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 import { heartbeat } from "../core/metrics.js";
 import { workerLogger } from "../middleware/logger.js";
 import { fetchOrderUpdates } from "../fx/limitOrders.js";

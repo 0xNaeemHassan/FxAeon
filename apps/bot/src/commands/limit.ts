@@ -1,6 +1,6 @@
 import { Context } from "grammy";
-import { prisma } from "@fxbot/db";
-import { MARKETS } from "@fxbot/shared";
+import { prisma } from "@fxaeon/db";
+import { MARKETS } from "@fxaeon/shared";
 
 export async function limitCommand(ctx: Context) {
   const telegramId = ctx.from?.id.toString();
@@ -19,7 +19,7 @@ export async function limitCommand(ctx: Context) {
       return;
     }
 
-    const [action, market, side, atWord, priceStr] = args;
+    const [action, market, side, _atWord, priceStr] = args;
     const price = parseFloat(priceStr);
 
     // Validate input BEFORE database access

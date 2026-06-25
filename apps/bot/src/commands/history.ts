@@ -3,7 +3,7 @@
  * (every on-chain action the bot has broadcast for this user).
  */
 import { Context } from "grammy";
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 
 const TYPE_LABELS: Record<string, string> = {
   open_long: "📈 Open long",

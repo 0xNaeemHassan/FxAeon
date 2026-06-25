@@ -4,7 +4,7 @@
  * Live on-chain execution via signed confirm (handlers/earnActions.ts).
  */
 import { Context } from "grammy";
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 import { buildSaveWithdrawPreview } from "../handlers/earnActions.js";
 
 export async function redeemCommand(ctx: Context) {

@@ -6,7 +6,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vites
 import { createHmac } from "node:crypto";
 import express from "express";
 import type { Server } from "node:http";
-import { prisma } from "@fxbot/db";
+import { prisma } from "@fxaeon/db";
 
 // Mock privy + funding before importing the router (onboarding path).
 const getUserWalletMock = vi.fn();
@@ -145,7 +145,7 @@ describe("miniapp router", () => {
       language: "en",
       slippageBps: 50,
       mevProtection: "off",
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
     } as any);
     const r = await fetch(`${base}/me`, { headers: auth });
     const body = await r.json();
@@ -180,7 +180,7 @@ describe("miniapp router", () => {
       telegramId: "777000111",
       walletAddress: "0xAbCd000000000000000000000000000000001234",
       referralCode: "NEWCODE2",
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
     } as any);
 
     const r = await fetch(`${base}/onboard`, {
@@ -221,7 +221,7 @@ describe("miniapp router", () => {
       telegramId: "777000111",
       walletAddress: "0xAbCd000000000000000000000000000000001234",
       referralCode: "ABCD2345",
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
     } as any);
     const r = await fetch(`${base}/onboard`, {
       method: "POST",
@@ -238,7 +238,7 @@ describe("miniapp router", () => {
       language: "es",
       slippageBps: 75,
       mevProtection: "on",
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
     } as any);
     const r = await fetch(`${base}/settings`, {
       method: "POST",

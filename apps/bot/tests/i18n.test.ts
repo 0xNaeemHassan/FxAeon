@@ -98,7 +98,7 @@ describe("i18n runtime", () => {
 
   it("preserves blank lines in multiline Fluent patterns", () => {
     const msg = i18n.t("en", "start-welcome-new");
-    expect(msg).toContain("Welcome to fxBot");
+    expect(msg).toContain("Welcome to FxAeon");
     expect(msg).toContain("\n\n"); // paragraph breaks survive .ftl multiline syntax
     expect(i18n.t("en", "help-body")).toContain("\n\n");
   });

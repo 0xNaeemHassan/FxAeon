@@ -1,5 +1,5 @@
-import path from "path";
-import { fileURLToPath } from "url";
+
+
 import express from "express";
 import { Bot, Context, GrammyError, HttpError, webhookCallback } from "grammy";
 import { getTelegramWebhookSecret } from "./utils/webhookAuth.js";
@@ -7,7 +7,6 @@ import type { RequestWithRawBody } from "./utils/webhookAuth.js";
 import { apiThrottler } from "@grammyjs/transformer-throttler";
 import { conversations, type ConversationFlavor } from "@grammyjs/conversations";
 import type { I18nFlavor } from "@grammyjs/i18n";
-import { prisma } from "@fxbot/db";
 
 import {
   startCommand, portfolioCommand, tradeCommand, limitCommand,
@@ -26,6 +25,7 @@ import {
   speedUpCommand,
   cancelTxCommand,
   handleTxControlCallback,
+  arbCommand,
 } from "./commands/index.js";
 
 import { handleWebAppData } from "./handlers/walletConnect.js";
@@ -48,6 +48,7 @@ import { limitOrderPolling } from "./notifications/limit-order-poller.js";
 import { healthMonitor } from "./notifications/health-monitor.js";
 import { priceAlertPoller } from "./notifications/price-alert-poller.js";
 import { automationPoller } from "./notifications/automation-poller.js";
+import { arbPoller } from "./notifications/arb-poller.js";
 import { initNotify } from "./notifications/notify.js";
 import { i18n } from "./i18n/index.js";
 
@@ -96,6 +97,7 @@ bot.command("orders", ordersCommand);
 bot.command("mint", mintCommand);
 bot.command("redeem", redeemCommand);
 bot.command("save", saveCommand);
+bot.command("arb", arbCommand);
 bot.command("borrow", borrowCommand);
 bot.command("repay", repayCommand);
 bot.command("bridge", bridgeCommand);
@@ -182,6 +184,7 @@ async function configureTelegramBot() {
     { command: "mint", description: "Mint fxUSD" },
     { command: "redeem", description: "Redeem fxSAVE to fxUSD" },
     { command: "save", description: "Earn yield on fxUSD" },
+    { command: "arb", description: "Arb scanner (/arb on for alerts)" },
     { command: "borrow", description: "Borrow against collateral" },
     { command: "repay", description: "Repay a loan" },
     { command: "deposit", description: "Deposit funds" },
@@ -237,6 +240,7 @@ function startBackgroundWorkers() {
     try { sloDigest.start((chatId, msg) => bot.api.sendMessage(chatId, msg)); } catch (e) { logger.error(e, "Failed to start SLO digest"); }
     try { priceAlertPoller.start(); } catch (e) { logger.error(e, "Failed to start price-alert poller"); }
     try { automationPoller.start(); } catch (e) { logger.error(e, "Failed to start automation poller"); }
+  try { arbPoller.start(); } catch (e) { logger.error(e, "Failed to start arb poller"); }
   }, 5000);
 }
 

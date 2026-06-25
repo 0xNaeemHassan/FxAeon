@@ -16,7 +16,7 @@ removed in W-14; `docker-compose.yml` + `deploy.sh` are local/dev only.
    check is `/api/v1/health`, used by monitoring and the smoke test).
    If the service was created manually (not via this Blueprint), set
    *Settings → Health Check Path* to `/health` in the dashboard too.
-4. Database migrations: run `pnpm --filter @fxbot/db db:deploy` against the
+4. Database migrations: run `pnpm --filter @fxaeon/db db:deploy` against the
    production `DATABASE_URL` (or enable the gated `deploy-db` job in
    `.github/workflows/deploy.yml` via the `DEPLOY_DB_ENABLED` repo variable).
    **Required for the next release:** the W-11 migration

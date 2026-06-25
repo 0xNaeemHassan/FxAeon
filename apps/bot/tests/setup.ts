@@ -1,7 +1,7 @@
 import { vi } from "vitest";
 
-// Mock @fxbot/db — prisma returns null user by default (new user flow)
-vi.mock("@fxbot/db", () => ({
+// Mock @fxaeon/db — prisma returns null user by default (new user flow)
+vi.mock("@fxaeon/db", () => ({
   prisma: {
     user: {
       findUnique: vi.fn().mockResolvedValue(null),
