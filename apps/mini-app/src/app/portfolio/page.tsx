@@ -174,10 +174,13 @@ function PositionCard({ p }: { p: ApiPosition }) {
                 ? `${p.pnlPct >= 0 ? '+' : '−'}${Math.abs(p.pnlPct).toFixed(1)}% PnL`
                 : signedUsd(p.pnlUsd)}
             </span>
-            <span className="text-[11px] font-medium text-mut">
-              {signedUsd(p.pnlUsd)}
-              {typeof p.entryPrice === 'number' ? ` · Entry ${fmtMarketPrice(p.entryPrice)}` : ''}
-            </span>
+            {(typeof p.pnlPct === 'number' || typeof p.entryPrice === 'number') && (
+              <span className="text-[11px] font-medium text-mut">
+                {typeof p.pnlPct === 'number' ? signedUsd(p.pnlUsd) : ''}
+                {typeof p.pnlPct === 'number' && typeof p.entryPrice === 'number' ? ' · ' : ''}
+                {typeof p.entryPrice === 'number' ? `Entry ${fmtMarketPrice(p.entryPrice)}` : ''}
+              </span>
+            )}
           </div>
         ) : (
           <span className="text-[13px] font-medium text-mut">—</span>

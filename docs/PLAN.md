@@ -57,7 +57,7 @@ Effort: S (≤½ day) · M (1–2 days) · L (3+ days). "Verify" = how the PR pr
 
 ### P3 — hygiene (bundled into nearby PRs or one sweep PR)
 
-`ignoreBuildErrors` removal (with W-10) · leverage-cap single source in `@fxbot/shared` (with W-07) · docs truth pass: `SECURITY.md` fake audit claims, `architecture.md` nonexistent components (with W-13) · naming decision fxBot vs FxAeon (owner call, no code risk).
+`ignoreBuildErrors` removal (with W-10) · leverage-cap single source in `@fxaeon/shared` (with W-07) · docs truth pass: `SECURITY.md` fake audit claims, `architecture.md` nonexistent components (with W-13) · naming decision fxBot vs FxAeon (owner call, no code risk).
 
 ---
 

@@ -139,7 +139,7 @@ Four deploy stories coexist: Render (`render.yaml`, webhook URL derived from `RE
 - **P3-3** `docs/api.md` documents an API that doesn't exist; `SECURITY.md` claims passed internal audits; `docs/architecture.md` describes Policy Engine/libsodium/keeper infrastructure absent from code. Docs must be brought down to truth.
 - **P3-4** `next.config.js` `ignoreBuildErrors: true` is stale — mini-app `tsc --noEmit` passes clean (verified). Remove the flag so regressions surface.
 - **P3-5** `fx-upgrade-monitor.yml` pushes commits as `GitHub Action` directly to the default branch and posts to a Discord webhook secret that may not be configured.
-- **P3-6** `validation.ts` `tradeSchema` allows leverage 1–31; actual pool caps are 7x long / 3x short (mirrored correctly in the mini-app). Single source for limits in `@fxbot/shared`.
+- **P3-6** `validation.ts` `tradeSchema` allows leverage 1–31; actual pool caps are 7x long / 3x short (mirrored correctly in the mini-app). Single source for limits in `@fxaeon/shared`.
 
 ---
 

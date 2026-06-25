@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { getRiskParameter, validateLeverage, validatePositionSize, validateSlippage } from '@fxbot/shared';
+import { getRiskParameter, validateLeverage, validatePositionSize, validateSlippage } from '@fxaeon/shared';
 
 export const positionSchema = z.object({
   asset: z.enum(['xETH', 'xUSD']),
