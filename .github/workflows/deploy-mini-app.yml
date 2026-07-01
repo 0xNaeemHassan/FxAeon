@@ -37,7 +37,7 @@ jobs:
     needs: check-secrets
     if: needs.check-secrets.outputs.has-cf-token == 'true'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
 
