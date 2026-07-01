@@ -7,9 +7,10 @@
  * tracesSampleRate stays 0 — errors only, comfortably inside the free tier.
  */
 import * as Sentry from "@sentry/node";
+import type { ErrorEvent } from "@sentry/node";
 import { logger, maskAddresses } from "../middleware/logger.js";
 
-export function scrubEvent(event: Sentry.Event): Sentry.Event {
+export function scrubEvent(event: ErrorEvent): ErrorEvent | null {
   // Never ship request payloads, headers, or cookies.
   delete event.request;
   delete (event as { user?: unknown }).user;
@@ -40,7 +41,7 @@ export function initSentry(): boolean {
     release: process.env.npm_package_version,
     tracesSampleRate: 0,
     beforeSend: (event) => scrubEvent(event),
-    beforeSendTransaction: () => null,
+    // In Sentry v10 transaction filtering is handled via tracesSampleRate: 0.
   });
   logger.info("Sentry initialized (errors only, scrubbed)");
   return true;
