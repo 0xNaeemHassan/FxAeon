@@ -247,12 +247,31 @@ export interface ApplyFeeResult {
 }
 
 /**
+ * Look up the referrer code for a user (Phase 5 referral attribution).
+ * Returns the user's referredBy code, or undefined if none.
+ */
+export async function resolveReferrerCode(userId: string): Promise<string | undefined> {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { referredBy: true },
+    });
+    return user?.referredBy ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Apply FxAeon fee for a confirmed action.
  *
  * Called by txExecutor after a successful trade execution.
  * In "enforce" mode, this builds and broadcasts a fee transfer tx.
  * In "observe" mode, it only records to FeeLedger.
  * In "off" mode, it does nothing.
+ *
+ * Phase 5: Automatically resolves referrerCode from user.referredBy
+ * if not explicitly provided — every FeeLedger insert gets referral attribution.
  */
 export async function applyFxAeonFee(params: {
   userId: string;
@@ -281,11 +300,14 @@ export async function applyFxAeonFee(params: {
     return { applied: false, mode, feeUsd: 0, feeWei: 0n, feeOrphan: false };
   }
 
+  // Phase 5: auto-resolve referrer code if not provided
+  const referrerCode = params.referrerCode ?? (await resolveReferrerCode(params.userId));
+
   if (mode === "observe") {
     // Record in FeeLedger but don't transfer on-chain
     await recordFee({
       userId: params.userId,
-      referrerCode: params.referrerCode,
+      referrerCode,
       intentKind: params.intentKind,
       tokenAddress: params.tokenAddress,
       tokenAmountWei: feeWei.toString(),
@@ -321,7 +343,7 @@ export async function applyFxAeonFee(params: {
 
   await recordFee({
     userId: params.userId,
-    referrerCode: params.referrerCode,
+    referrerCode,
     txHash: feeTxHash,
     intentKind: params.intentKind,
     tokenAddress: params.tokenAddress,

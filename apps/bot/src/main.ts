@@ -64,6 +64,10 @@ import { automationPoller } from "./notifications/automation-poller.js";
 import { arbPoller } from "./notifications/arb-poller.js";
 import { initNotify } from "./notifications/notify.js";
 import { i18n } from "./i18n/index.js";
+import { prisma } from "@fxaeon/db";
+import { looksLikeNaturalIntent, parseIntent, intentToTradeParams } from "./agent/index.js";
+import { createTradeIntent } from "./core/tradeIntent.js";
+import { buildPreview } from "./handlers/tradeActions.js";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -180,6 +184,70 @@ bot.command("history", portfolioCommand);
 bot.command("balance", portfolioCommand);
 bot.command("wallet", portfolioCommand);
 bot.command("earn", saveCommand);
+
+// Phase 5: Natural-language intent handler.
+// When a user has AI input enabled, free-text messages are parsed and
+// routed to the same Step 5 preview that button taps produce.
+bot.on("message:text", async (ctx, next) => {
+  const text = ctx.message?.text ?? "";
+  // Skip commands (they're handled above)
+  if (text.startsWith("/")) return next();
+
+  const telegramId = ctx.from?.id.toString();
+  if (!telegramId) return next();
+
+  // Check if user has AI input enabled
+  const user = await prisma.user.findUnique({
+    where: { telegramId },
+    select: { id: true, slippageBps: true, mevProtection: true, aiInputEnabled: true } as any,
+  }).catch(() => null);
+
+  if (!user || !(user as any).aiInputEnabled) return next();
+
+  // Only process if the text looks like a trade intent
+  if (!looksLikeNaturalIntent(text)) return next();
+
+  const intent = parseIntent(text);
+
+  if (intent.confidence === "low" || intent.action === "unknown") return next();
+
+  // Route known non-trade intents
+  if (intent.action === "check_positions" || intent.action === "check_portfolio") {
+    return portfolioCommand(ctx as any);
+  }
+  if (intent.action === "check_price") {
+    return priceCommand(ctx as any);
+  }
+  if (intent.action === "help") {
+    return helpCommand(ctx as any);
+  }
+
+  // Trade intents → build preview
+  const tradeParams = intentToTradeParams(intent);
+  if (tradeParams) {
+    const { text: previewText, keyboard } = buildPreview(
+      tradeParams,
+      user,
+      ctx.me?.username ?? "FxAeonBot"
+    );
+    await ctx.reply(
+      `🤖 I understood: *${intent.action.replace(/_/g, " ")}* ${tradeParams.market} at ${tradeParams.leverage}×\n\n${previewText}`,
+      { reply_markup: keyboard, parse_mode: "Markdown" }
+    );
+    return;
+  }
+
+  // For other recognized intents, show confirmation
+  if (intent.action !== "unknown") {
+    await ctx.reply(
+      `🤖 I understood: *${intent.action.replace(/_/g, " ")}*\n\nPlease use the corresponding command for now. Full NL routing coming soon.`,
+      { parse_mode: "Markdown" }
+    );
+    return;
+  }
+
+  return next();
+});
 
 // Smart callback fallback with 24-hour hard cutoff + stale detection.
 // Buttons older than 24h get a "stale" notice; newer ones get the honest

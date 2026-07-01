@@ -15,6 +15,7 @@ import { RISK_PARAMS } from "@fxaeon/shared";
 import { SUPPORTED_LOCALES, invalidateLocaleCache } from "../i18n/index.js";
 
 const VALID_MODES = ["beginner", "pro"] as const;
+const VALID_AI = ["on", "off"] as const;
 const VALID_COLLATERALS = ["fxUSD", "wstETH", "WBTC", "USDC", "WETH", "stETH", "ETH"] as const;
 
 export async function settingsCommand(ctx: Context & I18nFlavor) {
@@ -34,6 +35,7 @@ export async function settingsCommand(ctx: Context & I18nFlavor) {
     const defaultLeverage = (user as any)?.defaultLeverage ?? 3.0;
     const oracleThreshold = (user as any)?.oracleDivergenceThresholdPct ?? 0.5;
     const chainlinkThreshold = (user as any)?.chainlinkStalenessThresholdMin ?? 60;
+    const aiInputEnabled = (user as any)?.aiInputEnabled ?? false;
 
     if (args.length === 0) {
       // Show all settings
@@ -47,6 +49,7 @@ export async function settingsCommand(ctx: Context & I18nFlavor) {
         `📈 Default leverage: ${defaultLeverage}×`,
         `🔮 Oracle divergence alert: ${oracleThreshold}%`,
         `⏱️ Chainlink staleness alert: ${chainlinkThreshold}min`,
+        `🤖 AI input: ${aiInputEnabled ? "ON ✅" : "OFF"}`,
         ``,
         `To change: /settings <key> <value>`,
         ``,
@@ -59,6 +62,7 @@ export async function settingsCommand(ctx: Context & I18nFlavor) {
         `  leverage <${RISK_PARAMS.MIN_LEVERAGE}–${RISK_PARAMS.MAX_LEVERAGE_LONG}>`,
         `  oracle <0.1–5.0>  (divergence %)`,
         `  staleness <10–1440>  (minutes)`,
+        `  ai <on|off>  (natural language input)`,
       ].join("\n");
 
       // Quick-toggle buttons
@@ -173,6 +177,33 @@ export async function settingsCommand(ctx: Context & I18nFlavor) {
         });
       }
       await ctx.reply(`⏱️ Chainlink staleness alert set to ${mins} minutes.`);
+    } else if (key === "ai") {
+      if (!["on", "off"].includes(value)) {
+        await ctx.reply("❌ AI input must be 'on' or 'off'.");
+        return;
+      }
+      const enabled = value === "on";
+      if (user) {
+        await prisma.user.update({
+          where: { telegramId },
+          data: { aiInputEnabled: enabled } as any,
+        });
+      }
+      if (enabled) {
+        await ctx.reply(
+          `🤖 AI input *enabled*.\n\n` +
+          `You can now type natural language like:\n` +
+          `• "go long 500 fxusd on btc at 5x"\n` +
+          `• "short eth 0.5 wsteth 3x"\n` +
+          `• "check my positions"\n\n` +
+          `⚠️ *Privacy note:* Your text messages will be parsed locally by FxAeon's intent engine. ` +
+          `No data is sent to external AI services. All processing happens on the bot server.\n\n` +
+          `To disable: /settings ai off`,
+          { parse_mode: "Markdown" }
+        );
+      } else {
+        await ctx.reply("🤖 AI input disabled. Use /commands as usual.");
+      }
     } else {
       await ctx.reply(ctx.t("settings-unknown"));
     }
