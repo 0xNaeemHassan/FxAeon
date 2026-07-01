@@ -48,6 +48,9 @@ model User {
   oracleDivergenceBps       Int       @default(50)
   /// Chainlink staleness warning threshold in seconds.
   chainlinkStalenessSec     Int       @default(3600)
+  /// Phase 5: Whether the user has opted into NL (AI) input parsing.
+  /// Off by default — must be explicitly enabled via /settings ai on.
+  aiInputEnabled            Boolean   @default(false)
   /// FIFO cap-5 recent withdraw destinations (JSON array of addresses).
   lastWithdrawTargets       Json      @default("[]")
   /// Set on account delete (soft-delete timestamp).
@@ -432,4 +435,18 @@ model DepositWatcher {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+/// Records of deleted user accounts. Created during the 2-step delete flow.
+/// Used by /start to detect returning deleted users and show a clean re-welcome.
+model DeletedUser {
+  id         String   @id @default(uuid())
+  telegramId String   @unique
+  /// Wallet address at time of deletion (for audit trail).
+  wallet     String
+  /// Reason provided (optional).
+  reason     String?
+  deletedAt  DateTime @default(now())
+
+  @@index([telegramId])
 }
