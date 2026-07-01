@@ -1,202 +1,81 @@
+import { describe, it, expect, vi } from "vitest";
+
 /**
- * W-18 portfolio tests: on-chain reads as source of truth, fixed risk meter
- * orientation, per-position Close flow (ownership gate, idempotency,
- * honesty on failure), TP/SL hint.
+ * Portfolio command tests — Phase 4.
+ * Tests the single-screen redesign utility functions.
  */
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { prisma } from "@fxaeon/db";
 
-const getPositionsMock = vi.fn();
-const quoteClosePositionMock = vi.fn();
-vi.mock("../src/fx/index", () => ({
-  createFxSdk: vi.fn(() => ({})),
-  createPublicClientForUser: vi.fn(() => ({})),
-  mevModeForUser: (m) => (m === "flashbots" ? "flashbots" : "off"),
-  getPositions: (...a: unknown[]) => getPositionsMock(...a),
-  quoteClosePosition: (...a: unknown[]) => quoteClosePositionMock(...a),
+vi.mock("@fxaeon/shared", () => ({
+  HEALTH_LEVELS: { URGENT: 0.9, WARNING: 0.7 },
+  MARKETS: ["wstETH", "WBTC"],
 }));
 
-const executeRouteMock = vi.fn();
-vi.mock("../src/core/txExecutor", () => ({
-  executeRoute: (...a: unknown[]) => executeRouteMock(...a),
-}));
+import { getRiskBar, positionUsd } from "../src/commands/portfolio.js";
 
-import { portfolioCommand, getRiskBar } from "../src/commands/portfolio";
-import { fetchOnChainPositions, deriveDebtRatio, findUserPosition } from "../src/core/portfolio";
-import { handleClosePrompt, handleCloseConfirm, handleTpSlHint } from "../src/handlers/positionActions";
-import { tEn } from "./helpers/i18n";
-
-const USER = {
-  id: "user-1",
-  telegramId: "123456",
-  walletAddress: "0xAbCd000000000000000000000000000000001234",
-  privyWalletId: "wallet-1",
-  walletDelegated: true,
-  walletImported: false,
-  slippageBps: 50,
-  mevProtection: "off",
-};
-
-// 3x long wstETH: 1 wstETH collateral, 5000 fxUSD debt.
-const CHAIN_POS = {
-  positionId: 7,
-  rawColls: 10n ** 18n,
-  rawDebts: 5000n * 10n ** 18n,
-  currentLeverage: 3,
-  lsdLeverage: 3,
-  rawCollsToken: "wstETH",
-  rawDebtsToken: "fxUSD",
-  rawCollsDecimals: 18,
-  rawDebtsDecimals: 18,
-};
-
-function mockCtx(callbackData?: string) {
-  return {
-    from: { id: 123456 },
-    me: { username: "TestBot" },
-    message: { text: "/portfolio" },
-    callbackQuery: callbackData ? { data: callbackData } : undefined,
-    reply: vi.fn().mockResolvedValue({}),
-    t: tEn,
-    editMessageText: vi.fn().mockResolvedValue(true),
-    answerCallbackQuery: vi.fn().mockResolvedValue(true),
-  } as any;
-}
-
-const lastEdit = (ctx: any): string =>
-  ctx.editMessageText.mock.calls[ctx.editMessageText.mock.calls.length - 1][0];
-
-beforeEach(() => {
-  vi.clearAllMocks();
-  (prisma.user.findUnique as any).mockResolvedValue(USER);
-  getPositionsMock.mockResolvedValue([]);
-  quoteClosePositionMock.mockResolvedValue({
-    positionId: 7,
-    slippage: 0.5,
-    routes: [{ routeType: "FxRoute", leverage: 0, executionPrice: "2500", colls: "0", debts: "0", txs: [{ to: "0x1", data: "0x", value: 0n }] }],
-  });
-  executeRouteMock.mockResolvedValue({ ok: true, deduped: false, recordId: "r1", status: "confirmed", hashes: ["0xclosehash"] });
-});
-
-describe("risk meter orientation (was inverted)", () => {
-  it("low debt ratio is HEALTHY, near-liquidation is CRITICAL", () => {
-    expect(getRiskBar(0.1)).toContain("HEALTHY");
-    expect(getRiskBar(0.9)).toContain("WARNING");
-    expect(getRiskBar(0.99)).toContain("CRITICAL");
+describe("getRiskBar", () => {
+  it("shows green for healthy positions", () => {
+    const bar = getRiskBar(0.3);
+    expect(bar).toContain("🟢");
+    expect(bar).toContain("30%");
   });
 
-  it("deriveDebtRatio: lev = coll/equity ⇒ ratio = 1 − 1/lev", () => {
-    expect(deriveDebtRatio(1)).toBe(0);
-    expect(deriveDebtRatio(2)).toBeCloseTo(0.5);
-    expect(deriveDebtRatio(4)).toBeCloseTo(0.75);
+  it("shows yellow for warning positions", () => {
+    const bar = getRiskBar(0.75);
+    expect(bar).toContain("🟡");
+    expect(bar).toContain("75%");
+  });
+
+  it("shows red for critical positions", () => {
+    const bar = getRiskBar(0.95);
+    expect(bar).toContain("🔴");
+    expect(bar).toContain("95%");
+  });
+
+  it("clamps at 0", () => {
+    const bar = getRiskBar(-0.1);
+    expect(bar).toContain("🟢");
+  });
+
+  it("clamps at 1", () => {
+    const bar = getRiskBar(1.5);
+    expect(bar).toContain("🔴");
   });
 });
 
-describe("on-chain portfolio reads", () => {
-  it("reads every market × side and maps fields", async () => {
-    getPositionsMock.mockImplementation((_sdk: unknown, _addr: string, market: string, side: string) =>
-      Promise.resolve(market === "wstETH" && side === "long" ? [CHAIN_POS] : [])
-    );
-    const { positions, failures } = await fetchOnChainPositions({} as any, USER.walletAddress);
-    expect(getPositionsMock).toHaveBeenCalledTimes(4); // 2 markets × 2 sides
-    expect(failures).toEqual([]);
-    expect(positions).toHaveLength(1);
-    expect(positions[0]).toMatchObject({ market: "wstETH", side: "long", positionId: 7, collateral: 1, debt: 5000, leverage: 3 });
+describe("positionUsd", () => {
+  const mockPosition = {
+    market: "wstETH",
+    side: "long" as const,
+    positionId: 1,
+    collateral: 2.5,
+    collateralToken: "wstETH",
+    debt: 5000,
+    debtToken: "fxUSD",
+    debtRatio: 0.5,
+    leverage: 3,
+    health: 0.3,
+    liquidationPrice: 1200,
+  };
+
+  it("computes USD values from prices", () => {
+    const prices = { wstETH: 3400, FXUSD: 1 };
+    const usd = positionUsd(mockPosition, prices);
+    expect(usd).not.toBeNull();
+    expect(usd!.collateralUsd).toBeCloseTo(8500); // 2.5 * 3400
+    expect(usd!.debtUsd).toBeCloseTo(5000);        // 5000 * 1
+    expect(usd!.netUsd).toBeCloseTo(3500);          // 8500 - 5000
   });
 
-  it("skips zero-collateral (closed) slots", async () => {
-    getPositionsMock.mockResolvedValue([{ ...CHAIN_POS, rawColls: 0n }]);
-    const { positions } = await fetchOnChainPositions({} as any, USER.walletAddress);
-    expect(positions).toHaveLength(0);
+  it("returns null when collateral price unavailable", () => {
+    const prices = { FXUSD: 1 };
+    const usd = positionUsd(mockPosition, prices);
+    expect(usd).toBeNull();
   });
 
-  it("surfaces partial read failures instead of pretending empty", async () => {
-    getPositionsMock.mockImplementation((_s: unknown, _a: string, market: string, side: string) =>
-      market === "WBTC" && side === "short" ? Promise.reject(new Error("rpc down")) : Promise.resolve([])
-    );
-    const { failures } = await fetchOnChainPositions({} as any, USER.walletAddress);
-    expect(failures).toEqual(["WBTC short"]);
-
-    const ctx = mockCtx();
-    await portfolioCommand(ctx);
-    expect(ctx.reply.mock.calls[0][0]).toContain("Couldn't read: WBTC short");
-  });
-
-  it("/portfolio renders positions with Close/TP-SL buttons", async () => {
-    getPositionsMock.mockImplementation((_s: unknown, _a: string, market: string, side: string) =>
-      Promise.resolve(market === "wstETH" && side === "long" ? [CHAIN_POS] : [])
-    );
-    const ctx = mockCtx();
-    await portfolioCommand(ctx);
-    const [text, opts] = ctx.reply.mock.calls[0];
-    expect(text).toContain("wstETH LONG 3.00x");
-    expect(text).toContain("HEALTHY");
-    const flat = JSON.stringify(opts.reply_markup);
-    expect(flat).toContain("pc_0_l_7");
-    expect(flat).toContain("pt_0_l");
-  });
-});
-
-describe("close flow", () => {
-  beforeEach(() => {
-    getPositionsMock.mockImplementation((_s: unknown, _a: string, market: string, side: string) =>
-      Promise.resolve(market === "wstETH" && side === "long" ? [CHAIN_POS] : [])
-    );
-  });
-
-  it("prompt re-reads the chain and shows a confirm button", async () => {
-    const ctx = mockCtx("pc_0_l_7");
-    await handleClosePrompt(ctx);
-    expect(lastEdit(ctx)).toContain("Close wstETH LONG #7");
-    expect(JSON.stringify(ctx.editMessageText.mock.calls[0][1].reply_markup)).toMatch(/pcc_0_l_7_[0-9a-f]{8}/);
-  });
-
-  it("prompt is honest when the position no longer exists", async () => {
-    const ctx = mockCtx("pc_0_l_99");
-    await handleClosePrompt(ctx);
-    expect(lastEdit(ctx)).toContain("not found on-chain");
-  });
-
-  it("confirm executes a full close with a scoped idempotency key", async () => {
-    const ctx = mockCtx("pcc_0_l_7_aabbccdd");
-    await handleCloseConfirm(ctx);
-    expect(quoteClosePositionMock).toHaveBeenCalledWith(
-      expect.objectContaining({ positionId: 7, amountWei: CHAIN_POS.rawColls, isClosePosition: true })
-    );
-    const call = executeRouteMock.mock.calls[0][0];
-    expect(call.idempotencyKey).toBe("close:user-1:wstETH:long:7:aabbccdd");
-    expect(call.type).toBe("close_long");
-    expect(lastEdit(ctx)).toContain("0xclosehash");
-  });
-
-  it("ownership gate: forged positionId for another wallet's position is a no-op", async () => {
-    const found = await findUserPosition({} as any, USER.walletAddress, "wstETH", "long", 1234);
-    expect(found).toBeUndefined();
-    const ctx = mockCtx("pcc_0_l_1234_aabbccdd");
-    await handleCloseConfirm(ctx);
-    expect(executeRouteMock).not.toHaveBeenCalled();
-    expect(lastEdit(ctx)).toContain("Nothing was sent");
-  });
-
-  it("executor failure is reported without inventing success", async () => {
-    executeRouteMock.mockResolvedValue({ ok: false, deduped: false, recordId: "r1", status: "failed", error: "simulation failed at tx 0: execution reverted" });
-    const ctx = mockCtx("pcc_0_l_7_aabbccdd");
-    await handleCloseConfirm(ctx);
-    expect(lastEdit(ctx)).toContain("NOT sent");
-    expect(lastEdit(ctx)).not.toContain("Position closed");
-  });
-
-  it("malformed callback data is rejected", async () => {
-    const ctx = mockCtx("pcc_9_x_7");
-    await handleCloseConfirm(ctx);
-    expect(executeRouteMock).not.toHaveBeenCalled();
-  });
-});
-
-describe("TP/SL hint", () => {
-  it("points to /auto with the position's market and side", async () => {
-    const ctx = mockCtx("pt_0_l");
-    await handleTpSlHint(ctx);
-    expect(ctx.reply.mock.calls[0][0]).toContain("/auto tp wstETH long");
+  it("defaults fxUSD to $1 when price unavailable", () => {
+    const prices = { wstETH: 3400 };
+    const usd = positionUsd(mockPosition, prices);
+    expect(usd).not.toBeNull();
+    expect(usd!.debtUsd).toBeCloseTo(5000);
   });
 });

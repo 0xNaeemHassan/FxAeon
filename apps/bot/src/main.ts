@@ -22,6 +22,10 @@ import {
   alertCommand,
   alertsCommand,
   handleAlertDeleteCallback,
+  handleSecurityCallback,
+  handleDepositCallback,
+  handleWithdrawCallback,
+  handleSaveCallback,
   registerAutoActions,
   speedUpCommand,
   cancelTxCommand,
@@ -41,7 +45,7 @@ import { registerTradeActions } from "./handlers/tradeActions.js";
 import { registerPositionActions } from "./handlers/positionActions.js";
 import { registerPositionCardActions } from "./handlers/positionCardActions.js";
 import { handleActionCallback } from "./handlers/earnActions.js";
-import { handleWithdrawCallback } from "./commands/withdraw.js";
+// handleWithdrawCallback now imported from commands/index.js
 import { apiRouter } from "./api/index.js";
 import { applySecurityMiddleware, errorHandler } from "./middleware/index.js";
 import { validateConfig } from "./middleware/config.js";
@@ -163,6 +167,19 @@ bot.callbackQuery(/^tx_/, handleTxControlCallback);
 
 // Price-alert delete buttons (/alerts list).
 bot.callbackQuery(/^aldel_/, handleAlertDeleteCallback);
+
+// Phase 4: Security, deposit, earn callbacks.
+bot.callbackQuery(/^sec_/, handleSecurityCallback);
+bot.callbackQuery(/^dep_/, handleDepositCallback);
+bot.callbackQuery(/^sv_/, handleSaveCallback);
+
+// Phase 4: Portfolio aliases.
+bot.command("positions", portfolioCommand);
+bot.command("pnl", portfolioCommand);
+bot.command("history", portfolioCommand);
+bot.command("balance", portfolioCommand);
+bot.command("wallet", portfolioCommand);
+bot.command("earn", saveCommand);
 
 // Smart callback fallback with 24-hour hard cutoff + stale detection.
 // Buttons older than 24h get a "stale" notice; newer ones get the honest
