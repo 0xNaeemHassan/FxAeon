@@ -17,7 +17,7 @@ export { voteCommand } from "./vote.js";
 export { claimCommand } from "./claim.js";
 export { referCommand } from "./refer.js";
 export { autoCommand, registerAutoActions } from "./auto.js";
-export { settingsCommand } from "./settings.js";
+export { settingsCommand, registerSettingsActions } from "./settings.js";
 export { securityCommand } from "./security.js";
 export { depositCommand } from "./deposit.js";
 export { withdrawCommand } from "./withdraw.js";
@@ -28,3 +28,5 @@ export { historyCommand } from "./history.js";
 export { alertCommand, alertsCommand, handleAlertDeleteCallback } from "./alert.js";
 export { speedUpCommand, cancelTxCommand, handleTxControlCallback } from "./txControl.js";
 export { arbCommand } from "./arb.js";
+// Phase 2: Asset-locked trading shortcuts
+export { longShortCommand, closeAssetCommand, registerLongShortActions } from "./longShort.js";

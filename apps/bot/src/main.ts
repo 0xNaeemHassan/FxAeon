@@ -30,11 +30,16 @@ import {
   balanceCommand,
   closeCommand,
   positionCommand,
+  longShortCommand,
+  closeAssetCommand,
+  registerLongShortActions,
+  registerSettingsActions,
 } from "./commands/index.js";
 
 import { handleWebAppData } from "./handlers/walletConnect.js";
 import { registerTradeActions } from "./handlers/tradeActions.js";
 import { registerPositionActions } from "./handlers/positionActions.js";
+import { registerPositionCardActions } from "./handlers/positionCardActions.js";
 import { handleActionCallback } from "./handlers/earnActions.js";
 import { handleWithdrawCallback } from "./commands/withdraw.js";
 import { apiRouter } from "./api/index.js";
@@ -126,6 +131,14 @@ bot.command("history", historyCommand);
 bot.command("alert", alertCommand);
 bot.command("alerts", alertsCommand);
 
+// Phase 2: Asset-locked trading shortcuts
+bot.command("longbtc", longShortCommand);
+bot.command("longeth", longShortCommand);
+bot.command("shortbtc", longShortCommand);
+bot.command("shorteth", longShortCommand);
+bot.command("closebtc", closeAssetCommand);
+bot.command("closeeth", closeAssetCommand);
+
 // Mini App → bot data channel (W-16): wallet-connect onboarding completes here.
 bot.on("message:web_app_data", handleWebAppData);
 
@@ -135,6 +148,13 @@ registerTradeActions(bot);
 // Portfolio position actions (W-18): close prompt/confirm, TP/SL hint.
 registerPositionActions(bot);
 registerAutoActions(bot);
+
+// Phase 2: Long/Short 6-step ladder callbacks + settings toggle callbacks.
+registerLongShortActions(bot);
+registerSettingsActions(bot);
+
+// Phase 2: Position card action buttons (increase/reduce/adjust/refresh).
+registerPositionCardActions(bot);
 
 // Earn & borrow callbacks: signed action-intent confirms (a1_…) + cancel (a1c).
 bot.callbackQuery(/^a1(_|c$)/, handleActionCallback);
