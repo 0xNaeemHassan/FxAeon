@@ -254,6 +254,12 @@ model PositionSnapshot {
   closedAt        DateTime?
 
   // ── Master Plan additions (closed-position data) ──────────────────────
+  /// Collateral (human units) at position close — for realized PnL.
+  exitCollateral  Float?
+  /// Debt (human units) at position close.
+  exitDebt        Float?
+  /// Collateral spot USD at close — null if the feed was down.
+  exitSpotUsd     Float?
   /// Realized PnL in USD, filled when closedAt is set.
   realizedPnlUsd  Float?
   /// Total closing fees (f(x) + FxAeon) in USD at close time.

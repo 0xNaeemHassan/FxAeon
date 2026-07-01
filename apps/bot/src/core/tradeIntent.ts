@@ -36,6 +36,7 @@ export type VerifyIntentResult =
   | { ok: false; reason: "malformed" | "tampered" | "expired" };
 
 const VERSION = "t1";
+const VERSION_V2 = "t2";
 export const INTENT_TTL_MS = 10 * 60 * 1000;
 
 function signingKey(): Buffer {
@@ -122,6 +123,124 @@ export function verifyTradeIntent(token: string): VerifyIntentResult {
       amount,
       nonce,
       expiresAt,
+    },
+  };
+}
+
+// ── Trade Intent v2 — Phase 3 (Masterplan) ──────────────────────────────────
+// Adds `kind` (IntentKind) and `notionalUsd` for the fee layer.
+// The signed token format becomes:
+//   t2_<marketIdx>_<l|s>_<leverage*10>_<amount*1e6>_<expMinute>_<nonce>_<kindIdx>_<notionalUsdCents>_<sig>
+
+import type { IntentKind } from "./fxaeonFees.js";
+
+export interface TradeIntentV2 extends TradeIntent {
+  kind: IntentKind;
+  notionalUsd: number;
+}
+
+const INTENT_KINDS: IntentKind[] = [
+  "open_long",
+  "open_short",
+  "close_long",
+  "close_short",
+  "adjust_leverage",
+  "increase_position",
+  "reduce_position",
+  "fxsave_deposit",
+  "fxsave_withdraw",
+  "mint",
+  "redeem",
+  "bridge",
+  "lock",
+  "vote",
+  "claim",
+];
+
+export function createTradeIntentV2(
+  params: {
+    market: Market;
+    side: "long" | "short";
+    leverage: number;
+    amount: number;
+    kind: IntentKind;
+    notionalUsd: number;
+  },
+  ttlMs: number = INTENT_TTL_MS
+): string {
+  const marketIdx = (MARKETS as readonly string[]).indexOf(params.market);
+  if (marketIdx < 0) throw new Error(`tradeIntentV2: unknown market ${params.market}`);
+
+  const kindIdx = INTENT_KINDS.indexOf(params.kind);
+  if (kindIdx < 0) throw new Error(`tradeIntentV2: unknown kind ${params.kind}`);
+
+  const expMinute = Math.ceil((Date.now() + ttlMs) / 60_000);
+  const nonce = randomBytes(5).toString("hex");
+  const notionalCents = Math.round(params.notionalUsd * 100);
+
+  const body = [
+    VERSION_V2,
+    marketIdx,
+    params.side === "long" ? "l" : "s",
+    Math.round(params.leverage * 10),
+    Math.round(params.amount * 1e6),
+    expMinute,
+    nonce,
+    kindIdx,
+    notionalCents,
+  ].join("_");
+
+  return `${body}_${sign(body)}`;
+}
+
+export function looksLikeTradeIntentV2(token: string | undefined): token is string {
+  return typeof token === "string" && token.startsWith(`${VERSION_V2}_`);
+}
+
+export function verifyTradeIntentV2(token: string): { ok: true; intent: TradeIntentV2 } | { ok: false; reason: string } {
+  const parts = token.split("_");
+  if (parts.length !== 10 || parts[0] !== VERSION_V2) return { ok: false, reason: "malformed" };
+
+  const body = parts.slice(0, 9).join("_");
+  const givenSig = Buffer.from(parts[9]);
+  const expectSig = Buffer.from(sign(body));
+  if (givenSig.length !== expectSig.length || !timingSafeEqual(givenSig, expectSig)) {
+    return { ok: false, reason: "tampered" };
+  }
+
+  const [, marketIdxS, sideCode, lev10S, amtMicroS, expMinuteS, nonce, kindIdxS, notionalCentsS] = parts;
+  const market = MARKETS[Number(marketIdxS)];
+  const leverage = Number(lev10S) / 10;
+  const amount = Number(amtMicroS) / 1e6;
+  const expiresAt = Number(expMinuteS) * 60_000;
+  const kindIdx = Number(kindIdxS);
+  const notionalUsd = Number(notionalCentsS) / 100;
+
+  if (
+    !market ||
+    (sideCode !== "l" && sideCode !== "s") ||
+    !Number.isFinite(leverage) || leverage <= 0 ||
+    !Number.isFinite(amount) || amount <= 0 ||
+    !Number.isFinite(expiresAt) ||
+    kindIdx < 0 || kindIdx >= INTENT_KINDS.length ||
+    !Number.isFinite(notionalUsd)
+  ) {
+    return { ok: false, reason: "malformed" };
+  }
+
+  if (Date.now() > expiresAt) return { ok: false, reason: "expired" };
+
+  return {
+    ok: true,
+    intent: {
+      market,
+      side: sideCode === "l" ? "long" : "short",
+      leverage,
+      amount,
+      nonce,
+      expiresAt,
+      kind: INTENT_KINDS[kindIdx],
+      notionalUsd,
     },
   };
 }

@@ -60,6 +60,11 @@ export const ADDRESSES = {
   FXSAVE_OFT_ADAPTER: "0xCaD2b9C980322f460db51CC8E45539F677C73F86",
 
   
+  // FxAeon Fee Collector — Phase 3 (Masterplan).
+  // EOA controlled by the FxAeon team; receives the 0.05% leverage fee
+  // and 0.01% other-action fee on every confirmed trade.
+  FEE_COLLECTOR: "0xea24f6a870b57455a83387704d7d2a12e3463d84",
+
   // ERC20 Tokens
   WSTETH: "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0",
   WBTC: "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
