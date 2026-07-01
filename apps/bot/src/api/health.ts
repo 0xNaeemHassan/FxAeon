@@ -165,3 +165,36 @@ healthRouter.get("/ready", asyncHandler(async (_req, res) => {
   const db = await checkDb();
   res.status(db === "healthy" ? 200 : 503).json({ ready: db === "healthy" });
 }));
+
+/**
+ * /health/deps — per-dependency status for Mini App degraded-chip display.
+ * Returns a flat map: { db: "ok"|"degraded"|"down", redis: ..., rpc: ... }
+ * so the Mini App can show a single chip per down/degraded dependency.
+ */
+healthRouter.get("/deps", asyncHandler(async (_req, res) => {
+  type DepStatus = "ok" | "degraded" | "down";
+
+  const [dbStatus, redisStatus, rpc] = await Promise.all([
+    checkDb(),
+    checkRedis(),
+    checkRpc(),
+  ]);
+
+  const dbDep: DepStatus = dbStatus === "healthy" ? "ok" : "down";
+  const redisDep: DepStatus =
+    redisStatus === "skipped" ? "ok" :
+    redisStatus === "healthy" ? "ok" : "down";
+  const rpcDep: DepStatus =
+    rpc.status === "skipped" || rpc.status === "healthy" ? "ok" :
+    rpc.status === "degraded" ? "degraded" : "down";
+
+  const overall: DepStatus =
+    dbDep === "down" ? "down" :
+    rpcDep === "down" ? "down" :
+    rpcDep === "degraded" || redisDep === "down" ? "degraded" : "ok";
+
+  res.json({
+    overall,
+    deps: { db: dbDep, redis: redisDep, rpc: rpcDep },
+  });
+}));

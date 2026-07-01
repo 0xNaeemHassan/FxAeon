@@ -65,6 +65,28 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
   const [importKey, setImportKey] = useState('');
   const [result, setResult] = useState<OnboardResult | null>(null);
   const [delegated, setDelegated] = useState(false);
+  const [convergenceStuck, setConvergenceStuck] = useState(false);
+
+  // ── Convergence guard (Phase 1 §1.8) ─────────────────────────────────
+  // If any non-terminal phase (authenticating, creating, importing-busy,
+  // delegating, linking) lingers longer than 30s, show a Restart button.
+  const CONVERGENCE_TIMEOUT_MS = 30_000;
+  const busyPhases: Phase[] = [
+    'authenticating',
+    'creating',
+    'importing-busy',
+    'delegating',
+    'linking',
+  ];
+  useEffect(() => {
+    if (!busyPhases.includes(phase)) {
+      setConvergenceStuck(false);
+      return;
+    }
+    const timer = setTimeout(() => setConvergenceStuck(true), CONVERGENCE_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
 
   const embedded = useMemo(
     () => wallets.find((w) => w.walletClientType === 'privy'),
@@ -630,6 +652,27 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
           {phase === 'error' && (
             <Card className="mt-4 border-[rgba(255,194,75,0.35)]">
               <p className="text-[13px] leading-relaxed text-warn">{error}</p>
+            </Card>
+          )}
+
+          {/* Convergence guard: restart button when a busy phase hangs */}
+          {convergenceStuck && (
+            <Card className="mt-4 border-[rgba(255,194,75,0.35)]">
+              <p className="text-[13px] leading-relaxed text-warn">
+                This step is taking longer than expected.
+              </p>
+              <Button
+                variant="ghost"
+                className="mt-2"
+                onClick={() => {
+                  setError('');
+                  setConvergenceStuck(false);
+                  setPhase('intro');
+                  haptic('error');
+                }}
+              >
+                ↻ Restart
+              </Button>
             </Card>
           )}
 

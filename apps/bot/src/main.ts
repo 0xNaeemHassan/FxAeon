@@ -7,6 +7,7 @@ import type { RequestWithRawBody } from "./utils/webhookAuth.js";
 import { apiThrottler } from "@grammyjs/transformer-throttler";
 import { conversations, type ConversationFlavor } from "@grammyjs/conversations";
 import type { I18nFlavor } from "@grammyjs/i18n";
+import { getBotState, setBotState, BS_WEBHOOK_URL } from "./core/botState.js";
 
 import {
   startCommand, portfolioCommand, tradeCommand, limitCommand,
@@ -26,6 +27,9 @@ import {
   cancelTxCommand,
   handleTxControlCallback,
   arbCommand,
+  balanceCommand,
+  closeCommand,
+  positionCommand,
 } from "./commands/index.js";
 
 import { handleWebAppData } from "./handlers/walletConnect.js";
@@ -91,6 +95,9 @@ bot.use(commandTiming);
 // ---------------------------------------------------------------------------
 bot.command("start", startCommand);
 bot.command("portfolio", portfolioCommand);
+bot.command("balance", balanceCommand);
+bot.command("close", closeCommand);
+bot.command("position", positionCommand);
 bot.command("trade", tradeCommand);
 bot.command("limit", limitCommand);
 bot.command("orders", ordersCommand);
@@ -137,10 +144,27 @@ bot.callbackQuery(/^tx_/, handleTxControlCallback);
 // Price-alert delete buttons (/alerts list).
 bot.callbackQuery(/^aldel_/, handleAlertDeleteCallback);
 
-// Honest fallback for any other callback_data: until W-17 there was NO
-// callback handler at all, so every inline button just spun forever. Buttons
-// that aren't wired yet now say so instead of pretending to load.
+// Smart callback fallback with 24-hour hard cutoff + stale detection.
+// Buttons older than 24h get a "stale" notice; newer ones get the honest
+// "not wired yet" message. Telegram stores callback_query messages for 48h;
+// after that they disappear, but users sometimes press cached buttons from
+// earlier sessions.
+const CALLBACK_STALE_CUTOFF_MS = 24 * 60 * 60 * 1000;
+
 bot.on("callback_query:data", async (ctx) => {
+  const messageDate = ctx.callbackQuery.message?.date;
+  if (messageDate) {
+    const ageMs = Date.now() - messageDate * 1000;
+    if (ageMs > CALLBACK_STALE_CUTOFF_MS) {
+      await ctx
+        .answerCallbackQuery({
+          text: "⏰ This button has expired. Please run the command again for a fresh session.",
+          show_alert: true,
+        })
+        .catch(() => undefined);
+      return;
+    }
+  }
   await ctx
     .answerCallbackQuery({ text: "This button isn't wired up yet." })
     .catch(() => undefined);
@@ -174,39 +198,19 @@ bot.catch((err) => {
 // Telegram bot menu & commands list
 // ---------------------------------------------------------------------------
 async function configureTelegramBot() {
-  // Register command list with Telegram so users see a menu
+  // Top-8 command menu visible to the user (Telegram limits visibility at 8).
+  // Every other command still works — they just don't clutter the menu.
   await bot.api.setMyCommands([
     { command: "start", description: "Start / connect wallet" },
     { command: "portfolio", description: "View portfolio & positions" },
     { command: "trade", description: "Open a leveraged trade" },
-    { command: "limit", description: "Set a limit order" },
-    { command: "orders", description: "View active orders" },
-    { command: "mint", description: "Mint fxUSD" },
-    { command: "redeem", description: "Redeem fxSAVE to fxUSD" },
-    { command: "save", description: "Earn yield on fxUSD" },
-    { command: "arb", description: "Arb scanner (/arb on for alerts)" },
-    { command: "borrow", description: "Borrow against collateral" },
-    { command: "repay", description: "Repay a loan" },
     { command: "deposit", description: "Deposit funds" },
     { command: "withdraw", description: "Withdraw funds" },
-    { command: "bridge", description: "Bridge assets cross-chain" },
-    { command: "lock", description: "Lock governance tokens" },
-    { command: "vote", description: "Vote on proposals" },
-    { command: "claim", description: "Claim matured fxSAVE redemption" },
-    { command: "refer", description: "Referral program" },
-    { command: "auto", description: "Stop-loss / take-profit automation" },
+    { command: "save", description: "Earn yield on fxUSD" },
     { command: "settings", description: "Bot settings" },
-    { command: "security", description: "Security settings" },
-    { command: "gas", description: "Live gas prices" },
-    { command: "speedup", description: "Speed up a stuck transaction" },
-    { command: "cancel", description: "Cancel a stuck transaction" },
-    { command: "price", description: "Market overview (live prices)" },
-    { command: "alert", description: "Set a one-shot price alert" },
-    { command: "alerts", description: "Manage your price alerts" },
-    { command: "history", description: "Your on-chain history" },
     { command: "help", description: "Help & commands" },
   ]);
-  logger.info("Bot command menu registered");
+  logger.info("Bot command menu registered (top 8)");
 
   // Set mini-app menu button (opens the mini-app inside Telegram)
   const miniAppUrl = env.MINI_APP_URL;
@@ -242,6 +246,68 @@ function startBackgroundWorkers() {
     try { automationPoller.start(); } catch (e) { logger.error(e, "Failed to start automation poller"); }
   try { arbPoller.start(); } catch (e) { logger.error(e, "Failed to start arb poller"); }
   }, 5000);
+}
+
+// ---------------------------------------------------------------------------
+// Webhook retry with exponential backoff + BotState skip-noop
+// ---------------------------------------------------------------------------
+const WEBHOOK_MAX_RETRIES = 4;
+const WEBHOOK_BASE_DELAY_MS = 1_000;
+
+async function registerWebhookWithRetry(
+  webhookUrl: string,
+  telegramWebhookSecret: string
+): Promise<void> {
+  // Skip-noop: avoid redundant setWebhook calls on every cold start.
+  try {
+    const storedUrl = await getBotState(BS_WEBHOOK_URL);
+    if (storedUrl === webhookUrl) {
+      logger.info(
+        { webhookUrl },
+        "Webhook URL unchanged in BotState — skipping setWebhook"
+      );
+      return;
+    }
+  } catch {
+    // BotState table might not exist yet (first deploy before migration).
+    // Proceed to register.
+  }
+
+  for (let attempt = 0; attempt <= WEBHOOK_MAX_RETRIES; attempt++) {
+    try {
+      await bot.api.setWebhook(webhookUrl, {
+        allowed_updates: ["message", "callback_query", "inline_query"],
+        drop_pending_updates: true,
+        secret_token: telegramWebhookSecret,
+      });
+      logger.info(
+        { webhookUrl, attempt },
+        "Telegram webhook registered"
+      );
+      // Persist so the next cold start skips.
+      try {
+        await setBotState(BS_WEBHOOK_URL, webhookUrl);
+      } catch {
+        // Non-fatal: skip-noop just won't work until the table exists.
+      }
+      return;
+    } catch (e) {
+      const isLast = attempt === WEBHOOK_MAX_RETRIES;
+      if (isLast) {
+        logger.error(
+          e,
+          `Failed to register webhook after ${WEBHOOK_MAX_RETRIES + 1} attempts — continuing without re-registration`
+        );
+        return;
+      }
+      const delay = WEBHOOK_BASE_DELAY_MS * Math.pow(2, attempt);
+      logger.warn(
+        { attempt, delay },
+        "Webhook registration failed — retrying"
+      );
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -324,32 +390,12 @@ async function main() {
       // health worker startup. Worker start is internally delayed 5s anyway.
       startBackgroundWorkers();
 
-      // Register webhook with Telegram
-      // Render provides RENDER_EXTERNAL_URL; fall back to WEBHOOK_URL env var
+      // Register webhook with Telegram — skip-noop + exponential retry.
+      // Render provides RENDER_EXTERNAL_URL; fall back to WEBHOOK_URL env var.
       const webhookDomain = process.env.RENDER_EXTERNAL_URL || process.env.WEBHOOK_URL;
       if (webhookDomain) {
         const webhookUrl = `${webhookDomain}/webhook`;
-        // Guard webhook registration: on Render's spin-down/up cycle this runs
-        // on every cold start, and Telegram rate-limits repeated setWebhook
-        // calls (429 "Too Many Requests"). An unhandled throw here used to
-        // abort the rest of this async listener callback — meaning
-        // startBackgroundWorkers() never ran and limit-order/price-alert/
-        // automation/health workers silently never started. Fail soft instead:
-        // the webhook stays registered from a prior boot, and the workers must
-        // start regardless.
-        try {
-          await bot.api.setWebhook(webhookUrl, {
-            allowed_updates: ["message", "callback_query", "inline_query"],
-            drop_pending_updates: true,
-            secret_token: telegramWebhookSecret,
-          });
-          logger.info({ webhookUrl }, "Telegram webhook registered");
-        } catch (e) {
-          logger.error(
-            e,
-            "Failed to (re)register Telegram webhook — continuing startup so background workers still start"
-          );
-        }
+        await registerWebhookWithRetry(webhookUrl, telegramWebhookSecret);
       } else {
         logger.warn(
           "No RENDER_EXTERNAL_URL or WEBHOOK_URL set — Telegram webhook NOT registered! " +

@@ -31,6 +31,41 @@ model User {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
+  // ── Master Plan additions ─────────────────────────────────────────────
+  /// Beginner | Pro preset — controls UX density and risk-warning verbosity.
+  mode                      String    @default("beginner")
+  /// Preselected token on the collateral picker (Step 3).
+  defaultCollateralToken    String    @default("fxUSD")
+  /// Preselected leverage on Step 2.
+  defaultLeverage           Float     @default(3.0)
+  /// Display currency for USD equivalents (EUR, GBP, JPY, KRW).
+  displayCurrency           String    @default("USD")
+  /// Toggle verbose risk-warning copy on previews.
+  riskWarnings              Boolean   @default(true)
+  /// Compact vs Detailed position cards.
+  positionView              String    @default("compact")
+  /// f(x) oracle-vs-spot divergence warning threshold in basis points.
+  oracleDivergenceBps       Int       @default(50)
+  /// Chainlink staleness warning threshold in seconds.
+  chainlinkStalenessSec     Int       @default(3600)
+  /// FIFO cap-5 recent withdraw destinations (JSON array of addresses).
+  lastWithdrawTargets       Json      @default("[]")
+  /// Set on account delete (soft-delete timestamp).
+  deletedAt                 DateTime?
+  /// Set when adaptive Privy revocation wait times out; nightly cleanup picks
+  /// these up and finishes the cascade.
+  deletePending             Boolean   @default(false)
+  /// Running notional total for referral tier attribution.
+  referrerVolumeUsd         Float     @default(0)
+  /// Set on the user's first confirmed trade — gates referral payouts.
+  firstTradeAt              DateTime?
+  /// Optional user circuit breaker: max USD trade volume per day.
+  maxDailyVolumeUsd         Float?
+  /// Optional user circuit breaker: max simultaneous open positions.
+  maxOpenPositions          Int?
+  /// Optional user circuit breaker: pause duration after liquidation (seconds).
+  coolDownAfterLiquidationSec Int?
+
   positions       Position[]
   limitOrders     LimitOrder[]
   rules           AutomationRule[]
@@ -40,6 +75,8 @@ model User {
   transactions    Transaction[]
   priceAlerts     PriceAlert[]
   positionSnapshots PositionSnapshot[]
+  feeLedger       FeeLedger[]
+  depositWatchers DepositWatcher[]
 
   @@index([telegramId])
   @@index([walletAddress])
@@ -146,6 +183,14 @@ model NotificationPref {
   governance        Boolean  @default(false)
   rules             Boolean  @default(true)
   arb               Boolean  @default(false)
+  /// Funding level transition notifications.
+  funding           Boolean  @default(false)
+  /// APY change notifications.
+  apy               Boolean  @default(false)
+  /// Portfolio value threshold notifications.
+  portfolio         Boolean  @default(false)
+  /// fxSAVE redeem-ready auto-managed notifications.
+  fxsaveRedeemable  Boolean  @default(true)
   quietHoursStart   String?
   quietHoursEnd     String?
   lastHealthAlert   DateTime?
@@ -155,18 +200,22 @@ model NotificationPref {
   lastGovernanceAlert DateTime?
   lastRulesAlert    DateTime?
   lastArbAlert      DateTime?
+  lastFundingAlert  DateTime?
+  lastApyAlert      DateTime?
+  lastPortfolioAlert DateTime?
 
   user              User     @relation(fields: [userId], references: [id])
 }
 
 /// One-shot price alerts (/alert). Evaluated by the price-alert poller
 /// against the shared CoinGecko snapshot; fires once, then status=triggered.
+/// Extended kinds: above | below | pct | health | funding | apy | portfolio | fxsave_redeemable
 model PriceAlert {
   id          String    @id @default(uuid())
   userId      String
   /// Display symbol from market/coingecko SUPPORTED_ASSETS (e.g. "BTC").
   symbol      String
-  /// "above" | "below" (absolute USD) or "pct" (24h move, signed threshold).
+  /// "above" | "below" | "pct" | "health" | "funding" | "apy" | "portfolio" | "fxsave_redeemable"
   kind        String
   /// USD price for above/below; signed percent for pct (e.g. -5 = drops 5%).
   threshold   Float
@@ -175,6 +224,8 @@ model PriceAlert {
   triggeredAt DateTime?
   /// Price observed when the alert fired.
   triggerPrice Float?
+  /// Optional: auto-expiry timestamp (used by fxsave_redeemable kind).
+  expiresAt   DateTime?
 
   user        User      @relation(fields: [userId], references: [id])
 
@@ -202,6 +253,14 @@ model PositionSnapshot {
   entryAt         DateTime  @default(now())
   closedAt        DateTime?
 
+  // ── Master Plan additions (closed-position data) ──────────────────────
+  /// Realized PnL in USD, filled when closedAt is set.
+  realizedPnlUsd  Float?
+  /// Total closing fees (f(x) + FxAeon) in USD at close time.
+  closingFeesUsd  Float?
+  /// Transaction hash of the closing trade.
+  closingTxHash   String?
+
   user            User      @relation(fields: [userId], references: [id])
 
   @@unique([userId, market, side, positionId])
@@ -226,6 +285,8 @@ model Referral {
   referrerId  String
   refereeId   String?
   earnings    Float    @default(0)
+  /// Running total of payouts actually sent (subset of earnings).
+  paidUsd     Float    @default(0)
   createdAt   DateTime @default(now())
 
   @@index([code])
@@ -287,4 +348,82 @@ model Transaction {
   @@index([userId])
   @@index([status])
   @@index([createdAt])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Master Plan new tables
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Fee ledger: every confirmed FxAeon fee, tagged for referral attribution.
+/// Written on confirmed broadcast receipts; reconciler retries output-flow
+/// failures up to 3 times, then flags feeOrphan.
+model FeeLedger {
+  id              String    @id @default(uuid())
+  userId          String
+  /// Referral code of the user's referrer (null if not referred).
+  referrerCode    String?
+  /// Null until the fee-transfer receipt is confirmed.
+  txHash          String?
+  /// Intent kind: open_long | open_short | close | reduce | increase |
+  /// adjust_lev | mint | repay | fxsave_deposit | fxsave_withdraw |
+  /// fxsave_claim | bridge | user_withdraw | limit_fill
+  intentKind      String
+  /// Lowercase hex of the token used to pay the fee.
+  tokenAddress    String
+  /// BigInt as string — precise on-chain amount transferred.
+  tokenAmountWei  String
+  /// The fee itself in USD at confirmation time.
+  usdAmount       Float
+  /// Un-fee'd trade volume in USD — used for referral tier attribution.
+  notionalUsd     Float
+  /// Fee tier in basis points (5 for leverage actions, 1 for everything else).
+  feeBps          Int
+  /// True if the fee transfer failed 3+ times and was orphaned.
+  feeOrphan       Boolean   @default(false)
+  /// Payout cycle label, e.g. "2026-07".
+  payoutCycle     String
+  /// Referrer's share ratio at the time of the trade (0.0 – 0.5).
+  referrerShare   Float     @default(0)
+  /// Set when the referrer payout cron pays this row's contribution.
+  referrerPaidAt  DateTime?
+  /// Transaction hash of the referrer payout transfer.
+  referrerTxHash  String?
+  createdAt       DateTime  @default(now())
+
+  user            User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([referrerCode, payoutCycle])
+  @@index([payoutCycle, referrerPaidAt])
+  @@index([txHash])
+  @@index([intentKind, feeOrphan, createdAt])
+}
+
+/// Simple key/value store for bot operational state (webhook URL, deploy ID,
+/// feature flags). Used by the webhook skip-noop logic on cold starts.
+model BotState {
+  key       String   @id
+  value     String
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+/// Watches for first deposits to a user's wallet. Created by /deposit's
+/// "Notify on first deposit" button; auto-expires after 24 hours.
+/// The deposit-watcher poller batches all active watchers into one eth_getLogs
+/// call per ERC-20 token + one native-balance delta check.
+model DepositWatcher {
+  id        String    @id @default(uuid())
+  userId    String
+  /// Block number to start scanning from.
+  fromBlock BigInt
+  /// Auto-expiry timestamp (24 hours after creation).
+  expiresAt DateTime
+  /// Set when the first deposit is detected and the DM fires.
+  firedAt   DateTime?
+  createdAt DateTime  @default(now())
+
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([expiresAt])
 }
