@@ -42,8 +42,7 @@
     "prisma": "^5.7.0",
     "alchemy-sdk": "^3.0.0",
     "@privy-io/react-auth": "^3.30.0",
-    "@sentry/node": "^7.100.0",
-    "@sentry/profiling-node": "^7.100.0"
+    "@sentry/node": "^10.62.0"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
