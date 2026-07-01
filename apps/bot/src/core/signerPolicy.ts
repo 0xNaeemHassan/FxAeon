@@ -109,6 +109,10 @@ export function checkRoute(
   const violations: PolicyViolation[] = [];
   txs.forEach((tx, index) => {
     const to = (tx.to ?? "").toLowerCase();
+
+    // Phase 3: value-only ETH sends to FEE_COLLECTOR are always allowed.
+    if (isFeeCollectorSend(tx)) return;
+
     if (!ALLOWED_TARGETS.has(to)) {
       violations.push({
         index,
@@ -136,6 +140,37 @@ export function checkRoute(
     }
   });
   return violations;
+}
+
+/**
+ * Check whether a tx is a plain value-send to FEE_COLLECTOR.
+ * Phase 3: fee transfers send ETH (value-only, no calldata) to the
+ * FEE_COLLECTOR EOA. This is explicitly allowed by the signer policy.
+ */
+export function isFeeCollectorSend(tx: PolicyTx): boolean {
+  const to = (tx.to ?? "").toLowerCase();
+  const feeCollector = ADDRESSES.FEE_COLLECTOR?.toLowerCase();
+  if (!feeCollector) return false;
+  // Value-only: non-zero value, empty or "0x" calldata
+  const data = tx.data ?? "";
+  const isEmpty = data === "" || data === "0x";
+  return to === feeCollector && isEmpty && (tx.value ?? 0n) > 0n;
+}
+
+/**
+ * Check whether a tx is an intent-scoped user_withdraw exception.
+ * Phase 3: the /withdraw flow (Phase 4) needs to send ETH or ERC-20 to
+ * an address NOT in the registry. The caller must prove this tx carries
+ * a valid withdraw intent before calling assertRouteAllowed.
+ */
+export function isWithdrawException(
+  tx: PolicyTx,
+  opts: { intentScopedRecipient?: string } = {}
+): boolean {
+  if (!opts.intentScopedRecipient) return false;
+  const to = (tx.to ?? "").toLowerCase();
+  const recipient = opts.intentScopedRecipient.toLowerCase();
+  return to === recipient;
 }
 
 /**

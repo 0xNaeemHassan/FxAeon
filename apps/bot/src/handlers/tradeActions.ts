@@ -42,6 +42,7 @@ import { listUserPositions } from "../core/portfolio.js";
 import { trackPositions } from "../core/pnl.js";
 import { getSpotPrices } from "../market/coingecko.js";
 import { botLogger } from "../middleware/logger.js";
+import { buildFeePreview as buildFeePreviewLines } from "../core/fxaeonFees.js";
 
 type Side = "long" | "short";
 
@@ -143,6 +144,13 @@ export function buildPreview(
   const token = createTradeIntent(intent);
   const minutesLeft = 10;
 
+  // Phase 3: build fee preview lines
+  const intentKind = intent.side === "long" ? "open_long" : "open_short";
+  // Estimate notional USD (amount × spot price × leverage is the notional)
+  // For preview we use amount × leverage as a rough approximation
+  const approxNotionalUsd = intent.amount * intent.leverage * 1000; // placeholder
+  const feePreview = buildFeePreviewLines(intentKind as any, approxNotionalUsd, intent.leverage);
+
   const lines = [
     `⚡ Trade Preview`,
     ``,
@@ -157,6 +165,9 @@ export function buildPreview(
     );
   }
   lines.push(
+    ``,
+    `Fees:`,
+    ...feePreview.lines,
     ``,
     `Quote, simulation and broadcast all happen on Confirm — nothing is sent before that.`,
     `This preview expires in ~${minutesLeft} min.`,
