@@ -72,6 +72,28 @@ export async function startCommand(ctx: Context & I18nFlavor) {
       if (handled) return;
     }
 
+    // ── Phase 4: Deleted-user recognition ─────────────────────────────────
+    // A user who previously deleted their account sees a clean re-welcome
+    // instead of the returning-user flow (which would crash on a null wallet).
+    const deletedUser = await prisma.deletedUser.findUnique({ where: { telegramId } }).catch(() => null);
+    if (deletedUser) {
+      const miniAppUrl = process.env.MINI_APP_URL || "https://fxbot-mini-app.pages.dev";
+      await ctx.reply(
+        `👋 Welcome back!\n\n` +
+          `Your previous account was deleted on ${deletedUser.deletedAt.toISOString().slice(0, 10)}.\n` +
+          `You can start fresh — your old data has been fully removed.\n\n` +
+          `Tap the button below to create a new wallet.`,
+        {
+          reply_markup: {
+            keyboard: [[{ text: "🔐 Create New Wallet", web_app: { url: `${miniAppUrl}/login` } }]],
+            resize_keyboard: true,
+            one_time_keyboard: true,
+          },
+        }
+      );
+      return;
+    }
+
     if (!user) {
       // ── New user onboarding (W-16) ──────────────────────────────────────
       // The Create-Wallet button MUST be a reply-keyboard web_app button:

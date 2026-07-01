@@ -23,17 +23,25 @@ export const MAX_ACTIVE_ALERTS = 10;
 
 export type ParsedAlert =
   | { kind: "above" | "below"; symbol: string; threshold: number }
-  | { kind: "pct"; symbol: string; threshold: number };
+  | { kind: "pct"; symbol: string; threshold: number }
+  | { kind: "funding"; symbol: string; threshold: number }
+  | { kind: "apy"; symbol: string; threshold: number }
+  | { kind: "portfolio"; symbol: string; threshold: number }
+  | { kind: "fxsave_redeemable"; symbol: string; threshold: number };
 
 const SYMBOLS = new Set(SUPPORTED_ASSETS.map((a) => a.symbol));
 
 const USAGE =
-  `🔔 Price alerts\n\n` +
-  `Usage:\n` +
+  `🔔 Alerts\n\n` +
+  `Price alerts:\n` +
   `/alert btc > 65000 — when BTC goes above $65,000\n` +
   `/alert eth < 1500 — when ETH goes below $1,500\n` +
   `/alert fxn +10% — when FXN's 24h move reaches +10%\n` +
-  `/alert btc -5% — when BTC's 24h move reaches -5%\n` +
+  `/alert btc -5% — when BTC's 24h move reaches -5%\n\n` +
+  `Advanced alerts:\n` +
+  `/alert funding eth > 0.01 — funding rate threshold\n` +
+  `/alert apy fxsave < 5 — fxSAVE APY drops below 5%\n` +
+  `/alert portfolio -10% — portfolio drops 10%+\n\n` +
   `/alerts — list & manage your active alerts\n\n` +
   `Supported: ${SUPPORTED_ASSETS.map((a) => a.symbol).join(", ")}\n` +
   `Alerts fire once, then auto-archive.`;
@@ -78,6 +86,18 @@ export function describeAlert(a: { symbol: string; kind: string; threshold: numb
   if (a.kind === "pct") {
     const sign = a.threshold > 0 ? "+" : "";
     return `${a.symbol} 24h move reaches ${sign}${a.threshold}%`;
+  }
+  if (a.kind === "funding") {
+    return `${a.symbol} funding rate ${a.threshold > 0 ? "above" : "below"} ${Math.abs(a.threshold)}`;
+  }
+  if (a.kind === "apy") {
+    return `${a.symbol} APY ${a.threshold > 0 ? "above" : "below"} ${Math.abs(a.threshold)}%`;
+  }
+  if (a.kind === "portfolio") {
+    return `Portfolio moves ${a.threshold > 0 ? "+" : ""}${a.threshold}%`;
+  }
+  if (a.kind === "fxsave_redeemable") {
+    return `fxSAVE redemption ready to claim`;
   }
   return `${a.symbol} goes ${a.kind} ${formatPrice(a.threshold)}`;
 }
