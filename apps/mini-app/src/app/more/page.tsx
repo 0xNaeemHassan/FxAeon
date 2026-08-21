@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Settings,
   ShieldCheck,
+  Trophy,
   Wallet,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -69,6 +70,7 @@ export default function MorePage() {
         )}
 
         <Section label="Protocol">
+          <MoreRow href="/leaderboard" icon={Trophy} title="Community Leaderboard" body="Top performing PnL traders and win streaks" />
           <MoreRow href="/positions" icon={Layers2} title="Positions" body="Increase, reduce, close, and adjust leverage" />
           <MoreRow href="/borrow" icon={Banknote} title="Borrow fxUSD" body="Deposit collateral, mint, repay, and release" />
           <MoreRow href="/activity" icon={Activity} title="Activity" body="On-chain execution journal and receipts" />

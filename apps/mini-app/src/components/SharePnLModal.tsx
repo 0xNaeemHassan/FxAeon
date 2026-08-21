@@ -207,6 +207,23 @@ export function SharePnLModal({ isOpen, onClose, data }: SharePnLModalProps) {
     }
   };
 
+  const handleShareStory = () => {
+    haptic('medium');
+    const webapp = getWebApp();
+    const shareText = `Trading on @${BOT_USERNAME} · f(x) Protocol Gateway`;
+    const widgetUrl = `https://t.me/${BOT_USERNAME}/app`;
+
+    if (webapp?.shareToStory) {
+      // Telegram native story share API
+      webapp.shareToStory('https://fxaeon.app/icon.svg', {
+        text: shareText,
+        widget_link: { url: widgetUrl, name: 'FxAeon' },
+      });
+    } else {
+      handleShareTelegram();
+    }
+  };
+
   const handleCopy = async () => {
     const shareText = `FxAeon ${data.market} ${data.side.toUpperCase()} (${data.leverage}x) position` +
       (pnlPctFormatted ? ` | PnL: ${pnlPctFormatted}` : '') +
@@ -241,7 +258,7 @@ export function SharePnLModal({ isOpen, onClose, data }: SharePnLModalProps) {
           </span>
           <div>
             <h3 className="text-[16px] font-semibold">Share Position Card</h3>
-            <p className="text-[11px] text-mut">Share your trade badge on Telegram or save as image</p>
+            <p className="text-[11px] text-mut">Share your trade badge on Telegram or Stories</p>
           </div>
         </div>
 
@@ -308,15 +325,20 @@ export function SharePnLModal({ isOpen, onClose, data }: SharePnLModalProps) {
 
         {/* Actions Grid */}
         <div className="mt-4 flex flex-col gap-2">
-          <Button onClick={handleShareTelegram} className="gap-2">
-            <Send className="h-4 w-4" /> Share on Telegram
-          </Button>
+          <div className="grid grid-cols-2 gap-2">
+            <Button onClick={handleShareTelegram} className="gap-1.5 text-[12.5px]">
+              <Send className="h-3.5 w-3.5" /> Share Chat
+            </Button>
+            <Button onClick={handleShareStory} variant="ghost" className="gap-1.5 text-[12.5px] border border-[var(--mint-dim)] text-mint">
+              <Share2 className="h-3.5 w-3.5" /> Post Story
+            </Button>
+          </div>
 
           <div className="grid grid-cols-2 gap-2">
-            <Button variant="ghost" onClick={handleDownload} loading={downloading} className="text-[13px]">
+            <Button variant="ghost" onClick={handleDownload} loading={downloading} className="text-[12.5px]">
               <Download className="h-3.5 w-3.5" /> Save Image
             </Button>
-            <Button variant="ghost" onClick={handleCopy} className="text-[13px]">
+            <Button variant="ghost" onClick={handleCopy} className="text-[12.5px]">
               {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
               {copied ? 'Copied' : 'Copy Text'}
             </Button>

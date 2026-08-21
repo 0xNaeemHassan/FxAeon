@@ -55,6 +55,7 @@ import { registerTradeActions } from "./handlers/tradeActions.js";
 import { registerPositionActions } from "./handlers/positionActions.js";
 import { registerPositionCardActions } from "./handlers/positionCardActions.js";
 import { handleActionCallback } from "./handlers/earnActions.js";
+import { registerInlineQueries } from "./inline/index.js";
 // handleWithdrawCallback now imported from commands/index.js
 import { apiRouter } from "./api/index.js";
 import { configureAdminWebhook } from "./api/admin.js";
@@ -287,6 +288,9 @@ bot.on("message:text", async (ctx, next) => {
 
   return next();
 });
+
+// Register Inline Query Handler (@FxAeonBot in any chat)
+registerInlineQueries(bot);
 
 // Smart callback fallback with 24-hour hard cutoff + stale detection.
 // Buttons older than 24h get a "stale" notice; newer ones get the honest
