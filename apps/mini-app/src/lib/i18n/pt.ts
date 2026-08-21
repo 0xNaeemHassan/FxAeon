@@ -22,7 +22,7 @@ const pt: Messages = {
 
   // -- browser splash (app/page.tsx) --
   'splash.tagline':
-    'Trading alavancado não custodial no f(x) Protocol, feito para o Telegram. Este app roda dentro do bot FxAeon.',
+    'Negocie, peça emprestado, poupe, faça bridge e gerencie cada posição do f(x) Protocol em um único app autocustodial no Telegram.',
 
   // -- login gates (app/login/page.tsx) --
   'loginGate.tgTitle': 'O FxAeon roda dentro do Telegram',
@@ -79,7 +79,7 @@ const pt: Messages = {
   'portfolio.markets': 'Mercados',
   'portfolio.pricesStale': 'Os preços podem estar alguns minutos atrasados (instabilidade na origem).',
   'portfolio.quickActions': 'Ações rápidas',
-  'portfolio.qaTradeHint': 'Alavancagem de até 10x',
+  'portfolio.qaTradeHint': 'Até 7x em posições long',
   'portfolio.qaDepositHint': 'ETH · wstETH · WBTC',
   'portfolio.qaSecurity': 'Como sua carteira é protegida',
   'portfolio.qaSecurityHint': 'Autocustódia, suas chaves',
@@ -214,12 +214,12 @@ const pt: Messages = {
     'O bot só pode assinar enquanto sua concessão de session signer estiver ativa. Revogue-a em Configurações → Carteira e a execução pelo chat para instantaneamente.',
   'policy.rule3Title': 'Execução protegida por simulação',
   'policy.rule3Body':
-    'Toda ação confirmada no chat é simulada primeiro. Se for falhar, nada é transmitido — sempre falha de forma segura.',
-  'policy.rule4Title': 'Apenas confirmações explícitas',
+    'Antes da revisão, o servidor constrói, verifica pela política e simula o plano exato. As conversões de posição devem corresponder à tabela fixa de rotas v1 do SDK f(x).',
+  'policy.rule4Title': 'Revisão de dois minutos vinculada à carteira',
   'policy.rule4Body':
-    'Nenhuma transação é construída ou enviada antes de você tocar em Confirmar. As prévias expiram após cerca de 10 minutos.',
+    'O Mini App congela esse plano exato por 2 minutos. Confirmar reivindica o ticket de uso único; uma repetição só retorna o mesmo registro de transação idempotente.',
   'policy.footer':
-    'Gerencie tudo em Configurações → Carteira: exporte sua chave, ative ou revogue o trading via bot. Veja /security no bot para o status ao vivo.',
+    'A Atividade preserva o hash e o status de cada etapa, inclusive pendente, parcial, cancelada, revertida ou confirmada. Gerencie o acesso de assinatura em Configurações → Carteira.',
   // -- login sign-in card (PrivyFlow intro) --
   'loginCard.signIn': 'Entrar no FxAeon',
   'loginCard.subtitle': 'Carteira autocustodial com tecnologia Privy',
@@ -228,6 +228,9 @@ const pt: Messages = {
   'loginCard.wallet': 'Conectar carteira existente',
   'loginCard.terms': 'Ao continuar, você aceita nossos Termos e Privacidade',
   'loginCard.poweredBy': 'Desenvolvido por',
+  'nav.earn': 'Ganhar',
+  'nav.move': 'Mover',
+  'nav.more': 'Mais',
 };
 
 export default pt;

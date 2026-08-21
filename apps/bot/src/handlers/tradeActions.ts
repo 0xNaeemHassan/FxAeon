@@ -9,7 +9,7 @@
  *   /trade            → ladder: market → side → leverage → amount (one message,
  *                       edited in place; callback_data `tl_*`, navigation only)
  *   /trade <args>     → signed preview (Confirm = `tc_<signed token>`)
- *   /start t1_<token> → signed deep link (10-min TTL) → same preview
+ *   /start t3_<token> → signed exact-amount deep link (10-min TTL) → same preview
  *   Confirm           → verify sig+TTL → quote → simulate → broadcast →
  *                       receipt, each stage edited into the original message.
  *
@@ -20,7 +20,7 @@
  */
 import { Context, InlineKeyboard, type Bot } from "grammy";
 import { prisma } from "@fxaeon/db";
-import { parseUnits } from "viem";
+import { formatUnits, parseUnits } from "viem";
 import { MARKETS, RISK_PARAMS, type Market } from "@fxaeon/shared";
 import {
   collateralDecimals,
@@ -42,7 +42,6 @@ import { listUserPositions } from "../core/portfolio.js";
 import { trackPositions } from "../core/pnl.js";
 import { getSpotPrices } from "../market/coingecko.js";
 import { botLogger } from "../middleware/logger.js";
-import { buildFeePreview as buildFeePreviewLines } from "../core/fxaeonFees.js";
 
 type Side = "long" | "short";
 
@@ -57,9 +56,9 @@ function maxLeverage(side: Side): number {
 }
 
 /** Amount presets in collateral units (wstETH / WBTC). */
-const AMOUNT_PRESETS: Record<Market, number[]> = {
-  wstETH: [0.05, 0.1, 0.25, 0.5],
-  WBTC: [0.001, 0.005, 0.01, 0.05],
+const AMOUNT_PRESETS: Record<Market, string[]> = {
+  wstETH: ["0.05", "0.1", "0.25", "0.5"],
+  WBTC: ["0.001", "0.005", "0.01", "0.05"],
 };
 
 function leveragePresets(side: Side): number[] {
@@ -121,7 +120,7 @@ function ladderAmountKeyboard(marketIdx: number, side: Side, lev10: number): Inl
   const market = MARKETS[marketIdx];
   const kb = new InlineKeyboard();
   AMOUNT_PRESETS[market].forEach((amt) =>
-    kb.text(`${amt} ${market}`, `tl_p_${marketIdx}_${side === "long" ? "l" : "s"}_${lev10}_${Math.round(amt * 1e6)}`)
+    kb.text(`${amt} ${market}`, `tl_p_${marketIdx}_${side === "long" ? "l" : "s"}_${lev10}_${parseUnits(amt, 6)}`)
   );
   kb.row().text("« Back", `tl_l_${marketIdx}_${side === "long" ? "l" : "s"}`);
   return kb;
@@ -137,26 +136,21 @@ export interface PreviewUserSettings {
 }
 
 export function buildPreview(
-  intent: { market: Market; side: Side; leverage: number; amount: number },
+  intent: { market: Market; side: Side; leverage: number; amount: string | number },
   user: PreviewUserSettings | null,
   botUsername: string
 ): { text: string; keyboard: InlineKeyboard; token: string } {
   const token = createTradeIntent(intent);
+  const amount = verifyTradeIntent(token);
+  if (!amount.ok) throw new Error("trade preview intent failed its own validation");
   const minutesLeft = 10;
-
-  // Phase 3: build fee preview lines
-  const intentKind = intent.side === "long" ? "open_long" : "open_short";
-  // Estimate notional USD (amount × spot price × leverage is the notional)
-  // For preview we use amount × leverage as a rough approximation
-  const approxNotionalUsd = intent.amount * intent.leverage * 1000; // placeholder
-  const feePreview = buildFeePreviewLines(intentKind as any, approxNotionalUsd, intent.leverage);
 
   const lines = [
     `⚡ Trade Preview`,
     ``,
     `Market: ${intent.market} ${sideLabel(intent.side)}`,
     `Leverage: ${intent.leverage}x`,
-    `Collateral: ${intent.amount} ${intent.market}`,
+    `Collateral: ${amount.intent.amount} ${intent.market}`,
   ];
   if (user) {
     lines.push(
@@ -167,7 +161,8 @@ export function buildPreview(
   lines.push(
     ``,
     `Fees:`,
-    ...feePreview.lines,
+    `Network and f(x) protocol fees are calculated from the live route on Confirm.`,
+    `No USD fee estimate is shown until a real market quote exists.`,
     ``,
     `Quote, simulation and broadcast all happen on Confirm — nothing is sent before that.`,
     `This preview expires in ~${minutesLeft} min.`,
@@ -204,6 +199,10 @@ export function statusLine(state: TxState, detail?: string): string {
       return "✅ Confirmed on-chain.";
     case "reverted":
       return `❌ Reverted on-chain${detail ? ` — ${detail}` : ""}.`;
+    case "partial":
+      return `⚠️ Partially completed${detail ? ` — ${detail}` : ""}. Review Activity before taking another action.`;
+    case "cancelled":
+      return "🛑 Cancelled on-chain.";
     case "failed":
       return `❌ Failed${detail ? ` — ${detail}` : ""}.`;
   }
@@ -244,10 +243,8 @@ export async function executeTradeIntent(ctx: Context, intent: TradeIntent): Pro
 
   try {
     const sdk = createFxSdk();
-    const client = createPublicClientForUser(
-      user.mevProtection === "flashbots" ? "flashbots" : "off"
-    );
-    const amountWei = parseUnits(String(intent.amount), collateralDecimals(intent.market));
+    const client = createPublicClientForUser(mevModeForUser(user.mevProtection));
+    const amountWei = parseUnits(intent.amount, collateralDecimals(intent.market));
     const quote = await quoteOpenPosition({
       sdk,
       userAddress: user.walletAddress,
@@ -376,7 +373,12 @@ export async function handleLadderCallback(ctx: Context): Promise<void> {
 
   if (step === "p") {
     const leverage = Number(parts[4]) / 10;
-    const amount = Number(parts[5]) / 1e6;
+    const amountMicro = BigInt(parts[5]);
+    if (amountMicro <= 0n) {
+      await editSafe(ctx, "❌ Invalid amount. Start again with /trade.");
+      return;
+    }
+    const amount = formatUnits(amountMicro, 6);
     const telegramId = ctx.from?.id.toString();
     const user = telegramId
       ? await prisma.user.findUnique({ where: { telegramId } })

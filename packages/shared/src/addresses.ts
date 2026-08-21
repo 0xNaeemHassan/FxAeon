@@ -46,11 +46,17 @@ export const ADDRESSES = {
   FXUSD_BASE_POOL: "0x65C9A641afCEB9C0E6034e558A319488FA0FA3be",
   PEG_KEEPER: "0x50562fe7e870420F5AAe480B7F94EB4ace2fcd70",
   SPOT_PRICE_ORACLE: "0xc2312CaF0De62eC9b4ADC785C79851Cb989C9abc",
+  // Per-market price oracles mirrored from fx-sdk 1.0.5 pool configs.
+  WSTETH_PRICE_ORACLE: "0x0C5C61025f047cB7e3e85852dC8eAFd7b9a4Abfb",
+  WBTC_PRICE_ORACLE: "0xb3c90e64EB6f456A5F5C17Aa99b6aecA6f4a6390",
   GAUGE_REWARDER: "0x5Ac1A882E6CeDc58511b7e42b02BAB42E2c02956",
   TREASURY: "0x0084C2e1B1823564e597Ff4848a88D61ac63D703",
   FXETH_CREDIT_NOTE: "0x7c5350BaC0eB97F86A366Ee4F9619a560480F05A",
   FXBTC_CREDIT_NOTE: "0xB25a554033C59e33e48c5dc05A7192Fb1bbDdfc6",
   FXUSD_REGENERACY: "0xf729422D68c2cf00574fb5712972454cf402A9b1",
+  // SDK 1.0.5's pinned converter. It is validated inside Router/FxMintRouter
+  // calldata but is never a direct delegated-signing target.
+  MULTIPATH_CONVERTER: "0x12AF4529129303D7FbD2563E242C4a2890525912",
 
   // LayerZero V2 OFT adapters (Ethereum side) — used by /bridge to move fxUSD /
   // fxSAVE to Base. Source-of-truth is fx-sdk's BRIDGE_OFT_BY_TOKEN; mirrored
@@ -60,9 +66,9 @@ export const ADDRESSES = {
   FXSAVE_OFT_ADAPTER: "0xCaD2b9C980322f460db51CC8E45539F677C73F86",
 
   
-  // FxAeon Fee Collector — Phase 3 (Masterplan).
-  // EOA controlled by the FxAeon team; receives the 0.05% leverage fee
-  // and 0.01% other-action fee on every confirmed trade.
+  // Reserved FxAeon fee collector. The current production execution routes do
+  // not charge an FxAeon fee; keep this address explicit for signer policy and
+  // any future, separately reviewed fee rollout.
   FEE_COLLECTOR: "0xea24f6a870b57455a83387704d7d2a12e3463d84",
 
   // ERC20 Tokens

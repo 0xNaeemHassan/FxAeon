@@ -10,6 +10,7 @@
  * chip with a tooltip explaining what's slow."
  */
 import { useEffect, useState } from 'react';
+import { AlertTriangle, WifiOff } from 'lucide-react';
 import { apiAvailable } from '@/lib/api';
 
 type DepStatus = 'ok' | 'degraded' | 'down';
@@ -20,12 +21,6 @@ interface DepsResponse {
 }
 
 const POLL_INTERVAL_MS = 60_000;
-
-const statusEmoji: Record<DepStatus, string> = {
-  ok: '🟢',
-  degraded: '🟡',
-  down: '🔴',
-};
 
 const statusLabel: Record<DepStatus, string> = {
   ok: 'All systems operational',
@@ -57,9 +52,12 @@ export function HealthChip() {
       try {
         const botApi = process.env.NEXT_PUBLIC_BOT_API_URL;
         if (!botApi) return;
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 5_000);
         const res = await fetch(`${botApi}/api/health/deps`, {
-          signal: AbortSignal.timeout(5_000),
+          signal: controller.signal,
         });
+        window.clearTimeout(timeout);
         if (res.ok && mounted) {
           setData(await res.json());
         }
@@ -83,7 +81,9 @@ export function HealthChip() {
 
   return (
     <div
-      className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs"
+      role="status"
+      aria-live="polite"
+      className="glass mb-3 flex items-start gap-2.5 rounded-2xl border px-3.5 py-3 text-xs"
       style={{
         borderColor:
           data.overall === 'down'
@@ -95,7 +95,11 @@ export function HealthChip() {
             : 'rgba(234, 179, 8, 0.08)',
       }}
     >
-      <span>{statusEmoji[data.overall]}</span>
+      {data.overall === 'down' ? (
+        <WifiOff className="mt-0.5 h-4 w-4 shrink-0 text-danger" aria-hidden="true" />
+      ) : (
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warn" aria-hidden="true" />
+      )}
       <div className="flex flex-col">
         <span className="font-medium">{statusLabel[data.overall]}</span>
         <span className="text-mut">

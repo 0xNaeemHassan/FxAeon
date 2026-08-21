@@ -5,6 +5,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import {
   ACTION_INTENT_TTL_MS,
+  canonicalActionAmount,
   createActionIntent,
   looksLikeActionIntent,
   packAmount,
@@ -14,9 +15,11 @@ import {
 import {
   assertKnownTargets,
   assertEthToBase,
+  oftAdapterForChain,
   oftAdapterEthereum,
   quoteBridge,
   quoteBridgeFee,
+  resolveBridgeRoute,
 } from "../src/fx/earn.js";
 import { __resetConfigForTests } from "../src/middleware/config.js";
 import { ADDRESSES } from "@fxaeon/shared";
@@ -31,14 +34,29 @@ afterEach(() => {
 });
 
 describe("packAmount / unpackAmount", () => {
-  it("round-trips amounts at micro precision", () => {
-    for (const n of [0.000001, 0.5, 1, 1234.567891, 1_000_000]) {
-      expect(unpackAmount(packAmount(n))).toBeCloseTo(n, 6);
+  it("round-trips decimal strings exactly, including 18-decimal amounts", () => {
+    for (const n of [
+      "0.000000000000000001",
+      "0.000001",
+      "0.5",
+      "1",
+      "1234.567891",
+      "9007199254740993.123456789012345678",
+    ]) {
+      expect(unpackAmount(packAmount(n))).toBe(n);
     }
   });
 
   it("uses 0 as the ALL sentinel", () => {
-    expect(unpackAmount("0")).toBe(0);
+    expect(unpackAmount("0")).toBe("0");
+  });
+
+  it("canonicalizes plain decimals and rejects lossy or ambiguous inputs", () => {
+    expect(canonicalActionAmount("001,234.5600", 6)).toBe("1234.56");
+    expect(canonicalActionAmount(".000001", 6)).toBe("0.000001");
+    for (const raw of ["0", "1e-6", "+1", "-1", "12,34", "1.0000001"]) {
+      expect(canonicalActionAmount(raw, 6), raw).toBeNull();
+    }
   });
 });
 
@@ -53,7 +71,22 @@ describe("createActionIntent / verifyActionIntent", () => {
       expect(verdict.intent.kind).toBe("rp");
       expect(verdict.intent.p1).toBe("1");
       expect(parseInt(verdict.intent.p2, 36)).toBe(123456);
-      expect(unpackAmount(verdict.intent.p3)).toBeCloseTo(9999.99, 6);
+      expect(unpackAmount(verdict.intent.p3)).toBe("9999.99");
+    }
+  });
+
+  it("keeps two exact 18-decimal mint amounts inside Telegram's limit", () => {
+    const token = createActionIntent("mt", {
+      p1: "0",
+      p2: packAmount("0.123456789012345678"),
+      p3: packAmount("1500.123456789012345678"),
+    });
+    expect(Buffer.byteLength(token)).toBeLessThanOrEqual(64);
+    const verdict = verifyActionIntent(token);
+    expect(verdict.ok).toBe(true);
+    if (verdict.ok) {
+      expect(unpackAmount(verdict.intent.p2)).toBe("0.123456789012345678");
+      expect(unpackAmount(verdict.intent.p3)).toBe("1500.123456789012345678");
     }
   });
 
@@ -108,14 +141,18 @@ describe("assertKnownTargets (fail-closed route guard)", () => {
 // ── Cross-chain bridge (fx/earn.ts bridge wrappers) ──────────────────────────
 
 describe("bridge: direction gating", () => {
-  it("accepts Ethereum → Base", () => {
+  it("accepts and normalizes both bridge directions", () => {
+    expect(resolveBridgeRoute(1, 8453)).toEqual({ sourceChainId: 1, destChainId: 8453 });
+    expect(resolveBridgeRoute(8453, 1)).toEqual({ sourceChainId: 8453, destChainId: 1 });
+    expect(resolveBridgeRoute(8453)).toEqual({ sourceChainId: 8453, destChainId: 1 });
+  });
+  it("retains the Telegram legacy Ethereum-to-Base guard", () => {
     expect(() => assertEthToBase(1, 8453)).not.toThrow();
+    expect(() => assertEthToBase(8453, 1)).toThrow(/legacy flow/i);
   });
-  it("rejects Base → Ethereum with an honest reason", () => {
-    expect(() => assertEthToBase(8453, 1)).toThrow(/Base.*Ethereum.*isn't live/i);
-  });
-  it("rejects unsupported chains", () => {
-    expect(() => assertEthToBase(1, 137)).toThrow(/Only Ethereum/i);
+  it("rejects unsupported or same-chain routes", () => {
+    expect(() => resolveBridgeRoute(1, 137)).toThrow(/destination chainId/i);
+    expect(() => resolveBridgeRoute(8453, 8453)).toThrow(/must differ/i);
   });
 });
 
@@ -148,21 +185,49 @@ describe("bridge: quoteBridgeFee / quoteBridge", () => {
     // minimal env it needs (RPC stays unset; the SDK is mocked anyway).
     process.env.TELEGRAM_BOT_TOKEN = "test-token";
     process.env.DATABASE_URL = "postgres://test";
+    process.env.ALCHEMY_RPC_URL = "https://eth.example.test";
+    process.env.BASE_RPC_URL = "https://base.example.test";
     __resetConfigForTests();
   });
 
   it("quoteBridgeFee returns the live LayerZero native fee", async () => {
     const q = await quoteBridgeFee({ sdk: mockSdk(), token: "fxUSD", amountWei: 10n ** 18n, recipient: USER });
     expect(q.nativeFeeWei).toBe(203126224121156n);
+    expect(q.sourceChainId).toBe(1);
+    expect(q.destChainId).toBe(8453);
     expect(q.oftAdapter.toLowerCase()).toBe(OFT_FXUSD.toLowerCase());
+  });
+
+  it("quotes Base -> Ethereum against the configured Base RPC and Base OFT", async () => {
+    const sdk = mockSdk();
+    const q = await quoteBridgeFee({
+      sdk,
+      token: "fxSAVE",
+      amountWei: 10n ** 18n,
+      recipient: USER,
+      sourceChainId: 8453,
+      destChainId: 1,
+    });
+    expect(q).toMatchObject({
+      sourceChainId: 8453,
+      destChainId: 1,
+      oftAdapter: oftAdapterForChain("fxSAVE", 8453),
+    });
+    expect((sdk as { getBridgeQuote: ReturnType<typeof vi.fn> }).getBridgeQuote).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceChainId: 8453,
+        destChainId: 1,
+        sourceRpcUrl: "https://base.example.test",
+      })
+    );
   });
 
   it("quoteBridgeFee rejects zero amount and bad recipient", async () => {
     await expect(
       quoteBridgeFee({ sdk: mockSdk(), token: "fxUSD", amountWei: 0n, recipient: USER })
-    ).rejects.toThrow(/greater than 0/);
+    ).rejects.toThrow(/at least 0\.0001/);
     await expect(
-      quoteBridgeFee({ sdk: mockSdk(), token: "fxUSD", amountWei: 1n, recipient: "nope" })
+      quoteBridgeFee({ sdk: mockSdk(), token: "fxUSD", amountWei: 10n ** 18n, recipient: "nope" })
     ).rejects.toThrow(/valid address/);
   });
 
@@ -192,6 +257,47 @@ describe("bridge: quoteBridgeFee / quoteBridge", () => {
     });
     expect(txs).toHaveLength(1);
     expect(txs[0].to.toLowerCase()).toBe(OFT_FXUSD.toLowerCase());
+  });
+
+  it("builds Base -> Ethereum as one OFT send without reading allowance", async () => {
+    const baseOft = oftAdapterForChain("fxUSD", 8453);
+    const readAllowance = vi.fn().mockRejectedValue(new Error("must not be called on Base"));
+    const sdk = {
+      buildBridgeTx: vi.fn().mockResolvedValue({
+        tx: { to: baseOft, data: "0xdeadbeef", value: 42n },
+        quote: { nativeFee: 42n, lzTokenFee: 0n },
+      }),
+    } as never;
+    const { txs, quote } = await quoteBridge({
+      sdk,
+      userAddress: USER,
+      token: "fxUSD",
+      amountWei: 10n ** 18n,
+      sourceChainId: 8453,
+      destChainId: 1,
+      readAllowance,
+    });
+    expect(readAllowance).not.toHaveBeenCalled();
+    expect(txs).toEqual([{ to: baseOft, data: "0xdeadbeef", value: 42n }]);
+    expect(quote).toMatchObject({ sourceChainId: 8453, destChainId: 1, oftAdapter: baseOft });
+  });
+
+  it("fails closed when SDK tx value and quoted native fee diverge", async () => {
+    const sdk = {
+      buildBridgeTx: vi.fn().mockResolvedValue({
+        tx: { to: OFT_FXUSD, data: "0xdeadbeef", value: 43n },
+        quote: { nativeFee: 42n, lzTokenFee: 0n },
+      }),
+    } as never;
+    await expect(
+      quoteBridge({
+        sdk,
+        userAddress: USER,
+        token: "fxUSD",
+        amountWei: 10n ** 18n,
+        readAllowance: async () => 10n ** 30n,
+      })
+    ).rejects.toThrow(/does not match/i);
   });
 
   it("quoteBridge fails closed on an unexpected send target", async () => {

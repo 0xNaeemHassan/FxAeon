@@ -8,6 +8,7 @@ import { describeFunding, getFundingState } from "../core/funding.js";
 import { looksLikeTradeIntent, verifyTradeIntent } from "../core/tradeIntent.js";
 import { buildPreview } from "../handlers/tradeActions.js";
 import { MARKETS, RISK_PARAMS } from "@fxaeon/shared";
+import { formatUnits } from "viem";
 
 /**
  * Render a trade preview from a /start deep link. Returns true when the
@@ -19,7 +20,7 @@ async function handleTradeDeepLink(
   user: { slippageBps: number; mevProtection: string },
   payload: string
 ): Promise<boolean> {
-  let intent: { market: (typeof MARKETS)[number]; side: "long" | "short"; leverage: number; amount: number };
+  let intent: { market: (typeof MARKETS)[number]; side: "long" | "short"; leverage: number; amount: string };
 
   if (looksLikeTradeIntent(payload)) {
     const verdict = verifyTradeIntent(payload);
@@ -40,9 +41,10 @@ async function handleTradeDeepLink(
     const market = MARKETS[Number(m[1])];
     const side = m[2] === "l" ? "long" : "short";
     const leverage = Number(m[3]) / 10;
-    const amount = Number(m[4]) / 1e6;
+    const amountMicro = BigInt(m[4]);
+    const amount = formatUnits(amountMicro, 6);
     const maxLev = side === "long" ? RISK_PARAMS.MAX_LEVERAGE_LONG : RISK_PARAMS.MAX_LEVERAGE_SHORT;
-    if (!market || leverage < RISK_PARAMS.MIN_LEVERAGE || leverage > maxLev || !(amount > 0)) {
+    if (!market || leverage < RISK_PARAMS.MIN_LEVERAGE || leverage > maxLev || amountMicro <= 0n) {
       await ctx.reply(`❌ Invalid trade parameters in that link. Use /trade to set up a position.`);
       return true;
     }
@@ -63,11 +65,11 @@ export async function startCommand(ctx: Context & I18nFlavor) {
     const user = await prisma.user.findUnique({ where: { telegramId } });
 
     // ── W-17: trade deep links ──────────────────────────────────────────────
-    // `t1_*` = signed short-TTL intent ("Share setup" links); `tq_*` = unsigned
+    // `t3_*` = signed short-TTL intent ("Share setup" links); `tq_*` = unsigned
     // params from the Mini App MainButton — re-validated and re-signed here.
     // Both only render a PREVIEW; execution requires the inline Confirm tap.
     const startPayload = ctx.message?.text?.split(" ")[1];
-    if (user && startPayload && (startPayload.startsWith("t1_") || startPayload.startsWith("tq_"))) {
+    if (user && startPayload && (startPayload.startsWith("t3_") || startPayload.startsWith("tq_"))) {
       const handled = await handleTradeDeepLink(ctx, user, startPayload);
       if (handled) return;
     }
@@ -77,7 +79,7 @@ export async function startCommand(ctx: Context & I18nFlavor) {
     // instead of the returning-user flow (which would crash on a null wallet).
     const deletedUser = await prisma.deletedUser.findUnique({ where: { telegramId } }).catch(() => null);
     if (deletedUser) {
-      const miniAppUrl = process.env.MINI_APP_URL || "https://fxbot-mini-app.pages.dev";
+      const miniAppUrl = process.env.MINI_APP_URL || "http://localhost:3000";
       await ctx.reply(
         `👋 Welcome back!\n\n` +
           `Your previous account was deleted on ${deletedUser.deletedAt.toISOString().slice(0, 10)}.\n` +
@@ -98,7 +100,7 @@ export async function startCommand(ctx: Context & I18nFlavor) {
       // ── New user onboarding (W-16) ──────────────────────────────────────
       // The Create-Wallet button MUST be a reply-keyboard web_app button:
       // Telegram only delivers WebApp.sendData() for keyboard-launched apps.
-      const miniAppUrl = process.env.MINI_APP_URL || "https://fxbot-mini-app.pages.dev";
+      const miniAppUrl = process.env.MINI_APP_URL || "http://localhost:3000";
       const loginUrl = referralCode
         ? `${miniAppUrl}/login?ref=${encodeURIComponent(referralCode)}`
         : `${miniAppUrl}/login`;

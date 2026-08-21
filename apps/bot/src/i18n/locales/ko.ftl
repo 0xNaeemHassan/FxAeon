@@ -5,7 +5,7 @@
 start-welcome-new =
     🚀 FxAeon에 오신 것을 환영합니다
     
-    f(x) Protocol을 위한 가장 진보된 인터페이스 — 레버리지 포지션, 지정가 주문, 수익 자동화를 모두 Telegram에서.
+    f(x) Protocol을 위한 가장 진보된 인터페이스 — 레버리지 포지션과 수익 자동화를 모두 Telegram에서.
     
     🔐 셀프 커스터디 — 지갑을 직접 생성하거나 가져오세요. 키는 오직 본인만 보유합니다
     ⚡ 시뮬레이션 검증 — 시뮬레이션을 통과하지 않으면 아무것도 전송되지 않습니다
@@ -38,7 +38,7 @@ help-body =
     
     ⚡ 트레이딩
       /trade — 레버리지 포지션 열기 (1.1x–7x)
-      /limit — 지정가/스탑 주문
+      /limit — 지정가/스탑 주문 미리보기 검증(제출 안 함)
       /orders — 활성 주문 보기
       /mint — fxUSD 빌리기 (레버리지 없음)
       /redeem — fxUSD를 담보로 상환
@@ -61,7 +61,7 @@ help-body =
     
     🤖 자동화
       /auto — 손절/익절 자동화 규칙 (/auto sl wstETH long 2500)
-      /refer — 추천 링크 + 수익
+      /refer — 초대 링크 + 연결된 계정
     
     ⚙️ 설정
       /settings — 언어, 슬리피지, MEV 보호
@@ -110,7 +110,7 @@ trade-usage =
     /trade <마켓> <long|short> <레버리지> <수량>
     
     예시:
-    /trade wstETH long 3x 1ETH
+    /trade wstETH long 3x 0.25
     
     레버리지 한도:
     • 롱: { $minLev }x – { $maxLong }x

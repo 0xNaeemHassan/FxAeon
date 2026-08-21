@@ -7,6 +7,7 @@ import { Context } from "grammy";
 import { prisma } from "@fxaeon/db";
 import { MARKETS, type Market } from "@fxaeon/shared";
 import { buildMintPreview } from "../handlers/earnActions.js";
+import { canonicalActionAmount } from "../core/actionIntent.js";
 
 const USAGE =
   `Usage: /mint <collateral amount> <fxUSD amount> [market]\n\n` +
@@ -36,10 +37,12 @@ export async function mintCommand(ctx: Context) {
     return;
   }
 
-  const collateral = Number(args[0].replace(/,/g, ""));
-  const fxUsd = Number(args[1].replace(/,/g, ""));
   const market = resolveMarket(args[2]);
-  if (!Number.isFinite(collateral) || collateral <= 0 || !Number.isFinite(fxUsd) || fxUsd <= 0 || !market) {
+  const collateral = market
+    ? canonicalActionAmount(args[0], market === "WBTC" ? 8 : 18)
+    : null;
+  const fxUsd = canonicalActionAmount(args[1], 18);
+  if (!collateral || !fxUsd || !market) {
     await ctx.reply(USAGE);
     return;
   }

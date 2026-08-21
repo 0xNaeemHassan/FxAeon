@@ -29,6 +29,8 @@ export interface OnChainPosition {
   collateralToken: string;
   /** Debt in human units of `debtToken` (fxUSD). */
   debt: number;
+  /** Exact SDK/on-chain debt units (used as the short-reduction basis). */
+  rawDebt: bigint;
   debtToken: string;
   leverage: number;
   /**
@@ -63,6 +65,7 @@ function toOnChainPosition(market: Market, side: Side, p: PositionInfo): OnChain
     rawCollateral: p.rawColls,
     collateralToken: p.rawCollsToken || market,
     debt: Number(formatUnits(p.rawDebts, p.rawDebtsDecimals)),
+    rawDebt: p.rawDebts,
     debtToken: p.rawDebtsToken || "fxUSD",
     leverage,
     debtRatio,

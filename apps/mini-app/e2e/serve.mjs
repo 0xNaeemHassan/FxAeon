@@ -19,7 +19,7 @@ import { createServer } from 'node:http';
 import { spawnSync } from 'node:child_process';
 import { readFile, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join, extname, normalize } from 'node:path';
+import { join, extname, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
@@ -37,14 +37,31 @@ function buildIfNeeded() {
   if (existsSync(join(DIST, 'index.html')) && process.env.E2E_BUILD !== '1') return;
    
   console.log('[e2e] building mini-app static export…');
-  const res = spawnSync('corepack', ['pnpm', 'build'], {
+  // Reuse the package-manager CLI that launched Playwright. This works
+  // cross-platform and avoids Windows .cmd shell shims; Corepack remains a
+  // direct-exec fallback.
+  const packageManagerCli = process.env.npm_execpath;
+  const useInheritedPackageManager = packageManagerCli && existsSync(packageManagerCli);
+  const windowsFallback = process.platform === 'win32' && !useInheritedPackageManager;
+  const command = useInheritedPackageManager
+    ? process.execPath
+    : windowsFallback
+      ? process.env.ComSpec || 'cmd.exe'
+      : 'pnpm';
+  const isNpmCli = Boolean(packageManagerCli && /npm-cli\.(?:c?js)$/i.test(packageManagerCli));
+  const args = useInheritedPackageManager
+    ? [packageManagerCli, ...(isNpmCli ? ['run', 'build'] : ['build'])]
+    : windowsFallback
+      ? ['/d', '/s', '/c', 'pnpm.cmd', 'build']
+      : ['build'];
+  const res = spawnSync(command, args, {
     cwd: ROOT,
     stdio: 'inherit',
     env: { ...process.env, ...BUILD_ENV },
+    windowsHide: true,
   });
   if (res.status !== 0) {
-     
-    console.error('[e2e] build failed');
+    console.error(`[e2e] build failed${res.error ? `: ${res.error.message}` : ''}`);
     process.exit(res.status ?? 1);
   }
 }
@@ -68,10 +85,11 @@ const MIME = {
 async function resolveFile(pathname) {
   // Strip query, normalise, prevent path traversal.
   let p = decodeURIComponent(pathname.split('?')[0]);
-  p = normalize(p).replace(/^(\.\.[/\\])+/, '');
+  p = normalize(p).replace(/^[/\\]+/, '');
   if (p === '/' || p === '') return join(DIST, 'index.html');
 
-  const direct = join(DIST, p);
+  const direct = resolve(DIST, p);
+  if (direct !== DIST && !direct.startsWith(`${DIST}${sep}`)) return null;
   // Exact file (assets like /_next/..., /favicon.ico, /file.html).
   try {
     const s = await stat(direct);

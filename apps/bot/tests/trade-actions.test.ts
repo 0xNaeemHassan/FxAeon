@@ -11,6 +11,7 @@ vi.mock("../src/fx/index", () => ({
   createPublicClientForUser: vi.fn(() => ({})),
   mevModeForUser: (m) => (m === "flashbots" ? "flashbots" : "off"),
   collateralDecimals: vi.fn(() => 18),
+  getPositions: vi.fn().mockResolvedValue([]),
   quoteOpenPosition: (...a: unknown[]) => quoteOpenPositionMock(...a),
 }));
 
@@ -18,11 +19,21 @@ const executeRouteMock = vi.fn();
 vi.mock("../src/core/txExecutor", () => ({
   executeRoute: (...a: unknown[]) => executeRouteMock(...a),
 }));
+vi.mock("../src/core/delegation", () => ({
+  requireDelegatedWallet: vi.fn(async (user: typeof USER) =>
+    user.walletDelegated && user.privyWalletId
+      ? { ok: true, walletId: user.privyWalletId }
+      : { ok: false, message: "🔐 Bot trading is off" }
+  ),
+}));
 
 // Funding reads hit RPC from /start's returning-user path — stub them.
 vi.mock("../src/core/funding", () => ({
   getFundingState: vi.fn().mockResolvedValue({ known: false }),
   describeFunding: vi.fn().mockReturnValue(""),
+}));
+vi.mock("../src/market/coingecko", () => ({
+  getSpotPrices: vi.fn().mockResolvedValue({ stale: true, prices: {} }),
 }));
 
 import {
@@ -94,8 +105,8 @@ describe("ladder navigation", () => {
     expect(lastEdit(ctx)).toContain("0.5 wstETH");
     const keyboard = ctx.editMessageText.mock.calls[0][1].reply_markup;
     const flat = JSON.stringify(keyboard);
-    expect(flat).toContain("tc_t1_");
-    expect(flat).toContain("t.me/TestBot?start=t1_");
+    expect(flat).toContain("tc_t3_");
+    expect(flat).toContain("t.me/TestBot?start=t3_");
   });
 
   it("preview without a connected wallet hides Confirm and points to /start", async () => {
@@ -103,7 +114,7 @@ describe("ladder navigation", () => {
     const ctx = mockCtx("tl_p_0_l_30_500000");
     await handleLadderCallback(ctx);
     expect(lastEdit(ctx)).toContain("/start");
-    expect(JSON.stringify(ctx.editMessageText.mock.calls[0][1].reply_markup)).not.toContain("tc_t1_");
+    expect(JSON.stringify(ctx.editMessageText.mock.calls[0][1].reply_markup)).not.toContain("tc_t3_");
   });
 });
 
@@ -116,7 +127,7 @@ describe("confirm flow", () => {
     await handleConfirmCallback(ctx);
     expect(executeRouteMock).toHaveBeenCalledTimes(1);
     const call = executeRouteMock.mock.calls[0][0];
-    expect(call.idempotencyKey).toMatch(/^trade:user-1:[0-9a-f]{10}$/);
+    expect(call.idempotencyKey).toMatch(/^trade:user-1:[0-9a-f]{8}$/);
     expect(call.walletId).toBe("wallet-1");
     expect(call.type).toBe("open_long");
     expect(lastEdit(ctx)).toContain("0xhash1");
@@ -177,14 +188,14 @@ describe("confirm flow", () => {
 });
 
 describe("/start trade deep links", () => {
-  it("signed t1_ payload renders a preview for existing users", async () => {
+  it("signed t3_ payload renders a preview for existing users", async () => {
     const token = createTradeIntent({ market: "wstETH", side: "long", leverage: 3, amount: 0.5 });
     const ctx = mockCtx(undefined, `/start ${token}`);
     await startCommand(ctx);
     expect(ctx.reply.mock.calls[0][0]).toContain("Trade Preview");
   });
 
-  it("expired t1_ payload gets an honest expiry message", async () => {
+  it("expired t3_ payload gets an honest expiry message", async () => {
     const token = createTradeIntent({ market: "wstETH", side: "long", leverage: 3, amount: 0.5 }, -60_000);
     const ctx = mockCtx(undefined, `/start ${token}`);
     await startCommand(ctx);

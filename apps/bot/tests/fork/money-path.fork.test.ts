@@ -93,6 +93,7 @@ const { txStore, prismaMock } = vi.hoisted(() => {
   let seq = 0;
   const prisma = {
     txRecord: {
+      count: vi.fn(async () => 0),
       findUnique: vi.fn(async ({ where }: { where: { id?: string; idempotencyKey?: string } }) => {
         if (where.idempotencyKey)
           return [...store.values()].find((r) => r.idempotencyKey === where.idempotencyKey) ?? null;

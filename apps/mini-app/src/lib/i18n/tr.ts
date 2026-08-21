@@ -22,7 +22,7 @@ const tr: Messages = {
 
   // -- browser splash (app/page.tsx) --
   'splash.tagline':
-    'f(x) Protocol üzerinde, Telegram için tasarlanmış öz saklamalı kaldıraçlı işlem. Bu uygulama FxAeon botunun içinde çalışır.',
+    'Tek bir öz saklamalı Telegram uygulamasından işlem yapın, borç alın, birikim yapın, köprüleyin ve tüm f(x) Protocol pozisyonlarını yönetin.',
 
   // -- login gates (app/login/page.tsx) --
   'loginGate.tgTitle': 'FxAeon Telegram içinde çalışır',
@@ -79,7 +79,7 @@ const tr: Messages = {
   'portfolio.markets': 'Piyasalar',
   'portfolio.pricesStale': 'Fiyatlar birkaç dakika eski olabilir (yukarı akış sorunu).',
   'portfolio.quickActions': 'Hızlı işlemler',
-  'portfolio.qaTradeHint': '10x’e kadar kaldıraç',
+  'portfolio.qaTradeHint': 'Uzun işlemlerde 7x’e kadar',
   'portfolio.qaDepositHint': 'ETH · wstETH · WBTC',
   'portfolio.qaSecurity': 'Cüzdanınız nasıl korunuyor',
   'portfolio.qaSecurityHint': 'Öz saklama, anahtarlar sizde',
@@ -214,12 +214,12 @@ const tr: Messages = {
     'Bot yalnızca oturum imzalayıcı izniniz etkinken imzalayabilir. Bunu Ayarlar → Cüzdan’dan geri alın, sohbet yürütmesi anında durur.',
   'policy.rule3Title': 'Simülasyon kontrollü yürütme',
   'policy.rule3Body':
-    'Sohbette onaylanan her işlem önce simüle edilir. Başarısız olacaksa hiçbir şey yayınlanmaz — daima güvenli tarafta kalır.',
-  'policy.rule4Title': 'Yalnızca açık onaylar',
+    'İncelemeden önce sunucu kesin planı oluşturur, politikaya göre denetler ve simüle eder. Pozisyon dönüşümleri sabit f(x) SDK v1 rota tablosuyla tam eşleşmelidir.',
+  'policy.rule4Title': 'İki dakikalık, cüzdana bağlı inceleme',
   'policy.rule4Body':
-    'Siz Onayla’ya basmadan hiçbir işlem oluşturulmaz veya gönderilmez. Önizlemeler yaklaşık 10 dakika sonra sona erer.',
+    'Mini App bu kesin planı 2 dakika dondurur. Onay, tek kullanımlık bileti talep eder; tekrar yalnızca aynı idempotent işlem kaydını döndürebilir.',
   'policy.footer':
-    'Her şeyi Ayarlar → Cüzdan’dan yönetin: anahtarınızı dışa aktarın, bot işlemini etkinleştirin veya geri alın. Canlı durum için botta /security’ye bakın.',
+    'Etkinlik, beklemede, kısmi, iptal edilmiş, geri alınmış veya onaylanmış sonuçlar dahil her adımın hash ve durumunu saklar. İmzalama erişimini Ayarlar → Cüzdan’dan yönetin.',
   // -- login sign-in card (PrivyFlow intro) --
   'loginCard.signIn': 'FxAeon’a giriş yap',
   'loginCard.subtitle': 'Privy destekli öz saklamalı cüzdan',
@@ -228,6 +228,9 @@ const tr: Messages = {
   'loginCard.wallet': 'Mevcut cüzdanı bağla',
   'loginCard.terms': 'Devam ederek Şartlarımızı ve Gizliliğimizi kabul edersiniz',
   'loginCard.poweredBy': 'Destekleyen',
+  'nav.earn': 'Kazan',
+  'nav.move': 'Taşı',
+  'nav.more': 'Daha',
 };
 
 export default tr;

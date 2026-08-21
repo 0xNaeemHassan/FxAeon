@@ -19,6 +19,8 @@ const TYPE_LABELS: Record<string, string> = {
 const STATUS_EMOJI: Record<string, string> = {
   confirmed: "✅",
   reverted: "❌",
+  partial: "⚠️",
+  cancelled: "🛑",
   failed: "❌",
   broadcast: "📤",
   broadcasting: "📤",

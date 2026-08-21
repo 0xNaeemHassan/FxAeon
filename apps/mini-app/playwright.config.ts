@@ -80,6 +80,9 @@ export default defineConfig({
     stdout: 'pipe',
     stderr: 'pipe',
     env: {
+      // Never serve a stale export built with production credentials. A
+      // deterministic rebuild is shared by the entire Playwright run.
+      E2E_BUILD: '1',
       PORT: String(PORT),
       NEXT_PUBLIC_BOT_API_URL: BASE_URL,
       NEXT_PUBLIC_TELEGRAM_BOT_USERNAME: 'FxAeonBot',

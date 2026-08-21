@@ -1,5 +1,5 @@
 /**
- * Oracle price checks — f(x) SpotPriceOracle + Chainlink staleness.
+ * Oracle price checks — official per-market f(x) oracle + Chainlink staleness.
  *
  * Phase 2 (Masterplan): Every trade preview surfaces oracle health as chips:
  * - SpotPriceOracle vs CoinGecko spot — if divergence exceeds threshold, ⚠
@@ -22,7 +22,11 @@ const SPOT_ORACLE_ABI = [
     type: "function",
     stateMutability: "view",
     inputs: [],
-    outputs: [{ name: "price", type: "uint256" }],
+    outputs: [
+      { name: "anchorPrice", type: "uint256" },
+      { name: "minPrice", type: "uint256" },
+      { name: "maxPrice", type: "uint256" },
+    ],
   },
 ] as const;
 
@@ -101,17 +105,19 @@ function getClient(): PublicClient {
  * Read the f(x) SpotPriceOracle price.
  * Returns price in USD (18-decimal format from the contract).
  */
-export async function getFxOraclePrice(): Promise<number | null> {
+export async function getFxOraclePrice(asset: "BTC" | "ETH"): Promise<number | null> {
   try {
     const client = getClient();
+    const oracle = asset === "BTC" ? ADDRESSES.WBTC_PRICE_ORACLE : ADDRESSES.WSTETH_PRICE_ORACLE;
     const price = await client.readContract({
-      address: ADDRESSES.SPOT_PRICE_ORACLE as `0x${string}`,
+      address: oracle as `0x${string}`,
       abi: SPOT_ORACLE_ABI,
       functionName: "getPrice",
     });
-    return Number(formatEther(price));
+    if (!Array.isArray(price) || price.length !== 3) return null;
+    return Number(formatEther(price[0]));
   } catch (err) {
-    botLogger.warn({ err: String(err) }, "oracle: failed to read SpotPriceOracle");
+    botLogger.warn({ err: String(err), asset }, "oracle: failed to read f(x) market oracle");
     return null;
   }
 }
@@ -163,7 +169,8 @@ export async function checkOracles(opts: OracleCheckOptions): Promise<OracleChec
   const maxDiv = opts.maxDivergence ?? 0.005;
   const maxStale = opts.maxStalenessSeconds ?? 3600;
 
-  const [chainlinkData] = await Promise.all([
+  const [fxPrice, chainlinkData] = await Promise.all([
+    getFxOraclePrice(opts.asset),
     getChainlinkData(opts.asset),
   ]);
 
@@ -171,9 +178,9 @@ export async function checkOracles(opts: OracleCheckOptions): Promise<OracleChec
   const chainlinkStalenessSeconds = chainlinkData?.stalenessSeconds ?? null;
   const spotPrice = opts.spotPrice ?? null;
 
-  // Use Chainlink as our f(x) oracle proxy (SpotPriceOracle often uses
-  // Chainlink under the hood)
-  const fxOraclePrice = chainlinkPrice;
+  // The f(x) value is read from the exact market oracle declared by the
+  // official SDK. Chainlink remains an independent freshness cross-check.
+  const fxOraclePrice = fxPrice;
 
   // Divergence check: f(x) oracle vs spot
   let fxSpotDivergence: number | null = null;
@@ -232,39 +239,4 @@ function buildChainlinkChip(
   const mins = Math.floor(stalenessSeconds / 60);
   const icon = warning ? "⚠️" : "✅";
   return `Chainlink:           ${priceStr}    ${icon} updated ${mins}m ago`;
-}
-
-/**
- * Estimate the daily funding cost for short positions.
- * Uses AAVE USDC borrow rate × 10 as a rough proxy per the masterplan.
- */
-export async function estimateDailyFunding(positionSizeUsd: number): Promise<{
-  dailyCostUsd: number;
-  annualRatePct: number;
-} | null> {
-  try {
-    // Fetch AAVE USDC borrow rate from DeFi Llama
-    const res = await fetch("https://yields.llama.fi/pools");
-    const data = await res.json();
-    const aaveUsdcPool = (data.data as any[]).find(
-      (p: any) =>
-        p.project === "aave-v3" &&
-        p.chain === "Ethereum" &&
-        p.symbol?.includes("USDC") &&
-        p.apyBaseBorrow != null
-    );
-    if (!aaveUsdcPool) return null;
-
-    const annualRate = aaveUsdcPool.apyBaseBorrow * 10; // ×10 per masterplan
-    const dailyRate = annualRate / 365;
-    const dailyCost = (positionSizeUsd * dailyRate) / 100;
-
-    return {
-      dailyCostUsd: dailyCost,
-      annualRatePct: annualRate,
-    };
-  } catch (err) {
-    botLogger.warn({ err: String(err) }, "oracle: failed to estimate funding");
-    return null;
-  }
 }

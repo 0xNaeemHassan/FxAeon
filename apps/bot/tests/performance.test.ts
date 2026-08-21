@@ -105,7 +105,7 @@ describe("Performance — Database Capacity", () => {
 
   it("should estimate Redis command usage", () => {
     const users = 500;
-    const commandsPerUserPerDay = 20; // BullMQ + sessions + locks
+    const commandsPerUserPerDay = 20; // rate limits, sessions, and locks
     const dailyCommands = users * commandsPerUserPerDay;
     
     expect(dailyCommands).toBe(10000); // Exactly at Upstash free limit

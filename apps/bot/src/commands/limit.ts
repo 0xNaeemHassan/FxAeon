@@ -1,6 +1,7 @@
 import { Context } from "grammy";
 import { prisma } from "@fxaeon/db";
 import { MARKETS } from "@fxaeon/shared";
+import { botLogger } from "../middleware/logger.js";
 
 export async function limitCommand(ctx: Context) {
   const telegramId = ctx.from?.id.toString();
@@ -8,7 +9,7 @@ export async function limitCommand(ctx: Context) {
 
   try {
     const args = ctx.message?.text?.split(" ").slice(1) || [];
-    if (args.length < 4) {
+    if (args.length !== 5) {
       await ctx.reply(
         `Usage: /limit <open|close> <market> <long|short> <at price>\n\n` +
         `Examples:\n` +
@@ -20,7 +21,7 @@ export async function limitCommand(ctx: Context) {
     }
 
     const [action, market, side, _atWord, priceStr] = args;
-    const price = parseFloat(priceStr);
+    const price = /^(?:\d+(?:\.\d+)?|\.\d+)$/.test(priceStr) ? Number(priceStr) : NaN;
 
     // Validate input BEFORE database access
     if (!["open", "close"].includes(action)) {
@@ -30,6 +31,21 @@ export async function limitCommand(ctx: Context) {
 
     if (!(MARKETS as readonly string[]).includes(market)) {
       await ctx.reply("Invalid market. Available: " + MARKETS.join(", "));
+      return;
+    }
+
+    if (side !== "long" && side !== "short") {
+      await ctx.reply("Invalid side. Use long or short.");
+      return;
+    }
+
+    if (_atWord.toLowerCase() !== "at") {
+      await ctx.reply("Invalid syntax. Put “at” before the trigger price.");
+      return;
+    }
+
+    if (!Number.isFinite(price) || price <= 0) {
+      await ctx.reply("Invalid trigger price. Enter a positive number.");
       return;
     }
 
@@ -43,10 +59,10 @@ export async function limitCommand(ctx: Context) {
       `🎯 Limit Order Preview\n\n` +
       `Action: ${action.toUpperCase()} ${market} ${side.toUpperCase()}\n` +
       `Trigger: $${price}\n\n` +
-      `Use the Mini App to sign and submit.`
+      `⚠️ Preview only — no order was created. Limit-order signing is not available in the current chat or Mini App UI.`
     );
   } catch (error) {
-    console.error("[limitCommand] Error:", error);
+    botLogger.error({ err: error, telegramId }, "limit command failed");
     await ctx.reply("❌ An error occurred. Please try again.");
   }
 }

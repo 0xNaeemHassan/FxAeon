@@ -17,10 +17,10 @@ describe("parseIntent", () => {
     it("parses 'go long 500 fxusd on btc at 5x'", () => {
       const result = parseIntent("go long 500 fxusd on btc at 5x");
       expect(result.action).toBe("open_long");
-      expect(result.market).toBe("BTC");
+      expect(result.market).toBe("WBTC");
       expect(result.side).toBe("long");
       expect(result.leverage).toBe(5);
-      expect(result.amount).toBe(500);
+      expect(result.amount).toBe("500");
       expect(result.token).toBe("fxUSD");
       expect(result.confidence).toBe("high");
     });
@@ -28,23 +28,23 @@ describe("parseIntent", () => {
     it("parses 'long eth 0.5 wsteth 3x'", () => {
       const result = parseIntent("long eth 0.5 wsteth 3x");
       expect(result.action).toBe("open_long");
-      expect(result.market).toBe("ETH");
-      expect(result.amount).toBe(0.5);
+      expect(result.market).toBe("wstETH");
+      expect(result.amount).toBe("0.5");
       expect(result.leverage).toBe(3);
     });
 
     it("parses 'buy btc 1000 7x'", () => {
       const result = parseIntent("buy btc 1000 7x");
       expect(result.action).toBe("open_long");
-      expect(result.market).toBe("BTC");
-      expect(result.amount).toBe(1000);
+      expect(result.market).toBe("WBTC");
+      expect(result.amount).toBe("1000");
       expect(result.leverage).toBe(7);
     });
 
     it("parses 'bull eth'", () => {
       const result = parseIntent("bull eth");
       expect(result.action).toBe("open_long");
-      expect(result.market).toBe("ETH");
+      expect(result.market).toBe("wstETH");
     });
   });
 
@@ -52,15 +52,15 @@ describe("parseIntent", () => {
     it("parses 'short eth 0.5 wsteth 3x'", () => {
       const result = parseIntent("short eth 0.5 wsteth 3x");
       expect(result.action).toBe("open_short");
-      expect(result.market).toBe("ETH");
+      expect(result.market).toBe("wstETH");
       expect(result.leverage).toBe(3);
-      expect(result.amount).toBe(0.5);
+      expect(result.amount).toBe("0.5");
     });
 
     it("parses 'bear btc 2x'", () => {
       const result = parseIntent("bear btc 2x");
       expect(result.action).toBe("open_short");
-      expect(result.market).toBe("BTC");
+      expect(result.market).toBe("WBTC");
       expect(result.leverage).toBe(2);
     });
 
@@ -76,16 +76,16 @@ describe("parseIntent", () => {
     it("parses 'longbtc 500 5x'", () => {
       const result = parseIntent("longbtc 500 5x");
       expect(result.action).toBe("open_long");
-      expect(result.market).toBe("BTC");
-      expect(result.amount).toBe(500);
+      expect(result.market).toBe("WBTC");
+      expect(result.amount).toBe("500");
       expect(result.leverage).toBe(5);
     });
 
     it("parses 'shorteth 0.5 3x'", () => {
       const result = parseIntent("shorteth 0.5 3x");
       expect(result.action).toBe("open_short");
-      expect(result.market).toBe("ETH");
-      expect(result.amount).toBe(0.5);
+      expect(result.market).toBe("wstETH");
+      expect(result.amount).toBe("0.5");
     });
   });
 
@@ -93,14 +93,14 @@ describe("parseIntent", () => {
     it("parses 'close my btc long'", () => {
       const result = parseIntent("close my btc long");
       expect(result.action).toBe("close_position");
-      expect(result.market).toBe("BTC");
+      expect(result.market).toBe("WBTC");
       expect(result.side).toBe("long");
     });
 
     it("parses 'exit eth short'", () => {
       const result = parseIntent("exit eth short");
       expect(result.action).toBe("close_position");
-      expect(result.market).toBe("ETH");
+      expect(result.market).toBe("wstETH");
       expect(result.side).toBe("short");
     });
 
@@ -132,13 +132,13 @@ describe("parseIntent", () => {
     it("parses 'price btc'", () => {
       const result = parseIntent("price btc");
       expect(result.action).toBe("check_price");
-      expect(result.market).toBe("BTC");
+      expect(result.market).toBe("WBTC");
     });
 
     it("parses 'what is the price of ethereum'", () => {
       const result = parseIntent("what is the price of ethereum");
       expect(result.action).toBe("check_price");
-      expect(result.market).toBe("ETH");
+      expect(result.market).toBe("wstETH");
     });
   });
 
@@ -146,7 +146,7 @@ describe("parseIntent", () => {
     it("parses 'deposit 100 usdc into fxsave'", () => {
       const result = parseIntent("deposit 100 usdc into fxsave");
       expect(result.action).toBe("fxsave_deposit");
-      expect(result.amount).toBe(100);
+      expect(result.amount).toBe("100");
       expect(result.token).toBe("USDC");
     });
 
@@ -197,17 +197,33 @@ describe("looksLikeNaturalIntent", () => {
     expect(looksLikeNaturalIntent("short eth now")).toBe(true);
     expect(looksLikeNaturalIntent("check my positions")).toBe(true);
   });
+
+  it("does not match keywords embedded inside unrelated words", () => {
+    expect(looksLikeNaturalIntent("this is helpful")).toBe(false);
+  });
 });
 
 describe("intentToTradeParams", () => {
   it("extracts trade params from a complete intent", () => {
-    const intent = parseIntent("long btc 500 fxusd 5x");
+    const intent = parseIntent("long btc 0.005 wbtc 5x");
     const params = intentToTradeParams(intent);
     expect(params).not.toBeNull();
-    expect(params!.market).toBe("BTC");
+    expect(params!.market).toBe("WBTC");
     expect(params!.side).toBe("long");
     expect(params!.leverage).toBe(5);
-    expect(params!.amount).toBe(500);
+    expect(params!.amount).toBe("0.005");
+  });
+
+  it("rejects non-native collateral instead of reinterpreting its amount", () => {
+    const intent = parseIntent("long btc 500 fxusd 5x");
+    expect(intent.token).toBe("fxUSD");
+    expect(intentToTradeParams(intent)).toBeNull();
+  });
+
+  it("does not mistake a market alias for an explicit collateral", () => {
+    const intent = parseIntent("long eth 0.5 2x");
+    expect(intent.token).toBeUndefined();
+    expect(intentToTradeParams(intent)).toMatchObject({ market: "wstETH", amount: "0.5" });
   });
 
   it("returns null for non-trade intents", () => {
@@ -217,6 +233,12 @@ describe("intentToTradeParams", () => {
 
   it("returns null when amount is missing", () => {
     const intent = parseIntent("long btc");
+    expect(intentToTradeParams(intent)).toBeNull();
+  });
+
+  it("does not treat a leverage token as collateral", () => {
+    const intent = parseIntent("long btc 5x");
+    expect(intent.amount).toBeUndefined();
     expect(intentToTradeParams(intent)).toBeNull();
   });
 

@@ -1,107 +1,97 @@
-<p align="center">
-  <img src="docs/img/banner.png" alt="FxAeon — Trade f(x) Protocol from Telegram. Self-custody by default." width="100%"/>
-</p>
+# FxAeon
 
-<h1 align="center">FxAeon</h1>
+FxAeon is a mobile-first gateway to [f(x) Protocol](https://fx.aladdin.club/) on Ethereum and Base. It combines a Telegram bot, a Next.js Telegram Mini App, a user-controlled Privy embedded wallet, and `@aladdindao/fx-sdk` 1.0.5.
 
-<p align="center"><b>Trade f(x) Protocol from Telegram. Self-custody by default.</b></p>
+The core safety rule is simple: **a preview is not a transaction**. For a Mini App action, the server builds and simulates the exact transaction plan, freezes it in a wallet-bound review ticket for two minutes, and executes only that plan after confirmation. Chat actions are reconstructed from their signed server intent at confirmation. Both paths are restricted to protocol-native f(x) routes, checked against exact target/selector/argument/value semantics, simulated as a complete route, and only then broadcast through a session-signer permission the user can revoke.
 
-<p align="center">
-  <a href="https://t.me/FxAeonBot"><img src="https://img.shields.io/badge/Telegram-%40FxAeonBot-26A5E4?logo=telegram&logoColor=white" alt="Telegram bot"/></a>
-  <a href="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/0xNaeemHassan/FxAeon/ci.yml?branch=main&label=CI" alt="CI"/></a>
-  <img src="https://img.shields.io/badge/Node-22%2B-339933?logo=nodedotjs&logoColor=white" alt="Node 22+"/>
-  <img src="https://img.shields.io/badge/pnpm-9-F69220?logo=pnpm&logoColor=white" alt="pnpm 9"/>
-  <img src="https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white" alt="TypeScript strict"/>
-  <img src="https://img.shields.io/badge/wallets-Privy-7C5CFF" alt="Privy wallets"/>
-  <img src="https://img.shields.io/badge/chain-Ethereum-627EEA?logo=ethereum&logoColor=white" alt="Ethereum"/>
-  <a href="./LICENSE"><img src="https://img.shields.io/github/license/0xNaeemHassan/FxAeon?color=blue" alt="MIT license"/></a>
-</p>
+> FxAeon and this repository have not received an independent application security audit. Leveraged positions, smart contracts, bridges, private relays, RPC providers, and embedded-wallet infrastructure all carry risk. Do not use funds you cannot afford to lose.
 
-Telegram DeFi trading bot + Mini App for [f(x) Protocol](https://fx.aladdin.club/) on Ethereum mainnet.
+## Product surfaces
 
-- **Bot:** [@FxAeonBot](https://t.me/FxAeonBot)
-- **Wallets:** user-owned [Privy](https://privy.io) embedded wallets — created or imported by the user in the Mini App, with a revocable session-signer grant for bot trading. The server never creates or owns user keys.
-- **Stack:** TypeScript · grammY · Next.js (static export) · Prisma/Postgres · Upstash Redis · viem · Sentry
+| Surface | What it does today |
+|---|---|
+| Mini App | Wallet onboarding; supported-asset portfolio summary and wallet-scoped activity; all SDK 1.0.5 position, borrowing, and fxSAVE actions; receive QR; bidirectional bridge review; settings and signer controls |
+| Telegram trading | Open, close, partially reduce, and adjust leverage for wstETH and WBTC long/short positions |
+| Borrowing | Deposit collateral and mint fxUSD; repay fxUSD debt and withdraw collateral |
+| fxSAVE | Read balances/config; deposit fxUSD, USDC, or Base Pool tokens; request queued or instant fxUSD/USDC withdrawal, redeem directly to `fxUSDBasePool`, and claim a matured queued redemption |
+| Wallet operations | Show the Ethereum deposit address and send explicit ETH/ERC-20 withdrawals to a validated destination |
+| Monitoring | Market and gas data, position-health warnings, deposit detection, price alerts, and transaction history |
+| Automation | Off-chain stop-loss and take-profit rules that execute the standard full-close path |
+| Transaction control | Speed up or cancel the latest replaceable pending transaction |
+| Bridge | SDK-native fxUSD/fxSAVE LayerZero code paths between Ethereum and Base; execution is disabled by default and remains a release-gated capability, not production-readiness evidence |
+| Limit orders | Prepare/relay/status/cancel HTTP primitives exist; `/limit` is preview-only because no signing UI is exposed |
+| Governance | FXN locking, gauge voting, and reward claiming are not implemented |
 
-## ✨ Highlights
+The detailed, method-by-method status is in the [SDK capability matrix](docs/sdk-capabilities.md). It explicitly distinguishes SDK support, application support, operator-gated behavior, and unsupported behavior.
 
-- 🔐 **Self-custodial** — Privy embedded wallets in a TEE; the server never holds user keys. Bot trading runs on a **revocable, scoped session-signer**.
-- 🛡️ **Fail-closed execution** — every bot trade is `simulate`-d before broadcast and checked against an on-chain **signer allow-list** (only f(x) contracts + specific 4-byte selectors can ever be signed).
-- ⛽ **Honest EIP-1559 gas** — fees come from `eth_feeHistory` with bigint-only math; no fabricated numbers, simulation shows the real cost before you confirm.
-- 🔁 **Idempotent trades** — one idempotency key, one broadcast, ever — safe against Telegram retry storms and worker restarts.
-- 🤖 **Trade fxUSD / fxSAVE & xPOSITIONs** and **bridge Ethereum → Base** (LayerZero OFT) without leaving Telegram.
-- 🧪 **Tested deeply** — unit, integration, on-chain fork-verify, security and performance suites in CI.
+## Transaction lifecycle
 
-## 🖼️ Screens
+Every protocol action and wallet withdrawal follows the central execution path:
 
-<table>
-  <tr>
-    <td><img src="docs/img/screen-login.png" alt="Login" width="240"/></td>
-    <td><img src="docs/img/screen-quote.png" alt="Quote" width="240"/></td>
-    <td><img src="docs/img/screen-gas.png" alt="Gas picker" width="240"/></td>
-  </tr>
-  <tr>
-    <td><img src="docs/img/screen-portfolio.png" alt="Portfolio" width="240"/></td>
-    <td><img src="docs/img/screen-tx-success.png" alt="Tx success" width="240"/></td>
-    <td><img src="docs/img/bot-conversation.png" alt="Bot conversation" width="240"/></td>
-  </tr>
-</table>
+1. Validate the Telegram callback, signed intent, or authenticated Mini App request.
+2. Resolve the user and confirm that the Privy session-signer grant is active.
+3. Build the route from current server-side state; never accept client calldata. A Mini App quote freezes the exact wallet, action, chain, targets, calldata, and values in a two-minute server ticket.
+4. Claim the ticket/intent and create or recover its per-user idempotent transaction record. Replays converge on that record instead of creating a second broadcast.
+5. Apply the default-deny signer policy to the exact SDK-emitted targets, selectors, pools/tokens, amounts, receivers, approvals, nested converter/callback payloads, and native value.
+6. Simulate the ordered route on its source chain with `eth_simulateV1`; unavailable or failed simulation stops execution.
+7. Enforce the user's UTC-day logical-action cap, failing closed if its persisted check is unavailable.
+8. Derive EIP-1559 fees on the server and broadcast transactions sequentially on the stamped source chain.
+9. Watch every route step and persist its hash and receipt-derived status. The durable record distinguishes `broadcast` (outcome still unknown), `confirmed`, `reverted`, `partial`, `cancelled`, and pre-broadcast `failed` outcomes.
 
-## 🧱 Architecture
+Position routes are requested only through the protocol-native SDK target and must return `FxRoute` v1. `FxRoute 2`, remote Odos/Velora payloads, unlisted token pairs, and any encoding or packed route word that differs from the exact SDK 1.0.5 table are rejected. MultiPathConverter is allowed only as a decoded nested protocol target, never as a direct session-signer destination.
 
-<p align="center"><img src="docs/diagrams/architecture.png" alt="FxAeon system architecture" width="900"/></p>
+Ethereum speed-up/cancel is a separate replacement path: after record-owner and wallet checks, speed-up replays only the recorded pending call, while cancel may replace it only with a zero-value, empty-calldata self-send. The policy is reapplied with this narrow replacement scope, fees are bumped server-side, and the replacement receipt is watched. The path does not re-run the original route simulation or consume the normal logical-action cap.
 
-For the session-signer security model, see <a href="docs/diagrams/security-model.png">docs/diagrams/security-model.png</a> and the [threat model](docs/audit/THREAT_MODEL.md).
+See [Architecture](docs/architecture.md) and [Security model](docs/security.md) for trust boundaries and exceptions.
 
-## Monorepo layout
+## Repository
 
-```
-apps/bot/        grammY Telegram bot + Express API (Render, Docker)
-apps/mini-app/   Next.js Telegram Mini App (Cloudflare Pages, static export)
-packages/db/     Prisma schema, migrations, client
-packages/shared/ f(x) contract addresses, ABIs, types, risk math
-ops/runbooks/    incident runbooks (bot down, Privy outage, key compromise, …)
-docs/            architecture, deployment, API, audit
-scripts/         dev setup, address verification, secret hygiene
+```text
+apps/bot/        grammY bot, Express API, workers, f(x) routes, execution policy
+apps/mini-app/   Next.js 15 static Telegram Mini App
+packages/db/     Prisma schema, migrations, and database client
+packages/shared/ Address registry, ABI fragments, risk constants, shared types
+docs/            Product, API, security, deployment, and operations guides
+ops/runbooks/    Incident-response runbooks
+scripts/         Verification and operator utilities
 ```
 
-## 🚀 Quick start (local dev)
+## Verify locally
+
+Requirements: Node.js 22, Corepack, pnpm 11.16, and PostgreSQL. An Ethereum mainnet RPC is required for protocol reads and transactions. A Base RPC is additionally required for Base-source bridge quotes/execution. Redis is optional and provides shared HTTP rate limits plus the cross-process live counter for `DAILY_TX_CAP`; PostgreSQL supplies the durable broadcast-count check and a single process falls back to memory. The cap limits logical executor actions, not transaction value, and does not make the in-process workers safe to run in multiple replicas.
 
 ```bash
-git clone https://github.com/0xNaeemHassan/FxAeon.git
-cd FxAeon
-./scripts/dev-setup.sh   # copies .env templates, installs deps
-# fill in the .env files (see SETUP.md for where each credential comes from)
-pnpm dev                 # bot + mini-app via turbo
+corepack enable
+corepack prepare pnpm@11.16.0 --activate
+pnpm install --frozen-lockfile
+pnpm --filter @fxaeon/db db:generate
+pnpm build
+pnpm typecheck
+pnpm lint
+pnpm test
 ```
 
-Requires Node 22+ and pnpm 9 (`corepack enable`). Full credential walkthrough: **[SETUP.md](./SETUP.md)**.
+The bot loads `.env.local`, `.env.production`, and `.env` relative to its process working directory without overriding variables already supplied by the shell or process manager. Docker Compose separately reads the root `.env`. Follow [SETUP.md](SETUP.md) before starting either service.
 
-## Production
+## Documentation
 
-| Component | Target | How |
-|---|---|---|
-| Bot | Render (Docker web service) | auto-deploy on push to `main` via `render.yaml`; DB migrations run in `deploy.yml` |
-| Mini App | Cloudflare Pages | built + deployed by `.github/workflows/deploy-mini-app.yml` |
-| DB backups | GitHub Actions → Cloudflare R2 | nightly `backup.yml` (pg_dump 17 → `fxbot-backups` bucket) |
-
-Details: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
-
-## 📚 Documentation
-
-- [Setup guide](./SETUP.md) — accounts, credentials, first deploy
+- [Documentation map](docs/README.md)
+- [Setup](SETUP.md)
+- [User guide](docs/user-guide.md)
+- [Mini App guide](docs/mini-app.md)
+- [Telegram commands](docs/telegram-commands.md)
+- [SDK capability matrix](docs/sdk-capabilities.md)
 - [Architecture](docs/architecture.md)
+- [HTTP API](docs/api.md)
+- [Security model](docs/security.md)
+- [Threat model](docs/threat-model.md)
 - [Deployment](docs/DEPLOYMENT.md)
-- [API reference](docs/api.md)
-- [External APIs](docs/external-apis.md)
-- [Security audit & threat model](docs/audit/)
-- [Incident runbooks](ops/runbooks/)
-- [Contributing](./CONTRIBUTING.md) · [Security policy](./SECURITY.md) · [Changelog](./CHANGELOG.md)
+- [Operations and troubleshooting](docs/operations.md)
+- [Incident runbooks](ops/runbooks/README.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security reporting](SECURITY.md)
+- [Changelog](CHANGELOG.md)
 
-## 🧪 CI
+## License
 
-Every PR runs typecheck, tests (Vitest), an on-chain verification of the contract-address registry, secret scanning (gitleaks), and Lighthouse budgets for the Mini App (`interactive ≤ 4s`). Post-deploy smoke tests hit the live bot.
-
-## 📜 License
-
-[MIT](./LICENSE)
+[MIT](LICENSE)

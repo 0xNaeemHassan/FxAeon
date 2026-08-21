@@ -12,6 +12,7 @@ import { createFxSdk } from "../fx/index.js";
 import { quoteBridgeFee, BRIDGE_TOKEN_DECIMALS, type BridgeToken } from "../fx/earn.js";
 import { buildBridgePreview } from "../handlers/earnActions.js";
 import { botLogger } from "../middleware/logger.js";
+import { canonicalActionAmount } from "../core/actionIntent.js";
 
 const USAGE =
   `Usage: /bridge <from> <to> <amount> <token>\n\n` +
@@ -38,21 +39,15 @@ export async function bridgeCommand(ctx: Context) {
   const telegramId = ctx.from?.id.toString();
   if (!telegramId) return;
 
-  const user = await prisma.user.findUnique({ where: { telegramId } });
-  if (!user) {
-    await ctx.reply("Please connect your wallet first with /start");
-    return;
-  }
-
   const args = ctx.message?.text?.split(/\s+/).slice(1) ?? [];
-  if (args.length < 4) {
+  if (args.length !== 4) {
     await ctx.reply(USAGE);
     return;
   }
 
   const [from, to, amountRaw, tokenRaw] = args;
   const token = normToken(tokenRaw);
-  const amount = Number((amountRaw ?? "").replace(/,/g, ""));
+  const amount = canonicalActionAmount(amountRaw ?? "", BRIDGE_TOKEN_DECIMALS);
 
   if (!isEthereum(from) || !isBase(to)) {
     await ctx.reply(
@@ -64,8 +59,16 @@ export async function bridgeCommand(ctx: Context) {
     await ctx.reply(`Token must be fxUSD or fxSAVE.\n\n${USAGE}`);
     return;
   }
-  if (!Number.isFinite(amount) || amount <= 0) {
-    await ctx.reply(`Enter a positive amount.\n\n${USAGE}`);
+  if (!amount) {
+    await ctx.reply(
+      `Enter a positive decimal amount with at most ${BRIDGE_TOKEN_DECIMALS} decimal places.\n\n${USAGE}`
+    );
+    return;
+  }
+
+  const user = await prisma.user.findUnique({ where: { telegramId } });
+  if (!user) {
+    await ctx.reply("Please connect your wallet first with /start");
     return;
   }
 
@@ -74,7 +77,7 @@ export async function bridgeCommand(ctx: Context) {
     const quote = await quoteBridgeFee({
       sdk,
       token,
-      amountWei: parseUnits(String(amount), BRIDGE_TOKEN_DECIMALS),
+      amountWei: parseUnits(amount, BRIDGE_TOKEN_DECIMALS),
       recipient: user.walletAddress,
     });
     const { text, keyboard } = buildBridgePreview({
@@ -85,7 +88,8 @@ export async function bridgeCommand(ctx: Context) {
     await ctx.reply(text, keyboard ? { reply_markup: keyboard } : undefined);
   } catch (error) {
     botLogger.error({ error: String(error) }, "bridge: quote failed");
-    const msg = error instanceof Error ? error.message : "couldn't fetch a quote right now";
-    await ctx.reply(`🌉 Bridge\n\n❌ ${msg}\n\n${USAGE}`);
+    await ctx.reply(
+      `🌉 Bridge\n\n❌ Couldn't fetch a live bridge quote right now. Nothing was sent.\n\n${USAGE}`
+    );
   }
 }

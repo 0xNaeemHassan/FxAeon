@@ -135,17 +135,18 @@ export function computePnl(
   if (!(snap.entryAt instanceof Date) || typeof snap.entryCollateral !== "number" || typeof snap.entryDebt !== "number") {
     return null; // malformed snapshot — omit rather than guess
   }
-  // Same valuation convention as /portfolio's positionUsd (kept local to
-  // avoid a command↔core import cycle): live collateral spot, fxUSD at its
-  // live price when available and $1 otherwise.
+  // Same fail-closed valuation convention as the portfolio summary (kept
+  // local to avoid a command↔core import cycle): every asset, including
+  // fxUSD, requires a live price.
   const colPrice = prices[pos.collateralToken];
   if (typeof colPrice !== "number") return null;
-  const debtPrice = pos.debtToken === "fxUSD" ? (prices["FXUSD"] ?? 1) : prices[pos.debtToken];
+  const debtPrice = pos.debtToken === "fxUSD" ? prices["FXUSD"] : prices[pos.debtToken];
   if (typeof debtPrice !== "number") return null;
   const current = { netUsd: pos.collateral * colPrice - pos.debt * debtPrice };
-  // Entry debt is fxUSD — valued at $1, same convention positionUsd falls
-  // back to when FXUSD itself is unpriced.
-  const entryNet = snap.entryCollateral * snap.entrySpotUsd - snap.entryDebt;
+  // Revalue the observed entry debt at the same live debt-token price used
+  // for the current position. That keeps the estimate internally consistent
+  // without inventing a historical peg price that was never recorded.
+  const entryNet = snap.entryCollateral * snap.entrySpotUsd - snap.entryDebt * debtPrice;
   const pnlUsd = current.netUsd - entryNet;
   const pnlPct = Math.abs(entryNet) > 1e-9 ? (pnlUsd / Math.abs(entryNet)) * 100 : null;
   return { pnlUsd, pnlPct, since: snap.entryAt };

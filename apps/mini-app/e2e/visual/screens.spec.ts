@@ -2,49 +2,42 @@ import { test, expect } from '../fixtures/test';
 import { settle } from '../fixtures/visual';
 import { emptyMe } from '../fixtures/data';
 
-/**
- * Visual-regression baselines for the product's key surfaces. Animations are
- * frozen (playwright config) and fonts are awaited (settle) so the snapshots are
- * pixel-stable. Full-page captures cover the scrollable screens.
- *
- * Regenerate baselines intentionally with:
- *   pnpm --filter @fxaeon/mini-app test:e2e:update
- */
+/** Pixel-level contracts for the gateway's primary mobile surfaces. */
 test.describe('Visual regression', () => {
   test.describe('browser (no Telegram)', () => {
     test.use({ telegram: false });
     test('splash', async ({ page }) => {
       await page.goto('/');
-      await expect(page.getByText(/Non-custodial leveraged trading/)).toBeVisible();
+      await expect(page.getByText(/Trade, borrow, save, bridge/)).toBeVisible();
       await settle(page);
       await expect(page).toHaveScreenshot('splash.png', { fullPage: true });
     });
   });
 
-  test('login — operator not-configured gate', async ({ page }) => {
+  test('login - operator not-configured gate', async ({ page }) => {
     await page.goto('/login');
     await expect(page.getByRole('heading', { name: 'Wallet service not configured' })).toBeVisible();
     await settle(page);
     await expect(page).toHaveScreenshot('login-not-configured.png', { fullPage: true });
   });
 
-  test('portfolio — loaded account', async ({ page }) => {
+  test('portfolio - loaded account', async ({ page }) => {
     await page.goto('/portfolio');
     await expect(page.getByText('$5,240.75')).toBeVisible();
     await settle(page);
     await expect(page).toHaveScreenshot('portfolio-loaded.png', { fullPage: true });
   });
 
-  test('portfolio — fxUSD savings tab', async ({ page }) => {
+  test('portfolio - fxUSD savings tab', async ({ page }) => {
     await page.goto('/portfolio');
     await expect(page.getByText('$5,240.75')).toBeVisible();
-    await page.getByRole('button', { name: 'fxUSD' }).click();
+    await page.getByRole('tab', { name: 'fxUSD' }).click();
     await expect(page.getByText('fxUSD Stability Pool')).toBeVisible();
     await settle(page);
     await expect(page).toHaveScreenshot('portfolio-fxusd.png', { fullPage: true });
   });
 
-  test('portfolio — empty / unfunded', async ({ page, api }) => {
+  test('portfolio - empty / unfunded', async ({ page, api }) => {
     api.setMe(emptyMe);
     await page.goto('/portfolio');
     await expect(page.getByText('No open positions')).toBeVisible();
@@ -52,37 +45,54 @@ test.describe('Visual regression', () => {
     await expect(page).toHaveScreenshot('portfolio-empty.png', { fullPage: true });
   });
 
-  test('trade — builder', async ({ page }) => {
-    await page.goto('/trade?market=wstETH&side=long&lev=3');
-    await page.locator('#amt').fill('1');
-    await expect(page.getByText(/Total exposure/)).toBeVisible();
+  test('trade - builder', async ({ page }) => {
+    await page.goto('/trade');
+    await page.getByLabel('Input amount in ETH').fill('1');
+    await expect(page.getByText('1 ETH', { exact: true })).toBeVisible();
     await settle(page);
     await expect(page).toHaveScreenshot('trade-builder.png', { fullPage: true });
   });
 
-  test('trade — review quote (gas expanded)', async ({ page }) => {
-    await page.goto('/trade?market=wstETH&side=long&lev=3');
-    await page.locator('#amt').fill('1');
-    await page.getByRole('button', { name: /Review & confirm in chat/ }).click();
-    await expect(page.getByText('You pay')).toBeVisible();
-    await page.getByRole('button', { name: /Network fee/ }).click();
-    await expect(page.getByText('Transaction speed')).toBeVisible();
+  test('trade - action review', async ({ page }) => {
+    await page.goto('/trade');
+    await page.getByLabel('Input amount in ETH').fill('1');
+    await page.getByRole('button', { name: 'Review wstETH long' }).click();
+    await expect(page.getByText('Open wstETH long', { exact: true })).toBeVisible();
     await settle(page);
-    // The live quote TTL counts down ("15s" → …) — mask it so it never flaps.
-    await expect(page).toHaveScreenshot('trade-review.png', {
-      fullPage: true,
-      mask: [page.getByRole('button', { name: 'Refresh quote' })],
-    });
+    await expect(page).toHaveScreenshot('trade-review.png', { fullPage: true });
   });
 
-  test('trade — success result', async ({ page }) => {
-    await page.goto('/trade?market=wstETH&side=long&lev=3');
-    await page.locator('#amt').fill('1');
-    await page.getByRole('button', { name: /Review & confirm in chat/ }).click();
-    await page.getByRole('button', { name: /Confirm & Sign/ }).click();
-    await expect(page.getByText('Position opened')).toBeVisible({ timeout: 15_000 });
+  test('trade - success result', async ({ page }) => {
+    await page.goto('/trade');
+    await page.getByLabel('Input amount in ETH').fill('1');
+    await page.getByRole('button', { name: 'Review wstETH long' }).click();
+    await page.getByRole('button', { name: /Confirm and execute/ }).click();
+    await expect(page.getByRole('heading', { name: 'Confirmed on-chain' })).toBeVisible({ timeout: 15_000 });
     await settle(page);
     await expect(page).toHaveScreenshot('trade-success.png', { fullPage: true });
+  });
+
+  test('earn - live fxSAVE deposit', async ({ page }) => {
+    await page.goto('/earn');
+    await expect(page.getByText('1.025 fxUSD', { exact: true })).toBeVisible();
+    await page.getByLabel('Amount in fxUSD').fill('250');
+    await settle(page);
+    await expect(page).toHaveScreenshot('earn-deposit.png', { fullPage: true });
+  });
+
+  test('move - Base to Ethereum', async ({ page }) => {
+    await page.goto('/move');
+    await page.getByRole('radio', { name: /To Ethereum/ }).click();
+    await page.getByLabel('Amount on Base in fxUSD').fill('25');
+    await settle(page);
+    await expect(page).toHaveScreenshot('move-base-to-ethereum.png', { fullPage: true });
+  });
+
+  test('more - complete toolkit', async ({ page }) => {
+    await page.goto('/more');
+    await expect(page.getByText('Signer on')).toBeVisible();
+    await settle(page);
+    await expect(page).toHaveScreenshot('more.png', { fullPage: true });
   });
 
   test('settings', async ({ page }) => {
@@ -92,7 +102,7 @@ test.describe('Visual regression', () => {
     await expect(page).toHaveScreenshot('settings.png', { fullPage: true });
   });
 
-  test('deposit (qr)', async ({ page }) => {
+  test('receive (qr)', async ({ page }) => {
     await page.goto('/qr');
     await settle(page);
     await expect(page).toHaveScreenshot('deposit-qr.png', { fullPage: true });

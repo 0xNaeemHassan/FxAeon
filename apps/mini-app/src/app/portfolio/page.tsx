@@ -29,17 +29,24 @@ import {
   Wallet,
   Clock,
   CheckCircle2,
+  PiggyBank,
+  Banknote,
+  ArrowLeftRight,
+  Share2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { isTMA, getInitData, haptic } from '@/lib/telegram';
 import { apiConfigured, getMe, getMarket, Me, ApiPosition, SavingsPosition, MarketSnapshot, MarketRow } from '@/lib/api';
+import { SharePnLModal, type PnLData } from '@/components/SharePnLModal';
 import {
   AppShell,
   AddressChip,
   ActionTile,
   Button,
+  ButtonLink,
   Card,
   EmptyState,
+  LoadingRegion,
   SectionTitle,
   Skeleton,
   Stat,
@@ -47,16 +54,18 @@ import {
 
 import { useT, useLocale } from '@/lib/i18n';
 import TokenIcon from '@/components/TokenIcon';
+import { formatExactDecimal } from '@/lib/amount';
 
 const BOT_USERNAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || 'FxAeonBot';
 
 function fmt(value?: string): string {
   if (value === undefined) return '—';
-  const n = Number(value);
-  if (!Number.isFinite(n)) return value;
-  if (n === 0) return '0';
-  if (n < 0.0001) return '<0.0001';
-  return n.toLocaleString('en-US', { maximumFractionDigits: 4 });
+  if (/^-?0*\.0*[1-9]\d*$/.test(value)) {
+    const fraction = value.split('.')[1] ?? '';
+    const firstNonZero = fraction.search(/[1-9]/);
+    if (firstNonZero >= 4) return '<0.0001';
+  }
+  return formatExactDecimal(value, 4);
 }
 
 function usd2(n: number): string {
@@ -104,7 +113,7 @@ function ProfileAvatar() {
       href="/settings"
       onClick={() => haptic('light')}
       aria-label="Settings"
-      className="glass-press flex h-10 w-10 items-center justify-center rounded-full ring-2 ring-[var(--mint)]/60"
+      className="glass-press flex h-11 w-11 items-center justify-center rounded-full ring-2 ring-[var(--mint)]/60"
       style={{ background: 'linear-gradient(135deg, var(--mint), var(--cyan))' }}
     >
       <User className="h-5 w-5 text-white" strokeWidth={2} />
@@ -124,7 +133,7 @@ function TokenGlyph({ symbol, leverage }: { symbol: string; leverage: number }) 
   );
 }
 
-function PositionCard({ p }: { p: ApiPosition }) {
+function PositionCard({ p, onShare }: { p: ApiPosition; onShare?: (p: ApiPosition) => void }) {
   const t = useT();
   const router = useRouter();
   const token = p.collateralToken || p.market;
@@ -134,39 +143,56 @@ function PositionCard({ p }: { p: ApiPosition }) {
     p.collateral !== undefined ? `${fmt(p.collateral)} ${token}` : undefined;
 
   return (
-    <button
-      type="button"
-      onClick={() => {
-        haptic('light');
-        router.push('/trade');
-      }}
-      className="glass glass-press flex w-full items-center gap-3 p-3.5 text-left"
-    >
-      <TokenGlyph symbol={token} leverage={p.leverage} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="text-display text-[15px] font-semibold">{p.market}</span>
-          <span className="text-[13px] font-semibold text-gradient">
-            {p.leverage % 1 === 0 ? p.leverage : p.leverage.toFixed(1)}x
-          </span>
-        </div>
-        <p className="mt-0.5 truncate text-[12px] text-mut">
-          <span className="text-success">●</span> {t(`portfolio.${p.side}`)}
-          {sizeText ? ` · ${t('portfolio.size')} ${sizeText}` : ''}
-        </p>
-        {/* Real health indicator (replaces the mockup's price sparkline, which
-            needs a price-history feed the protocol doesn't expose yet). */}
-        <div className="mt-2 flex items-center gap-2">
-          <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
+    <div className="glass glass-press flex w-full items-center gap-3 p-3.5 text-left">
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label={`${p.market} ${p.side} position, ${p.leverage}x leverage`}
+        onClick={() => {
+          haptic('light');
+          router.push('/positions');
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            haptic('light');
+            router.push('/positions');
+          }
+        }}
+        className="flex min-w-0 flex-1 items-center gap-3 cursor-pointer outline-none"
+      >
+        <TokenGlyph symbol={token} leverage={p.leverage} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-display text-[15px] font-semibold">{p.market}</span>
+            <span className="text-[13px] font-semibold text-gradient">
+              {p.leverage % 1 === 0 ? p.leverage : p.leverage.toFixed(1)}x
+            </span>
+          </div>
+          <p className="mt-0.5 truncate text-[12px] text-mut">
+            <span className="text-success">●</span> {t(`portfolio.${p.side}`)}
+            {sizeText ? ` · ${t('portfolio.size')} ${sizeText}` : ''}
+          </p>
+          {/* Real health indicator */}
+          <div className="mt-2 flex items-center gap-2">
             <span
-              className={`block h-full rounded-full ${healthTone}`}
-              style={{ width: `${Math.max(6, Math.round(p.healthPercent * 100))}%` }}
-            />
-          </span>
-          <span className="text-[10px] text-mut">{Math.round(p.healthPercent * 100)}%</span>
+              className="h-1.5 flex-1 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]"
+              role="progressbar"
+              aria-label="Position health"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.max(0, Math.min(100, Math.round(p.healthPercent * 100)))}
+            >
+              <span
+                className={`block h-full rounded-full ${healthTone}`}
+                style={{ width: `${Math.min(100, Math.max(6, Math.round(p.healthPercent * 100)))}%` }}
+              />
+            </span>
+            <span className="text-[10px] text-mut">{Math.round(p.healthPercent * 100)}%</span>
+          </div>
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-1.5">
+
+      <div className="flex shrink-0 items-center gap-2">
         {typeof p.pnlUsd === 'number' ? (
           <div className="flex flex-col items-end leading-tight">
             <span className={`text-[14px] font-semibold ${p.pnlUsd >= 0 ? 'text-success' : 'text-danger'}`}>
@@ -185,9 +211,23 @@ function PositionCard({ p }: { p: ApiPosition }) {
         ) : (
           <span className="text-[13px] font-medium text-mut">—</span>
         )}
+        {onShare && (
+          <button
+            type="button"
+            aria-label={`Share ${p.market} ${p.side} position badge`}
+            onClick={(e) => {
+              e.stopPropagation();
+              haptic('medium');
+              onShare(p);
+            }}
+            className="flex min-h-8 min-w-8 items-center justify-center rounded-lg bg-[rgba(255,255,255,0.06)] p-1.5 text-mut transition-colors hover:bg-[var(--mint-dim)] hover:text-mint"
+          >
+            <Share2 className="h-3.5 w-3.5" />
+          </button>
+        )}
         <ChevronRight className="h-4 w-4 text-mut" />
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -198,9 +238,10 @@ function SavingsCard({ s }: { s: SavingsPosition }) {
   return (
     <button
       type="button"
+      aria-label={`${t('portfolio.savingsTitle')}, ${fmt(s.shares)} shares`}
       onClick={() => {
         haptic('light');
-        router.push('/trade');
+        router.push('/earn');
       }}
       className="glass glass-press flex w-full items-center gap-3 p-3.5 text-left"
     >
@@ -309,9 +350,21 @@ export default function PortfolioPage() {
   const [mounted, setMounted] = useState(false);
   const [me, setMe] = useState<Me | null>(null);
   const [market, setMarket] = useState<MarketSnapshot | null>(null);
+  const [marketError, setMarketError] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [tab, setTab] = useState<'positions' | 'fxusd'>('positions');
+  const [shareData, setShareData] = useState<PnLData | null>(null);
+
+  const loadMarket = useCallback(async () => {
+    setMarketError('');
+    try {
+      setMarket(await getMarket());
+    } catch (cause) {
+      setMarket(null);
+      setMarketError(cause instanceof Error ? cause.message : 'Live market data is unavailable.');
+    }
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -324,17 +377,13 @@ export default function PortfolioPage() {
       }
       setMe(data);
       setLocale(data.language);
-      try {
-        setMarket(await getMarket());
-      } catch {
-        setMarket(null);
-      }
+      await loadMarket();
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [router, setLocale]);
+  }, [loadMarket, router, setLocale]);
 
   useEffect(() => {
     setMounted(true);
@@ -357,9 +406,9 @@ export default function PortfolioPage() {
           title={t('portfolio.openInTgTitle')}
           body={t('portfolio.openInTgBody')}
           action={
-            <a href={`https://t.me/${BOT_USERNAME}`}>
-              <Button>{t('common.openBot', { bot: BOT_USERNAME })}</Button>
-            </a>
+            <ButtonLink href={`https://t.me/${BOT_USERNAME}`} external>
+              {t('common.openBot', { bot: BOT_USERNAME })}
+            </ButtonLink>
           }
         />
       </AppShell>
@@ -381,12 +430,12 @@ export default function PortfolioPage() {
   if (loading) {
     return (
       <AppShell title={t('portfolio.title')}>
-        <div className="flex flex-col gap-3">
+        <LoadingRegion label="Loading your portfolio" className="flex flex-col gap-3">
           <Skeleton className="h-36" />
           <Skeleton className="h-10" />
           <Skeleton className="h-20" />
           <Skeleton className="h-20" />
-        </div>
+        </LoadingRegion>
       </AppShell>
     );
   }
@@ -407,11 +456,12 @@ export default function PortfolioPage() {
   const funding = me.funding;
   const positions = me.positions ?? [];
   const summary = me.summary;
-  const noFunds =
+  // Only the backend's all-token, chain-derived aggregate may declare a
+  // wallet empty. Deriving this from the three summary tiles would hide USDC,
+  // USDT, fxUSD, WETH, stETH, and base-pool balances.
+  const confirmedEmptyWallet =
     funding?.known &&
-    Number(funding.eth ?? 0) === 0 &&
-    Number(funding.wstEth ?? 0) === 0 &&
-    Number(funding.wbtc ?? 0) === 0;
+    funding.funded === false;
 
   const total = summary?.totalValueUsd;
   const netPnl = summary?.netPnlUsd;
@@ -421,8 +471,13 @@ export default function PortfolioPage() {
     <AppShell>
       <div className="stagger flex flex-col">
         {/* Header: title + avatar */}
-        <header className="anim-fade-up mb-4 flex items-center justify-between">
-          <h1 className="text-display text-[26px] font-semibold leading-tight">{t('portfolio.title')}</h1>
+        <header className="anim-fade-up mb-5 flex items-center justify-between">
+          <div>
+            <p className="mb-1.5 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.17em] text-mut">
+              <span className="status-dot" aria-hidden="true" /> Ethereum mainnet
+            </p>
+            <h1 className="text-display text-[28px] font-semibold leading-tight tracking-[-0.04em]">{t('portfolio.title')}</h1>
+          </div>
           <ProfileAvatar />
         </header>
 
@@ -435,7 +490,7 @@ export default function PortfolioPage() {
           <div className="relative">
             <p className="text-[12px] text-mut">{t('portfolio.totalValue')}</p>
             {typeof total === 'number' ? (
-              <p className="text-display mt-1 text-[34px] font-bold leading-none">${usd2(total)}</p>
+              <p className="text-display mt-1 break-words text-[clamp(1.8rem,9vw,2.125rem)] font-bold leading-none">${usd2(total)}</p>
             ) : (
               <>
                 <p className="text-display mt-1 text-[34px] font-bold leading-none text-mut">—</p>
@@ -458,19 +513,32 @@ export default function PortfolioPage() {
         </Card>
 
         {/* Tabs */}
-        <div className="mt-4 grid grid-cols-2 gap-1 rounded-2xl bg-[rgba(255,255,255,0.04)] p-1">
+        <div className="mt-4 grid grid-cols-2 gap-1 rounded-2xl border border-[var(--line)] bg-[rgba(255,255,255,0.035)] p-1" role="tablist" aria-label="Portfolio views">
           {(['positions', 'fxusd'] as const).map((key) => {
             const active = tab === key;
             return (
               <button
                 key={key}
                 type="button"
+                role="tab"
+                aria-selected={active}
+                aria-controls="portfolio-tabpanel"
+                id={`portfolio-tab-${key}`}
+                tabIndex={active ? 0 : -1}
                 onClick={() => {
                   haptic('selection');
                   setTab(key);
                 }}
-                className={`rounded-xl py-2 text-[13px] font-semibold transition-colors ${
-                  active ? 'bg-[var(--mint-dim)] text-mint' : 'text-mut'
+                onKeyDown={(event) => {
+                  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                  event.preventDefault();
+                  const next = event.key === 'ArrowLeft' || event.key === 'Home' ? 'positions' : 'fxusd';
+                  setTab(next);
+                  event.currentTarget.parentElement?.querySelector<HTMLButtonElement>(`#portfolio-tab-${next}`)?.focus();
+                  haptic('selection');
+                }}
+                className={`min-h-11 rounded-xl py-2 text-[13px] font-semibold transition-colors ${
+                  active ? 'bg-[var(--mint-dim)] text-mint shadow-[inset_0_0_0_1px_rgba(139,109,255,0.1)]' : 'text-mut'
                 }`}
               >
                 {key === 'positions' ? t('portfolio.tabPositions') : t('portfolio.tabFxusd')}
@@ -480,7 +548,7 @@ export default function PortfolioPage() {
         </div>
 
         {/* Tab content */}
-        <div className="mt-3">
+        <div id="portfolio-tabpanel" role="tabpanel" aria-labelledby={`portfolio-tab-${tab}`} className="mt-3">
           {tab === 'positions' ? (
             <>
               {me.positionsKnown === false && (
@@ -491,7 +559,21 @@ export default function PortfolioPage() {
               {positions.length > 0 ? (
                 <div className="flex flex-col gap-2.5">
                   {positions.map((p) => (
-                    <PositionCard key={p.tokenId} p={p} />
+                    <PositionCard
+                      key={`${p.market}-${p.side}-${p.tokenId}`}
+                      p={p}
+                      onShare={(pos) =>
+                        setShareData({
+                          market: pos.market,
+                          side: pos.side,
+                          leverage: pos.leverage,
+                          pnlUsd: pos.pnlUsd,
+                          pnlPct: pos.pnlPct,
+                          entryPrice: pos.entryPrice,
+                          referralCode: me.referralCode ?? undefined,
+                        })
+                      }
+                    />
                   ))}
                 </div>
               ) : (
@@ -537,7 +619,7 @@ export default function PortfolioPage() {
             <button
               type="button"
               onClick={() => void load()}
-              className="text-mut transition-colors hover:text-mint"
+              className="-m-2 flex min-h-11 min-w-11 items-center justify-center rounded-xl text-mut transition-colors hover:text-mint"
               aria-label="Refresh"
             >
               <RefreshCw className="h-3.5 w-3.5" />
@@ -548,7 +630,7 @@ export default function PortfolioPage() {
         </SectionTitle>
         <Card className="relative overflow-hidden">
           <div className="flex items-center justify-between">
-            <AddressChip address={me.walletAddress!} />
+            {me.walletAddress ? <AddressChip address={me.walletAddress} /> : <span className="text-[12px] text-warn">Wallet address unavailable</span>}
             <span className="flex items-center gap-1 rounded-full bg-[var(--mint-dim)] px-2.5 py-1 text-[10.5px] font-medium text-mint">
               <ShieldCheck className="h-3 w-3" /> {t('portfolio.selfCustodyBadge')}
             </span>
@@ -563,16 +645,16 @@ export default function PortfolioPage() {
         <SectionTitle>{t('portfolio.balances')}</SectionTitle>
         {funding?.known ? (
           <div className="grid grid-cols-3 gap-2.5">
-            <Stat label="ETH" value={fmt(funding.eth)} accent={Number(funding.eth) > 0} />
-            <Stat label="wstETH" value={fmt(funding.wstEth)} accent={Number(funding.wstEth) > 0} />
-            <Stat label="WBTC" value={fmt(funding.wbtc)} accent={Number(funding.wbtc) > 0} />
+            <Stat label="ETH" value={fmt(funding.eth)} accent={Boolean(funding.eth && /[1-9]/.test(funding.eth))} />
+            <Stat label="wstETH" value={fmt(funding.wstEth)} accent={Boolean(funding.wstEth && /[1-9]/.test(funding.wstEth))} />
+            <Stat label="WBTC" value={fmt(funding.wbtc)} accent={Boolean(funding.wbtc && /[1-9]/.test(funding.wbtc))} />
           </div>
         ) : (
           <Card>
             <p className="text-[12.5px] text-mut">{t('portfolio.balancesUnavailable')}</p>
           </Card>
         )}
-        {noFunds && (
+        {confirmedEmptyWallet && (
           <Card className="mt-2.5 border border-[rgba(124,92,255,0.25)]">
             <p className="text-[13px] leading-relaxed">
               <span className="font-medium text-mint">{t('portfolio.fundTitle')}</span>{' '}
@@ -590,11 +672,24 @@ export default function PortfolioPage() {
             <MarketsCard market={market} />
           </>
         )}
+        {!market && marketError && (
+          <>
+            <SectionTitle>{t('portfolio.markets')}</SectionTitle>
+            <Card className="border-[rgba(255,194,102,.24)]">
+              <p role="alert" className="text-[12px] leading-relaxed text-warn">Market data unavailable: {marketError}</p>
+              <Button variant="ghost" className="mt-3" onClick={() => void loadMarket()}>
+                <RefreshCw aria-hidden="true" className="h-4 w-4" /> Retry markets
+              </Button>
+            </Card>
+          </>
+        )}
 
         <SectionTitle>{t('portfolio.quickActions')}</SectionTitle>
         <div className="grid grid-cols-2 gap-2.5">
           <ActionTile icon={CandlestickChart} label={t('nav.trade')} hint={t('portfolio.qaTradeHint')} href="/trade" />
-          <ActionTile icon={QrCode} label={t('nav.deposit')} hint={t('portfolio.qaDepositHint')} href="/qr" />
+          <ActionTile icon={PiggyBank} label={t('nav.earn')} hint="Deposit or redeem fxSAVE" href="/earn" />
+          <ActionTile icon={Banknote} label="Borrow" hint="Mint or repay fxUSD" href="/borrow" />
+          <ActionTile icon={ArrowLeftRight} label={t('nav.move')} hint="Bridge Ethereum ↔ Base" href="/move" />
         </div>
         <div className="mt-2.5">
           <ActionTile
@@ -604,6 +699,14 @@ export default function PortfolioPage() {
             href="/policy"
           />
         </div>
+
+        {shareData && (
+          <SharePnLModal
+            isOpen={Boolean(shareData)}
+            onClose={() => setShareData(null)}
+            data={shareData}
+          />
+        )}
       </div>
     </AppShell>
   );

@@ -1,6 +1,9 @@
 'use client';
 
 import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { AlertTriangle, MessageCircle, RefreshCw, RotateCcw } from 'lucide-react';
+import FxLogo from '@/components/FxLogo';
+import { haptic } from '@/lib/telegram';
 
 interface Props {
   children: ReactNode;
@@ -30,152 +33,129 @@ class ErrorBoundaryInner extends Component<Props, State> {
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('FxAeon ErrorBoundary caught:', error, errorInfo);
     this.setState({ errorInfo });
-    
-    // Report to error tracking
     this.props.onError?.(error, errorInfo);
-    
-    // Show Telegram alert if available
-    if (typeof window !== 'undefined') {
-      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.('error');
-    }
+    haptic('error');
   }
 
   private handleRetry = () => {
+    haptic('warning');
     this.setState({ isRetrying: true });
-    
-    // Give visual feedback before resetting
     setTimeout(() => {
       this.setState({ hasError: false, error: null, errorInfo: null, isRetrying: false });
-    }, 800);
+    }, 450);
   };
 
   private handleReload = () => {
-    if (typeof window !== 'undefined') {
-      window.location.reload();
-    }
+    haptic('medium');
+    window.location.reload();
   };
 
   public render() {
     if (this.state.hasError) {
       return (
-        this.props.fallback || <ErrorFallback 
-          error={this.state.error}
-          errorInfo={this.state.errorInfo}
-          isRetrying={this.state.isRetrying}
-          onRetry={this.handleRetry}
-          onReload={this.handleReload}
-        />
+        this.props.fallback ?? (
+          <ErrorFallback
+            error={this.state.error}
+            errorInfo={this.state.errorInfo}
+            isRetrying={this.state.isRetrying}
+            onRetry={this.handleRetry}
+            onReload={this.handleReload}
+          />
+        )
       );
     }
-
     return this.props.children;
   }
 }
 
-function ErrorFallback({ 
-  error, 
-  errorInfo, 
-  isRetrying, 
-  onRetry, 
-  onReload 
-}: { 
+function ErrorFallback({
+  error,
+  errorInfo,
+  isRetrying,
+  onRetry,
+  onReload,
+}: {
   error: Error | null;
   errorInfo: ErrorInfo | null;
   isRetrying: boolean;
   onRetry: () => void;
   onReload: () => void;
 }) {
+  const showTechnicalDetails = process.env.NODE_ENV !== 'production';
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center border border-slate-200">
-        {/* Error icon */}
-        <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-red-50 flex items-center justify-center">
-          <svg 
-            className="w-10 h-10 text-red-500" 
-            fill="none" 
-            viewBox="0 0 24 24" 
-            stroke="currentColor"
-            aria-hidden="true"
-          >
-            <path 
-              strokeLinecap="round" 
-              strokeLinejoin="round" 
-              strokeWidth={1.5} 
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" 
-            />
-          </svg>
+    <main className="app-shell mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-[430px] items-center px-5 py-10">
+      <section className="glass anim-scale-in w-full rounded-[28px] p-6 text-center">
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-[26px] border border-[rgba(255,107,118,0.22)] bg-[var(--danger-dim)]">
+          <AlertTriangle className="h-9 w-9 text-danger" strokeWidth={1.7} aria-hidden="true" />
         </div>
-        
-        <h1 className="text-xl font-bold text-slate-900 mb-2">
-          Something went wrong
+
+        <div className="mt-5 flex items-center justify-center gap-2">
+          <FxLogo size={22} />
+          <span className="text-display text-[13px] font-semibold tracking-tight">FxAeon</span>
+        </div>
+        <h1 className="text-display mt-4 text-[23px] font-semibold tracking-[-0.035em]">
+          This screen hit a snag
         </h1>
-        
-        <p className="text-slate-500 mb-6">
-          We encountered an unexpected error. Don&apos;t worry, your funds are safe.
+        <p className="mx-auto mt-2 max-w-[300px] text-[13px] leading-relaxed text-mut">
+          Your wallet and funds are unaffected. Retry the screen, or reload the Mini App if the issue persists.
         </p>
-        
-        {/* Error details (collapsible) */}
-        {error && (
-          <details className="mb-6 text-left">
-            <summary className="cursor-pointer text-sm text-slate-500 hover:text-slate-700 transition-colors">
-              Error details
+
+        {showTechnicalDetails && error && (
+          <details className="mt-5 rounded-2xl border border-[var(--line)] bg-[rgba(0,0,0,0.18)] p-3 text-left">
+            <summary className="cursor-pointer text-[12px] text-mut transition-colors hover:text-[var(--text)]">
+              Technical details
             </summary>
-            <div className="mt-2 p-3 bg-slate-100 rounded-lg text-xs font-mono text-slate-700 overflow-auto max-h-40">
-              <p className="text-red-500 font-semibold mb-1">{error.message}</p>
+            <div className="mt-2 max-h-36 overflow-auto rounded-xl bg-black/20 p-3 font-mono text-[10px] leading-relaxed text-mut">
+              <p className="mb-1 font-semibold text-danger">{error.message}</p>
               {errorInfo?.componentStack && (
-                <pre className="text-slate-500 whitespace-pre-wrap">{errorInfo.componentStack}</pre>
+                <pre className="whitespace-pre-wrap">{errorInfo.componentStack}</pre>
               )}
             </div>
           </details>
         )}
-        
-        {/* Action buttons */}
-        <div className="flex gap-3">
-          <button type="button"
+
+        <div className="mt-6 grid grid-cols-2 gap-2.5">
+          <button
+            type="button"
             onClick={onRetry}
             disabled={isRetrying}
-            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            aria-busy={isRetrying || undefined}
+            className="button button-primary glass-press flex min-h-12 items-center justify-center gap-2 rounded-2xl px-3 text-[14px] font-semibold text-white disabled:opacity-50"
           >
             {isRetrying ? (
               <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span>Retrying...</span>
+                <RefreshCw className="h-4 w-4 animate-spin" aria-hidden="true" />
+                <span>Retrying…</span>
               </>
             ) : (
               <>
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                <span>Try Again</span>
+                <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                <span>Try again</span>
               </>
             )}
           </button>
-          
-          <button type="button"
+          <button
+            type="button"
             onClick={onReload}
-            className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-3 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
+            className="button button-ghost glass-press flex min-h-12 items-center justify-center gap-2 rounded-2xl px-3 text-[14px] font-medium"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
+            <RefreshCw className="h-4 w-4" aria-hidden="true" />
             <span>Reload</span>
           </button>
         </div>
-        
-        {/* Support link */}
-        <p className="mt-4 text-sm text-slate-400">
-          Still having issues?{' '}
-          <a 
-            href="https://t.me/FxAeonBot" 
-            className="text-blue-600 hover:underline"
+
+        <p className="mt-5 text-[12px] text-mut">
+          <a
+            href="https://t.me/FxAeonBot"
+            className="inline-flex items-center gap-1.5 text-mint hover:underline"
             target="_blank"
             rel="noopener noreferrer"
           >
-            Contact support
+            <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" /> Contact support
           </a>
         </p>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }
 

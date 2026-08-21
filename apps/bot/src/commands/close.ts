@@ -54,14 +54,14 @@ export default async function handler(ctx: Context & I18nFlavor): Promise<void> 
       const mIdx = MARKETS.indexOf(pos.market);
       const sideKey = pos.side === "short" ? "s" : "l";
       const kb = new InlineKeyboard()
-        .text("🔒 Close 100%", `pc_${mIdx}_${sideKey}_${pos.positionId}_full`)
+        .text("🔒 Close 100%", `pc_${mIdx}_${sideKey}_${pos.positionId}`)
         .text("❌ Cancel", "pc_cancel")
         .row();
       await ctx.reply(
         `🔒 Close Position\n\n` +
           `${positionLabel(pos)}\n` +
-          `Collateral: ${Number(pos.collateral).toFixed(6)} ${pos.collateralToken}\n` +
-          `Debt: ${Number(pos.debt).toFixed(2)} ${pos.debtToken}\n\n` +
+          `Collateral: ${pos.collateral.toFixed(6)} ${pos.collateralToken}\n` +
+          `Debt: ${pos.debt.toFixed(2)} ${pos.debtToken}\n\n` +
           `Tap to close or cancel:`,
         { reply_markup: kb }
       );

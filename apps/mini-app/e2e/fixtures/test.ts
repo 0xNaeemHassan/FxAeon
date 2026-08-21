@@ -15,17 +15,33 @@
  */
 import { test as base, expect, type Page, type Route } from '@playwright/test';
 import {
+  actionExecuteSuccess,
+  actionQuoteFor,
+  activityItems,
+  bridgeState,
   onboardedMe,
   marketSnapshot,
-  quoteFor,
-  executeSuccess,
+  protocolInfo,
   type Me,
 } from './data';
 import { telegramInitScript, type TelegramShimOptions } from './telegram';
-import type { MarketSnapshot, TradeExecuteResult } from '../../src/lib/api';
+import type {
+  ActionExecuteResult,
+  ActivityItem,
+  BridgeState,
+  MarketSnapshot,
+  MiniActionParams,
+  ProtocolInfo,
+} from '../../src/lib/api';
 
 interface JsonResponse {
   status: number;
+  body: unknown;
+}
+
+export interface ApiRequest {
+  method: string;
+  path: string;
   body: unknown;
 }
 
@@ -33,13 +49,24 @@ interface JsonResponse {
 export class ApiMock {
   me: Me = structuredClone(onboardedMe);
   market: MarketSnapshot = structuredClone(marketSnapshot);
-  execute: TradeExecuteResult = structuredClone(executeSuccess);
+  protocol: ProtocolInfo = structuredClone(protocolInfo);
+  bridge: BridgeState = structuredClone(bridgeState);
+  activity: ActivityItem[] = structuredClone(activityItems);
+  execute: ActionExecuteResult = structuredClone(actionExecuteSuccess);
+  readonly requests: ApiRequest[] = [];
   /** Per-path overrides win over the defaults above. key = `METHOD /path`. */
   private overrides = new Map<string, JsonResponse>();
 
   setMe(me: Me): this { this.me = structuredClone(me); return this; }
   setMarket(m: MarketSnapshot): this { this.market = structuredClone(m); return this; }
-  setExecute(r: TradeExecuteResult): this { this.execute = structuredClone(r); return this; }
+  setProtocol(info: ProtocolInfo): this { this.protocol = structuredClone(info); return this; }
+  setBridgeState(state: BridgeState): this { this.bridge = structuredClone(state); return this; }
+  setActivity(items: ActivityItem[]): this { this.activity = structuredClone(items); return this; }
+  setExecute(r: ActionExecuteResult): this { this.execute = structuredClone(r); return this; }
+
+  lastRequest(method: string, path: string): ApiRequest | undefined {
+    return this.requests.findLast((request) => request.method === method.toUpperCase() && request.path === path);
+  }
 
   /** Force a specific JSON response for one endpoint. */
   set(method: string, path: string, res: JsonResponse): this {
@@ -51,17 +78,23 @@ export class ApiMock {
     return this.set(method, path, { status, body: { error: { code, message } } });
   }
 
-  private resolve(method: string, path: string): JsonResponse {
+  private resolve(method: string, path: string, body: unknown): JsonResponse {
     const override = this.overrides.get(`${method} ${path}`);
     if (override) return override;
     if (method === 'GET' && path === '/me') return { status: 200, body: this.me };
     if (method === 'GET' && path === '/market') return { status: 200, body: this.market };
     if (method === 'POST' && path === '/market') return { status: 200, body: this.market };
-    if (method === 'POST' && path === '/trade/quote') {
-      const q = quoteFor(this.me.positions?.[0]?.market ?? 'wstETH');
-      return { status: 200, body: { ok: true, quote: q } };
+    if (method === 'GET' && path === '/protocol') return { status: 200, body: this.protocol };
+    if (method === 'GET' && path === '/bridge-state') return { status: 200, body: this.bridge };
+    if (method === 'GET' && path === '/activity') return { status: 200, body: { items: this.activity } };
+    if (method === 'POST' && path === '/action/quote') {
+      return { status: 200, body: { ok: true, quote: actionQuoteFor(body as MiniActionParams) } };
     }
-    if (method === 'POST' && path === '/trade/execute') return { status: 200, body: this.execute };
+    if (method === 'POST' && path === '/action/execute') {
+      const params = body as { ticket?: unknown };
+      const chainId = typeof params.ticket === 'string' && params.ticket.startsWith('B') ? 8453 : 1;
+      return { status: 200, body: { ...this.execute, chainId } };
+    }
     if (method === 'POST' && path === '/settings') return { status: 200, body: { ok: true } };
     if (method === 'POST' && path === '/wallet/sync')
       return { status: 200, body: { ok: true, walletDelegated: true, walletAddress: this.me.walletAddress } };
@@ -84,7 +117,14 @@ export class ApiMock {
       const req = route.request();
       const url = new URL(req.url());
       const path = url.pathname.replace(/^.*\/api\/v1\/miniapp/, '') || '/';
-      const { status, body } = this.resolve(req.method().toUpperCase(), path);
+      const method = req.method().toUpperCase();
+      let requestBody: unknown = undefined;
+      if (req.postData()) {
+        try { requestBody = req.postDataJSON(); }
+        catch { requestBody = req.postData(); }
+      }
+      this.requests.push({ method, path, body: structuredClone(requestBody) });
+      const { status, body } = this.resolve(method, path, requestBody);
       await route.fulfill({
         status,
         contentType: 'application/json',

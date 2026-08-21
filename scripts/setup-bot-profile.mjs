@@ -15,10 +15,10 @@
  */
 const TOKEN = process.env.BOT_TOKEN;
 const DRY = process.argv.includes("--dry");
-const MINI_APP_URL = process.env.MINI_APP_URL || "https://fxbot-mini-app.pages.dev/";
+const MINI_APP_URL = process.env.MINI_APP_URL;
 
-if (!TOKEN) {
-  console.error("BOT_TOKEN env var is required");
+if (!TOKEN || !MINI_APP_URL) {
+  console.error("BOT_TOKEN and MINI_APP_URL env vars are required");
   process.exit(1);
 }
 

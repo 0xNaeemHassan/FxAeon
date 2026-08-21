@@ -72,10 +72,9 @@ describe("positionUsd", () => {
     expect(usd).toBeNull();
   });
 
-  it("defaults fxUSD to $1 when price unavailable", () => {
+  it("returns null when the fxUSD price is unavailable", () => {
     const prices = { wstETH: 3400 };
     const usd = positionUsd(mockPosition, prices);
-    expect(usd).not.toBeNull();
-    expect(usd!.debtUsd).toBeCloseTo(5000);
+    expect(usd).toBeNull();
   });
 });

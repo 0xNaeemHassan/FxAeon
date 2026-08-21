@@ -29,13 +29,14 @@ test.describe('Portfolio', () => {
     // Live markets table.
     await expect(page.getByText('Markets')).toBeVisible();
     await expect(page.getByText('$3,500').first()).toBeVisible();
+    await expect(page.getByText('Longs up to 7x')).toBeVisible();
   });
 
   test('fxUSD tab shows the real fxSAVE stability-pool position', async ({ page }) => {
     await page.goto('/portfolio');
     await expect(page.getByText('$5,240.75')).toBeVisible();
 
-    await page.getByRole('button', { name: 'fxUSD' }).click();
+    await page.getByRole('tab', { name: 'fxUSD' }).click();
     await expect(page.getByText('fxUSD Stability Pool')).toBeVisible();
     await expect(page.getByText('$1,215.50')).toBeVisible();
   });
@@ -48,6 +49,18 @@ test.describe('Portfolio', () => {
     // Unfunded → fund-your-wallet nudge with a deposit action.
     await expect(page.getByText('Fund your wallet to start trading.')).toBeVisible();
     await expect(page.getByText('Show deposit address')).toBeVisible();
+  });
+
+  test('does not infer an empty wallet from the three summary assets', async ({ page, api }) => {
+    const stablecoinFunded = structuredClone(emptyMe);
+    if (!stablecoinFunded.funding) throw new Error('funding fixture required');
+    stablecoinFunded.funding.funded = true;
+    stablecoinFunded.funding.balances = { ...stablecoinFunded.funding.balances, USDC: '25' };
+    api.setMe(stablecoinFunded);
+
+    await page.goto('/portfolio');
+    await expect(page.getByText('No open positions')).toBeVisible();
+    await expect(page.getByText('Fund your wallet to start trading.')).toHaveCount(0);
   });
 
   test('API auth failure surfaces an honest load-failed state with retry', async ({ page, api }) => {

@@ -1,51 +1,76 @@
 /**
- * Deposit Watcher Poller — Phase 4.
+ * Deposit watcher poller.
  *
- * Every 30 seconds, batches all active DepositWatcher rows into:
- *   1. One eth_getLogs per ERC-20 token for Transfer(from, to) events
- *   2. One native-balance delta check per unique wallet
+ * Each watcher persists three pieces of chain state:
+ * - `fromBlock`: the activation block (never moves)
+ * - `lastCheckedBlock`: the last block whose ERC-20 logs were fully scanned
+ * - `ethBalanceBaselineWei`: the last observed native balance
  *
- * On the first match, fires a Telegram DM and sets firedAt.
- * Watchers auto-expire after 24 hours.
+ * Keeping the cursor and balance in Postgres makes detection restart-safe.
+ * Legacy rows are bootstrapped at the current head without treating an
+ * already-funded wallet as a new deposit.
  */
 import { prisma } from "@fxaeon/db";
+import { ADDRESSES } from "@fxaeon/shared";
 import { createPublicClient, http, parseAbiItem, type PublicClient } from "viem";
 import { mainnet } from "viem/chains";
-import { ADDRESSES } from "@fxaeon/shared";
 import { botLogger } from "../middleware/logger.js";
+import { heartbeat } from "../core/metrics.js";
 
 const POLL_INTERVAL_MS = 30_000;
+const WATCHER_LIFETIME_MS = 24 * 60 * 60 * 1_000;
 const ERC20_TRANSFER_EVENT = parseAbiItem(
   "event Transfer(address indexed from, address indexed to, uint256 value)"
 );
 
-// Tokens to watch for ERC-20 deposits
-const WATCHED_TOKENS: Array<{ symbol: string; address: `0x${string}` }> = [
+const WATCHED_TOKENS: ReadonlyArray<{
+  symbol: string;
+  address: `0x${string}`;
+}> = [
   { symbol: "fxUSD", address: ADDRESSES.FXUSD as `0x${string}` },
   { symbol: "wstETH", address: ADDRESSES.WSTETH as `0x${string}` },
   { symbol: "WBTC", address: ADDRESSES.WBTC as `0x${string}` },
+  { symbol: "USDC", address: ADDRESSES.USDC as `0x${string}` },
+  { symbol: "USDT", address: ADDRESSES.USDT as `0x${string}` },
+  { symbol: "WETH", address: ADDRESSES.WETH as `0x${string}` },
 ];
 
-// Add USDC/USDT/WETH if they exist in ADDRESSES
-if ((ADDRESSES as any).USDC) WATCHED_TOKENS.push({ symbol: "USDC", address: (ADDRESSES as any).USDC });
-if ((ADDRESSES as any).WETH) WATCHED_TOKENS.push({ symbol: "WETH", address: (ADDRESSES as any).WETH });
-
 let timer: ReturnType<typeof setInterval> | null = null;
+let pollInFlight = false;
 let pollCount = 0;
 let lastBlockChecked = 0n;
+
+export function getDepositRpcUrl(
+  processEnv: NodeJS.ProcessEnv = process.env
+): string {
+  const rpcUrl = processEnv.ALCHEMY_RPC_URL?.trim();
+  if (!rpcUrl) {
+    throw new Error("ALCHEMY_RPC_URL is required for deposit watching");
+  }
+  return rpcUrl;
+}
 
 function getClient(): PublicClient {
   return createPublicClient({
     chain: mainnet,
-    transport: http(process.env.ETH_RPC_URL),
+    transport: http(getDepositRpcUrl()),
   });
 }
 
 interface ActiveWatcher {
   id: string;
   userId: string;
-  walletAddress: string;
+  walletAddress: `0x${string}`;
   telegramId: string;
+  fromBlock: bigint;
+  lastCheckedBlock: bigint | null;
+  ethBalanceBaselineWei: bigint | null;
+}
+
+interface RuntimeWatcher extends ActiveWatcher {
+  scanAfterBlock: bigint;
+  baselineWei: bigint;
+  observedBalanceWei: bigint;
 }
 
 async function getActiveWatchers(): Promise<ActiveWatcher[]> {
@@ -61,134 +86,310 @@ async function getActiveWatchers(): Promise<ActiveWatcher[]> {
     },
   });
 
-  return watchers.map((w) => ({
-    id: w.id,
-    userId: w.userId,
-    walletAddress: w.user.walletAddress,
-    telegramId: w.user.telegramId,
+  return watchers.map((watcher) => ({
+    id: watcher.id,
+    userId: watcher.userId,
+    walletAddress: watcher.user.walletAddress as `0x${string}`,
+    telegramId: watcher.user.telegramId,
+    fromBlock: watcher.fromBlock,
+    lastCheckedBlock: watcher.lastCheckedBlock,
+    ethBalanceBaselineWei: watcher.ethBalanceBaselineWei,
   }));
 }
 
-async function checkForDeposits(
+/**
+ * Capture the activation block and native-balance baseline before creating a
+ * watcher. A deposit that predates this snapshot is intentionally not a new
+ * deposit; the first scan begins at the following block.
+ */
+export async function activateDepositWatcher(
+  userId: string,
+  walletAddress: string,
+  client: PublicClient = getClient()
+) {
+  const address = walletAddress as `0x${string}`;
+  const fromBlock = await client.getBlockNumber();
+  // Pin the balance read to the activation block. Reading both at "latest"
+  // concurrently has a race where a deposit lands between the two calls,
+  // enters the baseline, and is then excluded from the subsequent log scan.
+  const ethBalanceBaselineWei = await client.getBalance({
+    address,
+    blockNumber: fromBlock,
+  });
+
+  return prisma.depositWatcher.create({
+    data: {
+      userId,
+      fromBlock,
+      lastCheckedBlock: fromBlock,
+      ethBalanceBaselineWei,
+      expiresAt: new Date(Date.now() + WATCHER_LIFETIME_MS),
+    },
+  });
+}
+
+async function bootstrapWatcher(
   client: PublicClient,
-  watchers: ActiveWatcher[],
+  watcher: ActiveWatcher,
+  currentBlock: bigint
+): Promise<RuntimeWatcher> {
+  const observedBalanceWei = await client.getBalance({
+    address: watcher.walletAddress,
+    blockNumber: currentBlock,
+  });
+
+  // Old rows used zero as a placeholder rather than a real activation block.
+  // Establish their activation at the current head so we neither scan from
+  // genesis nor report an existing balance as a fresh deposit.
+  const fromBlock = watcher.fromBlock > 0n ? watcher.fromBlock : currentBlock;
+  const lastCheckedBlock =
+    watcher.lastCheckedBlock ??
+    (watcher.fromBlock > 0n && fromBlock > 0n ? fromBlock - 1n : currentBlock);
+  const baselineWei = watcher.ethBalanceBaselineWei ?? observedBalanceWei;
+
+  if (
+    fromBlock !== watcher.fromBlock ||
+    lastCheckedBlock !== watcher.lastCheckedBlock ||
+    watcher.ethBalanceBaselineWei === null
+  ) {
+    await prisma.depositWatcher.update({
+      where: { id: watcher.id },
+      data: {
+        fromBlock,
+        lastCheckedBlock,
+        ethBalanceBaselineWei: baselineWei,
+      },
+    });
+  }
+
+  return {
+    ...watcher,
+    fromBlock,
+    lastCheckedBlock,
+    ethBalanceBaselineWei: baselineWei,
+    scanAfterBlock: lastCheckedBlock,
+    baselineWei,
+    observedBalanceWei,
+  };
+}
+
+async function notifyAndMarkFired(
+  watcher: RuntimeWatcher,
+  message: string,
   sendDm: (telegramId: string, msg: string) => Promise<void>
-): Promise<void> {
-  if (watchers.length === 0) return;
-
+): Promise<boolean> {
   try {
-    const currentBlock = await client.getBlockNumber();
-    const fromBlock = lastBlockChecked > 0n ? lastBlockChecked + 1n : currentBlock - 2n;
-
-    if (fromBlock > currentBlock) return;
-
-    const walletSet = new Map<string, ActiveWatcher>();
-    for (const w of watchers) {
-      walletSet.set(w.walletAddress.toLowerCase(), w);
-    }
-
-    const walletAddresses = [...walletSet.keys()] as `0x${string}`[];
-
-    // Check ERC-20 Transfer events to any watched wallet
-    for (const token of WATCHED_TOKENS) {
-      try {
-        const logs = await client.getLogs({
-          address: token.address,
-          event: ERC20_TRANSFER_EVENT,
-          args: { to: walletAddresses },
-          fromBlock,
-          toBlock: currentBlock,
-        });
-
-        for (const log of logs) {
-          const to = (log.args.to as string).toLowerCase();
-          const watcher = walletSet.get(to);
-          if (watcher) {
-            await prisma.depositWatcher.update({
-              where: { id: watcher.id },
-              data: { firedAt: new Date() },
-            });
-            const msg =
-              `🔔 Deposit detected!\n\n` +
-              `${token.symbol} received at your wallet.\n` +
-              `Tx: https://etherscan.io/tx/${log.transactionHash}\n\n` +
-              `You're ready to trade! Try /trade or /longETH.`;
-            await sendDm(watcher.telegramId, msg);
-            walletSet.delete(to); // Don't fire twice
-          }
-        }
-      } catch (e) {
-        botLogger.debug({ token: token.symbol, error: String(e) }, "deposit-watcher: getLogs failed");
-      }
-    }
-
-    // Check native ETH balance delta (simple heuristic: block has a tx to wallet)
-    for (const [addr, watcher] of walletSet) {
-      try {
-        const balance = await client.getBalance({ address: addr as `0x${string}` });
-        // We can't easily detect delta without storing previous balance,
-        // so we check if any ETH transaction was sent TO the address in recent blocks.
-        // This is a simplified check — the poller creates the watcher with fromBlock=0,
-        // so we just check if balance > 0 as a first-deposit heuristic.
-        if (balance > 0n) {
-          // Check if this is actually a recent deposit by looking at tx count
-          const txCount = await client.getTransactionCount({ address: addr as `0x${string}` });
-          // If the wallet has received any ETH at all, fire the watcher
-          // (this is conservative — fires on first poll if wallet has funds)
-          if (txCount > 0 || balance > 0n) {
-            await prisma.depositWatcher.update({
-              where: { id: watcher.id },
-              data: { firedAt: new Date() },
-            });
-            const msg =
-              `🔔 Deposit detected!\n\n` +
-              `ETH received at your wallet.\n\n` +
-              `You're ready to trade! Try /trade or /longETH.`;
-            await sendDm(watcher.telegramId, msg);
-          }
-        }
-      } catch (e) {
-        botLogger.debug({ address: addr, error: String(e) }, "deposit-watcher: balance check failed");
-      }
-    }
-
-    lastBlockChecked = currentBlock;
-  } catch (e) {
-    botLogger.error({ error: String(e) }, "deposit-watcher: poll cycle failed");
+    // Send first. If the process dies between these operations, a duplicate is
+    // preferable to permanently losing the only deposit notification.
+    await sendDm(watcher.telegramId, message);
+    await prisma.depositWatcher.update({
+      where: { id: watcher.id },
+      data: { firedAt: new Date() },
+    });
+    return true;
+  } catch (error) {
+    botLogger.warn(
+      { watcherId: watcher.id, error: String(error) },
+      "deposit-watcher: notification failed; retaining cursor for retry"
+    );
+    return false;
   }
 }
 
-/**
- * Start the deposit watcher poller.
- * @param sendDm Function to send a Telegram DM to a user by telegramId
- */
+/** Execute one complete, testable poll cycle. */
+export async function pollDepositWatchersOnce(
+  client: PublicClient,
+  sendDm: (telegramId: string, msg: string) => Promise<void>
+): Promise<void> {
+  heartbeat("deposit-watcher-poller");
+  pollCount++;
+  const storedWatchers = await getActiveWatchers();
+  if (storedWatchers.length === 0) return;
+
+  const currentBlock = await client.getBlockNumber();
+  const watchers: RuntimeWatcher[] = [];
+
+  for (const watcher of storedWatchers) {
+    try {
+      watchers.push(await bootstrapWatcher(client, watcher, currentBlock));
+    } catch (error) {
+      botLogger.warn(
+        { watcherId: watcher.id, error: String(error) },
+        "deposit-watcher: unable to bootstrap watcher"
+      );
+    }
+  }
+  if (watchers.length === 0) return;
+
+  const watchersByAddress = new Map<string, RuntimeWatcher[]>();
+  for (const watcher of watchers) {
+    const key = watcher.walletAddress.toLowerCase();
+    const matches = watchersByAddress.get(key) ?? [];
+    matches.push(watcher);
+    watchersByAddress.set(key, matches);
+  }
+
+  const firstBlockToScan = watchers.reduce((minimum, watcher) => {
+    const next = watcher.scanAfterBlock + 1n;
+    return next < minimum ? next : minimum;
+  }, currentBlock + 1n);
+
+  const firedWatcherIds = new Set<string>();
+  const failedWatcherIds = new Set<string>();
+  const attemptedWatcherIds = new Set<string>();
+
+  if (firstBlockToScan <= currentBlock) {
+    const walletAddresses = [...watchersByAddress.keys()] as `0x${string}`[];
+
+    // Do not advance any cursor unless every token query succeeds. Otherwise a
+    // transient provider error could permanently skip a deposit in that range.
+    for (const token of WATCHED_TOKENS) {
+      const logs = await client.getLogs({
+        address: token.address,
+        event: ERC20_TRANSFER_EVENT,
+        args: { to: walletAddresses },
+        fromBlock: firstBlockToScan,
+        toBlock: currentBlock,
+      });
+
+      for (const log of logs) {
+        const to = log.args.to?.toLowerCase();
+        const from = log.args.from?.toLowerCase();
+        const value = log.args.value;
+        const blockNumber = log.blockNumber;
+        // Zero-value and self-transfer events do not fund the wallet and must
+        // not consume a one-shot deposit watcher.
+        if (
+          !to ||
+          blockNumber === null ||
+          value === undefined ||
+          value <= 0n ||
+          from === to
+        ) {
+          continue;
+        }
+
+        for (const watcher of watchersByAddress.get(to) ?? []) {
+          const watcherFirstBlock = watcher.scanAfterBlock + 1n;
+          if (
+            blockNumber < watcherFirstBlock ||
+            blockNumber < watcher.fromBlock ||
+            firedWatcherIds.has(watcher.id) ||
+            attemptedWatcherIds.has(watcher.id)
+          ) {
+            continue;
+          }
+
+          attemptedWatcherIds.add(watcher.id);
+          const transactionLine = log.transactionHash
+            ? `Tx: https://etherscan.io/tx/${log.transactionHash}\n\n`
+            : "";
+          const delivered = await notifyAndMarkFired(
+            watcher,
+            `🔔 Deposit detected!\n\n${token.symbol} received at your wallet.\n` +
+              transactionLine +
+              "You're ready to use your funds in FxAeon.",
+            sendDm
+          );
+          (delivered ? firedWatcherIds : failedWatcherIds).add(watcher.id);
+        }
+      }
+    }
+  }
+
+  // Native ETH transfers have no event log. A persisted positive balance
+  // delta catches EOAs, contracts, and internal transfers without inspecting
+  // every transaction in every block.
+  for (const watcher of watchers) {
+    if (
+      firedWatcherIds.has(watcher.id) ||
+      failedWatcherIds.has(watcher.id) ||
+      currentBlock < watcher.scanAfterBlock
+    ) {
+      continue;
+    }
+
+    if (watcher.observedBalanceWei > watcher.baselineWei) {
+      attemptedWatcherIds.add(watcher.id);
+      const delivered = await notifyAndMarkFired(
+        watcher,
+        "🔔 Deposit detected!\n\nETH received at your wallet.\n\n" +
+          "You're ready to use your funds in FxAeon.",
+        sendDm
+      );
+      (delivered ? firedWatcherIds : failedWatcherIds).add(watcher.id);
+    }
+  }
+
+  // Persist progress independently per watcher. Notification failures retain
+  // the previous cursor and baseline so the matching event is retried.
+  for (const watcher of watchers) {
+    if (
+      firedWatcherIds.has(watcher.id) ||
+      failedWatcherIds.has(watcher.id) ||
+      currentBlock < watcher.scanAfterBlock
+    ) {
+      continue;
+    }
+    try {
+      await prisma.depositWatcher.update({
+        where: { id: watcher.id },
+        data: {
+          lastCheckedBlock: currentBlock,
+          ethBalanceBaselineWei: watcher.observedBalanceWei,
+        },
+      });
+    } catch (error) {
+      botLogger.warn(
+        { watcherId: watcher.id, error: String(error) },
+        "deposit-watcher: unable to persist scan progress"
+      );
+    }
+  }
+
+  lastBlockChecked = currentBlock;
+}
+
+async function runPollCycle(
+  client: PublicClient,
+  sendDm: (telegramId: string, msg: string) => Promise<void>
+): Promise<void> {
+  if (pollInFlight) {
+    botLogger.warn("deposit-watcher: previous poll still running; skipping overlap");
+    return;
+  }
+
+  pollInFlight = true;
+  try {
+    await pollDepositWatchersOnce(client, sendDm);
+  } catch (error) {
+    botLogger.error({ error: String(error) }, "deposit-watcher: poll cycle failed");
+  } finally {
+    pollInFlight = false;
+  }
+}
+
+/** Start the poller and run its first cycle immediately. */
 export function startDepositWatcherPoller(
   sendDm: (telegramId: string, msg: string) => Promise<void>
 ): void {
   if (timer) return;
   const client = getClient();
 
-  timer = setInterval(async () => {
-    pollCount++;
-    try {
-      const watchers = await getActiveWatchers();
-      if (watchers.length > 0) {
-        await checkForDeposits(client, watchers, sendDm);
-      }
-    } catch (e) {
-      botLogger.error({ error: String(e) }, "deposit-watcher: interval error");
-    }
+  timer = setInterval(() => {
+    void runPollCycle(client, sendDm);
   }, POLL_INTERVAL_MS);
+  timer.unref?.();
+  void runPollCycle(client, sendDm);
 
   botLogger.info("deposit-watcher poller started (30s interval)");
 }
 
 export function stopDepositWatcherPoller(): void {
-  if (timer) {
-    clearInterval(timer);
-    timer = null;
-    botLogger.info("deposit-watcher poller stopped");
-  }
+  if (!timer) return;
+  clearInterval(timer);
+  timer = null;
+  botLogger.info("deposit-watcher poller stopped");
 }
 
 export function getDepositWatcherStats(): {

@@ -5,7 +5,7 @@
 start-welcome-new =
     🚀 欢迎使用 FxAeon
     
-    f(x) Protocol 最先进的交易界面 — 杠杆头寸、限价订单、收益自动化，全部在 Telegram 中完成。
+    f(x) Protocol 最先进的交易界面 — 杠杆头寸和收益自动化，全部在 Telegram 中完成。
     
     🔐 自托管 — 创建或导入您自己的钱包；私钥只属于您
     ⚡ 模拟验证 — 模拟未通过的交易绝不会广播
@@ -38,7 +38,7 @@ help-body =
     
     ⚡ 交易
       /trade — 开杠杆头寸 (1.1x–7x)
-      /limit — 下限价/止损单
+      /limit — 验证限价/止损单预览（不提交）
       /orders — 查看活跃订单
       /mint — 借入 fxUSD（无杠杆）
       /redeem — 用 fxUSD 赎回抵押品
@@ -61,7 +61,7 @@ help-body =
     
     🤖 自动化
       /auto — 止损/止盈自动化 (/auto sl wstETH long 2500)
-      /refer — 您的推荐链接 + 收益
+      /refer — 邀请链接 + 已关联账户
     
     ⚙️ 设置
       /settings — 语言、滑点、MEV 保护
@@ -110,7 +110,7 @@ trade-usage =
     /trade <市场> <long|short> <杠杆> <数量>
     
     示例:
-    /trade wstETH long 3x 1ETH
+    /trade wstETH long 3x 0.25
     
     杠杆限制:
     • 做多: { $minLev }x – { $maxLong }x

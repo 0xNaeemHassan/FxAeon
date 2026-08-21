@@ -1,3 +1,43 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+
+allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  '@reown/appkit': true
+  bufferutil: true
+  es5-ext: true
+  esbuild: true
+  keccak: true
+  msgpackr-extract: true
+  prisma: true
+  sharp: true
+  utf-8-validate: true
+
+# pnpm 10+ reads workspace-wide dependency policies from this file. Keeping
+# security overrides here also makes frozen installs match pnpm-lock.yaml.
+overrides:
+  'axios@>=1.0.0 <1.18.0': '1.18.0'
+  'body-parser@<1.20.6': '1.20.6'
+  'brace-expansion@<1.1.18': '1.1.18'
+  'brace-expansion@>=4.0.0 <5.0.9': '5.0.9'
+  'fast-uri@<3.1.5': '3.1.5'
+  'tsx>esbuild': '0.28.1'
+  'form-data@>=4.0.0 <4.0.6': '>=4.0.6'
+  hono: '4.12.34'
+  'js-yaml@>=4.0.0 <4.3.1': '4.3.1'
+  'nanoid@<3.3.18': '3.3.18'
+  'next>sharp': '0.35.0'
+  postcss: '8.5.23'
+  socket.io-parser: '4.2.7'
+  use-sync-external-store: '1.6.0'
+  'uuid@<11.1.1': '11.1.1'
+  ws: '8.21.3'
+
+peerDependencyRules:
+  # ws 7's optional native accelerator is API-compatible with v6; pnpm's
+  # strict peer checker otherwise flags the transitive WalletConnect pairing.
+  allowedVersions:
+    utf-8-validate: '*'
+    ws: '*'

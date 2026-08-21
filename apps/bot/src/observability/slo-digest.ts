@@ -8,14 +8,13 @@
  * restart if the process restarted — the message says so honestly.
  */
 import { logger } from "../middleware/logger.js";
-import { snapshot, heartbeat } from "../core/metrics.js";
+import { REQUIRED_WORKERS, snapshot, heartbeat } from "../core/metrics.js";
 import { withRetry, withTimeout } from "../utils/resilience.js";
 
 const DIGEST_INTERVAL_MS = 24 * 60 * 60 * 1000;
-const KNOWN_WORKERS = ["health-monitor", "limit-order-poller"];
 
 export function formatDigest(now = new Date()): string {
-  const m = snapshot(KNOWN_WORKERS);
+  const m = snapshot([...REQUIRED_WORKERS]);
   const lines: string[] = [
     `📊 FxAeon daily digest — ${now.toISOString().slice(0, 10)}`,
     `Uptime: ${(m.uptimeSeconds / 3600).toFixed(1)}h (metrics cover this window only)`,

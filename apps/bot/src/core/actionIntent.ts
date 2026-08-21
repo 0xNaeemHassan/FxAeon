@@ -11,9 +11,9 @@
  *   Telegram user who pressed the button.
  * - The nonce feeds the executor idempotency key → double-taps dedupe.
  *
- * Format: a1_<kind>_<p1>_<p2>_<p3>_<expMinute36>_<nonce>_<sig>
+ * Format: a2.<kind>.<p1>.<p2>.<p3>.<expMinute36>.<nonce>.<sig>
  * - kind: 2-letter action code (see ActionKind).
- * - p1..p3: action params; numbers are base36-encoded integers.
+ * - p1..p3: action params; decimal amounts use an exact compact base36 form.
  * - Stays under Telegram's 64-byte callback_data cap (handlers register the
  *   token itself as callback data, no extra prefix).
  */
@@ -40,20 +40,71 @@ export type VerifyActionResult =
   | { ok: true; intent: ActionIntent }
   | { ok: false; reason: "malformed" | "tampered" | "expired" };
 
-const VERSION = "a1";
+const VERSION = "a2";
 const KINDS: ReadonlySet<string> = new Set(["sd", "sw", "sc", "mt", "rp", "br"]);
 export const ACTION_INTENT_TTL_MS = 10 * 60 * 1000;
 
-/** Micro-unit (1e6) fixed-point for human amounts, base36-packed. */
-export function packAmount(amount: number): string {
-  if (!Number.isFinite(amount) || amount < 0) throw new Error("actionIntent: invalid amount");
-  return Math.round(amount * 1e6).toString(36);
+type DecimalInput = string | number;
+
+function normalizeDecimal(
+  raw: DecimalInput,
+  maxDecimals: number,
+  allowZero: boolean
+): string | null {
+  if (!Number.isInteger(maxDecimals) || maxDecimals < 0 || maxDecimals > 35) return null;
+  const input = String(raw).trim();
+  if (!input || input.length > 100) return null;
+  // Allow either plain digits or correctly grouped thousands separators.
+  // Scientific notation and signs are intentionally rejected.
+  if (!/^(?:(?:\d{1,3}(?:,\d{3})+)|\d+|\.\d+)(?:\.\d+)?$/.test(input)) return null;
+  const value = input.replace(/,/g, "");
+  const [wholeRaw = "0", fractionRaw = ""] = value.startsWith(".")
+    ? ["0", value.slice(1)]
+    : value.split(".");
+  if (fractionRaw.length > maxDecimals) return null;
+  const whole = wholeRaw.replace(/^0+(?=\d)/, "") || "0";
+  const fraction = fractionRaw.replace(/0+$/, "");
+  const coefficient = `${whole}${fraction}`.replace(/^0+/, "") || "0";
+  if (!allowZero && coefficient === "0") return null;
+  return fraction ? `${whole}.${fraction}` : whole;
 }
 
-export function unpackAmount(packed: string): number {
-  const micro = parseInt(packed, 36);
-  if (!Number.isFinite(micro) || micro < 0) throw new Error("actionIntent: invalid packed amount");
-  return micro / 1e6;
+/** Validate and canonicalize a positive user amount without IEEE-754 coercion. */
+export function canonicalActionAmount(raw: string, maxDecimals: number): string | null {
+  return normalizeDecimal(raw, maxDecimals, false);
+}
+
+/** Exact decimal encoding: one base36 scale digit followed by a base36 coefficient. */
+export function packAmount(amount: DecimalInput): string {
+  const canonical = normalizeDecimal(amount, 35, true);
+  if (canonical == null) throw new Error("actionIntent: invalid amount");
+  if (canonical === "0") return "0"; // reserved ALL sentinel where supported
+  const [whole, fraction = ""] = canonical.split(".");
+  const coefficient = BigInt(`${whole}${fraction}`);
+  return `${fraction.length.toString(36)}${coefficient.toString(36)}`;
+}
+
+function base36BigInt(value: string): bigint {
+  if (!/^[0-9a-z]+$/.test(value)) throw new Error("actionIntent: invalid packed amount");
+  let result = 0n;
+  for (const char of value) {
+    const digit = parseInt(char, 36);
+    result = result * 36n + BigInt(digit);
+  }
+  return result;
+}
+
+/** Decode an amount to a canonical decimal string, preserving every digit. */
+export function unpackAmount(packed: string): string {
+  if (packed === "0") return "0";
+  if (!/^[0-9a-z]{2,30}$/.test(packed)) {
+    throw new Error("actionIntent: invalid packed amount");
+  }
+  const scale = parseInt(packed[0], 36);
+  const digits = base36BigInt(packed.slice(1)).toString(10);
+  if (scale === 0) return digits;
+  if (digits.length <= scale) return `0.${"0".repeat(scale - digits.length)}${digits}`;
+  return `${digits.slice(0, -scale)}.${digits.slice(-scale)}`;
 }
 
 function signingKey(): Buffer {
@@ -64,13 +115,17 @@ function signingKey(): Buffer {
     );
   }
   // Domain-separate from the raw bot token AND from trade intents.
-  return createHmac("sha256", seed).update("fxaeon-action-intent-v1").digest();
+  return createHmac("sha256", seed).update("fxaeon-action-intent-v2").digest();
 }
 
 function sign(body: string): string {
   // 64-bit truncated HMAC: adequate for a 10-minute online-only token where
   // every guess costs a Telegram callback round-trip; keeps total ≤64 bytes.
-  return createHmac("sha256", signingKey()).update(body).digest("hex").slice(0, 16);
+  return createHmac("sha256", signingKey())
+    .update(body)
+    .digest()
+    .subarray(0, 8)
+    .toString("base64url");
 }
 
 export function createActionIntent(
@@ -81,26 +136,26 @@ export function createActionIntent(
   if (!KINDS.has(kind)) throw new Error(`actionIntent: unknown kind ${kind}`);
   const clean = (v: string | undefined) => {
     const s = v ?? "0";
-    if (!/^[a-z0-9]{1,12}$/i.test(s)) throw new Error(`actionIntent: bad param ${s}`);
+    if (!/^[a-z0-9]{1,30}$/i.test(s)) throw new Error(`actionIntent: bad param ${s}`);
     return s;
   };
   const expMinute = Math.ceil((Date.now() + ttlMs) / 60_000).toString(36);
   const nonce = randomBytes(4).toString("hex"); // 8 chars, CSPRNG
-  const body = [VERSION, kind, clean(params.p1), clean(params.p2), clean(params.p3), expMinute, nonce].join("_");
-  const token = `${body}_${sign(body)}`;
+  const body = [VERSION, kind, clean(params.p1), clean(params.p2), clean(params.p3), expMinute, nonce].join(".");
+  const token = `${body}.${sign(body)}`;
   if (token.length > 64) throw new Error(`actionIntent: token too long (${token.length})`);
   return token;
 }
 
 export function looksLikeActionIntent(token: string | undefined): token is string {
-  return typeof token === "string" && token.startsWith(`${VERSION}_`);
+  return typeof token === "string" && token.startsWith(`${VERSION}.`);
 }
 
 export function verifyActionIntent(token: string): VerifyActionResult {
-  const parts = token.split("_");
+  const parts = token.split(".");
   if (parts.length !== 8 || parts[0] !== VERSION) return { ok: false, reason: "malformed" };
 
-  const body = parts.slice(0, 7).join("_");
+  const body = parts.slice(0, 7).join(".");
   const givenSig = Buffer.from(parts[7]);
   const expectSig = Buffer.from(sign(body));
   if (givenSig.length !== expectSig.length || !timingSafeEqual(givenSig, expectSig)) {

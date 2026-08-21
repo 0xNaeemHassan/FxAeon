@@ -92,7 +92,7 @@ describe("i18n runtime", () => {
       const back = i18n.t(locale, "start-welcome-back", { wallet: "0xAbCd…1234" });
       expect(back, `locale: ${locale}`).toContain("0xAbCd…1234");
       const usage = i18n.t(locale, "trade-usage", { minLev: 1.1, maxLong: 7, maxShort: 5 });
-      expect(usage, `locale: ${locale}`).toContain("/trade wstETH long 3x 1ETH");
+      expect(usage, `locale: ${locale}`).toContain("/trade wstETH long 3x 0.25");
     }
   });
 

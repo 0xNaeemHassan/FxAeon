@@ -1,5 +1,3 @@
-import { ethers } from 'ethers';
-
 export interface BatchTransaction {
   id: string;
   type: 'open' | 'close' | 'adjust';

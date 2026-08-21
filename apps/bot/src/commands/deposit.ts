@@ -9,6 +9,7 @@
 import { Context, InlineKeyboard } from "grammy";
 import { prisma } from "@fxaeon/db";
 import { botLogger } from "../middleware/logger.js";
+import { activateDepositWatcher } from "../notifications/deposit-watcher-poller.js";
 
 const SUPPORTED_TOKENS = [
   "ETH", "WETH", "wstETH", "WBTC",
@@ -25,8 +26,7 @@ export async function depositCommand(ctx: Context) {
     return;
   }
 
-  const walletShort = `${user.walletAddress.slice(0, 6)}…${user.walletAddress.slice(-4)}`;
-  const miniAppUrl = process.env.MINI_APP_URL || "https://fxbot-mini-app.pages.dev";
+  const miniAppUrl = process.env.MINI_APP_URL || "http://localhost:3000";
 
   const lines = [
     `📥  Deposit to your FxAeon wallet`,
@@ -48,7 +48,7 @@ export async function depositCommand(ctx: Context) {
     .row()
     .text("🔔 Notify on first deposit", `dep_watch`)
     .row()
-    .url("📱 Open in Mini App", `${miniAppUrl}/deposit?address=${user.walletAddress}`);
+    .url("📱 Open in Mini App", `${miniAppUrl}/qr`);
 
   await ctx.reply(lines.join("\n"), {
     parse_mode: "Markdown",
@@ -106,16 +106,10 @@ export async function handleDepositCallback(ctx: Context) {
     }
 
     try {
-      // Get current block number for the watcher start point
-      const fromBlock = BigInt(0); // The poller will use latest-N approach
-
-      await prisma.depositWatcher.create({
-        data: {
-          userId: user.id,
-          fromBlock,
-          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24h
-        },
-      });
+      // Snapshot both the canonical Ethereum head and this wallet's current
+      // ETH balance before activating. The poller can then distinguish a new
+      // deposit from funds that were already present.
+      await activateDepositWatcher(user.id, user.walletAddress);
 
       await ctx.reply(
         `🔔 Deposit watcher activated!\n\n` +

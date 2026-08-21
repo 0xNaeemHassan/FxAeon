@@ -17,6 +17,7 @@
 import { useEffect, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import {
+  applyThemeParams,
   bindViewportHeight,
   getWebApp,
   initTelegram,
@@ -37,7 +38,15 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
   // deliberate dark theme — Telegram themeParams are not mapped onto it.)
   useEffect(() => {
     initTelegram();
-    return bindViewportHeight();
+    applyThemeParams();
+    const tg = getWebApp();
+    const syncTheme = () => applyThemeParams();
+    const unbindViewport = bindViewportHeight();
+    tg?.onEvent('themeChanged', syncTheme);
+    return () => {
+      unbindViewport();
+      tg?.offEvent('themeChanged', syncTheme);
+    };
   }, []);
 
   // Maintain the nav stack.

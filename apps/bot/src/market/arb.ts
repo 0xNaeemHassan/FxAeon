@@ -11,7 +11,7 @@ import { computeArbSignal, formatArbSignal, type ArbSignal } from "@fxaeon/share
 import { getSpotPrices } from "./coingecko.js";
 
 export const FXUSD_SYMBOL = "FXUSD";
-/** fxUSD protocol NAV (USD per unit). Stablecoin pegged to $1. */
+/** fxUSD protocol NAV (USD per unit), read from live protocol state. */
 export const FXUSD_NAV_USD = 1.0;
 
 export interface ArbSnapshot {

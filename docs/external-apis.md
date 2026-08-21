@@ -1,27 +1,68 @@
-# External API dependencies
+# External services
 
-Every outbound dependency, what we call it for, and how it is protected.
-Primitives live in `apps/bot/src/utils/resilience.ts` (`withTimeout`,
-`withRetry` with backoff + jitter, `CircuitBreaker`). Rule of thumb: anything
-called from a background loop gets a breaker; anything user-blocking gets a
-timeout + bounded retries; nothing retries on 4xx.
+FxAeon is an orchestrator across several providers. A healthy process does not imply every dependency is healthy, and no provider response should be treated as trusted transaction intent.
 
-| Dependency | Used for | Timeout | Retry | Breaker | Notes |
-|---|---|---|---|---|---|
-| **Telegram Bot API** (`api.telegram.org`) | All notifications via the `notify()` gate; command replies via grammY | 10s per send | 2 attempts, 500ms base + jitter | `telegram-api` (5 failures → 60s open) | Only `notify()` may push messages outside command handlers. AuditLog row is written **only after** Telegram confirms delivery. |
-| **fx limit-order relay** (`fx-limit-order-api.aladdin.club`) | Order submission/cancel mirror (W-09); fill polling via `GET /v1/order-updates?after=` | 10s | 3 attempts, 500ms·attempt + jitter; 4xx (`RelayRejectedError`) is fatal, never retried | `limit-order-relay` (5 → 60s) on the poller | Poller is incremental: one request per 30s for *all* orders, cursor only advances after a successful fetch (1s overlap; DB updates are idempotent). |
-| **Ethereum RPC** (`RPC_URL`, viem `PublicClient`) | Quotes/simulation (W-07), `eth_feeHistory` fees and receipt polling (W-11), health reads | viem default per call | Receipt watcher polls every 4s + jitter, 180s budget, returns `timeout` — never guesses an outcome | — (executor fails closed; a watcher timeout leaves the honest `broadcast` state) | Simulation failure or fee-history failure aborts *before* broadcast. |
-| **Privy API** (`@privy-io/server-auth`) | Auth verification, wallet create, tx signing/broadcast through the default-deny policy (W-08) | SDK defaults | None — signing/broadcast must never be auto-retried (duplicate-broadcast risk); idempotency keys protect wallet creation and tx records | — | **Transaction webhooks are an enterprise feature we do not have.** The whole svix webhook path was removed in W-12; lifecycle comes from the W-11 receipt watcher, which is equivalent because we broadcast every tx ourselves. `PRIVY_WEBHOOK_SECRET` no longer exists in config. |
+| Service | Used for | Credentials/config | Current failure behavior |
+|---|---|---|---|
+| Telegram Bot API | Updates, commands, messages, Mini App launch | `TELEGRAM_BOT_TOKEN`, webhook secret, public origin | Webhook retries; API output throttled; bot unavailable if Telegram fails |
+| Telegram WebApp script | Browser Mini App bridge | Loaded from `telegram.org` | App shows non-Telegram/degraded behavior when unavailable |
+| Privy | Telegram auth, embedded wallet lifecycle, delegated signing | App ID/secret, authorization key, public signer ID | Onboarding/signing fails; no local-key fallback |
+| Ethereum RPC | f(x) reads/routes, simulation, fees, nonce, receipt, logs | `ALCHEMY_RPC_URL` | Funds-moving paths fail closed; reads show unavailable/partial |
+| Base RPC | Base-source bridge quote, simulation, fees, nonce, receipts, and health | `BASE_RPC_URL` | Base→Ethereum quote/execution unavailable; bridge execution gate cannot validate without it |
+| f(x) SDK 1.0.5 | Protocol route construction and state methods | Installed package + RPC | No route/action; never substitute fabricated calldata |
+| f(x) contracts | Positions, mint/repay, fxSAVE, orders, bridge OFTs | Runtime registry + SDK-pinned Base OFTs | On-chain revert/upgrade risk; source receipt is authoritative only for its chain |
+| LayerZero V2 | fxUSD/fxSAVE OFT message delivery between Ethereum and Base | Native source-chain fee from SDK quote | Source transaction can confirm before delayed/failed destination delivery |
+| CoinGecko | Spot/market data for display, PnL, alerts, automation | Optional `COINGECKO_API_KEY` | 45 s cache; on failure serve marked stale data up to 10 min; automation skips stale |
+| Etherscan v2 | `/gas` oracle and ETH price | `ETHERSCAN_API_KEY` | 12 s cache, marked stale up to 5 min; `/gas` can use RPC fallback |
+| Flashbots Protect | Private raw transaction submission | User MEV setting | Private submission failure surfaces; no silent public downgrade |
+| f(x) limit-order relay | Signed order submission and incremental status updates | No API key in current client | 10 s request timeout, up to 3 attempts for transport/5xx; 4xx fails immediately |
+| QR Server | Telegram `/deposit` QR image URL | None | QR button/image may fail; address remains available as text |
+| PostgreSQL | Account linkage and application state | `DATABASE_URL` | Readiness 503; production actions generally unavailable |
+| Redis | Shared HTTP rate-limit decisions and live per-user daily-action counter | `REDIS_URL` TCP | 250 ms decision deadline then in-memory fallback; no worker queue; the durable broadcast-count check remains in PostgreSQL |
+| Sentry | Optional error telemetry | `SENTRY_DSN` | Disabled when unset/failing; application continues |
 
-| **Etherscan API** (`api.etherscan.io/v2/api`) | `/gas` command: Gas Oracle tiers (safe/standard/fast), base fee, block, network utilization, ETH/USD+BTC price. Gas estimator uses proposed price for trade cost estimates. | 8s | None — cached 12s in-process, stale-if-error up to 5 min | — | Free tier (5 calls/s, 100k/day). Two endpoints per `/gas` invocation (gasoracle + ethprice, parallel). Gas estimator uses cached gasoracle only (0 extra calls). Single-flighted: concurrent `/gas` commands share one upstream request. Falls back to RPC `estimateFeesPerGas` if Etherscan key is unset or both calls fail. Env: `ETHERSCAN_API_KEY` (optional). |
-| **CoinGecko** (`api.coingecko.com/api/v3`) | `/price` command: market overview for 14+ DeFi assets in one request, cached 45s. Spot prices for portfolio USD valuation. | 10s | None — stale-if-error up to 10 min, single-flighted | — | Demo tier (30 calls/min). One request fetches all assets. `COINGECKO_API_KEY` optional (works unauthenticated at lower limits). |
+## RPC requirements
 
-## Worker schedule
+`ALCHEMY_RPC_URL` must serve Ethereum mainnet (chain 1). `BASE_RPC_URL` must serve Base mainnet (chain 8453) when Base-source bridge quoting/execution is used. Each execution provider must support standard reads, `eth_feeHistory`, receipts/logs, and `eth_simulateV1` as used by viem `simulateCalls`. A provider that lacks ordered-call simulation cannot safely serve that source-chain execution path.
 
-| Worker | Interval | External calls per tick |
-|---|---|---|
-| `health-monitor` | 5 min | 0 (DB only) + Telegram via `notify()` (30-min throttle; urgent: 10-min, bypasses quiet hours) |
-| `limit-order-poller` | 30s | 1 relay request (breaker-guarded) + Telegram via `notify()` for state changes |
+Deep health reports `rpc` for Ethereum and `baseRpc` for Base. It considers a configured RPC degraded when the latest visible block timestamp is more than about 60 seconds behind. Missing Base RPC is `skipped` unless bridge execution is requested, in which case it is unhealthy. The health probe has a three-second budget; transaction operations have their own call behavior.
 
-Cost note: this keeps us comfortably inside the free tiers — one relay call
-per 30s (~2.9k/day) and Telegram pushes are free.
+Do not place RPC URLs with embedded secrets in client-side `NEXT_PUBLIC_*` variables. The Mini App talks to the bot API, not directly to either production RPC.
+
+## CoinGecko cache and automation
+
+One `/coins/markets` request covers displayed and internal spot assets. Concurrent requests share an in-flight promise. Fresh cache lifetime is 45 seconds. If refresh fails, a snapshot no older than ten minutes may be returned with `stale: true`.
+
+Portfolio display may use a fresh snapshot. Stop-loss/take-profit intentionally refuses to fire on stale data. This avoids knowingly trading on old prices but creates availability risk during an upstream outage.
+
+## Etherscan
+
+The client uses v2 endpoints for gas oracle, ETH price, and gas-time estimate with an eight-second timeout and typed validation. Missing/invalid responses are never converted to synthetic values. Etherscan is optional because transaction fee derivation ultimately uses the RPC path.
+
+## Limit-order relay
+
+Before relay submission, FxAeon validates order deltas, verifies that the signature recovers to `maker`, and compares the local typed-data hash with the deployed contract. The relay remains an external availability and censorship dependency. Polling uses `/v1/order-updates` every 30 seconds for locally recorded open orders.
+
+No supported end-user signing UI currently reaches this path. Every HTTP primitive requires fresh Telegram Mini App authentication and an onboarded user; prepare, submit, and single-order cancellation bind the maker to that user's database wallet. This prevents anonymous relay/RPC proxy use, but the routes remain internal application primitives rather than a stable public API.
+
+## Flashbots
+
+MEV-enabled broadcasts are signed through Privy and submitted as raw EIP-1559 transactions to the built-in Flashbots Protect endpoint in `apps/bot/src/fx/index.ts`. It is not currently an environment-configurable URL. Standard reads and receipt checks continue through the normal Ethereum RPC.
+
+Private submission can be delayed, censored, leaked, or rejected and cannot guarantee protection or inclusion. FxAeon fails the action if it cannot obtain the explicit nonce needed for private signing.
+
+## Privy
+
+The browser handles embedded wallet creation/import/export. The backend uses the server SDK to resolve the Telegram-linked user and request signatures from delegated wallets. There is no supported mode that exports or stores user private keys on the FxAeon server.
+
+Treat `PRIVY_APP_SECRET` and especially `PRIVY_AUTHORIZATION_KEY` as high-impact credentials. Rotate immediately after suspected exposure and instruct users to revoke bot trading.
+
+## Operational principle
+
+For every dependency, distinguish:
+
+- **unavailable**: show a retry/degraded state;
+- **stale**: label age and never use for automation when prohibited;
+- **unknown**: do not replace with zero or fabricated success;
+- **partial**: preserve successful on-chain effects and reconcile before retry;
+- **untrusted**: validate identity, shape, units, addresses, and economic intent before signing.

@@ -21,6 +21,8 @@ import { fetchOnChainPositions, type OnChainPosition } from "../core/portfolio.j
 import { trackPositions, computePnl, snapshotKey, type SnapshotMap } from "../core/pnl.js";
 import { getSpotPrices } from "../market/coingecko.js";
 import { botLogger } from "../middleware/logger.js";
+import { storeCallbackPayload } from "../core/callbackKeys.js";
+import type { Bot } from "grammy";
 
 // ── Utilities ────────────────────────────────────────────────────────────
 
@@ -34,22 +36,10 @@ export function getRiskBar(health: number): string {
   return `🟢 ${bar} ${(health * 100).toFixed(0)}%`;
 }
 
-function fmtAmount(n: number): string {
-  if (n === 0) return "0";
-  if (n < 0.0001) return n.toExponential(2);
-  return n >= 100 ? n.toFixed(2) : Number(n.toPrecision(5)).toString();
-}
-
 function fmtUsd(n: number): string {
   const abs = Math.abs(n);
   const s = abs >= 1000 ? Math.round(abs).toLocaleString("en-US") : abs.toFixed(2);
   return `${n < 0 ? "-" : ""}$${s}`;
-}
-
-function pctStr(pct: number | null): string {
-  if (pct === null) return "";
-  const sign = pct >= 0 ? "+" : "";
-  return `${sign}${pct.toFixed(1)}%`;
 }
 
 /**
@@ -61,7 +51,7 @@ export function positionUsd(
 ): { collateralUsd: number; debtUsd: number; netUsd: number } | null {
   const colPrice = prices[pos.collateralToken];
   if (typeof colPrice !== "number") return null;
-  const debtPrice = pos.debtToken === "fxUSD" ? (prices["FXUSD"] ?? 1) : prices[pos.debtToken];
+  const debtPrice = pos.debtToken === "fxUSD" ? prices["FXUSD"] : prices[pos.debtToken];
   if (typeof debtPrice !== "number") return null;
   const collateralUsd = pos.collateral * colPrice;
   const debtUsd = pos.debt * debtPrice;
@@ -90,8 +80,8 @@ function buildSummary(
     else hasAll = false;
   }
 
-  // Wallet value placeholder — would require balance reads for all tokens.
-  // For now show position value + note.
+  // This Telegram summary is intentionally position-only. The Mini App's
+  // portfolio adds wallet balances and fxSAVE using the strict shared valuer.
   const posStr = hasAll ? fmtUsd(totalPositionUsd) : `~${fmtUsd(totalPositionUsd)}+`;
 
   lines.push(
@@ -141,7 +131,7 @@ function buildOpenPositions(
       lines.push(`   ${fmtUsd(usd.collateralUsd - usd.debtUsd)}${pnl ? `  ${pnl.trim()}` : ""}`);
     }
     lines.push(
-      `   [ Close ]  [ Inc ]  [ Dec ]  [ Adj Lev ]  [ TP/SL ]`
+      `   [ Close ]  [ Reduce ]  [ Leverage ]  [ TP/SL ]`
     );
     lines.push(``);
   }
@@ -192,21 +182,15 @@ async function buildPerformance(userId: string): Promise<string[]> {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
   try {
-    const [closedAgg, feeAgg] = await Promise.all([
-      prisma.positionSnapshot.aggregate({
-        where: {
-          userId,
-          closedAt: { gte: thirtyDaysAgo },
-          realizedPnlUsd: { not: null },
-        },
-        _sum: { realizedPnlUsd: true, closingFeesUsd: true },
-        _count: true,
-      }),
-      prisma.feeLedger.aggregate({
-        where: { userId, createdAt: { gte: thirtyDaysAgo } },
-        _sum: { usdAmount: true },
-      }),
-    ]);
+    const closedAgg = await prisma.positionSnapshot.aggregate({
+      where: {
+        userId,
+        closedAt: { gte: thirtyDaysAgo },
+        realizedPnlUsd: { not: null },
+      },
+      _sum: { realizedPnlUsd: true, closingFeesUsd: true },
+      _count: true,
+    });
 
     // Win rate
     let winRate = "";
@@ -223,13 +207,11 @@ async function buildPerformance(userId: string): Promise<string[]> {
 
     const realizedPnl = closedAgg._sum.realizedPnlUsd ?? 0;
     const closingFees = closedAgg._sum.closingFeesUsd ?? 0;
-    const fxaeonFees = feeAgg._sum.usdAmount ?? 0;
-    const totalFees = closingFees + fxaeonFees;
 
     const lines = [
       `────── PERFORMANCE (30d) ──────`,
       `Realized PnL:     ${realizedPnl >= 0 ? "+" : ""}${fmtUsd(realizedPnl)}`,
-      `Total fees paid:  ${fmtUsd(totalFees)}   (f(x) ${fmtUsd(closingFees)}  •  FxAeon ${fmtUsd(fxaeonFees)})`,
+      `Recorded close fees: ${fmtUsd(closingFees)}`,
     ];
     if (winRate) lines.push(winRate);
     lines.push(``);
@@ -241,20 +223,35 @@ async function buildPerformance(userId: string): Promise<string[]> {
 
 // ── Action keyboard ──────────────────────────────────────────────────────
 
-function positionsKeyboard(positions: OnChainPosition[]): InlineKeyboard {
+function positionsKeyboard(positions: OnChainPosition[], miniAppUrl: string): InlineKeyboard {
   const kb = new InlineKeyboard();
   positions.slice(0, 4).forEach((pos, i) => {
     const mIdx = MARKETS.indexOf(pos.market);
     const sideKey = pos.side === "short" ? "s" : "l";
+    const reduceNonce = storeCallbackPayload({
+      action: "pa_reduce",
+      market: pos.market,
+      side: pos.side,
+      positionId: pos.positionId,
+    });
+    const leverageNonce = storeCallbackPayload({
+      action: "pa_adjust_lev",
+      market: pos.market,
+      side: pos.side,
+      positionId: pos.positionId,
+    });
     kb.text(`🔻 Close #${i + 1}`, `pc_${mIdx}_${sideKey}_${pos.positionId}`)
+      .text(`📉 Reduce #${i + 1}`, `pa_red_${reduceNonce}`)
+      .text(`⚖️ Lev #${i + 1}`, `pa_lev_${leverageNonce}`)
+      .row()
       .text(`🎯 TP/SL #${i + 1}`, `pt_${mIdx}_${sideKey}`)
       .row();
   });
   kb.text("🔄 Refresh", "pf_refresh")
-    .text("📈 Trade", "tl_start")
+    .text("📈 Trade", "tl_m")
     .row()
     .text("🪙 Earn", "sv_overview")
-    .text("📱 Open in Mini App", "pf_miniapp");
+    .url("📱 Open in Mini App", miniAppUrl);
   return kb;
 }
 
@@ -312,7 +309,8 @@ export async function portfolioCommand(ctx: Context & I18nFlavor) {
     parts.push(...(await buildPerformance(user.id)));
 
     const msg = parts.join("\n");
-    await ctx.reply(msg, { reply_markup: positionsKeyboard(positions) });
+    const miniAppUrl = process.env.MINI_APP_URL || "http://localhost:3000";
+    await ctx.reply(msg, { reply_markup: positionsKeyboard(positions, miniAppUrl) });
   } catch (error) {
     botLogger.error({ err: error }, "portfolioCommand error");
     await ctx.reply(
@@ -320,4 +318,11 @@ export async function portfolioCommand(ctx: Context & I18nFlavor) {
         `On-chain read failed — your funds are unaffected, this is a display issue. Please try again.`
     );
   }
+}
+
+export function registerPortfolioActions(bot: Bot<any>): void {
+  bot.callbackQuery("pf_refresh", async (ctx) => {
+    await ctx.answerCallbackQuery({ text: "Refreshing…" }).catch(() => undefined);
+    await portfolioCommand(ctx as unknown as Context & I18nFlavor);
+  });
 }

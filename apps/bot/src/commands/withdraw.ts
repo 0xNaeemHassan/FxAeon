@@ -52,7 +52,8 @@ if ((ADDRESSES as any).USDC) {
 interface PendingWithdrawal {
   telegramId: string;
   tokenKey: string;
-  amount: number;
+  /** Canonical decimal string; never round-trip user value through Number. */
+  amount: string;
   to: `0x${string}`;
   expiresAt: number;
 }
@@ -68,6 +69,28 @@ function prunePending(): void {
 /** Test hook. */
 export function __clearPendingWithdrawalsForTests(): void {
   pending.clear();
+}
+
+/**
+ * Parse a user token amount without IEEE-754 precision loss or scientific
+ * notation. Returning the canonical `formatUnits(parseUnits())` form keeps
+ * previews and execution byte-for-byte consistent for 6/8/18-decimal assets.
+ */
+export function canonicalWithdrawalAmount(raw: string, decimals: number): string | null {
+  const value = raw.trim();
+  if (!Number.isInteger(decimals) || decimals < 0 || decimals > 255) return null;
+  if (!/^\d+(?:\.\d+)?$/.test(value) || value.length > 100) return null;
+  const fraction = value.split(".")[1] ?? "";
+  // viem rounds excess fractional digits. Financial sends must never do that:
+  // reject values that cannot be represented exactly by the selected token.
+  if (fraction.length > decimals) return null;
+  try {
+    const wei = parseUnits(value, decimals);
+    if (wei <= 0n || wei > (1n << 256n) - 1n) return null;
+    return formatUnits(wei, decimals);
+  } catch {
+    return null;
+  }
 }
 
 // ── Step 1: Token picker ─────────────────────────────────────────────────
@@ -113,56 +136,11 @@ function buildAmountPicker(tokenKey: string): { text: string; keyboard: InlineKe
   return { text, keyboard: kb };
 }
 
-// ── Step 3: Destination ──────────────────────────────────────────────────
-
-async function buildDestinationPicker(
-  tokenKey: string,
-  amount: string,
-  userId: string
-): Promise<{ text: string; keyboard: InlineKeyboard }> {
-  const token = WITHDRAW_TOKENS[tokenKey];
-
-  // Load recent recipients from user's lastWithdrawTargets
-  let recentTargets: string[] = [];
-  try {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { lastWithdrawTargets: true },
-    });
-    if (user?.lastWithdrawTargets) {
-      recentTargets = (user.lastWithdrawTargets as string[]).slice(0, 5);
-    }
-  } catch {}
-
-  const lines = [
-    `📤  Withdraw — Step 3/5`,
-    ``,
-    `Token: ${token?.symbol ?? tokenKey}`,
-    `Amount: ${amount}`,
-    ``,
-    `Enter the destination address:`,
-    `/withdraw ${amount} ${token?.symbol ?? tokenKey} 0xYourAddress…`,
-  ];
-
-  if (recentTargets.length > 0) {
-    lines.push(``, `Recent recipients:`);
-  }
-
-  const kb = new InlineKeyboard();
-  recentTargets.forEach((addr, i) => {
-    const short = `${addr.slice(0, 6)}…${addr.slice(-4)}`;
-    kb.text(`📍 ${short}`, `wd_r_${tokenKey}_${amount}_${addr}`).row();
-  });
-  kb.text("« Back", `wd_t_${tokenKey}`).text("❌ Cancel", "wd_cancel");
-
-  return { text: lines.join("\n"), keyboard: kb };
-}
-
 // ── Step 4+5: Preview + Confirm ──────────────────────────────────────────
 
 async function buildWithdrawPreview(
   tokenKey: string,
-  amount: number,
+  amount: string,
   to: `0x${string}`,
   telegramId: string
 ): Promise<{ text: string; keyboard: InlineKeyboard } | null> {
@@ -171,8 +149,6 @@ async function buildWithdrawPreview(
 
   const user = await prisma.user.findUnique({ where: { telegramId } });
   if (!user) return null;
-
-  const toShort = `${to.slice(0, 6)}…${to.slice(-4)}`;
 
   // Balance check
   let balanceStr = "";
@@ -188,7 +164,7 @@ async function buildWithdrawPreview(
       : await client.getBalance({ address: user.walletAddress as `0x${string}` });
     balanceStr = `Balance: ${formatUnits(balance, token.decimals)} ${token.symbol}`;
 
-    const amountWei = parseUnits(String(amount), token.decimals);
+    const amountWei = parseUnits(amount, token.decimals);
     if (balance < amountWei) {
       return {
         text:
@@ -258,7 +234,7 @@ export async function withdrawCommand(ctx: Context) {
   if (parts.length === 3) {
     const [amountRaw, tokenRaw, to] = parts;
     const token = WITHDRAW_TOKENS[tokenRaw.toLowerCase()];
-    const amount = Number(amountRaw);
+    const amount = token ? canonicalWithdrawalAmount(amountRaw, token.decimals) : null;
 
     if (!token) {
       await ctx.reply(
@@ -268,7 +244,7 @@ export async function withdrawCommand(ctx: Context) {
       );
       return;
     }
-    if (!Number.isFinite(amount) || amount <= 0) {
+    if (!amount) {
       await ctx.reply(`❌ Invalid amount "${amountRaw}".`);
       return;
     }
@@ -359,10 +335,14 @@ export async function handleWithdrawCallback(ctx: Context) {
     const amountStr = remainder.slice(0, secondUnderscore);
     const address = remainder.slice(secondUnderscore + 1);
 
-    if (isAddress(address)) {
+    const recentToken = WITHDRAW_TOKENS[tokenKey];
+    const amount = recentToken
+      ? canonicalWithdrawalAmount(amountStr, recentToken.decimals)
+      : null;
+    if (isAddress(address) && amount) {
       const result = await buildWithdrawPreview(
         tokenKey,
-        Number(amountStr),
+        amount,
         address as `0x${string}`,
         telegramId
       );
@@ -401,7 +381,7 @@ export async function handleWithdrawCallback(ctx: Context) {
     await editSafe(`❌ Unknown token — run /withdraw again.`);
     return;
   }
-  const amountWei = parseUnits(String(req.amount), token.decimals);
+  const amountWei = parseUnits(req.amount, token.decimals);
   const header = `📤 Withdrawing ${req.amount} ${token.symbol} → ${req.to.slice(0, 6)}…${req.to.slice(-4)}`;
 
   const tx = token.address
@@ -438,7 +418,12 @@ export async function handleWithdrawCallback(ctx: Context) {
       idempotencyKey: `withdraw:${user.id}:${id}`,
       txs: [tx],
       type: "withdraw",
-      client: createPublicClientForUser(user.mevProtection === "flashbots" ? "flashbots" : "off"),
+      intentScopedWithdrawal: {
+        recipient: req.to,
+        tokenAddress: token.address,
+        amount: amountWei,
+      },
+      client: createPublicClientForUser(mevModeForUser(user.mevProtection)),
       mev: mevModeForUser(user.mevProtection),
       onStatus: (status, detail) => {
         const line = `${status}${detail ? ` — ${detail}` : ""}`;

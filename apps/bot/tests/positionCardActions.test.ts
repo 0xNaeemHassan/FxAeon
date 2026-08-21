@@ -9,18 +9,6 @@ vi.mock("../src/middleware/logger", () => ({
   botLogger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-vi.mock("@fxaeon/shared", () => ({
-  ADDRESSES: {
-    FXUSD: "0x085780639CC2cACd35E474e71f4d000e2405d8f6",
-    WSTETH: "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0",
-    WBTC: "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
-    STETH: "0xae7ab96520de3a18e5e111b5eaab095312d7fe84",
-    WETH: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-    ETH: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
-  },
-  MARKETS: ["wstETH", "WBTC"],
-}));
-
 vi.mock("@fxaeon/db", () => ({
   prisma: {
     user: { findUnique: vi.fn() },
@@ -34,6 +22,7 @@ vi.mock("../src/core/callbackKeys.js", () => ({
 
 vi.mock("../src/fx/index.js", () => ({
   createFxSdk: vi.fn(),
+  getSdkReductionAmountWei: vi.fn(),
 }));
 
 vi.mock("../src/core/portfolio.js", () => ({
@@ -51,6 +40,7 @@ describe("renderPositionCard", () => {
     positionId: 42,
     collateral: 2.5,
     rawCollateral: 2_500_000_000_000_000_000n,
+    rawDebt: 5_000_000_000_000_000_000_000n,
     collateralToken: "wstETH",
     debt: 5000,
     debtToken: "fxUSD",

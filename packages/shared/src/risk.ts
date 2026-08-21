@@ -1,6 +1,10 @@
 /**
- * Risk Parameters - LOCKED
- * These parameters are immutable and must match the f(x) Protocol specification exactly.
+ * Product guardrails and audited defaults.
+ *
+ * The pool contracts can update their debt-ratio, rebalance, and liquidation
+ * settings. Transaction validation and position health therefore read live
+ * pool state; the threshold values below are retained only for backwards-
+ * compatible display helpers and must not be presented as live protocol state.
  */
 
 export const RISK_PARAMETERS = {
@@ -101,8 +105,13 @@ export const HEALTH_LEVELS = {
  * At debtRatio == LIQUIDATION_THRESHOLD (0.95), health == 1.0 (liquidation).
  * Values > 1.0 mean the position is past liquidation threshold.
  */
-export function computeHealthPercent(debtRatio: number): number {
-  return debtRatio / RISK_PARAMETERS.LIQUIDATION_THRESHOLD;
+export function computeHealthPercent(
+  debtRatio: number,
+  threshold: number = RISK_PARAMETERS.LIQUIDATION_THRESHOLD
+): number {
+  if (!Number.isFinite(debtRatio) || debtRatio < 0) return Number.NaN;
+  if (!Number.isFinite(threshold) || threshold <= 0) return Number.NaN;
+  return debtRatio / threshold;
 }
 
 /**
@@ -123,13 +132,13 @@ export function computeLiquidationPrice(
 ): number {
   if (collateral === 0n) return 0;
 
-  // Collateral uses 18 decimal places (wei), debt uses 15 decimal places (price precision)
-  const collateralNum = Number(collateral) / 1e18;
-  const debtNum = Number(debt) / 1e15;
-
-  if (collateralNum === 0) return 0;
-
-  const ratio = debtNum / collateralNum;
+  // Collateral uses 18 decimals and debt uses 15. Keep the division in
+  // bigint space so large on-chain values never pass through an imprecise
+  // Number conversion. Twelve ratio decimals are ample for a UI price.
+  const ratioScale = 1_000_000_000_000n;
+  const ratioScaled = (debt * 1_000n * ratioScale) / collateral;
+  const ratio = Number(ratioScaled) / Number(ratioScale);
+  if (!Number.isFinite(ratio)) return 0;
   const threshold = RISK_PARAMETERS.LIQUIDATION_THRESHOLD;
 
   if (side === "long") {

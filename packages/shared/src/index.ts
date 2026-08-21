@@ -9,6 +9,7 @@ export * from './types.js';
 export * from './constants.js';
 export * from './abis.js';
 export * from './addresses.js';
+export * from './protocolTokens.js';
 export * from './utils.js';
 export * from './etherscan.js';
 export * from "./arb.js";

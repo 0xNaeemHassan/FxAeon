@@ -15,6 +15,7 @@
  *   as notify()/sloDigest — unit-testable without a live bot.
  */
 import { logger } from "../middleware/logger.js";
+import { scrubSensitiveText } from "../utils/scrubSensitive.js";
 
 type SendFn = (chatId: string, message: string) => Promise<unknown>;
 
@@ -30,7 +31,7 @@ const recentSignatures = new Map<string, { lastSent: number; suppressed: number 
 /** Strip credentials and key-shaped strings from text before it leaves the box. */
 export function scrubSensitive(text: string): string {
   return (
-    text
+    scrubSensitiveText(text)
       // URL credentials: scheme://user:pass@host → scheme://***@host
       .replace(/(\w+:\/\/)([^/\s:@]+):([^/\s@]+)@/g, "$1***@")
       // Bearer / token-like assignments

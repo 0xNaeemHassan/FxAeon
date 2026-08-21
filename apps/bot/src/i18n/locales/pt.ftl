@@ -6,7 +6,7 @@
 start-welcome-new =
     🚀 Bem-vindo ao FxAeon
     
-    A interface mais avançada para o f(x) Protocol — posições alavancadas, ordens limite e automação de rendimento, tudo pelo Telegram.
+    A interface mais avançada para o f(x) Protocol — posições alavancadas e automação de rendimento, tudo pelo Telegram.
     
     🔐 Autocustódia — crie ou importe a SUA carteira; só você tem as chaves
     ⚡ Protegido por simulação — nada é transmitido sem simular sem erros
@@ -42,7 +42,7 @@ help-body =
     
     ⚡ Trading
       /trade — Abrir posição alavancada (1.1x–7x)
-      /limit — Colocar ordens limite/stop
+      /limit — Validar prévia de ordem limite/stop (não envia)
       /orders — Ver ordens ativas
       /mint — Tomar fxUSD emprestado (sem alavancagem)
       /redeem — Resgatar fxSAVE de volta para fxUSD
@@ -67,7 +67,7 @@ help-body =
     
     🤖 Automação
       /auto — Regras de stop-loss / take-profit (/auto sl wstETH long 2500)
-      /refer — Seu link de indicação + ganhos
+      /refer — Seu link de convite + contas vinculadas
     
     ⚙️ Configurações
       /settings — Idioma, slippage, proteção MEV
@@ -116,7 +116,7 @@ trade-usage =
     /trade <mercado> <long|short> <alavancagem> <quantidade>
     
     Exemplo:
-    /trade wstETH long 3x 1ETH
+    /trade wstETH long 3x 0.25
     
     Limites de Alavancagem:
     • Long: { $minLev }x – { $maxLong }x

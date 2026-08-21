@@ -6,7 +6,7 @@
  * page) so the heavy @privy-io/react-auth bundle is fetched only when the
  * flow actually renders — never on first paint (W-20 perf budget).
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
   PartyPopper,
@@ -66,6 +66,11 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
   const [result, setResult] = useState<OnboardResult | null>(null);
   const [delegated, setDelegated] = useState(false);
   const [convergenceStuck, setConvergenceStuck] = useState(false);
+  const phaseHeadingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    phaseHeadingRef.current?.focus({ preventScroll: true });
+  }, [phase]);
 
   // ── Convergence guard (Phase 1 §1.8) ─────────────────────────────────
   // If any non-terminal phase (authenticating, creating, importing-busy,
@@ -437,6 +442,8 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
 
   if (!ready) return <FullScreenSpinner />;
 
+  if (phase === 'linking') return <FullScreenSpinner />;
+
   // ── Done ──────────────────────────────────────────────────────────────────
   if (phase === 'done') {
     return (
@@ -449,7 +456,7 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
               <Check className="h-8 w-8 text-success" strokeWidth={2} />
             )}
           </span>
-          <h1 className="text-display text-2xl font-semibold">
+          <h1 ref={phaseHeadingRef} tabIndex={-1} className="text-display text-2xl font-semibold outline-none">
             {result ? (result.created ? 'Wallet ready — and it’s yours' : 'You’re already set up') : 'Wallet ready'}
           </h1>
           {(result?.walletAddress ?? walletAddress) && (
@@ -480,7 +487,7 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
     return (
       <main className="mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col justify-center gap-4 px-6">
         <div className="stagger flex flex-col gap-4">
-          <h1 className="text-display text-[26px] font-semibold leading-tight">
+          <h1 ref={phaseHeadingRef} tabIndex={-1} className="text-display text-[26px] font-semibold leading-tight outline-none">
             Your wallet, <span className="text-gradient">your call</span>
           </h1>
           <p className="text-[13.5px] leading-relaxed text-mut">
@@ -524,7 +531,7 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
           </Card>
           {error && (
             <Card className="border-[rgba(255,194,75,0.35)]">
-              <p className="text-[13px] leading-relaxed text-warn">{error}</p>
+              <p role="alert" className="text-[13px] leading-relaxed text-warn">{error}</p>
             </Card>
           )}
         </div>
@@ -537,25 +544,36 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
     return (
       <main className="mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col justify-center gap-4 px-6">
         <div className="stagger flex flex-col gap-4">
-          <h1 className="text-display text-[26px] font-semibold leading-tight">Import your wallet</h1>
+          <h1 ref={phaseHeadingRef} tabIndex={-1} className="text-display text-[26px] font-semibold leading-tight outline-none">Import your wallet</h1>
           <p className="text-[13.5px] leading-relaxed text-mut">
             Paste the private key (64 hex characters). It is sent over an encrypted channel
             directly into Privy’s secure enclave — it never touches FxAeon’s servers and is
             not stored in this app.
           </p>
+          <label htmlFor="wallet-private-key" className="text-[10px] font-semibold uppercase tracking-[0.15em] text-mut">
+            Private key
+          </label>
           <textarea
+            id="wallet-private-key"
+            name="wallet-private-key"
             value={importKey}
-            onChange={(e) => setImportKey(e.target.value)}
+            onChange={(e) => {
+              setImportKey(e.target.value);
+              if (error) setError('');
+            }}
             placeholder="0x…"
             rows={3}
             autoComplete="off"
             autoCorrect="off"
             spellCheck={false}
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? 'wallet-private-key-error' : undefined}
+            aria-errormessage={error ? 'wallet-private-key-error' : undefined}
             className="w-full rounded-xl border border-[var(--line)] bg-[var(--card)] p-3 font-mono text-[13px] text-[var(--text)] outline-none focus:border-[var(--mint)]"
           />
           {error && (
             <Card className="border-[rgba(255,194,75,0.35)]">
-              <p className="text-[13px] leading-relaxed text-warn">{error}</p>
+              <p id="wallet-private-key-error" role="alert" className="text-[13px] leading-relaxed text-warn">{error}</p>
             </Card>
           )}
           <Button onClick={handleImport} loading={phase === 'importing-busy'}>
@@ -577,7 +595,7 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
           <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--mint-dim)]">
             <Bot className="h-7 w-7 text-mint" strokeWidth={1.8} />
           </span>
-          <h1 className="text-display text-[26px] font-semibold leading-tight">Enable bot trading?</h1>
+          <h1 ref={phaseHeadingRef} tabIndex={-1} className="text-display text-[26px] font-semibold leading-tight outline-none">Enable bot trading?</h1>
           <p className="text-[13.5px] leading-relaxed text-mut">
             This grants the bot a <span className="text-[var(--text)]">revocable</span> permission
             (a session signer) to execute the f(x) trades you confirm in chat. Your key never
@@ -587,7 +605,7 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
           {walletAddress && <AddressChip address={walletAddress} />}
           {error && (
             <Card className="border-[rgba(255,194,75,0.35)]">
-              <p className="text-[13px] leading-relaxed text-warn">{error}</p>
+              <p role="alert" className="text-[13px] leading-relaxed text-warn">{error}</p>
             </Card>
           )}
           <Button onClick={handleDelegate} loading={phase === 'delegating'}>
@@ -619,7 +637,7 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
           </div>
 
           {/* Heading */}
-          <h1 className="text-display mt-5 text-center text-[23px] font-semibold leading-tight">
+          <h1 ref={phaseHeadingRef} tabIndex={-1} className="text-display mt-5 text-center text-[23px] font-semibold leading-tight outline-none">
             {t('loginCard.signIn')}
           </h1>
           <p className="mt-1.5 text-center text-[13px] leading-relaxed text-mut">
@@ -651,7 +669,7 @@ function PrivyLoginFlow({ referral }: { referral?: string }) {
 
           {phase === 'error' && (
             <Card className="mt-4 border-[rgba(255,194,75,0.35)]">
-              <p className="text-[13px] leading-relaxed text-warn">{error}</p>
+              <p role="alert" className="text-[13px] leading-relaxed text-warn">{error}</p>
             </Card>
           )}
 

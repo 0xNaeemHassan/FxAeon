@@ -1,122 +1,146 @@
-# FxAeon System Architecture
+# Architecture
 
-## Overview
+FxAeon is a Telegram-native application that turns user intent into f(x) Protocol reads and transactions. Ethereum, Base, and the embedded wallet remain separate trust domains; the backend coordinates them but does not store the wallet private key.
 
-FxAeon is a non-custodial Telegram interface for [f(x) Protocol](https://fx.aladdin.club/) DeFi trading on Ethereum mainnet. The system is built around **zero key custody** — users create or import their own [Privy](https://privy.io) embedded wallet, whose private key never leaves Privy's TEE (Trusted Execution Environment). The bot can only sign while the user's **revocable session-signer grant** is active.
+## Components
 
-## Architecture Layers
-
-### 1. Telegram Layer
-- **Bot**: [@FxAeonBot](https://t.me/FxAeonBot) built with grammY + TypeScript
-- **Inline Mode**: price queries (`@FxAeonBot wsteth`) in any chat
-- **Mini App**: Next.js 15 webview (static export) for wallet setup, portfolio, and trade confirmation
-- **Rate Limiting**: grammY `transformer-throttler` (30 msg/s global, 1 msg/s per user)
-
-### 2. Mini App Layer (Next.js 15 + Privy React SDK, static export)
-
-| Route | Purpose |
-|---|---|
-| `/login` | Telegram auth → create or import the user's own Privy embedded wallet (`createWallet` / `importWallet`), with an optional revocable bot-trading session-signer grant |
-| `/trade` | Build a trade and confirm it back in Telegram via a signed deep link (the Mini App itself never broadcasts — see the kill-switch note below) |
-| `/portfolio` | On-chain positions, balances, and health status |
-| `/qr` | Deposit address as a QR code |
-| `/settings` | Language, slippage, MEV (Flashbots) toggle, notifications, session-signer revoke |
-| `/policy` | Self-custody + session-signer security explainer |
-
-> **Kill-switch:** the Mini App is intentionally read/build-only and never calls `eth_sendTransaction`. All broadcasts happen server-side in the bot, behind the simulation gate and signer policy (see §5 and the security model).
-
-### 3. Backend Layer (Node 22, Docker on Render)
-- **Webhook Handler**: processes Telegram updates (Express + grammY)
-- **Command Router**: ~29 commands with validation
-- **Privy Server SDK**: signs via the user's revocable session-signer grant — the server never creates or owns user wallets
-- **fx-sdk Wrapper**: `@aladdindao/fx-sdk` for protocol quotes and calldata
-- **viem**: `eth_simulateV1` pre-flight simulation (fail-closed), EIP-712 limit-order signing, EIP-1559 fee derivation
-- **Automation & pollers (BullMQ + Redis / node-cron)**: limit-order fill polling, price alerts, health monitoring, automation rules, and the daily SLO digest
-- **Signer Policy**: a fail-closed allow-list (`core/signerPolicy.ts`) — every broadcast target must be a verified `ADDRESSES` contract
-- **At-rest Encryption**: per-record random salt, versioned ciphertext, no fallback key (BYOK guard)
-- **Notification Service**: one preference-aware `notify()` gate (tx confirmations, order fills, health alerts)
-- **Rate Limiter**: Redis-backed when `REDIS_URL` is set, in-memory fallback otherwise
-
-### 4. Data Layer
-- **Postgres (Supabase)**: users, positions, limit orders, automation rules, audit logs, referrals
-- **Redis (Upstash)**: BullMQ job queues, distributed locks (`SETNX`), caches
-- **Cloudflare R2**: nightly `pg_dump` backups (GitHub Actions)
-
-### 5. Blockchain Layer (Ethereum Mainnet)
-- **RPC**: Alchemy (free tier) — `ALCHEMY_RPC_URL`
-- **Flashbots Protect**: user-toggleable MEV protection (`/settings`)
-- **Simulation gate**: every broadcast is simulated with `eth_simulateV1` and fails closed if the simulation reverts
-- **Addresses**: the single verified registry lives in `packages/shared/src/addresses.ts`; CI (`verify-addresses.mjs`) asserts every entry has live bytecode on mainnet. Key contracts: f(x) Router, long/short pool managers, the four pools (wstETH/WBTC × long/short), `LimitOrderManager`, `fxUSD`, `FXN`, `fxSAVE`, the spot-price oracle, and the LayerZero OFT adapters used by `/bridge`.
-- **f(x) Keepers**: protocol-run; fill limit orders when triggers are met
-
-### 6. External APIs
-
-See **[external-apis.md](./external-apis.md)** for the authoritative table (timeouts, retries, circuit breakers). In summary:
-
-- **DefiLlama / CoinGecko**: market prices and pool data (cached)
-- **fx limit-order relay** (`fx-limit-order-api.aladdin.club`): `POST /v1/order`, incremental `GET /v1/order-updates?after=` (30s poll)
-- **Etherscan v2**: `/gas` command gas oracle + ETH/BTC price (optional `ETHERSCAN_API_KEY`)
-
-### 7. Monitoring & CI/CD
-- **Sentry**: errors-only with `beforeSend` scrubbing (optional `SENTRY_DSN`)
-- **`/api/v1/health`**: real DB/Redis/RPC/worker checks (the path Render polls)
-- **Daily SLO digest** → admin Telegram chat (`ADMIN_TELEGRAM_CHAT_ID`)
-- **GitHub Actions**: CI (typecheck, tests, address verification, gitleaks), Lighthouse budget for the Mini App, nightly backup, weekly f(x) upgrade monitor (opens a PR, never pushes `main`)
-
-## Security Model
-
-```
-User (Telegram) — creates/imports their OWN wallet in the Mini App
-    ↓
-Privy TEE (SOC 2 Type II) — user-owned keys, exportable by the user only
-    ↓
-Session signer (key quorum) — the bot may sign ONLY while the user's
-revocable grant is active (walletDelegated); revoke in Settings → Wallet
-    ↓
-Signer policy (default-deny) — broadcast targets must be verified ADDRESSES
-    ↓
-Simulation gate — every broadcast is simulated (eth_simulateV1) first; fail-closed
+```text
+Telegram client
+  ├─ grammY commands/callbacks ───────────────┐
+  └─ Telegram Mini App                         │
+       ├─ signed WebApp initData ─────────────┤
+       └─ Privy client wallet controls         │
+                                               ▼
+                                Bot/API process (Node.js 22)
+                                  ├─ identity and intent validation
+                                  ├─ @aladdindao/fx-sdk route builder
+                                  ├─ signer policy + simulation
+                                  ├─ Privy delegated broadcast
+                                  ├─ receipt watcher and workers
+                                  ├─ PostgreSQL
+                                  └─ Redis rate-limit store (optional)
+                                               │
+                    ┌──────────────────────────┼──────────────────────┐
+                    ▼                          ▼                      ▼
+          Ethereum + Base RPCs          External data/relay       Telegram API
+                    │
+                    ▼
+         f(x) contracts + LayerZero OFTs
 ```
 
-## Data Flow: Opening a Leveraged Position
+## Telegram layer
 
-1. User sends `/trade wstETH long 3x 1ETH` (or uses the inline ladder).
-2. Bot validates the market and leverage bounds (1.1× to the asset cap).
-3. Bot builds an HMAC-signed, short-TTL trade intent and shows a Confirm/Cancel inline keyboard.
-4. On Confirm, the bot fetches a real fx-sdk quote → simulates the route (`eth_simulateV1`).
-5. If the simulation passes, the signer policy checks every target, then the bot signs via the user's Privy session signer and broadcasts (EIP-1559 fees from `eth_feeHistory`).
-6. The W-11 receipt watcher polls for the receipt and drives the tx state machine (`pending → submitted → confirmed/failed`); status edits land on the same Telegram message.
-7. On a confirmed receipt, the AuditLog row is written and the notification is sent.
+The bot uses grammY and supports two process modes:
 
-> The bot broadcasts every transaction itself and reconciles by receipt — it does **not** rely on Privy transaction webhooks (an enterprise-only feature that was removed).
+- `NODE_ENV=production`: Express receives Telegram updates at `POST /webhook`; startup registers that URL with Telegram.
+- development/test: Express still serves health/application APIs, while grammY receives Telegram updates through long polling. The direct `/webhook` handler is production-only.
 
-## Data Flow: Limit Order
+Incoming command and callback values are untrusted. Trade and generic action confirmations use HMAC-signed, approximately ten-minute intents. Longer callback payloads use a ten-minute in-process nonce store. A process restart therefore expires those in-memory callbacks by design.
 
-1. User sends `/limit open wstETH long at 2800`.
-2. Bot builds an EIP-712 `Order` struct; domain and types are pinned against the deployed `LimitOrderManager`.
-3. User signs `signTypedData` via Privy in the Mini App.
-4. Signature + order data are POSTed to the f(x) limit-order relay.
-5. The poller reads `GET /v1/order-updates?after=` every 30s; when an f(x) keeper fills the order, the user gets a Telegram notification.
+Telegram API output is throttled globally and per user. HTTP middleware separately applies IP rate limits.
 
-## Cost Breakdown (500 MAU)
+## Mini App layer
 
-| Service | Provider | Plan | Monthly Cost |
-|---|---|---|---|
-| Backend | Render | Starter (Docker web service) | ~$7 |
-| Database | Supabase | Free (500 MB) | $0 |
-| Cache/Queue | Upstash | Free | $0 |
-| RPC | Alchemy | Free (30M CU) | $0 |
-| Storage | Cloudflare R2 | Free (10 GB) | $0 |
-| Wallets | Privy | Free (≤499 MAU) | $0 |
-| Error tracking | Sentry | Free | $0 |
-| Domain | Cloudflare Registrar | ~$9/yr | ~$1 |
-| **TOTAL** | | | **~$8/mo** |
+`apps/mini-app` is a Next.js 15 static export served by Cloudflare Pages or Nginx. It contains no server-side Next.js runtime.
 
-## Key Design Decisions
+The app has two privileged integrations:
 
-1. **No 4337/7702**: plain EOA via Privy is cheaper and simpler than smart-account infra.
-2. **No custom keeper**: f(x) keepers fill limit orders — no centralization, no extra infra.
-3. **No subgraph indexing**: fx-sdk + on-chain reads cover all read paths.
-4. **No third-party simulation service**: viem `eth_simulateV1` is free on Alchemy.
-5. **No fiat on-ramps**: users fund their own wallets — zero compliance surface.
-6. **Self-custody by default**: the server never holds keys; bot trading is an explicit, revocable grant.
+- Telegram WebApp `initData`, forwarded to the backend and HMAC-verified there.
+- Privy's React SDK, used in the browser to authenticate, create/import/export the embedded wallet, and grant/revoke the configured session signer.
+
+The Mini App does not construct trusted transaction calldata. Its quote API sends a closed set of intent fields for position open/increase/reduce/adjust, mint/repay, fxSAVE deposit/withdraw/claim, and bridge. The backend resolves wallet ownership, token metadata, targets, source chain, calldata, and value, checks policy, and simulates the complete route. It then stores that exact plan plus each displayed tier's worst-case fee budget in a wallet- and user-bound `ActionQuoteTicket` and returns only an opaque ticket with a two-minute expiry. Execute accepts the ticket and a named fee tier, not the action fields or raw fees; a fee move above the reviewed budget requires a new quote.
+
+## Backend layer
+
+The production process combines:
+
+- command/callback routing;
+- the authenticated Mini App API;
+- operational/health endpoints;
+- f(x) SDK wrappers;
+- signer delegation checks;
+- the central transaction executor;
+- receipt polling and transaction replacement;
+- periodic price-alert, automation, position-health, limit-order-status, deposit, arbitrage, and SLO workers.
+
+Workers are in-process `setInterval` loops, not a durable queue. Multiple bot replicas would therefore duplicate worker loops unless deployment adds leader election or separates workers.
+
+## Data layer
+
+PostgreSQL/Prisma stores account linkage, settings, notification preferences, transaction records, automation/alert rules, position observation snapshots, known limit orders, referrals, operational state, deposit watchers, and other ledgers.
+
+Ethereum is authoritative for wallet balances, open positions, fxSAVE holdings, transaction receipts, and protocol state. The legacy `Position` table is not the portfolio source of truth.
+
+Redis is used by HTTP rate limiting, health probing, and the live `DAILY_TX_CAP` counter. Immediately before broadcast, the central executor checks the user's UTC-day persisted records with a transaction hash and consumes one logical-action point. The database check fails closed; a missing/slow Redis falls back to an in-process counter. That fallback is suitable for one process but cannot serialize concurrent actions across replicas. The cap counts routes rather than transactions or value and does not cover the separate Ethereum replacement path.
+
+The Ethereum replacement path verifies record ownership and wallet identity before reconstructing one persisted pending call at the same nonce. Speed-up preserves that exact call. Only cancellation may introduce a self-send, and the policy accepts it only in this replacement scope, with the authenticated wallet as target, empty calldata, and zero value. Replacements are screened again, but are not re-simulated and do not consume the normal logical-action cap.
+
+## f(x) and chain layer
+
+- `@aladdindao/fx-sdk` 1.0.5 builds position, mint/repay, fxSAVE, and bridge routes.
+- viem performs source-chain reads, typed-data/hash validation, chained `eth_simulateV1`, EIP-1559 fee derivation, and receipt polling.
+- `packages/shared/src/addresses.ts` is the runtime contract/token registry.
+- `apps/bot/policy/signer.policy.json` is a generated review artifact; runtime enforcement uses an explicit set of SDK-emitted target labels whose address values come from the TypeScript registry. Registry membership alone is not signing authority.
+- Position quote construction requests only the protocol-native `FxRoute` target and accepts only `FxRoute` v1. The signer policy then requires the exact encoding and packed word sequence for the listed SDK 1.0.5 input/output pair. `FxRoute 2`, unlisted pairs, modified words, and remote Odos/Velora embedded payloads fail before signing.
+- The signer policy is chain-scoped and semantic. Ethereum pins each supported Router, FxMintRouter, fxSAVE, token, pool, and OFT selector plus its security-sensitive fields. Base allows only an exact intent-scoped send through the SDK-pinned fxUSD or fxSAVE OFT.
+- Flashbots Protect is optional per user for Ethereum private broadcast. Base explicitly rejects Flashbots and uses public Privy broadcast.
+
+MultiPathConverter is not a top-level signing target. For position, mint/repay, and fxSAVE router calls, the policy decodes the outer ABI structs, conversion payloads, and flash-loan callbacks; it requires the configured converter, matching tokens/amounts, empty external-signature fields, and canonical bounded route arrays. Native value must be the encoded ETH input or exact bounded bridge fee and is zero for other protocol calls. Any ERC-20 or position approval emitted by a normal route must precede and match one later action's exact token/pool, spender/operator, and amount/position ID; blanket position approvals are rejected.
+
+## Opening a position
+
+```text
+User requests a Mini App quote
+  → verify identity + constrained intent
+  → resolve user and active Privy delegation
+  → obtain a fresh SDK route
+  → signer-policy check
+  → simulate the complete route
+  → freeze exact plan in a wallet-bound, two-minute ticket
+User confirms the ticket + named fee tier
+  → claim ticket; create/dedupe its TxRecord
+  → reapply policy and simulate the frozen plan
+  → enforce the UTC-day logical-action cap
+  → derive server-side EIP-1559 fees
+  → broadcast tx 1 and wait for receipt
+  → broadcast tx 2 ... and wait
+  → persist every step hash/status and the durable route state
+  → refresh position snapshot and present result
+```
+
+The first confirmation claims the ticket before fee/RPC/broadcast work. The immutable ticket ID is also the per-user executor idempotency key, so a duplicate request can only observe or deduplicate the same record and cannot create a different route. Sequential receipt waiting matters because a later router call can depend on an earlier approval. Each hash is persisted immediately and each step moves from `prepared` to `broadcast` and a receipt-derived outcome. If a later transaction cannot be broadcast after an earlier step is known mined, the route becomes terminal `partial`; a mined same-nonce cancellation becomes terminal `cancelled`. A receipt timeout remains `broadcast`, because submission is not proof of failure or success.
+
+## Reading a portfolio
+
+The backend reads four market/side position combinations from the SDK, every supported Ethereum wallet-token balance from chain, fxSAVE independently, and spot prices through the market-data cache. It returns explicit completeness flags. Wallet valuation iterates the supported balance registry; fxSAVE shares are excluded from the cash leg and valued once through the SDK's redeemable assets. A positive supported balance without a live price, a failed balance read, an incomplete position/savings read, or any missing required price—including fxUSD—makes the total unavailable instead of producing a partial or assumed-pegged number. Unregistered arbitrary ERC-20 holdings are outside this product total.
+
+Position PnL is derived from a first-observed snapshot and current spot price. A position opened outside FxAeon gets a first-observed basis, not a reconstructed historical entry price.
+
+## Automation
+
+Stop-loss/take-profit rules are stored off-chain and checked about every minute against a fresh shared CoinGecko snapshot. A crossed rule is atomically claimed in the database, re-reads matching positions, and invokes the same close route/executor as a manual action. Stale prices never trigger a rule. Failures retry up to a bounded count before pausing.
+
+This architecture does not provide on-chain keeper guarantees, exact trigger-price execution, or availability while the service is down.
+
+## Limit orders
+
+The local limit-order module can construct and chain-verify EIP-712 order data, verify a maker signature, submit it to the official f(x) relay, read execution state, and construct cancellation calldata. Its HTTP router requires fresh TMA authentication and binds order makers to the authenticated database wallet. No Telegram or Mini App signing UI currently completes this flow, so `/limit` is preview-only.
+
+## Cross-chain bridge
+
+The SDK accepts source/destination chain IDs 1 and 8453. The backend maps the user's direction to a server-stamped source chain and corresponding RPC/client; the browser cannot supply arbitrary chain IDs, RPCs, OFT addresses, recipients, or refund addresses. Privy signing uses CAIP-2 chain identifiers `eip155:1` and `eip155:8453`.
+
+Ethereum-source routes may be one exact-amount token approval followed by exactly one OFT send. Base-source routes are exactly one call to the selected SDK-pinned OFT. The signer policy binds the canonical fxUSD/fxSAVE token-OFT pair, source chain, exact amount, SDK four-decimal credited minimum, token-specific LayerZero options, opposite-chain endpoint, same-wallet recipient/refund address, empty compose/command payloads, zero LZ-token fee, and transaction value equal to the encoded native fee; the native fee is capped at 0.1 ETH. The common executor persists the source-chain transaction lifecycle, but destination-chain delivery is an external LayerZero outcome and is not inferred from the source receipt.
+
+## Deployment topology
+
+The canonical production files describe:
+
+- Render Docker web service for the bot/API;
+- Cloudflare Pages static hosting for the Mini App;
+- managed PostgreSQL and optional Redis;
+- optional GitHub Actions database migration, Mini App deploy, backup, fork test, smoke test, and quality workflows.
+
+Docker Compose is a local/self-hosted topology with bot, Mini App Nginx, Redis, and a root Nginx proxy. It does not provision the database or production TLS.
+
+See [Deployment](DEPLOYMENT.md), [Operations](operations.md), and [Security](security.md).

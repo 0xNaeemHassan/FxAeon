@@ -15,6 +15,7 @@ import {
   SUPPORTED_ASSETS,
   type MarketRow,
 } from "../market/coingecko.js";
+import { botLogger } from "../middleware/logger.js";
 
 /** Escape MarkdownV2 special characters (outside code blocks). */
 export function escapeMarkdownV2(text: string): string {
@@ -105,7 +106,7 @@ export async function priceCommand(ctx: Context): Promise<void> {
 
     await ctx.reply(message, { parse_mode: "MarkdownV2" });
   } catch (error) {
-    console.error("[priceCommand] Error:", error);
+    botLogger.error({ err: error }, "price command failed");
     await ctx.reply(
       `📊 Market Overview\n\n❌ Couldn't fetch live prices right now ` +
         `(CoinGecko unavailable). Nothing is cached yet — please try again in a minute.`

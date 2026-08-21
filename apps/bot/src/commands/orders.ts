@@ -10,8 +10,10 @@ export async function ordersCommand(ctx: Context) {
     include: { limitOrders: { orderBy: { createdAt: "desc" } } },
   });
 
-  if(!user || user.limitOrders.length === 0) {
-    await ctx.reply("No limit orders. Use /limit to place one.");
+  if (!user || user.limitOrders.length === 0) {
+    await ctx.reply(
+      "No limit orders found. New order signing is not available in chat yet; /limit validates a preview only."
+    );
     return;
   }
 

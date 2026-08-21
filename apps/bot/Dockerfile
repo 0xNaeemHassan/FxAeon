@@ -7,7 +7,7 @@ WORKDIR /app
 RUN apk add --no-cache python3 make g++ openssl
 
 # Install pnpm
-RUN npm install -g pnpm@9
+RUN npm install -g pnpm@11.16.0
 
 # Copy workspace config + per-package manifests (cache-friendly layer)
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.json ./
@@ -27,5 +27,10 @@ COPY apps/bot/ ./apps/bot/
 RUN pnpm build
 
 ENV NODE_ENV=production
+
+EXPOSE 8080
+
+# The service never needs root after its build artifacts are created.
+USER node
 
 CMD ["node", "apps/bot/dist/main.js"]

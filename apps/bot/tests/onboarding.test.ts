@@ -33,7 +33,7 @@ import {
   parseReferralPayload,
   onboardUser,
 } from "../src/core/onboarding";
-import { describeFunding } from "../src/core/funding";
+import { describeFunding, isPositiveDecimalString } from "../src/core/funding";
 import { handleWebAppData } from "../src/handlers/walletConnect";
 import { startCommand } from "../src/commands/start";
 import { tEn } from "./helpers/i18n";
@@ -290,6 +290,13 @@ describe("startCommand (W-16)", () => {
 });
 
 describe("describeFunding", () => {
+  it("detects positive decimal balances without Number underflow or overflow", () => {
+    expect(isPositiveDecimalString("0.000000000000000001")).toBe(true);
+    expect(isPositiveDecimalString("9".repeat(100))).toBe(true);
+    expect(isPositiveDecimalString("0.0000")).toBe(false);
+    expect(isPositiveDecimalString("1e18")).toBe(false);
+  });
+
   it("says nothing when balances are unknown (no fabricated numbers)", () => {
     expect(describeFunding({ known: false })).toBe("");
   });

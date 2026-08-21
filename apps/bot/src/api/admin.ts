@@ -5,24 +5,25 @@
  * is not set, every request returns 403.
  *
  * Endpoints:
- *   POST /api/v1/admin/rewebhook     — force re-register the Telegram webhook
+ *   POST /api/v1/admin/rewebhook     — immediately re-register the Telegram webhook
  *   GET  /api/v1/admin/policy-mode   — read current signer-policy mode
- *   POST /api/v1/admin/policy-mode   — hot-toggle signer-policy mode
- *   GET  /api/v1/admin/fee-mode      — read current fee mode
- *   POST /api/v1/admin/fee-mode      — hot-toggle fee mode
- *   GET  /api/v1/admin/stats         — today's volume / fees / error rates
+ *   POST /api/v1/admin/policy-mode   — 405; restart-required by design
+ *   GET  /api/v1/admin/stats         — current user / transaction counts
  */
 import { Router, type Request, type Response, type NextFunction } from "express";
+import { timingSafeEqual } from "node:crypto";
 import { prisma } from "@fxaeon/db";
-import {
-  getBotState,
-  setBotState,
-  BS_FEE_MODE,
-  BS_POLICY_MODE,
-} from "../core/botState.js";
 import { logger } from "../middleware/logger.js";
+import { resolvePolicyMode } from "../core/signerPolicy.js";
 
 export const adminRouter = Router();
+
+let rewebhook: (() => Promise<string>) | null = null;
+
+/** Injected by main.ts after the Telegram bot and registration routine exist. */
+export function configureAdminWebhook(action: () => Promise<string>): void {
+  rewebhook = action;
+}
 
 // ── Auth guard ──────────────────────────────────────────────────────────
 function requireAdmin(req: Request, res: Response, next: NextFunction): void {
@@ -32,7 +33,9 @@ function requireAdmin(req: Request, res: Response, next: NextFunction): void {
     return;
   }
   const auth = req.headers.authorization;
-  if (auth !== `Bearer ${token}`) {
+  const supplied = Buffer.from(auth ?? "", "utf8");
+  const expected = Buffer.from(`Bearer ${token}`, "utf8");
+  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
@@ -43,12 +46,13 @@ adminRouter.use(requireAdmin);
 
 // ── POST /rewebhook ─────────────────────────────────────────────────────
 adminRouter.post("/rewebhook", async (_req: Request, res: Response) => {
+  if (!rewebhook) {
+    res.status(503).json({ error: "Webhook registration is unavailable in this process" });
+    return;
+  }
   try {
-    // This endpoint is a signal — the actual re-registration happens in main.ts
-    // on the next restart. We clear the cached webhook URL so the skip-noop
-    // logic forces a re-register.
-    await setBotState("webhook_url", "");
-    res.json({ ok: true, message: "Webhook cache cleared — will re-register on next boot or poll cycle" });
+    const endpoint = await rewebhook();
+    res.json({ ok: true, endpoint, message: "Telegram webhook re-registered" });
   } catch (e) {
     logger.error(e, "admin: rewebhook failed");
     res.status(500).json({ error: "Failed to clear webhook cache" });
@@ -57,36 +61,14 @@ adminRouter.post("/rewebhook", async (_req: Request, res: Response) => {
 
 // ── GET/POST /policy-mode ───────────────────────────────────────────────
 adminRouter.get("/policy-mode", async (_req: Request, res: Response) => {
-  const mode = (await getBotState(BS_POLICY_MODE)) ?? process.env.SIGNER_POLICY_MODE ?? "enforce";
-  res.json({ mode });
+  res.json({ mode: resolvePolicyMode(), mutable: false });
 });
 
-adminRouter.post("/policy-mode", async (req: Request, res: Response) => {
-  const { mode } = req.body as { mode?: string };
-  if (!mode || !["enforce", "observe", "off"].includes(mode)) {
-    res.status(400).json({ error: "mode must be one of: enforce, observe, off" });
-    return;
-  }
-  await setBotState(BS_POLICY_MODE, mode);
-  logger.info({ mode }, "admin: signer policy mode changed");
-  res.json({ ok: true, mode });
-});
-
-// ── GET/POST /fee-mode ──────────────────────────────────────────────────
-adminRouter.get("/fee-mode", async (_req: Request, res: Response) => {
-  const mode = (await getBotState(BS_FEE_MODE)) ?? process.env.FXAEON_FEE_MODE ?? "observe";
-  res.json({ mode });
-});
-
-adminRouter.post("/fee-mode", async (req: Request, res: Response) => {
-  const { mode } = req.body as { mode?: string };
-  if (!mode || !["enforce", "observe", "off"].includes(mode)) {
-    res.status(400).json({ error: "mode must be one of: enforce, observe, off" });
-    return;
-  }
-  await setBotState(BS_FEE_MODE, mode);
-  logger.info({ mode }, "admin: fee mode changed");
-  res.json({ ok: true, mode });
+adminRouter.post("/policy-mode", async (_req: Request, res: Response) => {
+  res.status(405).json({
+    error: "Signer policy is security-critical and immutable at runtime. Set SIGNER_POLICY_MODE and restart the service.",
+    mode: resolvePolicyMode(),
+  });
 });
 
 // ── GET /stats ──────────────────────────────────────────────────────────
@@ -98,8 +80,6 @@ adminRouter.get("/stats", async (_req: Request, res: Response) => {
     const [
       totalUsers,
       activeToday,
-      feeLedgerToday,
-      feeOrphans,
       txsToday,
       openPositions,
     ] = await Promise.all([
@@ -107,12 +87,6 @@ adminRouter.get("/stats", async (_req: Request, res: Response) => {
       prisma.user.count({
         where: { updatedAt: { gte: todayStart }, deletedAt: null },
       }),
-      prisma.feeLedger.aggregate({
-        where: { createdAt: { gte: todayStart } },
-        _sum: { usdAmount: true, notionalUsd: true },
-        _count: true,
-      }),
-      prisma.feeLedger.count({ where: { feeOrphan: true } }),
       prisma.txRecord.count({
         where: { createdAt: { gte: todayStart } },
       }),
@@ -122,14 +96,8 @@ adminRouter.get("/stats", async (_req: Request, res: Response) => {
     res.json({
       timestamp: new Date().toISOString(),
       users: { total: totalUsers, activeToday },
-      today: {
-        trades: txsToday,
-        feeCount: feeLedgerToday._count,
-        feeUsd: feeLedgerToday._sum.usdAmount ?? 0,
-        volumeUsd: feeLedgerToday._sum.notionalUsd ?? 0,
-      },
+      today: { transactions: txsToday },
       openPositions,
-      feeOrphans,
     });
   } catch (e) {
     logger.error(e, "admin: stats failed");

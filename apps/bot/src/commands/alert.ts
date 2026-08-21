@@ -38,10 +38,6 @@ const USAGE =
   `/alert eth < 1500 — when ETH goes below $1,500\n` +
   `/alert fxn +10% — when FXN's 24h move reaches +10%\n` +
   `/alert btc -5% — when BTC's 24h move reaches -5%\n\n` +
-  `Advanced alerts:\n` +
-  `/alert funding eth > 0.01 — funding rate threshold\n` +
-  `/alert apy fxsave < 5 — fxSAVE APY drops below 5%\n` +
-  `/alert portfolio -10% — portfolio drops 10%+\n\n` +
   `/alerts — list & manage your active alerts\n\n` +
   `Supported: ${SUPPORTED_ASSETS.map((a) => a.symbol).join(", ")}\n` +
   `Alerts fire once, then auto-archive.`;

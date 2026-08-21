@@ -6,12 +6,16 @@
  * 'confirmed'/'reverted' strings already written by tx-notifier.
  *
  *   prepared → simulated → broadcasting → broadcast → confirmed
- *      └→ failed   └→ failed   └→ failed      └→ reverted
+ *      └→ failed   └→ failed   └→ failed      ├→ reverted
+ *                                             ├→ partial
+ *                                             └→ cancelled
  *
  * Notes:
  * - 'broadcast' has NO edge to 'failed': once a signed tx left our hands it
  *   may still land. A watcher timeout leaves the record in 'broadcast' for a
- *   later sweep — it must never be marked failed on a hunch.
+ *   later sweep — it must never be marked failed on a hunch. `partial` is used
+ *   only after at least one route step is known mined and a later step cannot
+ *   complete; `cancelled` means a same-nonce cancellation is known mined.
  * - Terminal states have no outgoing edges. Retrying a failed trade requires a
  *   NEW idempotency key; we never resurrect a terminal record.
  */
@@ -23,6 +27,8 @@ export const TX_STATES = [
   "broadcast",
   "confirmed",
   "reverted",
+  "partial",
+  "cancelled",
   "failed",
 ] as const;
 
@@ -32,9 +38,11 @@ const TRANSITIONS: Record<TxState, readonly TxState[]> = {
   prepared: ["simulated", "failed"],
   simulated: ["broadcasting", "failed"],
   broadcasting: ["broadcast", "failed"],
-  broadcast: ["confirmed", "reverted"],
+  broadcast: ["confirmed", "reverted", "partial", "cancelled"],
   confirmed: [],
   reverted: [],
+  partial: [],
+  cancelled: [],
   failed: [],
 };
 

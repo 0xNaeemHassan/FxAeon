@@ -1,4 +1,17 @@
-import { describe, it, expect } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
+import { prisma } from "@fxaeon/db";
+
+const sideEffects = vi.hoisted(() => ({
+  broadcast: vi.fn(),
+  waitForReceipt: vi.fn(),
+}));
+
+vi.mock("../src/core/broadcast.js", () => ({
+  broadcastTransaction: (...args: unknown[]) => sideEffects.broadcast(...args),
+}));
+vi.mock("../src/core/txExecutor.js", () => ({
+  waitForReceipt: (...args: unknown[]) => sideEffects.waitForReceipt(...args),
+}));
 import {
   bumpFee,
   bumpFees,
@@ -6,6 +19,7 @@ import {
   planReplacement,
   feesFromPending,
   txFromPending,
+  executeReplacement,
   type PendingTx,
 } from "../src/core/txReplace.js";
 import type { Eip1559Fees } from "../src/core/fees.js";
@@ -24,6 +38,11 @@ const pending: PendingTx = {
 };
 
 const WALLET = "0x2222222222222222222222222222222222222222" as const;
+
+beforeEach(() => {
+  sideEffects.broadcast.mockReset();
+  sideEffects.waitForReceipt.mockReset();
+});
 
 describe("bumpFee", () => {
   it("raises by at least 12.5% (geth's 10% min replacement rule, with margin)", () => {
@@ -78,6 +97,19 @@ describe("bumpFees", () => {
     expect(out.maxFeePerGas).toBeGreaterThanOrEqual(fresh.maxFeePerGas);
     expect(out.maxPriorityFeePerGas).toBeGreaterThanOrEqual(fresh.maxPriorityFeePerGas);
   });
+
+  it("fails closed when repeated bumps cross absolute priority or total-fee caps", () => {
+    expect(() => bumpFees({
+      maxFeePerGas: 100n * GWEI,
+      maxPriorityFeePerGas: 19n * GWEI,
+      nextBaseFee: 81n * GWEI,
+    })).toThrow(/priority fee.*safety cap/i);
+    expect(() => planReplacement({
+      ...pending,
+      gasLimit: "10000000",
+      maxFeePerGas: (100n * GWEI).toString(),
+    }, "speedup", WALLET)).toThrow(/worst-case network fee/i);
+  });
 });
 
 describe("buildCancelTx", () => {
@@ -117,5 +149,109 @@ describe("round-trips", () => {
     expect(feesFromPending(pending).maxFeePerGas).toBe(BigInt(pending.maxFeePerGas));
     expect(txFromPending(pending).value).toBe(0n);
     expect(txFromPending(pending).to).toBe(pending.to);
+  });
+});
+
+describe("executeReplacement authorization", () => {
+  const params = {
+    recordId: "record-1",
+    userId: "user-1",
+    walletId: "wallet-1",
+    walletAddress: WALLET,
+    client: {} as never,
+    kind: "speedup" as const,
+  };
+
+  it("does not reveal or replace another user's record", async () => {
+    (prisma as unknown as { txRecord: unknown }).txRecord = {
+      findUnique: vi.fn(async () => ({
+        id: "record-1",
+        userId: "user-2",
+        status: "broadcast",
+        data: { chainId: 1, walletAddress: WALLET, pending },
+      })),
+    };
+
+    await expect(executeReplacement(params)).resolves.toEqual({ ok: false, reason: "no such tx record" });
+  });
+
+  it("refuses a record created by a different or unscoped wallet", async () => {
+    (prisma as unknown as { txRecord: unknown }).txRecord = {
+      findUnique: vi.fn(async () => ({
+        id: "record-1",
+        userId: "user-1",
+        status: "broadcast",
+        data: {
+          chainId: 1,
+          walletAddress: "0x3333333333333333333333333333333333333333",
+          pending,
+        },
+      })),
+    };
+
+    const result = await executeReplacement(params);
+    expect(result).toEqual({ ok: false, reason: "tx record does not belong to the active wallet" });
+  });
+
+  it("rejects an opposite-kind race instead of coalescing cancel into speed-up", async () => {
+    let release!: () => void;
+    sideEffects.broadcast.mockImplementation(() => new Promise((resolve) => {
+      release = () => resolve("0x" + "a".repeat(64));
+    }));
+    sideEffects.waitForReceipt.mockResolvedValue("confirmed");
+    const record = {
+      id: "record-1",
+      userId: "user-1",
+      status: "broadcast",
+      data: {
+        chainId: 1,
+        walletAddress: WALLET,
+        hashes: [pending.hash],
+        steps: [{ index: 0, status: "broadcast", hash: pending.hash }],
+        pending: { ...pending, routeIndex: 0, routeLength: 1 },
+      },
+    };
+    (prisma as unknown as { txRecord: unknown }).txRecord = {
+      findUnique: vi.fn(async () => record),
+      update: vi.fn(async () => ({})),
+    };
+
+    const speeding = executeReplacement(params);
+    await vi.waitFor(() => expect(sideEffects.broadcast).toHaveBeenCalledTimes(1));
+    const cancelling = await executeReplacement({ ...params, kind: "cancel" });
+    expect(cancelling).toEqual({
+      ok: false,
+      reason: expect.stringMatching(/speedup replacement is already in progress/i),
+    });
+    release();
+    await expect(speeding).resolves.toMatchObject({ ok: true, kind: "speedup" });
+    expect(sideEffects.broadcast).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks a mined cancellation as cancelled, never confirmed", async () => {
+    sideEffects.broadcast.mockResolvedValue("0x" + "b".repeat(64));
+    sideEffects.waitForReceipt.mockResolvedValue("confirmed");
+    const update = vi.fn(async () => ({}));
+    const record = {
+      id: "record-1",
+      userId: "user-1",
+      status: "broadcast",
+      data: {
+        chainId: 1,
+        walletAddress: WALLET,
+        hashes: [pending.hash],
+        steps: [{ index: 0, status: "broadcast", hash: pending.hash }],
+        pending: { ...pending, routeIndex: 0, routeLength: 2 },
+      },
+    };
+    (prisma as unknown as { txRecord: unknown }).txRecord = {
+      findUnique: vi.fn(async () => record),
+      update,
+    };
+    await expect(executeReplacement({ ...params, kind: "cancel" })).resolves.toMatchObject({
+      ok: true,
+      kind: "cancel",
+    });
+    expect(update.mock.calls.at(-1)?.[0]).toMatchObject({ data: { status: "cancelled" } });
   });
 });

@@ -9,6 +9,38 @@
 
 const MAX_SAMPLES = 500;
 
+/**
+ * Workers that main.ts always starts. Keep one canonical registry for the
+ * health endpoint and operator digest so a newly added poller cannot silently
+ * disappear from one of those views.
+ */
+export const REQUIRED_WORKERS = [
+  "health-monitor",
+  "limit-order-poller",
+  "price-alert-poller",
+  "automation-poller",
+  "arb-poller",
+  "deposit-watcher-poller",
+] as const;
+
+/** Longest interval is five minutes; two missed cycles is an alert. */
+export const WORKER_STALE_SECONDS = 11 * 60;
+/** Startup is delayed five seconds and the slowest worker first runs at 5m. */
+export const WORKER_STARTUP_GRACE_SECONDS = WORKER_STALE_SECONDS;
+
+export type WorkerStatus = "starting" | "healthy" | "stale" | "not-started";
+
+/** Pure classification used by health responses and unit tests. */
+export function classifyWorkerStatus(
+  secondsSinceHeartbeat: number | null,
+  uptimeSeconds: number
+): WorkerStatus {
+  if (secondsSinceHeartbeat === null) {
+    return uptimeSeconds <= WORKER_STARTUP_GRACE_SECONDS ? "starting" : "not-started";
+  }
+  return secondsSinceHeartbeat > WORKER_STALE_SECONDS ? "stale" : "healthy";
+}
+
 const counters = new Map<string, number>();
 const timings = new Map<string, number[]>();
 const heartbeats = new Map<string, number>();

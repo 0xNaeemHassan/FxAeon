@@ -73,7 +73,8 @@ describe("Commands", () => {
       mockCtx.message.text = "/settings";
       await settingsCommand(mockCtx);
       expect(mockCtx.reply).toHaveBeenCalledWith(
-        expect.stringContaining("Settings")
+        expect.stringContaining("Settings"),
+        expect.objectContaining({ reply_markup: expect.anything() })
       );
     });
 

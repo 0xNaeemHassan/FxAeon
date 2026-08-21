@@ -52,15 +52,28 @@ jobs:
       - name: Build shared package
         run: pnpm --filter @fxaeon/shared build
 
+      - name: Validate required Mini App configuration
+        env:
+          PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID }}
+          PRIVY_SIGNER_ID: ${{ secrets.PRIVY_SIGNER_ID }}
+          TELEGRAM_BOT_USERNAME: ${{ secrets.TELEGRAM_BOT_USERNAME }}
+          PRODUCTION_URL: ${{ secrets.PRODUCTION_URL }}
+        run: |
+          for key in PRIVY_APP_ID PRIVY_SIGNER_ID TELEGRAM_BOT_USERNAME PRODUCTION_URL; do
+            if [ -z "${!key}" ]; then
+              echo "::error::$key is required for a functional Mini App build"
+              exit 1
+            fi
+          done
+
       - name: Build Mini App
         # Package is @fxaeon/mini-app (an earlier wrong filter matched nothing,
         # so wrangler would have shipped a stale/empty dist).
         run: pnpm --filter @fxaeon/mini-app build
         env:
           NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID }}
+          NEXT_PUBLIC_PRIVY_SIGNER_ID: ${{ secrets.PRIVY_SIGNER_ID }}
           NEXT_PUBLIC_TELEGRAM_BOT_USERNAME: ${{ secrets.TELEGRAM_BOT_USERNAME }}
-          NEXT_PUBLIC_MINI_APP_URL: ${{ secrets.MINI_APP_URL }}
-          NEXT_PUBLIC_ALCHEMY_RPC_URL: ${{ secrets.ALCHEMY_RPC_URL }}
           NEXT_PUBLIC_BOT_API_URL: ${{ secrets.PRODUCTION_URL }}
 
       - name: Deploy to Cloudflare Pages

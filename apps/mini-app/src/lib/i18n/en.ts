@@ -22,7 +22,7 @@ const en: Messages = {
 
   // -- browser splash (app/page.tsx) --
   'splash.tagline':
-    'Non-custodial leveraged trading on f(x) Protocol, built for Telegram. This app runs inside the FxAeon bot.',
+    'Trade, borrow, save, bridge, and manage every f(x) Protocol position from one self-custodial Telegram app.',
 
   // -- login gates (app/login/page.tsx) --
   'loginGate.tgTitle': 'FxAeon runs inside Telegram',
@@ -79,7 +79,7 @@ const en: Messages = {
   'portfolio.markets': 'Markets',
   'portfolio.pricesStale': 'Prices may be a few minutes old (upstream hiccup).',
   'portfolio.quickActions': 'Quick actions',
-  'portfolio.qaTradeHint': 'Leverage up to 10x',
+  'portfolio.qaTradeHint': 'Longs up to 7x',
   'portfolio.qaDepositHint': 'ETH · wstETH · WBTC',
   'portfolio.qaSecurity': 'How your wallet is protected',
   'portfolio.qaSecurityHint': 'Self-custody, your keys',
@@ -214,12 +214,12 @@ const en: Messages = {
     'The bot can only sign while your session-signer grant is active. Revoke it in Settings → Wallet and chat execution stops instantly.',
   'policy.rule3Title': 'Simulation-gated execution',
   'policy.rule3Body':
-    'Every chat-confirmed action is simulated first. If it would fail, nothing is broadcast — fail closed, always.',
-  'policy.rule4Title': 'Explicit confirms only',
+    'Before review, the server builds, policy-checks, and simulates the exact plan. Position conversions must match the pinned f(x) SDK v1 route table.',
+  'policy.rule4Title': 'Two-minute, wallet-bound review',
   'policy.rule4Body':
-    'No transaction is built or sent before you tap Confirm. Previews expire after ~10 minutes.',
+    'The Mini App freezes that exact plan for 2 minutes. Confirm claims its one-use ticket; a repeat can only return the same idempotent transaction record.',
   'policy.footer':
-    'Manage everything in Settings → Wallet: export your key, enable or revoke bot trading. Check /security in the bot for the live status.',
+    'Activity preserves every route-step hash and status, including pending, partial, cancelled, reverted, or confirmed outcomes. Manage signing access in Settings → Wallet.',
   // -- login sign-in card (PrivyFlow intro) --
   'loginCard.signIn': 'Sign in to FxAeon',
   'loginCard.subtitle': 'Self-custodial wallet powered by Privy',
@@ -228,6 +228,9 @@ const en: Messages = {
   'loginCard.wallet': 'Connect existing wallet',
   'loginCard.terms': 'By continuing you accept our Terms and Privacy',
   'loginCard.poweredBy': 'Powered by',
+  'nav.earn': 'Earn',
+  'nav.move': 'Move',
+  'nav.more': 'More',
 };
 
 export default en;

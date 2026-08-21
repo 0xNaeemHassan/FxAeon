@@ -6,11 +6,13 @@
  * up as complete ones (AUDIT P0-3).
  *
  * Valuation convention matches `/portfolio` (commands/portfolio.ts) and the
- * PnL tracker (core/pnl.ts): collateral at live spot, fxUSD debt at its live
- * price when available and $1.00 otherwise.
+ * PnL tracker (core/pnl.ts): collateral and debt at live spot. Missing fxUSD
+ * pricing makes the result unknown; a stablecoin label is not a $1 guarantee.
  */
 import type { OnChainPosition } from "./portfolio.js";
 import type { FundingState } from "./funding.js";
+import type { ProtocolTokenSymbol } from "@fxaeon/shared";
+import { isPositiveDecimalString } from "./funding.js";
 
 export interface PositionValuation {
   collateralUsd: number;
@@ -23,9 +25,11 @@ export function valuePosition(
   pos: Pick<OnChainPosition, "collateral" | "collateralToken" | "debt" | "debtToken">,
   prices: Record<string, number | null>
 ): PositionValuation | null {
-  const colPrice = prices[pos.collateralToken];
+  const colPrice = pos.collateralToken === "fxUSD"
+    ? prices["FXUSD"]
+    : prices[pos.collateralToken];
   if (typeof colPrice !== "number") return null;
-  const debtPrice = pos.debtToken === "fxUSD" ? (prices["FXUSD"] ?? 1) : prices[pos.debtToken];
+  const debtPrice = pos.debtToken === "fxUSD" ? prices["FXUSD"] : prices[pos.debtToken];
   if (typeof debtPrice !== "number") return null;
   const collateralUsd = pos.collateral * colPrice;
   const debtUsd = pos.debt * debtPrice;
@@ -35,8 +39,8 @@ export function valuePosition(
 /**
  * USD value of an fxSAVE (stability-pool) holding from its underlying assets.
  * fxSAVE is an ERC-4626 vault over fxUSD, so the SDK's `assetsWei` already is
- * the position's redeemable fxUSD — we only convert fxUSD→USD (its live price,
- * or $1.00 when the feed is down, matching the debt convention above).
+ * the position's redeemable fxUSD — we only convert fxUSD→USD using its live
+ * price. A missing feed stays unknown instead of assuming the peg.
  *
  * Returns 0 when there is no position (shares ≈ 0), and null when there IS a
  * position but its underlying value can't be priced — so the caller shows an
@@ -47,12 +51,12 @@ export function valueSavings(
   assets: string | number | null | undefined,
   prices: Record<string, number | null> | null
 ): number | null {
-  const sharesNum = Number(shares ?? 0);
-  if (!(sharesNum > 0)) return 0; // no stability-pool position
+  const sharesText = String(shares ?? "0");
+  if (!isPositiveDecimalString(sharesText)) return 0; // no stability-pool position
   if (!prices) return null;
   const assetsNum = assets === null || assets === undefined ? NaN : Number(assets);
   if (!Number.isFinite(assetsNum)) return null; // SDK couldn't value the shares
-  const fxUsdPrice = prices["FXUSD"] ?? 1;
+  const fxUsdPrice = prices["FXUSD"];
   if (typeof fxUsdPrice !== "number") return null;
   return assetsNum * fxUsdPrice;
 }
@@ -98,13 +102,35 @@ export function summarizePortfolio(
   // -- wallet cash --------------------------------------------------------
   let walletUsd: number | null = funding.known ? 0 : null;
   if (funding.known) {
-    const legs: Array<[number, number | null]> = [
-      [Number(funding.eth), prices["ETH"]],
-      [Number(funding.wstEth), prices["wstETH"]],
-      [Number(funding.wbtc), prices["WBTC"]],
-    ];
-    for (const [amount, price] of legs) {
-      if (!(amount > 0)) continue; // 0 (or NaN) balance: price irrelevant
+    // New funding snapshots enumerate every supported wallet token. fxSAVE
+    // shares are deliberately excluded here because savingsUsd values those
+    // same shares via the SDK's redeemable-asset result (counting both would
+    // double the holding). Legacy snapshots retain their original three legs.
+    const balances: Partial<Record<ProtocolTokenSymbol, string | null>> = funding.balances ?? {
+      ETH: funding.eth,
+      wstETH: funding.wstEth,
+      WBTC: funding.wbtc,
+    };
+    const priceFor = (symbol: ProtocolTokenSymbol): number | null => {
+      if (symbol === "fxUSD") return prices["FXUSD"] ?? null;
+      if (symbol === "fxUSDBasePool") return prices["fxUSDBasePool"] ?? null;
+      return prices[symbol] ?? null;
+    };
+    for (const [symbol, rawAmount] of Object.entries(balances) as Array<[ProtocolTokenSymbol, string | null]>) {
+      if (symbol === "fxSAVE") continue;
+      // A failed balance read means the wallet total is unknowable even when
+      // every successfully-read token happens to be zero.
+      if (rawAmount === null) {
+        walletUsd = null;
+        break;
+      }
+      if (!isPositiveDecimalString(rawAmount)) continue; // zero balance: price irrelevant
+      const amount = Number(rawAmount);
+      if (!Number.isFinite(amount)) {
+        walletUsd = null;
+        break;
+      }
+      const price = priceFor(symbol);
       if (typeof price !== "number") {
         walletUsd = null;
         break;

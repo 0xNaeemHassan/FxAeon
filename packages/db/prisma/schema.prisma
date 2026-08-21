@@ -8,125 +8,126 @@ datasource db {
 }
 
 model User {
-  id              String    @id @default(uuid())
-  telegramId      String    @unique
-  privyUserId     String    @unique
-  walletAddress   String    @unique
+  id              String   @id @default(uuid())
+  telegramId      String   @unique
+  privyUserId     String   @unique
+  walletAddress   String   @unique
   /// Privy wallet API id of the user's embedded wallet. Nullable: rows
   /// created before W-16 predate wallet ids; also null until Privy exposes
   /// the id (it always does once the user delegates).
-  privyWalletId   String?   @unique
+  privyWalletId   String?  @unique
   /// True while the user's session-signer grant (bot trading) is active.
-  walletDelegated Boolean   @default(false)
+  walletDelegated Boolean  @default(false)
   /// True when the user imported an existing private key instead of creating
   /// a fresh embedded wallet.
-  walletImported  Boolean   @default(false)
-  language        String    @default("en")
-  mevProtection   String    @default("off")
-  slippageBps     Int       @default(50)
-  referralCode    String?   @unique
+  walletImported  Boolean  @default(false)
+  language        String   @default("en")
+  mevProtection   String   @default("off")
+  slippageBps     Int      @default(50)
+  referralCode    String?  @unique
   referredBy      String?
-  dailyTxCount    Int       @default(0)
-  dailyTxResetAt  DateTime  @default(now())
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  dailyTxCount    Int      @default(0)
+  dailyTxResetAt  DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   // ── Master Plan additions ─────────────────────────────────────────────
   /// Beginner | Pro preset — controls UX density and risk-warning verbosity.
-  mode                      String    @default("beginner")
+  mode                        String    @default("beginner")
   /// Preselected token on the collateral picker (Step 3).
-  defaultCollateralToken    String    @default("fxUSD")
+  defaultCollateralToken      String    @default("fxUSD")
   /// Preselected leverage on Step 2.
-  defaultLeverage           Float     @default(3.0)
+  defaultLeverage             Float     @default(3.0)
   /// Display currency for USD equivalents (EUR, GBP, JPY, KRW).
-  displayCurrency           String    @default("USD")
+  displayCurrency             String    @default("USD")
   /// Toggle verbose risk-warning copy on previews.
-  riskWarnings              Boolean   @default(true)
+  riskWarnings                Boolean   @default(true)
   /// Compact vs Detailed position cards.
-  positionView              String    @default("compact")
+  positionView                String    @default("compact")
   /// f(x) oracle-vs-spot divergence warning threshold in basis points.
-  oracleDivergenceBps       Int       @default(50)
+  oracleDivergenceBps         Int       @default(50)
   /// Chainlink staleness warning threshold in seconds.
-  chainlinkStalenessSec     Int       @default(3600)
+  chainlinkStalenessSec       Int       @default(3600)
   /// Phase 5: Whether the user has opted into NL (AI) input parsing.
   /// Off by default — must be explicitly enabled via /settings ai on.
-  aiInputEnabled            Boolean   @default(false)
+  aiInputEnabled              Boolean   @default(false)
   /// FIFO cap-5 recent withdraw destinations (JSON array of addresses).
-  lastWithdrawTargets       Json      @default("[]")
+  lastWithdrawTargets         Json      @default("[]")
   /// Set on account delete (soft-delete timestamp).
-  deletedAt                 DateTime?
+  deletedAt                   DateTime?
   /// Set when adaptive Privy revocation wait times out; nightly cleanup picks
   /// these up and finishes the cascade.
-  deletePending             Boolean   @default(false)
-  /// Running notional total for referral tier attribution.
-  referrerVolumeUsd         Float     @default(0)
-  /// Set on the user's first confirmed trade — gates referral payouts.
-  firstTradeAt              DateTime?
+  deletePending               Boolean   @default(false)
+  /// Reserved legacy field; current invite attribution has no paid tiers.
+  referrerVolumeUsd           Float     @default(0)
+  /// Set on the user's first confirmed trade for first-run education.
+  firstTradeAt                DateTime?
   /// Optional user circuit breaker: max USD trade volume per day.
-  maxDailyVolumeUsd         Float?
+  maxDailyVolumeUsd           Float?
   /// Optional user circuit breaker: max simultaneous open positions.
-  maxOpenPositions          Int?
+  maxOpenPositions            Int?
   /// Optional user circuit breaker: pause duration after liquidation (seconds).
   coolDownAfterLiquidationSec Int?
 
-  positions       Position[]
-  limitOrders     LimitOrder[]
-  rules           AutomationRule[]
-  auditLogs       AuditLog[]
-  notifications   NotificationPref?
-  aiKeys          AiKey?
-  transactions    Transaction[]
-  priceAlerts     PriceAlert[]
-  positionSnapshots PositionSnapshot[]
-  feeLedger       FeeLedger[]
-  depositWatchers DepositWatcher[]
+  positions          Position[]
+  limitOrders        LimitOrder[]
+  rules              AutomationRule[]
+  auditLogs          AuditLog[]
+  notifications      NotificationPref?
+  aiKeys             AiKey?
+  transactions       Transaction[]
+  priceAlerts        PriceAlert[]
+  positionSnapshots  PositionSnapshot[]
+  feeLedger          FeeLedger[]
+  depositWatchers    DepositWatcher[]
+  actionQuoteTickets ActionQuoteTicket[]
 
   @@index([telegramId])
   @@index([walletAddress])
 }
 
 model Position {
-  id                String   @id @default(uuid())
-  userId            String
-  tokenId           String
-  market            String
-  side              String
-  collateral        String
-  debt              String
-  debtRatio         Float
-  leverage          Float
-  liquidationPrice  Float
-  healthPercent     Float
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id               String   @id @default(uuid())
+  userId           String
+  tokenId          String
+  market           String
+  side             String
+  collateral       String
+  debt             String
+  debtRatio        Float
+  leverage         Float
+  liquidationPrice Float
+  healthPercent    Float
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  user              User     @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([tokenId])
 }
 
 model LimitOrder {
-  id              String   @id @default(uuid())
-  userId          String
-  orderHash       String   @unique
-  status          String   @default("open")
-  positionSide    Boolean
-  orderType       Boolean
-  orderSide       Boolean
-  triggerPrice    String
-  pool            String
-  fxUSDDelta      String?
-  collDelta       String?
-  debtDelta       String?
-  nonce           String?
-  salt            String?
-  deadline        DateTime?
-  createdAt       DateTime @default(now())
-  expiresAt       DateTime
-  filledAt        DateTime?
+  id           String    @id @default(uuid())
+  userId       String
+  orderHash    String    @unique
+  status       String    @default("open")
+  positionSide Boolean
+  orderType    Boolean
+  orderSide    Boolean
+  triggerPrice String
+  pool         String
+  fxUSDDelta   String?
+  collDelta    String?
+  debtDelta    String?
+  nonce        String?
+  salt         String?
+  deadline     DateTime?
+  createdAt    DateTime  @default(now())
+  expiresAt    DateTime
+  filledAt     DateTime?
 
-  user            User     @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([status])
@@ -134,7 +135,7 @@ model LimitOrder {
 }
 
 model AutomationRule {
-  id              String   @id @default(uuid())
+  id              String    @id @default(uuid())
   userId          String
   name            String
   type            String
@@ -146,14 +147,14 @@ model AutomationRule {
   maxValueUsd     Float
   minIntervalSec  Int
   deadline        DateTime
-  status          String   @default("active")
+  status          String    @default("active")
   lastRun         DateTime?
-  failureCount    Int      @default(0)
-  priority        Int      @default(0)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  failureCount    Int       @default(0)
+  priority        Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  user            User     @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([status])
@@ -169,7 +170,7 @@ model AuditLog {
   ipHash    String?
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([createdAt])
@@ -177,60 +178,60 @@ model AuditLog {
 }
 
 model NotificationPref {
-  id                String   @id @default(uuid())
-  userId            String   @unique
-  tx                Boolean  @default(true)
-  orders            Boolean  @default(true)
-  health            Boolean  @default(true)
-  rewards           Boolean  @default(false)
-  governance        Boolean  @default(false)
-  rules             Boolean  @default(true)
-  arb               Boolean  @default(false)
+  id                  String    @id @default(uuid())
+  userId              String    @unique
+  tx                  Boolean   @default(true)
+  orders              Boolean   @default(true)
+  health              Boolean   @default(true)
+  rewards             Boolean   @default(false)
+  governance          Boolean   @default(false)
+  rules               Boolean   @default(true)
+  arb                 Boolean   @default(false)
   /// Funding level transition notifications.
-  funding           Boolean  @default(false)
+  funding             Boolean   @default(false)
   /// APY change notifications.
-  apy               Boolean  @default(false)
+  apy                 Boolean   @default(false)
   /// Portfolio value threshold notifications.
-  portfolio         Boolean  @default(false)
+  portfolio           Boolean   @default(false)
   /// fxSAVE redeem-ready auto-managed notifications.
-  fxsaveRedeemable  Boolean  @default(true)
-  quietHoursStart   String?
-  quietHoursEnd     String?
-  lastHealthAlert   DateTime?
-  lastOrderAlert    DateTime?
-  lastTxAlert       DateTime?
-  lastRewardsAlert  DateTime?
+  fxsaveRedeemable    Boolean   @default(true)
+  quietHoursStart     String?
+  quietHoursEnd       String?
+  lastHealthAlert     DateTime?
+  lastOrderAlert      DateTime?
+  lastTxAlert         DateTime?
+  lastRewardsAlert    DateTime?
   lastGovernanceAlert DateTime?
-  lastRulesAlert    DateTime?
-  lastArbAlert      DateTime?
-  lastFundingAlert  DateTime?
-  lastApyAlert      DateTime?
-  lastPortfolioAlert DateTime?
+  lastRulesAlert      DateTime?
+  lastArbAlert        DateTime?
+  lastFundingAlert    DateTime?
+  lastApyAlert        DateTime?
+  lastPortfolioAlert  DateTime?
 
-  user              User     @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 }
 
 /// One-shot price alerts (/alert). Evaluated by the price-alert poller
 /// against the shared CoinGecko snapshot; fires once, then status=triggered.
 /// Extended kinds: above | below | pct | health | funding | apy | portfolio | fxsave_redeemable
 model PriceAlert {
-  id          String    @id @default(uuid())
-  userId      String
+  id           String    @id @default(uuid())
+  userId       String
   /// Display symbol from market/coingecko SUPPORTED_ASSETS (e.g. "BTC").
-  symbol      String
+  symbol       String
   /// "above" | "below" | "pct" | "health" | "funding" | "apy" | "portfolio" | "fxsave_redeemable"
-  kind        String
+  kind         String
   /// USD price for above/below; signed percent for pct (e.g. -5 = drops 5%).
-  threshold   Float
-  status      String    @default("active") // active | triggered | cancelled
-  createdAt   DateTime  @default(now())
-  triggeredAt DateTime?
+  threshold    Float
+  status       String    @default("active") // active | triggered | cancelled
+  createdAt    DateTime  @default(now())
+  triggeredAt  DateTime?
   /// Price observed when the alert fired.
   triggerPrice Float?
   /// Optional: auto-expiry timestamp (used by fxsave_redeemable kind).
-  expiresAt   DateTime?
+  expiresAt    DateTime?
 
-  user        User      @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([status])
@@ -258,45 +259,45 @@ model PositionSnapshot {
 
   // ── Master Plan additions (closed-position data) ──────────────────────
   /// Collateral (human units) at position close — for realized PnL.
-  exitCollateral  Float?
+  exitCollateral Float?
   /// Debt (human units) at position close.
-  exitDebt        Float?
+  exitDebt       Float?
   /// Collateral spot USD at close — null if the feed was down.
-  exitSpotUsd     Float?
+  exitSpotUsd    Float?
   /// Realized PnL in USD, filled when closedAt is set.
-  realizedPnlUsd  Float?
+  realizedPnlUsd Float?
   /// Total closing fees (f(x) + FxAeon) in USD at close time.
-  closingFeesUsd  Float?
+  closingFeesUsd Float?
   /// Transaction hash of the closing trade.
-  closingTxHash   String?
+  closingTxHash  String?
 
-  user            User      @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 
   @@unique([userId, market, side, positionId])
   @@index([userId])
 }
 
 model AiKey {
-  id          String   @id @default(uuid())
-  userId      String   @unique
+  id           String   @id @default(uuid())
+  userId       String   @unique
   encryptedKey String
-  nonce       String
-  provider    String   @default("surplus")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  nonce        String
+  provider     String   @default("surplus")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  user        User     @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 }
 
 model Referral {
-  id          String   @id @default(uuid())
-  code        String   @unique
-  referrerId  String
-  refereeId   String?
-  earnings    Float    @default(0)
+  id         String   @id @default(uuid())
+  code       String   @unique
+  referrerId String
+  refereeId  String?
+  earnings   Float    @default(0)
   /// Running total of payouts actually sent (subset of earnings).
-  paidUsd     Float    @default(0)
-  createdAt   DateTime @default(now())
+  paidUsd    Float    @default(0)
+  createdAt  DateTime @default(now())
 
   @@index([code])
   @@index([referrerId])
@@ -311,15 +312,36 @@ model TxRecord {
   status         String
   type           String
   data           Json
-  /// Unique per user intent — guarantees the same action never broadcasts twice.
-  idempotencyKey String?  @unique
+  /// Unique within one user — callers may reuse opaque nonce values without
+  /// colliding with or observing another user's action.
+  idempotencyKey String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @default(now()) @updatedAt
 
+  @@unique([userId, idempotencyKey])
   @@index([userId])
   @@index([hash])
   @@index([status])
   @@index([createdAt])
+}
+
+/// Short-lived, wallet-bound execution plan produced by a successful Mini App
+/// quote simulation. Execution consumes this immutable plan instead of asking
+/// the SDK to rebuild calldata after the user has reviewed it.
+model ActionQuoteTicket {
+  id            String    @id
+  userId        String
+  walletAddress String
+  actionKind    String
+  data          Json
+  expiresAt     DateTime
+  consumedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model PriceCache {
@@ -338,22 +360,21 @@ model PoolCache {
   updatedAt DateTime @updatedAt
 }
 
-
 model Transaction {
   id        String   @id @default(cuid())
   txHash    String   @unique
   userId    String
-  type      String   // open, close, adjust, deposit, withdraw
+  type      String // open, close, adjust, deposit, withdraw
   asset     String
   amount    String
-  status    String   // pending, confirmed, failed
+  status    String // pending, confirmed, failed
   gasUsed   String?
   gasPrice  String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
-  user      User     @relation(fields: [userId], references: [id])
-  
+
+  user User @relation(fields: [userId], references: [id])
+
   @@index([userId])
   @@index([status])
   @@index([createdAt])
@@ -363,43 +384,44 @@ model Transaction {
 // Master Plan new tables
 // ═══════════════════════════════════════════════════════════════════════════
 
-/// Fee ledger: every confirmed FxAeon fee, tagged for referral attribution.
-/// Written on confirmed broadcast receipts; reconciler retries output-flow
-/// failures up to 3 times, then flags feeOrphan.
+/// Legacy ledger retained for schema compatibility and historical records.
+/// Current FxAeon transaction routes do not create, collect, or retry fees.
 model FeeLedger {
-  id              String    @id @default(uuid())
-  userId          String
+  id             String    @id @default(uuid())
+  userId         String
   /// Referral code of the user's referrer (null if not referred).
-  referrerCode    String?
+  referrerCode   String?
   /// Null until the fee-transfer receipt is confirmed.
-  txHash          String?
+  txHash         String?
   /// Intent kind: open_long | open_short | close | reduce | increase |
   /// adjust_lev | mint | repay | fxsave_deposit | fxsave_withdraw |
   /// fxsave_claim | bridge | user_withdraw | limit_fill
-  intentKind      String
+  intentKind     String
   /// Lowercase hex of the token used to pay the fee.
-  tokenAddress    String
+  tokenAddress   String
   /// BigInt as string — precise on-chain amount transferred.
-  tokenAmountWei  String
+  tokenAmountWei String
   /// The fee itself in USD at confirmation time.
-  usdAmount       Float
+  usdAmount      Float
   /// Un-fee'd trade volume in USD — used for referral tier attribution.
-  notionalUsd     Float
+  notionalUsd    Float
   /// Fee tier in basis points (5 for leverage actions, 1 for everything else).
-  feeBps          Int
-  /// True if the fee transfer failed 3+ times and was orphaned.
-  feeOrphan       Boolean   @default(false)
+  feeBps         Int
+  /// Legacy flag from the retired fee-transfer design.
+  feeOrphan      Boolean   @default(false)
+  /// Legacy reconciliation counter; no current worker consumes it.
+  retryCount     Int       @default(0)
   /// Payout cycle label, e.g. "2026-07".
-  payoutCycle     String
+  payoutCycle    String
   /// Referrer's share ratio at the time of the trade (0.0 – 0.5).
-  referrerShare   Float     @default(0)
+  referrerShare  Float     @default(0)
   /// Set when the referrer payout cron pays this row's contribution.
-  referrerPaidAt  DateTime?
+  referrerPaidAt DateTime?
   /// Transaction hash of the referrer payout transfer.
-  referrerTxHash  String?
-  createdAt       DateTime  @default(now())
+  referrerTxHash String?
+  createdAt      DateTime  @default(now())
 
-  user            User      @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([referrerCode, payoutCycle])
@@ -421,17 +443,25 @@ model BotState {
 /// The deposit-watcher poller batches all active watchers into one eth_getLogs
 /// call per ERC-20 token + one native-balance delta check.
 model DepositWatcher {
-  id        String    @id @default(uuid())
-  userId    String
+  id                    String    @id @default(uuid())
+  userId                String
   /// Block number to start scanning from.
-  fromBlock BigInt
+  fromBlock             BigInt
+  /// Last block whose ERC-20 logs were scanned successfully. Nullable so the
+  /// deploy-safe migration can bootstrap existing rows without guessing an
+  /// on-chain cursor.
+  lastCheckedBlock      BigInt?
+  /// Last successfully observed native ETH balance, in wei. Persisting this
+  /// baseline prevents restarts from turning an already-funded wallet into a
+  /// false "new deposit" notification.
+  ethBalanceBaselineWei BigInt?
   /// Auto-expiry timestamp (24 hours after creation).
-  expiresAt DateTime
+  expiresAt             DateTime
   /// Set when the first deposit is detected and the DM fires.
-  firedAt   DateTime?
-  createdAt DateTime  @default(now())
+  firedAt               DateTime?
+  createdAt             DateTime  @default(now())
 
-  user      User      @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([expiresAt])

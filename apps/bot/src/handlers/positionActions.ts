@@ -15,6 +15,7 @@ import { MARKETS, type Market } from "@fxaeon/shared";
 import {
   createFxSdk,
   createPublicClientForUser,
+  getSdkReductionAmountWei,
   mevModeForUser,
   quoteClosePosition,
 } from "../fx/index.js";
@@ -123,13 +124,22 @@ export async function handleCloseConfirm(ctx: Context): Promise<void> {
     }
 
     await editSafe(ctx, `${header}\n\n🔎 Fetching close quote…`);
+    const client = createPublicClientForUser(mevModeForUser(user.mevProtection));
+    const amountWei = await getSdkReductionAmountWei({
+      client,
+      market: target.market,
+      side: target.side,
+      rawCollateralWei: pos.rawCollateral,
+      rawDebtWei: pos.rawDebt,
+      fractionBps: 10_000,
+    });
     const quote = await quoteClosePosition({
       sdk,
       userAddress: user.walletAddress,
       market: target.market,
       side: target.side,
       positionId: target.positionId,
-      amountWei: pos.rawCollateral,
+      amountWei,
       slippagePercent: user.slippageBps / 100,
       isClosePosition: true,
     });
@@ -147,7 +157,7 @@ export async function handleCloseConfirm(ctx: Context): Promise<void> {
       idempotencyKey: `close:${user.id}:${target.market}:${target.side}:${target.positionId}:${target.nonce}`,
       txs: route.txs,
       type: target.side === "long" ? "close_long" : "close_short",
-      client: createPublicClientForUser(user.mevProtection === "flashbots" ? "flashbots" : "off"),
+      client,
       mev: mevModeForUser(user.mevProtection),
       onStatus: (status, detail) => {
         const line = statusLine(status, detail);
@@ -182,6 +192,14 @@ export async function handleCloseConfirm(ctx: Context): Promise<void> {
   }
 }
 
+export async function handleCloseCancel(ctx: Context): Promise<void> {
+  await ctx.answerCallbackQuery({ text: "Cancelled" }).catch(() => undefined);
+  await editSafe(
+    ctx,
+    "❌ Close cancelled. Nothing was sent on-chain.\n\nUse /portfolio for a fresh position view."
+  );
+}
+
 /** TP/SL: honest pointer to /auto (rule creation isn't inline yet). */
 export async function handleTpSlHint(ctx: Context): Promise<void> {
   await ctx.answerCallbackQuery().catch(() => undefined);
@@ -205,6 +223,7 @@ export async function handleTpSlHint(ctx: Context): Promise<void> {
 /** Register /portfolio position-action callbacks. Call once from main.ts. */
  
 export function registerPositionActions(bot: Bot<any>): void {
+  bot.callbackQuery("pc_cancel", (ctx) => handleCloseCancel(ctx as unknown as Context));
   bot.callbackQuery(/^pc_/, (ctx) => handleClosePrompt(ctx as unknown as Context));
   bot.callbackQuery(/^pcc_/, (ctx) => handleCloseConfirm(ctx as unknown as Context));
   bot.callbackQuery(/^pt_/, (ctx) => handleTpSlHint(ctx as unknown as Context));

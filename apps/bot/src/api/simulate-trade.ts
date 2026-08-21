@@ -1,8 +1,11 @@
-import { Router } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
 import { isAddress, formatEther } from "viem";
+import { prisma } from "@fxaeon/db";
 import { RISK_PARAMS, MARKETS } from "@fxaeon/shared";
 import { ValidationError, SimulationError, asyncHandler } from "../middleware/errors.js";
+import { getConfig } from "../middleware/config.js";
+import { verifyInitData } from "./miniapp.js";
 import {
   createFxSdk,
   createPublicClientForUser,
@@ -13,22 +16,70 @@ import {
 
 export const simulateRouter = Router();
 
+interface SimulationRequest extends Request {
+  simulationUser?: { id: string; walletAddress: string };
+}
+
+// This route performs costly SDK and RPC work. It used to be an anonymous
+// quote proxy for arbitrary addresses; bind it to a fresh Telegram signature
+// and to the authenticated user's own wallet, just like every Mini App money
+// path. The newer /api/v1/miniapp quote routes already follow this model.
+simulateRouter.use(async (req: SimulationRequest, res: Response, next: NextFunction) => {
+  const match = /^tma (.+)$/i.exec(req.header("authorization") ?? "");
+  const verified = match
+    ? verifyInitData(match[1], getConfig().TELEGRAM_BOT_TOKEN)
+    : null;
+  if (!verified) {
+    res.status(401).json({
+      error: { code: "UNAUTHORIZED", message: "Valid Telegram Mini App authentication is required." },
+    });
+    return;
+  }
+  try {
+    const user = await prisma.user.findUnique({
+      where: { telegramId: verified.telegramId },
+      select: { id: true, walletAddress: true },
+    });
+    if (!user) {
+      res.status(404).json({
+        error: { code: "NOT_ONBOARDED", message: "Finish wallet setup first." },
+      });
+      return;
+    }
+    req.simulationUser = user;
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
 const tradeSchema = z.object({
   address: z.string().refine(isAddress, "invalid address"),
   market: z.enum(MARKETS),
   side: z.enum(["long", "short"]),
   leverage: z.coerce.number().min(RISK_PARAMS.MIN_LEVERAGE),
   /** Collateral amount in wei units of the input token, as a decimal string. */
-  amountWei: z.string().regex(/^[0-9]+$/, "amountWei must be an integer wei string"),
+  amountWei: z.string()
+    .max(78, "amountWei exceeds uint256")
+    .regex(/^(?:0|[1-9][0-9]*)$/, "amountWei must be a canonical integer wei string"),
   slippageBps: z.coerce.number().int().min(1).max(1000).optional(),
 });
 
-simulateRouter.post("/trade", asyncHandler(async (req, res) => {
+simulateRouter.post("/trade", asyncHandler(async (req: SimulationRequest, res) => {
   const parsed = tradeSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new ValidationError(parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "));
   }
   const { address, market, side, leverage, amountWei, slippageBps } = parsed.data;
+
+  const collateralWei = BigInt(amountWei);
+  if (collateralWei <= 0n || collateralWei > (1n << 256n) - 1n) {
+    throw new ValidationError("amountWei must be a positive uint256 value");
+  }
+
+  if (address.toLowerCase() !== req.simulationUser?.walletAddress.toLowerCase()) {
+    throw new ValidationError("address must match the authenticated wallet");
+  }
 
   const maxLev = side === "long" ? RISK_PARAMS.MAX_LEVERAGE_LONG : RISK_PARAMS.MAX_LEVERAGE_SHORT;
   if (leverage > maxLev) {
@@ -46,7 +97,7 @@ simulateRouter.post("/trade", asyncHandler(async (req, res) => {
       market,
       side,
       leverage,
-      amountWei: BigInt(amountWei),
+      amountWei: collateralWei,
       slippagePercent: (slippageBps ?? RISK_PARAMS.SLIPPAGE_DEFAULT_BPS) / 100,
     });
     const route = quote.routes[0];
@@ -84,7 +135,7 @@ simulateRouter.post("/trade", asyncHandler(async (req, res) => {
               baseFeeWei: feeHistory?.baseFeePerGas?.at(-1)?.toString(),
               estimatedGasCostEth: formatEther(estimatedGasCostWei),
             }
-          : { error: sim.error, failedTxIndex: sim.failedTxIndex }),
+          : { error: "Transaction simulation failed.", failedTxIndex: sim.failedTxIndex }),
       },
       warnings: leverage > 5 ? ["High leverage increases liquidation risk"] : [],
     });

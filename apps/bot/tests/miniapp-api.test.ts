@@ -20,9 +20,20 @@ vi.mock("../src/core/privy", () => ({
 vi.mock("../src/core/funding", () => ({
   getFundingState: vi.fn().mockResolvedValue({ known: false }),
   describeFunding: () => "",
+  isPositiveDecimalString: (value: string | null | undefined) =>
+    typeof value === "string" && /^(?:\d+(?:\.\d+)?|\.\d+)$/.test(value) && /[1-9]/.test(value),
+}));
+vi.mock("../src/market/coingecko", () => ({
+  getSpotPrices: vi.fn().mockResolvedValue({ stale: true, prices: {} }),
+  getMarketOverview: vi.fn().mockResolvedValue({ stale: true, markets: [] }),
 }));
 
-import { verifyInitData, createMiniAppRouter } from "../src/api/miniapp";
+import {
+  buildMiniSavingsSnapshot,
+  createMiniAppRouter,
+  valuePendingSaveAssets,
+  verifyInitData,
+} from "../src/api/miniapp";
 
 const BOT_TOKEN = "12345:TEST-TOKEN";
 
@@ -80,9 +91,76 @@ describe("verifyInitData", () => {
     expect(verifyInitData("a".repeat(5000), BOT_TOKEN)).toBeNull();
   });
 
+  it("rejects malformed auth fields even when the payload is correctly signed", () => {
+    expect(verifyInitData(makeInitData({ id: 0 }), BOT_TOKEN)).toBeNull();
+    expect(verifyInitData(makeInitData({ id: Number.MAX_SAFE_INTEGER + 1 }), BOT_TOKEN)).toBeNull();
+    expect(
+      verifyInitData(makeInitData(TG_USER, { authDate: 1.5 }), BOT_TOKEN)
+    ).toBeNull();
+    const valid = makeInitData(TG_USER);
+    expect(verifyInitData(valid.replace(/hash=[^&]+/, "hash=zz"), BOT_TOKEN)).toBeNull();
+  });
+
   it("passes start_param through", () => {
     const v = verifyInitData(makeInitData(TG_USER, { startParam: "ref_ABCD1234" }), BOT_TOKEN);
     expect(v!.startParam).toBe("ref_ABCD1234");
+  });
+});
+
+describe("Mini App fxSAVE snapshot", () => {
+  const redeemAllOverview = {
+    shares: "0",
+    sharesWei: 0n,
+    assets: null,
+    fxUsd: "0",
+    usdc: "0",
+    redeem: {
+      hasPendingRedeem: true,
+      pendingShares: "12.5",
+      redeemableAt: 2_000_000_000,
+      isCooldownComplete: false,
+      cooldownHours: 24,
+    },
+  };
+
+  it("retains redeem-all claim state and includes the exact two-asset preview value", () => {
+    const snapshot = buildMiniSavingsSnapshot(
+      redeemAllOverview,
+      { fxUsd: "10", usdc: "2" },
+      { FXUSD: 1.01, USDC: 0.99 }
+    );
+
+    expect(snapshot.savings).toMatchObject({
+      shares: "0",
+      pendingRedeem: true,
+      pendingShares: "12.5",
+      pendingAssets: { fxUsd: "10", usdc: "2" },
+    });
+    expect((snapshot.savings as { valueUsd: number }).valueUsd).toBeCloseTo(12.08, 8);
+    expect(snapshot.savingsUsd).toBeCloseTo(12.08, 8);
+  });
+
+  it("keeps claim state but makes portfolio value incomplete when its preview is unavailable", () => {
+    const snapshot = buildMiniSavingsSnapshot(
+      redeemAllOverview,
+      null,
+      { FXUSD: 1, USDC: 1 }
+    );
+
+    expect(snapshot.savings).toMatchObject({
+      shares: "0",
+      pendingRedeem: true,
+      pendingShares: "12.5",
+      valueUsd: null,
+    });
+    expect(snapshot.savingsUsd).toBeNull();
+  });
+
+  it("does not require a price for a zero-valued preview leg", () => {
+    expect(valuePendingSaveAssets(
+      { fxUsd: "8", usdc: "0" },
+      { FXUSD: 1 }
+    )).toBe(8);
   });
 });
 
@@ -133,6 +211,8 @@ describe("miniapp router", () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValueOnce(null);
     const r = await fetch(`${base}/me`, { headers: auth });
     expect(r.status).toBe(200);
+    expect(r.headers.get("cache-control")).toContain("no-store");
+    expect(r.headers.get("vary")).toContain("Authorization");
     expect(await r.json()).toEqual({ onboarded: false });
   });
 
@@ -162,6 +242,31 @@ describe("miniapp router", () => {
     expect(body.savings).toBeNull();
     expect(body.summary.savingsUsd).toBeNull();
     expect(body.summary.totalValueUsd).toBeNull();
+  });
+
+  it("GET /bridge-state reports disabled and unknown chains instead of fake zeroes", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+      id: "u1",
+      telegramId: "777000111",
+      walletAddress: "0xAbCd000000000000000000000000000000001234",
+    } as any);
+    const r = await fetch(`${base}/bridge-state`, { headers: auth });
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({
+      enabled: false,
+      ethereum: {
+        chainId: 1,
+        known: false,
+        native: null,
+        assets: { fxUSD: null, fxSAVE: null },
+      },
+      base: {
+        chainId: 8453,
+        known: false,
+        native: null,
+        assets: { fxUSD: null, fxSAVE: null },
+      },
+    });
   });
 
   it("POST /onboard links the USER's wallet and mirrors it into the chat", async () => {
@@ -237,7 +342,7 @@ describe("miniapp router", () => {
     vi.mocked(prisma.user.update).mockResolvedValueOnce({
       language: "es",
       slippageBps: 75,
-      mevProtection: "on",
+      mevProtection: "flashbots",
        
     } as any);
     const r = await fetch(`${base}/settings`, {
@@ -247,9 +352,10 @@ describe("miniapp router", () => {
     });
     const body = await r.json();
     expect(body.ok).toBe(true);
+    expect(body.mevProtection).toBe("on");
     expect(vi.mocked(prisma.user.update).mock.calls[0][0]).toEqual({
       where: { telegramId: "777000111" },
-      data: { language: "es", slippageBps: 75, mevProtection: "on" },
+      data: { language: "es", slippageBps: 75, mevProtection: "flashbots" },
     });
   });
 
@@ -260,5 +366,30 @@ describe("miniapp router", () => {
       body: JSON.stringify({ slippageBps: 99999, mevProtection: "lol", language: "<script>" }),
     });
     expect(r.status).toBe(400);
+  });
+
+  it("POST /action/execute refuses raw params or nonce without a server quote ticket", async () => {
+    const r = await fetch(`${base}/action/execute`, {
+      method: "POST",
+      headers: { ...auth, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        params: { kind: "save_claim" },
+        nonce: "client-chosen",
+      }),
+    });
+    expect(r.status).toBe(400);
+    expect((await r.json()).error.code).toBe("BAD_QUOTE_TICKET");
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("POST /action/execute rejects an unknown fee tier instead of silently changing it", async () => {
+    const r = await fetch(`${base}/action/execute`, {
+      method: "POST",
+      headers: { ...auth, "Content-Type": "application/json" },
+      body: JSON.stringify({ ticket: "T".repeat(43), feeTier: "turbo" }),
+    });
+    expect(r.status).toBe(400);
+    expect((await r.json()).error.code).toBe("BAD_FEE_TIER");
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
   });
 });

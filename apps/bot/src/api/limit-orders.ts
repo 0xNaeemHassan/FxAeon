@@ -14,13 +14,16 @@
  * Everything fails closed: any validation, RPC or hash-mismatch error aborts the request.
  */
 
-import { Router } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
 import { isAddress, type Address, type Hex } from "viem";
 import { prisma } from "@fxaeon/db";
 import { ADDRESSES } from "@fxaeon/shared";
 import { ValidationError, SimulationError, asyncHandler } from "../middleware/errors.js";
 import { createPublicClientForUser } from "../fx/index.js";
+import { verifyInitData } from "./miniapp.js";
+import { getConfig } from "../middleware/config.js";
+import { botLogger } from "../middleware/logger.js";
 import {
   type FxLimitOrder,
   buildSignPayload,
@@ -37,6 +40,46 @@ import {
 
 export const limitOrdersRouter = Router();
 
+interface LimitOrderRequest extends Request {
+  limitOrderUser?: { id: string; walletAddress: string };
+}
+
+/**
+ * Limit-order preparation/relay used to be anonymously reachable. Even though
+ * signatures were verified, that exposed our RPC and relay as a public proxy
+ * and let callers prepare orders for arbitrary makers. Bind every route to a
+ * fresh Telegram Mini App signature and the matching database wallet.
+ */
+limitOrdersRouter.use(async (req: LimitOrderRequest, res: Response, next: NextFunction) => {
+  const match = /^tma (.+)$/i.exec(req.header("authorization") ?? "");
+  const verified = match ? verifyInitData(match[1], getConfig().TELEGRAM_BOT_TOKEN) : null;
+  if (!verified) {
+    res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Valid Telegram Mini App authentication is required." } });
+    return;
+  }
+  try {
+    const user = await prisma.user.findUnique({
+      where: { telegramId: verified.telegramId },
+      select: { id: true, walletAddress: true },
+    });
+    if (!user) {
+      res.status(404).json({ error: { code: "NOT_ONBOARDED", message: "Finish wallet setup first." } });
+      return;
+    }
+    req.limitOrderUser = user;
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
+function requireAuthenticatedMaker(req: LimitOrderRequest, maker: string): void {
+  const expected = req.limitOrderUser?.walletAddress;
+  if (!expected || maker.toLowerCase() !== expected.toLowerCase()) {
+    throw new ValidationError("order maker must match the authenticated wallet");
+  }
+}
+
 const KNOWN_POOLS: ReadonlySet<string> = new Set(
   [
     ADDRESSES.WSTETH_LONG_POOL,
@@ -47,14 +90,30 @@ const KNOWN_POOLS: ReadonlySet<string> = new Set(
 );
 
 const addressSchema = z.string().refine(isAddress, "invalid address");
-const intString = z.string().regex(/^-?[0-9]+$/, "must be an integer string (wei)");
-const uintString = z.string().regex(/^[0-9]+$/, "must be a non-negative integer string (wei)");
+const UINT256_MAX = (1n << 256n) - 1n;
+const INT256_MAX = (1n << 255n) - 1n;
+const INT256_MIN = -(1n << 255n);
+const intString = z.string()
+  .max(79, "must fit int256")
+  .regex(/^-?[0-9]+$/, "must be an integer string (wei)")
+  .refine((value) => {
+    if (value.length > 79 || !/^-?[0-9]+$/.test(value)) return false;
+    const n = BigInt(value);
+    return n >= INT256_MIN && n <= INT256_MAX;
+  }, "must fit int256");
+const uintString = z.string()
+  .max(78, "must fit uint256")
+  .regex(/^[0-9]+$/, "must be a non-negative integer string (wei)")
+  .refine(
+    (value) => value.length <= 78 && /^[0-9]+$/.test(value) && BigInt(value) <= UINT256_MAX,
+    "must fit uint256"
+  );
 const bytes32Schema = z.string().regex(/^0x[0-9a-fA-F]{64}$/, "must be a 0x-prefixed 32-byte hex string");
 
 const prepareSchema = z.object({
   maker: addressSchema,
   pool: addressSchema,
-  positionId: z.coerce.number().int().min(0),
+  positionId: z.coerce.number().int().safe().min(0),
   positionSide: z.boolean(),
   orderType: z.boolean(),
   orderSide: z.boolean(),
@@ -65,13 +124,13 @@ const prepareSchema = z.object({
   collDelta: intString,
   debtDelta: intString,
   /** Unix seconds; defaults to 7 days from now, capped at 30 days. */
-  deadline: z.coerce.number().int().positive().optional(),
+  deadline: z.coerce.number().int().safe().positive().optional(),
 });
 
 const wireOrderSchema = z.object({
   maker: addressSchema,
   pool: addressSchema,
-  positionId: z.coerce.number().int().min(0),
+  positionId: z.coerce.number().int().safe().min(0),
   positionSide: z.boolean(),
   orderType: z.boolean(),
   orderSide: z.boolean(),
@@ -80,14 +139,16 @@ const wireOrderSchema = z.object({
   fxUSDDelta: intString,
   collDelta: intString,
   debtDelta: intString,
-  nonce: z.coerce.number().int().min(0),
+  nonce: z.coerce.number().int().safe().min(0),
   salt: bytes32Schema,
-  deadline: z.coerce.number().int().positive(),
+  deadline: z.coerce.number().int().safe().positive(),
 });
 
 const submitSchema = z.object({
   order: wireOrderSchema,
-  signature: z.string().regex(/^0x[0-9a-fA-F]+$/, "invalid signature hex"),
+  // Standard ECDSA r || s || v signature (65 bytes). Bounding this prevents
+  // oversized attacker-controlled blobs from reaching recovery and relay.
+  signature: z.string().regex(/^0x[0-9a-fA-F]{130}$/, "signature must be 65-byte hex"),
 });
 
 function toFxOrder(wire: z.infer<typeof wireOrderSchema>): FxLimitOrder {
@@ -118,12 +179,13 @@ function requireKnownPool(pool: string): void {
 const MAX_DEADLINE_SECONDS = 30 * 24 * 60 * 60;
 const DEFAULT_DEADLINE_SECONDS = 7 * 24 * 60 * 60;
 
-limitOrdersRouter.post("/prepare", asyncHandler(async (req, res) => {
+limitOrdersRouter.post("/prepare", asyncHandler(async (req: LimitOrderRequest, res) => {
   const parsed = prepareSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new ValidationError(parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "));
   }
   const input = parsed.data;
+  requireAuthenticatedMaker(req, input.maker);
   requireKnownPool(input.pool);
 
   const now = Math.floor(Date.now() / 1000);
@@ -159,28 +221,33 @@ limitOrdersRouter.post("/prepare", asyncHandler(async (req, res) => {
   }
 }));
 
-limitOrdersRouter.post("/submit", asyncHandler(async (req, res) => {
+limitOrdersRouter.post("/submit", asyncHandler(async (req: LimitOrderRequest, res) => {
   const parsed = submitSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new ValidationError(parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "));
   }
   const order = toFxOrder(parsed.data.order);
+  requireAuthenticatedMaker(req, order.maker);
   requireKnownPool(order.pool);
+  const now = Math.floor(Date.now() / 1000);
+  if (order.deadline <= BigInt(now) || order.deadline > BigInt(now + MAX_DEADLINE_SECONDS)) {
+    throw new ValidationError("deadline must be in the future and at most 30 days out");
+  }
 
   try {
     const client = createPublicClientForUser("off");
     // relayOrder re-validates deltas, verifies sig recovery and re-checks the hash on-chain.
     const { orderHash } = await relayOrder(client, order, parsed.data.signature as Hex);
 
-    // Track the order for the maker if we know them; relaying succeeded either way.
-    const user = await prisma.user.findUnique({ where: { walletAddress: order.maker } }).catch(() => null);
-    if (user) {
-      await prisma.limitOrder
+    // Authentication already bound maker to this exact user. Use that id
+    // directly: a case-sensitive address lookup could miss an equivalent
+    // checksummed/lowercase address after the relay accepted the order.
+    await prisma.limitOrder
         .upsert({
           where: { orderHash },
           update: { status: "open" },
           create: {
-            userId: user.id,
+            userId: req.limitOrderUser!.id,
             orderHash,
             status: "open",
             positionSide: order.positionSide,
@@ -199,14 +266,14 @@ limitOrdersRouter.post("/submit", asyncHandler(async (req, res) => {
         })
         .catch((dbError: unknown) => {
           // Order is already live on the relay — log, never fake a failure.
-          console.error("[limit-orders] failed to record relayed order:", dbError);
+          botLogger.error({ err: dbError, orderHash }, "limit-orders: failed to record relayed order");
         });
-    }
 
     res.json({ success: true, orderHash });
   } catch (error: unknown) {
     if (error instanceof RelayRejectedError) {
-      throw new ValidationError(error.message);
+      botLogger.warn({ err: error }, "limit-orders: relay rejected signed order");
+      throw new ValidationError("the order relay rejected this signed order");
     }
     if (error instanceof ValidationError) throw error;
     const message = error instanceof Error ? error.message : String(error);
@@ -214,10 +281,20 @@ limitOrdersRouter.post("/submit", asyncHandler(async (req, res) => {
   }
 }));
 
-limitOrdersRouter.get("/status/:orderHash", asyncHandler(async (req, res) => {
+limitOrdersRouter.get("/status/:orderHash", asyncHandler(async (req: LimitOrderRequest, res) => {
   const orderHash = req.params.orderHash;
   if (!/^0x[0-9a-fA-F]{64}$/.test(orderHash)) {
     throw new ValidationError("orderHash must be a 0x-prefixed 32-byte hex string");
+  }
+  // Do not expose the chain RPC as an authenticated-but-arbitrary hash proxy.
+  // Status reads are limited to orders recorded for this exact Telegram user.
+  const tracked = await prisma.limitOrder.findUnique({
+    where: { orderHash },
+    select: { userId: true },
+  });
+  if (!tracked || tracked.userId !== req.limitOrderUser!.id) {
+    res.status(404).json({ error: { code: "ORDER_NOT_FOUND", message: "Order not found." } });
+    return;
   }
   try {
     const client = createPublicClientForUser("off");
@@ -244,7 +321,7 @@ const cancelSchema = z.object({
   cancelAll: z.boolean().optional(),
 });
 
-limitOrdersRouter.post("/cancel-tx", (req, res) => {
+limitOrdersRouter.post("/cancel-tx", (req: LimitOrderRequest, res) => {
   const parsed = cancelSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new ValidationError(parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "));
@@ -257,6 +334,7 @@ limitOrdersRouter.post("/cancel-tx", (req, res) => {
   if (!parsed.data.order) {
     throw new ValidationError("provide either order or cancelAll=true");
   }
+  requireAuthenticatedMaker(req, parsed.data.order.maker);
   const tx = buildCancelOrderTx(toFxOrder(parsed.data.order));
   res.json({ success: true, kind: "cancelOrder", tx: { to: tx.to, data: tx.data, value: "0" } });
 });

@@ -7,7 +7,7 @@
  * It implements exactly the surface lib/telegram.ts touches: initData / platform
  * (so isTMA() is true), ready/expand/close/sendData/openTelegramLink, the
  * viewport event, BackButton/MainButton and HapticFeedback. Calls that a test
- * may want to assert (close, openTelegramLink, sendData, MainButton text) are
+ * may want to assert (close, openLink, openTelegramLink, sendData, MainButton text) are
  * recorded on `window.__tg`.
  */
 export interface TelegramShimOptions {
@@ -64,6 +64,7 @@ export function telegramInitScript(_opts: TelegramShimOptions = {}): (o: Telegra
       expand() { (this as { isExpanded: boolean }).isExpanded = true; log('expand'); },
       close() { log('close'); },
       sendData(data: string) { log('sendData', data); },
+      openLink(url: string) { log('openLink', url); },
       openTelegramLink(url: string) { log('openTelegramLink', url); },
       onEvent(name: string, cb: () => void) { (events[name] ??= new Set()).add(cb); },
       offEvent(name: string, cb: () => void) { events[name]?.delete(cb); },

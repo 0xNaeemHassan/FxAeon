@@ -94,7 +94,12 @@ describe("/speedup & /cancel", () => {
 
     await handleTxControlCallback(ctxWith("", out, captured));
     expect(executeReplacementMock).toHaveBeenCalledTimes(1);
-    expect(executeReplacementMock.mock.calls[0][0]).toMatchObject({ recordId: "rec-1", kind: "speedup", walletId: "wal-1" });
+    expect(executeReplacementMock.mock.calls[0][0]).toMatchObject({
+      recordId: "rec-1",
+      userId: "user-1",
+      kind: "speedup",
+      walletId: "wal-1",
+    });
     expect(out[out.length - 1]).toMatch(/Sped up/i);
   });
 

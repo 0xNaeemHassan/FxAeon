@@ -66,7 +66,7 @@ function PrivyLogoutControls() {
       </Card>
       {error && (
         <Card className="mt-2 border-[rgba(255,90,95,0.35)]">
-          <p className="text-[13px] text-danger">{error}</p>
+          <p role="alert" className="text-[13px] text-danger">{error}</p>
         </Card>
       )}
     </>

@@ -213,8 +213,8 @@ describe("positionUsd", () => {
     expect(positionUsd(pos, { wstETH: null, FXUSD: 1.0 })).toBeNull();
   });
 
-  it("falls back to $1 for fxUSD only when FXUSD itself is unpriced", () => {
+  it("returns null when fxUSD itself is unpriced", () => {
     const usd = positionUsd(pos, { wstETH: 2000 });
-    expect(usd?.debtUsd).toBe(3000);
+    expect(usd).toBeNull();
   });
 });

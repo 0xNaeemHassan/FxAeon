@@ -14,18 +14,19 @@
     "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
-    "next": "^15.0.7",
+    "@fxaeon/shared": "workspace:*",
+    "next": "^15.5.23",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "qrcode.react": "^4.2.0",
-    "lucide-react": "^0.390.0",
+    "lucide-react": "^0.554.0",
     "tailwindcss": "^3.4.0",
     "@privy-io/react-auth": "^3.30.0"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
-    "@types/react": "^18.3.0",
-    "@types/react-dom": "^18.3.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
     "typescript": "^5.4.0",
     "tailwindcss": "^3.4.0",
     "postcss": "^8.4.0",

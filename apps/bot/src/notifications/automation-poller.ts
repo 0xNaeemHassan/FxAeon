@@ -30,7 +30,13 @@ import { markSnapshotClosed } from "../core/pnl.js";
 import { requireDelegatedWallet } from "../core/delegation.js";
 import { executeRoute } from "../core/txExecutor.js";
 import { describeExecutionError } from "../core/errorTaxonomy.js";
-import { createFxSdk, createPublicClientForUser, mevModeForUser, quoteClosePosition } from "../fx/index.js";
+import {
+  createFxSdk,
+  createPublicClientForUser,
+  getSdkReductionAmountWei,
+  mevModeForUser,
+  quoteClosePosition,
+} from "../fx/index.js";
 import { notify } from "./notify.js";
 import { heartbeat, incr } from "../core/metrics.js";
 import { workerLogger } from "../middleware/logger.js";
@@ -91,13 +97,22 @@ async function closeMatchingPositions(
   const outcomes: CloseOutcome[] = [];
   for (const pos of positions) {
     try {
+      const client = createPublicClientForUser(mevModeForUser(user.mevProtection));
+      const amountWei = await getSdkReductionAmountWei({
+        client,
+        market,
+        side,
+        rawCollateralWei: pos.rawCollateral,
+        rawDebtWei: pos.rawDebt,
+        fractionBps: 10_000,
+      });
       const quote = await quoteClosePosition({
         sdk,
         userAddress: user.walletAddress,
         market,
         side,
         positionId: pos.positionId,
-        amountWei: pos.rawCollateral,
+        amountWei,
         slippagePercent: user.slippageBps / 100,
         isClosePosition: true,
       });
@@ -113,7 +128,7 @@ async function closeMatchingPositions(
         idempotencyKey: `auto:${ruleId}:${pos.positionId}:${attempt}`,
         txs: route.txs,
         type: side === "long" ? "close_long" : "close_short",
-        client: createPublicClientForUser(user.mevProtection === "flashbots" ? "flashbots" : "off"),
+        client,
         mev: mevModeForUser(user.mevProtection),
       });
       outcomes.push(
@@ -128,7 +143,17 @@ async function closeMatchingPositions(
           : { position: pos, ok: false, detail: describeExecutionError(result.error) }
       );
     } catch (error) {
-      outcomes.push({ position: pos, ok: false, detail: String(error) });
+      workerLogger.warn(
+        { error, ruleId, positionId: pos.positionId },
+        "automation close failed before a safe execution result was available"
+      );
+      // This detail is sent to the user. Never reflect an RPC/SDK error that
+      // may contain credentials, provider URLs, or internal infrastructure.
+      outcomes.push({
+        position: pos,
+        ok: false,
+        detail: "Live protocol data was unavailable or the close quote became invalid. Nothing was sent.",
+      });
     }
   }
   return outcomes;
@@ -279,6 +304,8 @@ export const automationPoller = {
 
   start(): NodeJS.Timeout {
     const timer = setInterval(() => void this.check(), POLL_INTERVAL_MS);
+    heartbeat("automation-poller");
+    timer.unref?.();
     workerLogger.info("Automation poller started (60s interval)");
     return timer;
   },

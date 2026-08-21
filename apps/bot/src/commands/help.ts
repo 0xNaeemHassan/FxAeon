@@ -1,5 +1,6 @@
 import { Context } from "grammy";
 import type { I18nFlavor } from "@grammyjs/i18n";
+import { botLogger } from "../middleware/logger.js";
 
 /**
  * W-21: the full command guide lives in the locale catalogs
@@ -11,7 +12,7 @@ export async function helpCommand(ctx: Context & I18nFlavor) {
   try {
     await ctx.reply(ctx.t("help-body"));
   } catch (error) {
-    console.error("[helpCommand] Error:", error);
+    botLogger.error({ err: error }, "help command failed");
     await ctx.reply(ctx.t("help-error"));
   }
 }

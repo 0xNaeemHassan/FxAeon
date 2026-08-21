@@ -6,7 +6,7 @@
  * that fits BOTH a Telegram callback_data slot (≤64 bytes) and a /start deep
  * link payload (≤64 chars, charset [A-Za-z0-9_-]).
  *
- * Format:  t1_<marketIdx>_<l|s>_<leverage*10>_<amount*1e6>_<expMinute>_<nonce>_<sig>
+ * Format:  t3_<marketIdx>_<l|s>_<leverage*10>_<exactAmount>_<expMinute36>_<nonce>_<sig>
  *
  * - The signature covers every field, so params can't be tampered with after
  *   the bot rendered a preview (callback_data and deep links are both
@@ -20,13 +20,14 @@
  */
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { MARKETS, type Market } from "@fxaeon/shared";
+import { canonicalActionAmount, packAmount, unpackAmount } from "./actionIntent.js";
 
 export interface TradeIntent {
   market: Market;
   side: "long" | "short";
   leverage: number;
   /** Collateral amount in human units of the market's collateral token. */
-  amount: number;
+  amount: string;
   nonce: string;
   expiresAt: number;
 }
@@ -35,8 +36,7 @@ export type VerifyIntentResult =
   | { ok: true; intent: TradeIntent }
   | { ok: false; reason: "malformed" | "tampered" | "expired" };
 
-const VERSION = "t1";
-const VERSION_V2 = "t2";
+const VERSION = "t3";
 export const INTENT_TTL_MS = 10 * 60 * 1000;
 
 function signingKey(): Buffer {
@@ -47,38 +47,55 @@ function signingKey(): Buffer {
     );
   }
   // Domain-separate from the raw bot token.
-  return createHmac("sha256", seed).update("fxaeon-trade-intent-v1").digest();
+  return createHmac("sha256", seed).update("fxaeon-trade-intent-v3").digest();
+}
+
+const BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+function base62(bytes: Buffer): string {
+  let value = BigInt(`0x${bytes.toString("hex")}`);
+  let out = "";
+  do {
+    out = BASE62[Number(value % 62n)] + out;
+    value /= 62n;
+  } while (value > 0n);
+  return out.padStart(14, "0");
 }
 
 function sign(body: string): string {
   // 80-bit truncated HMAC: ample for a 10-minute online-only token, and short
   // enough to keep the whole thing under Telegram's 64-char start payload cap.
-  return createHmac("sha256", signingKey()).update(body).digest("hex").slice(0, 20);
+  return base62(createHmac("sha256", signingKey()).update(body).digest().subarray(0, 10));
 }
 
 export function createTradeIntent(
-  params: { market: Market; side: "long" | "short"; leverage: number; amount: number },
+  params: { market: Market; side: "long" | "short"; leverage: number; amount: string | number },
   ttlMs: number = INTENT_TTL_MS
 ): string {
   const marketIdx = (MARKETS as readonly string[]).indexOf(params.market);
   if (marketIdx < 0) throw new Error(`tradeIntent: unknown market ${params.market}`);
-  if (!Number.isFinite(params.leverage) || params.leverage <= 0)
+  const lev10 = params.leverage * 10;
+  if (!Number.isFinite(params.leverage) || params.leverage <= 0 || !Number.isInteger(lev10))
     throw new Error("tradeIntent: invalid leverage");
-  if (!Number.isFinite(params.amount) || params.amount <= 0)
-    throw new Error("tradeIntent: invalid amount");
+  const amount = canonicalActionAmount(String(params.amount), params.market === "WBTC" ? 8 : 18);
+  if (!amount) throw new Error("tradeIntent: invalid amount");
 
-  const expMinute = Math.ceil((Date.now() + ttlMs) / 60_000);
-  const nonce = randomBytes(5).toString("hex"); // 10 chars, CSPRNG
+  const expMinute = Math.ceil((Date.now() + ttlMs) / 60_000).toString(36);
+  const nonce = randomBytes(4).toString("hex"); // 8 chars, CSPRNG
   const body = [
     VERSION,
     marketIdx,
     params.side === "long" ? "l" : "s",
-    Math.round(params.leverage * 10),
-    Math.round(params.amount * 1e6),
+    lev10,
+    packAmount(amount),
     expMinute,
     nonce,
   ].join("_");
-  return `${body}_${sign(body)}`;
+  const token = `${body}_${sign(body)}`;
+  if (Buffer.byteLength(`tc_${token}`) > 64) {
+    throw new Error("tradeIntent: amount is too large for a Telegram confirmation");
+  }
+  return token;
 }
 
 export function looksLikeTradeIntent(token: string | undefined): token is string {
@@ -96,138 +113,27 @@ export function verifyTradeIntent(token: string): VerifyIntentResult {
     return { ok: false, reason: "tampered" };
   }
 
-  const [, marketIdxS, sideCode, lev10S, amtMicroS, expMinuteS, nonce] = parts;
+  const [, marketIdxS, sideCode, lev10S, amountPacked, expMinuteS, nonce] = parts;
   const market = MARKETS[Number(marketIdxS)];
   const leverage = Number(lev10S) / 10;
-  const amount = Number(amtMicroS) / 1e6;
-  const expiresAt = Number(expMinuteS) * 60_000;
+  let amount: string;
+  try {
+    amount = unpackAmount(amountPacked);
+  } catch {
+    return { ok: false, reason: "malformed" };
+  }
+  const expiresAt = parseInt(expMinuteS, 36) * 60_000;
   if (
     !market ||
     (sideCode !== "l" && sideCode !== "s") ||
     !Number.isFinite(leverage) ||
     leverage <= 0 ||
-    !Number.isFinite(amount) ||
-    amount <= 0 ||
-    !Number.isFinite(expiresAt)
-  ) {
-    return { ok: false, reason: "malformed" };
-  }
-  if (Date.now() > expiresAt) return { ok: false, reason: "expired" };
-
-  return {
-    ok: true,
-    intent: {
-      market,
-      side: sideCode === "l" ? "long" : "short",
-      leverage,
-      amount,
-      nonce,
-      expiresAt,
-    },
-  };
-}
-
-// ── Trade Intent v2 — Phase 3 (Masterplan) ──────────────────────────────────
-// Adds `kind` (IntentKind) and `notionalUsd` for the fee layer.
-// The signed token format becomes:
-//   t2_<marketIdx>_<l|s>_<leverage*10>_<amount*1e6>_<expMinute>_<nonce>_<kindIdx>_<notionalUsdCents>_<sig>
-
-import type { IntentKind } from "./fxaeonFees.js";
-
-export interface TradeIntentV2 extends TradeIntent {
-  kind: IntentKind;
-  notionalUsd: number;
-}
-
-const INTENT_KINDS: IntentKind[] = [
-  "open_long",
-  "open_short",
-  "close_long",
-  "close_short",
-  "adjust_leverage",
-  "increase_position",
-  "reduce_position",
-  "fxsave_deposit",
-  "fxsave_withdraw",
-  "mint",
-  "redeem",
-  "bridge",
-  "lock",
-  "vote",
-  "claim",
-];
-
-export function createTradeIntentV2(
-  params: {
-    market: Market;
-    side: "long" | "short";
-    leverage: number;
-    amount: number;
-    kind: IntentKind;
-    notionalUsd: number;
-  },
-  ttlMs: number = INTENT_TTL_MS
-): string {
-  const marketIdx = (MARKETS as readonly string[]).indexOf(params.market);
-  if (marketIdx < 0) throw new Error(`tradeIntentV2: unknown market ${params.market}`);
-
-  const kindIdx = INTENT_KINDS.indexOf(params.kind);
-  if (kindIdx < 0) throw new Error(`tradeIntentV2: unknown kind ${params.kind}`);
-
-  const expMinute = Math.ceil((Date.now() + ttlMs) / 60_000);
-  const nonce = randomBytes(5).toString("hex");
-  const notionalCents = Math.round(params.notionalUsd * 100);
-
-  const body = [
-    VERSION_V2,
-    marketIdx,
-    params.side === "long" ? "l" : "s",
-    Math.round(params.leverage * 10),
-    Math.round(params.amount * 1e6),
-    expMinute,
-    nonce,
-    kindIdx,
-    notionalCents,
-  ].join("_");
-
-  return `${body}_${sign(body)}`;
-}
-
-export function looksLikeTradeIntentV2(token: string | undefined): token is string {
-  return typeof token === "string" && token.startsWith(`${VERSION_V2}_`);
-}
-
-export function verifyTradeIntentV2(token: string): { ok: true; intent: TradeIntentV2 } | { ok: false; reason: string } {
-  const parts = token.split("_");
-  if (parts.length !== 10 || parts[0] !== VERSION_V2) return { ok: false, reason: "malformed" };
-
-  const body = parts.slice(0, 9).join("_");
-  const givenSig = Buffer.from(parts[9]);
-  const expectSig = Buffer.from(sign(body));
-  if (givenSig.length !== expectSig.length || !timingSafeEqual(givenSig, expectSig)) {
-    return { ok: false, reason: "tampered" };
-  }
-
-  const [, marketIdxS, sideCode, lev10S, amtMicroS, expMinuteS, nonce, kindIdxS, notionalCentsS] = parts;
-  const market = MARKETS[Number(marketIdxS)];
-  const leverage = Number(lev10S) / 10;
-  const amount = Number(amtMicroS) / 1e6;
-  const expiresAt = Number(expMinuteS) * 60_000;
-  const kindIdx = Number(kindIdxS);
-  const notionalUsd = Number(notionalCentsS) / 100;
-
-  if (
-    !market ||
-    (sideCode !== "l" && sideCode !== "s") ||
-    !Number.isFinite(leverage) || leverage <= 0 ||
-    !Number.isFinite(amount) || amount <= 0 ||
+    !canonicalActionAmount(amount, market === "WBTC" ? 8 : 18) ||
     !Number.isFinite(expiresAt) ||
-    kindIdx < 0 || kindIdx >= INTENT_KINDS.length ||
-    !Number.isFinite(notionalUsd)
+    !/^[0-9a-f]{8}$/.test(nonce)
   ) {
     return { ok: false, reason: "malformed" };
   }
-
   if (Date.now() > expiresAt) return { ok: false, reason: "expired" };
 
   return {
@@ -239,8 +145,6 @@ export function verifyTradeIntentV2(token: string): { ok: true; intent: TradeInt
       amount,
       nonce,
       expiresAt,
-      kind: INTENT_KINDS[kindIdx],
-      notionalUsd,
     },
   };
 }

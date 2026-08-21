@@ -46,7 +46,11 @@ export interface TgWebApp {
   ready: () => void;
   expand: () => void;
   close: () => void;
+  setHeaderColor?: (color: string) => void;
+  setBackgroundColor?: (color: string) => void;
+  setBottomBarColor?: (color: string) => void;
   sendData: (data: string) => void;
+  openLink?: (url: string, options?: { try_instant_view?: boolean }) => void;
   openTelegramLink?: (url: string) => void;
   onEvent: (event: string, cb: () => void) => void;
   offEvent: (event: string, cb: () => void) => void;
@@ -150,6 +154,9 @@ export function initTelegram(): void {
   if (!tg) return;
   try {
     tg.ready();
+    tg.setHeaderColor?.('#07070d');
+    tg.setBackgroundColor?.('#07070d');
+    tg.setBottomBarColor?.('#07070d');
     if (!tg.isExpanded) tg.expand();
   } catch {
     /* older clients */

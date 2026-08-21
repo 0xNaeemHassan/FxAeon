@@ -4,20 +4,24 @@
  * FxAeon shared UI kit — every screen composes these so the app feels like
  * one product instead of disconnected pages.
  */
-import { ReactNode, useState } from 'react';
+import { forwardRef, ReactNode, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Home,
   CandlestickChart,
-  QrCode,
-  Settings,
+  PiggyBank,
+  ArrowLeftRight,
+  LayoutGrid,
   Copy,
   Check,
   LucideIcon,
+  ChevronRight,
 } from 'lucide-react';
 import { haptic } from '@/lib/telegram';
 import { useT } from '@/lib/i18n';
+import FxLogo from '@/components/FxLogo';
+import { HealthChip } from '@/components/HealthChip';
 
 /* ------------------------------------------------------------------ shell */
 
@@ -32,48 +36,66 @@ export function AppShell({
   children: ReactNode;
   tabs?: boolean;
 }) {
+  const pathname = usePathname();
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const contentRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const target = headingRef.current ?? contentRef.current;
+    target?.focus({ preventScroll: true });
+  }, [pathname]);
+
   return (
-    <div className="mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col px-5 pt-5 pb-safe">
+    <div className={`app-shell mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-[430px] flex-col px-5 pt-[calc(env(safe-area-inset-top,0px)+1.25rem)] ${tabs ? 'pb-safe' : 'pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)]'}`}>
+      <a href="#main-content" className="skip-link">Skip to main content</a>
       {title && (
-        <header className="anim-fade-up mb-5">
-          <h1 className="text-display text-[26px] font-semibold leading-tight">{title}</h1>
-          {subtitle && <p className="mt-1 text-[13px] text-mut">{subtitle}</p>}
+        <header className="page-header anim-fade-up mb-5">
+          <div>
+            <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-mint">
+              <span className="status-dot" aria-hidden="true" /> FxAeon
+            </div>
+            <h1 ref={headingRef} tabIndex={-1} className="text-display text-[27px] font-semibold leading-tight tracking-[-0.035em] outline-none">{title}</h1>
+            {subtitle && <p className="mt-1.5 text-[13px] leading-relaxed text-mut">{subtitle}</p>}
+          </div>
         </header>
       )}
-      <div className="flex-1">{children}</div>
+      <HealthChip />
+      <main ref={contentRef} id="main-content" tabIndex={-1} className="flex-1 outline-none">{children}</main>
       {tabs && <TabBar />}
     </div>
   );
 }
 
-const TABS: { href: string; labelKey: string; icon: LucideIcon }[] = [
+const TABS: { href: string; labelKey: string; icon: LucideIcon; also?: string[] }[] = [
   { href: '/portfolio', labelKey: 'nav.home', icon: Home },
-  { href: '/trade', labelKey: 'nav.trade', icon: CandlestickChart },
-  { href: '/qr', labelKey: 'nav.deposit', icon: QrCode },
-  { href: '/settings', labelKey: 'nav.settings', icon: Settings },
+  { href: '/trade', labelKey: 'nav.trade', icon: CandlestickChart, also: ['/positions', '/borrow'] },
+  { href: '/earn', labelKey: 'nav.earn', icon: PiggyBank },
+  { href: '/move', labelKey: 'nav.move', icon: ArrowLeftRight, also: ['/qr'] },
+  { href: '/more', labelKey: 'nav.more', icon: LayoutGrid, also: ['/activity', '/settings'] },
 ];
 
 export function TabBar() {
   const pathname = usePathname();
   const t = useT();
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40">
-      <div className="tabbar-safe mx-auto w-full max-w-md px-5 pb-3">
-        <div className="glass flex items-center justify-between rounded-3xl px-2 py-2"
-          style={{ background: 'rgba(10,13,15,0.82)' }}
-        >
-          {TABS.map(({ href, labelKey, icon: Icon }) => {
-            const active = pathname === href;
+    <nav className="pointer-events-none fixed inset-x-0 bottom-0 z-40" aria-label="Primary navigation">
+      <div className="tabbar-safe mx-auto w-full max-w-[430px] px-4 pb-3">
+        <div className="tabbar pointer-events-auto flex items-center justify-between rounded-[24px] px-1.5 py-1.5">
+          {TABS.map(({ href, labelKey, icon: Icon, also }) => {
+            const active = pathname === href || Boolean(also?.some((prefix) => pathname.startsWith(prefix)));
             return (
               <Link
                 key={href}
                 href={href}
                 onClick={() => haptic('selection')}
-                className={`flex flex-1 flex-col items-center gap-0.5 rounded-2xl py-2 text-[10px] font-medium transition-colors ${
-                  active ? 'bg-[var(--mint-dim)] text-mint' : 'text-mut'
+                aria-current={active ? 'page' : undefined}
+                className={`nav-item flex min-h-14 flex-1 flex-col items-center justify-center gap-1 rounded-[16px] text-[9px] font-semibold ${
+                  active ? 'nav-item-active text-mint' : 'text-mut'
                 }`}
               >
-                <Icon className="h-[18px] w-[18px]" strokeWidth={active ? 2.4 : 1.8} />
+                <span className="nav-icon relative flex h-6 w-8 items-center justify-center rounded-full">
+                  <Icon aria-hidden="true" className="h-[18px] w-[18px]" strokeWidth={active ? 2.35 : 1.8} />
+                </span>
                 {t(labelKey)}
               </Link>
             );
@@ -96,46 +118,78 @@ export function Card({
   glow?: boolean;
 }) {
   return (
-    <div className={`glass p-4 ${glow ? 'anim-glow' : ''} ${className}`}>{children}</div>
+    <div className={`card glass p-4 ${glow ? 'card-glow' : ''} ${className}`}>{children}</div>
   );
 }
 
-export function Button({
-  children,
-  onClick,
-  variant = 'primary',
-  disabled = false,
-  loading = false,
-  className = '',
-}: {
+function buttonClasses(variant: 'primary' | 'ghost' | 'danger', className = ''): string {
+  const styles =
+    variant === 'primary'
+      ? 'button-primary text-white font-semibold'
+      : variant === 'danger'
+        ? 'button-danger text-danger'
+        : 'button-ghost text-[var(--text)]';
+  return `button glass-press flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-[15px] disabled:cursor-not-allowed disabled:opacity-50 ${styles} ${className}`;
+}
+
+export const Button = forwardRef<HTMLButtonElement, {
   children: ReactNode;
   onClick?: () => void;
   variant?: 'primary' | 'ghost' | 'danger';
   disabled?: boolean;
   loading?: boolean;
   className?: string;
-}) {
-  const styles =
-    variant === 'primary'
-      ? 'bg-mint text-white font-semibold shadow-[0_8px_24px_rgba(124,92,255,0.32)]'
-      : variant === 'danger'
-        ? 'bg-[rgba(255, 90, 95,0.14)] text-danger border border-[rgba(255, 90, 95,0.3)]'
-        : 'glass text-[var(--text)]';
+}>(function Button({
+  children,
+  onClick,
+  variant = 'primary',
+  disabled = false,
+  loading = false,
+  className = '',
+}, ref) {
   return (
     <button
+      ref={ref}
       type="button"
       disabled={disabled || loading}
+      aria-busy={loading || undefined}
       onClick={() => {
         haptic('medium');
         onClick?.();
       }}
-      className={`glass-press flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3.5 text-[15px] transition-opacity disabled:opacity-40 ${styles} ${className}`}
+      className={buttonClasses(variant, className)}
     >
       {loading && (
-        <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+        <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden="true" />
       )}
       {children}
     </button>
+  );
+});
+
+export function ButtonLink({
+  children,
+  href,
+  variant = 'primary',
+  external = false,
+  className = '',
+}: {
+  children: ReactNode;
+  href: string;
+  variant?: 'primary' | 'ghost' | 'danger';
+  external?: boolean;
+  className?: string;
+}) {
+  const props = external ? { target: '_blank', rel: 'noopener noreferrer' } : {};
+  return (
+    <a
+      href={href}
+      {...props}
+      onClick={() => haptic('medium')}
+      className={buttonClasses(variant, className)}
+    >
+      {children}
+    </a>
   );
 }
 
@@ -151,8 +205,8 @@ export function Stat({
   accent?: boolean;
 }) {
   return (
-    <div className="glass glass-press flex flex-col gap-1 p-4">
-      <span className="text-[11px] uppercase tracking-wide text-mut">{label}</span>
+    <div className="stat-card glass glass-press flex flex-col gap-1.5 p-4">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.13em] text-mut">{label}</span>
       <span
         className={`text-display text-[20px] font-semibold leading-none ${accent ? 'text-gradient' : ''}`}
       >
@@ -179,15 +233,16 @@ export function ActionTile({
   const inner = (
     <>
       <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--mint-dim)]">
-        <Icon className="h-5 w-5 text-mint" strokeWidth={2} />
+        <Icon aria-hidden="true" className="h-5 w-5 text-mint" strokeWidth={2} />
       </span>
       <span className="flex flex-col text-left">
         <span className="text-[14px] font-medium">{label}</span>
         {hint && <span className="text-[11px] text-mut">{hint}</span>}
       </span>
+      <ChevronRight className="ml-auto h-4 w-4 text-[var(--mut-2)]" aria-hidden="true" />
     </>
   );
-  const cls = 'glass glass-press flex w-full items-center gap-3 p-3.5';
+  const cls = 'action-tile glass glass-press flex min-h-16 w-full items-center gap-3 p-3.5';
   if (href)
     return (
       <Link href={href} className={cls} onClick={() => haptic('light')}>
@@ -208,29 +263,51 @@ export function ActionTile({
   );
 }
 
+export async function copyText(value: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+    const input = document.createElement('textarea');
+    input.value = value;
+    input.setAttribute('readonly', '');
+    input.style.position = 'fixed';
+    input.style.opacity = '0';
+    document.body.appendChild(input);
+    input.select();
+    const copied = document.execCommand('copy');
+    document.body.removeChild(input);
+    return copied;
+  } catch {
+    return false;
+  }
+}
+
 export function AddressChip({ address }: { address: string }) {
   const [copied, setCopied] = useState(false);
   const short = `${address.slice(0, 6)}…${address.slice(-4)}`;
   return (
     <button
       type="button"
+      aria-label={copied ? 'Address copied' : `Copy wallet address ${short}`}
+      title={address}
       onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(address);
+        if (await copyText(address)) {
           haptic('success');
           setCopied(true);
           setTimeout(() => setCopied(false), 1800);
-        } catch {
-          /* clipboard unavailable */
+        } else {
+          haptic('error');
         }
       }}
-      className="glass glass-press inline-flex items-center gap-2 rounded-full px-3 py-1.5 font-mono text-[12px] text-mut"
+      className="address-chip glass glass-press inline-flex min-h-11 items-center gap-2 rounded-full px-3 py-1.5 font-mono text-[12px] text-mut"
     >
       {short}
       {copied ? (
-        <Check className="h-3.5 w-3.5 text-success" />
+        <Check aria-hidden="true" className="h-3.5 w-3.5 text-success" />
       ) : (
-        <Copy className="h-3.5 w-3.5" />
+        <Copy aria-hidden="true" className="h-3.5 w-3.5" />
       )}
     </button>
   );
@@ -248,9 +325,9 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="glass anim-scale-in flex flex-col items-center gap-2 px-6 py-8 text-center">
-      <span className="anim-float flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--mint-dim)]">
-        <Icon className="h-6 w-6 text-mint" strokeWidth={1.8} />
+    <div className="empty-state glass anim-scale-in flex flex-col items-center gap-2 px-6 py-9 text-center">
+      <span className="empty-icon anim-float flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--mint-dim)]">
+        <Icon aria-hidden="true" className="h-6 w-6 text-mint" strokeWidth={1.8} />
       </span>
       <p className="mt-1 text-[15px] font-medium">{title}</p>
       {body && <p className="text-[12.5px] leading-relaxed text-mut">{body}</p>}
@@ -261,8 +338,8 @@ export function EmptyState({
 
 export function SectionTitle({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
-    <div className="mb-2.5 mt-6 flex items-center justify-between">
-      <h2 className="text-[12px] font-semibold uppercase tracking-[0.12em] text-mut">
+    <div className="mb-2.5 mt-7 flex items-center justify-between">
+      <h2 className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-mut">
         {children}
       </h2>
       {right}
@@ -271,7 +348,24 @@ export function SectionTitle({ children, right }: { children: ReactNode; right?:
 }
 
 export function Skeleton({ className = '' }: { className?: string }) {
-  return <div className={`skeleton ${className}`} />;
+  return <div aria-hidden="true" className={`skeleton ${className}`} />;
+}
+
+export function LoadingRegion({
+  label,
+  children,
+  className = '',
+}: {
+  label: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div role="status" aria-live="polite" className={className}>
+      <span className="sr-only">{label}</span>
+      {children}
+    </div>
+  );
 }
 
 export function FullScreenSpinner() {
@@ -280,15 +374,17 @@ export function FullScreenSpinner() {
   // cold starts show content instead of a blank screen. A border-only
   // spinner does NOT count as a contentful paint (Lighthouse NO_FCP).
   return (
-    <div className="flex min-h-[var(--tg-viewport-stable-height)] flex-col items-center justify-center gap-3">
-      <h1 className="text-display text-2xl font-semibold">
-        Fx<span className="text-gradient">Aeon</span>
-      </h1>
-      <span
-        className="h-7 w-7 animate-spin rounded-full border-[3px] border-mint border-t-transparent"
-        aria-hidden="true"
-      />
-      <p className="text-[12.5px] text-mut">{t('common.loading')}</p>
+    <div role="status" aria-live="polite" aria-label={t('common.loading')} className="flex min-h-[var(--tg-viewport-stable-height)] flex-col items-center justify-center gap-4 px-6 text-center">
+      <div className="brand-orbit anim-scale-in">
+        <FxLogo size={56} />
+      </div>
+      <div>
+        <h1 className="text-display text-2xl font-semibold tracking-[-0.04em]">
+          Fx<span className="text-gradient">Aeon</span>
+        </h1>
+        <p className="mt-1.5 text-[12.5px] text-mut">{t('common.loading')}</p>
+      </div>
+      <span className="loading-line" aria-hidden="true" />
     </div>
   );
 }

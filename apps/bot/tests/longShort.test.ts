@@ -40,7 +40,6 @@ vi.mock("@fxaeon/db", () => ({
 
 vi.mock("../src/market/oracle.js", () => ({
   checkOracles: vi.fn(),
-  estimateDailyFunding: vi.fn(),
 }));
 
 vi.mock("../src/core/collateral.js", () => ({
@@ -62,7 +61,7 @@ vi.mock("../src/handlers/tradeActions.js", () => ({
   registerTradeActions: vi.fn(),
 }));
 
-import { parseShortcutCommand } from "../src/commands/longShort.js";
+import { parseProArgs, parseShortcutCommand } from "../src/commands/longShort.js";
 
 describe("parseShortcutCommand", () => {
   it("parses /longBTC correctly", () => {
@@ -86,7 +85,7 @@ describe("parseShortcutCommand", () => {
   });
 
   it("handles command with trailing text", () => {
-    const result = parseShortcutCommand("/longBTC 500 5x usdc");
+    const result = parseShortcutCommand("/longBTC 0.005 2x");
     expect(result).toEqual({ side: "long", asset: "BTC" });
   });
 
@@ -104,42 +103,15 @@ describe("parseShortcutCommand", () => {
 });
 
 describe("Pro-mode argument parsing", () => {
-  // Test the parseProArgs logic inline
-  function parseProArgs(args: string[]): {
-    amount: number;
-    leverage: number;
-    collateral?: string;
-  } | null {
-    if (args.length < 2) return null;
-    const amount = parseFloat(args[0].replace("$", ""));
-    if (isNaN(amount) || amount <= 0) return null;
-    const leverage = parseFloat(args[1].replace(/x$/i, ""));
-    if (isNaN(leverage) || leverage <= 0) return null;
-    return {
-      amount,
-      leverage,
-      collateral: args[2]?.toUpperCase(),
-    };
-  }
-
-  it("parses '500 5x usdc'", () => {
-    const result = parseProArgs(["500", "5x", "usdc"]);
-    expect(result).toEqual({ amount: 500, leverage: 5, collateral: "USDC" });
+  it("parses strict native-unit amounts", () => {
+    expect(parseProArgs(["0.005", "2x"])).toEqual({ amount: "0.005", leverage: 2 });
+    expect(parseProArgs([".5", "1.1"])).toEqual({ amount: "0.5", leverage: 1.1 });
   });
 
-  it("parses '$100 3x'", () => {
-    const result = parseProArgs(["$100", "3x"]);
-    expect(result).toEqual({ amount: 100, leverage: 3, collateral: undefined });
-  });
-
-  it("parses '0.5 1.1x wstETH'", () => {
-    const result = parseProArgs(["0.5", "1.1x", "wstETH"]);
-    expect(result).toEqual({ amount: 0.5, leverage: 1.1, collateral: "WSTETH" });
-  });
-
-  it("parses '1000 7 fxusd' (no x suffix)", () => {
-    const result = parseProArgs(["1000", "7", "fxusd"]);
-    expect(result).toEqual({ amount: 1000, leverage: 7, collateral: "FXUSD" });
+  it("rejects fiat and alternate-token syntax", () => {
+    expect(parseProArgs(["500", "5x", "usdc"])).toBeNull();
+    expect(parseProArgs(["$100", "3x"])).toBeNull();
+    expect(parseProArgs(["0.5", "1.1x", "wstETH"])).toBeNull();
   });
 
   it("returns null for single arg", () => {
@@ -149,6 +121,7 @@ describe("Pro-mode argument parsing", () => {
   it("returns null for invalid amount", () => {
     expect(parseProArgs(["abc", "5x"])).toBeNull();
     expect(parseProArgs(["-100", "5x"])).toBeNull();
+    expect(parseProArgs(["0.5oops", "5x"])).toBeNull();
   });
 
   it("returns null for invalid leverage", () => {

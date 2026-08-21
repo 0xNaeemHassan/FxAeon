@@ -1,5 +1,7 @@
 'use client';
 
+import { useId } from 'react';
+
 /**
  * FxAeon logo mark — an inline SVG so it stays crisp at any size, paints with
  * no extra network request, and tints from the brand violet tokens. A clean
@@ -8,7 +10,9 @@
  */
 
 export function FxLogo({ size = 56, className = '' }: { size?: number; className?: string }) {
-  const id = 'fxlogo-grad';
+  // Multiple marks can coexist during transitions; unique SVG IDs prevent
+  // one instance's gradient from being resolved against another instance.
+  const id = `fxlogo-grad-${useId().replace(/:/g, '')}`;
   return (
     <svg
       width={size}

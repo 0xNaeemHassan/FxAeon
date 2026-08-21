@@ -19,10 +19,11 @@ export function applySecurityMiddleware(app: express.Application) {
   }));
 
   app.use(cors({
-    origin: process.env.MINI_APP_URL || "https://fxbot-mini-app.pages.dev",
+    origin: process.env.MINI_APP_URL || "http://localhost:3000",
     methods: ["GET", "POST", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "Privy-Signature"],
-    credentials: true,
+    // Mini App authentication is carried in Authorization, never cookies.
+    credentials: false,
     maxAge: 86400,
   }));
 

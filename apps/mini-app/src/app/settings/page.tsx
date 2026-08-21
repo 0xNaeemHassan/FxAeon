@@ -12,11 +12,11 @@
  * same PrivyClientProvider that WalletSection uses. This prevents the hook
  * from running outside the provider and crashing the Settings tab.
  */
-import { useEffect, useState } from 'react';
-import { Globe, Sliders, Shield, Check, PlugZap, Send } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Globe, Sliders, Shield, Check, PlugZap, RefreshCw, Send } from 'lucide-react';
 import { isTMA, getInitData, haptic } from '@/lib/telegram';
 import { apiConfigured, getMe, saveSettings } from '@/lib/api';
-import { AppShell, Button, Card, EmptyState, SectionTitle, Skeleton } from '@/components/ui';
+import { AppShell, Button, ButtonLink, Card, EmptyState, LoadingRegion, SectionTitle, Skeleton } from '@/components/ui';
 import { useLocale } from '@/lib/i18n';
 import dynamic from 'next/dynamic';
 
@@ -54,6 +54,7 @@ export default function SettingsPage() {
   const { t, setLocale } = useLocale();
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [error, setError] = useState('');
   const [lang, setLang] = useState('en');
   const [slippageBps, setSlippageBps] = useState(50);
@@ -64,24 +65,32 @@ export default function SettingsPage() {
 
   useEffect(() => setMounted(true), []);
 
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError('');
+    try {
+      const me = await getMe();
+      if (me.onboarded) {
+        setLang(me.language ?? 'en');
+        setLocale(me.language ?? 'en');
+        setSlippageBps(me.slippageBps ?? 50);
+        setMev((me.mevProtection as 'on' | 'off') ?? 'off');
+      }
+    } catch (cause) {
+      setLoadError(cause instanceof Error ? cause.message : 'Settings could not be loaded.');
+    } finally {
+      setLoading(false);
+    }
+  }, [setLocale]);
+
   useEffect(() => {
     if (!mounted) return;
     if (!isTMA() || !getInitData() || !apiConfigured()) {
       setLoading(false);
       return;
     }
-    getMe()
-      .then((me) => {
-        if (me.onboarded) {
-          setLang(me.language ?? 'en');
-          setLocale(me.language ?? 'en');
-          setSlippageBps(me.slippageBps ?? 50);
-          setMev((me.mevProtection as 'on' | 'off') ?? 'off');
-        }
-      })
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [mounted, setLocale]);
+    void load();
+  }, [load, mounted]);
 
   const save = async () => {
     setSaving(true);
@@ -115,9 +124,9 @@ export default function SettingsPage() {
           title={t('settings.openInTgTitle')}
           body={t('settings.openInTgBody')}
           action={
-            <a href={`https://t.me/${BOT_USERNAME}`}>
-              <Button>{t('common.openBot', { bot: BOT_USERNAME })}</Button>
-            </a>
+            <ButtonLink href={`https://t.me/${BOT_USERNAME}`} external>
+              {t('common.openBot', { bot: BOT_USERNAME })}
+            </ButtonLink>
           }
         />
       </AppShell>
@@ -139,11 +148,24 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <AppShell title={t('settings.title')}>
-        <div className="flex flex-col gap-3">
+        <LoadingRegion label="Loading settings" className="flex flex-col gap-3">
           <Skeleton className="h-40" />
           <Skeleton className="h-28" />
           <Skeleton className="h-20" />
-        </div>
+        </LoadingRegion>
+      </AppShell>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <AppShell title={t('settings.title')}>
+        <EmptyState
+          icon={RefreshCw}
+          title="Settings unavailable"
+          body={loadError}
+          action={<Button onClick={() => void load()}>Retry</Button>}
+        />
       </AppShell>
     );
   }
@@ -158,51 +180,36 @@ export default function SettingsPage() {
             <Globe className="h-3.5 w-3.5" /> {t('settings.language')}
           </span>
         </SectionTitle>
-        <div className="grid grid-cols-3 gap-2">
-          {LANGUAGES.map((l) => (
-            <button
-              key={l.code}
-              type="button"
-              onClick={() => {
-                haptic('selection');
-                setLang(l.code);
-                setLocale(l.code);
-                touch();
-              }}
-              className={`glass glass-press rounded-2xl px-2 py-2.5 text-[13px] ${
-                lang === l.code ? 'border-[rgba(124, 92, 255,0.45)] bg-[var(--mint-dim)] text-mint' : 'text-mut'
-              }`}
-            >
-              {l.name}
-            </button>
-          ))}
-        </div>
+        <ChoiceGrid
+          ariaLabel={t('settings.language')}
+          value={lang}
+          options={LANGUAGES.map((language) => ({ value: language.code, label: language.name }))}
+          columns="grid-cols-3"
+          onChange={(next) => {
+            setLang(next);
+            setLocale(next);
+            touch();
+          }}
+        />
 
         <SectionTitle>
           <span className="flex items-center gap-1.5">
             <Sliders className="h-3.5 w-3.5" /> {t('settings.maxSlippage')}
           </span>
         </SectionTitle>
-        <div className="grid grid-cols-4 gap-2">
-          {SLIPPAGE_PRESETS.map((bps) => (
-            <button
-              key={bps}
-              type="button"
-              onClick={() => {
-                haptic('selection');
-                setSlippageBps(bps);
-                touch();
-              }}
-              className={`glass glass-press rounded-2xl py-2.5 text-[13px] font-medium ${
-                slippageBps === bps
-                  ? 'border-[rgba(124, 92, 255,0.45)] bg-[var(--mint-dim)] text-mint'
-                  : 'text-mut'
-              }`}
-            >
-              {(bps / 100).toFixed(bps % 100 === 0 ? 0 : 1)}%
-            </button>
-          ))}
-        </div>
+        <ChoiceGrid
+          ariaLabel={t('settings.maxSlippage')}
+          value={slippageBps}
+          options={SLIPPAGE_PRESETS.map((bps) => ({
+            value: bps,
+            label: `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 1)}%`,
+          }))}
+          columns="grid-cols-4"
+          onChange={(next) => {
+            setSlippageBps(next);
+            touch();
+          }}
+        />
 
         <SectionTitle>
           <span className="flex items-center gap-1.5">
@@ -218,26 +225,27 @@ export default function SettingsPage() {
             type="button"
             role="switch"
             aria-checked={mev === 'on'}
+            aria-label={t('settings.privateTx')}
             onClick={() => {
               haptic('selection');
               setMev(mev === 'on' ? 'off' : 'on');
               touch();
             }}
-            className={`relative h-7 w-12 rounded-full transition-colors ${
-              mev === 'on' ? 'bg-mint' : 'bg-[rgba(255,255,255,0.12)]'
-            }`}
+            className="flex min-h-11 min-w-14 items-center justify-center rounded-xl"
           >
-            <span
-              className={`absolute top-0.5 h-6 w-6 rounded-full bg-white transition-transform ${
-                mev === 'on' ? 'translate-x-[22px]' : 'translate-x-0.5'
-              }`}
-            />
+            <span aria-hidden="true" className={`relative h-7 w-12 rounded-full transition-colors ${mev === 'on' ? 'bg-mint' : 'bg-[rgba(255,255,255,0.12)]'}`}>
+              <span
+                className={`absolute top-0.5 h-6 w-6 rounded-full bg-white transition-transform ${
+                  mev === 'on' ? 'translate-x-[22px]' : 'translate-x-0.5'
+                }`}
+              />
+            </span>
           </button>
         </Card>
 
         {error && (
           <Card className="mt-4 border-[rgba(255, 90, 95,0.35)]">
-            <p className="text-[13px] text-danger">{error}</p>
+            <p role="alert" className="text-[13px] text-danger">{error}</p>
           </Card>
         )}
 
@@ -256,5 +264,58 @@ export default function SettingsPage() {
         <LogoutSection />
       </div>
     </AppShell>
+  );
+}
+
+function ChoiceGrid<T extends string | number>({
+  ariaLabel,
+  value,
+  options,
+  columns,
+  onChange,
+}: {
+  ariaLabel: string;
+  value: T;
+  options: Array<{ value: T; label: string }>;
+  columns: string;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div className={`grid ${columns} gap-2`} role="radiogroup" aria-label={ariaLabel}>
+      {options.map((option, index) => {
+        const active = value === option.value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            tabIndex={active ? 0 : -1}
+            onClick={() => {
+              haptic('selection');
+              onChange(option.value);
+            }}
+            onKeyDown={(event) => {
+              if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+              event.preventDefault();
+              const backwards = event.key === 'ArrowLeft' || event.key === 'ArrowUp';
+              const next = event.key === 'Home'
+                ? 0
+                : event.key === 'End'
+                  ? options.length - 1
+                  : (index + (backwards ? -1 : 1) + options.length) % options.length;
+              onChange(options[next].value);
+              event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
+              haptic('selection');
+            }}
+            className={`glass glass-press min-h-11 rounded-2xl px-2 py-2.5 text-[13px] ${
+              active ? 'border-[rgba(124,92,255,0.45)] bg-[var(--mint-dim)] text-mint' : 'text-mut'
+            }`}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }

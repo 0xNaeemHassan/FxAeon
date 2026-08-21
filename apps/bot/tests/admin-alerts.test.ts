@@ -134,9 +134,10 @@ describe("classifyDbError", () => {
     expect(classifyDbError(new Error("db health check timed out"))).toContain("timeout");
   });
 
-  it("falls back to a truncated unknown without inventing causes", () => {
-    const hint = classifyDbError(new Error("weird driver thing"));
+  it("keeps unknown public health hints generic and secret-free", () => {
+    const hint = classifyDbError(new Error("postgres://admin:super-secret@db.example/prod"));
     expect(hint).toContain("unknown");
-    expect(hint).toContain("weird driver thing");
+    expect(hint).not.toContain("super-secret");
+    expect(hint).not.toContain("admin");
   });
 });

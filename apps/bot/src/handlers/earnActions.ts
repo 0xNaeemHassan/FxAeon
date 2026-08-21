@@ -6,7 +6,7 @@
  * the W-11 executor (simulate → broadcast → receipt) with status edits on the
  * same message. No tx is ever built or sent before Confirm.
  *
- * Callback data: the action-intent token itself (`a1_…`), plus `a1c` = cancel.
+ * Callback data: the action-intent token itself (`a2.…`), plus `a2c` = cancel.
  */
 import { Context, InlineKeyboard } from "grammy";
 import { prisma } from "@fxaeon/db";
@@ -27,6 +27,8 @@ import {
   quoteSaveDeposit,
   quoteSaveWithdraw,
   quoteBridge,
+  bridgeTokenAddress,
+  oftAdapterForChain,
   BRIDGE_TOKEN_DECIMALS,
   type SaveToken,
   type BridgeToken,
@@ -72,13 +74,17 @@ function statusLine(state: TxState, detail?: string): string {
       return "✅ Confirmed on-chain.";
     case "reverted":
       return `❌ Reverted on-chain${detail ? ` — ${detail}` : ""}.`;
+    case "partial":
+      return `⚠️ Partially completed${detail ? ` — ${detail}` : ""}. Review Activity before taking another action.`;
+    case "cancelled":
+      return "🛑 Cancelled on-chain.";
     case "failed":
       return `❌ Failed${detail ? ` — ${detail}` : ""}.`;
   }
 }
 
 export function confirmKeyboard(token: string): InlineKeyboard {
-  return new InlineKeyboard().text("✅ Confirm", token).text("❌ Cancel", "a1c");
+  return new InlineKeyboard().text("✅ Confirm", token).text("❌ Cancel", "a2c");
 }
 
 const PREVIEW_FOOTER =
@@ -111,6 +117,12 @@ interface RunRouteParams {
   idempotencyKey: string;
   quote: () => Promise<{ txs: { to: `0x${string}`; data: `0x${string}`; value: bigint }[] }>;
   successText: string;
+  intentScopedBridge?: {
+    sourceChainId: 1 | 8453;
+    tokenAddress: `0x${string}`;
+    oftTarget: `0x${string}`;
+    amount: bigint;
+  };
 }
 
 async function runRoute(params: RunRouteParams): Promise<void> {
@@ -118,9 +130,7 @@ async function runRoute(params: RunRouteParams): Promise<void> {
   await editSafe(ctx, `${header}\n\n🔎 Building transaction…`);
   try {
     const { txs } = await quote();
-    const client = createPublicClientForUser(
-      user.mevProtection === "flashbots" ? "flashbots" : "off"
-    );
+    const client = createPublicClientForUser(mevModeForUser(user.mevProtection));
     let lastStatus = "";
     const result = await executeRoute({
       userId: user.id,
@@ -129,6 +139,7 @@ async function runRoute(params: RunRouteParams): Promise<void> {
       idempotencyKey,
       txs,
       type: txType,
+      intentScopedBridge: params.intentScopedBridge,
       client,
       mev: mevModeForUser(user.mevProtection),
       onStatus: (status, detail) => {
@@ -153,10 +164,10 @@ async function runRoute(params: RunRouteParams): Promise<void> {
     }
   } catch (error) {
     botLogger.error({ error: String(error), txType }, "earn-ux: execution error");
-    const msg = error instanceof Error ? error.message : "unexpected error";
     await editSafe(
       ctx,
-      `${header}\n\n❌ Failed before broadcast — nothing was sent on-chain.\n\n${msg}`
+      `${header}\n\n❌ Failed before broadcast — nothing was sent on-chain.\n\n` +
+        `Live protocol data is unavailable or the action is no longer valid. Refresh and try again.`
     );
   }
 }
@@ -167,31 +178,33 @@ async function runRoute(params: RunRouteParams): Promise<void> {
 
 export function buildSaveDepositPreview(
   token: SaveToken,
-  amount: number
+  amount: string | number
 ): { text: string; keyboard: InlineKeyboard } {
+  const exactAmount = unpackAmount(packAmount(amount));
   const intent = createActionIntent("sd", {
     p1: token === "usdc" ? "u" : "f",
-    p2: packAmount(amount),
+    p2: packAmount(exactAmount),
   });
   const text =
     `🏦 fxSAVE Deposit Preview\n\n` +
-    `Deposit: ${amount} ${token === "usdc" ? "USDC" : "fxUSD"} → fxSAVE\n` +
+    `Deposit: ${exactAmount} ${token === "usdc" ? "USDC" : "fxUSD"} → fxSAVE\n` +
     `You receive yield-bearing fxSAVE shares.\n` +
     PREVIEW_FOOTER;
   return { text, keyboard: confirmKeyboard(intent) };
 }
 
 export function buildSaveWithdrawPreview(
-  shares: number | "all",
+  shares: string | number | "all",
   instant: boolean
 ): { text: string; keyboard: InlineKeyboard } {
+  const exactShares = shares === "all" ? "all" : unpackAmount(packAmount(shares));
   const intent = createActionIntent("sw", {
     p1: instant ? "i" : "c",
-    p2: shares === "all" ? "0" : packAmount(shares),
+    p2: exactShares === "all" ? "0" : packAmount(exactShares),
   });
   const text =
     `🔓 fxSAVE Withdraw Preview\n\n` +
-    `Shares: ${shares === "all" ? "ALL" : shares} fxSAVE → fxUSD\n` +
+    `Shares: ${exactShares === "all" ? "ALL" : exactShares} fxSAVE → fxUSD\n` +
     `Mode: ${instant ? "Instant (small fee + slippage)" : "2-step (no fee — request now, /claim after the cooldown)"}\n` +
     PREVIEW_FOOTER;
   return { text, keyboard: confirmKeyboard(intent) };
@@ -219,19 +232,21 @@ export function buildClaimPreview(preview: {
 
 export function buildMintPreview(
   market: Market,
-  collateral: number,
-  fxUsd: number
+  collateral: string | number,
+  fxUsd: string | number
 ): { text: string; keyboard: InlineKeyboard } {
+  const exactCollateral = unpackAmount(packAmount(collateral));
+  const exactFxUsd = unpackAmount(packAmount(fxUsd));
   const marketIdx = (MARKETS as readonly string[]).indexOf(market);
   const intent = createActionIntent("mt", {
     p1: String(marketIdx),
-    p2: packAmount(collateral),
-    p3: packAmount(fxUsd),
+    p2: packAmount(exactCollateral),
+    p3: packAmount(exactFxUsd),
   });
   const text =
     `🏛 Mint fxUSD Preview\n\n` +
-    `Deposit: ${collateral} ${market} collateral\n` +
-    `Mint: ${fxUsd} fxUSD (borrow against your collateral)\n` +
+    `Deposit: ${exactCollateral} ${market} collateral\n` +
+    `Mint: ${exactFxUsd} fxUSD (borrow against your collateral)\n` +
     `This opens a new borrowing position — track it with /portfolio, repay with /repay.\n` +
     `\n⚠️ Borrowing carries liquidation risk if your collateral value falls.` +
     PREVIEW_FOOTER;
@@ -241,29 +256,31 @@ export function buildMintPreview(
 export function buildRepayPreview(
   market: Market,
   positionId: number,
-  amount: number | "all"
+  amount: string | number | "all"
 ): { text: string; keyboard: InlineKeyboard } {
+  const exactAmount = amount === "all" ? "all" : unpackAmount(packAmount(amount));
   const marketIdx = (MARKETS as readonly string[]).indexOf(market);
   const intent = createActionIntent("rp", {
     p1: String(marketIdx),
     p2: positionId.toString(36),
-    p3: amount === "all" ? "0" : packAmount(amount),
+    p3: exactAmount === "all" ? "0" : packAmount(exactAmount),
   });
   const text =
     `💸 Repay Preview\n\n` +
     `Position: ${market} #${positionId}\n` +
-    `Repay: ${amount === "all" ? "ALL outstanding debt" : `${amount} fxUSD`}\n` +
+    `Repay: ${exactAmount === "all" ? "ALL outstanding debt" : `${exactAmount} fxUSD`}\n` +
     PREVIEW_FOOTER;
   return { text, keyboard: confirmKeyboard(intent) };
 }
 
 export function buildBridgePreview(params: {
   token: BridgeToken;
-  amount: number;
+  amount: string | number;
   /** Real LayerZero native fee (wei) from the on-chain quote. */
   nativeFeeWei: bigint;
 }): { text: string; keyboard?: InlineKeyboard } {
-  const { token, amount, nativeFeeWei } = params;
+  const { token, nativeFeeWei } = params;
+  const amount = unpackAmount(packAmount(params.amount));
   const feeEth = Number(formatEther(nativeFeeWei));
   const lines = [
     `🌉 Bridge Preview — Ethereum → Base`,
@@ -299,7 +316,7 @@ async function executeSaveDeposit(ctx: Context, intent: ActionIntent): Promise<v
   const amount = unpackAmount(intent.p2);
   const header = `🏦 fxSAVE Deposit — ${amount} ${token === "usdc" ? "USDC" : "fxUSD"}`;
   const user = await requireWalletUser(ctx, header);
-  if (!user || amount <= 0) {
+  if (!user || amount === "0") {
     if (user) await editSafe(ctx, `${header}\n\n❌ Invalid amount.`);
     return;
   }
@@ -315,7 +332,7 @@ async function executeSaveDeposit(ctx: Context, intent: ActionIntent): Promise<v
         sdk,
         userAddress: user.walletAddress,
         tokenIn: token,
-        amountWei: parseUnits(String(amount), token === "usdc" ? 6 : 18),
+        amountWei: parseUnits(amount, token === "usdc" ? 6 : 18),
         slippagePercent: user.slippageBps / 100,
       }),
     }),
@@ -325,8 +342,8 @@ async function executeSaveDeposit(ctx: Context, intent: ActionIntent): Promise<v
 
 async function executeSaveWithdraw(ctx: Context, intent: ActionIntent): Promise<void> {
   const instant = intent.p1 === "i";
-  const amount = unpackAmount(intent.p2); // 0 = all
-  const header = `🔓 fxSAVE Withdraw — ${amount === 0 ? "ALL" : amount} shares (${instant ? "instant" : "2-step"})`;
+  const amount = unpackAmount(intent.p2); // "0" = all
+  const header = `🔓 fxSAVE Withdraw — ${amount === "0" ? "ALL" : amount} shares (${instant ? "instant" : "2-step"})`;
   const user = await requireWalletUser(ctx, header);
   if (!user) return;
   const sdk = createFxSdk();
@@ -338,9 +355,9 @@ async function executeSaveWithdraw(ctx: Context, intent: ActionIntent): Promise<
     idempotencyKey: `save:${user.id}:${intent.nonce}`,
     quote: async () => {
       const sharesWei =
-        amount === 0
+        amount === "0"
           ? (await sdk.getFxSaveBalance({ userAddress: user.walletAddress })).balanceWei
-          : parseUnits(String(amount), 18);
+          : parseUnits(amount, 18);
       if (sharesWei <= 0n) throw new Error("No fxSAVE balance to withdraw.");
       return {
         txs: await quoteSaveWithdraw({
@@ -383,7 +400,7 @@ async function executeMint(ctx: Context, intent: ActionIntent): Promise<void> {
   const market = MARKETS[Number(intent.p1)];
   const collateral = unpackAmount(intent.p2);
   const fxUsd = unpackAmount(intent.p3);
-  if (!market || collateral <= 0 || fxUsd <= 0) {
+  if (!market || collateral === "0" || fxUsd === "0") {
     await editSafe(ctx, `🏛 Mint fxUSD\n\n❌ Invalid parameters.`);
     return;
   }
@@ -402,8 +419,8 @@ async function executeMint(ctx: Context, intent: ActionIntent): Promise<void> {
         sdk,
         userAddress: user.walletAddress,
         market,
-        collateralWei: parseUnits(String(collateral), collateralDecimals(market)),
-        mintWei: parseUnits(String(fxUsd), 18),
+        collateralWei: parseUnits(collateral, collateralDecimals(market)),
+        mintWei: parseUnits(fxUsd, 18),
       });
       return { txs: q.txs };
     },
@@ -414,12 +431,12 @@ async function executeMint(ctx: Context, intent: ActionIntent): Promise<void> {
 async function executeRepay(ctx: Context, intent: ActionIntent): Promise<void> {
   const market = MARKETS[Number(intent.p1)];
   const positionId = parseInt(intent.p2, 36);
-  const amount = unpackAmount(intent.p3); // 0 = all
+  const amount = unpackAmount(intent.p3); // "0" = all
   if (!market || !Number.isFinite(positionId) || positionId <= 0) {
     await editSafe(ctx, `💸 Repay\n\n❌ Invalid parameters.`);
     return;
   }
-  const header = `💸 Repay — ${market} #${positionId} (${amount === 0 ? "ALL" : `${amount} fxUSD`})`;
+  const header = `💸 Repay — ${market} #${positionId} (${amount === "0" ? "ALL" : `${amount} fxUSD`})`;
   const user = await requireWalletUser(ctx, header);
   if (!user) return;
   const sdk = createFxSdk();
@@ -435,17 +452,16 @@ async function executeRepay(ctx: Context, intent: ActionIntent): Promise<void> {
       const pos = positions.find((p) => p.positionId === positionId);
       if (!pos) throw new Error(`Position #${positionId} not found in your ${market} positions.`);
       if (pos.rawDebts <= 0n) throw new Error(`Position #${positionId} has no outstanding debt.`);
-      let repayWei = amount === 0 ? pos.rawDebts : parseUnits(String(amount), 18);
+      let repayWei = amount === "0" ? pos.rawDebts : parseUnits(amount, 18);
       if (repayWei > pos.rawDebts) repayWei = pos.rawDebts;
-      return {
-        txs: await quoteRepay({
+      const quote = await quoteRepay({
           sdk,
           userAddress: user.walletAddress,
           market,
           positionId,
           repayWei,
-        }),
-      };
+        });
+      return { txs: quote.txs };
     },
     successText: `✅ Debt repaid. Check /portfolio for the updated position.`,
   });
@@ -461,7 +477,7 @@ async function executeBridge(ctx: Context, intent: ActionIntent): Promise<void> 
     return;
   }
   const user = await requireWalletUser(ctx, header);
-  if (!user || amount <= 0) {
+  if (!user || amount === "0") {
     if (user) await editSafe(ctx, `${header}\n\n❌ Invalid amount.`);
     return;
   }
@@ -472,12 +488,18 @@ async function executeBridge(ctx: Context, intent: ActionIntent): Promise<void> 
     header,
     txType: "bridge_eth_to_base",
     idempotencyKey: `bridge:${user.id}:${intent.nonce}`,
+    intentScopedBridge: {
+      sourceChainId: 1,
+      tokenAddress: bridgeTokenAddress(token, 1),
+      oftTarget: oftAdapterForChain(token, 1),
+      amount: parseUnits(amount, BRIDGE_TOKEN_DECIMALS),
+    },
     quote: async () => {
       const { txs } = await quoteBridge({
         sdk,
         userAddress: user.walletAddress as `0x${string}`,
         token,
-        amountWei: parseUnits(String(amount), BRIDGE_TOKEN_DECIMALS),
+        amountWei: parseUnits(amount, BRIDGE_TOKEN_DECIMALS),
       });
       return { txs };
     },
@@ -493,7 +515,7 @@ export async function handleActionCallback(ctx: Context): Promise<void> {
   const data = ctx.callbackQuery?.data ?? "";
   await ctx.answerCallbackQuery().catch(() => undefined);
 
-  if (data === "a1c") {
+  if (data === "a2c") {
     await editSafe(ctx, "❌ Cancelled. Nothing was sent on-chain.");
     return;
   }

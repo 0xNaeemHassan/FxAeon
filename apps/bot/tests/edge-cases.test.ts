@@ -3,7 +3,6 @@ import { startCommand } from "../src/commands/start";
 import { tradeCommand } from "../src/commands/trade";
 import { limitCommand } from "../src/commands/limit";
 import { settingsCommand } from "../src/commands/settings";
-import { referCommand } from "../src/commands/refer";
 import { autoCommand } from "../src/commands/auto";
 import { RISK_PARAMS } from "@fxaeon/shared";
 import { tEn } from "./helpers/i18n";
@@ -79,8 +78,7 @@ describe("Edge Cases — Commands", () => {
         message: { text: "/trade wstETH long 3x -1ETH" },
       });
       await tradeCommand(ctx as any);
-      // Should show preview but simulation would catch negative
-      expect(ctx.reply).toHaveBeenCalled();
+      expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("Invalid Amount"));
     });
 
     it("should handle zero collateral", async () => {
@@ -88,7 +86,7 @@ describe("Edge Cases — Commands", () => {
         message: { text: "/trade wstETH long 3x 0ETH" },
       });
       await tradeCommand(ctx as any);
-      expect(ctx.reply).toHaveBeenCalled();
+      expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("Invalid Amount"));
     });
 
     it("should handle extremely large numbers", async () => {
@@ -96,7 +94,7 @@ describe("Edge Cases — Commands", () => {
         message: { text: "/trade wstETH long 3x 999999999ETH" },
       });
       await tradeCommand(ctx as any);
-      expect(ctx.reply).toHaveBeenCalled();
+      expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("Invalid Amount"));
     });
 
     it("should handle malformed input (missing side)", async () => {
@@ -111,13 +109,11 @@ describe("Edge Cases — Commands", () => {
 
     it("should handle case-insensitive market names", async () => {
       const ctx = createMockCtx({
-        message: { text: "/trade WSTETH long 3x 1ETH" },
+        message: { text: "/trade WSTETH long 3x 0.25" },
       });
       await tradeCommand(ctx as any);
-      // Should be rejected as invalid market (case-sensitive)
-      expect(ctx.reply).toHaveBeenCalledWith(
-        expect.stringContaining("Invalid market")
-      );
+      expect(ctx.reply).toHaveBeenCalled();
+      expect(ctx.reply.mock.calls[0][0]).not.toContain("Invalid market");
     });
 
     it("should handle invalid side (neither long nor short)", async () => {

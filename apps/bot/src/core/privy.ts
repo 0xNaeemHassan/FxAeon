@@ -22,6 +22,19 @@ import { getConfig, features } from '../middleware/config.js';
 
 let client: PrivyClient | null = null;
 
+/** Chains on which FxAeon is allowed to ask a delegated EVM wallet to act. */
+export type SupportedWalletChainId = 1 | 8453;
+
+export function assertSupportedWalletChainId(chainId: number): asserts chainId is SupportedWalletChainId {
+  if (chainId !== 1 && chainId !== 8453) {
+    throw new Error(`Unsupported wallet chainId ${chainId}; expected Ethereum (1) or Base (8453)`);
+  }
+}
+
+function evmCaip2(chainId: SupportedWalletChainId): `eip155:${SupportedWalletChainId}` {
+  return `eip155:${chainId}`;
+}
+
 /** Lazy singleton — never crashes at import time; fails loudly when actually used. */
 export function getPrivy(): PrivyClient {
   if (client) return client;
@@ -150,14 +163,21 @@ export async function sendWalletTransaction(
     gasLimit?: `0x${string}` | number;
     maxFeePerGas?: `0x${string}` | number;
     maxPriorityFeePerGas?: `0x${string}` | number;
-  }
+  },
+  chainId: SupportedWalletChainId = 1
 ) {
   if (!features.enablePrivyWalletApi) {
     throw new Error('Privy wallet API is not configured (PRIVY_AUTHORIZATION_KEY missing)');
   }
+  assertSupportedWalletChainId(chainId);
+  if (transaction.chainId !== undefined && Number(transaction.chainId) !== chainId) {
+    throw new Error(
+      `Privy broadcast chain mismatch: transaction says ${String(transaction.chainId)}, requested ${chainId}`
+    );
+  }
   return getPrivy().walletApi.ethereum.sendTransaction({
     walletId,
-    caip2: 'eip155:1',
+    caip2: evmCaip2(chainId),
     transaction,
   });
 }
@@ -181,10 +201,17 @@ export async function signWalletTransaction(
     gasLimit?: `0x${string}` | number;
     maxFeePerGas?: `0x${string}` | number;
     maxPriorityFeePerGas?: `0x${string}` | number;
-  }
+  },
+  chainId: SupportedWalletChainId = 1
 ): Promise<{ signedTransaction: `0x${string}`; encoding: string }> {
   if (!features.enablePrivyWalletApi) {
     throw new Error('Privy wallet API is not configured (PRIVY_AUTHORIZATION_KEY missing)');
+  }
+  assertSupportedWalletChainId(chainId);
+  if (transaction.chainId !== undefined && Number(transaction.chainId) !== chainId) {
+    throw new Error(
+      `Privy signing chain mismatch: transaction says ${String(transaction.chainId)}, requested ${chainId}`
+    );
   }
   const res = await getPrivy().walletApi.ethereum.signTransaction({ walletId, transaction });
   return {

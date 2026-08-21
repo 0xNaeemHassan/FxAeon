@@ -6,7 +6,7 @@
 start-welcome-new =
     🚀 FxAeon'a hoş geldiniz
     
-    f(x) Protocol için en gelişmiş arayüz — kaldıraçlı pozisyonlar, limit emirleri ve getiri otomasyonu, hepsi Telegram üzerinden.
+    f(x) Protocol için en gelişmiş arayüz — kaldıraçlı pozisyonlar ve getiri otomasyonu, hepsi Telegram üzerinden.
     
     🔐 Öz saklama — KENDİ cüzdanınızı oluşturun veya içe aktarın; anahtarlar yalnızca sizde
     ⚡ Simülasyon kontrollü — temiz simüle edilmeden hiçbir şey yayınlanmaz
@@ -42,7 +42,7 @@ help-body =
     
     ⚡ İşlem
       /trade — Kaldıraçlı pozisyon aç (1.1x–7x)
-      /limit — Limit/stop emirleri ver
+      /limit — Limit/stop önizlemesini doğrula (göndermez)
       /orders — Aktif emirleri görüntüle
       /mint — fxUSD ödünç al (kaldıraçsız)
       /redeem — fxSAVE'i fxUSD'ye geri dönüştür
@@ -67,7 +67,7 @@ help-body =
     
     🤖 Otomasyon
       /auto — Stop-loss / take-profit kuralları (/auto sl wstETH long 2500)
-      /refer — Referans bağlantınız + kazançlarınız
+      /refer — Davet bağlantınız + bağlı hesaplar
     
     ⚙️ Ayarlar
       /settings — Dil, kayma, MEV koruması
@@ -116,7 +116,7 @@ trade-usage =
     /trade <piyasa> <long|short> <kaldıraç> <miktar>
     
     Örnek:
-    /trade wstETH long 3x 1ETH
+    /trade wstETH long 3x 0.25
     
     Kaldıraç Limitleri:
     • Long: { $minLev }x – { $maxLong }x

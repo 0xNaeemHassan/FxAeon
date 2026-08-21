@@ -5,7 +5,7 @@
 start-welcome-new =
     🚀 FxAeonへようこそ
     
-    f(x) Protocol向けの最先端インターフェース — レバレッジポジション、指値注文、利回り自動化をすべてTelegramから。
+    f(x) Protocol向けの最先端インターフェース — レバレッジポジションと利回り自動化をすべてTelegramから。
     
     🔐 セルフカストディ — ウォレットを自分で作成またはインポート。鍵はあなただけのもの
     ⚡ シミュレーション必須 — シミュレーションを通過しない限り何も送信されません
@@ -38,7 +38,7 @@ help-body =
     
     ⚡ トレード
       /trade — レバレッジポジションを開く (1.1x–7x)
-      /limit — 指値/ストップ注文
+      /limit — 指値/ストップ注文のプレビューを検証（送信なし）
       /orders — アクティブな注文を表示
       /mint — fxUSDを借りる（レバレッジなし）
       /redeem — fxUSDを担保に償還
@@ -61,7 +61,7 @@ help-body =
     
     🤖 自動化
       /auto — ストップロス／テイクプロフィット (/auto sl wstETH long 2500)
-      /refer — 紹介リンク + 報酬
+      /refer — 招待リンク + 連携アカウント
     
     ⚙️ 設定
       /settings — 言語、スリッページ、MEV保護
@@ -110,7 +110,7 @@ trade-usage =
     /trade <マーケット> <long|short> <レバレッジ> <数量>
     
     例:
-    /trade wstETH long 3x 1ETH
+    /trade wstETH long 3x 0.25
     
     レバレッジ上限:
     • ロング: { $minLev }x – { $maxLong }x

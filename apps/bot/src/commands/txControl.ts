@@ -157,17 +157,20 @@ export async function handleTxControlCallback(ctx: Context): Promise<void> {
     await editSafe(`${header}\n\n⏳ Broadcasting replacement at the same nonce…`);
     const result = await executeReplacement({
       recordId: req.recordId,
+      userId: user.id,
       walletId: gate.walletId,
       walletAddress: user.walletAddress as `0x${string}`,
-      client: createPublicClientForUser(user.mevProtection === "flashbots" ? "flashbots" : "off"),
+      client: createPublicClientForUser(mevModeForUser(user.mevProtection)),
       mev: mevModeForUser(user.mevProtection),
       kind: req.kind,
     });
 
     if (result.ok) {
+      const completedKind = result.kind;
+      const completedHeader = `⛽ ${label[completedKind]} transaction`;
       await editSafe(
-        `${header}\n\n` +
-          (req.kind === "speedup"
+        `${completedHeader}\n\n` +
+          (completedKind === "speedup"
             ? `✅ Sped up — the replacement mined.`
             : `✅ Cancelled — the original was voided by a self-send.`) +
           `\n\nTx: https://etherscan.io/tx/${result.hash}`

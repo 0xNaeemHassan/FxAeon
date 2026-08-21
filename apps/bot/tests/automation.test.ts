@@ -39,6 +39,7 @@ function pos(over: Partial<OnChainPosition> = {}): OnChainPosition {
     positionId: 7,
     collateral: 2,
     rawCollateral: 2_000_000_000_000_000_000n,
+    rawDebt: 3_000_000_000_000_000_000_000n,
     collateralToken: "wstETH",
     debt: 3000,
     debtToken: "fxUSD",
@@ -173,9 +174,9 @@ describe("computePnl", () => {
     expect(computePnl(pos(), snap, {})).toBeNull();
   });
 
-  it("values fxUSD debt at $1 when FXUSD itself is unpriced", () => {
+  it("returns null when the live fxUSD price is unavailable", () => {
     const pnl = computePnl(pos(), snap, { wstETH: 3200 });
-    expect(pnl!.pnlUsd).toBeCloseTo(400, 6);
+    expect(pnl).toBeNull();
   });
 
   it("keys snapshots by market:side:positionId", () => {

@@ -9,6 +9,7 @@
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 import reactHooks from "eslint-plugin-react-hooks";
+import nextPlugin from "@next/eslint-plugin-next";
 import globals from "globals";
 
 export default tseslint.config(
@@ -58,8 +59,13 @@ export default tseslint.config(
   // React components (Mini App): the rules-of-hooks linting Next.js relies on.
   {
     files: ["apps/mini-app/src/**/*.{ts,tsx}"],
-    plugins: { "react-hooks": reactHooks },
+    plugins: { "react-hooks": reactHooks, "@next/next": nextPlugin },
     rules: {
+      ...nextPlugin.configs.recommended.rules,
+      ...nextPlugin.configs["core-web-vitals"].rules,
+      // App Router lives under apps/mini-app/src/app; this Pages Router rule
+      // probes the monorepo root and emits a false "pages directory" warning.
+      "@next/next/no-html-link-for-pages": "off",
       "react-hooks/rules-of-hooks": "error",
       "react-hooks/exhaustive-deps": "warn",
     },

@@ -83,7 +83,9 @@ export async function ensurePrivyUserId(telegramId: string): Promise<string> {
 /**
  * Refresh the wallet snapshot (address can rotate only via re-import;
  * delegation toggles whenever the user grants/revokes the session signer).
- * Fail-soft: a Privy read error keeps the stored state.
+ * Returns the authoritative wallet snapshot. A Privy read failure is reported
+ * to the caller instead of silently treating stale delegation as current;
+ * money paths must fail closed when revocation state cannot be verified.
  */
 export async function syncWalletState(user: {
   id: string;
@@ -92,10 +94,26 @@ export async function syncWalletState(user: {
   privyWalletId: string | null;
   walletDelegated: boolean;
   walletImported: boolean;
-}): Promise<{ walletDelegated: boolean; walletImported: boolean }> {
+}): Promise<{
+  walletAddress: string;
+  privyWalletId: string | null;
+  walletDelegated: boolean;
+  walletImported: boolean;
+}> {
   try {
     const wallet = await getUserWallet(user.privyUserId);
-    if (!wallet) return { walletDelegated: user.walletDelegated, walletImported: user.walletImported };
+    if (!wallet) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { walletDelegated: false, privyWalletId: null },
+      });
+      return {
+        walletAddress: user.walletAddress,
+        privyWalletId: null,
+        walletDelegated: false,
+        walletImported: user.walletImported,
+      };
+    }
     const changed =
       wallet.delegated !== user.walletDelegated ||
       wallet.imported !== user.walletImported ||
@@ -112,10 +130,15 @@ export async function syncWalletState(user: {
         },
       });
     }
-    return { walletDelegated: wallet.delegated, walletImported: wallet.imported };
+    return {
+      walletAddress: wallet.address,
+      privyWalletId: wallet.id,
+      walletDelegated: wallet.delegated,
+      walletImported: wallet.imported,
+    };
   } catch (e) {
-    botLogger.warn({ err: e, userId: user.id }, "wallet state sync failed (using stored state)");
-    return { walletDelegated: user.walletDelegated, walletImported: user.walletImported };
+    botLogger.warn({ err: e, userId: user.id }, "wallet state sync failed");
+    throw e;
   }
 }
 
@@ -130,13 +153,21 @@ export async function onboardUser(
 ): Promise<OnboardResult> {
   const existing = await prisma.user.findUnique({ where: { telegramId } });
   if (existing) {
-    const synced = await syncWalletState(existing);
+    // Onboarding is non-money-touching, so a transient Privy outage may keep
+    // showing the stored account snapshot. Execution gates revalidate and
+    // fail closed separately before asking Privy to sign.
+    const synced = await syncWalletState(existing).catch(() => ({
+      walletAddress: existing.walletAddress,
+      privyWalletId: existing.privyWalletId,
+      walletDelegated: existing.walletDelegated,
+      walletImported: existing.walletImported,
+    }));
     return {
       status: "existing",
       user: {
         id: existing.id,
         telegramId: existing.telegramId,
-        walletAddress: existing.walletAddress,
+        walletAddress: synced.walletAddress,
         referralCode: existing.referralCode,
         walletDelegated: synced.walletDelegated,
         walletImported: synced.walletImported,

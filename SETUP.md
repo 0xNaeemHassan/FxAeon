@@ -1,296 +1,197 @@
-# FxAeon Setup Guide
+# Setup
 
-Complete setup guide to get your FxAeon Telegram DeFi bot running.
+This guide configures a local development environment and identifies the production-only requirements. Deployment procedures are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-## Required Accounts & APIs
+## Prerequisites
 
-### 1. Telegram Bot (FREE)
-- **What**: Your bot on Telegram
-- **How**: Message [@BotFather](https://t.me/BotFather), send `/newbot`, follow prompts
-- **What you get**: Bot token (looks like `123456:ABC-DEF1234ghI-klmn567890`)
-- **Cost**: Free
-- **Setup time**: 2 minutes
+- Node.js 22 (`.nvmrc` is authoritative)
+- Corepack and pnpm 11.16.0
+- PostgreSQL compatible with Prisma 5
+- An Ethereum mainnet RPC for on-chain reads, quotes, simulations, and transactions
+- A Base mainnet RPC for Base-source bridge quotes and for any bidirectional bridge execution rollout
+- A Telegram bot token from [BotFather](https://t.me/BotFather)
+- A Privy application for wallet onboarding and delegated execution
+- Redis for shared HTTP rate limits and a cross-process `DAILY_TX_CAP` counter; development can use the in-memory fallback. The executor also checks the day's persisted broadcast records and fails closed if that database query is unavailable. Redis does not make the in-process workers multi-replica safe, and the cap is an action-count guard rather than a transaction-value ceiling.
 
-### 2. Privy (FREE tier)
-- **What**: MPC wallet infrastructure for your users
-- **How**: Sign up at [dashboard.privy.io](https://dashboard.privy.io)
-- **What you get**: App ID (looks like `cmq...`), App Secret, JWKS endpoint
-- **Cost**: Free up to 1,000 MAU, then $0.01/user
-- **Setup time**: 5 minutes
+Optional operator services include Sentry, Etherscan, CoinGecko's API key, and an admin Telegram chat.
 
-### 3. Alchemy (FREE tier)
-- **What**: Ethereum RPC node access
-- **How**: Sign up at [dashboard.alchemy.com](https://dashboard.alchemy.com)
-- **What you get**: API key (looks like `JIxO3...`)
-- **Cost**: Free up to 300M compute units/month
-- **Setup time**: 3 minutes
-
-### 4. PostgreSQL (FREE tier available)
-- **What**: PostgreSQL 17 database (production runs Postgres 17)
-- **How**: Render Postgres (pairs with the bot's Render service), Supabase, or Neon — any managed Postgres works
-- **What you get**: Database URL (`postgresql://user:pass@host:5432/db`)
-- **Cost**: Free tiers available on all three
-- **Setup time**: 5 minutes
-
-### 5. Upstash Redis (FREE tier)
-- **What**: Redis cache for rate limiting, sessions, queues
-- **How**: Sign up at [console.upstash.com](https://console.upstash.com), create Redis database
-- **What you get**: REST URL and token
-- **Cost**: Free up to 10,000 requests/day
-- **Setup time**: 3 minutes
-
-### 6. Cloudflare Pages (FREE)
-- **What**: Host your Mini App
-- **How**: Sign up at [dash.cloudflare.com](https://dash.cloudflare.com), go to Pages
-- **What you get**: `*.pages.dev` URL
-- **Cost**: Free unlimited requests
-- **Setup time**: 5 minutes
-
-### 7. Render (bot hosting — canonical)
-- **What**: Hosts the bot as a Docker web service (`render.yaml` blueprint, auto-deploys `main`)
-- **How**: Sign up at [render.com](https://render.com), create a Blueprint from this repo
-- **Cost**: Starter plan ~$7/month (free tier sleeps, which breaks webhooks)
-- **Setup time**: 10 minutes
-
----
-
-## Optional but Recommended
-
-### 8. Sentry (FREE tier)
-- **What**: Error tracking and monitoring
-- **How**: Sign up at [sentry.io](https://sentry.io)
-- **What you get**: DSN URL for error reporting
-- **Cost**: Free up to 5,000 errors/month
-
-### 9. UptimeRobot (FREE tier)
-- **What**: Uptime monitoring for your bot
-- **How**: Sign up at [uptimerobot.com](https://uptimerobot.com)
-- **What you get**: Monitor URLs, get alerts when down
-- **Cost**: Free up to 50 monitors
-
----
-
-## Step-by-Step Setup
-
-### Step 1: Clone the Repo
+## 1. Install
 
 ```bash
-git clone https://github.com/0xNaeemHassan/FxAeon.git
-cd FxAeon
+corepack enable
+corepack prepare pnpm@11.16.0 --activate
+pnpm install --frozen-lockfile
+pnpm --filter @fxaeon/db db:generate
 ```
 
-Or if using the bundle:
-```bash
-git clone fxaeon-final.bundle FxAeon
-cd FxAeon
-git remote add origin https://github.com/0xNaeemHassan/FxAeon.git
-git push -u origin main
-```
+## 2. Configure PostgreSQL
 
-### Step 2: Install Dependencies
+Create a database and export its connection string:
 
 ```bash
-# Install pnpm if you don't have it
-npm install -g pnpm
-
-# Install all dependencies
-pnpm install
+export DATABASE_URL='postgresql://user:password@localhost:5432/fxaeon'
+pnpm --filter @fxaeon/db exec prisma migrate deploy
 ```
 
-### Step 3: Configure Environment Variables
+PowerShell equivalent:
 
-Copy the example files and fill in your values:
-
-```bash
-cp .env.example .env
-cp apps/bot/.env.example apps/bot/.env.production
-cp apps/mini-app/.env.example apps/mini-app/.env.local
+```powershell
+$env:DATABASE_URL = 'postgresql://user:password@localhost:5432/fxaeon'
+pnpm --filter @fxaeon/db exec prisma migrate deploy
 ```
 
-Edit each file with your actual credentials:
+For PgBouncer transaction pooling, follow the provider's Prisma guidance and add `pgbouncer=true` where required. The deep health endpoint reports common missing-schema, authentication, reachability, and prepared-statement failures without returning credentials.
 
-**`.env` (root - for Docker Compose):**
-```
-TELEGRAM_BOT_TOKEN=your_bot_token_from_botfather
-PRIVY_APP_ID=your_privy_app_id
-PRIVY_APP_SECRET=your_privy_app_secret
-DATABASE_URL=your_supabase_connection_string
-REDIS_URL=your_upstash_redis_url
-ALCHEMY_RPC_URL=https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY
-ENCRYPTION_KEY=openssl_rand_hex_32_output
-```
+## 3. Configure the bot process
 
-**`apps/bot/.env.production`:**
-```
-TELEGRAM_BOT_TOKEN=your_bot_token
-PRIVY_APP_ID=your_privy_app_id
-PRIVY_APP_SECRET=your_privy_app_secret
-PRIVY_JWKS_ENDPOINT=https://auth.privy.io/api/v1/apps/YOUR_APP_ID/jwks.json
-DATABASE_URL=your_supabase_url
-REDIS_URL=your_upstash_url
-REDIS_TOKEN=your_upstash_token
-ALCHEMY_RPC_URL=https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY
-ETH_RPC_URL=https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY
-ENCRYPTION_KEY=your_32_char_hex_key
-MINI_APP_URL=https://your-mini-app.pages.dev
-NODE_ENV=production
-PORT=8080
-```
+At startup the bot loads `.env.local`, `.env.production`, and `.env` in that order through dotenv, relative to the process working directory. Existing shell or process-manager values win because file loading does not override them. For `pnpm --filter @fxaeon/bot dev`, copy `apps/bot/.env.example` to `apps/bot/.env` or export the variables explicitly. Docker Compose separately reads the repository-root `.env.example`/`.env` pair.
 
-**`apps/mini-app/.env.local`:**
-```
-NEXT_PUBLIC_PRIVY_APP_ID=your_privy_app_id
-NEXT_PUBLIC_TELEGRAM_BOT_USERNAME=YourBotUsername
-NEXT_PUBLIC_MINI_APP_URL=https://your-mini-app.pages.dev
-NEXT_PUBLIC_ALCHEMY_RPC_URL=https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY
-```
+### Core schema
 
-### Step 4: Generate Encryption Key
+| Variable | Purpose |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` | Telegram Bot API token |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `NODE_ENV` | `development`, `production`, or `test`; defaults to `development` |
+| `PORT` | Express port; defaults to `8080` |
+| `LOG_LEVEL` | `trace`, `debug`, `info`, `warn`, `error`, or `fatal`; defaults to `info` |
+
+Only `TELEGRAM_BOT_TOKEN` and `DATABASE_URL` have no schema default. Set `NODE_ENV=production` explicitly in a deployment so production fail-fast validation is active.
+
+### Required in production
+
+| Variable | Purpose |
+|---|---|
+| `TELEGRAM_WEBHOOK_SECRET` | At least 32 characters; Telegram secret-token verification |
+| `ENCRYPTION_KEY` | At least 32 characters; required by startup validation |
+| `INTENT_SECRET` | Independent, at least 32-character HMAC key for expiring transaction intents |
+| `RENDER_EXTERNAL_URL` or `WEBHOOK_URL` | Public HTTPS origin used to register `<origin>/webhook` |
+| `MINI_APP_URL` | Exact HTTPS Mini App origin used by Telegram links and CORS |
+
+Generate independent secrets:
 
 ```bash
 openssl rand -hex 32
+openssl rand -hex 32
 ```
 
-Copy the output into `ENCRYPTION_KEY` in your `.env` files.
+Do not reuse the bot token, Privy secret, authorization key, or database password.
 
-### Step 5: Set Up Database
+### Wallet and execution
+
+| Variable | Purpose | Behavior when absent |
+|---|---|---|
+| `PRIVY_APP_ID` | Server-side Privy application ID | Wallet resolution/onboarding unavailable |
+| `PRIVY_APP_SECRET` | Privy application secret | Must be paired with `PRIVY_APP_ID` |
+| `PRIVY_AUTHORIZATION_KEY` | Server authorization key for delegated wallet signing | Server broadcasts unavailable |
+| `ALCHEMY_RPC_URL` | Ethereum mainnet RPC URL | On-chain reads, SDK routes, simulation, gas, and execution unavailable |
+| `BASE_RPC_URL` | Base mainnet RPC URL | Base-source bridge quotes and execution unavailable |
+| `SIGNER_POLICY_MODE` | `enforce` (default), `observe`, or `off` | Always use `enforce` for production funds |
+| `BRIDGE_EXECUTION_ENABLED` | Enables Ethereum↔Base bridge broadcast when `true`; startup then requires both RPC URLs | Bridge broadcast stays disabled |
+| `DAILY_TX_CAP` | Per-user UTC-day logical-action cap in the central executor | Defaults to `50`; counts one ordered route as one action, not its transaction count or value; replacement broadcasts use a separate path |
+
+`observe` permits disallowed routes after logging them, and `off` disables the policy. They are diagnostic/test modes, not normal production settings.
+
+### Runtime services and observability
+
+| Variable | Purpose |
+|---|---|
+| `REDIS_URL` | `redis://` or `rediss://` TCP URL for shared HTTP limits and the live daily-action counter; do not use an Upstash REST URL |
+| `SENTRY_DSN` | Optional error reporting |
+| `ADMIN_TELEGRAM_CHAT_ID` | Optional admin errors and SLO digest target |
+| `ADMIN_TOKEN` | Bearer token for `/api/v1/admin/*`; routes return 403 when unset |
+| `COINGECKO_API_KEY` | Optional higher-rate market-data access |
+| `ETHERSCAN_API_KEY` | Optional `/gas` oracle access; RPC fallback remains |
+
+The authoritative validated schema is `apps/bot/src/middleware/config.ts`. A few operational variables are read directly at their call sites and therefore do not appear in that schema. `BRIDGE_EXECUTION_ENABLED=true` is deliberately fail-fast unless both `ALCHEMY_RPC_URL` and `BASE_RPC_URL` are valid URLs.
+
+## 4. Configure Privy
+
+In the Privy dashboard:
+
+1. Create an Ethereum application and enable Telegram login.
+2. Configure the production Mini App origin as an allowed origin.
+3. Configure an authorization-key quorum/session signer for bot trading.
+4. Put its public signer identifier in `NEXT_PUBLIC_PRIVY_SIGNER_ID` at Mini App build time.
+5. Put the matching server authorization key in `PRIVY_AUTHORIZATION_KEY`.
+
+The user creates or imports the embedded wallet in Privy's client UI. The backend resolves the wallet from the verified Telegram-linked Privy user; it must never accept a browser-supplied execution wallet as authoritative.
+
+## 5. Configure the Mini App build
+
+The Mini App is a static export. Every `NEXT_PUBLIC_*` value is embedded by `next build`, so changing one requires a rebuild and redeploy.
+
+| Variable | Required | Purpose |
+|---|---:|---|
+| `NEXT_PUBLIC_BOT_API_URL` | Yes | Explicit backend origin, such as `https://bot.example.com`; current client treats an empty value as unavailable rather than using same-origin |
+| `NEXT_PUBLIC_TELEGRAM_BOT_USERNAME` | Yes | Bot username without `@` |
+| `NEXT_PUBLIC_PRIVY_APP_ID` | Yes for wallet setup | Public Privy app ID |
+| `NEXT_PUBLIC_PRIVY_SIGNER_ID` | Yes for bot-trading grant/revoke | Signer/quorum identifier matching backend authorization |
+
+Create `apps/mini-app/.env.local` for local Next.js development, or export these variables before the build. Do not put server secrets in a `NEXT_PUBLIC_*` variable.
+
+## 6. Run locally
+
+Build shared dependencies once, migrate the database, then start development mode:
 
 ```bash
-cd packages/db
-pnpm db:generate  # Generate Prisma client
-pnpm db:deploy    # Apply migrations to your Postgres
+pnpm --filter @fxaeon/shared build
+pnpm --filter @fxaeon/db build
+pnpm --filter @fxaeon/bot dev
+pnpm --filter @fxaeon/mini-app dev
 ```
 
-### Step 6: Build Everything
+Run the two `dev` commands in separate terminals. In `NODE_ENV=development`, the bot uses Telegram long polling. The Mini App normally needs HTTPS and a Telegram launch context for real `initData`; use the Playwright harness for deterministic local UI flows.
+
+## 7. Build and test
 
 ```bash
-# From project root
-pnpm run build
-```
-
-### Step 7: Deploy Mini App to Cloudflare Pages
-
-```bash
-cd apps/mini-app
 pnpm build
-
-# Deploy using Wrangler
-npx wrangler pages deploy dist --project-name=fxaeon-mini-app
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm --filter @fxaeon/mini-app test:e2e
 ```
 
-Or connect your GitHub repo to Cloudflare Pages for auto-deployment.
-
-### Step 8: Deploy Bot
-
-**Option A: Render (canonical — see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md))**
-```text
-1. Render dashboard -> New -> Blueprint -> select this repo (picks up render.yaml)
-2. Set all `sync: false` env vars in the service's Environment tab
-3. Every push to main auto-deploys; /health gates the deploy
-```
-
-**Option B: Docker (local / self-hosting)**
-```bash
-# From project root
-docker-compose up -d
-```
-
-**Option C: VPS / Server**
-```bash
-# Build
-pnpm run build
-
-# Start bot
-cd apps/bot
-pnpm start
-
-# Or use PM2 for process management
-pm2 start dist/main.js --name fxaeon-bot
-```
-
-### Step 9: Set Telegram Webhook
+Install Chromium first if needed:
 
 ```bash
-curl -X POST "https://api.telegram.org/botYOUR_BOT_TOKEN/setWebhook"   -d "url=https://your-bot-domain.com/webhook"   -d "max_connections=40"
+pnpm --filter @fxaeon/mini-app exec playwright install chromium
 ```
 
-Replace `your-bot-domain.com` with your actual domain (Render URL, VPS IP, etc.). On Render this happens automatically at boot using `RENDER_EXTERNAL_URL` + `TELEGRAM_WEBHOOK_SECRET`.
-
-### Step 10: Verify Everything Works
+Mainnet-fork money-path tests require Foundry/Anvil and a mainnet RPC:
 
 ```bash
-# Run health check
-./health-check.sh https://your-bot-domain.com
-
-# Post-deploy smoke test (same one CI runs)
-BOT_URL=https://your-bot-domain.com TELEGRAM_TOKEN=... node smoke-test.js
+export FORK_BACKEND_RPC_URL='https://your-mainnet-rpc'
+pnpm --filter @fxaeon/bot test:fork
 ```
 
-You should see all checks passing.
+## 8. Docker Compose
 
----
+Create a filled `.env` at the repository root, then:
 
-## Quick Start Checklist
+```bash
+docker compose build
+docker compose up -d
+docker compose ps
+```
 
-- [ ] Created Telegram bot via @BotFather
-- [ ] Signed up for Privy and got App ID + Secret
-- [ ] Signed up for Alchemy and got API key
-- [ ] Provisioned Postgres 17 and got database URL
-- [ ] Created Upstash Redis and got URL + token
-- [ ] Cloned the repo
-- [ ] Installed dependencies (`pnpm install`)
-- [ ] Copied and filled in all `.env` files
-- [ ] Generated encryption key (`openssl rand -hex 32`)
-- [ ] Set up database (`pnpm db:deploy`)
-- [ ] Built the project (`pnpm run build`)
-- [ ] Deployed Mini App to Cloudflare Pages
-- [ ] Deployed bot (Render blueprint / Docker / VPS)
-- [ ] Set Telegram webhook
-- [ ] Ran health check and confirmed all green
+Compose starts the bot, static Mini App, Redis, and an HTTP-only Nginx reverse proxy. It does not provision PostgreSQL or TLS, and the checked-in Nginx configuration has no certificate mount or HTTPS listener. Terminate TLS at a trusted edge or replace the proxy configuration before internet exposure.
 
----
+## First-run checks
 
-## Cost Estimate (Monthly)
+```bash
+curl http://localhost:8080/health
+curl http://localhost:8080/api/v1/health
+curl http://localhost:8080/api/v1/health/ready
+```
 
-| Service | Free Tier | Paid (if you grow) |
-|---------|-----------|-------------------|
-| Telegram Bot | Free | Free |
-| Privy | 1,000 users | ~$10-50 |
-| Alchemy | 300M CU | ~$0-49 |
-| Postgres (Render/Supabase/Neon) | free tiers | ~$7-25 |
-| Upstash Redis | 10K req/day | ~$10 |
-| Cloudflare Pages | Unlimited | Free |
-| Render (bot) | — | ~$7 |
-| **Total** | **$0** | **~$50-150** |
+Then verify in Telegram:
 
----
+1. `/start` opens onboarding.
+2. The Mini App creates/imports and links the expected embedded wallet.
+3. `/deposit` shows the same address.
+4. `/security` reports the intended delegation and policy state.
+5. Use read-only `/price`, `/gas`, and `/portfolio` before testing a small, explicitly confirmed transaction.
 
-## Troubleshooting
-
-**Bot not responding?**
-- Check webhook is set: `curl https://api.telegram.org/botTOKEN/getWebhookInfo`
-- Check bot is running: `curl https://your-domain/health`
-- Check logs: Render dashboard -> Logs, or `docker logs fxaeon-bot`
-
-**Mini App not loading?**
-- Check Cloudflare Pages deployment status
-- Verify `NEXT_PUBLIC_PRIVY_APP_ID` is set correctly
-- Check browser console for errors
-
-**Database connection failed?**
-- Verify the Postgres connection string
-- Check your provider's IP allowlist (add the server's IP)
-- Test connection: `psql YOUR_DATABASE_URL -c "SELECT 1"`
-
-**Wallet connection not working?**
-- Verify Privy App ID matches in bot and Mini App
-- Check Privy dashboard for allowed domains (add your Mini App URL)
-- Ensure JWKS endpoint is accessible
-
----
-
-## Support
-
-- Telegram Bot: [@FxAeonBot](https://t.me/FxAeonBot)
-- GitHub Issues: [github.com/0xNaeemHassan/FxAeon/issues](https://github.com/0xNaeemHassan/FxAeon/issues)
-- Documentation: See `docs/` folder in the repo
+See [Operations](docs/operations.md) for failure diagnosis and [Security](docs/security.md) before enabling live funds.

@@ -4,10 +4,14 @@
  * and assertions are reproducible.
  */
 import type {
+  ActionExecuteResult,
+  ActionQuote,
+  ActivityItem,
+  BridgeState,
   Me,
   MarketSnapshot,
-  TradeQuote,
-  TradeExecuteResult,
+  MiniActionParams,
+  ProtocolInfo,
 } from '../../src/lib/api';
 
 export const WALLET = '0x742d35Cc6634C0532925a3b844Bc454e4438f44e';
@@ -23,7 +27,25 @@ export const onboardedMe: Me = {
   mevProtection: 'on',
   walletDelegated: true,
   walletImported: false,
-  funding: { known: true, funded: true, eth: '1.2500', wstEth: '0.5000', wbtc: '0.0100' },
+  funding: {
+    known: true,
+    funded: true,
+    eth: '1.2500',
+    wstEth: '0.5000',
+    wbtc: '0.0100',
+    balances: {
+      ETH: '1.2500',
+      WETH: '0.3500',
+      stETH: '0.7500',
+      wstETH: '0.5000',
+      WBTC: '0.0100',
+      USDC: '2400.00',
+      USDT: '900.00',
+      fxUSD: '850.00',
+      fxSAVE: '1200.0000',
+      fxUSDBasePool: '125.00',
+    },
+  },
   positionsKnown: true,
   positions: [
     {
@@ -86,7 +108,14 @@ export const emptyMe: Me = {
   mevProtection: 'off',
   walletDelegated: false,
   walletImported: false,
-  funding: { known: true, funded: false, eth: '0', wstEth: '0', wbtc: '0' },
+  funding: {
+    known: true,
+    funded: false,
+    eth: '0',
+    wstEth: '0',
+    wbtc: '0',
+    balances: { ETH: '0', wstETH: '0', WBTC: '0', fxUSD: '0', fxSAVE: '0' },
+  },
   positionsKnown: true,
   positions: [],
   savingsKnown: true,
@@ -116,40 +145,118 @@ export const marketSnapshot: MarketSnapshot = {
   ],
 };
 
-/** A review-quote for the canonical test trade: wstETH long 3x, 1 wstETH. */
-export function quoteFor(
-  market = 'wstETH',
-  side: 'long' | 'short' = 'long',
-  leverage = 3,
-  collateral = 1
-): TradeQuote {
+export const protocolInfo: ProtocolInfo = {
+  network: { name: 'Ethereum', chainId: 1 },
+  save: {
+    totalSupply: '10000000.0000',
+    totalAssets: '10250000.0000',
+    assetsPerShare: 1.025,
+    cooldownHours: 24,
+    instantRedeemFeePct: 0.25,
+    expenseRatioPct: 10,
+    harvesterRatioPct: 2,
+    threshold: '1000',
+  },
+  tokens: [
+    { symbol: 'ETH', decimals: 18, native: true, positionMarkets: ['wstETH'] },
+    { symbol: 'wstETH', decimals: 18, native: false, positionMarkets: ['wstETH'] },
+    { symbol: 'WBTC', decimals: 8, native: false, positionMarkets: ['WBTC'] },
+    { symbol: 'USDC', decimals: 6, native: false, positionMarkets: ['wstETH', 'WBTC'] },
+    { symbol: 'fxUSD', decimals: 18, native: false, positionMarkets: ['wstETH', 'WBTC'] },
+    { symbol: 'fxSAVE', decimals: 18, native: false, positionMarkets: [] },
+    { symbol: 'fxUSDBasePool', decimals: 18, native: false, positionMarkets: [] },
+  ],
+};
+
+export const bridgeState: BridgeState = {
+  enabled: true,
+  ethereum: {
+    chainId: 1,
+    known: true,
+    native: '0.125',
+    assets: { fxUSD: '850', fxSAVE: '1200' },
+  },
+  base: {
+    chainId: 8453,
+    known: true,
+    native: '0.03125',
+    assets: { fxUSD: '90.5', fxSAVE: '40.25' },
+  },
+};
+
+const actionGas = {
+  units: '450000',
+  recommended: 'market' as const,
+  tiers: [
+    { key: 'slow' as const, maxFeeGwei: 18.2, priorityGwei: 0.5, estCostWei: '8190000000000000', estCostEth: 0.00819, estCostUsd: 7.35 },
+    { key: 'market' as const, maxFeeGwei: 22.4, priorityGwei: 1.2, estCostWei: '10080000000000000', estCostEth: 0.01008, estCostUsd: 9.8 },
+    { key: 'fast' as const, maxFeeGwei: 28.9, priorityGwei: 2.5, estCostWei: '13005000000000000', estCostEth: 0.013005, estCostUsd: 12.6 },
+  ],
+};
+
+function actionTitle(params: MiniActionParams): string {
+  switch (params.kind) {
+    case 'position_open': return `Open ${params.market} ${params.side}`;
+    case 'position_increase': return `Increase ${params.market} position`;
+    case 'position_reduce': return params.fractionBps === 10_000 ? `Close ${params.market} position` : `Reduce ${params.market} position`;
+    case 'position_adjust': return `Adjust ${params.market} leverage`;
+    case 'mint': return 'Mint fxUSD';
+    case 'repay_withdraw': return 'Repay and release collateral';
+    case 'save_deposit': return 'Deposit to fxSAVE';
+    case 'save_withdraw': return params.instant ? 'Redeem fxSAVE instantly' : 'Queue fxSAVE redemption';
+    case 'save_claim': return 'Claim fxSAVE redemption';
+    case 'bridge': return params.direction === 'ethereum_to_base' ? `Bridge ${params.token} to Base` : `Bridge ${params.token} to Ethereum`;
+  }
+}
+
+function actionDetails(params: MiniActionParams): Array<{ label: string; value: string }> {
+  switch (params.kind) {
+    case 'position_open':
+      return [
+        { label: 'Input', value: `${params.amount} ${params.inputToken}` },
+        { label: 'Direction', value: params.side },
+        { label: 'Leverage', value: `${params.leverage}x` },
+      ];
+    case 'position_increase':
+      return [{ label: 'Position', value: `#${params.positionId}` }, { label: 'Input', value: `${params.amount} ${params.inputToken}` }];
+    case 'position_reduce':
+      return [{ label: 'Position', value: `#${params.positionId}` }, { label: 'Reduction', value: `${params.fractionBps / 100}%` }, { label: 'Receive', value: params.outputToken }];
+    case 'position_adjust':
+      return [{ label: 'Position', value: `#${params.positionId}` }, { label: 'Target leverage', value: `${params.leverage}x` }];
+    case 'mint':
+      return [{ label: 'Collateral', value: `${params.depositAmount} ${params.depositToken}` }, { label: 'Mint', value: `${params.mintAmount} fxUSD` }];
+    case 'repay_withdraw':
+      return [{ label: 'Repay', value: `${params.repayAmount} fxUSD` }, { label: 'Release', value: `${params.withdrawAmount} ${params.withdrawToken}` }];
+    case 'save_deposit':
+      return [{ label: 'Deposit', value: `${params.amount} ${params.tokenIn}` }];
+    case 'save_withdraw':
+      return [{ label: 'Shares', value: `${params.shares} fxSAVE` }, { label: 'Receive', value: params.tokenOut }];
+    case 'save_claim':
+      return [{ label: 'Action', value: 'Claim queued redemption' }];
+    case 'bridge':
+      return [{ label: 'Send', value: `${params.amount} ${params.token}` }, { label: 'Direction', value: params.direction === 'ethereum_to_base' ? 'Ethereum to Base' : 'Base to Ethereum' }];
+  }
+}
+
+/** A deterministic review assembled from the submitted intent. */
+export function actionQuoteFor(params: MiniActionParams): ActionQuote {
+  const fromBase = params.kind === 'bridge' && params.direction === 'base_to_ethereum';
   return {
-    market,
-    side,
-    leverage,
-    collateral,
-    collateralToken: market,
-    exposure: collateral * leverage,
-    executionPrice: '3500.42',
-    collateralAfter: collateral * leverage,
-    debtAfter: collateral * leverage * 2333.33,
-    positionId: 0,
-    slippagePct: 0.5,
-    mevProtection: 'on',
-    routeType: 'FxRoute',
-    gas: {
-      units: '450000',
-      recommended: 'market',
-      tiers: [
-        { key: 'slow', maxFeeGwei: 18.2, priorityGwei: 0.5, estCostWei: '8190000000000000', estCostEth: 0.00819, estCostUsd: 7.35 },
-        { key: 'market', maxFeeGwei: 22.4, priorityGwei: 1.2, estCostWei: '10080000000000000', estCostEth: 0.01008, estCostUsd: 9.8 },
-        { key: 'fast', maxFeeGwei: 28.9, priorityGwei: 2.5, estCostWei: '13005000000000000', estCostEth: 0.013005, estCostUsd: 12.6 },
-      ],
-    },
+    kind: params.kind,
+    title: actionTitle(params),
+    description: 'Official SDK route, rebuilt from this wallet-scoped intent.',
+    network: fromBase ? 'Base' : 'Ethereum',
+    chainId: fromBase ? 8453 : 1,
+    details: actionDetails(params),
+    warning: params.kind === 'bridge' ? 'The native LayerZero fee is included in this source-chain quote.' : undefined,
+    mevProtection: fromBase ? 'off' : 'on',
+    gas: structuredClone(actionGas),
+    ticket: (fromBase ? 'B' : 'E').repeat(43),
+    expiresAt: '2099-01-01T00:00:00.000Z',
   };
 }
 
-export const executeSuccess: TradeExecuteResult = {
+export const actionExecuteSuccess: ActionExecuteResult = {
   ok: true,
   deduped: false,
   status: 'confirmed',
@@ -165,11 +272,51 @@ export const executeSuccess: TradeExecuteResult = {
     gasPaidUsd: 31.6,
     confirmations: 3,
   },
+  chainId: 1,
 };
 
-export const executeDeduped: TradeExecuteResult = {
-  ...executeSuccess,
+export const actionExecuteDeduped: ActionExecuteResult = {
+  ...actionExecuteSuccess,
   deduped: true,
   status: 'broadcast',
   receipt: null,
 };
+
+export const activityItems: ActivityItem[] = [
+  {
+    id: 'activity-eth',
+    hash: TX_HASH,
+    hashes: [TX_HASH],
+    status: 'confirmed',
+    type: 'open_long',
+    createdAt: '2026-01-02T12:00:00.000Z',
+    updatedAt: '2026-01-02T12:01:00.000Z',
+    chainId: 1,
+    steps: [{ index: 0, status: 'confirmed', hash: TX_HASH }],
+    message: null,
+  },
+  {
+    id: 'activity-base',
+    hash: null,
+    hashes: ['0x' + 'cd'.repeat(32)],
+    status: 'broadcast',
+    type: 'bridge_base_to_eth',
+    createdAt: '2026-01-03T15:30:00.000Z',
+    updatedAt: '2026-01-03T15:30:05.000Z',
+    chainId: 8453,
+    steps: [{ index: 0, status: 'broadcast', hash: '0x' + 'cd'.repeat(32) }],
+    message: 'Waiting for a source-chain receipt.',
+  },
+  {
+    id: 'activity-failed',
+    hash: null,
+    hashes: [],
+    status: 'failed',
+    type: 'fxsave_withdraw',
+    createdAt: '2026-01-04T08:15:00.000Z',
+    updatedAt: '2026-01-04T08:15:02.000Z',
+    chainId: 1,
+    steps: [],
+    message: 'Simulation failed before broadcast.',
+  },
+];

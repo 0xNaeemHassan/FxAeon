@@ -6,6 +6,7 @@ import {
 } from "rate-limiter-flexible";
 import Redis from "ioredis";
 import { Request, Response, NextFunction } from "express";
+import { prisma } from "@fxaeon/db";
 import { logger } from "./logger.js";
 import { getRedisUrl } from "../utils/redisUrl.js";
 
@@ -77,6 +78,18 @@ function buildLimiters(): {
 }
 
 const limiters = buildLimiters();
+const txCapMemoryByLimit = new Map<number, RateLimiterMemory>();
+
+function txCapMemory(cap: number): RateLimiterMemory {
+  let limiter = txCapMemoryByLimit.get(cap);
+  if (!limiter) {
+    // The UTC date is part of the key, so a two-day expiry is only cleanup;
+    // counters never leak into the next calendar day.
+    limiter = new RateLimiterMemory({ keyPrefix: `txcap_memory_${cap}`, points: cap, duration: 172800 });
+    txCapMemoryByLimit.set(cap, limiter);
+  }
+  return limiter;
+}
 
 class LimiterTimeout extends Error {}
 
@@ -129,9 +142,44 @@ export async function rateLimiter(req: Request, res: Response, next: NextFunctio
   }
 }
 
-export async function checkTxCap(userId: string): Promise<{ allowed: boolean; remaining: number }> {
-  const cap = parseInt(process.env.DAILY_TX_CAP || "50");
-  const key = `txcap:${userId}:${new Date().toISOString().slice(0, 10)}`;
+export type TxCapDecision = {
+  allowed: boolean;
+  remaining: number;
+  reason?: "cap_reached" | "check_unavailable";
+};
+
+/**
+ * Consume one logical on-chain action from a user's UTC-day allowance.
+ *
+ * The persisted TxRecord count survives deploys and Redis loss. Redis gives
+ * cross-instance atomicity; the in-process limiter keeps the gate closed when
+ * Redis is absent or briefly unavailable. Only records that actually reached
+ * broadcast count in the persisted total, while a consumed live counter also
+ * prevents a burst of concurrent simulations from crossing the cap.
+ */
+export async function checkTxCap(userId: string): Promise<TxCapDecision> {
+  const parsedCap = Number.parseInt(process.env.DAILY_TX_CAP || "50", 10);
+  const cap = Number.isFinite(parsedCap) && parsedCap > 0 ? Math.min(parsedCap, 10_000) : 50;
+  const date = new Date().toISOString().slice(0, 10);
+  const startOfUtcDay = new Date(`${date}T00:00:00.000Z`);
+  const key = `${userId}:${date}`;
+
+  try {
+    const persisted = await prisma.txRecord.count({
+      where: {
+        userId,
+        createdAt: { gte: startOfUtcDay },
+        hash: { not: null },
+      },
+    });
+    if (persisted >= cap) return { allowed: false, remaining: 0, reason: "cap_reached" };
+  } catch (err) {
+    logger.error(
+      { err: err instanceof Error ? err.message : String(err), userId },
+      "tx-cap persisted check unavailable — refusing transaction"
+    );
+    return { allowed: false, remaining: 0, reason: "check_unavailable" };
+  }
 
   if (limiters.txCapClient) {
     const limiter = new RateLimiterRedis({
@@ -139,17 +187,30 @@ export async function checkTxCap(userId: string): Promise<{ allowed: boolean; re
       points: cap, duration: 86400,
     });
     try {
-      const res = await limiter.consume(key);
+      const res = await consumeWithDeadline(limiter, key) as { remainingPoints: number };
       return { allowed: true, remaining: res.remainingPoints };
     } catch (rejRes) {
-      if (rejRes instanceof RateLimiterRes) return { allowed: false, remaining: 0 };
-      // Redis down/slow: same posture as "no Redis configured" — allow and
-      // rely on the DB-level cap, instead of breaking trading entirely.
-      logger.warn({ err: rejRes instanceof Error ? rejRes.message : String(rejRes) }, "tx-cap redis unavailable — allowing (DB cap still applies)");
-      return { allowed: true, remaining: cap };
+      if (rejRes instanceof RateLimiterRes) {
+        return { allowed: false, remaining: 0, reason: "cap_reached" };
+      }
+      logger.warn(
+        { err: rejRes instanceof Error ? rejRes.message : String(rejRes) },
+        "tx-cap redis unavailable — using in-memory gate"
+      );
     }
   }
 
-  // No Redis — allow all (cap enforced at DB level as a fallback)
-  return { allowed: true, remaining: cap };
+  try {
+    const res = await txCapMemory(cap).consume(key);
+    return { allowed: true, remaining: res.remainingPoints };
+  } catch (rejRes) {
+    if (rejRes instanceof RateLimiterRes) {
+      return { allowed: false, remaining: 0, reason: "cap_reached" };
+    }
+    logger.error(
+      { err: rejRes instanceof Error ? rejRes.message : String(rejRes), userId },
+      "tx-cap in-memory check unavailable — refusing transaction"
+    );
+    return { allowed: false, remaining: 0, reason: "check_unavailable" };
+  }
 }

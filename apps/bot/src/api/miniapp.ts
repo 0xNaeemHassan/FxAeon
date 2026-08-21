@@ -13,15 +13,23 @@
  * sendData does NOT work). This API serves the second group; sendData serves
  * the first. Together every launch path has a working bot⇄app channel.
  */
-import { createHmac } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { Router, Request, Response, NextFunction } from "express";
 import { prisma } from "@fxaeon/db";
+import { PROTOCOL_TOKENS, RISK_PARAMS } from "@fxaeon/shared";
+import { formatUnits } from "viem";
 import { onboardUser, syncWalletState } from "../core/onboarding.js";
-import { getFundingState } from "../core/funding.js";
+import { getFundingState, isPositiveDecimalString } from "../core/funding.js";
 import { getMarketOverview, getSpotPrices } from "../market/coingecko.js";
 import { createFxSdk } from "../fx/index.js";
 import { fetchOnChainPositions, type OnChainPosition } from "../core/portfolio.js";
-import { getSaveOverview } from "../fx/earn.js";
+import {
+  getBridgeBalances,
+  getSaveConfig,
+  getSaveOverview,
+  type BridgeChainId,
+  type SaveOverview,
+} from "../fx/earn.js";
 import { trackPositions, computePnl, snapshotKey, type PnlEstimate } from "../core/pnl.js";
 import {
   summarizePortfolio,
@@ -30,15 +38,17 @@ import {
   type PortfolioSummary,
 } from "../core/portfolioSummary.js";
 import { botLogger } from "../middleware/logger.js";
+import { SUPPORTED_LOCALES } from "../i18n/index.js";
+import { features } from "../middleware/config.js";
 import {
-  validateTradeBody,
-  buildTradeQuote,
-  executeTrade,
-} from "../core/miniappTrade.js";
+  buildMiniActionQuote,
+  executeMiniAction,
+  validateMiniActionBody,
+} from "../core/miniappActions.js";
 
-/** Idempotency nonce from the client: a short opaque token, one per Confirm. */
-function validNonce(v: unknown): v is string {
-  return typeof v === "string" && /^[A-Za-z0-9_-]{8,100}$/.test(v);
+/** Opaque 32-byte base64url handle returned only after a successful quote. */
+function validActionTicket(v: unknown): v is string {
+  return typeof v === "string" && /^[A-Za-z0-9_-]{43}$/.test(v);
 }
 
 /** Max age of initData before we reject it (replay window). */
@@ -54,8 +64,8 @@ export interface VerifiedInitData {
 
 /**
  * Validate Telegram WebApp initData. Returns the verified user or null.
- * Constant-time hash comparison is unnecessary here (the hash is not a
- * secret), but we still compare full strings.
+ * The initData hash is an authentication tag. Compare decoded bytes in
+ * constant time so this endpoint never becomes a remote HMAC timing oracle.
  */
 export function verifyInitData(
   initData: string,
@@ -70,7 +80,7 @@ export function verifyInitData(
     return null;
   }
   const hash = params.get("hash");
-  if (!hash) return null;
+  if (!hash || !/^[0-9a-fA-F]{64}$/.test(hash)) return null;
   params.delete("hash");
 
   const dataCheckString = [...params.entries()]
@@ -81,11 +91,12 @@ export function verifyInitData(
   const secretKey = createHmac("sha256", "WebAppData").update(botToken).digest();
   const expected = createHmac("sha256", secretKey)
     .update(dataCheckString)
-    .digest("hex");
-  if (expected !== hash) return null;
+    .digest();
+  const supplied = Buffer.from(hash, "hex");
+  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) return null;
 
   const authDate = Number(params.get("auth_date"));
-  if (!Number.isFinite(authDate)) return null;
+  if (!Number.isSafeInteger(authDate) || authDate <= 0) return null;
   if (nowSeconds - authDate > MAX_INITDATA_AGE_SECONDS) return null;
   if (authDate - nowSeconds > 300) return null; // clock skew guard
 
@@ -95,7 +106,7 @@ export function verifyInitData(
   } catch {
     return null;
   }
-  if (!user.id) return null;
+  if (typeof user.id !== "number" || !Number.isSafeInteger(user.id) || user.id <= 0) return null;
 
   return {
     telegramId: String(user.id),
@@ -126,11 +137,87 @@ interface AuthedRequest extends Request {
   tgUser?: VerifiedInitData;
 }
 
+export interface PendingSaveAssets {
+  /** Exact claim-preview amount of fxUSD (18 decimals, formatted). */
+  fxUsd: string;
+  /** Exact claim-preview amount of USDC (6 decimals, formatted). */
+  usdc: string;
+}
+
+/**
+ * Price both assets returned by FxUSDBasePool.previewRedeem. A zero leg does
+ * not require a price; a positive unpriced leg makes the whole value unknown.
+ */
+export function valuePendingSaveAssets(
+  assets: PendingSaveAssets,
+  prices: Record<string, number | null> | null
+): number | null {
+  if (!prices) return null;
+  const legs: Array<[amount: string, priceKey: "FXUSD" | "USDC"]> = [
+    [assets.fxUsd, "FXUSD"],
+    [assets.usdc, "USDC"],
+  ];
+  let value = 0;
+  for (const [amountText, priceKey] of legs) {
+    if (!isPositiveDecimalString(amountText)) continue;
+    const amount = Number(amountText);
+    const price = prices[priceKey];
+    if (!Number.isFinite(amount) || typeof price !== "number") return null;
+    value += amount * price;
+  }
+  return value;
+}
+
+/**
+ * Build the Mini App savings view from one coherent overview plus the optional
+ * claim preview. Pending state is independent of the wallet's current shares.
+ */
+export function buildMiniSavingsSnapshot(
+  overview: SaveOverview,
+  pendingAssets: PendingSaveAssets | null,
+  prices: Record<string, number | null> | null
+): { savings: Record<string, unknown> | null; savingsUsd: number | null } {
+  const activeSavingsUsd = valueSavings(overview.shares, overview.assets, prices);
+  const pendingSavingsUsd = overview.redeem.hasPendingRedeem
+    ? pendingAssets === null
+      ? null
+      : valuePendingSaveAssets(pendingAssets, prices)
+    : 0;
+  const savingsUsd = activeSavingsUsd === null || pendingSavingsUsd === null
+    ? null
+    : activeSavingsUsd + pendingSavingsUsd;
+  const hasSavingsState = isPositiveDecimalString(overview.shares)
+    || overview.redeem.hasPendingRedeem;
+
+  return {
+    savings: hasSavingsState
+      ? {
+          shares: overview.shares,
+          assets: overview.assets,
+          pendingAssets,
+          valueUsd: savingsUsd,
+          pendingRedeem: overview.redeem.hasPendingRedeem,
+          redeemReady: overview.redeem.isCooldownComplete,
+          pendingShares: overview.redeem.pendingShares,
+          redeemableAt: overview.redeem.redeemableAt,
+          cooldownHours: overview.redeem.cooldownHours,
+        }
+      : null,
+    savingsUsd,
+  };
+}
+
 export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
   const router = Router();
 
   // -- auth middleware ------------------------------------------------------
   router.use((req: AuthedRequest, res: Response, next: NextFunction) => {
+    // Wallet balances, positions, quote tickets and activity are private and
+    // volatile. Never let a browser/proxy reuse one Telegram user's response
+    // for another authorization header or after the on-chain state changed.
+    res.setHeader("Cache-Control", "private, no-store, max-age=0");
+    res.setHeader("Pragma", "no-cache");
+    res.vary("Authorization");
     const header = req.header("authorization") ?? "";
     const m = /^tma (.+)$/i.exec(header);
     const verified = m ? verifyInitData(m[1], deps.botToken) : null;
@@ -156,6 +243,75 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
     } catch (err) {
       botLogger.error({ err }, "miniapp /market failed");
       res.status(503).json({ error: "market data unavailable" });
+    }
+  });
+
+  // -- GET /protocol: live product configuration + canonical token support -
+  // This is deliberately SDK-backed. The Mini App must never ship a made-up
+  // APY, cooldown or fee, and token decimals must stay identical to the
+  // server-side action validator.
+  router.get("/protocol", async (_req: AuthedRequest, res: Response) => {
+    try {
+      const save = await getSaveConfig(createFxSdk());
+      res.json({
+        network: { name: "Ethereum", chainId: 1 },
+        save,
+        tokens: Object.values(PROTOCOL_TOKENS).map((token) => ({
+          symbol: token.symbol,
+          decimals: token.decimals,
+          native: token.native,
+          positionMarkets: token.positionMarkets,
+        })),
+      });
+    } catch (err) {
+      botLogger.error({ err }, "miniapp /protocol failed");
+      res.status(503).json({
+        error: { code: "PROTOCOL_UNAVAILABLE", message: "Live protocol configuration is unavailable." },
+      });
+    }
+  });
+
+  // -- GET /bridge-state: source-chain balances + operator availability ----
+  // An unavailable RPC is represented as known:false, never as a fabricated
+  // zero. The Move screen uses this before it lets a user review a bridge.
+  router.get("/bridge-state", async (req: AuthedRequest, res: Response) => {
+    const telegramId = req.tgUser!.telegramId;
+    try {
+      const user = await prisma.user.findUnique({ where: { telegramId } });
+      if (!user) {
+        res.status(404).json({
+          error: { code: "NOT_ONBOARDED", message: "Finish wallet setup first." },
+        });
+        return;
+      }
+      const wallet = user.walletAddress as `0x${string}`;
+      const read = async (chainId: BridgeChainId) => {
+        try {
+          return await getBridgeBalances(wallet, chainId);
+        } catch (error) {
+          botLogger.warn(
+            { err: error, telegramId, chainId },
+            "miniapp /bridge-state: chain balance read failed"
+          );
+          return {
+            chainId,
+            known: false as const,
+            native: null,
+            assets: { fxUSD: null, fxSAVE: null },
+          };
+        }
+      };
+      const [ethereum, base] = await Promise.all([read(1), read(8453)]);
+      res.json({
+        enabled: features.enableBridgeExecution,
+        ethereum,
+        base,
+      });
+    } catch (error) {
+      botLogger.error({ err: error, telegramId }, "miniapp /bridge-state failed");
+      res.status(500).json({
+        error: { code: "BRIDGE_STATE_UNAVAILABLE", message: "Bridge state is unavailable." },
+      });
     }
   });
 
@@ -237,19 +393,30 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
       try {
         if (!sdk) throw new Error("SDK unavailable");
         const o = await getSaveOverview(sdk, user.walletAddress);
-        savingsUsd = valueSavings(o.shares, o.assets, prices);
-        if (Number(o.shares) > 0) {
-          savings = {
-            shares: o.shares,
-            assets: o.assets,
-            valueUsd: savingsUsd,
-            pendingRedeem: o.redeem.hasPendingRedeem,
-            redeemReady: o.redeem.isCooldownComplete,
-            pendingShares: o.redeem.pendingShares,
-            redeemableAt: o.redeem.redeemableAt,
-            cooldownHours: o.redeem.cooldownHours,
-          };
+        let pendingAssets: PendingSaveAssets | null = null;
+
+        // requestRedeem transfers the queued shares out of the user's wallet,
+        // so a redeem-all correctly reports shares=0 while claim state still
+        // exists. Price the queue from the SDK's exact base-pool preview. If
+        // that extra read fails, retain the claim state but make the total
+        // unknown rather than silently valuing a real receivable at zero.
+        if (o.redeem.hasPendingRedeem) {
+          try {
+            const claimable = await sdk.getFxSaveClaimable({ userAddress: user.walletAddress });
+            if (claimable.previewReceive) {
+              pendingAssets = {
+                fxUsd: formatUnits(claimable.previewReceive.amountYieldOutWei, 18),
+                usdc: formatUnits(claimable.previewReceive.amountStableOutWei, 6),
+              };
+            }
+          } catch (e) {
+            botLogger.warn(
+              { err: e, telegramId },
+              "miniapp /me: fxSAVE pending redemption preview failed"
+            );
+          }
         }
+        ({ savings, savingsUsd } = buildMiniSavingsSnapshot(o, pendingAssets, prices));
       } catch (e) {
         savingsKnown = false;
         savingsUsd = null; // unknown holding → don't claim a complete total
@@ -279,7 +446,7 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
         referralCode: user.referralCode,
         language: user.language,
         slippageBps: user.slippageBps,
-        mevProtection: user.mevProtection,
+        mevProtection: user.mevProtection === "flashbots" || user.mevProtection === "on" ? "on" : "off",
         funding,
         positionsKnown,
         positions: apiPositions,
@@ -375,7 +542,7 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
       const synced = await syncWalletState(user);
       res.json({
         ok: true,
-        walletAddress: user.walletAddress,
+        walletAddress: synced.walletAddress,
         walletDelegated: synced.walletDelegated,
         walletImported: synced.walletImported,
       });
@@ -391,19 +558,22 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
     const body = req.body ?? {};
     const data: Record<string, unknown> = {};
 
-    if (typeof body.language === "string" && /^[a-zA-Z-]{2,8}$/.test(body.language)) {
+    if (
+      typeof body.language === "string" &&
+      (SUPPORTED_LOCALES as readonly string[]).includes(body.language)
+    ) {
       data.language = body.language;
     }
     if (
       typeof body.slippageBps === "number" &&
       Number.isInteger(body.slippageBps) &&
       body.slippageBps >= 1 &&
-      body.slippageBps <= 500
+      body.slippageBps <= RISK_PARAMS.SLIPPAGE_MAX_BPS
     ) {
       data.slippageBps = body.slippageBps;
     }
     if (body.mevProtection === "on" || body.mevProtection === "off") {
-      data.mevProtection = body.mevProtection;
+      data.mevProtection = body.mevProtection === "on" ? "flashbots" : "off";
     }
 
     if (Object.keys(data).length === 0) {
@@ -417,7 +587,7 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
         ok: true,
         language: user.language,
         slippageBps: user.slippageBps,
-        mevProtection: user.mevProtection,
+        mevProtection: user.mevProtection === "flashbots" || user.mevProtection === "on" ? "on" : "off",
       });
     } catch (e) {
       botLogger.error({ err: e, telegramId }, "miniapp /settings failed");
@@ -425,13 +595,13 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
     }
   });
 
-  // -- POST /trade/quote: real review-quote + gas for an open --------------
-  // Screens 2 & 3 (review-quote, gas-sheet). Returns ONLY real numbers (SDK
-  // execution price + a real simulateCalls gas estimate + EIP-1559 fees) or an
-  // honest error — never a fabricated quote. Read-only: nothing is broadcast.
-  router.post("/trade/quote", async (req: AuthedRequest, res: Response) => {
+  // -- POST /action/quote + /action/execute: the complete SDK gateway ------
+  // These endpoints cover position lifecycle, borrowing, fxSAVE and bridge
+  // intents. The client submits intent values only; calldata, destinations,
+  // wallet ownership, fees and gas are all resolved and checked server-side.
+  router.post("/action/quote", async (req: AuthedRequest, res: Response) => {
     const telegramId = req.tgUser!.telegramId;
-    const valid = validateTradeBody(req.body);
+    const valid = validateMiniActionBody(req.body);
     if (!valid.ok) {
       res.status(400).json({ error: { code: valid.code, message: valid.message } });
       return;
@@ -439,52 +609,10 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
     try {
       const user = await prisma.user.findUnique({ where: { telegramId } });
       if (!user) {
-        res.status(404).json({ error: { code: "NOT_ONBOARDED", message: "Finish wallet setup first" } });
+        res.status(404).json({ error: { code: "NOT_ONBOARDED", message: "Finish wallet setup first." } });
         return;
       }
-      const result = await buildTradeQuote(
-        { walletAddress: user.walletAddress, slippageBps: user.slippageBps, mevProtection: user.mevProtection },
-        valid.params
-      );
-      if (!result.ok) {
-        res.status(422).json({ error: { code: result.code, message: result.message } });
-        return;
-      }
-      res.json({ ok: true, quote: result.quote });
-    } catch (e) {
-      botLogger.error({ err: e, telegramId }, "miniapp /trade/quote failed");
-      res.status(500).json({ error: { code: "INTERNAL", message: "Failed to build quote" } });
-    }
-  });
-
-  // -- POST /trade/execute: open the position for real ---------------------
-  // Screen 5 (position-opened). Routes through the SAME sanctioned engine the
-  // bot chat uses: session-signer gate → server-side re-quote (client calldata
-  // is never trusted) → executeRoute (idempotent → fail-closed simulate →
-  // broadcast → receipt). `nonce` dedupes double-taps to one broadcast.
-  router.post("/trade/execute", async (req: AuthedRequest, res: Response) => {
-    const telegramId = req.tgUser!.telegramId;
-    const valid = validateTradeBody(req.body);
-    if (!valid.ok) {
-      res.status(400).json({ error: { code: valid.code, message: valid.message } });
-      return;
-    }
-    const nonce = (req.body ?? {}).nonce;
-    if (!validNonce(nonce)) {
-      res.status(400).json({ error: { code: "BAD_NONCE", message: "Missing or malformed idempotency nonce." } });
-      return;
-    }
-    // Client sends only the tier intent; the server re-derives the real fees.
-    const rawTier = (req.body ?? {}).feeTier;
-    const feeTier: "slow" | "market" | "fast" =
-      rawTier === "slow" || rawTier === "fast" ? rawTier : "market";
-    try {
-      const user = await prisma.user.findUnique({ where: { telegramId } });
-      if (!user) {
-        res.status(404).json({ error: { code: "NOT_ONBOARDED", message: "Finish wallet setup first" } });
-        return;
-      }
-      const result = await executeTrade(
+      const quote = await buildMiniActionQuote(
         {
           id: user.id,
           privyUserId: user.privyUserId,
@@ -495,29 +623,129 @@ export function createMiniAppRouter(deps: MiniAppApiDeps): Router {
           slippageBps: user.slippageBps,
           mevProtection: user.mevProtection,
         },
-        valid.params,
-        nonce,
+        valid.params
+      );
+      res.json({ ok: true, quote });
+    } catch (err) {
+      botLogger.warn({ err, telegramId, kind: valid.params.kind }, "miniapp action quote failed");
+      res.status(422).json({
+        error: {
+          code: "QUOTE_FAILED",
+          message: "This action could not be prepared or simulated. Check balances and live position state, then try again.",
+        },
+      });
+    }
+  });
+
+  router.post("/action/execute", async (req: AuthedRequest, res: Response) => {
+    const telegramId = req.tgUser!.telegramId;
+    const ticket = req.body?.ticket;
+    if (!validActionTicket(ticket)) {
+      res.status(400).json({ error: { code: "BAD_QUOTE_TICKET", message: "Review the action before confirming it." } });
+      return;
+    }
+    const rawTier = req.body?.feeTier;
+    if (
+      rawTier !== undefined &&
+      rawTier !== "slow" &&
+      rawTier !== "market" &&
+      rawTier !== "fast"
+    ) {
+      res.status(400).json({
+        error: { code: "BAD_FEE_TIER", message: "Choose slow, market, or fast." },
+      });
+      return;
+    }
+    const feeTier: "slow" | "market" | "fast" =
+      rawTier === "slow" || rawTier === "fast" ? rawTier : "market";
+    try {
+      const user = await prisma.user.findUnique({ where: { telegramId } });
+      if (!user) {
+        res.status(404).json({ error: { code: "NOT_ONBOARDED", message: "Finish wallet setup first." } });
+        return;
+      }
+      const result = await executeMiniAction(
+        {
+          id: user.id,
+          privyUserId: user.privyUserId,
+          walletAddress: user.walletAddress,
+          privyWalletId: user.privyWalletId,
+          walletDelegated: user.walletDelegated,
+          walletImported: user.walletImported,
+          slippageBps: user.slippageBps,
+          mevProtection: user.mevProtection,
+        },
+        ticket,
         feeTier
       );
       if (!result.ok) {
-        // 409 for the session-signer gate (actionable: enable bot trading),
-        // 422 for an execution failure that was caught before/at broadcast.
-        const status = result.code === "BOT_TRADING_OFF" ? 409 : 422;
-        res.status(status).json({ error: { code: result.code, message: result.message } });
+        const status = result.code === "QUOTE_TICKET_EXPIRED"
+          ? 410
+          : result.code === "BOT_TRADING_OFF" || result.code === "BRIDGE_EXECUTION_DISABLED"
+            ? 409
+            : 422;
+        res.status(status).json({
+          error: { code: result.code, message: result.message },
+        });
         return;
       }
-      res.json({
-        ok: true,
-        deduped: result.deduped,
-        status: result.status,
-        txHash: result.txHash,
-        hashes: result.hashes,
-        recordId: result.recordId,
-        receipt: result.receipt,
+      res.json(result);
+    } catch (err) {
+      botLogger.error({ err, telegramId, ticket }, "miniapp action execute failed");
+      res.status(500).json({ error: { code: "INTERNAL", message: "The action could not be executed." } });
+    }
+  });
+
+  // -- GET /activity: scoped transaction journal for the signed-in wallet --
+  router.get("/activity", async (req: AuthedRequest, res: Response) => {
+    const telegramId = req.tgUser!.telegramId;
+    const takeRaw = Number(req.query.take ?? 30);
+    const take = Number.isSafeInteger(takeRaw) ? Math.max(1, Math.min(50, takeRaw)) : 30;
+    try {
+      const user = await prisma.user.findUnique({ where: { telegramId }, select: { id: true } });
+      if (!user) {
+        res.status(404).json({ error: { code: "NOT_ONBOARDED", message: "Finish wallet setup first." } });
+        return;
+      }
+      const records = await prisma.txRecord.findMany({
+        where: { userId: user.id },
+        orderBy: { createdAt: "desc" },
+        take,
+        select: { id: true, hash: true, status: true, type: true, data: true, createdAt: true, updatedAt: true },
       });
-    } catch (e) {
-      botLogger.error({ err: e, telegramId }, "miniapp /trade/execute failed");
-      res.status(500).json({ error: { code: "INTERNAL", message: "Failed to execute trade" } });
+      res.json({
+        items: records.map((record) => {
+          const data = record.data as { hashes?: unknown; chainId?: unknown; steps?: unknown; error?: unknown };
+          const steps = Array.isArray(data.steps)
+            ? data.steps.flatMap((raw, index) => {
+                if (!raw || typeof raw !== "object") return [];
+                const step = raw as Record<string, unknown>;
+                return [{
+                  index: typeof step.index === "number" ? step.index : index,
+                  status: typeof step.status === "string" ? step.status : "unknown",
+                  hash: typeof step.hash === "string" ? step.hash : null,
+                }];
+              })
+            : [];
+          return {
+            id: record.id,
+            hash: record.hash,
+            status: record.status,
+            type: record.type,
+            chainId: data.chainId === 8453 ? 8453 : 1,
+            hashes: data.hashes instanceof Array
+              ? data.hashes.filter((value): value is string => typeof value === "string")
+              : [],
+            steps,
+            message: typeof data.error === "string" ? data.error : null,
+            createdAt: record.createdAt.toISOString(),
+            updatedAt: record.updatedAt.toISOString(),
+          };
+        }),
+      });
+    } catch (err) {
+      botLogger.error({ err, telegramId }, "miniapp /activity failed");
+      res.status(500).json({ error: { code: "INTERNAL", message: "Activity could not be loaded." } });
     }
   });
 

@@ -45,9 +45,20 @@ describe("broadcastTransaction — mev 'off'", () => {
     expect(sendTxMock).toHaveBeenCalledTimes(1);
     expect(signTxMock).not.toHaveBeenCalled();
     // chainId/type are stamped server-side, never taken from the client.
-    const [walletId, tx] = sendTxMock.mock.calls[0];
+    const [walletId, tx, chainId] = sendTxMock.mock.calls[0];
     expect(walletId).toBe(WALLET_ID);
     expect(tx).toMatchObject({ chainId: 1, type: 2, nonce: "0x5", to: baseTx.to });
+    expect(chainId).toBe(1);
+  });
+
+  it("stamps Base chainId and asks Privy to broadcast on eip155:8453", async () => {
+    sendTxMock.mockResolvedValue({ hash: "0x" + "b".repeat(64) });
+
+    await broadcastTransaction(WALLET_ID, baseTx, "off", { chainId: 8453 });
+
+    const [, tx, chainId] = sendTxMock.mock.calls[0];
+    expect(tx).toMatchObject({ chainId: 8453, type: 2 });
+    expect(chainId).toBe(8453);
   });
 });
 
@@ -74,6 +85,16 @@ describe("broadcastTransaction — mev 'flashbots'", () => {
       broadcastTransaction(WALLET_ID, noNonce as BroadcastTx, "flashbots", { rawSend })
     ).rejects.toThrow(/nonce/i);
 
+    expect(signTxMock).not.toHaveBeenCalled();
+    expect(rawSend).not.toHaveBeenCalled();
+    expect(sendTxMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses Flashbots on Base without signing or silently sending publicly", async () => {
+    const rawSend = vi.fn();
+    await expect(
+      broadcastTransaction(WALLET_ID, baseTx, "flashbots", { rawSend, chainId: 8453 })
+    ).rejects.toThrow(/unavailable on Base/i);
     expect(signTxMock).not.toHaveBeenCalled();
     expect(rawSend).not.toHaveBeenCalled();
     expect(sendTxMock).not.toHaveBeenCalled();

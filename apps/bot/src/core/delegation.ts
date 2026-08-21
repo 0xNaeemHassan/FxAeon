@@ -5,15 +5,14 @@
  * (bot trading) is active. This helper is the single pre-flight check used by
  * every execution handler:
  *
- *  1. If the DB says the wallet is delegated and we have a wallet id → go.
- *  2. Otherwise re-sync once from Privy (the user may have just granted or
- *     revoked access in the Mini App) and re-check.
- *  3. Still not delegated → return honest, actionable copy. Nothing is sent.
+ *  1. Re-sync from Privy immediately before every money action.
+ *  2. Require an active grant, wallet API id, and the same address the route
+ *     was built for (a wallet rotation forces the caller to reload state).
+ *  3. Any unavailable/mismatched/revoked state fails closed before signing.
  *
  * Privy enforces the same rule server-side regardless — this check only
  * exists so users get clear copy BEFORE a broadcast attempt, not a raw error.
  */
-import { prisma } from "@fxaeon/db";
 import { syncWalletState } from "./onboarding.js";
 import { botLogger } from "../middleware/logger.js";
 
@@ -39,19 +38,20 @@ export type DelegationGateResult =
 export async function requireDelegatedWallet(
   user: DelegationGateUser
 ): Promise<DelegationGateResult> {
-  if (user.walletDelegated && user.privyWalletId) {
-    return { ok: true, walletId: user.privyWalletId };
-  }
-
-  // One re-sync: delegation may have been granted seconds ago in the Mini App.
+  // Always revalidate against Privy immediately before execution. Returning
+  // a cached DB grant here left a revocation window until Privy rejected the
+  // actual sign call, and could quote/simulate against a wallet that rotated.
   try {
-    await syncWalletState(user);
-    const fresh = await prisma.user.findUnique({ where: { id: user.id } });
-    if (fresh?.walletDelegated && fresh.privyWalletId) {
-      return { ok: true, walletId: fresh.privyWalletId };
+    const synced = await syncWalletState(user);
+    if (
+      synced.walletDelegated &&
+      synced.privyWalletId &&
+      synced.walletAddress.toLowerCase() === user.walletAddress.toLowerCase()
+    ) {
+      return { ok: true, walletId: synced.privyWalletId };
     }
   } catch (e) {
-    botLogger.warn({ err: e, userId: user.id }, "delegation re-sync failed");
+    botLogger.warn({ err: e, userId: user.id }, "delegation revalidation failed closed");
   }
 
   return { ok: false, message: BOT_TRADING_DISABLED_MESSAGE };

@@ -40,9 +40,13 @@ describe("valuePosition", () => {
     expect(valuePosition(pos({ collateralToken: "MYSTERY" }), prices)).toBeNull();
   });
 
-  it("falls back to $1 for fxUSD debt when FXUSD price is absent", () => {
-    const v = valuePosition(pos(), { wstETH: 3500 });
-    expect(v!.debtUsd).toBe(1000);
+  it("prices fxUSD collateral through the canonical FXUSD feed key", () => {
+    const v = valuePosition(pos({ collateral: 2_000, collateralToken: "fxUSD", debt: 0 }), prices);
+    expect(v?.collateralUsd).toBe(2_000);
+  });
+
+  it("returns null when the fxUSD debt price is absent", () => {
+    expect(valuePosition(pos(), { wstETH: 3500 })).toBeNull();
   });
 });
 
@@ -66,6 +70,54 @@ describe("summarizePortfolio", () => {
     );
     expect(s.walletUsd).toBeNull();
     expect(s.totalValueUsd).toBeNull();
+  });
+
+  it("values every supported wallet cash token returned by funding", () => {
+    const s = summarizePortfolio(
+      {
+        known: true,
+        funded: true,
+        eth: "1",
+        wstEth: "0.5",
+        wbtc: "0.01",
+        balances: {
+          ETH: "1",
+          WETH: "2",
+          stETH: "1",
+          wstETH: "0.5",
+          WBTC: "0.01",
+          USDC: "100",
+          USDT: "50",
+          fxUSD: "25",
+          fxSAVE: "10",
+          fxUSDBasePool: "0",
+        },
+      },
+      [],
+      [],
+      { ...prices, WETH: 3000, stETH: 2900, USDC: 1, USDT: 1 }
+    );
+    // fxSAVE is valued through savingsUsd, so its raw shares are not counted.
+    expect(s.walletUsd).toBe(14_425);
+    expect(s.totalValueUsd).toBe(14_425);
+  });
+
+  it("fails closed when a secondary balance read or LP-token price is missing", () => {
+    const unread = summarizePortfolio(
+      { ...funded, balances: { ETH: "1", USDC: null } },
+      [],
+      [],
+      { ...prices, USDC: 1 }
+    );
+    expect(unread.walletUsd).toBeNull();
+
+    const unpricedLp = summarizePortfolio(
+      { ...funded, balances: { ETH: "0", fxUSDBasePool: "1" } },
+      [],
+      [],
+      prices
+    );
+    expect(unpricedLp.walletUsd).toBeNull();
   });
 
   it("total is null when any position is unpriced", () => {
@@ -125,8 +177,8 @@ describe("valueSavings", () => {
     expect(valueSavings(0, "0", null)).toBe(0);
   });
 
-  it("falls back to $1.00 for fxUSD when the FXUSD price is absent", () => {
-    expect(valueSavings("5", "500", { ETH: 3000 })).toBe(500);
+  it("returns null when the fxUSD price is absent", () => {
+    expect(valueSavings("5", "500", { ETH: 3000 })).toBeNull();
   });
 
   it("returns null when shares are held but the assets value is unknown", () => {

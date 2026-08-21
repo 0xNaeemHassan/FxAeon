@@ -38,7 +38,20 @@ export interface Funding {
   eth?: string;
   wstEth?: string;
   wbtc?: string;
+  balances?: Partial<Record<ProtocolTokenSymbol, string | null>>;
 }
+
+export type ProtocolTokenSymbol =
+  | 'ETH'
+  | 'WETH'
+  | 'stETH'
+  | 'wstETH'
+  | 'WBTC'
+  | 'USDC'
+  | 'USDT'
+  | 'fxUSD'
+  | 'fxSAVE'
+  | 'fxUSDBasePool';
 
 export interface ApiPosition {
   tokenId: string;
@@ -79,14 +92,17 @@ export interface PortfolioSummary {
 
 /**
  * The user's fxSAVE (stability pool) holding — real on-chain savings.
- * Present in `Me.savings` only when shares > 0; null when there's no position.
+ * Present while shares are held OR a queued redemption is pending. A
+ * redeem-all therefore remains visible until its cooldown claim is complete.
  */
 export interface SavingsPosition {
   /** fxSAVE share balance (formatted, 18 dec). */
   shares: string;
-  /** Underlying redeemable fxUSD, or null when the SDK couldn't value it. */
+  /** Underlying fxUSD for shares still in the wallet, or null when unavailable. */
   assets: string | null;
-  /** USD value (assets × fxUSD price), or null when unpriced. */
+  /** Exact SDK claim preview for queued shares, or null when none/unavailable. */
+  pendingAssets?: { fxUsd: string; usdc: string } | null;
+  /** USD value of active shares plus the queued claim, or null when unpriced. */
   valueUsd: number | null;
   /** A withdrawal is queued in the cooldown. */
   pendingRedeem: boolean;
@@ -113,7 +129,7 @@ export interface Me {
   positions?: ApiPosition[];
   /** False when the fxSAVE read failed — savings state is unknown. */
   savingsKnown?: boolean;
-  /** The user's stability-pool holding, or null when they have none. */
+  /** Active stability-pool shares and/or a queued redemption; null when neither exists. */
   savings?: SavingsPosition | null;
   /** Priced portfolio totals — present once positions read cleanly. */
   summary?: PortfolioSummary;
@@ -212,8 +228,8 @@ export const saveSettings = (settings: {
 }) => call<{ ok: boolean }>('/settings', { method: 'POST', body: settings });
 
 // ---------------------------------------------------------------------------
-// In-app trade execution (screens 2/3/5). Both endpoints route through the
-// bot's real simulate-gated, session-signer engine — see core/miniappTrade.ts.
+// Unified action execution. Every protocol intent uses /action/quote and
+// /action/execute; there is no parallel legacy trade money path.
 // ---------------------------------------------------------------------------
 
 /** Real gas estimate from a live simulateCalls + EIP-1559 feeHistory. */
@@ -238,35 +254,6 @@ export interface GasEstimate {
   recommended: FeeTierKey;
 }
 
-/** A real review-quote: only SDK/chain-derived numbers, no fabricated fields. */
-export interface TradeQuote {
-  market: string;
-  side: 'long' | 'short';
-  leverage: number;
-  collateral: number;
-  collateralToken: string;
-  /** Notional exposure = collateral × leverage. */
-  exposure: number;
-  /** SDK execution price — the entry price. */
-  executionPrice: string;
-  /** Resulting position collateral (human units of the collateral token). */
-  collateralAfter: number;
-  /** Resulting position debt in fxUSD (human units). */
-  debtAfter: number;
-  positionId: number;
-  slippagePct: number;
-  mevProtection: 'on' | 'off';
-  routeType: string;
-  gas: GasEstimate;
-}
-
-export interface TradeParams {
-  market: string;
-  side: 'long' | 'short';
-  leverage: number;
-  amount: number;
-}
-
 /** Real on-chain receipt detail for the result screen (null when unread). */
 export interface TradeReceipt {
   blockNumber: number;
@@ -286,15 +273,176 @@ export interface TradeExecuteResult {
   hashes: string[];
   recordId: string;
   receipt: TradeReceipt | null;
+  /** Honest executor detail for pending/partial/cancelled/reverted outcomes. */
+  message?: string;
 }
 
-/** Build a real review-quote + gas estimate (read-only, nothing broadcast). */
-export const tradeQuote = (params: TradeParams) =>
-  call<{ ok: true; quote: TradeQuote }>('/trade/quote', { method: 'POST', body: params });
+// ---------------------------------------------------------------------------
+// Complete f(x) action surface. Parameters are intents, never calldata.
+// ---------------------------------------------------------------------------
 
-/**
- * Execute the open for real. `nonce` makes it idempotent: a double-tap or
- * retry with the same nonce dedupes to a single broadcast.
- */
-export const tradeExecute = (params: TradeParams, nonce: string, feeTier: FeeTierKey = 'market') =>
-  call<TradeExecuteResult>('/trade/execute', { method: 'POST', body: { ...params, nonce, feeTier } });
+export type Market = 'wstETH' | 'WBTC';
+export type PositionSide = 'long' | 'short';
+
+export type MiniActionParams =
+  | {
+      kind: 'position_open';
+      market: Market;
+      side: PositionSide;
+      inputToken: ProtocolTokenSymbol;
+      amount: string;
+      leverage: number;
+    }
+  | {
+      kind: 'position_increase';
+      market: Market;
+      side: PositionSide;
+      positionId: number;
+      inputToken: ProtocolTokenSymbol;
+      amount: string;
+    }
+  | {
+      kind: 'position_reduce';
+      market: Market;
+      side: PositionSide;
+      positionId: number;
+      outputToken: ProtocolTokenSymbol;
+      fractionBps: number;
+    }
+  | {
+      kind: 'position_adjust';
+      market: Market;
+      side: PositionSide;
+      positionId: number;
+      leverage: number;
+    }
+  | {
+      kind: 'mint';
+      market: Market;
+      positionId: number;
+      depositToken: ProtocolTokenSymbol;
+      depositAmount: string;
+      mintAmount: string;
+    }
+  | {
+      kind: 'repay_withdraw';
+      market: Market;
+      positionId: number;
+      repayAmount: string | 'all';
+      withdrawToken: ProtocolTokenSymbol;
+      withdrawAmount: string;
+    }
+  | {
+      kind: 'save_deposit';
+      tokenIn: 'USDC' | 'fxUSD' | 'fxUSDBasePool';
+      amount: string;
+    }
+  | {
+      kind: 'save_withdraw';
+      tokenOut: 'USDC' | 'fxUSD' | 'fxUSDBasePool';
+      shares: string | 'all';
+      instant: boolean;
+    }
+  | { kind: 'save_claim' }
+  | {
+      kind: 'bridge';
+      token: 'fxUSD' | 'fxSAVE';
+      amount: string;
+      direction: 'ethereum_to_base' | 'base_to_ethereum';
+    };
+
+export interface ActionDetail {
+  label: string;
+  value: string;
+}
+
+export interface ActionQuote {
+  kind: MiniActionParams['kind'];
+  title: string;
+  description: string;
+  network: 'Ethereum' | 'Base';
+  chainId: 1 | 8453;
+  details: ActionDetail[];
+  warning?: string;
+  mevProtection: 'on' | 'off';
+  gas: GasEstimate;
+  ticket: string;
+  expiresAt: string;
+}
+
+export interface ActionExecuteResult extends TradeExecuteResult {
+  chainId: 1 | 8453;
+}
+
+export const actionQuote = (params: MiniActionParams) =>
+  call<{ ok: true; quote: ActionQuote }>('/action/quote', { method: 'POST', body: params });
+
+export const actionExecute = (
+  ticket: string,
+  feeTier: FeeTierKey = 'market'
+) =>
+  call<ActionExecuteResult>('/action/execute', {
+    method: 'POST',
+    body: { ticket, feeTier },
+  });
+
+export interface SaveProtocolConfig {
+  totalSupply: string;
+  totalAssets: string;
+  assetsPerShare: number | null;
+  cooldownHours: number;
+  instantRedeemFeePct: number;
+  expenseRatioPct: number;
+  harvesterRatioPct: number;
+  threshold: string;
+}
+
+export interface ProtocolInfo {
+  network: { name: 'Ethereum'; chainId: 1 };
+  save: SaveProtocolConfig;
+  tokens: Array<{
+    symbol: ProtocolTokenSymbol;
+    decimals: number;
+    native: boolean;
+    positionMarkets: Market[];
+  }>;
+}
+
+export const getProtocol = () => call<ProtocolInfo>('/protocol');
+
+export interface BridgeChainState {
+  chainId: 1 | 8453;
+  /** False means the source RPC read failed; null balances are not zeros. */
+  known: boolean;
+  /** Native ETH available for source-chain gas and the LayerZero fee. */
+  native: string | null;
+  assets: {
+    fxUSD: string | null;
+    fxSAVE: string | null;
+  };
+}
+
+export interface BridgeState {
+  /** Operator execution gate. Balances remain readable while paused. */
+  enabled: boolean;
+  ethereum: BridgeChainState;
+  base: BridgeChainState;
+}
+
+export const getBridgeState = () => call<BridgeState>('/bridge-state');
+
+export interface ActivityItem {
+  id: string;
+  hash: string | null;
+  hashes: string[];
+  status: string;
+  type: string;
+  createdAt: string;
+  updatedAt: string;
+  chainId: 1 | 8453;
+  steps: Array<{ index: number; status: string; hash: string | null }>;
+  message: string | null;
+}
+
+export const getActivity = (take = 30) =>
+  call<{ items: ActivityItem[] }>(`/activity?take=${Math.max(1, Math.min(50, Math.round(take)))}`);

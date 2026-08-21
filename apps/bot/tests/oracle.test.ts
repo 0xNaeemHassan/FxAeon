@@ -1,14 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+const readContractMock = vi.fn();
+
 /**
  * Oracle module tests — Phase 2.
- * Tests the oracle check logic, chip formatting, and funding estimation.
+ * Tests the oracle check logic and chip formatting.
  */
 
 // Mock viem and external calls
 vi.mock("viem", () => ({
   createPublicClient: vi.fn(() => ({
-    readContract: vi.fn(),
+    readContract: readContractMock,
     multicall: vi.fn(),
     getBalance: vi.fn(),
   })),
@@ -30,6 +32,8 @@ vi.mock("../src/middleware/logger", () => ({
 vi.mock("@fxaeon/shared", () => ({
   ADDRESSES: {
     SPOT_PRICE_ORACLE: "0xc2312CaF0De62eC9b4ADC785C79851Cb989C9abc",
+    WSTETH_PRICE_ORACLE: "0x0C5C61025f047cB7e3e85852dC8eAFd7b9a4Abfb",
+    WBTC_PRICE_ORACLE: "0xb3c90e64EB6f456A5F5C17Aa99b6aecA6f4a6390",
     FXUSD: "0x085780639CC2cACd35E474e71f4d000e2405d8f6",
     WSTETH: "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0",
     WBTC: "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
@@ -50,7 +54,18 @@ vi.mock("@fxaeon/shared", () => ({
 
 describe("Oracle checks", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     process.env.ALCHEMY_RPC_URL = "https://eth-mainnet.g.alchemy.com/v2/test";
+  });
+
+  it("reads the official f(x) per-market oracle rather than relabeling Chainlink", async () => {
+    readContractMock.mockResolvedValueOnce([3_400n * 10n ** 18n, 0n, 0n]);
+    const { getFxOraclePrice } = await import("../src/market/oracle.js");
+    await expect(getFxOraclePrice("ETH")).resolves.toBe(3_400);
+    expect(readContractMock).toHaveBeenCalledWith(expect.objectContaining({
+      address: "0x0C5C61025f047cB7e3e85852dC8eAFd7b9a4Abfb",
+      functionName: "getPrice",
+    }));
   });
 
   describe("Divergence detection", () => {
@@ -123,13 +138,4 @@ describe("Oracle checks", () => {
     });
   });
 
-  describe("Funding estimation", () => {
-    it("calculates daily funding cost from borrow rate", () => {
-      const positionSizeUsd = 2500;
-      const annualRate = 50; // 5% borrow rate × 10
-      const dailyRate = annualRate / 365;
-      const dailyCost = (positionSizeUsd * dailyRate) / 100;
-      expect(dailyCost).toBeCloseTo(3.42, 1);
-    });
-  });
 });

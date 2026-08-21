@@ -39,8 +39,12 @@ export const SUPPORTED_ASSETS: ReadonlyArray<{ symbol: string; id: string }> = [
  * Not shown by /price.
  */
 export const EXTRA_ASSETS: ReadonlyArray<{ symbol: string; id: string }> = [
+  { symbol: "WETH", id: "weth" },
+  { symbol: "stETH", id: "staked-ether" },
   { symbol: "wstETH", id: "wrapped-steth" },
   { symbol: "WBTC", id: "wrapped-bitcoin" },
+  { symbol: "USDC", id: "usd-coin" },
+  { symbol: "USDT", id: "tether" },
 ];
 
 export interface AssetMarketData {

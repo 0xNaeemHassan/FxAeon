@@ -1,35 +1,44 @@
-# Runbook: Postgres >80% Disk
+# Runbook: PostgreSQL storage pressure
 
-## Detection
-- Supabase dashboard alert
-- Query performance degradation
+Use when provider storage, WAL, connection, or query alerts indicate the database is approaching its limit. This procedure is provider-neutral.
 
-## Response
+## Detect and scope
 
-### 1. Check disk usage
+Record provider metrics, free space, WAL growth, connection count, replication/backup health, and the largest relations. Start with read-only queries:
+
 ```sql
-SELECT pg_size_pretty(pg_database_size(current_database()));
+SELECT pg_size_pretty(pg_database_size(current_database())) AS database_size;
+
+SELECT
+  schemaname,
+  relname,
+  pg_size_pretty(pg_total_relation_size(format('%I.%I', schemaname, relname))) AS total_size
+FROM pg_stat_user_tables
+ORDER BY pg_total_relation_size(format('%I.%I', schemaname, relname)) DESC
+LIMIT 25;
 ```
 
-### 2. Vacuum and analyze
-```bash
-psql $DATABASE_URL -c "VACUUM ANALYZE;"
-```
+Inspect dead tuples, long-running transactions, locks, and provider backup retention. Do not assume table growth is reclaimable space.
 
-### 3. Prune old audit logs
-```sql
--- Keep 90 days of audit logs
-DELETE FROM "AuditLog" WHERE "createdAt" < NOW() - INTERVAL '90 days';
-```
+## Contain
 
-### 4. Prune old tx records
-```sql
-DELETE FROM "TxRecord" WHERE "createdAt" < NOW() - INTERVAL '30 days';
-```
+1. Preserve a current backup/snapshot and verify that the backup destination has capacity.
+2. If write failure is imminent, isolate state-changing application traffic and workers. Keep only diagnostics that do not increase pressure.
+3. Increase provider storage/capacity first when available; it is safer than emergency deletion.
+4. Do not delete `TxRecord`, `AuditLog`, user linkage, automation, order, or incident-window data during an active event. Transaction history is required for chain reconciliation and security forensics.
 
-### 5. Archive to R2 if needed
-```bash
-pg_dump --data-only --table=AuditLog $DATABASE_URL | gzip | aws s3 cp - s3://fxbot-backups/archive/$(date +%Y%m%d)_audit.sql.gz
-```
+## Remediate
 
-### 6. If still >80%, upgrade Supabase plan or optimize schema
+- End only clearly abandoned long transactions after identifying the owner/impact.
+- Run ordinary `VACUUM (ANALYZE)` on specific bloated tables during a reviewed window if the provider does not manage it. It helps reusable space but generally does not shrink the physical file.
+- Do not run `VACUUM FULL`, `REINDEX`, mass `DELETE`, or retention scripts without a backup, capacity/lock estimate, tested procedure, and explicit approval; these can require extra disk and long exclusive locks.
+- Archive or delete data only under a documented retention/privacy policy with referential-integrity tests and a proven restore path. The repository does not ship a safe pruning job.
+- Investigate unbounded application writes, stale indexes, WAL/replica lag, and backup failures as the durable fix.
+
+## Validate and close
+
+- Database readiness and normal Prisma model queries succeed.
+- Free space/growth projections meet the deployment threshold.
+- Migrations, constraints, and backups remain valid.
+- Non-terminal transactions and worker cursors were not lost.
+- An isolated restore of the post-incident backup succeeds.

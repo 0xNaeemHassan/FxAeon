@@ -8,7 +8,7 @@
 start-welcome-new =
     🚀 Welcome to FxAeon
     
-    The most advanced interface for f(x) Protocol — leveraged positions, limit orders, and yield automation, all from Telegram.
+    The most advanced interface for f(x) Protocol — leveraged positions and yield automation, all from Telegram.
     
     🔐 Self-custody — create or import YOUR wallet; only you hold the keys
     ⚡ Simulation-gated — nothing broadcasts unless it simulates clean
@@ -44,7 +44,7 @@ help-body =
     
     ⚡ Trading
       /trade — Open leveraged position (1.1x–7x)
-      /limit — Place limit/stop orders
+      /limit — Validate a limit/stop preview (does not submit)
       /orders — View active orders
       /mint — Borrow fxUSD (no leverage)
       /redeem — Redeem fxSAVE back to fxUSD
@@ -71,7 +71,7 @@ help-body =
     
     🤖 Automation
       /auto — Stop-loss / take-profit rules (/auto sl wstETH long 2500)
-      /refer — Your referral link + earnings
+      /refer — Your invite link + linked accounts
     
     ⚙️ Settings
       /settings — Language, slippage, MEV protection
@@ -120,7 +120,7 @@ trade-usage =
     /trade <market> <long|short> <leverage> <amount>
     
     Example:
-    /trade wstETH long 3x 1ETH
+    /trade wstETH long 3x 0.25
     
     Leverage Limits:
     • Long: { $minLev }x – { $maxLong }x

@@ -35,7 +35,19 @@ function parseAddresses() {
 
 function build() {
   const addresses = parseAddresses();
-  const allowedTargets = Object.entries(addresses)
+  // Keep this intentionally small: registry membership is not signing
+  // authority. A unit test compares these labels to signerPolicy.ts.
+  const signingLabels = [
+    "ROUTER", "FX_MINT_ROUTER", "FXSAVE", "FXUSD_BASE_POOL", "FXUSD",
+    "WSTETH", "WBTC", "STETH", "USDC", "USDT", "WETH",
+    "WSTETH_LONG_POOL", "WBTC_LONG_POOL", "WSTETH_SHORT_POOL", "WBTC_SHORT_POOL",
+    "FXUSD_OFT_ADAPTER", "FXSAVE_OFT_ADAPTER",
+  ];
+  const allowedTargets = signingLabels
+    .map((label) => {
+      if (!addresses[label]) throw new Error(`missing signing target ${label}`);
+      return [label, addresses[label]];
+    })
     .map(([label, address]) => ({ label, address: address.toLowerCase() }))
     .sort((a, b) => a.label.localeCompare(b.label));
   return {
@@ -45,20 +57,38 @@ function build() {
     description:
       "Broadcast allow-list for the bot's session signer. Enforced in " +
       "apps/bot/src/core/signerPolicy.ts (mode: SIGNER_POLICY_MODE). Generated " +
-      "from packages/shared/src/addresses.ts — do not edit by hand; run " +
+      "from the exact SDK-emitted execution targets in packages/shared/src/addresses.ts; " +
+      "registry membership alone never grants signing authority " +
+      "— do not edit by hand; run " +
       "`node scripts/gen-signer-policy.mjs`.",
     rules: {
       // tx.to must be one of allowedTargets.
       allowedTargetsOnly: true,
-      // ERC20 approve/increaseAllowance spender must be a target or the user's wallet.
-      erc20: {
+      exactSelectorsOnly: true,
+      exactActionArguments: [
+        "market pool and side",
+        "input/output token",
+        "authenticated receiver/owner",
+        "action amount and minimum output",
+        "native transaction value",
+      ],
+      arbitraryPayableValue: false,
+      approvals: {
         approve: "0x095ea7b3",
-        increaseAllowance: "0x39509351",
-        transfer: "0xa9059cbb",
-        transferFrom: "0x23b872dd",
-        spenderMustBeAllowed: true,
-        recipientMustBeAllowed: true,
+        exactRouteAmount: true,
+        correlatedToLaterAction: true,
+        unlimited: false,
+        blanketPositionApproval: false,
       },
+      embeddedConversion: {
+        target: addresses.MULTIPATH_CONVERTER.toLowerCase(),
+        selector: "convert(address,uint256,uint256,uint256[])",
+        exactTokenAndAmount: true,
+        externalSignaturePayloads: false,
+        permittedSdkRoutes: ["FxRoute", "FxRoute 2"],
+        remoteAggregators: false,
+      },
+      cancellationSelfSend: "authenticated persisted replacement only",
     },
     allowedTargets,
   };

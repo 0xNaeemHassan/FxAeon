@@ -1,56 +1,44 @@
-# Security Policy
+# Security policy
 
-## Supported Versions
+## Supported version
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 1.1.x   | :white_check_mark: |
-| 1.0.x   | :x:                |
+Security fixes are made against the current `main` branch and the latest released version. Older tags are not guaranteed to receive backports.
 
-## Reporting a Vulnerability
+## Report a vulnerability privately
 
-If you discover a security vulnerability in FxAeon, please report it responsibly:
+Do not open a public issue, discussion, Telegram message, or pull request containing exploit details, secrets, private keys, user data, or an unpatched funds-risk bug.
 
-1. **Do NOT open a public issue** — this could expose the vulnerability to attackers
-2. Email security reports to: [security@fxaeon.dev] (or create a private security advisory on GitHub)
-3. Include:
-   - Description of the vulnerability
-   - Steps to reproduce
-   - Potential impact
-   - Suggested fix (if any)
+Use the repository's **Security** tab to create a private GitHub security advisory. Include:
 
-## Response Timeline
+- affected commit or version;
+- affected component and deployment assumptions;
+- reproducible steps or a minimal proof of concept;
+- impact on funds, signer authority, authentication, privacy, or availability;
+- whether the issue has been exploited or publicly disclosed;
+- a suggested mitigation, if known.
 
-- **Acknowledgment**: Within 48 hours
-- **Initial assessment**: Within 7 days
-- **Fix deployment**: Within 30 days (critical), 90 days (high), 180 days (medium/low)
+If private advisories are unavailable, contact a maintainer through a private channel and ask for a secure reporting route without sending the exploit in the first message. This repository does not publish a verified security email address.
 
-## Security Measures
+## Sensitive testing rules
 
-- All wallet private keys are managed by Privy (MPC infrastructure)
-- Database credentials are encrypted at rest
-- Rate limiting prevents brute-force attacks
-- All transactions require user confirmation
-- Smart contract interactions are validated before execution
+- Test against local fixtures or an Anvil fork, not other users or production funds.
+- Never use or request another user's Telegram `initData`, wallet key, Privy token, bot token, webhook secret, or authorization key.
+- Do not submit a harmful order to the live relay, flood Telegram/Privy/RPC providers, or probe infrastructure outside this repository's scope.
+- Preserve evidence, minimize data access, and stop once impact is demonstrated.
 
-## Audit History
+## Response expectations
 
-**No external security audit has been performed yet.**
+Maintainers should acknowledge a complete report as soon as practical, reproduce it, classify severity, prepare a fix, rotate exposed credentials, and coordinate disclosure with the reporter. No guaranteed response or remediation deadline is promised by this community project.
 
-An internal code review (2026-06) is documented in
-[`docs/audit/AUDIT.md`](docs/audit/AUDIT.md). It found critical issues
-(including unverified transaction execution paths), which were remediated in
-the Phase 2 hardening waves — see [`docs/audit/DEFICIENCIES.md`](docs/audit/DEFICIENCIES.md)
-and [`docs/COMPLETED.md`](docs/COMPLETED.md) for the fix log. The threat model
-lives in [`docs/audit/THREAT_MODEL.md`](docs/audit/THREAT_MODEL.md).
+## Security status
 
-Treat this software as unaudited: do not deposit funds you cannot afford to
-lose.
+FxAeon is **unaudited application software**. Internal tests and reviews are not an independent security audit and do not establish that funds are safe. The f(x) protocol's audits do not audit FxAeon's bot, Mini App, backend, Privy integration, or operational configuration.
 
-## Disclosure Policy
+Current defenses and residual risks are documented in:
 
-We follow coordinated disclosure:
-1. Reporter submits vulnerability privately
-2. We investigate and develop a fix
-3. Fix is deployed
-4. Public disclosure after 30 days (or sooner with reporter's consent)
+- [Security model](docs/security.md)
+- [Threat model](docs/threat-model.md)
+- [Signer-policy decision](docs/adr/signer-policy.md)
+- [Known gaps](docs/GAPS.md)
+
+Users should keep bot trading disabled when it is not needed, verify transaction links independently, and never risk funds they cannot afford to lose.

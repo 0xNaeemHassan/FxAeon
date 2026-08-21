@@ -19,7 +19,7 @@ const ko: Messages = {
   'common.unknownError': '알 수 없는 오류',
 
   'splash.tagline':
-    'Telegram을 위해 만들어진 f(x) Protocol의 비수탁형 레버리지 거래. 이 앱은 FxAeon 봇 안에서 실행됩니다.',
+    '하나의 비수탁형 Telegram 앱에서 거래, 대출, 저축, 브리지와 모든 f(x) Protocol 포지션을 관리하세요.',
 
   'loginGate.tgTitle': 'FxAeon은 Telegram 안에서 실행됩니다',
   'loginGate.tgBody': '봇을 열고 /start를 보내 지갑을 설정하세요.',
@@ -73,7 +73,7 @@ const ko: Messages = {
   'portfolio.markets': '마켓',
   'portfolio.pricesStale': '가격이 몇 분 지났을 수 있습니다(상류 지연).',
   'portfolio.quickActions': '빠른 작업',
-  'portfolio.qaTradeHint': '레버리지 최대 10x',
+  'portfolio.qaTradeHint': '롱 포지션 최대 7x',
   'portfolio.qaDepositHint': 'ETH · wstETH · WBTC',
   'portfolio.qaSecurity': '지갑 보호 방식',
   'portfolio.qaSecurityHint': '자기수탁, 당신의 키',
@@ -201,12 +201,12 @@ const ko: Messages = {
     '봇은 당신의 session-signer 권한이 활성화된 동안에만 서명할 수 있습니다. 설정 → 지갑에서 철회하면 채팅 실행이 즉시 중단됩니다.',
   'policy.rule3Title': '시뮬레이션을 거친 실행',
   'policy.rule3Body':
-    '채팅에서 확인된 모든 작업은 먼저 시뮬레이션됩니다. 실패할 경우 아무것도 브로드캐스트되지 않습니다 — 항상 안전하게 차단됩니다.',
-  'policy.rule4Title': '명시적 확인만',
+    '검토 전에 서버가 정확한 계획을 만들고 정책 검사와 시뮬레이션을 수행합니다. 포지션 변환은 고정된 f(x) SDK v1 경로표와 정확히 일치해야 합니다.',
+  'policy.rule4Title': '2분 동안 지갑에 바인딩된 검토',
   'policy.rule4Body':
-    '당신이 확인을 탭하기 전에는 어떤 트랜잭션도 생성되거나 전송되지 않습니다. 미리보기는 약 10분 후 만료됩니다.',
+    'Mini App은 그 정확한 계획을 2분 동안 고정합니다. 확인하면 일회용 티켓이 사용되며, 반복 요청은 동일한 멱등 트랜잭션 기록만 반환할 수 있습니다.',
   'policy.footer':
-    '모든 것은 설정 → 지갑에서 관리하세요: 키 내보내기, 봇 거래 활성화 또는 철회. 실시간 상태는 봇에서 /security를 확인하세요.',
+    '활동에는 대기, 부분 실행, 취소, 되돌림, 확인을 포함한 모든 경로 단계의 해시와 상태가 보존됩니다. 설정 → 지갑에서 서명 권한을 관리하세요.',
   // -- login sign-in card (PrivyFlow intro) --
   'loginCard.signIn': 'FxAeon 로그인',
   'loginCard.subtitle': 'Privy 기반 자기수탁 지갑',
@@ -215,6 +215,9 @@ const ko: Messages = {
   'loginCard.wallet': '기존 지갑 연결',
   'loginCard.terms': '계속하면 약관 및 개인정보 보호정책에 동의하는 것입니다',
   'loginCard.poweredBy': '제공',
+  'nav.earn': '수익',
+  'nav.move': '이동',
+  'nav.more': '더보기',
 };
 
 export default ko;

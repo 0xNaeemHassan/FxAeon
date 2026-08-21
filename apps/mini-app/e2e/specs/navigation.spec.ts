@@ -1,29 +1,51 @@
 import { test, expect } from '../fixtures/test';
 
-/**
- * Bottom tab-bar navigation between the app's root surfaces. Uses Next.js
- * client-side routing (no full reload), exactly as in Telegram.
- */
-test.describe('Tab navigation', () => {
-  test('navigates Portfolio → Trade → Deposit → Settings', async ({ page }) => {
+/** The five primary tabs are the gateway's stable mobile information architecture. */
+test.describe('Gateway navigation', () => {
+  test('moves through Home, Trade, Earn, Move, and More', async ({ page }) => {
     await page.goto('/portfolio');
     await expect(page.getByText('$5,240.75')).toBeVisible();
 
-    // Scope to the bottom tab bar (other surfaces also link to these routes).
-    const tabs = page.getByRole('navigation');
+    const tabs = page.getByRole('navigation', { name: 'Primary navigation' });
+    await expect(tabs.getByRole('link')).toHaveCount(5);
 
-    await tabs.getByRole('link', { name: 'Trade' }).click();
-    await expect(page).toHaveURL(/\/trade$/);
-    await expect(page.getByRole('heading', { name: 'Trade' })).toBeVisible();
+    for (const [name, path, heading] of [
+      ['Trade', '/trade', 'Trade'],
+      ['Earn', '/earn', 'Earn'],
+      ['Move', '/move', 'Move'],
+      ['More', '/more', 'More'],
+      ['Home', '/portfolio', null],
+    ] as const) {
+      await tabs.getByRole('link', { name }).click();
+      await expect(page).toHaveURL(new RegExp(`${path}$`));
+      if (heading) await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
+      await expect(tabs.getByRole('link', { name })).toHaveAttribute('aria-current', 'page');
+    }
+  });
 
-    await tabs.getByRole('link', { name: 'Deposit' }).click();
-    await expect(page).toHaveURL(/\/qr$/);
+  test('More exposes every secondary protocol, wallet, and safety surface', async ({ page }) => {
+    await page.goto('/more');
+    await expect(page.getByText('Signer on')).toBeVisible();
 
-    await tabs.getByRole('link', { name: 'Settings' }).click();
-    await expect(page).toHaveURL(/\/settings$/);
-    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+    const routes = [
+      ['Positions', '/positions', 'Positions'],
+      ['Borrow fxUSD', '/borrow', 'Borrow'],
+      ['Activity', '/activity', 'Activity'],
+      ['Receive assets', '/qr', null],
+      ['Settings', '/settings', 'Settings'],
+      ['Execution policy', '/policy', null],
+    ] as const;
 
-    await tabs.getByRole('link', { name: 'Home' }).click();
-    await expect(page).toHaveURL(/\/portfolio$/);
+    for (const [name, path, heading] of routes) {
+      await page.goto('/more');
+      await page.getByRole('link', { name: new RegExp(`^${name}`) }).click();
+      await expect(page).toHaveURL(new RegExp(`${path}$`));
+      if (heading) await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
+    }
+
+    await page.goto('/more');
+    await expect(page.getByRole('link', { name: /^Open chat bot/ })).toHaveAttribute('href', 'https://t.me/FxAeonBot');
+    await expect(page.getByRole('link', { name: /^f\(x\) Protocol/ })).toHaveAttribute('target', '_blank');
+    await expect(page.getByRole('link', { name: /^Protocol docs/ })).toHaveAttribute('rel', /noopener/);
   });
 });

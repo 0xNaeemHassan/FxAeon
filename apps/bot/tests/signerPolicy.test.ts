@@ -5,20 +5,6 @@ import { describe, it, expect, vi } from "vitest";
  * Tests fee collector value-send exception and withdraw exception.
  */
 
-vi.mock("@fxaeon/shared", () => ({
-  ADDRESSES: {
-    FEE_COLLECTOR: "0xea24f6a870b57455a83387704d7d2a12e3463d84",
-    FXUSD: "0x085780639CC2cACd35E474e71f4d000e2405d8f6",
-    WSTETH: "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0",
-    WBTC: "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
-    STETH: "0xae7ab96520de3a18e5e111b5eaab095312d7fe84",
-    WETH: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-    ETH: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
-    ROUTER: "0xd0aC91e3353C3b12F031AfC5c63e6E3e63a29cB0",
-    FX_MINT_ROUTER: "0x5d0aC91e3353C3b12F031AfC5c63e6E3e63a29cB1",
-  },
-}));
-
 vi.mock("../src/core/metrics", () => ({
   incr: vi.fn(),
 }));
@@ -87,7 +73,9 @@ describe("isWithdrawException", () => {
     };
     expect(
       isWithdrawException(tx, {
-        intentScopedRecipient: "0x1234567890abcdef1234567890abcdef12345678",
+        recipient: "0x1234567890abcdef1234567890abcdef12345678",
+        tokenAddress: null,
+        amount: 1_000_000_000_000_000_000n,
       })
     ).toBe(true);
   });
@@ -97,7 +85,7 @@ describe("isWithdrawException", () => {
       to: "0x1234567890abcdef1234567890abcdef12345678",
       data: "0x",
     };
-    expect(isWithdrawException(tx, {})).toBe(false);
+    expect(isWithdrawException(tx)).toBe(false);
   });
 
   it("rejects mismatched recipient", () => {
@@ -107,14 +95,24 @@ describe("isWithdrawException", () => {
     };
     expect(
       isWithdrawException(tx, {
-        intentScopedRecipient: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        recipient: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        tokenAddress: null,
+        amount: 1n,
       })
     ).toBe(false);
   });
+
+  it("rejects calldata or a zero-value native withdrawal", () => {
+    const recipient = "0x1234567890abcdef1234567890abcdef12345678";
+    const scope = { recipient, tokenAddress: null, amount: 1n };
+    expect(isWithdrawException({ to: recipient, data: "0x1234", value: 1n }, scope)).toBe(false);
+    expect(isWithdrawException({ to: recipient, data: "0x", value: 0n }, scope)).toBe(false);
+    expect(isWithdrawException({ to: recipient, data: "0x", value: 2n }, scope)).toBe(false);
+  });
 });
 
-describe("checkRoute with fee collector", () => {
-  it("allows value send to FEE_COLLECTOR (no violations)", () => {
+describe("checkRoute with reserved fee collector", () => {
+  it("rejects value sends while product fees are dormant", () => {
     const route: PolicyTx[] = [
       {
         to: "0xea24f6a870b57455a83387704d7d2a12e3463d84",
@@ -123,7 +121,7 @@ describe("checkRoute with fee collector", () => {
       },
     ];
     const violations = checkRoute(route);
-    expect(violations).toHaveLength(0);
+    expect(violations).toHaveLength(1);
   });
 
   it("rejects call to unregistered address", () => {
@@ -138,7 +136,7 @@ describe("checkRoute with fee collector", () => {
     expect(violations[0].reason).toContain("not in the f(x) registry");
   });
 
-  it("allows call to registered contract", () => {
+  it("rejects an unknown selector even on a registered contract", () => {
     const route: PolicyTx[] = [
       {
         to: "0x085780639CC2cACd35E474e71f4d000e2405d8f6", // FXUSD
@@ -146,13 +144,14 @@ describe("checkRoute with fee collector", () => {
       },
     ];
     const violations = checkRoute(route);
-    expect(violations).toHaveLength(0);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].reason).toContain("selector");
   });
 });
 
 describe("ALLOWED_TARGETS", () => {
-  it("includes FEE_COLLECTOR", () => {
-    expect(ALLOWED_TARGETS.has("0xea24f6a870b57455a83387704d7d2a12e3463d84")).toBe(true);
+  it("excludes FEE_COLLECTOR", () => {
+    expect(ALLOWED_TARGETS.has("0xea24f6a870b57455a83387704d7d2a12e3463d84")).toBe(false);
   });
 
   it("includes core f(x) addresses", () => {

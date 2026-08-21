@@ -28,5 +28,4 @@ export async function setBotState(key: string, value: string): Promise<void> {
 export const BS_WEBHOOK_URL = "webhook_url";
 export const BS_WEBHOOK_SECRET = "webhook_secret";
 export const BS_DEPLOY_ID = "deploy_id";
-export const BS_FEE_MODE = "fee_mode";
 export const BS_POLICY_MODE = "policy_mode";

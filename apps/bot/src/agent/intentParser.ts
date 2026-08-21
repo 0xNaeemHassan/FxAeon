@@ -2,7 +2,7 @@
  * Natural-language intent parser — Phase 5 (Masterplan).
  *
  * Parses free-text messages like:
- *   "go long 500 fxusd on btc at 5x"
+ *   "go long btc with 0.005 wbtc at 5x"
  *   "short eth 0.5 wsteth 3x"
  *   "close my btc long"
  *   "deposit 100 usdc into fxsave"
@@ -16,7 +16,7 @@
  * same Step 5 signed preview that a button tap would produce.
  */
 import { MARKETS, RISK_PARAMS, type Market } from "@fxaeon/shared";
-import { botLogger } from "../middleware/logger.js";
+import { canonicalActionAmount } from "../core/actionIntent.js";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -37,14 +37,14 @@ export type IntentAction =
 
 export interface ParsedIntent {
   action: IntentAction;
-  /** Market for trade intents (ETH or BTC) */
+  /** Canonical protocol market for trade intents (wstETH or WBTC). */
   market?: Market;
   /** Side for trade intents */
   side?: "long" | "short";
   /** Leverage multiplier */
   leverage?: number;
   /** Amount in human-readable units */
-  amount?: number;
+  amount?: string;
   /** Collateral/token symbol */
   token?: string;
   /** Raw input text */
@@ -56,18 +56,22 @@ export interface ParsedIntent {
 // ── Market Resolution ───────────────────────────────────────────────────────
 
 const MARKET_ALIASES: Record<string, Market> = {
-  btc: "BTC",
-  bitcoin: "BTC",
-  wbtc: "BTC",
-  eth: "ETH",
-  ethereum: "ETH",
-  wsteth: "ETH",
-  steth: "ETH",
-  weth: "ETH",
+  btc: "WBTC",
+  bitcoin: "WBTC",
+  wbtc: "WBTC",
+  eth: "wstETH",
+  ethereum: "wstETH",
+  wsteth: "wstETH",
+  steth: "wstETH",
+  weth: "wstETH",
 };
 
 function resolveMarket(word: string): Market | undefined {
-  return MARKET_ALIASES[word.toLowerCase()] ?? (MARKETS.includes(word.toUpperCase() as Market) ? word.toUpperCase() as Market : undefined);
+  const normalized = word.toLowerCase();
+  return (
+    MARKET_ALIASES[normalized] ??
+    MARKETS.find((market) => market.toLowerCase() === normalized)
+  );
 }
 
 // ── Token Resolution ────────────────────────────────────────────────────────
@@ -90,10 +94,12 @@ function resolveToken(word: string): string | undefined {
 // ── Number Extraction ───────────────────────────────────────────────────────
 
 /** Extract a number from a word, handling $500, 500usd, 0.5, etc. */
-function extractNumber(word: string): number | undefined {
-  const cleaned = word.replace(/^\$/, "").replace(/,/g, "").replace(/usd$/i, "");
-  const n = parseFloat(cleaned);
-  return Number.isFinite(n) && n > 0 ? n : undefined;
+function extractNumber(word: string): string | undefined {
+  const cleaned = word.replace(/^\$/, "").replace(/usd$/i, "");
+  // parseFloat("5x") is 5, which previously let a leverage token double as
+  // trade collateral. Require the entire token to be a positive decimal.
+  if (!/^(?:\d+\.?\d*|\.\d+)$/.test(cleaned)) return undefined;
+  return canonicalActionAmount(cleaned, 18) ?? undefined;
 }
 
 /** Extract leverage from text like "5x", "at 5x", "5×", "leverage 5" */
@@ -130,8 +136,10 @@ export function parseIntent(text: string): ParsedIntent {
   const raw = text.trim();
   const words = raw
     .toLowerCase()
-    .replace(/[,!?.]/g, " ")
     .split(/\s+/)
+    // Trim sentence punctuation without destroying decimal points or
+    // thousands separators inside numeric tokens.
+    .map((word) => word.replace(/^[,!?]+/, "").replace(/[,!?.]+$/, ""))
     .filter(Boolean);
 
   if (words.length === 0) {
@@ -216,10 +224,16 @@ export function parseIntent(text: string): ParsedIntent {
 
   if (hasLong || hasShort) {
     const side: "long" | "short" = hasLong ? "long" : "short";
-    const market = words.map(resolveMarket).find(Boolean);
+    const marketIndex = words.findIndex((word) => resolveMarket(word) !== undefined);
+    const market = marketIndex >= 0 ? resolveMarket(words[marketIndex]) : undefined;
     const leverage = words.map(extractLeverage).find(Boolean);
     const amount = words.map(extractNumber).find(Boolean);
-    const token = words.map(resolveToken).find(Boolean);
+    // Do not mistake the market alias itself ("eth") for an explicitly
+    // requested collateral token. Any additional token remains visible so
+    // intentToTradeParams can fail closed when it is not market-native.
+    const token = words
+      .map((word, index) => (index === marketIndex ? undefined : resolveToken(word)))
+      .find(Boolean);
 
     // Validate leverage
     const maxLev = side === "long" ? RISK_PARAMS.MAX_LEVERAGE_LONG : RISK_PARAMS.MAX_LEVERAGE_SHORT;
@@ -306,7 +320,11 @@ export function looksLikeNaturalIntent(text: string): boolean {
     "leverage",
   ];
 
-  return allKeywords.some((kw) => lower.includes(kw));
+  const words = lower.match(/[a-z0-9]+/g) ?? [];
+  return (
+    words.some((word) => allKeywords.includes(word)) ||
+    /^(?:long|short)(?:btc|eth|bitcoin|ethereum)\b/.test(lower)
+  );
 }
 
 /**
@@ -315,7 +333,7 @@ export function looksLikeNaturalIntent(text: string): boolean {
  */
 export function intentToTradeParams(
   intent: ParsedIntent
-): { market: Market; side: "long" | "short"; leverage: number; amount: number } | null {
+): { market: Market; side: "long" | "short"; leverage: number; amount: string } | null {
   if (
     (intent.action !== "open_long" && intent.action !== "open_short") ||
     !intent.market ||
@@ -324,13 +342,23 @@ export function intentToTradeParams(
     return null;
   }
 
+
+  // A TradeIntent contains only a market and an amount. Until the execution
+  // schema can carry a separate collateral token and conversion route, only
+  // market-native units can be signed safely.
+  if (intent.token && intent.token !== intent.market) {
+    return null;
+  }
+
   const side = intent.side ?? (intent.action === "open_long" ? "long" : "short");
   const leverage = intent.leverage ?? 3; // Default leverage
+  const amount = canonicalActionAmount(intent.amount, intent.market === "WBTC" ? 8 : 18);
+  if (!amount) return null;
 
   return {
     market: intent.market,
     side,
     leverage,
-    amount: intent.amount,
+    amount,
   };
 }

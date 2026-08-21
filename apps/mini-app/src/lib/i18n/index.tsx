@@ -69,6 +69,13 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
     setLocaleState(normalizeLocale(next || getTelegramLanguage()));
   }, []);
 
+  useEffect(() => {
+    // The server starts in English for hydration safety; keep the document
+    // language synchronized once the persisted/Telegram locale resolves so
+    // screen readers switch pronunciation rules with the visible copy.
+    document.documentElement.lang = locale;
+  }, [locale]);
+
   const setLocale = useCallback((input: string | undefined | null) => {
     const resolved = normalizeLocale(input);
     setLocaleState(resolved);

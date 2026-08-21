@@ -1,5 +1,5 @@
 export { startCommand } from "./start.js";
-export { portfolioCommand } from "./portfolio.js";
+export { portfolioCommand, registerPortfolioActions } from "./portfolio.js";
 export { default as balanceCommand } from "./balance.js";
 export { default as closeCommand } from "./close.js";
 export { default as positionCommand } from "./position.js";

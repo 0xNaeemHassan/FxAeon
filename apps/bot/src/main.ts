@@ -1,16 +1,26 @@
 
 
 import express from "express";
+import { config as loadEnv } from "dotenv";
 import { Bot, Context, GrammyError, HttpError, webhookCallback } from "grammy";
-import { getTelegramWebhookSecret } from "./utils/webhookAuth.js";
+import {
+  getTelegramWebhookSecret,
+  webhookEndpointFromOrigin,
+  webhookSecretFingerprint,
+} from "./utils/webhookAuth.js";
 import type { RequestWithRawBody } from "./utils/webhookAuth.js";
 import { apiThrottler } from "@grammyjs/transformer-throttler";
 import { conversations, type ConversationFlavor } from "@grammyjs/conversations";
 import type { I18nFlavor } from "@grammyjs/i18n";
-import { getBotState, setBotState, BS_WEBHOOK_URL } from "./core/botState.js";
+import {
+  getBotState,
+  setBotState,
+  BS_WEBHOOK_SECRET,
+  BS_WEBHOOK_URL,
+} from "./core/botState.js";
 
 import {
-  startCommand, portfolioCommand, tradeCommand, limitCommand,
+  startCommand, portfolioCommand, registerPortfolioActions, tradeCommand, limitCommand,
   ordersCommand, mintCommand, redeemCommand, saveCommand,
   borrowCommand, repayCommand, bridgeCommand, lockCommand,
   voteCommand, claimCommand, referCommand, autoCommand,
@@ -47,6 +57,7 @@ import { registerPositionCardActions } from "./handlers/positionCardActions.js";
 import { handleActionCallback } from "./handlers/earnActions.js";
 // handleWithdrawCallback now imported from commands/index.js
 import { apiRouter } from "./api/index.js";
+import { configureAdminWebhook } from "./api/admin.js";
 import { applySecurityMiddleware, errorHandler } from "./middleware/index.js";
 import { validateConfig } from "./middleware/config.js";
 import { logger } from "./middleware/logger.js";
@@ -62,16 +73,19 @@ import { healthMonitor } from "./notifications/health-monitor.js";
 import { priceAlertPoller } from "./notifications/price-alert-poller.js";
 import { automationPoller } from "./notifications/automation-poller.js";
 import { arbPoller } from "./notifications/arb-poller.js";
+import { startDepositWatcherPoller } from "./notifications/deposit-watcher-poller.js";
 import { initNotify } from "./notifications/notify.js";
 import { i18n } from "./i18n/index.js";
 import { prisma } from "@fxaeon/db";
 import { looksLikeNaturalIntent, parseIntent, intentToTradeParams } from "./agent/index.js";
-import { createTradeIntent } from "./core/tradeIntent.js";
 import { buildPreview } from "./handlers/tradeActions.js";
 
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
+// Local development uses the files created by scripts/dev-setup.sh. Hosted
+// environments inject variables directly, which win because override=false.
+loadEnv({ path: [".env.local", ".env.production", ".env"], override: false });
 const env = validateConfig();
 
 // Observability (W-15): Sentry only when SENTRY_DSN is set; always silence
@@ -161,11 +175,13 @@ registerAutoActions(bot);
 registerLongShortActions(bot);
 registerSettingsActions(bot);
 
-// Phase 2: Position card action buttons (increase/reduce/adjust/refresh).
+// Position card action buttons (reduce/adjust/refresh; increase is omitted
+// until the SDK flow can target the existing position unambiguously).
 registerPositionCardActions(bot);
+registerPortfolioActions(bot);
 
-// Earn & borrow callbacks: signed action-intent confirms (a1_…) + cancel (a1c).
-bot.callbackQuery(/^a1(_|c$)/, handleActionCallback);
+// Earn & borrow callbacks: exact signed action-intent confirms (a2.…) + cancel (a2c).
+bot.callbackQuery(/^a2(\.|c$)/, handleActionCallback);
 bot.callbackQuery(/^wd_/, handleWithdrawCallback);
 bot.callbackQuery(/^tx_/, handleTxControlCallback);
 
@@ -180,8 +196,6 @@ bot.callbackQuery(/^sv_/, handleSaveCallback);
 // Phase 4: Portfolio aliases.
 bot.command("positions", portfolioCommand);
 bot.command("pnl", portfolioCommand);
-bot.command("history", portfolioCommand);
-bot.command("balance", portfolioCommand);
 bot.command("wallet", portfolioCommand);
 bot.command("earn", saveCommand);
 
@@ -199,10 +213,10 @@ bot.on("message:text", async (ctx, next) => {
   // Check if user has AI input enabled
   const user = await prisma.user.findUnique({
     where: { telegramId },
-    select: { id: true, slippageBps: true, mevProtection: true, aiInputEnabled: true } as any,
+    select: { id: true, slippageBps: true, mevProtection: true, aiInputEnabled: true },
   }).catch(() => null);
 
-  if (!user || !(user as any).aiInputEnabled) return next();
+  if (!user?.aiInputEnabled) return next();
 
   // Only process if the text looks like a trade intent
   if (!looksLikeNaturalIntent(text)) return next();
@@ -221,6 +235,29 @@ bot.on("message:text", async (ctx, next) => {
   if (intent.action === "help") {
     return helpCommand(ctx as any);
   }
+  if (intent.action === "deposit") {
+    return depositCommand(ctx as any);
+  }
+  if (intent.action === "withdraw") {
+    return withdrawCommand(ctx as any);
+  }
+  if (intent.action === "fxsave_deposit" || intent.action === "fxsave_withdraw") {
+    const amount = intent.amount ? ` ${intent.amount}` : "";
+    const token = intent.token ? ` ${intent.token}` : "";
+    await ctx.reply(
+      intent.action === "fxsave_deposit"
+        ? `🪙 To review this fxSAVE deposit, use /save deposit${amount}${token}.`
+        : `🪙 To review this fxSAVE withdrawal, use /save withdraw${amount || " all"}.`
+    );
+    return;
+  }
+  if (intent.action === "close_position") {
+    return closeCommand(ctx as any);
+  }
+  if (intent.action === "adjust_leverage") {
+    await ctx.reply("⚖️ Choose the position to adjust from /portfolio. Live leverage options are shown on its position card.");
+    return;
+  }
 
   // Trade intents → build preview
   const tradeParams = intentToTradeParams(intent);
@@ -237,11 +274,13 @@ bot.on("message:text", async (ctx, next) => {
     return;
   }
 
-  // For other recognized intents, show confirmation
-  if (intent.action !== "unknown") {
+  if (intent.action === "open_long" || intent.action === "open_short") {
+    const market = intent.market ?? "the market's native token";
+    const tokenMismatch = intent.token && intent.market && intent.token !== intent.market;
     await ctx.reply(
-      `🤖 I understood: *${intent.action.replace(/_/g, " ")}*\n\nPlease use the corresponding command for now. Full NL routing coming soon.`,
-      { parse_mode: "Markdown" }
+      tokenMismatch
+        ? `❌ ${intent.token} amounts cannot be safely converted in chat. Use ${market} units, for example: “${intent.side ?? "long"} ${market === "WBTC" ? "btc 0.005 wbtc" : "eth 0.25 wsteth"} 2x”.`
+        : `I need a market-native amount before I can build a preview. Example: “long btc 0.005 wbtc 2x”.`
     );
     return;
   }
@@ -349,7 +388,14 @@ function startBackgroundWorkers() {
     try { sloDigest.start((chatId, msg) => bot.api.sendMessage(chatId, msg)); } catch (e) { logger.error(e, "Failed to start SLO digest"); }
     try { priceAlertPoller.start(); } catch (e) { logger.error(e, "Failed to start price-alert poller"); }
     try { automationPoller.start(); } catch (e) { logger.error(e, "Failed to start automation poller"); }
-  try { arbPoller.start(); } catch (e) { logger.error(e, "Failed to start arb poller"); }
+    try { arbPoller.start(); } catch (e) { logger.error(e, "Failed to start arb poller"); }
+    try {
+      startDepositWatcherPoller(async (telegramId, message) => {
+        await bot.api.sendMessage(telegramId, message);
+      });
+    } catch (e) {
+      logger.error(e, "Failed to start deposit-watcher poller");
+    }
   }, 5000);
 }
 
@@ -361,17 +407,27 @@ const WEBHOOK_BASE_DELAY_MS = 1_000;
 
 async function registerWebhookWithRetry(
   webhookUrl: string,
-  telegramWebhookSecret: string
-): Promise<void> {
-  // Skip-noop: avoid redundant setWebhook calls on every cold start.
+  telegramWebhookSecret: string,
+  force = false
+): Promise<boolean> {
+  // Skip-noop only when both URL and secret match. URL-only caching leaves
+  // Telegram using an old header after a secret rotation.
+  const secretFingerprint = webhookSecretFingerprint(telegramWebhookSecret);
   try {
-    const storedUrl = await getBotState(BS_WEBHOOK_URL);
-    if (storedUrl === webhookUrl) {
-      logger.info(
-        { webhookUrl },
-        "Webhook URL unchanged in BotState — skipping setWebhook"
-      );
-      return;
+    const [storedUrl, storedSecretFingerprint] = await Promise.all([
+      getBotState(BS_WEBHOOK_URL),
+      getBotState(BS_WEBHOOK_SECRET),
+    ]);
+    if (!force && storedUrl === webhookUrl && storedSecretFingerprint === secretFingerprint) {
+      // The database cache is only an optimization. Verify Telegram's live
+      // state so an externally deleted or redirected webhook self-heals on
+      // the next boot instead of remaining silently offline.
+      const live = await bot.api.getWebhookInfo();
+      if (live.url === webhookUrl) {
+        logger.info({ webhookUrl }, "Live Telegram webhook already matches — skipping setWebhook");
+        return true;
+      }
+      logger.warn({ webhookUrl, liveUrl: live.url }, "Webhook cache drift detected — re-registering");
     }
   } catch {
     // BotState table might not exist yet (first deploy before migration).
@@ -382,7 +438,6 @@ async function registerWebhookWithRetry(
     try {
       await bot.api.setWebhook(webhookUrl, {
         allowed_updates: ["message", "callback_query", "inline_query"],
-        drop_pending_updates: true,
         secret_token: telegramWebhookSecret,
       });
       logger.info(
@@ -391,11 +446,14 @@ async function registerWebhookWithRetry(
       );
       // Persist so the next cold start skips.
       try {
-        await setBotState(BS_WEBHOOK_URL, webhookUrl);
+        await Promise.all([
+          setBotState(BS_WEBHOOK_URL, webhookUrl),
+          setBotState(BS_WEBHOOK_SECRET, secretFingerprint),
+        ]);
       } catch {
         // Non-fatal: skip-noop just won't work until the table exists.
       }
-      return;
+      return true;
     } catch (e) {
       const isLast = attempt === WEBHOOK_MAX_RETRIES;
       if (isLast) {
@@ -403,7 +461,7 @@ async function registerWebhookWithRetry(
           e,
           `Failed to register webhook after ${WEBHOOK_MAX_RETRIES + 1} attempts — continuing without re-registration`
         );
-        return;
+        return false;
       }
       const delay = WEBHOOK_BASE_DELAY_MS * Math.pow(2, attempt);
       logger.warn(
@@ -413,7 +471,21 @@ async function registerWebhookWithRetry(
       await new Promise((r) => setTimeout(r, delay));
     }
   }
+  return false;
 }
+
+configureAdminWebhook(async () => {
+  const origin = env.RENDER_EXTERNAL_URL || env.WEBHOOK_URL;
+  if (!origin) throw new Error("No public webhook origin is configured");
+  const endpoint = webhookEndpointFromOrigin(origin);
+  const registered = await registerWebhookWithRetry(
+    endpoint,
+    getTelegramWebhookSecret(),
+    true
+  );
+  if (!registered) throw new Error("Telegram rejected webhook registration after all retries");
+  return endpoint;
+});
 
 // ---------------------------------------------------------------------------
 // Start
@@ -424,6 +496,11 @@ async function main() {
     const port = parseInt(env.PORT, 10);
 
     const app = express();
+
+    // Render terminates TLS one hop in front of the service. Trust exactly
+    // that hop so IP rate limits do not collapse every Mini App user onto the
+    // proxy's internal address.
+    app.set("trust proxy", 1);
 
     // Apply full security middleware (helmet, cors, rate limiter, request logging)
     applySecurityMiddleware(app);
@@ -453,9 +530,8 @@ async function main() {
       res.json({ ok: true, timestamp: new Date().toISOString() });
     });
 
-    // Render's healthCheckPath is /api/v1/health — serve the REAL checks
-    // there (the previous alias returned a hardcoded "healthy", so Render
-    // could never see a dead DB). (W-15)
+    // Deep dependency health remains separate from the liveness endpoint
+    // Render uses, so dependency outages cannot restart-loop the process.
     app.use("/api/v1/health", healthRouter);
 
     // Mini App data API (initData-authenticated): /me, /onboard, /settings.
@@ -467,7 +543,7 @@ async function main() {
         botToken: env.TELEGRAM_BOT_TOKEN,
         sendMessage: (chatId, text, opts) =>
           bot.api.sendMessage(chatId, text, opts),
-        miniAppUrl: env.MINI_APP_URL || "https://fxbot-mini-app.pages.dev",
+        miniAppUrl: env.MINI_APP_URL,
       })
     );
 
@@ -476,7 +552,7 @@ async function main() {
     app.get("/api/v1/info", (_req, res) => {
       res.json({
         name: "fxbot",
-        version: process.env.npm_package_version || "1.1.0",
+        version: process.env.npm_package_version || "1.3.0",
         env: env.NODE_ENV,
         uptimeSeconds: Math.round(process.uptime()),
         timestamp: new Date().toISOString(),
@@ -497,9 +573,9 @@ async function main() {
 
       // Register webhook with Telegram — skip-noop + exponential retry.
       // Render provides RENDER_EXTERNAL_URL; fall back to WEBHOOK_URL env var.
-      const webhookDomain = process.env.RENDER_EXTERNAL_URL || process.env.WEBHOOK_URL;
+      const webhookDomain = env.RENDER_EXTERNAL_URL || env.WEBHOOK_URL;
       if (webhookDomain) {
-        const webhookUrl = `${webhookDomain}/webhook`;
+        const webhookUrl = webhookEndpointFromOrigin(webhookDomain);
         await registerWebhookWithRetry(webhookUrl, telegramWebhookSecret);
       } else {
         logger.warn(
@@ -515,6 +591,44 @@ async function main() {
     });
   } else {
     // ------ Polling mode (development) ------
+    // Keep the authenticated Mini App API available in local development.
+    // Previously `pnpm dev` started Telegram polling only, so every Mini App
+    // screen failed even with NEXT_PUBLIC_BOT_API_URL pointed at localhost.
+    const port = parseInt(env.PORT, 10);
+    const app = express();
+    applySecurityMiddleware(app);
+    app.use(
+      express.json({
+        verify: (req, _res, buf) => {
+          (req as RequestWithRawBody).rawBody = buf;
+        },
+      })
+    );
+    app.use("/api", apiRouter);
+    app.get("/health", (_req, res) => {
+      res.json({ ok: true, timestamp: new Date().toISOString() });
+    });
+    app.use("/api/v1/health", healthRouter);
+    app.use(
+      "/api/v1/miniapp",
+      createMiniAppRouter({
+        botToken: env.TELEGRAM_BOT_TOKEN,
+        sendMessage: (chatId, text, opts) => bot.api.sendMessage(chatId, text, opts),
+        miniAppUrl: env.MINI_APP_URL,
+      })
+    );
+    app.get("/api/v1/info", (_req, res) => {
+      res.json({
+        name: "fxbot",
+        version: process.env.npm_package_version || "1.3.0",
+        env: env.NODE_ENV,
+        uptimeSeconds: Math.round(process.uptime()),
+        timestamp: new Date().toISOString(),
+      });
+    });
+    app.use(errorHandler);
+    app.listen(port, () => logger.info({ port }, "Development API listening"));
+
     await configureTelegramBot().catch((e) =>
       logger.error(e, "Failed to configure Telegram bot menu")
     );

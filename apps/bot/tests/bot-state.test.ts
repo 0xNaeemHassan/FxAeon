@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Mock prisma with botState model
-const mockFindUnique = vi.fn();
-const mockUpsert = vi.fn();
+// Vitest hoists vi.mock factories, so their shared spies must be hoisted too.
+const { mockFindUnique, mockUpsert } = vi.hoisted(() => ({
+  mockFindUnique: vi.fn(),
+  mockUpsert: vi.fn(),
+}));
 
 vi.mock("@fxaeon/db", () => ({
   prisma: {
@@ -12,10 +14,6 @@ vi.mock("@fxaeon/db", () => ({
     },
     user: {
       findUnique: vi.fn().mockResolvedValue(null),
-      count: vi.fn().mockResolvedValue(0),
-    },
-    feeLedger: {
-      aggregate: vi.fn().mockResolvedValue({ _sum: { usdAmount: 0, notionalUsd: 0 }, _count: 0 }),
       count: vi.fn().mockResolvedValue(0),
     },
     txRecord: {
@@ -33,7 +31,6 @@ import {
   BS_WEBHOOK_URL,
   BS_WEBHOOK_SECRET,
   BS_DEPLOY_ID,
-  BS_FEE_MODE,
   BS_POLICY_MODE,
 } from "../src/core/botState";
 
@@ -69,7 +66,6 @@ describe("BotState", () => {
     expect(BS_WEBHOOK_URL).toBe("webhook_url");
     expect(BS_WEBHOOK_SECRET).toBe("webhook_secret");
     expect(BS_DEPLOY_ID).toBe("deploy_id");
-    expect(BS_FEE_MODE).toBe("fee_mode");
     expect(BS_POLICY_MODE).toBe("policy_mode");
   });
 });

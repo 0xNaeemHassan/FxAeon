@@ -169,7 +169,7 @@ function PrivyWalletControls() {
         <Button onClick={connect} loading={busy === 'login'}>
           Connect wallet
         </Button>
-        {error && <p className="text-[12.5px] text-warn">{error}</p>}
+        {error && <p role="alert" className="text-[12.5px] text-warn">{error}</p>}
       </Card>
     );
   }
@@ -282,7 +282,7 @@ function PrivyWalletControls() {
       </Card>
       {error && (
         <Card className="border-[rgba(255,194,75,0.35)]">
-          <p className="text-[13px] leading-relaxed text-warn">{error}</p>
+          <p role="alert" className="text-[13px] leading-relaxed text-warn">{error}</p>
         </Card>
       )}
     </div>

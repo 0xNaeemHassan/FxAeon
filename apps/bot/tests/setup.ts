@@ -13,6 +13,9 @@ vi.mock("@fxaeon/db", () => ({
       findMany: vi.fn().mockResolvedValue([]),
       count: vi.fn().mockResolvedValue(0),
     },
+    deletedUser: {
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
     automationRule: {
       findMany: vi.fn().mockResolvedValue([]),
       findUnique: vi.fn().mockResolvedValue(null),
@@ -30,6 +33,7 @@ vi.mock("@fxaeon/db", () => ({
     },
     limitOrder: {
       findMany: vi.fn().mockResolvedValue([]),
+      findUnique: vi.fn().mockResolvedValue(null),
     },
     auditLog: {
       create: vi.fn().mockResolvedValue({}),
@@ -47,4 +51,8 @@ vi.mock("@fxaeon/db", () => ({
 
 // W-17: trade intents are HMAC-signed; give tests a deterministic secret so
 // preview/confirm paths can sign without a real bot token.
-process.env.INTENT_SECRET ??= "test-intent-secret";
+// Keep the shared fixture inside the same minimum-strength boundary as the
+// production config. A deliberately under-sized key makes any request path
+// that calls getConfig() fail asynchronously and can hide the behavior the
+// test intended to exercise.
+process.env.INTENT_SECRET ??= "test-intent-secret-at-least-32-bytes";

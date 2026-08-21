@@ -7,11 +7,12 @@
  * set of verified f(x) contracts). Defense in depth: even though the user's
  * wallet is unrestricted, the bot itself refuses to broadcast elsewhere.
  */
-import type { FxSdk } from "@aladdindao/fx-sdk";
 import {
   BRIDGE_OFT_BY_TOKEN,
   CHAIN_ID_BASE,
   CHAIN_ID_ETHEREUM,
+  FxSdk,
+  type SupportedBridgeChainId,
 } from "@aladdindao/fx-sdk";
 import {
   createPublicClient,
@@ -20,8 +21,9 @@ import {
   formatUnits,
   http,
   isAddress,
+  type PublicClient,
 } from "viem";
-import { mainnet } from "viem/chains";
+import { base, mainnet } from "viem/chains";
 import { ADDRESSES, type Market } from "@fxaeon/shared";
 import { getConfig } from "../middleware/config.js";
 import { collateralAddress, toSdkMarket, type TradeTx } from "./index.js";
@@ -34,9 +36,12 @@ const KNOWN_TARGETS: ReadonlySet<string> = new Set(
   [
     ADDRESSES.ROUTER,
     ADDRESSES.FXSAVE,
+    ADDRESSES.FXUSD_BASE_POOL,
     ADDRESSES.FX_MINT_ROUTER,
     ADDRESSES.FXUSD,
     ADDRESSES.USDC,
+    ADDRESSES.USDT,
+    ADDRESSES.WETH,
     ADDRESSES.WSTETH,
     ADDRESSES.WBTC,
     ADDRESSES.STETH,
@@ -106,6 +111,37 @@ export interface SaveOverview {
   };
 }
 
+export interface SaveConfig {
+  totalSupply: string;
+  totalAssets: string;
+  assetsPerShare: number | null;
+  cooldownHours: number;
+  instantRedeemFeePct: number;
+  expenseRatioPct: number;
+  harvesterRatioPct: number;
+  threshold: string;
+}
+
+/** Live fxSAVE protocol totals and parameters from the SDK. */
+export async function getSaveConfig(sdk: FxSdk): Promise<SaveConfig> {
+  const config = await sdk.getFxSaveConfig();
+  const totalSupply = formatUnits(config.totalSupplyWei, 18);
+  const totalAssets = formatUnits(config.totalAssetsWei, 18);
+  const ratioToPct = (value: bigint): number => Number(formatUnits(value, 18)) * 100;
+  return {
+    totalSupply,
+    totalAssets,
+    assetsPerShare: config.totalSupplyWei > 0n
+      ? Number((config.totalAssetsWei * 1_000_000_000n) / config.totalSupplyWei) / 1_000_000_000
+      : null,
+    cooldownHours: Number(config.cooldownPeriodSeconds) / 3600,
+    instantRedeemFeePct: ratioToPct(config.instantRedeemFeeRatio),
+    expenseRatioPct: ratioToPct(config.expenseRatio),
+    harvesterRatioPct: ratioToPct(config.harvesterRatio),
+    threshold: formatUnits(config.threshold, 18),
+  };
+}
+
 export async function getSaveOverview(sdk: FxSdk, userAddress: string): Promise<SaveOverview> {
   const addr = userAddress as `0x${string}`;
   const [balance, redeem, fxUsdWei, usdcWei] = await Promise.all([
@@ -132,7 +168,7 @@ export async function getSaveOverview(sdk: FxSdk, userAddress: string): Promise<
 
 // ── fxSAVE quotes ───────────────────────────────────────────────────────────
 
-export type SaveToken = "fxUSD" | "usdc";
+export type SaveToken = "fxUSD" | "usdc" | "fxUSDBasePool";
 
 export async function quoteSaveDeposit(params: {
   sdk: FxSdk;
@@ -156,16 +192,23 @@ export async function quoteSaveWithdraw(params: {
   userAddress: string;
   /** fxSAVE shares in wei (18 decimals). */
   sharesWei: bigint;
-  /** true = instant (fee + slippage), false = 2-step cooldown request. */
+  /** true = instant (fee + slippage), false = 2-step cooldown request.
+   * fxUSDBasePool is a third SDK mode: direct ERC-4626 redeem, immediately. */
   instant: boolean;
   slippagePercent: number;
+  /** Every tokenOut accepted by fx-sdk. Defaults to fxUSD. */
+  tokenOut?: SaveToken;
 }): Promise<TradeTx[]> {
+  const tokenOut = params.tokenOut ?? "fxUSD";
   const { txs } = await params.sdk.withdrawFxSave({
     userAddress: params.userAddress,
-    tokenOut: "fxUSD",
+    tokenOut,
     amount: params.sharesWei,
-    instant: params.instant,
-    slippage: params.instant ? params.slippagePercent : undefined,
+    // SDK 1.0.5 special-cases fxUSDBasePool before checking `instant`; false
+    // documents that this is neither its fee-bearing instant swap nor queue.
+    instant: tokenOut === "fxUSDBasePool" ? false : params.instant,
+    slippage:
+      tokenOut !== "fxUSDBasePool" && params.instant ? params.slippagePercent : undefined,
   });
   return assertKnownTargets(txs, "fxSAVE withdraw");
 }
@@ -200,7 +243,10 @@ export async function quoteSaveClaim(sdk: FxSdk, userAddress: string): Promise<T
 
 export interface MintQuote {
   positionId: number;
+  leverage: number;
   executionPrice: string;
+  colls: string;
+  debts: string;
   txs: TradeTx[];
 }
 
@@ -212,6 +258,8 @@ export async function quoteDepositAndMint(params: {
   collateralWei: bigint;
   /** fxUSD to mint, in wei (18 decimals). */
   mintWei: bigint;
+  /** Any deposit token accepted by the SDK for this market. */
+  depositTokenAddress?: `0x${string}`;
   /** 0 = new position, >0 = add to existing. */
   positionId?: number;
 }): Promise<MintQuote> {
@@ -221,15 +269,27 @@ export async function quoteDepositAndMint(params: {
     userAddress: params.userAddress,
     // SDK compares this address case-sensitively against its lowercase
     // registry — keep it lowercase or it rejects with "must be eth, stETH…".
-    depositTokenAddress: collateralAddress(params.market).toLowerCase(),
+    depositTokenAddress: (params.depositTokenAddress ?? collateralAddress(params.market)).toLowerCase(),
     depositAmount: params.collateralWei,
     mintAmount: params.mintWei,
   });
   return {
     positionId: result.positionId,
+    leverage: result.leverage,
     executionPrice: result.executionPrice,
+    colls: result.colls,
+    debts: result.debts,
     txs: assertKnownTargets(result.txs as SdkTx[], "deposit & mint"),
   };
+}
+
+export interface RepayQuote {
+  positionId: number;
+  leverage: number;
+  executionPrice: string;
+  colls: string;
+  debts: string;
+  txs: TradeTx[];
 }
 
 export async function quoteRepay(params: {
@@ -241,16 +301,25 @@ export async function quoteRepay(params: {
   repayWei: bigint;
   /** Collateral to withdraw alongside, in wei (0 = repay only). */
   withdrawWei?: bigint;
-}): Promise<TradeTx[]> {
+  /** Any withdraw token accepted by the SDK for this market. */
+  withdrawTokenAddress?: `0x${string}`;
+}): Promise<RepayQuote> {
   const result = await params.sdk.repayAndWithdraw({
     market: toSdkMarket(params.market),
     positionId: params.positionId,
     userAddress: params.userAddress,
     repayAmount: params.repayWei,
     withdrawAmount: params.withdrawWei ?? 0n,
-    withdrawTokenAddress: collateralAddress(params.market).toLowerCase(),
+    withdrawTokenAddress: (params.withdrawTokenAddress ?? collateralAddress(params.market)).toLowerCase(),
   });
-  return assertKnownTargets(result.txs as SdkTx[], "repay");
+  return {
+    positionId: result.positionId,
+    leverage: result.leverage,
+    executionPrice: result.executionPrice,
+    colls: result.colls,
+    debts: result.debts,
+    txs: assertKnownTargets(result.txs as SdkTx[], "repay"),
+  };
 }
 
 // ── Cross-chain bridge (LayerZero V2 OFT) ────────────────────────────────────
@@ -260,29 +329,151 @@ export async function quoteRepay(params: {
 // adapters. Wrapped here in the same executor-ready shape + fail-closed target
 // allow-list as the earn/mint/repay routes above.
 //
-// SCOPE — Ethereum → Base only: the W-11 executor signs, simulates and
-// broadcasts on Ethereum mainnet, so an Ethereum→Base bridge (source chain =
-// mainnet, a single OFT `send`) fits it exactly. Base→Ethereum would have to be
-// signed/simulated on Base and is rejected here with an honest error.
+// SCOPE — both Ethereum → Base and Base → Ethereum. The caller must construct
+// the matching source-chain public client and pass the same chainId to the
+// executor; helpers below make that pairing explicit.
 //
 // APPROVE — buildBridgeTx returns only the OFT `send` call. The fxUSD/fxSAVE OFT
-// adapters are lockbox adapters (address ≠ token), so `send` pulls tokens via
-// transferFrom and needs an ERC-20 allowance. quoteBridge reads the allowance
-// and prepends an `approve` tx only when it is short.
+// Ethereum adapters are lockboxes (address ≠ token), so `send` pulls tokens via
+// transferFrom and may need an approval. On Base the child token is itself the
+// OFT and burns directly, so no approval is built.
 
 export type BridgeToken = "fxUSD" | "fxSAVE";
+export type BridgeChainId = SupportedBridgeChainId;
+
+export interface BridgeRoute {
+  sourceChainId: BridgeChainId;
+  destChainId: BridgeChainId;
+}
 
 /** Both bridgeable tokens are 18-decimal on Ethereum. */
 export const BRIDGE_TOKEN_DECIMALS = 18;
+/** SDK 1.0.5 truncates destination credit to four token decimals. */
+export const BRIDGE_MIN_AMOUNT_WEI = 10n ** 14n;
+
+function assertBridgeAmount(amountWei: bigint): void {
+  if (amountWei < BRIDGE_MIN_AMOUNT_WEI) {
+    throw new Error("Bridge amount must be at least 0.0001 token (the SDK credit granularity).");
+  }
+}
+
+/** Validate and normalize either supported bridge direction. */
+export function resolveBridgeRoute(
+  sourceChainId: number = CHAIN_ID_ETHEREUM,
+  destChainId?: number
+): BridgeRoute {
+  if (sourceChainId !== CHAIN_ID_ETHEREUM && sourceChainId !== CHAIN_ID_BASE) {
+    throw new Error(`Unsupported bridge source chainId ${sourceChainId}; use 1 or 8453.`);
+  }
+  const resolvedDest =
+    destChainId ??
+    (sourceChainId === CHAIN_ID_ETHEREUM ? CHAIN_ID_BASE : CHAIN_ID_ETHEREUM);
+  if (resolvedDest !== CHAIN_ID_ETHEREUM && resolvedDest !== CHAIN_ID_BASE) {
+    throw new Error(`Unsupported bridge destination chainId ${resolvedDest}; use 1 or 8453.`);
+  }
+  if (sourceChainId === resolvedDest) {
+    throw new Error("Bridge source and destination chains must differ.");
+  }
+  return { sourceChainId, destChainId: resolvedDest };
+}
+
+export function bridgeChainName(chainId: BridgeChainId): "Ethereum" | "Base" {
+  return chainId === CHAIN_ID_ETHEREUM ? "Ethereum" : "Base";
+}
+
+/** Configured source-chain RPC; never silently executes over a public fallback. */
+export function bridgeRpcUrl(chainId: BridgeChainId): string {
+  const cfg = getConfig();
+  const url = chainId === CHAIN_ID_ETHEREUM ? cfg.ALCHEMY_RPC_URL : cfg.BASE_RPC_URL;
+  if (!url) {
+    const key = chainId === CHAIN_ID_ETHEREUM ? "ALCHEMY_RPC_URL" : "BASE_RPC_URL";
+    throw new Error(`${key} is required for ${bridgeChainName(chainId)} bridge operations.`);
+  }
+  return url;
+}
+
+/** A source-chain SDK instance for bridge quote/build calls. */
+export function createBridgeSdk(chainId: BridgeChainId): FxSdk {
+  return new FxSdk({ chainId, rpcUrl: bridgeRpcUrl(chainId) });
+}
+
+/** Public client to pass to executeRoute for simulation/fees/receipt polling. */
+export function createBridgePublicClient(chainId: BridgeChainId): PublicClient {
+  const chain = chainId === CHAIN_ID_ETHEREUM ? mainnet : base;
+  return createPublicClient({
+    chain,
+    transport: http(bridgeRpcUrl(chainId), { timeout: RPC_TIMEOUT_MS }),
+  }) as PublicClient;
+}
+
+export interface BridgeBalanceSnapshot {
+  chainId: BridgeChainId;
+  known: true;
+  /** Source-chain native gas balance, formatted with 18 decimals. */
+  native: string;
+  assets: {
+    fxUSD: string;
+    fxSAVE: string;
+  };
+}
+
+/**
+ * Read the wallet's bridgeable source assets and native gas on one chain.
+ * The caller owns fail-soft behavior so an unavailable Base RPC can never be
+ * confused with a real zero balance.
+ */
+export async function getBridgeBalances(
+  userAddress: `0x${string}`,
+  chainId: BridgeChainId
+): Promise<BridgeBalanceSnapshot> {
+  if (!isAddress(userAddress)) throw new Error("Bridge wallet must be a valid address.");
+  const client = createBridgePublicClient(chainId);
+  const [nativeWei, fxUsdWei, fxSaveWei] = await Promise.all([
+    client.getBalance({ address: userAddress }),
+    client.readContract({
+      address: bridgeTokenAddress("fxUSD", chainId),
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      args: [userAddress],
+    }),
+    client.readContract({
+      address: bridgeTokenAddress("fxSAVE", chainId),
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      args: [userAddress],
+    }),
+  ]);
+  return {
+    chainId,
+    known: true,
+    native: formatUnits(nativeWei, 18),
+    assets: {
+      fxUSD: formatUnits(fxUsdWei, 18),
+      fxSAVE: formatUnits(fxSaveWei, 18),
+    },
+  };
+}
+
+/** Source-side OFT / adapter that receives the LayerZero `send` call. */
+export function oftAdapterForChain(
+  token: BridgeToken,
+  chainId: BridgeChainId
+): `0x${string}` {
+  return BRIDGE_OFT_BY_TOKEN[token][chainId] as `0x${string}`;
+}
 
 /** Ethereum-side ERC-20 token address for each bridgeable asset. */
-function bridgeTokenAddressEthereum(token: BridgeToken): `0x${string}` {
+export function bridgeTokenAddress(
+  token: BridgeToken,
+  chainId: BridgeChainId
+): `0x${string}` {
+  if (chainId === CHAIN_ID_BASE) return oftAdapterForChain(token, chainId);
   return (token === "fxUSD" ? ADDRESSES.FXUSD : ADDRESSES.FXSAVE) as `0x${string}`;
 }
 
 /** Ethereum-side OFT adapter address (the `send` target / approve spender). */
 export function oftAdapterEthereum(token: BridgeToken): `0x${string}` {
-  return BRIDGE_OFT_BY_TOKEN[token][CHAIN_ID_ETHEREUM] as `0x${string}`;
+  return oftAdapterForChain(token, CHAIN_ID_ETHEREUM);
 }
 
 /**
@@ -292,11 +483,14 @@ export function oftAdapterEthereum(token: BridgeToken): `0x${string}` {
 function assertKnownBridgeTargets(
   txs: SdkTx[],
   token: BridgeToken,
+  sourceChainId: BridgeChainId,
   action: string
 ): TradeTx[] {
   if (txs.length === 0) throw new Error(`${action}: no transactions built`);
   const allowed = new Set(
-    [bridgeTokenAddressEthereum(token), oftAdapterEthereum(token)].map((a) => a.toLowerCase())
+    [bridgeTokenAddress(token, sourceChainId), oftAdapterForChain(token, sourceChainId)].map((a) =>
+      a.toLowerCase()
+    )
   );
   for (const tx of txs) {
     if (!allowed.has(tx.to.toLowerCase())) {
@@ -312,62 +506,71 @@ function assertKnownBridgeTargets(
   }));
 }
 
-/** Only Ethereum→Base is supported today; anything else throws an honest error. */
+/** Legacy guard retained for the Telegram command's Ethereum-only intent. */
 export function assertEthToBase(sourceChainId: number, destChainId: number): void {
-  if (sourceChainId === CHAIN_ID_BASE && destChainId === CHAIN_ID_ETHEREUM) {
-    throw new Error(
-      "Base → Ethereum bridging isn't live yet — it has to be signed on Base, " +
-        "which this bot's executor doesn't do. Ethereum → Base works today."
-    );
-  }
+  resolveBridgeRoute(sourceChainId, destChainId);
   if (sourceChainId !== CHAIN_ID_ETHEREUM || destChainId !== CHAIN_ID_BASE) {
-    throw new Error("Only Ethereum → Base bridging is supported.");
+    throw new Error("This legacy flow only supports Ethereum -> Base.");
   }
 }
 
 export interface BridgeQuote {
   /** LayerZero native gas fee (wei) — paid as the source tx value. */
   nativeFeeWei: bigint;
-  /** OFT adapter the bridge sends through (Ethereum side). */
+  lzTokenFeeWei: bigint;
+  sourceChainId: BridgeChainId;
+  destChainId: BridgeChainId;
+  /** Source-side OFT/adapter through which the bridge sends. */
   oftAdapter: `0x${string}`;
 }
 
-/** Real on-chain LayerZero quote for an Ethereum→Base bridge. No tx is built. */
+/** Real source-chain LayerZero quote. No transaction is built or signed. */
 export async function quoteBridgeFee(params: {
-  sdk: FxSdk;
+  sdk?: FxSdk;
   token: BridgeToken;
   /** Amount in wei (18 decimals). */
   amountWei: bigint;
   /** Recipient on Base (EOA / smart wallet — same address by default). */
   recipient: string;
+  /** Defaults to Ethereum; destination defaults to the opposite chain. */
+  sourceChainId?: BridgeChainId;
+  destChainId?: BridgeChainId;
 }): Promise<BridgeQuote> {
-  const { sdk, token, amountWei, recipient } = params;
-  if (amountWei <= 0n) throw new Error("Bridge amount must be greater than 0.");
+  const { token, amountWei, recipient } = params;
+  assertBridgeAmount(amountWei);
   if (!isAddress(recipient)) throw new Error("Recipient must be a valid address.");
+  const route = resolveBridgeRoute(params.sourceChainId, params.destChainId);
+  const sdk = params.sdk ?? createBridgeSdk(route.sourceChainId);
   const quote = await sdk.getBridgeQuote({
-    sourceChainId: CHAIN_ID_ETHEREUM,
-    destChainId: CHAIN_ID_BASE,
+    ...route,
     token,
     amount: amountWei,
     recipient,
-    sourceRpcUrl: getConfig().ALCHEMY_RPC_URL,
+    sourceRpcUrl: bridgeRpcUrl(route.sourceChainId),
   });
-  return { nativeFeeWei: quote.nativeFee, oftAdapter: oftAdapterEthereum(token) };
+  return {
+    nativeFeeWei: quote.nativeFee,
+    lzTokenFeeWei: quote.lzTokenFee,
+    ...route,
+    oftAdapter: oftAdapterForChain(token, route.sourceChainId),
+  };
 }
 
 /**
- * Executor-ready tx list for an Ethereum→Base bridge:
- *   [approve(token → OFT adapter)?, OFT.send{value: nativeFee}]
- * The approve is prepended only when the current allowance is short.
+ * Executor-ready route. Ethereum may return [approve, OFT.send]; Base returns
+ * a single child-OFT send because the source token is the OFT itself.
  */
 export async function quoteBridge(params: {
-  sdk: FxSdk;
+  sdk?: FxSdk;
   userAddress: `0x${string}`;
   token: BridgeToken;
   /** Amount in wei (18 decimals). */
   amountWei: bigint;
-  /** Recipient on Base. Defaults to userAddress. */
+  /** Recipient on the destination chain. Defaults to userAddress. */
   recipient?: `0x${string}`;
+  /** Defaults to Ethereum; destination defaults to the opposite chain. */
+  sourceChainId?: BridgeChainId;
+  destChainId?: BridgeChainId;
   /** Allowance reader override (tests). */
   readAllowance?: (
     token: `0x${string}`,
@@ -375,51 +578,64 @@ export async function quoteBridge(params: {
     spender: `0x${string}`
   ) => Promise<bigint>;
 }): Promise<{ txs: TradeTx[]; quote: BridgeQuote }> {
-  const { sdk, userAddress, token, amountWei } = params;
+  const { userAddress, token, amountWei } = params;
   const recipient = params.recipient ?? userAddress;
-  if (amountWei <= 0n) throw new Error("Bridge amount must be greater than 0.");
+  assertBridgeAmount(amountWei);
+  if (!isAddress(userAddress) || !isAddress(recipient)) {
+    throw new Error("Bridge wallet and recipient must be valid addresses.");
+  }
+  const route = resolveBridgeRoute(params.sourceChainId, params.destChainId);
+  const sdk = params.sdk ?? createBridgeSdk(route.sourceChainId);
 
-  const tokenAddr = bridgeTokenAddressEthereum(token);
-  const adapter = oftAdapterEthereum(token);
+  const tokenAddr = bridgeTokenAddress(token, route.sourceChainId);
+  const adapter = oftAdapterForChain(token, route.sourceChainId);
 
   const built = await sdk.buildBridgeTx({
-    sourceChainId: CHAIN_ID_ETHEREUM,
-    destChainId: CHAIN_ID_BASE,
+    ...route,
     token,
     amount: amountWei,
     recipient,
     refundAddress: userAddress,
-    sourceRpcUrl: getConfig().ALCHEMY_RPC_URL,
+    sourceRpcUrl: bridgeRpcUrl(route.sourceChainId),
   });
+  if (built.tx.value !== built.quote.nativeFee) {
+    throw new Error("bridge: SDK tx value does not match its LayerZero native-fee quote");
+  }
 
   // OFT lockbox adapter pulls the token via transferFrom → ensure allowance.
-  const readAllowance =
-    params.readAllowance ??
-    ((t, owner, spender) =>
-      readClient().readContract({
-        address: t,
-        abi: erc20Abi,
-        functionName: "allowance",
-        args: [owner, spender],
-      }));
-  const allowance = await readAllowance(tokenAddr, userAddress, adapter);
-
   const raw: SdkTx[] = [];
-  if (allowance < amountWei) {
-    raw.push({
-      to: tokenAddr,
-      data: encodeFunctionData({
-        abi: erc20Abi,
-        functionName: "approve",
-        args: [adapter, amountWei],
-      }),
-      value: 0n,
-    });
+  if (route.sourceChainId === CHAIN_ID_ETHEREUM) {
+    const readAllowance =
+      params.readAllowance ??
+      ((t, owner, spender) =>
+        createBridgePublicClient(CHAIN_ID_ETHEREUM).readContract({
+          address: t,
+          abi: erc20Abi,
+          functionName: "allowance",
+          args: [owner, spender],
+        }));
+    const allowance = await readAllowance(tokenAddr, userAddress, adapter);
+    if (allowance < amountWei) {
+      raw.push({
+        to: tokenAddr,
+        data: encodeFunctionData({
+          abi: erc20Abi,
+          functionName: "approve",
+          args: [adapter, amountWei],
+        }),
+        value: 0n,
+      });
+    }
   }
   raw.push({ to: built.tx.to, data: built.tx.data, value: built.tx.value });
 
   return {
-    txs: assertKnownBridgeTargets(raw, token, "bridge"),
-    quote: { nativeFeeWei: built.quote.nativeFee, oftAdapter: adapter },
+    txs: assertKnownBridgeTargets(raw, token, route.sourceChainId, "bridge"),
+    quote: {
+      nativeFeeWei: built.quote.nativeFee,
+      lzTokenFeeWei: built.quote.lzTokenFee,
+      ...route,
+      oftAdapter: adapter,
+    },
   };
 }

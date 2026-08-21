@@ -3,11 +3,11 @@
  *
  * After a trade receipt or from /portfolio, each position card shows
  * action buttons:
- *   📈 Increase | 📉 Reduce | 🔒 Close | ⚖️ Adjust Leverage
+ *   📉 Reduce | 🔒 Close | ⚖️ Adjust Leverage
  *   🎯 TP/SL   | 🔄 Refresh | 🖥️ Open in App
  *
  * Each button either:
- * - Routes to the existing trade ladder (increase/reduce via /trade flow)
+ * - Executes a simulation-gated reduction or leverage adjustment
  * - Routes to the existing close flow (positionActions.ts)
  * - Performs an inline adjustment (leverage adjust)
  * - Shows a TP/SL setup hint (pointing to /auto)
@@ -16,11 +16,50 @@
  */
 import { Context, InlineKeyboard, type Bot } from "grammy";
 import { prisma } from "@fxaeon/db";
-import { MARKETS, type Market } from "@fxaeon/shared";
-import { createFxSdk } from "../fx/index.js";
-import { fetchOnChainPositions, findUserPosition, type OnChainPosition, type Side } from "../core/portfolio.js";
+import { MARKETS, RISK_PARAMS, type Market } from "@fxaeon/shared";
+import {
+  createFxSdk,
+  createPublicClientForUser,
+  getSdkReductionAmountWei,
+  mevModeForUser,
+  quoteAdjustPositionLeverage,
+  quoteClosePosition,
+} from "../fx/index.js";
+import { findUserPosition, type OnChainPosition, type Side } from "../core/portfolio.js";
 import { storeCallbackPayload, consumeCallbackPayload } from "../core/callbackKeys.js";
 import { botLogger } from "../middleware/logger.js";
+import { executeRoute } from "../core/txExecutor.js";
+import { requireDelegatedWallet } from "../core/delegation.js";
+import { describeExecutionError } from "../core/errorTaxonomy.js";
+import { statusLine } from "./tradeActions.js";
+
+interface PositionTarget {
+  market: Market;
+  side: Side;
+  positionId: number;
+}
+
+function readPositionTarget(
+  payload: ReturnType<typeof consumeCallbackPayload>,
+  action: string
+): PositionTarget | null {
+  if (
+    !payload ||
+    payload.action !== action ||
+    typeof payload.market !== "string" ||
+    !(MARKETS as readonly string[]).includes(payload.market) ||
+    (payload.side !== "long" && payload.side !== "short") ||
+    !Number.isSafeInteger(payload.positionId) ||
+    (payload.positionId as number) < 0
+  ) {
+    return null;
+  }
+  return {
+    market: payload.market as Market,
+    side: payload.side,
+    positionId: payload.positionId as number,
+  };
+}
 
 // ── Position Card Rendering ─────────────────────────────────────────────────
 
@@ -36,13 +75,6 @@ export function buildPositionActionKeyboard(
   const mIdx = MARKETS.indexOf(market);
   const sideKey = side === "short" ? "s" : "l";
 
-  // Store payloads for complex actions
-  const increaseNonce = storeCallbackPayload({
-    action: "pa_increase",
-    market,
-    side,
-    positionId,
-  });
   const reduceNonce = storeCallbackPayload({
     action: "pa_reduce",
     market,
@@ -58,7 +90,6 @@ export function buildPositionActionKeyboard(
 
   const kb = new InlineKeyboard()
     // Row 1: Core trade actions
-    .text("📈 Increase", `pa_inc_${increaseNonce}`)
     .text("📉 Reduce", `pa_red_${reduceNonce}`)
     .text("🔒 Close", `pc_${mIdx}_${sideKey}_${positionId}`)
     .row()
@@ -122,43 +153,21 @@ async function loadUser(ctx: Context) {
   return prisma.user.findUnique({ where: { telegramId } });
 }
 
-/** Handle "Increase" button — routes to trade flow with position pre-filled */
-async function handleIncrease(ctx: Context): Promise<void> {
-  const nonce = ctx.callbackQuery?.data?.slice("pa_inc_".length);
-  if (!nonce) return;
-
-  const payload = consumeCallbackPayload(nonce);
-  if (!payload) {
-    await editSafe(ctx, "⌛ This button expired. Use /portfolio for a fresh view.");
-    return;
-  }
-
-  const { market, side, positionId } = payload;
-  const asset = market === "wstETH" ? "ETH" : "BTC";
-
-  await ctx.reply(
-    `📈 Increase ${market} ${(side as string).toUpperCase()} #${positionId}\n\n` +
-      `To add collateral to this position, use:\n` +
-      `/${side}${asset} <amount> <leverage>x\n\n` +
-      `Example: /${side}${asset} 0.5 ${(side as string) === "long" ? "5" : "2"}x\n\n` +
-      `The trade flow will route through the existing position.`
-  );
-}
-
 /** Handle "Reduce" button — partial close via reduce position */
 async function handleReduce(ctx: Context): Promise<void> {
   const nonce = ctx.callbackQuery?.data?.slice("pa_red_".length);
   if (!nonce) return;
 
   const payload = consumeCallbackPayload(nonce);
-  if (!payload) {
-    await editSafe(ctx, "⌛ This button expired. Use /portfolio for a fresh view.");
+  const target = readPositionTarget(payload, "pa_reduce");
+  if (!target) {
+    await editSafe(ctx, "⌛ This button expired or is invalid. Use /portfolio for a fresh view.");
     return;
   }
 
-  const { market, side, positionId } = payload;
-  const mIdx = MARKETS.indexOf(market as Market);
-  const sideKey = (side as string) === "short" ? "s" : "l";
+  const { market, side, positionId } = target;
+  const mIdx = MARKETS.indexOf(market);
+  const sideKey = side === "short" ? "s" : "l";
 
   // Show percentage reduction buttons
   const kb = new InlineKeyboard();
@@ -176,7 +185,7 @@ async function handleReduce(ctx: Context): Promise<void> {
 
   await editSafe(
     ctx,
-    `📉 Reduce ${market} ${(side as string).toUpperCase()} #${positionId}\n\n` +
+    `📉 Reduce ${market} ${side.toUpperCase()} #${positionId}\n\n` +
       `How much do you want to reduce?`,
     kb
   );
@@ -188,12 +197,13 @@ async function handleAdjustLeverage(ctx: Context): Promise<void> {
   if (!nonce) return;
 
   const payload = consumeCallbackPayload(nonce);
-  if (!payload) {
-    await editSafe(ctx, "⌛ This button expired. Use /portfolio for a fresh view.");
+  const target = readPositionTarget(payload, "pa_adjust_lev");
+  if (!target) {
+    await editSafe(ctx, "⌛ This button expired or is invalid. Use /portfolio for a fresh view.");
     return;
   }
 
-  const { market, side, positionId } = payload;
+  const { market, side, positionId } = target;
   const user = await loadUser(ctx);
   if (!user) {
     await editSafe(ctx, "🔐 Connect your wallet first with /start.");
@@ -205,9 +215,9 @@ async function handleAdjustLeverage(ctx: Context): Promise<void> {
     const pos = await findUserPosition(
       sdk,
       user.walletAddress,
-      market as Market,
-      side as Side,
-      positionId as number
+      market,
+      side,
+      positionId
     );
     if (!pos) {
       await editSafe(ctx, "❌ Position not found on-chain. It may have been closed.");
@@ -215,12 +225,12 @@ async function handleAdjustLeverage(ctx: Context): Promise<void> {
     }
 
     const currentLev = pos.leverage;
-    const maxLev = (side as string) === "long" ? 7 : 3;
-    const minLev = 1.1;
+    const maxLev = side === "long" ? RISK_PARAMS.MAX_LEVERAGE_LONG : RISK_PARAMS.MAX_LEVERAGE_SHORT;
+    const minLev = RISK_PARAMS.MIN_LEVERAGE;
 
     // Build leverage adjustment buttons
     const kb = new InlineKeyboard();
-    const targets = (side as string) === "long" ? [2, 3, 5, 7] : [1.5, 2, 3];
+    const targets = side === "long" ? [2, 3, 5, 7] : [1.5, 2, 3];
 
     targets.forEach((lev) => {
       if (Math.abs(lev - currentLev) > 0.05) {
@@ -236,11 +246,11 @@ async function handleAdjustLeverage(ctx: Context): Promise<void> {
       }
     });
 
-    kb.row().text("← Back", `pa_ref_${MARKETS.indexOf(market as Market)}_${(side as string) === "short" ? "s" : "l"}_${positionId}`);
+    kb.row().text("← Back", `pa_ref_${MARKETS.indexOf(market)}_${side === "short" ? "s" : "l"}_${positionId}`);
 
     await editSafe(
       ctx,
-      `⚖️ Adjust Leverage — ${market} ${(side as string).toUpperCase()} #${positionId}\n\n` +
+      `⚖️ Adjust Leverage — ${market} ${side.toUpperCase()} #${positionId}\n\n` +
         `Current leverage: ${currentLev.toFixed(2)}×\n` +
         `Range: ${minLev}× – ${maxLev}×\n\n` +
         `Select target leverage:`,
@@ -249,6 +259,206 @@ async function handleAdjustLeverage(ctx: Context): Promise<void> {
   } catch (error) {
     botLogger.error({ error: String(error) }, "positionCardActions: adjust leverage failed");
     await editSafe(ctx, "❌ Couldn't read position. Try /portfolio again.");
+  }
+}
+
+/** Execute a simulation-gated partial position reduction. */
+export async function handleExecuteReduce(ctx: Context): Promise<void> {
+  const nonce = ctx.callbackQuery?.data?.slice("pa_dored_".length);
+  const payload = nonce ? consumeCallbackPayload(nonce) : null;
+  const target = readPositionTarget(payload, "pa_do_reduce");
+  const sizeBps = payload?.sizeBps;
+  if (!nonce || !target || !Number.isInteger(sizeBps) || sizeBps! <= 0 || sizeBps! >= 10_000) {
+    await editSafe(ctx, "⌛ This reduction request expired or is invalid. Use /portfolio to start over.");
+    return;
+  }
+
+  const user = await loadUser(ctx);
+  if (!user) {
+    await editSafe(ctx, "🔐 Connect your wallet first with /start.");
+    return;
+  }
+  const gate = await requireDelegatedWallet(user);
+  if (!gate.ok) {
+    await editSafe(ctx, gate.message);
+    return;
+  }
+
+  const percent = sizeBps! / 100;
+  const header = `📉 Reducing ${target.market} ${target.side.toUpperCase()} #${target.positionId} by ${percent}%`;
+  try {
+    const sdk = createFxSdk();
+    const position = await findUserPosition(
+      sdk,
+      user.walletAddress,
+      target.market,
+      target.side,
+      target.positionId
+    );
+    if (!position) {
+      await editSafe(ctx, `${header}\n\n❌ Position not found for your wallet. It may already be closed.`);
+      return;
+    }
+
+    const client = createPublicClientForUser(mevModeForUser(user.mevProtection));
+    const amountWei = await getSdkReductionAmountWei({
+      client,
+      market: target.market,
+      side: target.side,
+      rawCollateralWei: position.rawCollateral,
+      rawDebtWei: position.rawDebt,
+      fractionBps: sizeBps!,
+    });
+
+    await editSafe(ctx, `${header}\n\n🔎 Fetching reduction quote…`);
+    const quote = await quoteClosePosition({
+      sdk,
+      userAddress: user.walletAddress,
+      market: target.market,
+      side: target.side,
+      positionId: target.positionId,
+      amountWei,
+      slippagePercent: user.slippageBps / 100,
+      isClosePosition: false,
+    });
+    const route = quote.routes[0];
+    if (!route) {
+      await editSafe(ctx, `${header}\n\n❌ No reduction route is available right now. Nothing was sent.`);
+      return;
+    }
+
+    let lastStatus = "";
+    const result = await executeRoute({
+      userId: user.id,
+      walletId: gate.walletId,
+      walletAddress: user.walletAddress as `0x${string}`,
+      idempotencyKey: `reduce:${user.id}:${target.market}:${target.side}:${target.positionId}:${sizeBps}:${nonce}`,
+      txs: route.txs,
+      type: "reduce_position",
+      client,
+      mev: mevModeForUser(user.mevProtection),
+      onStatus: (state, detail) => {
+        const line = statusLine(state, detail);
+        if (line === lastStatus) return;
+        lastStatus = line;
+        void editSafe(ctx, `${header}\n\n${line}`);
+      },
+    });
+
+    if (!result.ok) {
+      await editSafe(ctx, `${header}\n\n❌ Reduction not completed.\n\n${describeExecutionError(result.error)}`);
+      return;
+    }
+    const hash = result.hashes[result.hashes.length - 1];
+    await editSafe(
+      ctx,
+      `${header}\n\n${result.deduped ? "♻️ Already processed; no duplicate transaction was sent." : "✅ Position reduced."}` +
+        (hash ? `\n\nTx: https://etherscan.io/tx/${hash}` : "") +
+        `\n\n📊 /portfolio for the updated position.`
+    );
+  } catch (error) {
+    botLogger.error({ error: String(error), ...target }, "positionCardActions: reduce failed");
+    await editSafe(ctx, `${header}\n\n❌ Reduction failed before broadcast. Nothing was sent.`);
+  }
+}
+
+/** Execute a simulation-gated leverage adjustment. */
+export async function handleExecuteAdjustLeverage(ctx: Context): Promise<void> {
+  const nonce = ctx.callbackQuery?.data?.slice("pa_doadj_".length);
+  const payload = nonce ? consumeCallbackPayload(nonce) : null;
+  const target = readPositionTarget(payload, "pa_do_adjust");
+  const targetLeverage = payload?.targetLeverage;
+  const maxLev = target?.side === "short" ? RISK_PARAMS.MAX_LEVERAGE_SHORT : RISK_PARAMS.MAX_LEVERAGE_LONG;
+  if (
+    !nonce ||
+    !target ||
+    typeof targetLeverage !== "number" ||
+    !Number.isFinite(targetLeverage) ||
+    targetLeverage < RISK_PARAMS.MIN_LEVERAGE ||
+    targetLeverage > maxLev
+  ) {
+    await editSafe(ctx, "⌛ This leverage request expired or is invalid. Use /portfolio to start over.");
+    return;
+  }
+
+  const user = await loadUser(ctx);
+  if (!user) {
+    await editSafe(ctx, "🔐 Connect your wallet first with /start.");
+    return;
+  }
+  const gate = await requireDelegatedWallet(user);
+  if (!gate.ok) {
+    await editSafe(ctx, gate.message);
+    return;
+  }
+
+  const header = `⚖️ Adjusting ${target.market} ${target.side.toUpperCase()} #${target.positionId} to ${targetLeverage}×`;
+  try {
+    const sdk = createFxSdk();
+    const position = await findUserPosition(
+      sdk,
+      user.walletAddress,
+      target.market,
+      target.side,
+      target.positionId
+    );
+    if (!position) {
+      await editSafe(ctx, `${header}\n\n❌ Position not found for your wallet. It may already be closed.`);
+      return;
+    }
+    if (Math.abs(position.leverage - targetLeverage) <= 0.05) {
+      await editSafe(ctx, `${header}\n\nℹ️ The position is already at this leverage. Nothing was sent.`);
+      return;
+    }
+
+    await editSafe(ctx, `${header}\n\n🔎 Fetching leverage quote…`);
+    const quote = await quoteAdjustPositionLeverage({
+      sdk,
+      userAddress: user.walletAddress,
+      market: target.market,
+      side: target.side,
+      positionId: target.positionId,
+      leverage: targetLeverage,
+      slippagePercent: user.slippageBps / 100,
+    });
+    const route = quote.routes[0];
+    if (!route) {
+      await editSafe(ctx, `${header}\n\n❌ No adjustment route is available right now. Nothing was sent.`);
+      return;
+    }
+
+    let lastStatus = "";
+    const result = await executeRoute({
+      userId: user.id,
+      walletId: gate.walletId,
+      walletAddress: user.walletAddress as `0x${string}`,
+      idempotencyKey: `adjust:${user.id}:${target.market}:${target.side}:${target.positionId}:${targetLeverage}:${nonce}`,
+      txs: route.txs,
+      type: "adjust_leverage",
+      client: createPublicClientForUser(mevModeForUser(user.mevProtection)),
+      mev: mevModeForUser(user.mevProtection),
+      onStatus: (state, detail) => {
+        const line = statusLine(state, detail);
+        if (line === lastStatus) return;
+        lastStatus = line;
+        void editSafe(ctx, `${header}\n\n${line}`);
+      },
+    });
+
+    if (!result.ok) {
+      await editSafe(ctx, `${header}\n\n❌ Adjustment not completed.\n\n${describeExecutionError(result.error)}`);
+      return;
+    }
+    const hash = result.hashes[result.hashes.length - 1];
+    await editSafe(
+      ctx,
+      `${header}\n\n${result.deduped ? "♻️ Already processed; no duplicate transaction was sent." : "✅ Leverage adjusted."}` +
+        (hash ? `\n\nTx: https://etherscan.io/tx/${hash}` : "") +
+        `\n\n📊 /portfolio for the updated position.`
+    );
+  } catch (error) {
+    botLogger.error({ error: String(error), ...target }, "positionCardActions: leverage adjust failed");
+    await editSafe(ctx, `${header}\n\n❌ Adjustment failed before broadcast. Nothing was sent.`);
   }
 }
 
@@ -284,7 +494,7 @@ async function handleRefresh(ctx: Context): Promise<void> {
       return;
     }
 
-    const miniAppUrl = process.env.MINI_APP_URL || "https://fxbot-mini-app.pages.dev";
+    const miniAppUrl = process.env.MINI_APP_URL || "http://localhost:3000";
     const { text, keyboard } = renderPositionCard(pos, miniAppUrl);
     await editSafe(ctx, `🔄 Refreshed\n\n${text}`, keyboard);
   } catch (error) {
@@ -296,10 +506,6 @@ async function handleRefresh(ctx: Context): Promise<void> {
 // ── Registration ────────────────────────────────────────────────────────────
 
 export function registerPositionCardActions(bot: Bot<any>): void {
-  bot.callbackQuery(/^pa_inc_/, (ctx) => {
-    ctx.answerCallbackQuery().catch(() => undefined);
-    return handleIncrease(ctx as unknown as Context);
-  });
   bot.callbackQuery(/^pa_red_/, (ctx) => {
     ctx.answerCallbackQuery().catch(() => undefined);
     return handleReduce(ctx as unknown as Context);
@@ -312,16 +518,12 @@ export function registerPositionCardActions(bot: Bot<any>): void {
     ctx.answerCallbackQuery().catch(() => undefined);
     return handleRefresh(ctx as unknown as Context);
   });
-  // Partial reduce execution
   bot.callbackQuery(/^pa_dored_/, (ctx) => {
     ctx.answerCallbackQuery().catch(() => undefined);
-    // TODO: Wire to SDK reducePosition with partial amount
-    ctx.reply("📉 Partial reduce is being executed…\n\n(Full SDK integration coming in Phase 3 fee layer)").catch(() => undefined);
+    return handleExecuteReduce(ctx as unknown as Context);
   });
-  // Leverage adjustment execution
   bot.callbackQuery(/^pa_doadj_/, (ctx) => {
     ctx.answerCallbackQuery().catch(() => undefined);
-    // TODO: Wire to SDK adjustPositionLeverage
-    ctx.reply("⚖️ Leverage adjustment is being executed…\n\n(Full SDK integration coming in Phase 3 fee layer)").catch(() => undefined);
+    return handleExecuteAdjustLeverage(ctx as unknown as Context);
   });
 }

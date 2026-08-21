@@ -1,139 +1,49 @@
-# GAPS — Honest Limits & Required Operator Actions
+# Known gaps
 
-What is **not** verified, not done, or needs a human with production access.
-Companion to [COMPLETED.md](./COMPLETED.md). No item here is hidden in a PR
-description — this is the single list.
+This is the current difference between the repository and the stated goal of a complete, professional mobile f(x) gateway. A missing row is not implied to be complete; use source and current verification evidence.
 
-## Operator actions required before/at next deploy
+## Release/security gaps
 
-Items 1–7 (workflow hardening, DB migrations, `DATABASE_URL`/`REDIS_URL`
-unification, smoke-test secrets, `ADMIN_TELEGRAM_CHAT_ID`) are **done and
-verified 2026-06-12** — see git history of this file for the full audit
-trail. Still open:
+1. **Independent application audit:** no external audit covers FxAeon's bot, Mini App, API, Privy integration, deployment, or operations.
+2. **Bridge release evidence:** both SDK directions are implemented behind a disabled-by-default execution gate, but still need funded source-chain fork/live coverage and LayerZero delivery observation before broad enablement.
+3. **Live integration evidence:** deterministic tests and fork tests do not prove production Telegram delivery, Privy delegated signing, provider quotas, or funded f(x) settlement in the deployed environment.
+4. **Multi-replica worker safety:** workers are in-process intervals without general leader election.
+5. **Database field encryption:** the encryption utility is not wired to active record paths; Telegram-wallet linkage and most application data rely on database/storage access controls.
+6. **Legacy schema/config debt:** unused or partially used models/settings remain and can mislead operators or future features.
+7. **Transaction-limit depth:** `executeRoute` enforces a database-backed, Redis/in-memory-assisted UTC-day action-count cap, but it is not a USD/value/allowance ceiling and the separate Ethereum speed-up/cancel path does not consume it. Without healthy Redis, multiple replicas can race their process-local live counters.
 
-Items 8–9 (`fx-upgrade-monitor` end-to-end run; nightly backup R2
-secrets + first green **Backup** run with pg_dump 17) are **done and
-verified 2026-06-12** — both workflows ran green on `main@99c05f5`.
-Still open:
+## Explicitly unsupported or incomplete product coverage
 
-1. **`SENTRY_DSN`** still unset — optional; error tracking stays off
-   until provided.
-2. **`/bridge` execution (Ethereum → Base)** is wired but **operator-gated
-   OFF** (`BRIDGE_EXECUTION_ENABLED=false`). The command always shows a REAL
-   on-chain LayerZero quote; broadcast is disabled until an operator:
-   (a) **fork-verifies** the OFT `approve` + `send` route end-to-end, and
-   (b) **adds the OFT adapter** (`ADDRESSES.FXUSD_OFT_ADAPTER` /
-   `FXSAVE_OFT_ADAPTER`) to the Privy default-deny policy allow-list (W-08) —
-   otherwise the policy engine rejects the `send` anyway. Then set
-   `BRIDGE_EXECUTION_ENABLED=true`. Base → Ethereum stays disabled (the
-   mainnet-only executor can't sign on Base).
+| Capability | Gap |
+|---|---|
+| Limit orders | Telegram-authenticated, maker-bound backend primitives exist; no wallet typed-data signing/submission/cancel UI |
+| FXN locking and veFXN | No SDK/application integration |
+| Gauge voting/reward claims | No SDK/application integration |
+| TWAP, trailing stop, DCA, batch | Risk constants or schema hints are not live workflows |
+| Automated arbitrage | Signal/notification only; no transaction builder |
 
-## Not verified (and why)
+## Mini App parity gaps
 
-- **Live Telegram delivery.** Notification sends, the SLO digest, and
-  health alerts are unit-tested against a fake `sendFn`; no real message
-  was pushed to a production chat. First real send happens in production.
-- **Sentry event delivery.** `beforeSend` scrubbing is unit-tested; an
-  actual event reaching a Sentry project needs a real DSN.
-- **Privy-signed broadcast end-to-end.** `executeRoute` calls Privy's
-  signing API directly; that cannot run against an Anvil fork without
-  refactoring signing behind an injectable interface (not worth the risk
-  right now). Everything around it — idempotency, state machine, fee
-  derivation, simulation gate — is fork-verified; the Privy signing call
-  itself is verified only by the existing live wallet setup (W-08).
-- **Funded-account fork trade.** The quoted wstETH route fails closed at
-  the funding step for an unfunded account (expected). A full fork trade
-  needs whale-impersonated collateral funding; deferred — the simulation
-  gate, which is what protects real funds, is what mattered to prove.
-- **Render restart-on-503 behavior** of `/api/v1/health`: the endpoint is
-  now verified in production (post-deploy smoke tests pass against the
-  live service, 2026-06-12), but the restart path only proves itself the
-  first time a real dependency outage drives a sustained 503.
+The Mini App executes position open/increase/reduce/close/leverage, mint/repay-withdraw, and fxSAVE deposit/withdraw/claim through the unified action API. Both bridge directions are implemented in that API but remain behind the disabled-by-default release gate described above; repository source is not evidence of a production bridge execution. The following remain chat-only: wallet withdrawal, alert/rule management, and pending transaction replacement. Limit-order signing is unavailable in both interfaces.
 
-## Known product debt (P2 — in progress, owner go-ahead 2026-06-11)
+A complete mobile gateway needs these actions presented with the same server-side safety gates, not merely deep links or decorative buttons.
 
-- ~~W-16 onboarding~~ — shipped, then REWORKED to user-owned wallets:
-  `/start` → Set-Up-Wallet web_app button → the user creates/imports their
-  own embedded wallet via Privy in the Mini App (+ optional revocable
-  bot-trading session signer) → backend links it read-only → referral write.
-  Operator notes: run `20260611_user_privy_wallet` AND
-  `20260612_user_owned_wallets` migrations; create a key-quorum signer in
-  the Privy dashboard and set `NEXT_PUBLIC_PRIVY_SIGNER_ID`;
-  `PRIVY_POLICY_ID` is no longer used.
-- ~~W-17 trade-UX~~ — landed (PR #51): inline ladder, signed short-TTL
-  intents, server-side confirm with status edits; first production caller
-  of the W-11 executor and first callback_query handler in the bot.
-- ~~W-20 TMA platform~~ — landed (PR #50): telegram-web-app.js loaded,
-  typed platform helpers, lazy Privy, Lighthouse budget.
-- ~~W-18 portfolio~~ — landed (PR #52): on-chain reads as source of
-  truth, fixed inverted risk meter, per-position Close flow.
-- ~~W-19 error taxonomy~~ — landed: execution failures now classified
-  by broadcast state first (simulation failures say "NOT sent"; reverts
-  link the tx hash) with actionable causes; mini-app build errors no
-  longer ignored; SECURITY.md audit table replaced with honest text.
-- ~~W-21 i18n~~ — landed: single canonical Fluent catalog dir
-  (`apps/bot/src/i18n/locales/*.ftl`, 6 locales) wired through
-  `@grammyjs/i18n` keyed off `User.language` (60s per-user cache,
-  Telegram `language_code` fallback, fail-soft to English); the two stale
-  JSON locale dirs (dead code with pre-W-16 copy and the wrong bot
-  username) deleted; CI enforces key + variable parity across locales.
+## UX and localization gaps
 
-## Smaller honest notes
+- Bot localization is strongest on recurring entry surfaces; substantial execution/error copy remains hardcoded English.
+- Deep Privy onboarding errors and some edge states remain English.
+- Real-device validation is still needed across iOS/Android Telegram versions, small/large text, screen readers, keyboards, slow networks, expired sessions, and interrupted transactions.
+- PnL is first-observed estimation rather than historical cost-basis/accounting.
+- Portfolio valuation correctly becomes unavailable when a required price is missing. `fxUSDBasePool` currently has no configured market-price mapping, so a positive wallet balance of that supported token makes the aggregate total unavailable until a trustworthy feed is integrated.
+- Activity provides the source-chain executor journal, but no dedicated status/support diagnostics, partial-route reconciliation, or destination bridge-tracking screen exists.
 
-- i18n coverage is partial by design (W-21): `/start`, `/help`, `/settings`,
-  the `/trade` usage screen and the `/portfolio` empty state are fully
-  translated. Still English-only: the remaining command flows (limit,
-  orders, mint, save, refer, security, deposit/withdraw/bridge, auto),
-  trade/close status edits, W-19 error-taxonomy strings, funding-state
-  lines, and notifications. The catalog + parity tests make extending
-  coverage mechanical; better to ship honest partial coverage than to
-  machine-translate execution-path error copy without review.
+## Operations gaps
 
-- Mini-app TTI budget is a measured baseline, not the goal: the W-20 budget
-  (TTI < 2.5s on 3G-Fast/mobile) was written while Lighthouse CI couldn't
-  actually run (pnpm conflict, then NO_FCP). First real runs (2026-06-11,
-  after the first-paint fix) measure best-of-3 TTI at ~3.2s (index) /
-  ~3.4s (login). The error budget is set at 4.0s to catch regressions;
-  getting to 2.5s needs real bundle work (React+Next baseline is ~105 kB
-  shared first-load JS).
+- Health tracks every worker started by the process and reports startup grace, stale, and not-started states.
+- FxAeon has no application-fee or fee-reconciliation path; the legacy database ledger remains for schema compatibility only.
+- Backup upload automation needs regular restore proof, not only a green workflow.
+- Production deployment evidence depends on secrets and external systems unavailable to repository-only CI.
 
-- In-process metrics reset on every deploy/restart; the daily digest says
-  so. Fine for one Render instance; revisit only if instances > 1.
-- The fx-sdk vendored bundle still contains debug `console.log`s; we
-  suppress the known `poolData-->` line at runtime. If the SDK adds new
-  ones, they'll appear in logs until added to the filter (or fixed
-  upstream — better).
-- `scripts/fork-verify.ts` needs a local Anvil fork and is a manual tool,
-  not wired into CI (public-RPC forking in CI would be slow and flaky).
-- Old git history still contains the pre-rotation secrets (W-01). They are
-  rotated and dead; rewriting history was judged not worth breaking
-  clones. gitleaks prevents re-introduction.
-- Session-signer broadcast policy (`apps/bot/src/core/signerPolicy.ts`, Pillar
-  A §3.4) enforces a fail-closed allow-list inside `executeRoute`: `tx.to` must
-  be a verified `ADDRESSES` contract, and any ERC20 approve/transfer recipient
-  must be a registry contract or the user's own wallet. The allow-list is
-  derived from the registry at runtime; `apps/bot/policy/signer.policy.json` is
-  the generated artifact (CI `gen-signer-policy.mjs --check` keeps it in sync).
-  Default mode is `enforce`. The `SIGNER_POLICY_MODE=observe` valve exists for
-  one scenario: if a *new, legitimate* f(x) peripheral ever shows up in an
-  fx-sdk route, flip to `observe` (the route is logged + counted via
-  `policy.observe` but still broadcasts), add the verified address to
-  `ADDRESSES`, regenerate the policy, then flip back — rather than bricking
-  trades on an unrecognised-but-valid contract. Hard `enforce` is the right
-  default because every target the bot builds today is already in the registry
-  (the earn path's older `assertKnownTargets` proved this in production).
+## Completion evidence required
 
-- Mini-app i18n (`apps/mini-app/src/lib/i18n/`) covers the recurring surfaces
-  every user sees per session — bottom nav, portfolio, trade, deposit,
-  settings, security/policy, the browser/login gate screens, and the
-  onboarding intro (value-props + CTAs) — fully translated into the same six
-  locales the bot ships (en/es/zh-CN/ru/ja/ko, selected via Settings, seeded
-  from the saved User.language then the Telegram UI language). The engine is
-  additive: any unkeyed string falls back to English, so nothing can break.
-  DEFERRED on purpose: the deep transient error/edge-case strings inside the
-  Privy onboarding flow (`PrivyFlow.tsx` — the many `fail(null, '…')` paths,
-  create/import/delegate phase copy) remain English. They are low-frequency,
-  security-sensitive wallet instructions where an unreviewed machine
-  translation is riskier than English; they should be translated with native
-  review before shipping. Adding them later is mechanical: extract to
-  `lib/i18n/en.ts`, mirror the keys in the five locale files, swap to `t()`.
+Before removing a gap, identify the authoritative proof: route-level source, rejection tests, UI/E2E state, funded mainnet-fork result, migration upgrade test, production config check, receipt, live provider response, or restoration exercise. A green typecheck or a screenshot alone cannot prove a funds-moving capability.

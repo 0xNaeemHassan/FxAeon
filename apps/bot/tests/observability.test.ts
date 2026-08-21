@@ -3,8 +3,17 @@
  * Sentry scrubbing, SLO digest formatting, vendor log filter.
  */
 import { describe, it, expect, beforeEach } from "vitest";
-import { maskAddresses, maskDeep } from "../src/middleware/logger";
-import { incr, observe, heartbeat, snapshot, __resetMetrics } from "../src/core/metrics";
+import { childLogger, maskAddresses, maskDeep, sanitizeLogString } from "../src/middleware/logger";
+import {
+  REQUIRED_WORKERS,
+  WORKER_STALE_SECONDS,
+  __resetMetrics,
+  classifyWorkerStatus,
+  heartbeat,
+  incr,
+  observe,
+  snapshot,
+} from "../src/core/metrics";
 import { commandName, commandTiming } from "../src/middleware/timing";
 import { scrubEvent } from "../src/observability/sentry";
 import { formatDigest } from "../src/observability/slo-digest";
@@ -36,9 +45,59 @@ describe("address masking", () => {
   });
 
   it("maskDeep masks Error messages without losing the Error", () => {
-    const out = maskDeep(new Error(`failed for ${ADDR}`)) as Error;
+    const original = new Error(`failed for ${ADDR}`);
+    const out = maskDeep(original) as Error;
     expect(out).toBeInstanceOf(Error);
     expect(out.message).not.toContain(ADDR);
+    expect(out.stack).toContain("observability.test");
+    expect(out.stack).not.toContain(ADDR);
+    expect(original.message).toContain(ADDR);
+  });
+
+  it("scrubs URL credentials, auth headers, query secrets, and provider path keys", () => {
+    const input = [
+      "postgresql://operator:p%40ssword@db.example:5432/app",
+      "Authorization: Bearer header.payload.signature",
+      "https://service.example/callback?api_key=query-secret&mode=fast",
+      "https://eth-mainnet.g.alchemy.com/v2/alchemy-secret",
+      'mnemonic: "alpha beta gamma delta"',
+    ].join(" ");
+    const out = sanitizeLogString(input);
+    expect(out).not.toContain("operator");
+    expect(out).not.toContain("p%40ssword");
+    expect(out).not.toContain("header.payload.signature");
+    expect(out).not.toContain("query-secret");
+    expect(out).not.toContain("alchemy-secret");
+    expect(out).not.toContain("alpha beta gamma delta");
+    expect(out).toContain("db.example:5432/app");
+  });
+
+  it("redacts sensitive object keys recursively but preserves public token metadata", () => {
+    const out = maskDeep({
+      request: {
+        headers: { authorization: "Bearer a-very-secret-value" },
+        botToken: "123456:abcdefghijklmnopqrstuvwxyzABCDEFGHIJK",
+        customRpcUrl: "https://rpc.vendor.example/embedded-key",
+      },
+      tokenAddress: ADDR,
+      tokenSymbol: "USDC",
+    }) as any;
+    expect(out.request.headers.authorization).toBe("[REDACTED]");
+    expect(out.request.botToken).toBe("[REDACTED]");
+    expect(out.request.customRpcUrl).toBe("[REDACTED]");
+    expect(out.tokenAddress).toBe("0x6B17…1d0F");
+    expect(out.tokenSymbol).toBe("USDC");
+  });
+
+  it("sanitizes persistent child logger bindings before serialization", () => {
+    const child = childLogger({
+      endpoint: "postgresql://operator:password@db.example/app",
+      apiKey: "fake-sensitive-api-key",
+    });
+    const bindings = child.bindings();
+    expect(bindings.endpoint).toBe("postgresql://***@db.example/app");
+    // Pino's defense-in-depth redact rule removes exact sensitive keys.
+    expect(bindings.apiKey).toBeUndefined();
   });
 });
 
@@ -62,6 +121,21 @@ describe("metrics", () => {
     const s = snapshot(["health-monitor", "limit-order-poller"]);
     expect(s.workers["health-monitor"]).toBeNull();
     expect(s.workers["limit-order-poller"]).toBeLessThanOrEqual(1);
+  });
+
+  it("tracks every worker started by main and alarms after startup grace", () => {
+    expect(REQUIRED_WORKERS).toEqual([
+      "health-monitor",
+      "limit-order-poller",
+      "price-alert-poller",
+      "automation-poller",
+      "arb-poller",
+      "deposit-watcher-poller",
+    ]);
+    expect(classifyWorkerStatus(null, 5)).toBe("starting");
+    expect(classifyWorkerStatus(null, WORKER_STALE_SECONDS + 1)).toBe("not-started");
+    expect(classifyWorkerStatus(WORKER_STALE_SECONDS, 10_000)).toBe("healthy");
+    expect(classifyWorkerStatus(WORKER_STALE_SECONDS + 1, 10_000)).toBe("stale");
   });
 });
 
@@ -146,6 +220,7 @@ describe("SLO digest", () => {
     expect(text).toContain("Notifications: 3 sent, 0 failed");
     expect(text).toContain("health-monitor: ok");
     expect(text).toContain("limit-order-poller: never ran");
+    expect(text).toContain("deposit-watcher-poller: never ran");
   });
 });
 

@@ -25,8 +25,8 @@ describe("tradeIntent (W-17)", () => {
       expect(verdict.intent.market).toBe("wstETH");
       expect(verdict.intent.side).toBe("long");
       expect(verdict.intent.leverage).toBe(3);
-      expect(verdict.intent.amount).toBe(0.5);
-      expect(verdict.intent.nonce).toMatch(/^[0-9a-f]{10}$/);
+      expect(verdict.intent.amount).toBe("0.5");
+      expect(verdict.intent.nonce).toMatch(/^[0-9a-f]{8}$/);
     }
   });
 
@@ -36,6 +36,29 @@ describe("tradeIntent (W-17)", () => {
     expect(token).toMatch(/^[A-Za-z0-9_-]+$/);
     // confirm callback_data prefix still fits the 64-BYTE callback limit
     expect(Buffer.byteLength(`tc_${token}`)).toBeLessThanOrEqual(64);
+  });
+
+  it("preserves exact market precision without Number coercion", () => {
+    const eth = verifyTradeIntent(createTradeIntent({
+      market: "wstETH",
+      side: "long",
+      leverage: 1.1,
+      amount: "0.123456789012345678",
+    }));
+    expect(eth.ok && eth.intent.amount).toBe("0.123456789012345678");
+    const btc = verifyTradeIntent(createTradeIntent({
+      market: "WBTC",
+      side: "short",
+      leverage: 2.5,
+      amount: "0.12345678",
+    }));
+    expect(btc.ok && btc.intent.amount).toBe("0.12345678");
+    expect(() => createTradeIntent({
+      market: "WBTC",
+      side: "long",
+      leverage: 2,
+      amount: "0.123456789",
+    })).toThrow(/amount/i);
   });
 
   it("rejects tampered params", () => {
@@ -48,7 +71,9 @@ describe("tradeIntent (W-17)", () => {
 
   it("rejects a forged signature", () => {
     const token = createTradeIntent(params);
-    const forged = token.slice(0, -20) + "0".repeat(20);
+    const parts = token.split("_");
+    parts[7] = "0".repeat(parts[7].length);
+    const forged = parts.join("_");
     expect(verifyTradeIntent(forged)).toEqual({ ok: false, reason: "tampered" });
   });
 
@@ -60,7 +85,7 @@ describe("tradeIntent (W-17)", () => {
   });
 
   it("rejects malformed tokens", () => {
-    expect(verifyTradeIntent("t1_garbage").ok).toBe(false);
+    expect(verifyTradeIntent("t3_garbage").ok).toBe(false);
     expect(verifyTradeIntent("").ok).toBe(false);
     expect(verifyTradeIntent("v9_0_l_30_500000_1_aa_bb").ok).toBe(false);
   });

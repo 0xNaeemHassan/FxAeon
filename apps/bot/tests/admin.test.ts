@@ -14,7 +14,6 @@ vi.mock("../src/core/botState", () => ({
   setBotState: vi.fn(async (key: string, value: string) => {
     botStateStore.set(key, value);
   }),
-  BS_FEE_MODE: "fee_mode",
   BS_POLICY_MODE: "policy_mode",
 }));
 
@@ -34,13 +33,6 @@ vi.mock("@fxaeon/db", () => ({
     user: {
       findUnique: vi.fn().mockResolvedValue(null),
       count: vi.fn().mockResolvedValue(42),
-    },
-    feeLedger: {
-      aggregate: vi.fn().mockResolvedValue({
-        _sum: { usdAmount: 123.45, notionalUsd: 50000 },
-        _count: 10,
-      }),
-      count: vi.fn().mockResolvedValue(2),
     },
     txRecord: {
       count: vi.fn().mockResolvedValue(15),
@@ -106,24 +98,6 @@ describe("Admin API logic", () => {
       expect(validModes.includes("observe")).toBe(true);
       expect(validModes.includes("off")).toBe(true);
       expect(validModes.includes("invalid")).toBe(false);
-    });
-  });
-
-  describe("Fee mode", () => {
-    it("defaults to 'observe' when no override exists", async () => {
-      const mode = (await getBotState("fee_mode")) ?? process.env.FXAEON_FEE_MODE ?? "observe";
-      expect(mode).toBe("observe");
-    });
-
-    it("stores and retrieves a mode override", async () => {
-      await setBotState("fee_mode", "enforce");
-      const mode = await getBotState("fee_mode");
-      expect(mode).toBe("enforce");
-    });
-
-    it("can be set to 'off' for testing", async () => {
-      await setBotState("fee_mode", "off");
-      expect(await getBotState("fee_mode")).toBe("off");
     });
   });
 

@@ -19,7 +19,7 @@ const es: Messages = {
   'common.unknownError': 'Error desconocido',
 
   'splash.tagline':
-    'Trading apalancado sin custodia en f(x) Protocol, creado para Telegram. Esta app funciona dentro del bot de FxAeon.',
+    'Opera, pide prestado, ahorra, transfiere entre redes y gestiona cada posición de f(x) Protocol desde una app de Telegram sin custodia.',
 
   'loginGate.tgTitle': 'FxAeon funciona dentro de Telegram',
   'loginGate.tgBody': 'Abre el bot y envía /start para configurar tu billetera.',
@@ -73,7 +73,7 @@ const es: Messages = {
   'portfolio.markets': 'Mercados',
   'portfolio.pricesStale': 'Los precios pueden tener unos minutos (problema en la fuente).',
   'portfolio.quickActions': 'Acciones rápidas',
-  'portfolio.qaTradeHint': 'Apalancamiento hasta 10x',
+  'portfolio.qaTradeHint': 'Hasta 7x en posiciones largas',
   'portfolio.qaDepositHint': 'ETH · wstETH · WBTC',
   'portfolio.qaSecurity': 'Cómo se protege tu billetera',
   'portfolio.qaSecurityHint': 'Autocustodia, tus claves',
@@ -201,12 +201,12 @@ const es: Messages = {
     'El bot solo puede firmar mientras tu concesión de firmante de sesión esté activa. Revócala en Ajustes → Billetera y la ejecución desde el chat se detiene al instante.',
   'policy.rule3Title': 'Ejecución validada por simulación',
   'policy.rule3Body':
-    'Cada acción confirmada en el chat se simula primero. Si fallara, no se transmite nada — siempre falla de forma segura.',
-  'policy.rule4Title': 'Solo confirmaciones explícitas',
+    'Antes de la revisión, el servidor construye, valida con la política y simula el plan exacto. Las conversiones de posiciones deben coincidir con la tabla fija de rutas v1 del SDK de f(x).',
+  'policy.rule4Title': 'Revisión de dos minutos vinculada a la billetera',
   'policy.rule4Body':
-    'Ninguna transacción se construye ni se envía antes de que toques Confirmar. Las vistas previas caducan a los ~10 minutos.',
+    'La Mini App congela ese plan exacto durante 2 minutos. Confirmar reclama su ticket de un solo uso; un intento repetido solo devuelve el mismo registro de transacción idempotente.',
   'policy.footer':
-    'Gestiona todo en Ajustes → Billetera: exporta tu clave, activa o revoca el trading del bot. Consulta /security en el bot para ver el estado en vivo.',
+    'Actividad conserva el hash y estado de cada paso, incluidos pendiente, parcial, cancelado, revertido o confirmado. Gestiona el acceso de firma en Ajustes → Billetera.',
   // -- login sign-in card (PrivyFlow intro) --
   'loginCard.signIn': 'Inicia sesión en FxAeon',
   'loginCard.subtitle': 'Monedero auto-custodiado con tecnología de Privy',
@@ -215,6 +215,9 @@ const es: Messages = {
   'loginCard.wallet': 'Conectar un monedero existente',
   'loginCard.terms': 'Al continuar aceptas nuestros Términos y Privacidad',
   'loginCard.poweredBy': 'Con tecnología de',
+  'nav.earn': 'Ganar',
+  'nav.move': 'Mover',
+  'nav.more': 'Más',
 };
 
 export default es;

@@ -6,6 +6,7 @@
 import { Context } from "grammy";
 import { prisma } from "@fxaeon/db";
 import { buildSaveWithdrawPreview } from "../handlers/earnActions.js";
+import { canonicalActionAmount } from "../core/actionIntent.js";
 
 export async function redeemCommand(ctx: Context) {
   const telegramId = ctx.from?.id.toString();
@@ -20,10 +21,10 @@ export async function redeemCommand(ctx: Context) {
   const instant = args.includes("instant");
   const amountRaw = args.find((a) => a !== "instant");
 
-  let amount: number | "all" = "all";
+  let amount: string | "all" = "all";
   if (amountRaw && amountRaw !== "all") {
-    const n = Number(amountRaw.replace(/,/g, ""));
-    if (!Number.isFinite(n) || n <= 0) {
+    const exact = canonicalActionAmount(amountRaw, 18);
+    if (!exact) {
       await ctx.reply(
         `Usage: /redeem <amount|all> [instant]\n\n` +
           `Redeems fxSAVE shares back to fxUSD.\n` +
@@ -32,7 +33,7 @@ export async function redeemCommand(ctx: Context) {
       );
       return;
     }
-    amount = n;
+    amount = exact;
   }
 
   const { text, keyboard } = buildSaveWithdrawPreview(amount, instant);

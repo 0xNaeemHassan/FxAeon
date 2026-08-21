@@ -8,25 +8,25 @@
  */
 import * as Sentry from "@sentry/node";
 import type { ErrorEvent } from "@sentry/node";
-import { logger, maskAddresses } from "../middleware/logger.js";
+import { logger, sanitizeLogString } from "../middleware/logger.js";
 
 export function scrubEvent(event: ErrorEvent): ErrorEvent | null {
   // Never ship request payloads, headers, or cookies.
   delete event.request;
   delete (event as { user?: unknown }).user;
 
-  if (event.message) event.message = maskAddresses(event.message);
+  if (event.message) event.message = sanitizeLogString(event.message);
   for (const ex of event.exception?.values ?? []) {
-    if (ex.value) ex.value = maskAddresses(ex.value);
+    if (ex.value) ex.value = sanitizeLogString(ex.value);
   }
   for (const crumb of event.breadcrumbs ?? []) {
-    if (crumb.message) crumb.message = maskAddresses(crumb.message);
+    if (crumb.message) crumb.message = sanitizeLogString(crumb.message);
     // Breadcrumb data can carry arbitrary objects — drop rather than risk it.
     delete crumb.data;
   }
   if (event.extra) {
     for (const [k, v] of Object.entries(event.extra)) {
-      event.extra[k] = typeof v === "string" ? maskAddresses(v) : "[scrubbed]";
+      event.extra[k] = typeof v === "string" ? sanitizeLogString(v) : "[scrubbed]";
     }
   }
   return event;

@@ -10,17 +10,18 @@ import { Router } from "express";
 import { prisma } from "@fxaeon/db";
 import Redis from "ioredis";
 import { withTimeout } from "../utils/resilience.js";
-import { snapshot } from "../core/metrics.js";
+import {
+  REQUIRED_WORKERS,
+  classifyWorkerStatus,
+  snapshot,
+  type WorkerStatus,
+} from "../core/metrics.js";
 import { asyncHandler } from "../middleware/errors.js";
 import { getRedisUrl } from "../utils/redisUrl.js";
 
 const CHECK_TIMEOUT_MS = 3_000;
 /** Chain head older than this ⇒ RPC (or chain view) considered stale. */
 const RPC_LAG_DEGRADED_S = 60;
-const KNOWN_WORKERS = ["health-monitor", "limit-order-poller"];
-/** Worker silent longer than this ⇒ degraded (longest loop is 5 min). */
-const WORKER_STALE_S = 11 * 60;
-
 // Lazily create the Redis client on first health check, not at import time.
 let redis: Redis | null | undefined;
 function getRedis(): Redis | null {
@@ -64,7 +65,10 @@ export function classifyDbError(err: unknown): string {
   if (/timed out|timeout/i.test(msg)) {
     return "timeout: query exceeded health-check budget (pool exhausted or DB overloaded)";
   }
-  return `unknown: ${msg.slice(0, 140)}`;
+  // This hint is returned by a public endpoint. Unknown driver messages can
+  // embed connection URLs, usernames, or provider tokens, so keep the public
+  // fallback deliberately generic and rely on sanitized server logs instead.
+  return "unknown: database check failed; inspect sanitized server logs";
 }
 
 let lastDbError: string | null = null;
@@ -94,27 +98,56 @@ async function checkRedis(): Promise<"healthy" | "unhealthy" | "skipped"> {
   }
 }
 
-async function checkRpc(): Promise<{ status: "healthy" | "degraded" | "unhealthy" | "skipped"; headLagSeconds: number | null }> {
-  const url = process.env.ALCHEMY_RPC_URL;
-  if (!url) return { status: "skipped", headLagSeconds: null };
+type RpcHealth = {
+  status: "healthy" | "degraded" | "unhealthy" | "skipped";
+  headLagSeconds: number | null;
+  chainId: number | null;
+};
+
+export async function checkRpc(
+  url: string | undefined,
+  label: "ethereum" | "base",
+  expectedChainId: number,
+  required = false
+): Promise<RpcHealth> {
+  if (!url) {
+    return { status: required ? "unhealthy" : "skipped", headLagSeconds: null, chainId: null };
+  }
   try {
-    const response = await withTimeout(
-      fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jsonrpc: "2.0", method: "eth_getBlockByNumber", params: ["latest", false], id: 1 }),
-      }),
+    const rpcRequest = (method: string, params: unknown[], id: number) => fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", method, params, id }),
+    });
+    const [headResponse, chainResponse] = await withTimeout(
+      Promise.all([
+        rpcRequest("eth_getBlockByNumber", ["latest", false], 1),
+        rpcRequest("eth_chainId", [], 2),
+      ]),
       CHECK_TIMEOUT_MS,
-      "rpc health check"
+      `${label} rpc health check`
     );
-    if (!response.ok) return { status: "degraded", headLagSeconds: null };
-    const json = (await response.json()) as { result?: { timestamp?: string } };
-    const ts = json.result?.timestamp;
-    if (!ts) return { status: "degraded", headLagSeconds: null };
+    if (!headResponse.ok || !chainResponse.ok) {
+      return { status: "degraded", headLagSeconds: null, chainId: null };
+    }
+    const [headJson, chainJson] = await Promise.all([
+      headResponse.json() as Promise<{ result?: { timestamp?: string } }>,
+      chainResponse.json() as Promise<{ result?: string }>,
+    ]);
+    const chainId = chainJson.result ? Number.parseInt(chainJson.result, 16) : null;
+    if (chainId !== expectedChainId) {
+      return { status: "unhealthy", headLagSeconds: null, chainId };
+    }
+    const ts = headJson.result?.timestamp;
+    if (!ts) return { status: "degraded", headLagSeconds: null, chainId };
     const headLagSeconds = Math.max(0, Math.round(Date.now() / 1000 - parseInt(ts, 16)));
-    return { status: headLagSeconds > RPC_LAG_DEGRADED_S ? "degraded" : "healthy", headLagSeconds };
+    return {
+      status: headLagSeconds > RPC_LAG_DEGRADED_S ? "degraded" : "healthy",
+      headLagSeconds,
+      chainId,
+    };
   } catch {
-    return { status: "unhealthy", headLagSeconds: null };
+    return { status: "unhealthy", headLagSeconds: null, chainId: null };
   }
 }
 
@@ -122,14 +155,24 @@ export const healthRouter = Router();
 
 healthRouter.get("/", asyncHandler(async (_req, res) => {
   const start = Date.now();
-  const [dbStatus, redisStatus, rpc] = await Promise.all([checkDb(), checkRedis(), checkRpc()]);
+  const bridgeRequested = (process.env.BRIDGE_EXECUTION_ENABLED ?? "false").toLowerCase() === "true";
+  const [dbStatus, redisStatus, rpc, baseRpc] = await Promise.all([
+    checkDb(),
+    checkRedis(),
+    checkRpc(process.env.ALCHEMY_RPC_URL, "ethereum", 1),
+    checkRpc(process.env.BASE_RPC_URL, "base", 8453, bridgeRequested),
+  ]);
 
-  const metrics = snapshot(KNOWN_WORKERS);
-  const workers: Record<string, { lastBeatSecondsAgo: number | null; status: "healthy" | "stale" | "not-started" }> = {};
-  for (const [name, secondsAgo] of Object.entries(metrics.workers)) {
+  const metrics = snapshot([...REQUIRED_WORKERS]);
+  const workers: Record<string, { lastBeatSecondsAgo: number | null; status: WorkerStatus }> = {};
+  // Only enforce the required-worker SLA here. Optional low-frequency jobs
+  // (notably the 24h SLO digest) also emit metrics, but applying an 11-minute
+  // poller threshold to them would leave health permanently degraded.
+  for (const name of REQUIRED_WORKERS) {
+    const secondsAgo = metrics.workers[name] ?? null;
     workers[name] = {
       lastBeatSecondsAgo: secondsAgo,
-      status: secondsAgo === null ? "not-started" : secondsAgo > WORKER_STALE_S ? "stale" : "healthy",
+      status: classifyWorkerStatus(secondsAgo, metrics.uptimeSeconds),
     };
   }
 
@@ -138,13 +181,15 @@ healthRouter.get("/", asyncHandler(async (_req, res) => {
     redisStatus === "unhealthy" ||
     rpc.status === "unhealthy" ||
     rpc.status === "degraded" ||
-    Object.values(workers).some((w) => w.status === "stale");
+    baseRpc.status === "unhealthy" ||
+    baseRpc.status === "degraded" ||
+    Object.values(workers).some((w) => w.status === "stale" || w.status === "not-started");
   const overall = dbStatus !== "healthy" ? "unhealthy" : degraded ? "degraded" : "healthy";
 
   res.status(overall === "unhealthy" ? 503 : 200).json({
     status: overall,
     timestamp: new Date().toISOString(),
-    version: process.env.npm_package_version || "1.1.0",
+    version: process.env.npm_package_version || "1.3.0",
     responseTime: Date.now() - start,
     uptimeSeconds: metrics.uptimeSeconds,
     services: {
@@ -153,7 +198,11 @@ healthRouter.get("/", asyncHandler(async (_req, res) => {
       databaseHint: lastDbError,
       redis: redisStatus,
       rpc: rpc.status,
+      rpcChainId: rpc.chainId,
       rpcHeadLagSeconds: rpc.headLagSeconds,
+      baseRpc: baseRpc.status,
+      baseRpcChainId: baseRpc.chainId,
+      baseRpcHeadLagSeconds: baseRpc.headLagSeconds,
     },
     workers,
     metrics: { counters: metrics.counters, timings: metrics.timings },
@@ -174,10 +223,12 @@ healthRouter.get("/ready", asyncHandler(async (_req, res) => {
 healthRouter.get("/deps", asyncHandler(async (_req, res) => {
   type DepStatus = "ok" | "degraded" | "down";
 
-  const [dbStatus, redisStatus, rpc] = await Promise.all([
+  const bridgeRequested = (process.env.BRIDGE_EXECUTION_ENABLED ?? "false").toLowerCase() === "true";
+  const [dbStatus, redisStatus, rpc, baseRpc] = await Promise.all([
     checkDb(),
     checkRedis(),
-    checkRpc(),
+    checkRpc(process.env.ALCHEMY_RPC_URL, "ethereum", 1),
+    checkRpc(process.env.BASE_RPC_URL, "base", 8453, bridgeRequested),
   ]);
 
   const dbDep: DepStatus = dbStatus === "healthy" ? "ok" : "down";
@@ -187,14 +238,17 @@ healthRouter.get("/deps", asyncHandler(async (_req, res) => {
   const rpcDep: DepStatus =
     rpc.status === "skipped" || rpc.status === "healthy" ? "ok" :
     rpc.status === "degraded" ? "degraded" : "down";
+  const baseRpcDep: DepStatus =
+    baseRpc.status === "skipped" || baseRpc.status === "healthy" ? "ok" :
+    baseRpc.status === "degraded" ? "degraded" : "down";
 
   const overall: DepStatus =
     dbDep === "down" ? "down" :
-    rpcDep === "down" ? "down" :
-    rpcDep === "degraded" || redisDep === "down" ? "degraded" : "ok";
+    rpcDep === "down" || baseRpcDep === "down" ? "down" :
+    rpcDep === "degraded" || baseRpcDep === "degraded" || redisDep === "down" ? "degraded" : "ok";
 
   res.json({
     overall,
-    deps: { db: dbDep, redis: redisDep, rpc: rpcDep },
+    deps: { db: dbDep, redis: redisDep, rpc: rpcDep, baseRpc: baseRpcDep },
   });
 }));

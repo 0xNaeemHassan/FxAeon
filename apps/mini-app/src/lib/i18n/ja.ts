@@ -19,7 +19,7 @@ const ja: Messages = {
   'common.unknownError': '不明なエラー',
 
   'splash.tagline':
-    'Telegram のために作られた、f(x) Protocol 上のノンカストディアルなレバレッジ取引。このアプリは FxAeon ボット内で動作します。',
+    '1つのノンカストディアル Telegram アプリで、取引・借入・運用・ブリッジと、すべての f(x) Protocol ポジション管理を。',
 
   'loginGate.tgTitle': 'FxAeon は Telegram 内で動作します',
   'loginGate.tgBody': 'ボットを開いて /start を送信し、ウォレットを設定してください。',
@@ -73,7 +73,7 @@ const ja: Messages = {
   'portfolio.markets': 'マーケット',
   'portfolio.pricesStale': '価格が数分古い可能性があります（上流の不調）。',
   'portfolio.quickActions': 'クイック操作',
-  'portfolio.qaTradeHint': 'レバレッジ最大 10x',
+  'portfolio.qaTradeHint': 'ロングは最大7x',
   'portfolio.qaDepositHint': 'ETH · wstETH · WBTC',
   'portfolio.qaSecurity': 'ウォレットの保護方法',
   'portfolio.qaSecurityHint': '自己管理、あなたの鍵',
@@ -201,12 +201,12 @@ const ja: Messages = {
     'ボットはあなたの session-signer 権限が有効な間だけ署名できます。設定 → ウォレットで取り消すと、チャットからの実行は即座に停止します。',
   'policy.rule3Title': 'シミュレーションを経た実行',
   'policy.rule3Body':
-    'チャットで確認された操作はすべてまずシミュレーションされます。失敗する場合は何もブロードキャストされません — 常にフェイルクローズです。',
-  'policy.rule4Title': '明示的な確認のみ',
+    'レビュー前に、サーバーが正確なプランを構築し、ポリシー検査とシミュレーションを行います。ポジション変換は固定された f(x) SDK v1 ルート表と完全に一致する必要があります。',
+  'policy.rule4Title': '2分間、ウォレットに紐づくレビュー',
   'policy.rule4Body':
-    'あなたが「確認」をタップするまで、トランザクションは作成も送信もされません。プレビューは約10分で失効します。',
+    'Mini App はその正確なプランを2分間固定します。確認すると1回限りのチケットが使用され、再試行は同じ冪等なトランザクション記録だけを返します。',
   'policy.footer':
-    'すべては 設定 → ウォレット で管理：鍵のエクスポート、ボット取引の有効化や取り消し。最新の状態はボットで /security を確認してください。',
+    'アクティビティには、保留、部分実行、キャンセル、リバート、確認を含む各ルート手順のハッシュと状態が保持されます。署名権限は 設定 → ウォレット で管理してください。',
   // -- login sign-in card (PrivyFlow intro) --
   'loginCard.signIn': 'FxAeon にサインイン',
   'loginCard.subtitle': 'Privy による自己管理型ウォレット',
@@ -215,6 +215,9 @@ const ja: Messages = {
   'loginCard.wallet': '既存のウォレットを接続',
   'loginCard.terms': '続行すると、利用規約とプライバシーに同意したものとみなされます',
   'loginCard.poweredBy': 'Powered by',
+  'nav.earn': '運用',
+  'nav.move': '移動',
+  'nav.more': 'その他',
 };
 
 export default ja;

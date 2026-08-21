@@ -52,6 +52,8 @@ export const arbPoller = {
 
   start(): NodeJS.Timeout {
     const timer = setInterval(() => void this.check(), POLL_INTERVAL_MS);
+    heartbeat("arb-poller");
+    timer.unref?.();
     workerLogger.info("Arb poller started (5m interval)");
     return timer;
   },

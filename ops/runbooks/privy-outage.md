@@ -1,30 +1,29 @@
-# Runbook: Privy Outage
+# Runbook: Privy degradation or outage
 
-## Detection
-- UptimeRobot monitor on `/health` returns >500ms or 5xx
-- Sentry alerts on Privy SDK errors
-- User reports "wallet not connecting"
+Privy is used for Telegram-linked wallet resolution, embedded-wallet onboarding, signer grant/revoke, delegated signing, and public transaction broadcast. FxAeon's health endpoints do not probe Privy directly.
 
-## Response
+## Detect and scope
 
-### 1. Verify outage
-```bash
-curl -s https://api.privy.io/v1/health | jq .status
-```
+- Record failing operation, HTTP/error class, affected Privy app/environment, start time, and whether the client SDK, server API, authorization key, or broadcast path is affected.
+- Check Privy's official status page/dashboard and deployment-side error logs. Do not depend on an undocumented `/v1/health` endpoint.
+- Distinguish onboarding/login failure from signing/broadcast failure. A working Mini App session does not prove delegated signing is available.
+- Inspect recent `TxRecord` rows: no hash means the current transaction was not acknowledged as broadcast, but earlier transactions in a multi-call route may already have landed.
 
-### 2. Notify users
-- Post in Telegram bot: "Wallet service temporarily unavailable. Your funds are safe."
-- Discord webhook alert to ops channel
+## Contain
 
-### 3. Check Privy status page
-- https://status.privy.io/
+1. Keep signing-dependent actions unavailable and show a retry/degraded message. Do not introduce a local private-key fallback.
+2. Do not queue confirmed user intents for automatic replay after recovery. Quotes, balances, nonces, fees, and protocol state will be stale; require a fresh user review/confirmation or fresh automation evaluation.
+3. If Privy behavior suggests credential compromise rather than outage, follow [security-incident.md](security-incident.md).
+4. Preserve grant/revoke and authorization audit evidence. Do not mark delegation active from a browser flag when server sync failed.
 
-### 4. Mitigation
-- If partial outage: retry with exponential backoff (1s, 2s, 4s, 8s)
-- If full outage: queue user actions in Redis BullMQ, resume when Privy recovers
-- Never store keys locally — wait for Privy recovery
+## Recover
 
-### 5. Post-incident
-- Update status page
-- Review retry queue for stuck transactions
-- Document in incident log
+1. Confirm official recovery and validate the configured Privy app ID/secret, authorization key, Mini App signer ID, allowed origin, and Telegram-linked identity.
+2. Test onboarding/wallet resolution with a non-production or approved canary account.
+3. Test signer grant, `/wallet/sync`, server delegation gate, a no-broadcast quote/simulation, then a minimal approved transaction.
+4. Reconcile all outage-window hashes and nonces before allowing replacements or retries.
+5. Resume automation only after fresh market, position, RPC, signer, and route checks.
+
+## Communication
+
+Say which capabilities are unavailable and that FxAeon is not sending new transactions through the affected path. Do not state that funds are safe or unaffected until suspected transactions and authority have been reconciled. Remind users they can independently inspect/export their Privy embedded wallet and revoke bot trading when Privy's controls are available.

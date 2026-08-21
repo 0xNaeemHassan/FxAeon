@@ -17,8 +17,10 @@ function requireEnv(name) {
 }
 
 const BASE_URL = process.argv[2] || process.env.BOT_URL || 'http://localhost:8080';
-const TELEGRAM_TOKEN = requireEnv('TELEGRAM_TOKEN');
-const MINI_APP_URL = process.env.MINI_APP_URL || 'https://fxbot-mini-app.pages.dev';
+const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_TOKEN;
+if (!TELEGRAM_TOKEN) throw new Error('Missing required env var: TELEGRAM_BOT_TOKEN');
+const MINI_APP_URL = requireEnv('MINI_APP_URL');
+const TELEGRAM_API_BASE_URL = (process.env.TELEGRAM_API_BASE_URL || 'https://api.telegram.org').replace(/\/$/, '');
 
 const green = (s) => `\x1b[32m${s}\x1b[0m`;
 const red = (s) => `\x1b[31m${s}\x1b[0m`;
@@ -39,16 +41,37 @@ function logStep(msg) { console.log(cyan('\n▶'), msg); }
 
 function request(url, options = {}) {
   return new Promise((resolve, reject) => {
+    const { body, ...requestOptions } = options;
     const client = url.startsWith('https') ? https : http;
-    const req = client.request(url, { timeout: 15000, ...options }, (res) => {
+    const req = client.request(url, { timeout: 15000, ...requestOptions }, (res) => {
       let data = '';
       res.on('data', (chunk) => data += chunk);
       res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, data }));
     });
     req.on('error', reject);
     req.on('timeout', () => { req.destroy(); reject(new Error('Timeout')); });
+    if (body !== undefined) req.write(body);
     req.end();
   });
+}
+
+async function checkRpc(label, rpcUrl, expectedChainId) {
+  const payload = JSON.stringify({ jsonrpc: '2.0', method: 'eth_chainId', params: [], id: 1 });
+  const res = await request(rpcUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(payload),
+    },
+    body: payload,
+  });
+  if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
+  const response = JSON.parse(res.data);
+  if (response.error) throw new Error(response.error.message || 'RPC error');
+  if (String(response.result).toLowerCase() !== expectedChainId.toLowerCase()) {
+    throw new Error(`wrong chain id ${response.result || 'missing'} (expected ${expectedChainId})`);
+  }
+  logPass(`${label} RPC endpoint reachable on chain ${parseInt(expectedChainId, 16)}`);
 }
 
 function _sleep(ms) {
@@ -102,7 +125,7 @@ async function runTests() {
   logStep('Step 2: Telegram Bot API');
 
   try {
-    const res = await request(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/getMe`);
+    const res = await request(`${TELEGRAM_API_BASE_URL}/bot${TELEGRAM_TOKEN}/getMe`);
     const body = JSON.parse(res.data);
     if (body.ok) {
       logPass(`Bot identity confirmed: @${body.result.username}`);
@@ -115,11 +138,20 @@ async function runTests() {
   }
 
   try {
-    const res = await request(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/getWebhookInfo`);
+    const res = await request(`${TELEGRAM_API_BASE_URL}/bot${TELEGRAM_TOKEN}/getWebhookInfo`);
     const body = JSON.parse(res.data);
     if (body.ok) {
       if (body.result.url) {
-        logPass(`Webhook set: ${body.result.url}`);
+        try {
+          const webhook = new URL(body.result.url);
+          if (webhook.protocol !== 'https:' || webhook.pathname !== '/webhook' || webhook.search || webhook.hash) {
+            logFail('Webhook must be the exact HTTPS /webhook endpoint');
+          } else {
+            logPass(`Webhook set to exact endpoint: ${webhook.origin}/webhook`);
+          }
+        } catch {
+          logFail('Webhook URL is invalid');
+        }
         if (body.result.pending_update_count > 50) {
           logFail(`High pending updates: ${body.result.pending_update_count}`);
         } else {
@@ -140,34 +172,45 @@ async function runTests() {
   // ═══════════════════════════════════════════════════════════════
   logStep('Step 3: External Services');
 
-  // Alchemy RPC
+  // Ethereum RPC — execute a real JSON-RPC request and verify the network.
   try {
-    const res = await request(
-      requireEnv('ALCHEMY_RPC_URL'),
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
-    if (res.status === 400 || res.status === 200) {
-      logPass('Alchemy RPC endpoint reachable');
-    } else {
-      logFail(`Alchemy RPC status: ${res.status}`);
-    }
+    await checkRpc('Ethereum', requireEnv('ALCHEMY_RPC_URL'), '0x1');
   } catch (e) {
-    logFail('Alchemy RPC unreachable: ' + e.message);
+    logFail('Ethereum RPC check failed: ' + e.message);
   }
 
-  // Privy JWKS
-  try {
-    const res = await request('https://auth.privy.io/api/v1/apps/cmq6a73jc002k0cl5vgleejt2/jwks.json');
-    if (res.status === 200) {
-      logPass('Privy JWKS endpoint reachable');
-    } else {
-      logFail(`Privy JWKS status: ${res.status}`);
+  // Base is required only when bridge execution is enabled, but is always
+  // verified when configured so a dormant bad provider is caught pre-release.
+  const bridgeEnabled = String(process.env.BRIDGE_EXECUTION_ENABLED || 'false').toLowerCase() === 'true';
+  if (!process.env.BASE_RPC_URL) {
+    if (bridgeEnabled) logFail('BASE_RPC_URL is required while bridge execution is enabled');
+    else logSkip('Base RPC check skipped: BASE_RPC_URL is not set and bridge execution is disabled');
+  } else {
+    try {
+      await checkRpc('Base', process.env.BASE_RPC_URL, '0x2105');
+    } catch (e) {
+      logFail('Base RPC check failed: ' + e.message);
     }
-  } catch (e) {
-    logFail('Privy JWKS unreachable: ' + e.message);
+  }
+
+  // Privy JWKS — always derived from THIS deployment's configuration.
+  const privyJwksUrl = process.env.PRIVY_JWKS_URL ||
+    (process.env.PRIVY_APP_ID
+      ? `https://auth.privy.io/api/v1/apps/${encodeURIComponent(process.env.PRIVY_APP_ID)}/jwks.json`
+      : '');
+  if (!privyJwksUrl) {
+    logSkip('Privy JWKS check skipped: set PRIVY_APP_ID or PRIVY_JWKS_URL');
+  } else {
+    try {
+      const res = await request(privyJwksUrl);
+      if (res.status === 200) {
+        logPass('Configured Privy JWKS endpoint reachable');
+      } else {
+        logFail(`Privy JWKS status: ${res.status}`);
+      }
+    } catch (e) {
+      logFail('Privy JWKS unreachable: ' + e.message);
+    }
   }
 
   // Database + Redis (via the bot's deep health endpoint — the bot's DB is
@@ -229,7 +272,7 @@ async function runTests() {
     const res = await request(MINI_APP_URL);
     if (res.status === 200 || res.status === 304) {
       logPass(`Mini App responds (HTTP ${res.status})`);
-      if (res.data && res.data.includes('<!DOCTYPE html>') || res.data.includes('<html')) {
+      if (res.data && (res.data.includes('<!DOCTYPE html>') || res.data.includes('<html'))) {
         logPass('Mini App returns valid HTML');
       } else {
         logWarn('Mini App response may not be valid HTML');
@@ -257,7 +300,7 @@ async function runTests() {
   logStep('Step 5: Bot Commands');
 
   try {
-    const res = await request(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/getMyCommands`);
+    const res = await request(`${TELEGRAM_API_BASE_URL}/bot${TELEGRAM_TOKEN}/getMyCommands`);
     const body = JSON.parse(res.data);
     if (body.ok && body.result) {
       const commands = body.result;
@@ -320,11 +363,8 @@ async function runTests() {
   if (fail === 0) {
     console.log(green('\n✓ All smoke tests passed! Deployment is healthy.\n'));
     process.exit(0);
-  } else if (fail <= 2) {
-    console.log(yellow('\n⚠ Some non-critical tests failed. Review above.\n'));
-    process.exit(0);
   } else {
-    console.log(red('\n✗ Multiple critical tests failed. Deployment needs attention.\n'));
+    console.log(red('\n✗ One or more smoke tests failed. Deployment needs attention.\n'));
     process.exit(1);
   }
 }

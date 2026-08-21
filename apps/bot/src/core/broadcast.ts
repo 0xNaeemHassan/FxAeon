@@ -23,7 +23,11 @@
 import { createPublicClient, http, type PublicClient } from "viem";
 import { mainnet } from "viem/chains";
 import { FLASHBOTS_RPC } from "../fx/index.js";
-import { sendWalletTransaction, signWalletTransaction } from "./privy.js";
+import {
+  sendWalletTransaction,
+  signWalletTransaction,
+  type SupportedWalletChainId,
+} from "./privy.js";
 
 export type MevMode = "off" | "flashbots";
 
@@ -43,6 +47,8 @@ export interface BroadcastTx {
 /** Optional injection seam for tests (avoids real network in unit tests). */
 export interface BroadcastDeps {
   rawSend?: (raw: `0x${string}`) => Promise<`0x${string}`>;
+  /** Source chain; defaults to Ethereum for backward compatibility. */
+  chainId?: SupportedWalletChainId;
 }
 
 let flashbotsClient: PublicClient | null = null;
@@ -64,20 +70,30 @@ export async function broadcastTransaction(
   mev: MevMode,
   deps?: BroadcastDeps
 ): Promise<`0x${string}`> {
-  const transaction = { ...tx, chainId: 1 as const, type: 2 as const };
+  const chainId = deps?.chainId ?? 1;
+  if (chainId !== 1 && chainId !== 8453) {
+    throw new Error(`Unsupported broadcast chainId ${chainId}; expected 1 or 8453`);
+  }
+  const transaction = { ...tx, chainId, type: 2 as const };
 
   if (mev === "flashbots") {
+    if (chainId !== 1) {
+      // Flashbots Protect's endpoint is Ethereum-mainnet-only. Never route a
+      // Base transaction to it and never silently downgrade a protection
+      // choice to the public mempool.
+      throw new Error("Flashbots Protect is unavailable on Base; use mev='off' for Base transactions");
+    }
     if (tx.nonce === undefined) {
       // Privy's signTransaction cannot fill the nonce, and a private raw
       // broadcast needs a complete tx. Fail loudly rather than silently
       // downgrade a user who explicitly asked for MEV protection.
       throw new Error("MEV-protected broadcast requires an explicit nonce");
     }
-    const { signedTransaction } = await signWalletTransaction(walletId, transaction);
+    const { signedTransaction } = await signWalletTransaction(walletId, transaction, chainId);
     const send = deps?.rawSend ?? ((raw) => getFlashbotsClient().sendRawTransaction({ serializedTransaction: raw }));
     return send(signedTransaction);
   }
 
-  const sent = await sendWalletTransaction(walletId, transaction);
+  const sent = await sendWalletTransaction(walletId, transaction, chainId);
   return sent.hash as `0x${string}`;
 }

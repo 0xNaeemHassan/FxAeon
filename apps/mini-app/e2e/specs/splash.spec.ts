@@ -12,8 +12,9 @@ test.describe('Browser splash (no Telegram)', () => {
     await page.goto('/');
     await expect(page.getByRole('heading', { name: /FxAeon/ })).toBeVisible();
     await expect(
-      page.getByText(/Non-custodial leveraged trading on f\(x\) Protocol/)
+      page.getByText(/Trade, borrow, save, bridge, and manage every f\(x\) Protocol position/)
     ).toBeVisible();
+    await expect(page.getByText('Bridge both ways')).toBeVisible();
     const cta = page.getByRole('link', { name: /Open in Telegram/ });
     await expect(cta).toBeVisible();
     await expect(cta).toHaveAttribute('href', /t\.me\/FxAeonBot/);

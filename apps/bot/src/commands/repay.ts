@@ -9,6 +9,7 @@ import { formatUnits } from "viem";
 import { MARKETS, type Market } from "@fxaeon/shared";
 import { createFxSdk, getPositions } from "../fx/index.js";
 import { buildRepayPreview } from "../handlers/earnActions.js";
+import { canonicalActionAmount } from "../core/actionIntent.js";
 
 const USAGE =
   `Usage: /repay <market> <position id> <amount|all>\n\n` +
@@ -71,12 +72,10 @@ export async function repayCommand(ctx: Context) {
   ) as Market | undefined;
   const positionId = Number(args[1]);
   const amountRaw = args[2].toLowerCase();
-  const amount: number | "all" | null =
+  const amount: string | "all" | null =
     amountRaw === "all"
       ? "all"
-      : Number.isFinite(Number(amountRaw.replace(/,/g, ""))) && Number(amountRaw.replace(/,/g, "")) > 0
-        ? Number(amountRaw.replace(/,/g, ""))
-        : null;
+      : canonicalActionAmount(amountRaw, 18);
 
   if (!market || !Number.isInteger(positionId) || positionId <= 0 || amount === null) {
     await ctx.reply(USAGE);

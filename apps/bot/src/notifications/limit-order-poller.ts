@@ -81,7 +81,7 @@ export const limitOrderPolling = {
       }
     } catch (error) {
       // Breaker-open and relay errors land here; next tick will retry/probe.
-      console.error("Limit order polling error:", error);
+      workerLogger.error({ err: error }, "limit order polling failed");
     }
   },
 

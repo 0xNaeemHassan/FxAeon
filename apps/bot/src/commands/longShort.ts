@@ -9,26 +9,50 @@
  * Flow (for /longBTC):
  *   Step 1 — Position summary (auto-rendered, market data + oracle chips)
  *   Step 2 — Leverage picker (inline buttons)
- *   Step 3 — Collateral (live wallet balances via multicall3)
- *   Step 4 — Size (% of balance / USD / custom)
+ *   Step 3 — Native market collateral (live wallet balance via multicall3)
+ *   Step 4 — Size (% of balance)
  *   Step 5 — Preview (real numbers, signed intent, single tap to confirm)
  *   Step 6 — Receipt (wired action buttons)
  *
- * Pro mode: `/longBTC 500 5x usdc` skips directly to Step 5.
+ * Pro mode: `/longBTC 0.005 2x` skips directly to Step 5. Amounts are
+ * always native market collateral units (WBTC for BTC, wstETH for ETH).
  */
 import { Context, InlineKeyboard } from "grammy";
 import type { I18nFlavor } from "@grammyjs/i18n";
 import { prisma } from "@fxaeon/db";
 import { MARKETS, RISK_PARAMS, type Market } from "@fxaeon/shared";
-import { checkOracles, estimateDailyFunding } from "../market/oracle.js";
-import { getCollateralBalances, formatBalance, type CollateralBalance } from "../core/collateral.js";
+import { checkOracles } from "../market/oracle.js";
+import { getCollateralBalances, formatBalance } from "../core/collateral.js";
 import { getSpotPrices } from "../market/coingecko.js";
 import { storeCallbackPayload, consumeCallbackPayload } from "../core/callbackKeys.js";
 import { buildPreview } from "../handlers/tradeActions.js";
 import { botLogger } from "../middleware/logger.js";
+import { formatUnits } from "viem";
+import { canonicalActionAmount } from "../core/actionIntent.js";
 
 type Side = "long" | "short";
 type Asset = "BTC" | "ETH";
+
+function isMarket(value: unknown): value is Market {
+  return typeof value === "string" && (MARKETS as readonly string[]).includes(value);
+}
+
+function isSide(value: unknown): value is Side {
+  return value === "long" || value === "short";
+}
+
+function isAsset(value: unknown): value is Asset {
+  return value === "BTC" || value === "ETH";
+}
+
+function isValidLeverage(value: unknown, side: Side): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= RISK_PARAMS.MIN_LEVERAGE &&
+    value <= maxLeverage(side)
+  );
+}
 
 // ── Asset/Market mapping ────────────────────────────────────────────────────
 
@@ -36,11 +60,6 @@ function assetToMarket(asset: Asset): Market {
   return asset === "ETH" ? "wstETH" : "WBTC";
 }
 
-function marketToAsset(market: Market): Asset {
-  return market === "wstETH" ? "ETH" : "BTC";
-}
-
-const sideLabel = (s: Side) => (s === "long" ? "LONG 📈" : "SHORT 📉");
 const sideEmoji = (s: Side) => (s === "long" ? "📈" : "📉");
 
 function maxLeverage(side: Side): number {
@@ -68,33 +87,36 @@ export function parseShortcutCommand(text: string): { asset: Asset; side: Side }
 }
 
 /**
- * Parse pro-mode args: /longBTC 500 5x usdc
- * Returns null if not enough args for pro mode.
+ * Parse pro-mode args: /longBTC 0.005 2x
+ * The syntax is deliberately strict: accepting a fiat or token suffix here
+ * would be unsafe because the current f(x) quote uses market-native units.
  */
-function parseProArgs(args: string[]): {
-  amount: number;
+export function parseProArgs(args: string[]): {
+  amount: string;
   leverage: number;
-  collateral?: string;
+} | null;
+export function parseProArgs(args: string[], maxDecimals?: number): {
+  amount: string;
+  leverage: number;
+} | null;
+export function parseProArgs(args: string[], maxDecimals = 18): {
+  amount: string;
+  leverage: number;
 } | null {
-  if (args.length < 2) return null;
+  if (args.length !== 2) return null;
 
   const amountStr = args[0];
   const levStr = args[1];
-  const collStr = args[2];
+  const leverageMatch = /^(\d+(?:\.\d+)?|\.\d+)x?$/i.exec(levStr);
+  if (!leverageMatch) return null;
 
-  // Parse amount: "500", "$500", "0.5"
-  const amount = parseFloat(amountStr.replace("$", ""));
-  if (isNaN(amount) || amount <= 0) return null;
+  const amount = canonicalActionAmount(amountStr, maxDecimals);
+  const leverage = Number(leverageMatch[1]);
+  if (!amount || !Number.isFinite(leverage) || leverage <= 0 || !Number.isInteger(leverage * 10)) {
+    return null;
+  }
 
-  // Parse leverage: "5x", "5", "3.5x"
-  const leverage = parseFloat(levStr.replace(/x$/i, ""));
-  if (isNaN(leverage) || leverage <= 0) return null;
-
-  return {
-    amount,
-    leverage,
-    collateral: collStr?.toUpperCase(),
-  };
+  return { amount, leverage };
 }
 
 // ── Step 1: Position Summary ────────────────────────────────────────────────
@@ -121,7 +143,12 @@ async function renderStep1(
   // Oracle checks (best-effort, non-blocking)
   let oracleCheck;
   try {
-    oracleCheck = await checkOracles({ asset, spotPrice });
+    oracleCheck = await checkOracles({
+      asset,
+      spotPrice,
+      maxDivergence: (user?.oracleDivergenceBps ?? 50) / 10_000,
+      maxStalenessSeconds: user?.chainlinkStalenessSec ?? 3600,
+    });
   } catch {
     oracleCheck = null;
   }
@@ -149,8 +176,7 @@ async function renderStep1(
 
   lines.push(
     `Available leverage:  ${RISK_PARAMS.MIN_LEVERAGE}× – ${maxLev}×`,
-    `Typical f(x) fee:    ~${side === "long" ? "0.30" : "0.10"}% (scales with leverage — exact fee shown in preview)`,
-    `FxAeon fee:          0.05%`,
+    `Protocol/network fees: calculated from the live route at confirmation`,
     `Slippage tolerance:  ${slippage}%    (Settings to change)`,
   );
 
@@ -163,7 +189,7 @@ async function renderStep1(
   }
 
   // First-time user tutor card
-  const isFirstTime = user && !user.mode;
+  const isFirstTime = user && !user.firstTradeAt;
   if (isFirstTime) {
     lines.push(
       "",
@@ -209,15 +235,13 @@ function renderLeverageKeyboard(
     kb.text(`${lev}×`, `ls_col_${nonce}`);
   });
 
-  // Custom leverage
-  const customNonce = storeCallbackPayload({
-    action: "ls_custom_lev",
+  const backNonce = storeCallbackPayload({
+    action: "ls_back_step1",
     market,
     side,
     asset,
   });
-  kb.row().text("Custom…", `ls_custlev_${customNonce}`);
-  kb.text("← Back", "ls_back_step1");
+  kb.row().text("← Back", `ls_back_step1_${backNonce}`);
 
   return kb;
 }
@@ -230,8 +254,7 @@ async function renderCollateralStep(
   side: Side,
   asset: Asset,
   leverage: number,
-  userAddress: `0x${string}`,
-  defaultCollateral?: string
+  userAddress: `0x${string}`
 ): Promise<void> {
   // Fetch balances via multicall3
   let prices: Record<string, number> = {};
@@ -242,8 +265,8 @@ async function renderCollateralStep(
       const ethPrice = snap.prices["ETH"] ?? 0;
       const btcPrice = snap.prices["BTC"] ?? 0;
       prices = {
-        fxUSD: 1, // stablecoin
-        USDC: 1,
+        ...(snap.prices["FXUSD"] != null ? { fxUSD: snap.prices["FXUSD"] } : {}),
+        ...(snap.prices["USDC"] != null ? { USDC: snap.prices["USDC"] } : {}),
         wstETH: snap.prices["wstETH"] ?? ethPrice,
         stETH: ethPrice,
         WETH: ethPrice,
@@ -257,65 +280,49 @@ async function renderCollateralStep(
 
   const balances = await getCollateralBalances(userAddress, market, prices);
 
-  // Find default collateral
-  const defaultToken = defaultCollateral || "fxUSD";
-  const defaultBal = balances.find((b) => b.symbol === defaultToken) || balances[0];
+  // The SDK currently quotes market-native collateral only. Never display a
+  // selectable token that the signed intent cannot faithfully represent.
+  const nativeBal = balances.find((b) => b.symbol === market);
 
   const lines = [
     `${sideEmoji(side)}  ${side === "long" ? "Long" : "Short"} ${asset} at ${leverage}×`,
     "",
-    `Using ${defaultBal?.symbol ?? defaultToken} as your default collateral.`,
+    `Collateral: ${market} (required for this market)`,
   ];
 
-  if (defaultBal && !defaultBal.isEmpty) {
-    lines.push(
-      `Wallet balance:  ${formatBalance(defaultBal)}`
-    );
+  if (nativeBal && !nativeBal.isEmpty) {
+    lines.push(`Wallet balance:  ${formatBalance(nativeBal)}`);
   } else {
-    lines.push(`Wallet balance:  0 ${defaultToken}  ⚠️ Insufficient`);
+    lines.push(`Wallet balance:  0 ${market}  ⚠️ Insufficient`);
   }
 
-  // Show other token balances
-  const others = balances.filter((b) => b.symbol !== defaultBal?.symbol);
-  if (others.length > 0) {
-    lines.push("", "Other accepted tokens:");
-    others.forEach((b) => {
-      lines.push(`  ${b.isEmpty ? "⬛" : "🟢"} ${formatBalance(b)}`);
+  const backNonce = storeCallbackPayload({
+    action: "ls_back_lev",
+    market,
+    side,
+    asset,
+    leverage,
+  });
+
+  const kb = new InlineKeyboard();
+  if (nativeBal && !nativeBal.isEmpty) {
+    const continueNonce = storeCallbackPayload({
+      action: "ls_collateral_selected",
+      market,
+      side,
+      asset,
+      leverage,
+      collateralSymbol: market,
+      collateralAddress: nativeBal.address,
+      collateralDecimals: nativeBal.decimals,
+      balanceRaw: nativeBal.balanceRaw.toString(),
     });
+    kb.text("✅ Continue", `ls_size_${continueNonce}`).row();
+  } else {
+    lines.push("", `Deposit ${market}, then start the trade again.`);
   }
 
-  // Store context
-  const continueNonce = storeCallbackPayload({
-    action: "ls_collateral_selected",
-    market,
-    side,
-    asset,
-    leverage,
-    collateralSymbol: defaultBal?.symbol ?? defaultToken,
-    collateralAddress: defaultBal?.address,
-    collateralDecimals: defaultBal?.decimals ?? 18,
-    balanceHuman: defaultBal?.balanceHuman ?? 0,
-  });
-
-  const changeNonce = storeCallbackPayload({
-    action: "ls_change_collateral",
-    market,
-    side,
-    asset,
-    leverage,
-    balances: balances.map((b) => ({
-      symbol: b.symbol,
-      address: b.address,
-      decimals: b.decimals,
-      balanceHuman: b.balanceHuman,
-    })),
-  });
-
-  const kb = new InlineKeyboard()
-    .text("✅ Continue", `ls_size_${continueNonce}`)
-    .text("🔄 Change Token", `ls_chg_${changeNonce}`)
-    .row()
-    .text("← Back", "ls_back_lev");
+  kb.text("← Back", `ls_back_lev_${backNonce}`);
 
   await editOrReply(ctx, lines.join("\n"), kb);
 }
@@ -330,12 +337,12 @@ function renderSizeKeyboard(
   collateralSymbol: string,
   collateralAddress: string,
   collateralDecimals: number,
-  balanceHuman: number
+  balanceRaw: string
 ): { text: string; keyboard: InlineKeyboard } {
   const lines = [
     `${sideEmoji(side)}  ${side === "long" ? "Long" : "Short"} ${asset} at ${leverage}× with ${collateralSymbol}`,
     "",
-    "Choose size:",
+    `Choose how much of your ${collateralSymbol} balance to use:`,
   ];
 
   const kb = new InlineKeyboard();
@@ -343,8 +350,9 @@ function renderSizeKeyboard(
   // Percentage presets (of token balance)
   const pctPresets = [25, 50, 75, 100];
   pctPresets.forEach((pct) => {
-    const amount = (balanceHuman * pct) / 100;
-    if (amount > 0) {
+    const amountWei = (BigInt(balanceRaw) * BigInt(pct)) / 100n;
+    if (amountWei > 0n) {
+      const amount = formatUnits(amountWei, collateralDecimals);
       const nonce = storeCallbackPayload({
         action: "ls_size_selected",
         market,
@@ -361,40 +369,16 @@ function renderSizeKeyboard(
     }
   });
 
-  kb.row();
-
-  // USD presets
-  const usdPresets = [50, 100, 250, 500, 1000];
-  usdPresets.forEach((usd) => {
-    const nonce = storeCallbackPayload({
-      action: "ls_size_usd",
-      market,
-      side,
-      asset,
-      leverage,
-      collateralSymbol,
-      collateralAddress,
-      collateralDecimals,
-      amountUsd: usd,
-      sizeLabel: `$${usd >= 1000 ? `${usd / 1000}k` : usd}`,
-    });
-    kb.text(`$${usd >= 1000 ? `${usd / 1000}k` : usd}`, `ls_prev_${nonce}`);
-  });
-
-  // Custom amount
-  const customNonce = storeCallbackPayload({
-    action: "ls_custom_size",
+  const backNonce = storeCallbackPayload({
+    action: "ls_back_col",
     market,
     side,
     asset,
     leverage,
-    collateralSymbol,
-    collateralAddress,
-    collateralDecimals,
   });
-  kb.row()
-    .text("Custom amount…", `ls_cust_${customNonce}`)
-    .text("← Back", "ls_back_col");
+  kb.row().text("← Back", `ls_back_col_${backNonce}`);
+
+  lines.push("", `Exact amount: /${side}${asset} <${market} amount> <leverage>x`);
 
   return { text: lines.join("\n"), keyboard: kb };
 }
@@ -407,7 +391,7 @@ async function renderPreview(
   side: Side,
   asset: Asset,
   leverage: number,
-  amount: number,
+  amount: string,
   collateralSymbol: string,
   user: any,
   botUsername: string
@@ -419,24 +403,9 @@ async function renderPreview(
     botUsername
   );
 
-  // Enhance with oracle info and funding cost for shorts
-  const lines = text.split("\n");
-
-  // Add funding cost for shorts
-  if (side === "short") {
-    const positionSize = amount * leverage;
-    const funding = await estimateDailyFunding(positionSize).catch(() => null);
-    if (funding) {
-      const insertIdx = lines.findIndex((l) => l.includes("MEV protection")) || lines.length - 3;
-      lines.splice(
-        insertIdx,
-        0,
-        `Est. daily funding:  ~$${funding.dailyCostUsd.toFixed(2)}/day    (AAVE USDC rate × 10)`
-      );
-    }
-  }
-
-  await editOrReply(ctx, lines.join("\n"), keyboard);
+  // Do not fabricate a funding estimate from an unrelated lending market.
+  // The SDK route quote is the authoritative source for executable economics.
+  await editOrReply(ctx, text, keyboard);
 }
 
 // ── Helper ──────────────────────────────────────────────────────────────────
@@ -489,9 +458,16 @@ export async function longShortCommand(ctx: Context & I18nFlavor): Promise<void>
       return;
     }
 
-    // Check for pro-mode args: /longBTC 500 5x usdc
+    // Check for strict native-unit pro mode: /longBTC 0.005 2x
     const args = text.split(/\s+/).slice(1);
-    const proArgs = parseProArgs(args);
+    const proArgs = parseProArgs(args, market === "WBTC" ? 8 : 18);
+
+    if (args.length > 0 && !proArgs) {
+      await ctx.reply(
+        `❌ Invalid trade syntax.\n\nUse /${side}${asset} <${market} amount> <leverage>x\nExample: /${side}${asset} ${asset === "BTC" ? "0.005" : "0.25"} 2x\n\nAmounts are ${market} units. Fiat and alternate-token amounts are not accepted in chat.`
+      );
+      return;
+    }
 
     if (proArgs) {
       // Pro mode: skip straight to preview
@@ -509,7 +485,7 @@ export async function longShortCommand(ctx: Context & I18nFlavor): Promise<void>
         asset,
         proArgs.leverage,
         proArgs.amount,
-        proArgs.collateral || user.defaultCollateralToken || "fxUSD",
+        market,
         user,
         ctx.me?.username ?? "FxAeonBot"
       );
@@ -583,19 +559,19 @@ export async function closeAssetCommand(ctx: Context & I18nFlavor): Promise<void
       // Add partial close buttons
       [25, 50, 75].forEach((pct) => {
         const nonce = storeCallbackPayload({
-          action: "partial_close",
+          action: "pa_do_reduce",
           market,
           side: pos.side,
           positionId: pos.positionId,
           sizeBps: pct * 100,
         });
-        kb.text(`${pct}%`, `ls_pclose_${nonce}`);
+        kb.text(`${pct}%`, `pa_dored_${nonce}`);
       });
 
       await ctx.reply(
         `🔒 Close ${asset} ${pos.side.toUpperCase()} #${pos.positionId}\n\n` +
-          `Collateral: ${Number(pos.collateral).toFixed(6)} ${pos.collateralToken}\n` +
-          `Debt: ${Number(pos.debt).toFixed(2)} ${pos.debtToken}\n` +
+          `Collateral: ${pos.collateral.toFixed(6)} ${pos.collateralToken}\n` +
+          `Debt: ${pos.debt.toFixed(2)} ${pos.debtToken}\n` +
           `Leverage: ${pos.leverage.toFixed(2)}×\n\n` +
           `Close how much?`,
         { reply_markup: kb }
@@ -636,6 +612,57 @@ export async function handleLongShortCallback(ctx: Context): Promise<void> {
     return;
   }
 
+  if (data.startsWith("ls_back_step1_")) {
+    const payload = consumeCallbackPayload(data.slice("ls_back_step1_".length));
+    if (!payload || payload.action !== "ls_back_step1" || !isAsset(payload.asset) || !isSide(payload.side)) {
+      await editOrReply(ctx, "⌛ This button expired. Start over with a new command.");
+      return;
+    }
+    const telegramId = ctx.from?.id.toString();
+    const user = telegramId ? await prisma.user.findUnique({ where: { telegramId } }) : null;
+    await renderStep1(ctx, payload.asset, payload.side, user);
+    return;
+  }
+
+  if (data.startsWith("ls_back_lev_")) {
+    const payload = consumeCallbackPayload(data.slice("ls_back_lev_".length));
+    if (
+      !payload || payload.action !== "ls_back_lev" || !isMarket(payload.market) ||
+      !isAsset(payload.asset) || !isSide(payload.side)
+    ) {
+      await editOrReply(ctx, "⌛ This button expired. Start over with a new command.");
+      return;
+    }
+    await editOrReply(
+      ctx,
+      `${sideEmoji(payload.side)}  ${payload.side === "long" ? "Long" : "Short"} ${payload.asset} — choose leverage (${RISK_PARAMS.MIN_LEVERAGE}×–${maxLeverage(payload.side)}×):`,
+      renderLeverageKeyboard(payload.side, payload.asset, payload.market)
+    );
+    return;
+  }
+
+  if (data.startsWith("ls_back_col_")) {
+    const payload = consumeCallbackPayload(data.slice("ls_back_col_".length));
+    if (
+      !payload || payload.action !== "ls_back_col" || !isMarket(payload.market) ||
+      !isAsset(payload.asset) || !isSide(payload.side) || !isValidLeverage(payload.leverage, payload.side)
+    ) {
+      await editOrReply(ctx, "⌛ This button expired. Start over with a new command.");
+      return;
+    }
+    const telegramId = ctx.from?.id.toString();
+    const user = telegramId ? await prisma.user.findUnique({ where: { telegramId } }) : null;
+    if (!user) {
+      await editOrReply(ctx, "🔐 Connect your wallet first with /start.");
+      return;
+    }
+    await renderCollateralStep(
+      ctx, payload.market, payload.side, payload.asset, payload.leverage,
+      user.walletAddress as `0x${string}`
+    );
+    return;
+  }
+
   // Step 1 → Step 2 (leverage picker)
   if (data.startsWith("ls_lev_")) {
     const nonce = data.slice("ls_lev_".length);
@@ -644,7 +671,16 @@ export async function handleLongShortCallback(ctx: Context): Promise<void> {
       await editOrReply(ctx, "⌛ This button expired. Start over with a new command.");
       return;
     }
-    const { market, side, asset } = payload as { market: Market; side: Side; asset: Asset };
+    if (
+      payload.action !== "ls_step1" ||
+      !isMarket(payload.market) ||
+      !isSide(payload.side) ||
+      !isAsset(payload.asset)
+    ) {
+      await editOrReply(ctx, "⚠️ This trade step is invalid. Start over with a new command.");
+      return;
+    }
+    const { market, side, asset } = payload;
     const maxLev = maxLeverage(side);
     const kb = renderLeverageKeyboard(side, asset, market);
     await editOrReply(
@@ -663,12 +699,17 @@ export async function handleLongShortCallback(ctx: Context): Promise<void> {
       await editOrReply(ctx, "⌛ This button expired. Start over with a new command.");
       return;
     }
-    const { market, side, asset, leverage } = payload as {
-      market: Market;
-      side: Side;
-      asset: Asset;
-      leverage: number;
-    };
+    if (
+      payload.action !== "ls_leverage" ||
+      !isMarket(payload.market) ||
+      !isSide(payload.side) ||
+      !isAsset(payload.asset) ||
+      !isValidLeverage(payload.leverage, payload.side)
+    ) {
+      await editOrReply(ctx, "⚠️ This trade step is invalid. Start over with a new command.");
+      return;
+    }
+    const { market, side, asset, leverage } = payload;
 
     const telegramId = ctx.from?.id.toString();
     const user = telegramId
@@ -685,8 +726,7 @@ export async function handleLongShortCallback(ctx: Context): Promise<void> {
       side,
       asset,
       leverage,
-      user.walletAddress as `0x${string}`,
-      user.defaultCollateralToken
+      user.walletAddress as `0x${string}`
     );
     return;
   }
@@ -699,8 +739,18 @@ export async function handleLongShortCallback(ctx: Context): Promise<void> {
       await editOrReply(ctx, "⌛ This button expired. Start over with a new command.");
       return;
     }
-    const { market, side, asset, leverage, collateralSymbol, collateralAddress, collateralDecimals, balanceHuman } =
-      payload as any;
+    if (
+      payload.action !== "ls_collateral_selected" || !isMarket(payload.market) ||
+      !isSide(payload.side) || !isAsset(payload.asset) ||
+      !isValidLeverage(payload.leverage, payload.side) || typeof payload.collateralSymbol !== "string" ||
+      payload.collateralSymbol !== payload.market ||
+      typeof payload.collateralAddress !== "string" || typeof payload.collateralDecimals !== "number" ||
+      typeof payload.balanceRaw !== "string" || !/^\d+$/.test(payload.balanceRaw) || BigInt(payload.balanceRaw) <= 0n
+    ) {
+      await editOrReply(ctx, "⚠️ This trade step is invalid. Start over with a new command.");
+      return;
+    }
+    const { market, side, asset, leverage, collateralSymbol, collateralAddress, collateralDecimals, balanceRaw } = payload;
 
     const { text, keyboard } = renderSizeKeyboard(
       market,
@@ -710,7 +760,7 @@ export async function handleLongShortCallback(ctx: Context): Promise<void> {
       collateralSymbol,
       collateralAddress,
       collateralDecimals,
-      balanceHuman
+      balanceRaw
     );
     await editOrReply(ctx, text, keyboard);
     return;
@@ -724,35 +774,22 @@ export async function handleLongShortCallback(ctx: Context): Promise<void> {
       await editOrReply(ctx, "⌛ This button expired. Start over with a new command.");
       return;
     }
-    const { market, side, asset, leverage, collateralSymbol, amount, amountUsd } = payload as any;
+    if (
+      payload.action !== "ls_size_selected" || !isMarket(payload.market) || !isSide(payload.side) ||
+      !isAsset(payload.asset) || !isValidLeverage(payload.leverage, payload.side) ||
+      typeof payload.collateralSymbol !== "string" || payload.collateralSymbol !== payload.market ||
+      typeof payload.amount !== "string" ||
+      !canonicalActionAmount(payload.amount, payload.market === "WBTC" ? 8 : 18)
+    ) {
+      await editOrReply(ctx, "⚠️ This trade size is invalid. Start over with a new command.");
+      return;
+    }
+    const { market, side, asset, leverage, collateralSymbol, amount } = payload;
 
     const telegramId = ctx.from?.id.toString();
     const user = telegramId
       ? await prisma.user.findUnique({ where: { telegramId } })
       : null;
-
-    // If USD amount, convert to token amount using current price
-    let tokenAmount = amount;
-    if (!tokenAmount && amountUsd) {
-      try {
-        const snap = await getSpotPrices();
-        const ethPrice = snap.prices?.["ETH"] ?? 0;
-        const btcPrice = snap.prices?.["BTC"] ?? 0;
-        const priceMap: Record<string, number> = {
-          fxUSD: 1,
-          USDC: 1,
-          wstETH: snap.prices?.["wstETH"] ?? ethPrice,
-          stETH: ethPrice,
-          WETH: ethPrice,
-          ETH: ethPrice,
-          WBTC: snap.prices?.["WBTC"] ?? btcPrice,
-        };
-        const price = priceMap[collateralSymbol] || 1;
-        tokenAmount = amountUsd / price;
-      } catch {
-        tokenAmount = amountUsd; // fallback
-      }
-    }
 
     await renderPreview(
       ctx,
@@ -760,7 +797,7 @@ export async function handleLongShortCallback(ctx: Context): Promise<void> {
       side,
       asset,
       leverage,
-      tokenAmount,
+      amount,
       collateralSymbol,
       user,
       ctx.me?.username ?? "FxAeonBot"
@@ -768,43 +805,7 @@ export async function handleLongShortCallback(ctx: Context): Promise<void> {
     return;
   }
 
-  // Change collateral token
-  if (data.startsWith("ls_chg_")) {
-    const nonce = data.slice("ls_chg_".length);
-    const payload = consumeCallbackPayload(nonce);
-    if (!payload) {
-      await editOrReply(ctx, "⌛ This button expired. Start over with a new command.");
-      return;
-    }
-    const { market, side, asset, leverage, balances } = payload as any;
-
-    const kb = new InlineKeyboard();
-    (balances as any[]).forEach((bal: any) => {
-      const selNonce = storeCallbackPayload({
-        action: "ls_collateral_selected",
-        market,
-        side,
-        asset,
-        leverage,
-        collateralSymbol: bal.symbol,
-        collateralAddress: bal.address,
-        collateralDecimals: bal.decimals,
-        balanceHuman: bal.balanceHuman,
-      });
-      const label = bal.balanceHuman > 0
-        ? `${bal.symbol} (${bal.balanceHuman.toFixed(4)})`
-        : `${bal.symbol} (empty)`;
-      kb.text(label, `ls_size_${selNonce}`).row();
-    });
-    kb.text("← Back", "ls_back_col");
-
-    await editOrReply(
-      ctx,
-      `🔄 Choose collateral token for ${side === "long" ? "Long" : "Short"} ${asset} at ${leverage}×:`,
-      kb
-    );
-    return;
-  }
+  await editOrReply(ctx, "⌛ This trade control is no longer valid. Start over with a new command.");
 }
 
 // ── Registration ────────────────────────────────────────────────────────────

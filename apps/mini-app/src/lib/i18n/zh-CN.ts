@@ -19,7 +19,7 @@ const zhCN: Messages = {
   'common.unknownError': '未知错误',
 
   'splash.tagline':
-    '在 f(x) Protocol 上进行非托管杠杆交易，专为 Telegram 打造。本应用在 FxAeon 机器人内运行。',
+    '在一个非托管 Telegram 应用中完成交易、借贷、储蓄、跨链，并管理所有 f(x) Protocol 仓位。',
 
   'loginGate.tgTitle': 'FxAeon 在 Telegram 中运行',
   'loginGate.tgBody': '打开机器人并发送 /start 来设置你的钱包。',
@@ -72,7 +72,7 @@ const zhCN: Messages = {
   'portfolio.markets': '市场',
   'portfolio.pricesStale': '价格可能有几分钟延迟（上游波动）。',
   'portfolio.quickActions': '快捷操作',
-  'portfolio.qaTradeHint': '杠杆最高 10x',
+  'portfolio.qaTradeHint': '多头最高 7x',
   'portfolio.qaDepositHint': 'ETH · wstETH · WBTC',
   'portfolio.qaSecurity': '你的钱包如何受到保护',
   'portfolio.qaSecurityHint': '自我托管，你的私钥',
@@ -200,12 +200,12 @@ const zhCN: Messages = {
     '只有在你的会话签名者授权有效期间，机器人才能签名。在设置 → 钱包中撤销，聊天执行将立即停止。',
   'policy.rule3Title': '经模拟校验的执行',
   'policy.rule3Body':
-    '每个在聊天中确认的操作都会先进行模拟。如果会失败，则不会广播任何交易 —— 始终安全失败。',
-  'policy.rule4Title': '仅限明确确认',
+    '审核前，服务器会构建确切计划，并执行策略检查和模拟。仓位转换必须与固定的 f(x) SDK v1 路由表完全一致。',
+  'policy.rule4Title': '两分钟的钱包绑定审核',
   'policy.rule4Body':
-    '在你点击“确认”之前，不会构建或发送任何交易。预览将在约 10 分钟后失效。',
+    'Mini App 会将该确切计划冻结 2 分钟。确认会领取一次性票据；重复请求只能返回同一条幂等交易记录。',
   'policy.footer':
-    '在设置 → 钱包中管理一切：导出私钥、启用或撤销机器人交易。在机器人中查看 /security 了解实时状态。',
+    '活动会保留每个路由步骤的哈希和状态，包括待处理、部分完成、已取消、已回退或已确认。请在设置 → 钱包中管理签名权限。',
   // -- login sign-in card (PrivyFlow intro) --
   'loginCard.signIn': '登录 FxAeon',
   'loginCard.subtitle': '由 Privy 提供支持的自托管钱包',
@@ -214,6 +214,9 @@ const zhCN: Messages = {
   'loginCard.wallet': '连接已有钱包',
   'loginCard.terms': '继续即表示您接受我们的条款和隐私政策',
   'loginCard.poweredBy': '技术支持',
+  'nav.earn': '收益',
+  'nav.move': '跨链',
+  'nav.more': '更多',
 };
 
 export default zhCN;

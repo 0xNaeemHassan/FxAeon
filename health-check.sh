@@ -1,14 +1,18 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -uo pipefail
 
-# FxAeon Health Check Verification Script
-# Usage: ./health-check.sh [BASE_URL]
-#   BASE_URL: defaults to http://localhost:8080
+# FxAeon deployment health verifier.
+#
+# Usage:
+#   ./health-check.sh [BOT_BASE_URL]
+#
+# BOT_BASE_URL defaults to BOT_URL and then localhost. Optional external
+# dependencies are checked only when their URL/credentials are supplied in the
+# environment; this script contains no deployment-specific project endpoints.
 
-BASE_URL="${1:-http://localhost:8080}"
-TELEGRAM_TOKEN="${TELEGRAM_TOKEN:?TELEGRAM_TOKEN env var is required}"
+BASE_URL="${1:-${BOT_URL:-http://localhost:8080}}"
+BASE_URL="${BASE_URL%/}"
 
-# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -17,172 +21,229 @@ NC='\033[0m'
 
 PASS=0
 FAIL=0
+SKIP=0
+RESPONSE_FILE="$(mktemp)"
+trap 'rm -f "$RESPONSE_FILE"' EXIT
 
 log_pass() {
-    echo -e "${GREEN}[PASS]${NC} $1"
-    ((PASS++))
+    printf "%b[PASS]%b %s\n" "$GREEN" "$NC" "$1"
+    PASS=$((PASS + 1))
 }
 
 log_fail() {
-    echo -e "${RED}[FAIL]${NC} $1"
-    ((FAIL++))
+    printf "%b[FAIL]%b %s\n" "$RED" "$NC" "$1"
+    FAIL=$((FAIL + 1))
+}
+
+log_skip() {
+    printf "%b[SKIP]%b %s\n" "$YELLOW" "$NC" "$1"
+    SKIP=$((SKIP + 1))
 }
 
 log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+    printf "%b[INFO]%b %s\n" "$BLUE" "$NC" "$1"
 }
 
-log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
+http_get() {
+    local url="$1"
+    : > "$RESPONSE_FILE"
+    curl --silent --show-error --location \
+        --connect-timeout 5 --max-time 15 \
+        --output "$RESPONSE_FILE" --write-out "%{http_code}" \
+        "$url" 2>/dev/null || true
 }
 
-echo "=== FxAeon Health Check ==="
-echo "Base URL: $BASE_URL"
-echo "Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-echo ""
-
-# 1. Bot health endpoint
-echo "--- Bot Health ---"
-HEALTH=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/api/v1/health" 2>/dev/null || echo "000")
-if [ "$HEALTH" = "200" ]; then
-    HEALTH_BODY=$(curl -s "$BASE_URL/api/v1/health" 2>/dev/null)
-    log_pass "Health endpoint responds (200)"
-    log_info "Response: $HEALTH_BODY"
-else
-    log_fail "Health endpoint failed (HTTP $HEALTH)"
+if ! command -v curl >/dev/null 2>&1; then
+    printf "curl is required to run this health check.\n" >&2
+    exit 2
 fi
 
-# 2. Bot info endpoint
-echo ""
-echo "--- Bot Info ---"
-INFO=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/api/v1/info" 2>/dev/null || echo "000")
-if [ "$INFO" = "200" ]; then
-    INFO_BODY=$(curl -s "$BASE_URL/api/v1/info" 2>/dev/null)
-    log_pass "Info endpoint responds (200)"
-    log_info "Response: $INFO_BODY"
+printf "=== FxAeon Health Check ===\n"
+printf "Base URL: %s\n" "$BASE_URL"
+printf "Time: %s\n\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+printf '%s\n' '--- Bot Process ---'
+STATUS="$(http_get "$BASE_URL/health")"
+if [ "$STATUS" = "200" ]; then
+    log_pass "Process liveness endpoint responds (200)"
 else
-    log_fail "Info endpoint failed (HTTP $INFO)"
+    log_fail "Process liveness endpoint failed (HTTP ${STATUS:-000})"
 fi
 
-# 3. Webhook status (if Telegram token available)
-echo ""
-echo "--- Telegram Webhook ---"
-if [ -n "$TELEGRAM_TOKEN" ]; then
-    WEBHOOK_INFO=$(curl -s "https://api.telegram.org/bot${TELEGRAM_TOKEN}/getWebhookInfo" 2>/dev/null)
-    if echo "$WEBHOOK_INFO" | grep -q '"ok":true'; then
-        URL=$(echo "$WEBHOOK_INFO" | grep -o '"url":"[^"]*"' | head -1 | cut -d'"' -f4)
-        PENDING=$(echo "$WEBHOOK_INFO" | grep -o '"pending_update_count":[0-9]*' | cut -d':' -f2)
-        log_pass "Telegram webhook is set"
-        log_info "Webhook URL: $URL"
-        log_info "Pending updates: $PENDING"
-        
-        if [ "$PENDING" -gt 100 ]; then
-            log_warn "High pending update count ($PENDING) - bot may be slow"
+STATUS="$(http_get "$BASE_URL/api/v1/info")"
+if [ "$STATUS" = "200" ]; then
+    log_pass "Build information endpoint responds (200)"
+    log_info "$(tr -d '\r\n' < "$RESPONSE_FILE")"
+else
+    log_fail "Build information endpoint failed (HTTP ${STATUS:-000})"
+fi
+
+printf '\n%s\n' '--- Deep Readiness ---'
+DEEP_STATUS="$(http_get "$BASE_URL/api/v1/health")"
+DEEP_BODY="$(tr -d '\r\n' < "$RESPONSE_FILE")"
+if [ "$DEEP_STATUS" = "200" ]; then
+    log_pass "Deep health endpoint responds (200)"
+else
+    log_fail "Deep health endpoint failed (HTTP ${DEEP_STATUS:-000})"
+fi
+log_info "${DEEP_BODY:-no response body}"
+
+if printf '%s' "$DEEP_BODY" | grep -Eq '"database"[[:space:]]*:[[:space:]]*"healthy"'; then
+    log_pass "Database reports healthy"
+else
+    log_fail "Database is not healthy in the deep-health response"
+fi
+
+if printf '%s' "$DEEP_BODY" | grep -Eq '"redis"[[:space:]]*:[[:space:]]*"healthy"'; then
+    log_pass "Redis reports healthy"
+elif printf '%s' "$DEEP_BODY" | grep -Eq '"redis"[[:space:]]*:[[:space:]]*"skipped"'; then
+    log_skip "Redis is not configured on the bot"
+else
+    log_fail "Redis is not healthy in the deep-health response"
+fi
+
+if printf '%s' "$DEEP_BODY" | grep -Eq '"rpc"[[:space:]]*:[[:space:]]*"healthy"'; then
+    log_pass "Ethereum RPC reports healthy"
+elif [ -z "${ALCHEMY_RPC_URL:-}" ]; then
+    log_skip "ALCHEMY_RPC_URL is not set; direct RPC verification skipped"
+else
+    log_fail "Ethereum RPC is not healthy in the deep-health response"
+fi
+
+if printf '%s' "$DEEP_BODY" | grep -Eq '"baseRpc"[[:space:]]*:[[:space:]]*"healthy"'; then
+    log_pass "Base RPC reports healthy"
+elif printf '%s' "$DEEP_BODY" | grep -Eq '"baseRpc"[[:space:]]*:[[:space:]]*"skipped"' && [ "${BRIDGE_EXECUTION_ENABLED:-false}" != "true" ]; then
+    log_skip "Base RPC is not configured and bridge execution is disabled"
+else
+    log_fail "Base RPC is not healthy in the deep-health response"
+fi
+
+printf '\n%s\n' '--- Telegram Webhook ---'
+TELEGRAM_TOKEN_VALUE="${TELEGRAM_BOT_TOKEN:-${TELEGRAM_TOKEN:-}}"
+if [ -z "$TELEGRAM_TOKEN_VALUE" ]; then
+    log_skip "TELEGRAM_BOT_TOKEN is not set"
+else
+    TELEGRAM_API_BASE_URL="${TELEGRAM_API_BASE_URL:-https://api.telegram.org}"
+    STATUS="$(http_get "${TELEGRAM_API_BASE_URL%/}/bot${TELEGRAM_TOKEN_VALUE}/getWebhookInfo")"
+    WEBHOOK_BODY="$(tr -d '\r\n' < "$RESPONSE_FILE")"
+    if [ "$STATUS" = "200" ] && printf '%s' "$WEBHOOK_BODY" | grep -q '"ok"[[:space:]]*:[[:space:]]*true'; then
+        if printf '%s' "$WEBHOOK_BODY" | grep -Eq '"url"[[:space:]]*:[[:space:]]*"https?://[^"[:space:]]+/webhook"'; then
+            log_pass "Telegram reports the exact /webhook endpoint configured"
+        else
+            log_fail "Telegram webhook is empty or does not end in /webhook"
         fi
     else
-        log_fail "Telegram webhook not configured"
+        log_fail "Telegram webhook query failed (HTTP ${STATUS:-000})"
     fi
-else
-    log_warn "TELEGRAM_TOKEN not set, skipping webhook check"
 fi
 
-# 4. Database connectivity (via health endpoint)
-echo ""
-echo "--- Database ---"
-if [ "$HEALTH" = "200" ]; then
-    if echo "$HEALTH_BODY" | grep -qi "database\|db\|postgres"; then
-        log_pass "Database status reported in health check"
+printf '\n%s\n' '--- Direct Ethereum RPC ---'
+if [ -z "${ALCHEMY_RPC_URL:-}" ]; then
+    log_skip "ALCHEMY_RPC_URL is not set"
+else
+    RPC_STATUS="$(curl --silent --show-error --connect-timeout 5 --max-time 15 \
+        --request POST --header 'Content-Type: application/json' \
+        --data '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}' \
+        --output "$RESPONSE_FILE" --write-out '%{http_code}' \
+        "$ALCHEMY_RPC_URL" 2>/dev/null || true)"
+    RPC_BODY="$(tr -d '\r\n' < "$RESPONSE_FILE")"
+    if [ "$RPC_STATUS" = "200" ] && printf '%s' "$RPC_BODY" | grep -Eqi '"result"[[:space:]]*:[[:space:]]*"0x0*1"'; then
+        log_pass "Configured Ethereum RPC responds on chain 1"
     else
-        log_warn "Database status not found in health response"
+        log_fail "Configured Ethereum RPC did not identify chain 1 (HTTP ${RPC_STATUS:-000})"
     fi
-else
-    log_fail "Cannot verify database - health endpoint down"
 fi
 
-# 5. Redis connectivity (via health endpoint)
-echo ""
-echo "--- Redis ---"
-if [ "$HEALTH" = "200" ]; then
-    if echo "$HEALTH_BODY" | grep -qi "redis\|cache"; then
-        log_pass "Redis status reported in health check"
+printf '\n%s\n' '--- Direct Base RPC ---'
+if [ -z "${BASE_RPC_URL:-}" ]; then
+    if [ "${BRIDGE_EXECUTION_ENABLED:-false}" = "true" ]; then
+        log_fail "BASE_RPC_URL is required while bridge execution is enabled"
     else
-        log_warn "Redis status not found in health response"
+        log_skip "BASE_RPC_URL is not set and bridge execution is disabled"
     fi
 else
-    log_fail "Cannot verify Redis - health endpoint down"
+    BASE_RPC_STATUS="$(curl --silent --show-error --connect-timeout 5 --max-time 15 \
+        --request POST --header 'Content-Type: application/json' \
+        --data '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}' \
+        --output "$RESPONSE_FILE" --write-out '%{http_code}' \
+        "$BASE_RPC_URL" 2>/dev/null || true)"
+    BASE_RPC_BODY="$(tr -d '\r\n' < "$RESPONSE_FILE")"
+    if [ "$BASE_RPC_STATUS" = "200" ] && printf '%s' "$BASE_RPC_BODY" | grep -Eqi '"result"[[:space:]]*:[[:space:]]*"0x0*2105"'; then
+        log_pass "Configured Base RPC responds on chain 8453"
+    else
+        log_fail "Configured Base RPC did not identify chain 8453 (HTTP ${BASE_RPC_STATUS:-000})"
+    fi
 fi
 
-# 6. RPC connectivity
-echo ""
-echo "--- Ethereum RPC ---"
-RPC_STATUS=$(curl -s -X POST \
-    -H "Content-Type: application/json" \
-    -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' \
-    "${ALCHEMY_RPC_URL:?ALCHEMY_RPC_URL env var is required}" 2>/dev/null | grep -o '"result":"0x[0-9a-f]*"' | head -1)
-
-if [ -n "$RPC_STATUS" ]; then
-    BLOCK_HEX=$(echo "$RPC_STATUS" | grep -o '0x[0-9a-f]*' | head -1)
-    BLOCK_NUM=$(printf "%d" "$BLOCK_HEX" 2>/dev/null || echo "unknown")
-    log_pass "Alchemy RPC responds (latest block: $BLOCK_NUM)"
+printf '\n%s\n' '--- Redis Transport ---'
+if [ -n "${REDIS_URL:-}" ]; then
+    case "$REDIS_URL" in
+        redis://*|rediss://*)
+            if command -v redis-cli >/dev/null 2>&1; then
+                REDIS_REPLY="$(redis-cli --no-auth-warning -u "$REDIS_URL" ping 2>/dev/null || true)"
+                if [ "$REDIS_REPLY" = "PONG" ]; then
+                    log_pass "Redis TCP endpoint responds to PING"
+                else
+                    log_fail "Redis TCP endpoint did not respond to PING"
+                fi
+            else
+                log_skip "redis-cli is unavailable; deep-health result is authoritative"
+            fi
+            ;;
+        http://*|https://*)
+            log_fail "REDIS_URL must use redis:// or rediss://, not an HTTP REST URL"
+            ;;
+        *)
+            log_fail "REDIS_URL has an unsupported scheme"
+            ;;
+    esac
+elif [ -n "${UPSTASH_REDIS_REST_URL:-}" ] && [ -n "${UPSTASH_REDIS_REST_TOKEN:-}" ]; then
+    # A REST endpoint is queried only through its explicitly named REST vars.
+    STATUS="$(curl --silent --show-error --connect-timeout 5 --max-time 15 \
+        --header "Authorization: Bearer $UPSTASH_REDIS_REST_TOKEN" \
+        --output "$RESPONSE_FILE" --write-out '%{http_code}' \
+        "${UPSTASH_REDIS_REST_URL%/}/ping" 2>/dev/null || true)"
+    if [ "$STATUS" = "200" ]; then
+        log_pass "Configured Redis REST endpoint responds"
+    else
+        log_fail "Configured Redis REST endpoint failed (HTTP ${STATUS:-000})"
+    fi
 else
-    log_fail "Alchemy RPC not responding"
+    log_skip "No Redis transport variables are set"
 fi
 
-# 7. Mini App (if URL configured)
-echo ""
-echo "--- Mini App ---"
-MINI_APP_URL="${MINI_APP_URL:-https://fxbot-mini-app.pages.dev}"
-MINI_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$MINI_APP_URL" 2>/dev/null || echo "000")
-if [ "$MINI_STATUS" = "200" ] || [ "$MINI_STATUS" = "304" ]; then
-    log_pass "Mini App responds (HTTP $MINI_STATUS)"
+printf '\n%s\n' '--- Optional Public Surfaces ---'
+if [ -n "${MINI_APP_URL:-}" ]; then
+    STATUS="$(http_get "${MINI_APP_URL%/}")"
+    case "$STATUS" in
+        200|204|301|302|303|307|308) log_pass "Configured Mini App URL responds (HTTP $STATUS)" ;;
+        *) log_fail "Configured Mini App URL failed (HTTP ${STATUS:-000})" ;;
+    esac
 else
-    log_fail "Mini App not responding (HTTP $MINI_STATUS)"
+    log_skip "MINI_APP_URL is not set"
 fi
 
-# 8. Privy JWKS endpoint
-echo ""
-echo "--- Privy Auth ---"
-PRIVY_JWKS=$(curl -s -o /dev/null -w "%{http_code}" "https://auth.privy.io/api/v1/apps/cmq6a73jc002k0cl5vgleejt2/jwks.json" 2>/dev/null || echo "000")
-if [ "$PRIVY_JWKS" = "200" ]; then
-    log_pass "Privy JWKS endpoint responds (200)"
+if [ -n "${PRIVY_JWKS_URL:-}" ]; then
+    STATUS="$(http_get "$PRIVY_JWKS_URL")"
+    if [ "$STATUS" = "200" ]; then
+        log_pass "Configured Privy JWKS URL responds (200)"
+    else
+        log_fail "Configured Privy JWKS URL failed (HTTP ${STATUS:-000})"
+    fi
 else
-    log_fail "Privy JWKS endpoint failed (HTTP $PRIVY_JWKS)"
+    log_skip "PRIVY_JWKS_URL is not set"
 fi
 
-# 9. Supabase connectivity
-echo ""
-echo "--- Supabase ---"
-SUPABASE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://gadzbgakqipnvkfozcfa.supabase.co/rest/v1/" \
-    -H "apikey: test" 2>/dev/null || echo "000")
-if [ "$SUPABASE_STATUS" = "200" ] || [ "$SUPABASE_STATUS" = "401" ]; then
-    log_pass "Supabase API responds (HTTP $SUPABASE_STATUS)"
-else
-    log_fail "Supabase API not responding (HTTP $SUPABASE_STATUS)"
-fi
+printf '\n========================================\n'
+printf "%bPassed: %d%b\n" "$GREEN" "$PASS" "$NC"
+printf "%bFailed: %d%b\n" "$RED" "$FAIL" "$NC"
+printf "%bSkipped: %d%b\n" "$YELLOW" "$SKIP" "$NC"
+printf '========================================\n'
 
-# 10. Upstash Redis
-echo ""
-echo "--- Upstash Redis ---"
-UPSTASH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-    "${REDIS_URL:?REDIS_URL env var is required}" \
-    -H "Authorization: Bearer ${REDIS_TOKEN:?REDIS_TOKEN env var is required}" 2>/dev/null || echo "000")
-if [ "$UPSTASH_STATUS" = "200" ] || [ "$UPSTASH_STATUS" = "401" ]; then
-    log_pass "Upstash Redis responds (HTTP $UPSTASH_STATUS)"
-else
-    log_fail "Upstash Redis not responding (HTTP $UPSTASH_STATUS)"
-fi
-
-# Summary
-echo ""
-echo "========================================"
-echo -e "${GREEN}Passed: $PASS${NC}"
-echo -e "${RED}Failed: $FAIL${NC}"
-echo "========================================"
-
-if [ $FAIL -eq 0 ]; then
-    echo -e "${GREEN}All checks passed! System is healthy.${NC}"
+if [ "$FAIL" -eq 0 ]; then
+    printf "%bAll configured checks passed.%b\n" "$GREEN" "$NC"
     exit 0
-else
-    echo -e "${RED}Some checks failed. Review issues above.${NC}"
-    exit 1
 fi
+
+printf "%bOne or more configured checks failed.%b\n" "$RED" "$NC"
+exit 1

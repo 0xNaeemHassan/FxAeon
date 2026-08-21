@@ -113,6 +113,7 @@ export const priceAlertPoller = {
 
   start(): NodeJS.Timeout {
     const timer = setInterval(() => void this.check(), POLL_INTERVAL_MS);
+    heartbeat("price-alert-poller");
     timer.unref?.();
     workerLogger.info("price-alert poller started (60s interval)");
     return timer;

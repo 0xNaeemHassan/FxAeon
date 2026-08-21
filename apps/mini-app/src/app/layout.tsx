@@ -10,16 +10,25 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 const grotesk = Space_Grotesk({ subsets: ['latin'], variable: '--font-display' });
 
 export const metadata: Metadata = {
-  title: 'FxAeon — f(x) Protocol Trading',
-  description: 'Self-custodial DeFi trading for f(x) Protocol',
+  title: {
+    default: 'FxAeon — f(x) Protocol Gateway',
+    template: '%s · FxAeon',
+  },
+  description: 'The self-custodial f(x) Protocol gateway for trading, borrowing, saving, bridging, and position management in Telegram.',
+  applicationName: 'FxAeon',
+  formatDetection: { telephone: false, email: false, address: false },
+  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'FxAeon' },
+  icons: { icon: '/icon.svg' },
 };
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
-  themeColor: '#0a0a12',
+  maximumScale: 5,
+  userScalable: true,
+  viewportFit: 'cover',
+  themeColor: '#07070d',
+  colorScheme: 'dark',
 };
 
 export default function RootLayout({

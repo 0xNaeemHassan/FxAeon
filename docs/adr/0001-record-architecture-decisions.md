@@ -1,34 +1,22 @@
-# 1. Record architecture decisions
+# ADR 0001: Record architecture decisions
 
-Date: 2026-06-15
-
-## Status
-
-Accepted
+Date: 2026-06-15  
+Status: Accepted
 
 ## Context
 
-FxAeon is a money-path application (self-custodial trading on f(x) Protocol via a
-Telegram Mini App). Several of its decisions are security-sensitive and hard to
-reverse — the custody model, the auth provider, the broadcast policy, the
-chain-of-trust for contract addresses. Today the reasoning behind these lives
-across PR descriptions, `docs/PLAN.md`, `docs/COMPLETED.md`, and `docs/GAPS.md`.
-PR descriptions are hard to find later, and the honest-limits docs describe
-*current state* rather than the *decision and its alternatives*.
+FxAeon coordinates a user wallet, delegated signing, third-party SDK routes, and live protocol transactions. Decisions about custody, authentication, contract trust, and broadcast controls are expensive to reverse and cannot be reconstructed reliably from old pull requests or planning documents.
 
 ## Decision
 
-We will keep a lightweight log of Architecture Decision Records (ADRs) in
-`docs/adr/`, one Markdown file per decision, using Michael Nygard's template
-(Context / Decision / Consequences). ADRs are immutable once accepted; a new ADR
-supersedes an old one rather than editing it.
+Keep lightweight Markdown ADRs in `docs/adr/`. Record the context, chosen approach, rejected alternatives, security/operational consequences, verification, and rollback for a significant decision.
 
-ADRs complement — they do not replace — `docs/GAPS.md` (honest current limits)
-and `docs/COMPLETED.md` (what shipped and how it was verified).
+Accepted decisions are superseded by a new ADR when their direction changes. Documentation may correct links and factual drift without rewriting the original rationale.
 
 ## Consequences
 
-- New significant or hard-to-reverse decisions get a short, discoverable record.
-- Reviewers can see *why* a "standard" approach was rejected (e.g. why Privy
-  webhooks were retired, why fork tests are kept out of CI) without archaeology.
-- Small cost: one extra file per major decision. Trivial choices do not get ADRs.
+- Reviewers can evaluate why a security boundary exists before weakening it.
+- Future changes identify which assumptions and tests must be revisited.
+- ADRs add maintenance cost and must not become an unverified parallel source of product truth.
+
+Current feature status belongs in [the capability matrix](../sdk-capabilities.md); current operational risks belong in [the threat model](../threat-model.md) and [known gaps](../GAPS.md).
