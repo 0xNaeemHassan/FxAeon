@@ -8,6 +8,7 @@ import { ActionReview } from '@/components/ActionReview';
 import { HealthGauge } from '@/components/HealthGauge';
 import { SharePnLModal, type PnLData } from '@/components/SharePnLModal';
 import { PositionFlipModal } from '@/components/PositionFlipModal';
+import { CollateralGuardian } from '@/components/CollateralGuardian';
 import { sound } from '@/lib/sound';
 import { AmountField, InfoNote, RangeField, Segmented, TokenSelect } from '@/components/ProtocolForm';
 import {
@@ -253,6 +254,22 @@ export default function PositionsPage() {
                   </div>
                 )}
               </Card>
+            )}
+
+            {selected && (
+              <CollateralGuardian
+                currentLiquidationPrice={
+                  selected.entryPrice ? selected.entryPrice * (1 - 0.85 / Math.max(1, selected.leverage)) : 2800
+                }
+                currentSpotPrice={selected.entryPrice ?? 3450}
+                currentCollateralUsd={selected.sizeUsd ?? 1000}
+                currentDebtUsd={
+                  selected.sizeUsd && selected.leverage > 1
+                    ? selected.sizeUsd * (1 - 1 / selected.leverage)
+                    : 650
+                }
+                market={selected.market}
+              />
             )}
 
             <ActionReview params={params} label={action === 'reduce' && fraction === 100 ? 'Review close' : `Review ${action}`} onComplete={() => void load()} />

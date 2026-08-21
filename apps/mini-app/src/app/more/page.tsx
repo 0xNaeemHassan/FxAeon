@@ -8,13 +8,16 @@ import {
   Bot,
   ChevronRight,
   CircleHelp,
+  Compass,
   Layers2,
   QrCode,
   RefreshCw,
+  Scale,
   Settings,
   ShieldCheck,
   Trophy,
   Wallet,
+  Waves,
 } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell, AddressChip, Button, Card, LoadingRegion, Skeleton } from '@/components/ui';
@@ -69,8 +72,14 @@ export default function MorePage() {
           </Card>
         )}
 
-        <Section label="Protocol">
+        <Section label="f(x)oor Intelligence">
+          <MoreRow href="/radar" icon={Scale} title="Arb Radar" body="Real-time fxUSD peg discount & redemption spread" />
+          <MoreRow href="/whales" icon={Waves} title="Whale Watcher" body="Live $50k+ smart-money protocol transaction feed" />
+          <MoreRow href="/quests" icon={Compass} title="f(x) Quests & XP" body="Season 1 pilot achievements and badge rewards" />
           <MoreRow href="/leaderboard" icon={Trophy} title="Community Leaderboard" body="Top performing PnL traders and win streaks" />
+        </Section>
+
+        <Section label="Protocol">
           <MoreRow href="/positions" icon={Layers2} title="Positions" body="Increase, reduce, close, and adjust leverage" />
           <MoreRow href="/borrow" icon={Banknote} title="Borrow fxUSD" body="Deposit collateral, mint, repay, and release" />
           <MoreRow href="/activity" icon={Activity} title="Activity" body="On-chain execution journal and receipts" />
