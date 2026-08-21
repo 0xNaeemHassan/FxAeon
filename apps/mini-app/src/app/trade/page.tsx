@@ -8,6 +8,10 @@ import { AppShell, Button, Card } from '@/components/ui';
 import { ActionReview } from '@/components/ActionReview';
 import { AmountField, InfoNote, RangeField, Segmented, TokenSelect } from '@/components/ProtocolForm';
 import { HealthGauge } from '@/components/HealthGauge';
+import { TradingChart } from '@/components/TradingChart';
+import { PnLSimulator } from '@/components/PnLSimulator';
+import { QuickCommandBar, type ParsedTradeCommand } from '@/components/QuickCommandBar';
+import { sound } from '@/lib/sound';
 import { getMe, type Market, type Me, type MiniActionParams, type PositionSide, type ProtocolTokenSymbol } from '@/lib/api';
 import { positiveDecimal } from '@/lib/amount';
 import { useLiveRefresh } from '@/lib/useLiveRefresh';
@@ -27,8 +31,21 @@ export default function TradePage() {
   const [walletLoading, setWalletLoading] = useState(true);
   const [walletError, setWalletError] = useState('');
 
+  const [livePrice, setLivePrice] = useState<number>(3500);
+  const [tpPrice, setTpPrice] = useState<number | null>(null);
+  const [slPrice, setSlPrice] = useState<number | null>(null);
+
   const maxLeverage = side === 'long' ? RISK_PARAMS.MAX_LEVERAGE_LONG : RISK_PARAMS.MAX_LEVERAGE_SHORT;
   const validAmount = positiveDecimal(amount, PROTOCOL_TOKENS[token].decimals);
+
+  // Dynamic estimated liquidation price
+  const liquidationPrice = useMemo(() => {
+    if (!livePrice || leverage <= 1) return null;
+    const dropFraction = 1 / leverage;
+    return side === 'long'
+      ? livePrice * (1 - dropFraction * 0.95)
+      : livePrice * (1 + dropFraction * 0.95);
+  }, [leverage, livePrice, side]);
 
   const loadWallet = useCallback(async () => {
     setWalletLoading(true);
@@ -50,6 +67,13 @@ export default function TradePage() {
     setLeverage((value) => Math.min(maxLeverage, Math.max(RISK_PARAMS.MIN_LEVERAGE, value)));
   }, [market, maxLeverage, token]);
 
+  const handleQuickCommand = useCallback((cmd: ParsedTradeCommand) => {
+    if (cmd.market) setMarket(cmd.market);
+    if (cmd.side) setSide(cmd.side);
+    if (cmd.leverage) setLeverage(cmd.leverage);
+    if (cmd.amount) setAmount(cmd.amount);
+  }, []);
+
   const params = useMemo<MiniActionParams | null>(() => {
     if (!validAmount) return null;
     return { kind: 'position_open', market, side, inputToken: token, amount: validAmount, leverage };
@@ -58,6 +82,19 @@ export default function TradePage() {
   return (
     <AppShell title="Trade" subtitle="Open an f(x) leveraged position from any SDK-supported input asset.">
       <div className="stagger flex flex-col gap-3.5">
+        {/* Quick Voice / Text Command Bar */}
+        <QuickCommandBar onApplyTrade={handleQuickCommand} />
+
+        {/* Live Interactive Candlestick / Area Chart */}
+        <TradingChart
+          market={market}
+          currentPrice={livePrice}
+          liquidationPrice={liquidationPrice}
+          takeProfitPrice={tpPrice}
+          stopLossPrice={slPrice}
+          onPriceUpdate={setLivePrice}
+        />
+
         <Card glow className="overflow-hidden p-5">
           <div className="pointer-events-none absolute -right-14 -top-16 h-40 w-40 rounded-full bg-[rgba(139,109,255,.16)] blur-3xl" />
           <div className="relative flex items-start justify-between gap-3">
@@ -74,14 +111,20 @@ export default function TradePage() {
 
         <Segmented
           value={market}
-          onChange={setMarket}
+          onChange={(m) => {
+            sound.tap();
+            setMarket(m);
+          }}
           ariaLabel="Market"
           options={[{ value: 'wstETH', label: 'ETH market', sub: 'wstETH pool' }, { value: 'WBTC', label: 'BTC market', sub: 'WBTC pool' }]}
         />
 
         <Segmented
           value={side}
-          onChange={setSide}
+          onChange={(s) => {
+            sound.tap();
+            setSide(s);
+          }}
           ariaLabel="Direction"
           options={[{ value: 'long', label: 'Long', sub: 'Price rises' }, { value: 'short', label: 'Short', sub: 'Price falls' }]}
         />
@@ -96,8 +139,28 @@ export default function TradePage() {
           <div className="flex flex-col gap-4">
             <TokenSelect label="Pay with" value={token} options={TOKENS[market]} onChange={setToken} />
             <AmountField label="Input amount" symbol={token} value={amount} onChange={setAmount} balance={walletLoading ? undefined : me?.funding?.balances?.[token]} maxDecimals={PROTOCOL_TOKENS[token].decimals} />
-            <RangeField label="Leverage" value={leverage} onChange={setLeverage} min={RISK_PARAMS.MIN_LEVERAGE} max={maxLeverage} step={0.1} />
+            <RangeField
+              label="Leverage"
+              value={leverage}
+              onChange={(lev) => {
+                setLeverage(lev);
+              }}
+              min={RISK_PARAMS.MIN_LEVERAGE}
+              max={maxLeverage}
+              step={0.1}
+            />
             <HealthGauge mode="leverage" value={leverage} side={side} market={market} />
+
+            {/* PnL & Take-Profit/Stop-Loss Target Simulator */}
+            <PnLSimulator
+              side={side}
+              leverage={leverage}
+              entryPrice={livePrice}
+              marginUsd={validAmount ? parseFloat(validAmount) * (token.includes('USD') ? 1 : livePrice) : 0}
+              onTakeProfitChange={setTpPrice}
+              onStopLossChange={setSlPrice}
+            />
+
             <InfoNote>
               Leveraged positions may be liquidated. The review uses a fresh SDK execution route, live gas, your saved slippage, and fail-closed simulation.
             </InfoNote>

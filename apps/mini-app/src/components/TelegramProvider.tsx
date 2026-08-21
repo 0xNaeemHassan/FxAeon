@@ -24,6 +24,8 @@ import {
   isTMA,
   showBackButton,
 } from '@/lib/telegram';
+import { applyTheme, getSavedTheme } from '@/lib/theme';
+import { biometrics } from '@/lib/biometrics';
 
 /** Screens that act as app roots — BackButton hidden (Telegram shows ✕). */
 const ROOT_PATHS = new Set(['/', '/login', '/portfolio']);
@@ -34,13 +36,17 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
   // Visited-path stack for back-vs-close decisions.
   const stack = useRef<string[]>([]);
 
-  // One-time platform init + viewport binding. (The app ships a single
-  // deliberate dark theme — Telegram themeParams are not mapped onto it.)
+  // One-time platform init + viewport binding + theme application.
   useEffect(() => {
     initTelegram();
     applyThemeParams();
+    applyTheme(getSavedTheme());
+    void biometrics.init();
     const tg = getWebApp();
-    const syncTheme = () => applyThemeParams();
+    const syncTheme = () => {
+      applyThemeParams();
+      applyTheme(getSavedTheme());
+    };
     const unbindViewport = bindViewportHeight();
     tg?.onEvent('themeChanged', syncTheme);
     return () => {

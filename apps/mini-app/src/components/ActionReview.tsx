@@ -25,6 +25,8 @@ import { getWebApp, haptic } from '@/lib/telegram';
 import { Button, Card } from '@/components/ui';
 import { BridgeTracker } from '@/components/BridgeTracker';
 import { HealthGauge } from '@/components/HealthGauge';
+import { biometrics } from '@/lib/biometrics';
+import { sound } from '@/lib/sound';
 
 function feeLabel(eth: number, usd: number | null): string {
   if (usd !== null) return `$${usd.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
@@ -92,12 +94,14 @@ export function ActionReview({
       setQuote(response.quote);
       setFeeTier(response.quote.gas.recommended);
       setStage('quote');
+      sound.confirm();
       haptic('selection');
     } catch (cause) {
       setError({
         code: cause instanceof ApiError ? cause.code : undefined,
         message: cause instanceof Error ? cause.message : 'A live quote could not be prepared.',
       });
+      sound.error();
       haptic('error');
     } finally {
       setLoading(false);
@@ -110,6 +114,17 @@ export function ActionReview({
       setError({ code: 'QUOTE_TICKET_EXPIRED', message: 'This live review expired. Go back and prepare a fresh quote.' });
       return;
     }
+
+    // Biometric face/finger authorization gate
+    const biometricAuth = await biometrics.authenticate('Authorize f(x) protocol transaction');
+    if (!biometricAuth.success) {
+      setError({
+        message: biometricAuth.error || 'Biometric authorization was cancelled.',
+      });
+      sound.error();
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setStage('executing');
@@ -118,6 +133,13 @@ export function ActionReview({
       setResult(response);
       setStage('result');
       onComplete?.(response);
+      if (response.status === 'confirmed') {
+        sound.success();
+      } else if (response.status === 'broadcast') {
+        sound.confirm();
+      } else {
+        sound.error();
+      }
       haptic(response.status === 'confirmed' ? 'success' : response.status === 'broadcast' ? 'warning' : 'error');
     } catch (cause) {
       setError({
@@ -125,6 +147,7 @@ export function ActionReview({
         message: cause instanceof Error ? cause.message : 'The transaction was not sent.',
       });
       setStage('quote');
+      sound.error();
       haptic('error');
     } finally {
       setLoading(false);

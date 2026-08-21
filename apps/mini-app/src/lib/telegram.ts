@@ -61,6 +61,23 @@ export interface TgWebApp {
     notificationOccurred: (type: 'error' | 'success' | 'warning') => void;
     selectionChanged: () => void;
   };
+  BiometricManager?: {
+    isInited: boolean;
+    isBiometricAvailable: boolean;
+    biometricType: string;
+    isAccessRequested: boolean;
+    isAccessGranted: boolean;
+    isBiometricTokenSaved: boolean;
+    deviceId: string;
+    init: (callback?: () => void) => void;
+    requestAccess: (params: { reason?: string }, callback?: (granted: boolean) => void) => void;
+    authenticate: (params: { reason?: string }, callback?: (authenticated: boolean) => void) => void;
+    openSettings: () => void;
+  };
+  CloudStorage?: {
+    setItem: (key: string, value: string, callback?: (error: Error | null, stored: boolean) => void) => void;
+    getItem: (key: string, callback: (error: Error | null, value: string) => void) => void;
+  };
 }
 
 /** The WebApp object, or null outside Telegram / during SSR. */

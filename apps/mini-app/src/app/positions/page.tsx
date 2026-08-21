@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PROTOCOL_TOKENS, RISK_PARAMS } from '@fxaeon/shared';
-import { Activity, ArrowDownRight, ArrowUpRight, Gauge, Layers2, RefreshCw, Share2 } from 'lucide-react';
+import { Activity, ArrowDownRight, ArrowLeftRight, ArrowUpRight, Gauge, Layers2, RefreshCw, Share2 } from 'lucide-react';
 import { AppShell, Button, Card, EmptyState, LoadingRegion, Skeleton } from '@/components/ui';
 import { ActionReview } from '@/components/ActionReview';
 import { HealthGauge } from '@/components/HealthGauge';
 import { SharePnLModal, type PnLData } from '@/components/SharePnLModal';
+import { PositionFlipModal } from '@/components/PositionFlipModal';
+import { sound } from '@/lib/sound';
 import { AmountField, InfoNote, RangeField, Segmented, TokenSelect } from '@/components/ProtocolForm';
 import {
   getMe,
@@ -43,6 +45,7 @@ export default function PositionsPage() {
   const [fraction, setFraction] = useState(25);
   const [leverage, setLeverage] = useState(2);
   const [shareData, setShareData] = useState<PnLData | null>(null);
+  const [flipModalOpen, setFlipModalOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -159,23 +162,36 @@ export default function PositionsPage() {
                     <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-mut">Selected Position</span>
                     <h3 className="text-display text-[16px] font-semibold">{selected.market} · #{selected.tokenId}</h3>
                   </div>
-                  <Button
-                    variant="ghost"
-                    className="min-h-9 w-auto px-3 py-1 text-[12px]"
-                    onClick={() =>
-                      setShareData({
-                        market: selected.market,
-                        side: selected.side,
-                        leverage: selected.leverage,
-                        pnlUsd: selected.pnlUsd,
-                        pnlPct: selected.pnlPct,
-                        entryPrice: selected.entryPrice,
-                        referralCode: me.referralCode ?? undefined,
-                      })
-                    }
-                  >
-                    <Share2 className="h-3.5 w-3.5" /> Share PnL
-                  </Button>
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      variant="ghost"
+                      className="min-h-9 w-auto px-2.5 py-1 text-[11px]"
+                      onClick={() => {
+                        sound.tap();
+                        setFlipModalOpen(true);
+                      }}
+                    >
+                      <ArrowLeftRight className="h-3.5 w-3.5" /> Flip
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="min-h-9 w-auto px-2.5 py-1 text-[11px]"
+                      onClick={() => {
+                        sound.tap();
+                        setShareData({
+                          market: selected.market,
+                          side: selected.side,
+                          leverage: selected.leverage,
+                          pnlUsd: selected.pnlUsd,
+                          pnlPct: selected.pnlPct,
+                          entryPrice: selected.entryPrice,
+                          referralCode: me.referralCode ?? undefined,
+                        });
+                      }}
+                    >
+                      <Share2 className="h-3.5 w-3.5" /> Share
+                    </Button>
+                  </div>
                 </div>
                 <div className="mt-3 grid grid-cols-3 gap-2">
                   <Metric label="Collateral" value={`${selected.collateral} ${selected.collateralToken ?? selected.market}`} />
@@ -195,7 +211,10 @@ export default function PositionsPage() {
 
             <Segmented
               value={action}
-              onChange={setAction}
+              onChange={(a) => {
+                sound.tap();
+                setAction(a);
+              }}
               ariaLabel="Position action"
               options={[
                 { value: 'increase', label: 'Add' },
@@ -243,6 +262,19 @@ export default function PositionsPage() {
                 isOpen={Boolean(shareData)}
                 onClose={() => setShareData(null)}
                 data={shareData}
+              />
+            )}
+
+            {selected && (
+              <PositionFlipModal
+                isOpen={flipModalOpen}
+                onClose={() => setFlipModalOpen(false)}
+                position={selected}
+                onConfirmFlip={() => {
+                  setAction('reduce');
+                  setFraction(100);
+                  sound.confirm();
+                }}
               />
             )}
           </>

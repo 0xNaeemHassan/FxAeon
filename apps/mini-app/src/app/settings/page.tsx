@@ -13,11 +13,14 @@
  * from running outside the provider and crashing the Settings tab.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { Globe, Sliders, Shield, Check, PlugZap, RefreshCw, Send } from 'lucide-react';
+import { Globe, Sliders, Shield, Check, PlugZap, RefreshCw, Send, Palette, Fingerprint, Volume2 } from 'lucide-react';
 import { isTMA, getInitData, haptic } from '@/lib/telegram';
 import { apiConfigured, getMe, saveSettings } from '@/lib/api';
 import { AppShell, Button, ButtonLink, Card, EmptyState, LoadingRegion, SectionTitle, Skeleton } from '@/components/ui';
 import { useLocale } from '@/lib/i18n';
+import { THEMES, getSavedTheme, applyTheme, type ThemeId } from '@/lib/theme';
+import { biometrics } from '@/lib/biometrics';
+import { sound } from '@/lib/sound';
 import dynamic from 'next/dynamic';
 
 // PERF (W-20): Settings → Wallet is the only Privy surface outside /login.
@@ -62,8 +65,16 @@ export default function SettingsPage() {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [currentTheme, setCurrentTheme] = useState<ThemeId>('violet');
+  const [biometricAuth, setBiometricAuth] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(true);
 
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    setMounted(true);
+    setCurrentTheme(getSavedTheme());
+    setBiometricAuth(biometrics.isUserEnabled());
+    setSoundEnabled(sound.isEnabled());
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -213,6 +224,112 @@ export default function SettingsPage() {
 
         <SectionTitle>
           <span className="flex items-center gap-1.5">
+            <Palette className="h-3.5 w-3.5" /> Cyber Theme Studio
+          </span>
+        </SectionTitle>
+        <div className="grid grid-cols-2 gap-2.5">
+          {(Object.keys(THEMES) as ThemeId[]).map((themeKey) => {
+            const th = THEMES[themeKey];
+            const active = currentTheme === themeKey;
+            return (
+              <button
+                key={themeKey}
+                type="button"
+                onClick={() => {
+                  sound.confirm();
+                  haptic('medium');
+                  setCurrentTheme(themeKey);
+                  applyTheme(themeKey);
+                }}
+                className={`flex flex-col text-left p-3 rounded-2xl border transition-all ${
+                  active
+                    ? 'border-[var(--mint)] bg-[var(--mint-dim)] shadow-[0_0_15px_var(--mint-glow)]'
+                    : 'border-[var(--line)] bg-[var(--surface)] hover:border-[rgba(255,255,255,0.2)]'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] font-bold text-white">{th.name}</span>
+                  <span
+                    className="h-3.5 w-3.5 rounded-full border border-white/20 shadow"
+                    style={{ backgroundColor: th.accent }}
+                  />
+                </div>
+                <span className="mt-1 text-[10.5px] text-mut">{th.subtitle}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <SectionTitle>
+          <span className="flex items-center gap-1.5">
+            <Fingerprint className="h-3.5 w-3.5" /> Biometric Authentication
+          </span>
+        </SectionTitle>
+        <Card className="flex items-center justify-between">
+          <div>
+            <p className="text-[14px] font-medium">FaceID / TouchID Confirmation</p>
+            <p className="mt-0.5 text-[12px] text-mut">Authorize trades and private key exports using device biometrics</p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={biometricAuth}
+            aria-label="Biometric confirmation"
+            onClick={() => {
+              sound.toggle();
+              haptic('selection');
+              const next = !biometricAuth;
+              setBiometricAuth(next);
+              biometrics.setUserEnabled(next);
+            }}
+            className="flex min-h-11 min-w-14 items-center justify-center rounded-xl"
+          >
+            <span aria-hidden="true" className={`relative h-7 w-12 rounded-full transition-colors ${biometricAuth ? 'bg-mint' : 'bg-[rgba(255,255,255,0.12)]'}`}>
+              <span
+                className={`absolute top-0.5 h-6 w-6 rounded-full bg-white transition-transform ${
+                  biometricAuth ? 'translate-x-[22px]' : 'translate-x-0.5'
+                }`}
+              />
+            </span>
+          </button>
+        </Card>
+
+        <SectionTitle>
+          <span className="flex items-center gap-1.5">
+            <Volume2 className="h-3.5 w-3.5" /> Procedural Sound FX
+          </span>
+        </SectionTitle>
+        <Card className="flex items-center justify-between">
+          <div>
+            <p className="text-[14px] font-medium">Web Audio UI Synthesis</p>
+            <p className="mt-0.5 text-[12px] text-mut">Subtle audio cues for taps, confirmations, and alerts</p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={soundEnabled}
+            aria-label="Sound FX"
+            onClick={() => {
+              const next = !soundEnabled;
+              setSoundEnabled(next);
+              sound.setEnabled(next);
+              if (next) sound.confirm();
+              haptic('selection');
+            }}
+            className="flex min-h-11 min-w-14 items-center justify-center rounded-xl"
+          >
+            <span aria-hidden="true" className={`relative h-7 w-12 rounded-full transition-colors ${soundEnabled ? 'bg-mint' : 'bg-[rgba(255,255,255,0.12)]'}`}>
+              <span
+                className={`absolute top-0.5 h-6 w-6 rounded-full bg-white transition-transform ${
+                  soundEnabled ? 'translate-x-[22px]' : 'translate-x-0.5'
+                }`}
+              />
+            </span>
+          </button>
+        </Card>
+
+        <SectionTitle>
+          <span className="flex items-center gap-1.5">
             <Shield className="h-3.5 w-3.5" /> {t('settings.mevProtection')}
           </span>
         </SectionTitle>
@@ -227,6 +344,7 @@ export default function SettingsPage() {
             aria-checked={mev === 'on'}
             aria-label={t('settings.privateTx')}
             onClick={() => {
+              sound.toggle();
               haptic('selection');
               setMev(mev === 'on' ? 'off' : 'on');
               touch();
