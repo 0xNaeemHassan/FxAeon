@@ -8,9 +8,14 @@ describe('Inline Query Trade Parser', () => {
     expect(r1.market).toBe('wstETH');
     expect(r1.leverage).toBe(3);
 
-    const r2 = parseIntent('short btc 0.05 wbtc 5x');
+    const r2 = parseIntent('short btc 0.05 wbtc 2.5x');
     expect(r2.action).toBe('open_short');
     expect(r2.market).toBe('WBTC');
-    expect(r2.leverage).toBe(5);
+    expect(r2.leverage).toBe(2.5);
+
+    const r3 = parseIntent('long btc 0.05 wbtc 5x');
+    expect(r3.action).toBe('open_long');
+    expect(r3.market).toBe('WBTC');
+    expect(r3.leverage).toBe(5);
   });
 });
