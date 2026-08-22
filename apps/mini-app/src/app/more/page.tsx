@@ -9,13 +9,16 @@ import {
   ChevronRight,
   CircleHelp,
   Compass,
+  Gauge,
   Layers2,
   QrCode,
   RefreshCw,
+  Repeat,
   Scale,
   Settings,
   ShieldCheck,
   Trophy,
+  Users,
   Wallet,
   Waves,
 } from 'lucide-react';
@@ -73,10 +76,13 @@ export default function MorePage() {
         )}
 
         <Section label="f(x)oor Intelligence">
+          <MoreRow href="/pulse" icon={Gauge} title="Macro Pulse" body="DeFi sentiment, funding rate radar & long/short skew" />
           <MoreRow href="/radar" icon={Scale} title="Arb Radar" body="Real-time fxUSD peg discount & redemption spread" />
           <MoreRow href="/whales" icon={Waves} title="Whale Watcher" body="Live $50k+ smart-money protocol transaction feed" />
+          <MoreRow href="/dca" icon={Repeat} title="Auto-DCA Builder" body="Automated accumulation & profit sweep strategies" />
           <MoreRow href="/quests" icon={Compass} title="f(x) Quests & XP" body="Season 1 pilot achievements and badge rewards" />
           <MoreRow href="/leaderboard" icon={Trophy} title="Community Leaderboard" body="Top performing PnL traders and win streaks" />
+          <MoreRow href="/affiliates" icon={Users} title="Affiliate Arena" body="Earn up to 30% perpetual fee rebates on referrals" />
         </Section>
 
         <Section label="Protocol">

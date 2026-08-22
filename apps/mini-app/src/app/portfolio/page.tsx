@@ -27,8 +27,9 @@ import {
   TrendingDown,
   User,
   Wallet,
-  Clock,
   CheckCircle2,
+  Clock,
+  Eye,
   PiggyBank,
   Banknote,
   ArrowLeftRight,
@@ -38,6 +39,8 @@ import Link from 'next/link';
 import { isTMA, getInitData, haptic } from '@/lib/telegram';
 import { apiConfigured, getMe, getMarket, Me, ApiPosition, SavingsPosition, MarketSnapshot, MarketRow } from '@/lib/api';
 import { SharePnLModal, type PnLData } from '@/components/SharePnLModal';
+import { WatchAddressModal } from '@/components/WatchAddressModal';
+import { sound } from '@/lib/sound';
 import {
   AppShell,
   AddressChip,
@@ -355,6 +358,7 @@ export default function PortfolioPage() {
   const [error, setError] = useState('');
   const [tab, setTab] = useState<'positions' | 'fxusd'>('positions');
   const [shareData, setShareData] = useState<PnLData | null>(null);
+  const [watchModalOpen, setWatchModalOpen] = useState(false);
 
   const loadMarket = useCallback(async () => {
     setMarketError('');
@@ -691,7 +695,24 @@ export default function PortfolioPage() {
           <ActionTile icon={Banknote} label="Borrow" hint="Mint or repay fxUSD" href="/borrow" />
           <ActionTile icon={ArrowLeftRight} label={t('nav.move')} hint="Bridge Ethereum ↔ Base" href="/move" />
         </div>
-        <div className="mt-2.5">
+        <div className="mt-2.5 grid grid-cols-2 gap-2.5">
+          <button
+            type="button"
+            onClick={() => {
+              sound.tap();
+              haptic('selection');
+              setWatchModalOpen(true);
+            }}
+            className="glass glass-press flex w-full items-center gap-3 p-3.5 text-left"
+          >
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[var(--mint-dim)] text-mint">
+              <Eye className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <span className="text-display block text-[13.5px] font-semibold text-white">Whale Mirror</span>
+              <span className="block truncate text-[11px] text-mut">Inspect any 0x / ENS</span>
+            </div>
+          </button>
           <ActionTile
             icon={ShieldCheck}
             label={t('portfolio.qaSecurity')}
@@ -707,6 +728,11 @@ export default function PortfolioPage() {
             data={shareData}
           />
         )}
+
+        <WatchAddressModal
+          isOpen={watchModalOpen}
+          onClose={() => setWatchModalOpen(false)}
+        />
       </div>
     </AppShell>
   );
