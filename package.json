@@ -29,6 +29,7 @@
     "eslint-plugin-react-hooks": "^5",
     "globals": "^17.6.0",
     "husky": "^9.1.7",
+    "puppeteer-core": "^25.8.0",
     "size-limit": "^12.1.0",
     "turbo": "^2.9.18",
     "typescript": "^5.4.0",

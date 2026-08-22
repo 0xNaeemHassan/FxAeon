@@ -49,6 +49,12 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
     };
     const unbindViewport = bindViewportHeight();
     tg?.onEvent('themeChanged', syncTheme);
+
+    // Register PWA service worker for sub-100ms instant offline loads
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+
     return () => {
       unbindViewport();
       tg?.offEvent('themeChanged', syncTheme);

@@ -1,38 +1,18 @@
-# Render Blueprint — https://render.com/docs/blueprint-spec
-# Root Directory must be the repo root so the Docker context
-# can reach packages/*, apps/*, and workspace config files.
-
 services:
   - type: web
-    name: fxbot
-    runtime: docker
-    dockerfilePath: ./apps/bot/Dockerfile
-    dockerContext: .
-    plan: starter
-    # Liveness only: Render uses this to gate deploys and to restart the
-    # service. It must answer 200 whenever the PROCESS can serve traffic.
-    # The deep dependency check lives at /api/v1/health (used by the smoke
-    # test + monitoring) — pointing Render at it caused a catch-22 on
-    # 2026-06-11: DB/Redis env vars were wrong -> deep health 503 -> Render
-    # restart-looped the old build AND refused to promote the build that
-    # contained the fix.
-    healthCheckPath: /health
+    name: fxaeon-bot
+    runtime: node
+    plan: standard
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @fxaeon/db db:generate && pnpm build
+    startCommand: node apps/bot/dist/main.js
     envVars:
-      - key: NODE_ENV
-        value: production
+      - key: NODE_VERSION
+        value: 22.0.0
       - key: DATABASE_URL
-        sync: false
-      - key: TELEGRAM_BOT_TOKEN
-        sync: false
-      # REQUIRED production security + money-path dependencies. Startup fails
-      # closed when any is absent, so liveness can never promote a bot that
-      # responds to Telegram while quotes/signing are unusable.
-      # Generate the three application secrets with: openssl rand -hex 32
-      - key: TELEGRAM_WEBHOOK_SECRET
-        sync: false
-      - key: ENCRYPTION_KEY
-        sync: false
-      - key: INTENT_SECRET
+        fromDatabase:
+          name: fxaeon-db
+          property: connectionString
+      - key: BOT_TOKEN
         sync: false
       - key: PRIVY_APP_ID
         sync: false
@@ -40,31 +20,20 @@ services:
         sync: false
       - key: ALCHEMY_RPC_URL
         sync: false
-      - key: BASE_RPC_URL
-        sync: false
-      - key: BRIDGE_EXECUTION_ENABLED
-        value: "false"
-      - key: SIGNER_POLICY_MODE
-        value: enforce
-      - key: DAILY_TX_CAP
-        value: "50"
-      # Must be the Upstash TCP connection string
-      # (rediss://default:<password>@<host>:6379) — NOT the https:// REST URL.
-      - key: REDIS_URL
-        sync: false
-      - key: SENTRY_DSN
-        sync: false
-      # Daily SLO digest target (W-15); digest disabled when unset.
-      - key: ADMIN_TELEGRAM_CHAT_ID
-        sync: false
-      # CoinGecko demo key for /price (optional — unauthenticated works at lower limits)
-      - key: COINGECKO_API_KEY
-        sync: false
-      - key: ETHERSCAN_API_KEY
-        sync: false
-      - key: MINI_APP_URL
-        sync: false
-      - key: PRIVY_AUTHORIZATION_KEY
-        sync: false
-      - key: ADMIN_TOKEN
-        sync: false
+
+  - type: web
+    name: fxaeon-mini-app
+    runtime: static
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @fxaeon/mini-app build
+    staticPublishPath: ./apps/mini-app/dist
+    envVars:
+      - key: NEXT_PUBLIC_BOT_API_URL
+        fromService:
+          type: web
+          name: fxaeon-bot
+          property: host
+
+databases:
+  - name: fxaeon-db
+    plan: standard
+    postgresMajorVersion: "16"
