@@ -13,6 +13,7 @@
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "deploy": "turbo run deploy",
+    "verify": "node scripts/verify_production.mjs",
     "audit": "npm audit --audit-level=moderate",
     "audit:fix": "npm audit fix",
     "size": "size-limit",

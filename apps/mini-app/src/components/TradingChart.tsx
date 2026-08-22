@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { CandlestickChart, LineChart, ShieldAlert, Target } from 'lucide-react';
 import { sound } from '@/lib/sound';
 import { haptic } from '@/lib/telegram';
+import { getPrewarmedCandles } from '@/lib/chartSnapshot';
 
 export type Timeframe = '1m' | '5m' | '15m' | '1h' | '1d';
 export type ChartMode = 'candles' | 'area';
@@ -26,27 +27,6 @@ interface TradingChartProps {
   onPriceUpdate?: (price: number) => void;
 }
 
-function generateInitialCandles(basePrice: number, count = 40): Candle[] {
-  const candles: Candle[] = [];
-  let lastClose = basePrice * 0.98;
-  const now = Date.now();
-  const stepMs = 60000;
-
-  for (let i = count; i > 0; i--) {
-    const time = now - i * stepMs;
-    const volatility = basePrice * 0.0035;
-    const delta = (Math.random() - 0.48) * volatility;
-    const open = lastClose;
-    const close = Math.max(1, open + delta);
-    const high = Math.max(open, close) + Math.random() * volatility * 0.5;
-    const low = Math.min(open, close) - Math.random() * volatility * 0.5;
-    const volume = Math.random() * 50 + 10;
-    candles.push({ time, open, high, low, close, volume });
-    lastClose = close;
-  }
-  return candles;
-}
-
 export function TradingChart({
   market,
   currentPrice,
@@ -58,7 +38,7 @@ export function TradingChart({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [timeframe, setTimeframe] = useState<Timeframe>('5m');
   const [chartMode, setChartMode] = useState<ChartMode>('candles');
-  const [candles, setCandles] = useState<Candle[]>(() => generateInitialCandles(currentPrice || 3500));
+  const [candles, setCandles] = useState<Candle[]>(() => getPrewarmedCandles(market, currentPrice, '5m'));
   const [livePrice, setLivePrice] = useState(currentPrice || 3500);
   const [isLiveConnected, setIsLiveConnected] = useState(false);
   const onPriceUpdateRef = useRef(onPriceUpdate);
@@ -76,9 +56,9 @@ export function TradingChart({
   useEffect(() => {
     if (currentPrice && Math.abs(currentPrice - livePrice) > 100) {
       setLivePrice(currentPrice);
-      setCandles(generateInitialCandles(currentPrice));
+      setCandles(getPrewarmedCandles(market, currentPrice, timeframe));
     }
-  }, [currentPrice, livePrice]);
+  }, [currentPrice, livePrice, market, timeframe]);
 
   // Connect to free public websocket for live real-time price updates
   useEffect(() => {

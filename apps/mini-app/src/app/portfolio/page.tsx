@@ -40,6 +40,7 @@ import { isTMA, getInitData, haptic } from '@/lib/telegram';
 import { apiConfigured, getMe, getMarket, Me, ApiPosition, SavingsPosition, MarketSnapshot, MarketRow } from '@/lib/api';
 import { SharePnLModal, type PnLData } from '@/components/SharePnLModal';
 import { WatchAddressModal } from '@/components/WatchAddressModal';
+import { OnboardingModal } from '@/components/OnboardingModal';
 import { sound } from '@/lib/sound';
 import {
   AppShell,
@@ -733,6 +734,8 @@ export default function PortfolioPage() {
           isOpen={watchModalOpen}
           onClose={() => setWatchModalOpen(false)}
         />
+
+        <OnboardingModal />
       </div>
     </AppShell>
   );

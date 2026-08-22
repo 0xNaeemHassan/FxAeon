@@ -112,3 +112,28 @@ export function reportErrorToAdmin(
   }
   return errorId;
 }
+
+/**
+ * Sends a structured high-priority operational telemetry alert to the admin chat.
+ */
+export function sendAdminTelemetryAlert(
+  title: string,
+  details: Record<string, string | number | boolean | undefined>
+): void {
+  try {
+    if (!sendFn || !adminChatId) return;
+    const lines = [
+      `🛡️ *FxAeon Ops Alert: ${title}*`,
+      ...Object.entries(details)
+        .filter(([_, v]) => v !== undefined)
+        .map(([k, v]) => `• *${k}:* \`${v}\``),
+      `_Time: ${new Date().toISOString()}_`,
+    ];
+    const message = scrubSensitive(lines.join('\n'));
+    void sendFn(adminChatId, message).catch((err: unknown) => {
+      logger.warn({ err, title }, "admin telemetry alert failed to send");
+    });
+  } catch (err) {
+    logger.warn({ err, title }, "admin telemetry alert failed to construct");
+  }
+}
