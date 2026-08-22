@@ -112,30 +112,37 @@ export function Card({
   children,
   className = '',
   glow = false,
+  elevation = 1,
 }: {
   children: ReactNode;
   className?: string;
   glow?: boolean;
+  elevation?: 1 | 2 | 3;
 }) {
+  const elevationClass = elevation === 2 ? 'astryx-card-elevated' : elevation === 3 ? 'astryx-card-elevated shadow-2xl' : 'astryx-card';
   return (
-    <div className={`card glass p-4 ${glow ? 'card-glow' : ''} ${className}`}>{children}</div>
+    <div className={`${elevationClass} glass p-4 ${glow ? 'card-glow' : ''} ${className}`}>{children}</div>
   );
 }
 
-function buttonClasses(variant: 'primary' | 'ghost' | 'danger', className = ''): string {
+function buttonClasses(variant: 'primary' | 'ghost' | 'danger' | 'outline' | 'glass', className = ''): string {
   const styles =
     variant === 'primary'
-      ? 'button-primary text-white font-semibold'
+      ? 'button-primary text-white font-semibold shadow-[0_4px_16px_rgba(139,109,255,0.35)]'
       : variant === 'danger'
         ? 'button-danger text-danger'
-        : 'button-ghost text-[var(--text)]';
-  return `button glass-press flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-[15px] disabled:cursor-not-allowed disabled:opacity-50 ${styles} ${className}`;
+        : variant === 'outline'
+          ? 'border border-[var(--astryx-border-default)] bg-[rgba(255,255,255,0.03)] text-[var(--text)] hover:border-[var(--astryx-border-strong)]'
+          : variant === 'glass'
+            ? 'astryx-card text-white hover:border-[var(--astryx-border-strong)]'
+            : 'button-ghost text-[var(--text)]';
+  return `button glass-press astryx-interactive flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-[15px] disabled:cursor-not-allowed disabled:opacity-50 ${styles} ${className}`;
 }
 
 export const Button = forwardRef<HTMLButtonElement, {
   children: ReactNode;
   onClick?: () => void;
-  variant?: 'primary' | 'ghost' | 'danger';
+  variant?: 'primary' | 'ghost' | 'danger' | 'outline' | 'glass';
   disabled?: boolean;
   loading?: boolean;
   className?: string;
@@ -176,7 +183,7 @@ export function ButtonLink({
 }: {
   children: ReactNode;
   href: string;
-  variant?: 'primary' | 'ghost' | 'danger';
+  variant?: 'primary' | 'ghost' | 'danger' | 'outline' | 'glass';
   external?: boolean;
   className?: string;
 }) {

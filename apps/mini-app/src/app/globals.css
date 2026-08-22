@@ -2,10 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
-/* FxAeon 2.0 — an OLED-first trading interface built for Telegram's compact
- * viewport. The historic `mint` token remains the brand alias so existing
- * Tailwind utilities keep working; positive financial state stays green. */
+/* ── Astryx Design System Foundations (Meta / StyleX Architecture) ── */
 :root {
+  /* Legacy aliases for backwards compatibility */
   --bg: #07070d;
   --bg-raised: #0b0b14;
   --surface: rgba(20, 20, 33, 0.78);
@@ -29,6 +28,42 @@
   --warn: #ffc266;
   --warn-dim: rgba(255, 194, 102, 0.12);
   --tg-viewport-stable-height: 100dvh;
+
+  /* Astryx Precision Design Tokens */
+  --astryx-surface-canvas: #07070d;
+  --astryx-surface-subtle: #0e0e1a;
+  --astryx-surface-default: #12121e;
+  --astryx-surface-raised: #181829;
+  --astryx-surface-overlay: #212038;
+  --astryx-surface-glass: rgba(18, 18, 30, 0.72);
+
+  --astryx-border-subtle: rgba(255, 255, 255, 0.07);
+  --astryx-border-default: rgba(255, 255, 255, 0.12);
+  --astryx-border-strong: rgba(255, 255, 255, 0.22);
+  --astryx-border-specular: linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.04) 100%);
+  --astryx-border-glow: rgba(139, 109, 255, 0.35);
+
+  --astryx-text-primary: #ffffff;
+  --astryx-text-secondary: #a7a6bd;
+  --astryx-text-tertiary: #6e6d85;
+  --astryx-text-accent: #8b6dff;
+
+  --astryx-elevation-0: none;
+  --astryx-elevation-1: 0 4px 16px -2px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --astryx-elevation-2: 0 12px 32px -4px rgba(0, 0, 0, 0.65), 0 2px 6px rgba(0, 0, 0, 0.4);
+  --astryx-elevation-3: 0 24px 56px -8px rgba(0, 0, 0, 0.8), 0 4px 12px rgba(0, 0, 0, 0.5);
+  --astryx-elevation-glow: 0 0 28px -4px var(--mint-glow);
+
+  --astryx-radius-sm: 8px;
+  --astryx-radius-md: 14px;
+  --astryx-radius-lg: 20px;
+  --astryx-radius-xl: 28px;
+  --astryx-radius-full: 9999px;
+
+  --astryx-ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.15);
+  --astryx-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --astryx-duration-fast: 120ms;
+  --astryx-duration-normal: 220ms;
 }
 
 * {
@@ -235,13 +270,47 @@ summary:focus-visible {
 }
 
 .glass-press {
-  transition: transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 180ms ease,
-    background-color 180ms ease, opacity 180ms ease;
+  transition: transform var(--astryx-duration-fast) var(--astryx-ease-spring), border-color var(--astryx-duration-fast) ease,
+    background-color var(--astryx-duration-fast) ease, opacity var(--astryx-duration-fast) ease;
 }
 
 .glass-press:active {
   transform: scale(0.975);
   border-color: var(--line-strong);
+}
+
+/* ── Astryx Component Primitives ── */
+.astryx-card {
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.01) 100%), var(--astryx-surface-default);
+  border: 1px solid var(--astryx-border-default);
+  border-radius: var(--astryx-radius-lg);
+  box-shadow: var(--astryx-elevation-1);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  transition: transform var(--astryx-duration-normal) var(--astryx-ease-spring), border-color var(--astryx-duration-fast) ease, box-shadow var(--astryx-duration-normal) ease;
+}
+
+.astryx-card-elevated {
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%), var(--astryx-surface-raised);
+  border: 1px solid var(--astryx-border-strong);
+  border-radius: var(--astryx-radius-xl);
+  box-shadow: var(--astryx-elevation-2), var(--astryx-elevation-glow);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+}
+
+.astryx-interactive {
+  cursor: pointer;
+  user-select: none;
+  transition: transform var(--astryx-duration-fast) var(--astryx-ease-spring), filter var(--astryx-duration-fast) ease, border-color var(--astryx-duration-fast) ease;
+}
+
+.astryx-interactive:hover {
+  border-color: var(--astryx-border-strong);
+}
+
+.astryx-interactive:active {
+  transform: scale(0.975);
 }
 
 /* Typography */
