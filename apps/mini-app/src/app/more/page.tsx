@@ -17,6 +17,7 @@ import {
   Scale,
   Settings,
   ShieldCheck,
+  Sparkles,
   Trophy,
   Users,
   Wallet,
@@ -76,6 +77,7 @@ export default function MorePage() {
         )}
 
         <Section label="f(x)oor Intelligence">
+          <MoreRow href="/card" icon={Sparkles} title="3D Holo Cards" body="Interactive gyroscope holographic flex cards" />
           <MoreRow href="/pulse" icon={Gauge} title="Macro Pulse" body="DeFi sentiment, funding rate radar & long/short skew" />
           <MoreRow href="/radar" icon={Scale} title="Arb Radar" body="Real-time fxUSD peg discount & redemption spread" />
           <MoreRow href="/whales" icon={Waves} title="Whale Watcher" body="Live $50k+ smart-money protocol transaction feed" />

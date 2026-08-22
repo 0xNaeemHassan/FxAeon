@@ -73,6 +73,7 @@ const PAGES = [
   { name: '15_macro_pulse_sentiment', path: '/pulse' },
   { name: '16_auto_dca_builder', path: '/dca' },
   { name: '17_affiliate_arena', path: '/affiliates' },
+  { name: '18_3d_holo_card', path: '/card' },
 ];
 
 async function run() {

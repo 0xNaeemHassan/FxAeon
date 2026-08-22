@@ -13,7 +13,7 @@
  * from running outside the provider and crashing the Settings tab.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { Globe, Sliders, Shield, Check, PlugZap, RefreshCw, Send, Palette, Fingerprint, Volume2 } from 'lucide-react';
+import { Globe, Sliders, Shield, Check, PlugZap, RefreshCw, Send, Palette, Fingerprint, Volume2, Radio } from 'lucide-react';
 import { isTMA, getInitData, haptic } from '@/lib/telegram';
 import { apiConfigured, getMe, saveSettings } from '@/lib/api';
 import { AppShell, Button, ButtonLink, Card, EmptyState, LoadingRegion, SectionTitle, Skeleton } from '@/components/ui';
@@ -21,6 +21,7 @@ import { useLocale } from '@/lib/i18n';
 import { THEMES, getSavedTheme, applyTheme, type ThemeId } from '@/lib/theme';
 import { biometrics } from '@/lib/biometrics';
 import { sound } from '@/lib/sound';
+import { announcer, getAnnouncerSettings, saveAnnouncerSettings, type VoicePersona } from '@/lib/announcer';
 import dynamic from 'next/dynamic';
 
 // PERF (W-20): Settings → Wallet is the only Privy surface outside /login.
@@ -68,12 +69,17 @@ export default function SettingsPage() {
   const [currentTheme, setCurrentTheme] = useState<ThemeId>('violet');
   const [biometricAuth, setBiometricAuth] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [voicePersona, setVoicePersona] = useState<VoicePersona>('cyberpunk');
 
   useEffect(() => {
     setMounted(true);
     setCurrentTheme(getSavedTheme());
     setBiometricAuth(biometrics.isUserEnabled());
     setSoundEnabled(sound.isEnabled());
+    const voiceSettings = getAnnouncerSettings();
+    setVoiceEnabled(voiceSettings.enabled);
+    setVoicePersona(voiceSettings.persona);
   }, []);
 
   const load = useCallback(async () => {
@@ -326,6 +332,78 @@ export default function SettingsPage() {
               />
             </span>
           </button>
+        </Card>
+
+        <SectionTitle>
+          <span className="flex items-center gap-1.5">
+            <Radio className="h-3.5 w-3.5" /> Cyberpunk Voice Announcer
+          </span>
+        </SectionTitle>
+        <Card className="p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[14px] font-medium">Live Terminal Audio Commentary</p>
+              <p className="mt-0.5 text-[12px] text-mut">Voice feedback for trades, Take-Profit, and whale alerts</p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={voiceEnabled}
+              aria-label="Voice Announcer"
+              onClick={() => {
+                sound.toggle();
+                haptic('selection');
+                const next = !voiceEnabled;
+                setVoiceEnabled(next);
+                saveAnnouncerSettings({ enabled: next });
+                if (next) announcer.testPersona(voicePersona);
+              }}
+              className="flex min-h-11 min-w-14 items-center justify-center rounded-xl"
+            >
+              <span aria-hidden="true" className={`relative h-7 w-12 rounded-full transition-colors ${voiceEnabled ? 'bg-mint' : 'bg-[rgba(255,255,255,0.12)]'}`}>
+                <span
+                  className={`absolute top-0.5 h-6 w-6 rounded-full bg-white transition-transform ${
+                    voiceEnabled ? 'translate-x-[22px]' : 'translate-x-0.5'
+                  }`}
+                />
+              </span>
+            </button>
+          </div>
+
+          {voiceEnabled && (
+            <div className="pt-2 border-t border-[var(--line)] space-y-2.5">
+              <label className="text-[10px] font-semibold text-mut uppercase tracking-wider block">
+                Select Voice Persona
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { id: 'cyberpunk' as const, name: 'Cyber AI 🤖', desc: 'Synthetic & sharp' },
+                  { id: 'hype' as const, name: 'Hype Desk 🔥', desc: 'Esports high-energy' },
+                  { id: 'zen' as const, name: 'Zen Master 🧘', desc: 'Calm & disciplined' },
+                ].map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => {
+                      sound.tap();
+                      haptic('selection');
+                      setVoicePersona(p.id);
+                      saveAnnouncerSettings({ persona: p.id });
+                      announcer.testPersona(p.id);
+                    }}
+                    className={`p-2.5 rounded-xl border text-left transition-all ${
+                      voicePersona === p.id
+                        ? 'border-mint bg-mint/15 shadow-[0_0_12px_var(--mint-glow)]'
+                        : 'border-[var(--line)] bg-[rgba(255,255,255,0.03)] hover:border-white/20'
+                    }`}
+                  >
+                    <span className="block text-[12px] font-bold text-white">{p.name}</span>
+                    <span className="block text-[9.5px] text-mut">{p.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </Card>
 
         <SectionTitle>
