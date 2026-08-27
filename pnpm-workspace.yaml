@@ -1,17 +1,13 @@
 packages:
-  - 'apps/*'
-  - 'packages/*'
+  - 'apps/mini-app'
 
 allowBuilds:
-  '@prisma/client': true
-  '@prisma/engines': true
   '@reown/appkit': true
   bufferutil: true
   es5-ext: true
   esbuild: true
   keccak: true
   msgpackr-extract: true
-  prisma: true
   sharp: true
   utf-8-validate: true
 
@@ -34,6 +30,9 @@ overrides:
   use-sync-external-store: '1.6.0'
   'uuid@<11.1.1': '11.1.1'
   ws: '8.21.3'
+
+patchedDependencies:
+  '@aladdindao/fx-sdk': patches/@aladdindao__fx-sdk.patch
 
 peerDependencyRules:
   # ws 7's optional native accelerator is API-compatible with v6; pnpm's

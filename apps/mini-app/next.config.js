@@ -1,19 +1,16 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'export',
+  // `pnpm lint` is an explicit release gate. Skipping Next's duplicate build
+  // lint keeps static export output deterministic and avoids the framework's
+  // legacy Pages-router plugin discovery warning with flat ESLint config.
+  eslint: { ignoreDuringBuilds: true },
   // Keep hot-reload artifacts separate from the static export. A production
   // build replaces `dist`; sharing it with `next dev` can delete the running
   // server's routes-manifest mid-request (especially during parallel CI/QA).
   distDir: process.env.NODE_ENV === 'development' ? '.next' : 'dist',
   images: { unoptimized: true },
-  transpilePackages: ['@fxaeon/shared'],
   webpack: (config, { webpack }) => {
-    // Let webpack resolve .js imports to .ts/.tsx source files
-    // (needed because shared package uses ESM .js extensions)
-    config.resolve.extensionAlias = {
-      '.js': ['.ts', '.tsx', '.js', '.jsx'],
-      '.mjs': ['.mts', '.mjs'],
-    };
     // Privy publishes optional integrations as dynamic imports in its main
     // entrypoint. FxAeon does not enable Stripe onramping or Farcaster/Solana;
     // explicitly ignore those optional peers instead of shipping dead code or

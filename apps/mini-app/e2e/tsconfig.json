@@ -4,5 +4,5 @@
     "types": ["node", "@playwright/test"],
     "noEmit": true
   },
-  "include": ["**/*.ts", "../playwright.config.ts", "../src/lib/api.ts"]
+  "include": ["**/*.ts", "../playwright.config.ts", "../src/lib/fx/**/*.ts"]
 }

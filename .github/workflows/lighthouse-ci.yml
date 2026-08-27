@@ -1,13 +1,9 @@
-# W-20: Lighthouse CI budget for the mini-app (TTI < 2.5s on 3G-Fast/mobile).
-# Applied in-place since 2026-06-11; error budget is the measured baseline
-# (4.0s) — see docs/GAPS.md for the real 2.5s goal.
 name: lighthouse-ci
 
 on:
   pull_request:
     paths:
       - "apps/mini-app/**"
-      - "packages/shared/**"
 
 permissions:
   contents: read
@@ -21,17 +17,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
+        with:
+          version: 11.19.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Build mini-app (static export)
-        run: pnpm --filter @fxaeon/mini-app build
+        run: pnpm build
         env:
-          NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID }}
+          NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL: https://eth-mainnet.g.alchemy.com/v2/ci-placeholder
+          NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL: https://base-mainnet.g.alchemy.com/v2/ci-placeholder
+          NEXT_PUBLIC_TELEGRAM_APP_URL: https://t.me/FxAeonBot/app
+      - name: Check static bundle budget
+        run: pnpm check:bundle
       - name: Lighthouse CI
         working-directory: apps/mini-app
-        run: npx --yes @lhci/cli@0.15.x autorun --config=lighthouserc.json
+        run: pnpm exec lhci autorun --config=lighthouserc.json

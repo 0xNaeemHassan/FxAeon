@@ -1,4 +1,3 @@
-# Supply-chain checks: dependency vulnerability gate + SBOM generation.
 name: Supply chain
 
 on:
@@ -7,7 +6,6 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    # Weekly, Monday 06:30 UTC — catch newly-disclosed CVEs in pinned deps.
     - cron: '30 6 * * 1'
 
 permissions:
@@ -15,55 +13,28 @@ permissions:
 
 jobs:
   audit:
-    name: pnpm audit (high+)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
+        with:
+          version: 11.19.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # Fail the build only on HIGH/CRITICAL advisories. Moderate/low are
-      # surfaced (non-blocking) so a single transitive low-sev CVE can't wedge
-      # every PR — matches the repo's "realistic gates" philosophy.
-      - name: Audit (report, non-blocking)
-        run: pnpm audit --audit-level=low || true
-      - name: Audit gate (high + critical)
-        run: pnpm audit --audit-level=high
-
-  signer-policy-sync:
-    # Belt-and-suspenders: the unit test (apps/bot/tests/signer-policy.test.ts)
-    # already asserts the JSON artifact mirrors the ADDRESSES registry, but this
-    # explicit gate makes a drift in the money-path allow-list impossible to
-    # merge even if the test suite is skipped/changed. See docs/adr/signer-policy.md.
-    name: Signer policy in sync
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: '22'
-      - name: Verify signer.policy.json matches the verified registry
-        run: node scripts/gen-signer-policy.mjs --check
-
+      - run: pnpm verify:scope
+      # The release artifact contains runtime dependencies only. CI tooling
+      # (including Lighthouse's browser downloader) is audited separately by
+      # its pinned lockfile and is never shipped to Pages.
+      - run: pnpm audit --prod --audit-level=high
   sbom:
-    name: SBOM (CycloneDX)
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - name: Generate SBOM
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:
           format: cyclonedx-json
           artifact-name: fxaeon.cdx.json
           output-file: fxaeon.cdx.json
-      - name: Upload SBOM artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: sbom-cyclonedx
-          path: fxaeon.cdx.json
-          retention-days: 30

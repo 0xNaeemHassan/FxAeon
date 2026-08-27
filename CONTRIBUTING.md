@@ -1,100 +1,81 @@
 # Contributing
 
-FxAeon is funds-adjacent software. Correctness, honest failure states, and reviewable changes matter more than feature count.
+FxAeon is a funds-adjacent static client. Keep the implementation small,
+auditable, and limited to the official `fx-sdk-skill` capability set.
 
 ## Development setup
 
-Follow [SETUP.md](SETUP.md). The minimum local checks are:
+Follow [SETUP.md](SETUP.md), then run:
 
 ```bash
-corepack enable
-corepack prepare pnpm@11.16.0 --activate
 pnpm install --frozen-lockfile
-pnpm --filter @fxaeon/db db:generate
-pnpm build
-pnpm typecheck
-pnpm lint
-pnpm test
+pnpm verify
 ```
 
 ## Repository layout
 
 ```text
-apps/bot/        Telegram bot, API, workers, and execution engine
-apps/mini-app/   Telegram Mini App and Playwright tests
-packages/db/     Prisma schema and migrations
-packages/shared/ Runtime address registry, ABIs, types, and risk constants
-docs/            Current documentation and architecture decisions
-ops/runbooks/    Operational response procedures
-scripts/         Verification and setup utilities
+apps/mini-app/       Static Telegram Mini App, SDK adapter, wallet runner, tests
+brand/               Product marks and brand assets
+docs/                Current architecture, scope, security, and test docs
+patches/             Audited patch for the pinned official f(x) SDK package
+scripts/             Scope and release verification scripts
 ```
 
-## Change rules
+There is intentionally no application server, bot runtime, database package,
+Redis client, worker, queue, or protocol-logic shared package.
 
-For any funds-moving or signer-authority change:
+## Scope and money-path rules
 
-1. Treat every client field, callback, SDK route, RPC response, and relay response as untrusted.
-2. Keep calldata construction on the server; never accept client-provided transaction payloads for execution.
-3. Route every new protocol action or withdrawal through `executeRoute` and preserve signer-policy, simulation, idempotency, action-cap, fee, and receipt gates. Pending-transaction replacement must stay in the narrow recorded-nonce replacement path and reapply its policy/fee/receipt controls.
-4. Verify token identity, units, decimals, recipient, market, side, leverage, and position ownership explicitly.
-5. Add the smallest new contract surface possible. Changes to `packages/shared/src/addresses.ts` require provenance and a mainnet bytecode check.
-6. Do not silently fall back from a requested private broadcast to public mempool submission.
-7. Render unknown or unavailable data as unknown; do not fabricate balances, prices, gas, PnL, yields, or transaction success.
-8. Add unit tests for rejection paths and integration/fork tests in proportion to risk.
-9. Update the command guide, API guide, capability matrix, security model, and changelog when behavior changes.
+1. Every retained protocol capability must map to the immutable method list in
+   [`fx-scope.lock.json`](fx-scope.lock.json).
+2. Keep protocol planning in the official f(x) SDK. FxAeon may validate inputs,
+   display the SDK plan, simulate it, and execute its ordered transactions.
+3. The selected Privy wallet is the only signing authority. Do not add raw
+   private-key handling, delegated/session signing, server execution, or hidden
+   automation.
+4. Validate chain ID, sender, destination, selector, native value, spender,
+   approval amount, nonce, route order, and receipt status before progressing.
+5. Stop after any rejected, reverted, timed-out, or nonce-drifted transaction.
+6. Read protocol state from Ethereum/Base and the SDK. Never treat local
+   storage as authoritative for balances, permissions, receipts, or bridge
+   delivery.
+7. Render unavailable data as unavailable. Do not fabricate prices, balances,
+   gas estimates, PnL, liquidation values, yields, transaction success, or
+   bridge completion.
+8. Do not add DCA, alerts, limit orders, TP/SL, copy trading, whales,
+   arbitrage, referrals, custom analytics, or background jobs.
 
 ## UI and accessibility
 
-- Design for Telegram's narrow mobile webview first, including safe-area insets and keyboard overlap.
-- Use semantic controls, visible focus, sufficient contrast, accessible names, and reduced-motion behavior.
-- Preserve Telegram WebApp integration (stable viewport, safe areas, haptics, and native BackButton) while keeping the deliberate dark product theme legible outside Telegram.
-- Provide explicit loading, empty, stale, partial-data, disabled, success, failure, and retry states.
-- Never label a preview, signal, or unavailable button as a completed transaction.
-- Update and review Playwright visual snapshots for intentional visual changes.
-
-## Database changes
-
-Create a migration for every Prisma schema change. Do not edit an applied migration. Verify both a fresh database and an upgrade path:
-
-```bash
-pnpm --filter @fxaeon/db db:generate
-pnpm --filter @fxaeon/db exec prisma migrate deploy
-pnpm --filter @fxaeon/db typecheck
-```
+- Design for Telegram's narrow mobile WebView first, including safe areas and
+  keyboard overlap.
+- Keep semantic controls, visible focus, sufficient contrast, accessible names,
+  reduced-motion behavior, and explicit loading/empty/error states.
+- Require an explicit review action and a visible wallet confirmation for every
+  transaction in a multi-step route.
+- Update visual snapshots only for intentional UI changes and review every diff.
 
 ## Testing
 
-Useful targeted commands:
-
 ```bash
-pnpm --filter @fxaeon/bot test
-pnpm --filter @fxaeon/mini-app test
-pnpm --filter @fxaeon/mini-app test:e2e
-pnpm --filter @fxaeon/bot test:fork
-node scripts/gen-signer-policy.mjs --check
-node scripts/verify-addresses.mjs
+pnpm verify:scope
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm build
+pnpm check:bundle
+pnpm test:e2e
 ```
 
-The address verifier needs `ALCHEMY_RPC_URL` or `ETH_RPC_URL`. Fork tests need Anvil and an upstream mainnet RPC. A skipped fork suite is not evidence that live protocol integration works.
+Protocol transaction tests must assert parameter/chain correctness, SDK order,
+per-step user approval, receipt waiting, stop-on-failure behavior, and a fresh
+post-confirmation read. Use a local fork or safe simulation; never use a
+production wallet merely to prove the client architecture.
 
-## Commits and pull requests
+## Pull requests
 
-Use Conventional Commits, for example:
-
-```text
-feat: add existing-position increase flow
-fix: bind withdrawal token units to the signed intent
-docs: update the SDK capability matrix
-security: reject unscoped limit-order makers
-```
-
-Keep changes focused. A pull request should state:
-
-- user-visible behavior and capability status;
-- security and custody implications;
-- migrations, environment, or deployment changes;
-- tests run and tests not run;
-- screenshots for Mini App changes;
-- rollback or kill-switch behavior for high-risk changes.
-
-Report vulnerabilities through [SECURITY.md](SECURITY.md), not a public pull request.
+State the retained official capability, security implications, tests run, and
+whether any public build configuration changed. Do not introduce infrastructure
+unless the client cannot safely perform a required operation and the concrete
+blocking reason is documented.

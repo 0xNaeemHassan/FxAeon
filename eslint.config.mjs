@@ -1,4 +1,4 @@
-// Flat ESLint config for the FxAeon monorepo.
+// Flat ESLint config for the FxAeon static Mini App.
 //
 // Philosophy: the type system (strict `tsc --noEmit`) and the test suite are
 // the primary correctness gates. ESLint catches the things tsc does not —
@@ -23,8 +23,6 @@ export default tseslint.config(
       "**/build/**",
       "**/*.min.js",
       "apps/mini-app/next-env.d.ts",
-      "apps/mini-app/e2e/__screenshots__/**",
-      "packages/db/prisma/migrations/**",
     ],
   },
 
@@ -71,7 +69,7 @@ export default tseslint.config(
     },
   },
 
-  // Plain CommonJS Node scripts (smoke-test.js, etc.).
+  // Plain CommonJS build scripts.
   {
     files: ["**/*.js", "**/*.cjs"],
     languageOptions: { sourceType: "commonjs", globals: { ...globals.node } },

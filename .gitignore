@@ -12,11 +12,9 @@ out/
 
 # Environment variables (NEVER commit these)
 .env
-.env.local
-.env.*.local
-# .env.production is committed — it contains ONLY NEXT_PUBLIC_ vars (public client config)
-# .env.production
+.env.*
 !.env.example
+!**/.env.example
 
 # Secret files
 .encryption_key
@@ -58,18 +56,15 @@ temp/
 *.tmp
 *.temp
 
-# Database
-*.sqlite
-*.sqlite3
-*.db
-
-# Docker
-
 # Misc
 .cache/
 *.pid
 *.seed
 *.pid.lock
+
+# Local build/deployment caches
+.wrangler/
+.turbo/
 
 # Large files
 *.zip
@@ -85,9 +80,6 @@ __pycache__/
 .Python
 *.egg-info/
 .eggs/
-
-# Turbo cache
-.turbo/
 
 # Playwright (mini-app E2E)
 **/playwright-report/

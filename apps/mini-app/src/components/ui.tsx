@@ -21,7 +21,6 @@ import {
 import { haptic } from '@/lib/telegram';
 import { useT } from '@/lib/i18n';
 import FxLogo from '@/components/FxLogo';
-import { HealthChip } from '@/components/HealthChip';
 
 /* ------------------------------------------------------------------ shell */
 
@@ -39,11 +38,16 @@ export function AppShell({
   const pathname = usePathname();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const contentRef = useRef<HTMLElement>(null);
+  const documentTitle = title ?? (pathname === '/portfolio' ? 'Portfolio' : undefined);
 
   useEffect(() => {
     const target = headingRef.current ?? contentRef.current;
     target?.focus({ preventScroll: true });
   }, [pathname]);
+
+  useEffect(() => {
+    if (documentTitle) document.title = `${documentTitle} · FxAeon`;
+  }, [documentTitle]);
 
   return (
     <div className={`app-shell mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-[430px] flex-col px-5 pt-[calc(env(safe-area-inset-top,0px)+1.25rem)] ${tabs ? 'pb-safe' : 'pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)]'}`}>
@@ -59,7 +63,6 @@ export function AppShell({
           </div>
         </header>
       )}
-      <HealthChip />
       <main ref={contentRef} id="main-content" tabIndex={-1} className="flex-1 outline-none">{children}</main>
       {tabs && <TabBar />}
     </div>
@@ -71,7 +74,7 @@ const TABS: { href: string; labelKey: string; icon: LucideIcon; also?: string[] 
   { href: '/trade', labelKey: 'nav.trade', icon: CandlestickChart, also: ['/positions', '/borrow'] },
   { href: '/earn', labelKey: 'nav.earn', icon: PiggyBank },
   { href: '/move', labelKey: 'nav.move', icon: ArrowLeftRight, also: ['/qr'] },
-  { href: '/more', labelKey: 'nav.more', icon: LayoutGrid, also: ['/activity', '/settings'] },
+  { href: '/more', labelKey: 'nav.more', icon: LayoutGrid, also: ['/settings'] },
 ];
 
 export function TabBar() {
@@ -375,13 +378,14 @@ export function LoadingRegion({
   );
 }
 
-export function FullScreenSpinner() {
+export function FullScreenSpinner({ asMain = false }: { asMain?: boolean } = {}) {
   const t = useT();
   // Contentful loading state: the brand text paints pre-hydration, so slow
   // cold starts show content instead of a blank screen. A border-only
   // spinner does NOT count as a contentful paint (Lighthouse NO_FCP).
+  const Element = asMain ? 'main' : 'div';
   return (
-    <div role="status" aria-live="polite" aria-label={t('common.loading')} className="flex min-h-[var(--tg-viewport-stable-height)] flex-col items-center justify-center gap-4 px-6 text-center">
+    <Element role="status" aria-live="polite" aria-label={t('common.loading')} className="flex min-h-[var(--tg-viewport-stable-height)] flex-col items-center justify-center gap-4 px-6 text-center">
       <div className="brand-orbit anim-scale-in">
         <FxLogo size={56} />
       </div>
@@ -392,6 +396,6 @@ export function FullScreenSpinner() {
         <p className="mt-1.5 text-[12.5px] text-mut">{t('common.loading')}</p>
       </div>
       <span className="loading-line" aria-hidden="true" />
-    </div>
+    </Element>
   );
 }

@@ -16,10 +16,6 @@ updates:
       prefix: "chore"
       include: "scope"
     groups:
-      grammy:
-        patterns:
-          - "grammy*"
-          - "@grammyjs/*"
       privy:
         patterns:
           - "@privy-io/*"

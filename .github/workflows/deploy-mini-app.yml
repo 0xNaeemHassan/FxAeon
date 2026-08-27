@@ -1,83 +1,78 @@
-name: Deploy Mini App to Cloudflare Pages
-
-# NOTE: Cloudflare Pages ALSO auto-deploys this project via its Git
-# integration. This workflow is the explicit, secrets-driven path; it
-# skips cleanly (neutral, not red) when CLOUDFLARE_API_TOKEN is not
-# configured so the Git-integration deploy remains the source of truth.
+name: Deploy static Mini App
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'apps/mini-app/**'
-      - 'packages/shared/**'
   workflow_dispatch:
 
-# Least-privilege token (W-14).
 permissions:
   contents: read
 
+concurrency:
+  group: fxaeon-production
+  cancel-in-progress: false
+
 jobs:
-  check-secrets:
-    runs-on: ubuntu-latest
-    outputs:
-      has-cf-token: ${{ steps.check.outputs.has-cf-token }}
-    steps:
-      - id: check
-        run: |
-          if [ -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]; then
-            echo "has-cf-token=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has-cf-token=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::CLOUDFLARE_API_TOKEN not set — skipping wrangler deploy (Cloudflare Pages Git integration handles deploys)."
-          fi
-
   deploy:
+    name: Build and deploy Cloudflare Pages
     runs-on: ubuntu-latest
-    needs: check-secrets
-    if: needs.check-secrets.outputs.has-cf-token == 'true'
+    timeout-minutes: 25
+    environment: production
     steps:
-      - uses: actions/checkout@v7
-
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build shared package
-        run: pnpm --filter @fxaeon/shared build
-
-      - name: Validate required Mini App configuration
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Validate public build configuration
+        shell: bash
         env:
-          PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID }}
-          PRIVY_SIGNER_ID: ${{ secrets.PRIVY_SIGNER_ID }}
-          TELEGRAM_BOT_USERNAME: ${{ secrets.TELEGRAM_BOT_USERNAME }}
-          PRODUCTION_URL: ${{ secrets.PRODUCTION_URL }}
+          PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID }}
+          ETHEREUM_RPC_URL: ${{ secrets.NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL }}
+          BASE_RPC_URL: ${{ secrets.NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL }}
+          TELEGRAM_APP_URL: ${{ vars.NEXT_PUBLIC_TELEGRAM_APP_URL }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          for key in PRIVY_APP_ID PRIVY_SIGNER_ID TELEGRAM_BOT_USERNAME PRODUCTION_URL; do
+          reject_placeholder() {
+            local key="$1"
+            local value="$2"
+            case "$value" in
+              *YOUR_*|*your_*|*PLACEHOLDER*|*placeholder*|*CHANGE_ME*|*change_me*|*REPLACE_ME*|*replace_me*|*EXAMPLE*|*example*)
+                echo "::error::$key contains a placeholder value"
+                return 1
+                ;;
+            esac
+          }
+          for key in PRIVY_APP_ID ETHEREUM_RPC_URL BASE_RPC_URL TELEGRAM_APP_URL; do
             if [ -z "${!key}" ]; then
-              echo "::error::$key is required for a functional Mini App build"
+              echo "::error::$key is required"
               exit 1
             fi
+            reject_placeholder "$key" "${!key}"
           done
-
-      - name: Build Mini App
-        # Package is @fxaeon/mini-app (an earlier wrong filter matched nothing,
-        # so wrangler would have shipped a stale/empty dist).
-        run: pnpm --filter @fxaeon/mini-app build
+          for key in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
+            if [ -z "${!key}" ]; then
+              echo "::error::$key is required"
+              exit 1
+            fi
+            reject_placeholder "$key" "${!key}"
+          done
+          case "$TELEGRAM_APP_URL" in
+            https://t.me/*) ;;
+            *) echo "::error::TELEGRAM_APP_URL must be an https://t.me/... Mini App URL"; exit 1 ;;
+          esac
+      - name: Run complete repository verification
+        run: pnpm verify
         env:
-          NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID }}
-          NEXT_PUBLIC_PRIVY_SIGNER_ID: ${{ secrets.PRIVY_SIGNER_ID }}
-          NEXT_PUBLIC_TELEGRAM_BOT_USERNAME: ${{ secrets.TELEGRAM_BOT_USERNAME }}
-          NEXT_PUBLIC_BOT_API_URL: ${{ secrets.PRODUCTION_URL }}
-
+          NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID }}
+          NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL: ${{ secrets.NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL }}
+          NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL: ${{ secrets.NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL }}
+          NEXT_PUBLIC_TELEGRAM_APP_URL: ${{ vars.NEXT_PUBLIC_TELEGRAM_APP_URL }}
       - name: Deploy to Cloudflare Pages
-        run: npx wrangler@3 pages deploy apps/mini-app/dist --project-name=fxbot-mini-app
+        run: pnpm exec wrangler pages deploy apps/mini-app/dist --project-name=fxaeon-mini-app --commit-dirty=true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

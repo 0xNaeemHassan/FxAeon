@@ -1,40 +1,32 @@
-name: CI
+name: Client CI
+
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
-  validate:
-    name: Typecheck, Test & Build
+  verify:
+    name: Scope, lint, typecheck, test, build
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
         with:
-          version: 10.5.2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+          version: 11.19.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run Prisma Generate & Monorepo Typecheck
-        run: pnpm typecheck
-
-      - name: Run Unit Tests
-        run: pnpm test
-
-      - name: Build Next.js Mini App
-        run: pnpm --filter @fxaeon/mini-app build
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run complete repository verification
+        run: pnpm verify
         env:
-          NEXT_PUBLIC_TELEGRAM_BOT_USERNAME: FxAeonBot
-          NEXT_PUBLIC_MINI_APP_URL: https://fxaeon.app
+          NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL: https://eth-mainnet.g.alchemy.com/v2/ci-placeholder
+          NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL: https://base-mainnet.g.alchemy.com/v2/ci-placeholder
+          NEXT_PUBLIC_TELEGRAM_APP_URL: https://t.me/FxAeonBot/app

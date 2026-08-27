@@ -1,4 +1,5 @@
-name = "fxbot-mini-app"
+# New client-first deployment name. This is configuration only; no Cloudflare
+# project is created or changed by the repository audit.
+name = "fxaeon-mini-app"
 compatibility_date = "2026-06-09"
-compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = "apps/mini-app/dist"

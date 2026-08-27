@@ -1,5 +1,5 @@
 /**
- * Telegram Mini App platform integration (W-20).
+ * Telegram Mini App platform integration.
  *
  * Single typed entry point for `window.Telegram.WebApp` — every page was
  * previously reaching for the raw global with `(window as any)`. All helpers
@@ -26,15 +26,6 @@ interface TgButton {
   offClick: (cb: () => void) => void;
 }
 
-interface TgMainButton extends TgButton {
-  setText: (text: string) => void;
-  enable: () => void;
-  disable: () => void;
-  showProgress: (leaveActive?: boolean) => void;
-  hideProgress: () => void;
-  isVisible: boolean;
-}
-
 export interface TgWebApp {
   initData: string;
   /** 'android' | 'ios' | 'tdesktop' | ... — 'unknown' outside Telegram. */
@@ -49,35 +40,14 @@ export interface TgWebApp {
   setHeaderColor?: (color: string) => void;
   setBackgroundColor?: (color: string) => void;
   setBottomBarColor?: (color: string) => void;
-  sendData: (data: string) => void;
   openLink?: (url: string, options?: { try_instant_view?: boolean }) => void;
-  openTelegramLink?: (url: string) => void;
-  shareToStory?: (media_url: string, params?: { text?: string; widget_link?: { url: string; name?: string } }) => void;
   onEvent: (event: string, cb: () => void) => void;
   offEvent: (event: string, cb: () => void) => void;
   BackButton: TgButton;
-  MainButton: TgMainButton;
   HapticFeedback?: {
     impactOccurred: (style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft') => void;
     notificationOccurred: (type: 'error' | 'success' | 'warning') => void;
     selectionChanged: () => void;
-  };
-  BiometricManager?: {
-    isInited: boolean;
-    isBiometricAvailable: boolean;
-    biometricType: string;
-    isAccessRequested: boolean;
-    isAccessGranted: boolean;
-    isBiometricTokenSaved: boolean;
-    deviceId: string;
-    init: (callback?: () => void) => void;
-    requestAccess: (params: { reason?: string }, callback?: (granted: boolean) => void) => void;
-    authenticate: (params: { reason?: string }, callback?: (authenticated: boolean) => void) => void;
-    openSettings: () => void;
-  };
-  CloudStorage?: {
-    setItem: (key: string, value: string, callback?: (error: Error | null, stored: boolean) => void) => void;
-    getItem: (key: string, callback: (error: Error | null, value: string) => void) => void;
   };
 }
 
@@ -90,11 +60,8 @@ export function getWebApp(): TgWebApp | null {
 /**
  * True when running inside Telegram.
  *
- * IMPORTANT (this was the root cause of the broken onboarding loop):
- * keyboard-button Mini App launches — the ONLY launches where sendData()
- * works — receive an EMPTY initData. Detecting Telegram via initData
- * therefore fails exactly when it matters most. The platform field is
- * 'unknown' outside Telegram and a real value inside, for every launch type.
+ * The platform field distinguishes a Telegram WebView even when a launch
+ * does not carry signed init data.
  */
 export function isTMA(): boolean {
   const tg = getWebApp();
@@ -102,31 +69,9 @@ export function isTMA(): boolean {
   return Boolean(tg.initData) || (Boolean(tg.platform) && tg.platform !== 'unknown');
 }
 
-/**
- * True when this launch can use WebApp.sendData() (keyboard-button launches:
- * inside Telegram with empty initData). Inline/menu/direct launches must use
- * the authenticated bot API instead.
- */
-export function canSendData(): boolean {
-  const tg = getWebApp();
-  return Boolean(tg) && isTMA() && !tg!.initData;
-}
-
-/** Signed initData for API auth — empty string for keyboard launches. */
+/** Signed init data consumed only by Privy's Telegram authentication flow. */
 export function getInitData(): string {
   return getWebApp()?.initData ?? '';
-}
-
-/**
- * Telegram's UI language for the launching user (e.g. 'en', 'ru', 'zh-hans').
- * Read from initDataUnsafe — present on launches that carry a user, '' otherwise.
- * Used only as a first-paint locale hint; the saved User.language wins once loaded.
- */
-export function getTelegramLanguage(): string {
-  const tg = getWebApp() as unknown as {
-    initDataUnsafe?: { user?: { language_code?: string } };
-  } | null;
-  return tg?.initDataUnsafe?.user?.language_code ?? '';
 }
 
 /**
@@ -266,32 +211,6 @@ export function showBackButton(onBack: () => void): () => void {
     try {
       tg.BackButton.offClick(handler);
       tg.BackButton.hide();
-    } catch {
-      /* noop */
-    }
-  };
-}
-
-/** Native MainButton: configure + wire a handler. Returns cleanup. */
-export function showMainButton(text: string, onClick: () => void): () => void {
-  const tg = getWebApp();
-  if (!tg?.MainButton) return () => {};
-  const handler = () => {
-    haptic('medium');
-    onClick();
-  };
-  try {
-    tg.MainButton.setText(text);
-    tg.MainButton.onClick(handler);
-    tg.MainButton.enable();
-    tg.MainButton.show();
-  } catch {
-    return () => {};
-  }
-  return () => {
-    try {
-      tg.MainButton.offClick(handler);
-      tg.MainButton.hide();
     } catch {
       /* noop */
     }
