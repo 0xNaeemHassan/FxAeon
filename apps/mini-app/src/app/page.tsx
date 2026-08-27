@@ -10,8 +10,8 @@
  */
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeftRight, ArrowUpRight, ShieldCheck, Sparkles } from 'lucide-react';
-import { isTMA } from '@/lib/telegram';
+import { AlertTriangle, ArrowLeftRight, ArrowUpRight, RefreshCw, ShieldCheck, Sparkles } from 'lucide-react';
+import { hasTelegramLaunchSignal, isTMA, waitForTelegramWebApp } from '@/lib/telegram';
 import { ButtonLink, FullScreenSpinner } from '@/components/ui';
 import { useT } from '@/lib/i18n';
 import FxLogo from '@/components/FxLogo';
@@ -22,18 +22,47 @@ export default function HomePage() {
   const t = useT();
   const router = useRouter();
   const [browser, setBrowser] = useState(false);
+  const [telegramUnavailable, setTelegramUnavailable] = useState(false);
 
   useEffect(() => {
     document.title = 'FxAeon — f(x) Protocol Gateway';
   }, []);
 
   useEffect(() => {
-    if (!isTMA()) {
-      setBrowser(true);
-      return;
+    let cancelled = false;
+    if (isTMA()) {
+      router.replace('/portfolio');
+      return () => { cancelled = true; };
     }
-    router.replace('/portfolio');
+    if (!hasTelegramLaunchSignal()) {
+      setBrowser(true);
+      return () => { cancelled = true; };
+    }
+
+    void waitForTelegramWebApp().then((webApp) => {
+      if (cancelled) return;
+      if (webApp && isTMA()) router.replace('/portfolio');
+      else setTelegramUnavailable(true);
+    });
+    return () => { cancelled = true; };
   }, [router]);
+
+  if (telegramUnavailable) {
+    return (
+      <main className="app-shell mx-auto flex min-h-[100dvh] w-full max-w-[430px] flex-col items-center justify-center px-6 py-10 text-center">
+        <span className="flex h-16 w-16 items-center justify-center rounded-3xl bg-[rgba(255,194,102,.10)] text-warn">
+          <AlertTriangle className="h-7 w-7" aria-hidden="true" />
+        </span>
+        <h1 className="text-display mt-5 text-[24px] font-semibold">Telegram bridge unavailable</h1>
+        <p className="mt-2 max-w-[330px] text-[13px] leading-relaxed text-mut">
+          FxAeon could not load Telegram’s Mini App bridge. Check your connection, update Telegram if needed, then reload.
+        </p>
+        <button type="button" onClick={() => window.location.reload()} className="button button-primary glass-press mt-5 flex min-h-12 w-full max-w-[280px] items-center justify-center gap-2 rounded-2xl px-4 py-3 text-[14px] font-semibold">
+          <RefreshCw className="h-4 w-4" aria-hidden="true" /> Reload FxAeon
+        </button>
+      </main>
+    );
+  }
 
   if (browser) {
     return (

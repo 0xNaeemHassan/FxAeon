@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from 'next';
-import Script from 'next/script';
 import { Inter, Space_Grotesk } from 'next/font/google';
 import './globals.css';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -40,11 +39,13 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${grotesk.variable}`}>
       <head>
-        {/* Load Telegram's native viewport, BackButton, link, and haptic APIs
-            before client components initialize. */}
-        <Script
+        {/* Start Telegram's bridge immediately, but do not let a slow or
+            unreachable telegram.org block FxAeon's React hydration. Client
+            launch gates wait a bounded time for the bridge when Telegram
+            launch parameters prove that this document came from Telegram. */}
+        <script
           src="https://telegram.org/js/telegram-web-app.js"
-          strategy="beforeInteractive"
+          async
         />
       </head>
       <body className={inter.className}>

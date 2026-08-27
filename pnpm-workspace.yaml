@@ -10,6 +10,7 @@ allowBuilds:
   msgpackr-extract: true
   sharp: true
   utf-8-validate: true
+  workerd: true
 
 # pnpm 10+ reads workspace-wide dependency policies from this file. Keeping
 # security overrides here also makes frozen installs match pnpm-lock.yaml.

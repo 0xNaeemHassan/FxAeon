@@ -14,15 +14,17 @@
  *
  * Everything is a no-op outside Telegram, so the app still works in a browser.
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   applyThemeParams,
   bindViewportHeight,
   getWebApp,
+  hasTelegramLaunchSignal,
   initTelegram,
   isTMA,
   showBackButton,
+  waitForTelegramWebApp,
 } from '@/lib/telegram';
 import { applyTheme, getSavedTheme } from '@/lib/theme';
 
@@ -72,21 +74,35 @@ async function releaseLegacyServiceWorker(): Promise<void> {
 export function TelegramProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [telegramReady, setTelegramReady] = useState(() => isTMA());
   // Visited-path stack for back-vs-close decisions.
   const stack = useRef<string[]>([]);
 
   // One-time platform init + viewport binding + theme application.
   useEffect(() => {
-    initTelegram();
-    applyThemeParams();
     applyTheme(getSavedTheme());
-    const tg = getWebApp();
-    const syncTheme = () => {
+    let disposed = false;
+    let unbindViewport = bindViewportHeight();
+    let cleanupTheme = () => {};
+
+    const bindTelegram = async () => {
+      const tg = getWebApp() ?? (hasTelegramLaunchSignal() ? await waitForTelegramWebApp() : null);
+      if (disposed || !tg) return;
+
+      unbindViewport();
+      initTelegram();
       applyThemeParams();
       applyTheme(getSavedTheme());
+      unbindViewport = bindViewportHeight();
+      const syncTheme = () => {
+        applyThemeParams();
+        applyTheme(getSavedTheme());
+      };
+      tg.onEvent('themeChanged', syncTheme);
+      cleanupTheme = () => tg.offEvent('themeChanged', syncTheme);
+      setTelegramReady(isTMA());
     };
-    const unbindViewport = bindViewportHeight();
-    tg?.onEvent('themeChanged', syncTheme);
+    void bindTelegram();
 
     // Financial state must never be served from the legacy offline cache.
     // Remove any worker installed by an older FxAeon build; the static app
@@ -94,8 +110,9 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
     void releaseLegacyServiceWorker();
 
     return () => {
+      disposed = true;
       unbindViewport();
-      tg?.offEvent('themeChanged', syncTheme);
+      cleanupTheme();
     };
   }, []);
 
@@ -113,12 +130,12 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
   // Native BackButton on sub-pages: back through in-app history, close when
   // the sub-page was the entry point.
   useEffect(() => {
-    if (!isTMA() || ROOT_PATHS.has(pathname ?? '/')) return;
+    if (!telegramReady || !isTMA() || ROOT_PATHS.has(pathname ?? '/')) return;
     return showBackButton(() => {
       if (stack.current.length > 1) router.back();
       else getWebApp()?.close();
     });
-  }, [pathname, router]);
+  }, [pathname, router, telegramReady]);
 
   return <>{children}</>;
 }

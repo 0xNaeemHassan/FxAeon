@@ -32,6 +32,10 @@ pnpm install
 pnpm dev
 ```
 
+The root package declares the same Node/pnpm versions used by CI. With Corepack,
+`corepack enable` is enough to expose the pinned pnpm version on supported Node
+installations.
+
 Configure a public Privy app ID and domain-restricted Alchemy Ethereum/Base browser endpoints. Every `NEXT_PUBLIC_*` value is shipped to the browser; never place a Telegram bot token, Privy secret, authorization key, or unrestricted credential there.
 
 ## Verify
@@ -47,6 +51,11 @@ pnpm check:bundle
 ```
 
 `verify:scope` fails if the installed SDK surface differs from the 15-method contract, an unsupported route returns, or active Mini App source regains backend/delegated-signing dependencies.
+
+`verify:production-env` is the deployment-only configuration gate. It rejects
+missing/placeholder values, unexpected Alchemy hosts or URL shapes, malformed
+Telegram launcher URLs, and malformed Cloudflare account IDs before a production
+build is allowed to deploy.
 
 ## Transaction safety
 
