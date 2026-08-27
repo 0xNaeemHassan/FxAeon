@@ -1,34 +1,24 @@
 'use client';
 
 /**
- * Privy provider — the foundation of user-owned wallets.
+ * The single Privy boundary for the Mini App.
  *
- * Users CREATE or IMPORT their embedded wallet client-side via the Privy SDK
- * (keys in Privy's TEE, exportable by the user, never visible to the FxAeon
- * backend). Telegram seamless login means no email/password: the Mini App's
- * signed init data authenticates the user with Privy directly.
+ * Privy is deliberately configured as a client-side wallet and signing
+ * provider. FxAeon never receives a private key, authorization key, session
+ * signer grant, or transaction authority. Protocol components ask the
+ * user's selected wallet to sign each planned transaction explicitly.
  *
- * Login methods are intentionally NOT pinned here: `loginMethods` in this
- * config OVERRIDES the Privy dashboard, which is exactly how Google login
- * silently disappeared once (the dashboard had it on, the hardcoded
- * `['telegram']` here suppressed it). Leave it unset so the dashboard is the
- * single source of truth — Telegram stays primary in our own flow
- * (login/PrivyFlow.tsx), and the Privy modal offers whatever else the
- * dashboard enables (Google, external wallets, …).
- *
- * PERF (W-20): this provider is intentionally NOT in the root layout. The
- * Privy SDK is heavy; only the surfaces that actually need it (/login flow,
- * Settings → Wallet) mount it — via next/dynamic so the SDK chunk never
- * blocks first paint anywhere.
- *
- * Graceful degradation: when NEXT_PUBLIC_PRIVY_APP_ID isn't baked into the
- * build, children render without the provider and pages show honest
- * "wallet service not configured" copy instead of crashing.
+ * Keep this provider mounted once, above all authenticated routes. Nested
+ * providers create independent sessions and can make a wallet appear to
+ * change between screens.
  */
 import { useState } from 'react';
 import { PrivyProvider } from '@privy-io/react-auth';
+import { base, mainnet } from 'viem/chains';
 import { PRIVY_APP_ID } from '@/lib/privyConfig';
 import { restoreTelegramLaunchHash } from '@/lib/telegram';
+import { PrivyWalletBridge, UnavailableWalletProvider } from '@/lib/wallet';
+import WalletRecoveryCoordinator from '@/components/WalletRecoveryCoordinator';
 
 export default function PrivyClientProvider({ children }: { children: React.ReactNode }) {
   // P0 login fix: Privy's seamless Telegram Mini-App login triggers at SDK
@@ -38,10 +28,13 @@ export default function PrivyClientProvider({ children }: { children: React.Reac
   // of every child/provider effect — which is exactly the ordering needed.
   // (See restoreTelegramLaunchHash for the full story.)
   useState(() => {
-    restoreTelegramLaunchHash();
+    // A no-Privy build is deliberately used by static/E2E checks. It must
+    // remain a plain public site: restoring Telegram's launch hash would
+    // mutate the URL even though no Privy provider exists to consume it.
+    if (PRIVY_APP_ID) restoreTelegramLaunchHash();
     return true;
   });
-  if (!PRIVY_APP_ID) return <>{children}</>;
+  if (!PRIVY_APP_ID) return <UnavailableWalletProvider>{children}</UnavailableWalletProvider>;
   return (
     <PrivyProvider
       appId={PRIVY_APP_ID}
@@ -49,18 +42,27 @@ export default function PrivyClientProvider({ children }: { children: React.Reac
         appearance: {
           theme: 'dark',
           accentColor: '#7c5cff',
-          // Ethereum-only app; hide Solana-flavored wallet options.
+          // FxAeon is EVM-only. Do not expose Solana wallet choices.
           walletChainType: 'ethereum-only',
+          showWalletLoginFirst: true,
         },
+        // The protocol uses Ethereum for f(x) and fxSAVE and Base as the
+        // supported bridge destination/source. Ethereum remains the default.
+        supportedChains: [mainnet, base],
+        defaultChain: mainnet,
         embeddedWallets: {
-          // Wallet creation is an EXPLICIT user choice (create vs import) on
-          // the login screen — never automatic.
+          // Wallet creation is an explicit user action on the login screen.
           ethereum: { createOnLogin: 'off' },
+          // Always display Privy's signing UI. Transaction components may
+          // repeat this per request; the provider-level setting is fail-safe.
           showWalletUIs: true,
         },
       }}
     >
-      {children}
+      <PrivyWalletBridge>
+        <WalletRecoveryCoordinator />
+        {children}
+      </PrivyWalletBridge>
     </PrivyProvider>
   );
 }

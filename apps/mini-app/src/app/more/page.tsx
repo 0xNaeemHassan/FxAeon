@@ -1,122 +1,142 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
+import type { LucideIcon } from 'lucide-react';
 import {
-  Activity,
+  ArrowLeftRight,
   Banknote,
   BookOpen,
-  Bot,
+  CandlestickChart,
   ChevronRight,
   CircleHelp,
-  Compass,
-  Gauge,
   Layers2,
   QrCode,
-  RefreshCw,
-  Repeat,
-  Scale,
   Settings,
-  ShieldCheck,
-  Sparkles,
-  Trophy,
-  Users,
   Wallet,
-  Waves,
 } from 'lucide-react';
 import Link from 'next/link';
-import { AppShell, AddressChip, Button, Card, LoadingRegion, Skeleton } from '@/components/ui';
-import { getMe, type Me } from '@/lib/api';
+import { usePrivy } from '@privy-io/react-auth';
+import { AppShell, AddressChip, Card } from '@/components/ui';
 import { haptic } from '@/lib/telegram';
+import { privyConfigured } from '@/lib/privyConfig';
+import { usePrivyWallet, useWalletReadyTimeout } from '@/lib/wallet';
 
-const BOT_USERNAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || 'FxAeonBot';
-
+/**
+ * The More tab is intentionally a small map of the official f(x) surface.
+ * It is not a feature marketplace: every primary row lands on a supported
+ * SDK flow, while protocol links remain informational and external.
+ */
 export default function MorePage() {
-  const [me, setMe] = useState<Me | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      setMe(await getMe());
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Wallet status is unavailable.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { void load(); }, [load]);
-
   return (
-    <AppShell title="More" subtitle="Your complete f(x) toolkit, wallet controls, and transaction history.">
-      <div className="stagger flex flex-col gap-3.5">
-        {loading ? <LoadingRegion label="Loading wallet status"><Skeleton className="h-24" /></LoadingRegion> : me?.walletAddress && (
-          <Card glow className="p-4">
-            <div className="flex items-center gap-3">
-              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--mint-dim)] text-mint"><Wallet className="h-5 w-5" /></span>
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-mut">Trading wallet</p>
-                <div className="mt-1"><AddressChip address={me.walletAddress} /></div>
-              </div>
-              <span className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase ${me.walletDelegated ? 'bg-[var(--success-dim)] text-success' : 'bg-[var(--warn-dim)] text-warn'}`}>
-                {me.walletDelegated ? 'Signer on' : 'Signer off'}
-              </span>
-            </div>
-          </Card>
-        )}
+    <AppShell title="Explore" subtitle="Everything FxAeon can do, in one calm place.">
+      <div className="stagger flex flex-col gap-5">
+        {privyConfigured() ? <WalletSummary /> : <WalletNotConfigured />}
 
-        {!loading && error && (
-          <Card className="border-[rgba(255,194,102,.24)] p-3.5">
-            <p role="alert" className="text-[11.5px] leading-relaxed text-warn">Wallet status unavailable: {error}</p>
-            <Button variant="ghost" className="mt-2" onClick={() => void load()}>
-              <RefreshCw aria-hidden="true" className="h-4 w-4" /> Retry wallet status
-            </Button>
-          </Card>
-        )}
-
-        <Section label="f(x)oor Intelligence">
-          <MoreRow href="/card" icon={Sparkles} title="3D Holo Cards" body="Interactive gyroscope holographic flex cards" />
-          <MoreRow href="/pulse" icon={Gauge} title="Macro Pulse" body="DeFi sentiment, funding rate radar & long/short skew" />
-          <MoreRow href="/radar" icon={Scale} title="Arb Radar" body="Real-time fxUSD peg discount & redemption spread" />
-          <MoreRow href="/whales" icon={Waves} title="Whale Watcher" body="Live $50k+ smart-money protocol transaction feed" />
-          <MoreRow href="/dca" icon={Repeat} title="Auto-DCA Builder" body="Automated accumulation & profit sweep strategies" />
-          <MoreRow href="/quests" icon={Compass} title="f(x) Quests & XP" body="Season 1 pilot achievements and badge rewards" />
-          <MoreRow href="/leaderboard" icon={Trophy} title="Community Leaderboard" body="Top performing PnL traders and win streaks" />
-          <MoreRow href="/affiliates" icon={Users} title="Affiliate Arena" body="Earn up to 30% perpetual fee rebates on referrals" />
+        <Section label="f(x) protocol">
+          <MoreRow href="/positions" icon={Layers2} title="Positions" body="Read, reduce, close, or adjust leverage" />
+          <MoreRow href="/borrow" icon={Banknote} title="Borrow fxUSD" body="Deposit collateral, mint, repay, or withdraw" />
+          <MoreRow href="/earn" icon={Wallet} title="fxSAVE" body="Read balances, deposit, redeem, and claim" />
+          <MoreRow href="/move" icon={ArrowLeftRight} title="Bridge" body="Move supported assets between Ethereum and Base" />
         </Section>
 
-        <Section label="Protocol">
-          <MoreRow href="/positions" icon={Layers2} title="Positions" body="Increase, reduce, close, and adjust leverage" />
-          <MoreRow href="/borrow" icon={Banknote} title="Borrow fxUSD" body="Deposit collateral, mint, repay, and release" />
-          <MoreRow href="/activity" icon={Activity} title="Activity" body="On-chain execution journal and receipts" />
+        <Section label="Wallet">
+          <MoreRow href="/qr" icon={QrCode} title="Receive assets" body="Copy your wallet address or show a QR code" />
+          <MoreRow href="/settings" icon={Settings} title="Settings" body="Wallet, theme, and slippage preferences" />
         </Section>
 
-        <Section label="Wallet & safety">
-          <MoreRow href="/qr" icon={QrCode} title="Receive assets" body="Address and scannable deposit QR" />
-          <MoreRow href="/settings" icon={Settings} title="Settings" body="Signer grant, slippage, MEV, and language" />
-          <MoreRow href="/policy" icon={ShieldCheck} title="Execution policy" body="See what the delegated signer is allowed to do" />
+        <Section label="Shortcuts">
+          <MoreRow href="/trade" icon={CandlestickChart} title="Trade" body="Open or increase an f(x) position" />
+          <MoreRow href="/borrow" icon={Banknote} title="Borrow" body="Mint or manage fxUSD against collateral" />
         </Section>
 
-        <Section label="Resources">
-          <MoreRow external href={`https://t.me/${BOT_USERNAME}`} icon={Bot} title="Open chat bot" body="Commands, alerts, automation, and support" />
-          <MoreRow external href="https://fx.aladdin.club/" icon={BookOpen} title="f(x) Protocol" body="Official protocol interface and resources" />
-          <MoreRow external href="https://docs.aladdin.club/fx-protocol" icon={CircleHelp} title="Protocol docs" body="Learn about markets, risks, and mechanics" />
+        <Section label="Learn">
+          <MoreRow external href="https://fx.aladdin.club/" icon={BookOpen} title="f(x) Protocol" body="Official interface and protocol resources" />
+          <MoreRow external href="https://docs.aladdin.club/fx-protocol" icon={CircleHelp} title="Protocol docs" body="Markets, mechanics, and risk disclosures" />
         </Section>
 
-        <p className="pb-2 text-center text-[9.5px] uppercase tracking-[0.14em] text-[var(--mut-2)]">FxAeon · f(x) on your phone · Ethereum + Base</p>
+        <Card className="border-[rgba(139,109,255,.22)] bg-[rgba(139,109,255,.06)]">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-mint">Client-first by design</p>
+          <p className="mt-2 text-[12.5px] leading-relaxed text-mut">
+            Reads come from the official SDK and public chains. FxAeon never invents balances, prices, or execution history, and every transaction stays behind your wallet’s confirmation.
+          </p>
+        </Card>
+
+        <p className="pb-2 text-center text-[9.5px] uppercase tracking-[0.14em] text-[var(--mut-2)]">FxAeon · official f(x) SDK · Ethereum + Base</p>
       </div>
     </AppShell>
   );
 }
 
-function Section({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div><h2 className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.17em] text-mut">{label}</h2><div className="overflow-hidden rounded-[22px] border border-[var(--line)] bg-[var(--surface)] divide-y divide-[var(--line)]">{children}</div></div>;
+function WalletSummary() {
+  const { ready, authenticated } = usePrivy();
+  const walletState = usePrivyWallet();
+  const wallet = walletState.selectedWallet;
+  const timedOut = useWalletReadyTimeout(ready && walletState.ready);
+
+  if (!ready || !walletState.ready) {
+    if (timedOut) {
+      return <Card className="border-[rgba(255,194,102,.24)]"><p className="text-[13px] font-semibold">Wallet provider did not load</p><p className="mt-1 text-[11px] leading-relaxed text-mut">No wallet state was assumed. Reload after checking your connection or Telegram version.</p><button type="button" onClick={() => window.location.reload()} className="button button-primary mt-3 min-h-11 w-full rounded-2xl px-4">Reload</button></Card>;
+    }
+    return <Card className="h-24 animate-pulse"><span className="sr-only">Loading wallet</span></Card>;
+  }
+
+  if (!authenticated || !wallet) {
+    return (
+      <Card glow className="p-4">
+        <div className="flex items-start gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--mint-dim)] text-mint"><Wallet className="h-5 w-5" aria-hidden="true" /></span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-mut">Wallet</p>
+            <p className="mt-1 text-[13px] font-medium">Connect to read your on-chain state</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-mut">No wallet or balance is assumed until Privy and the selected chain confirm it.</p>
+          </div>
+        </div>
+        <Link href="/login" className="button button-primary glass-press mt-4 flex min-h-12 w-full items-center justify-center rounded-2xl px-4 py-3 text-[15px] font-semibold">{authenticated ? 'Choose wallet' : 'Connect wallet'}</Link>
+      </Card>
+    );
+  }
+
+  return (
+    <Card glow className="p-4">
+      <div className="flex items-center gap-3">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--mint-dim)] text-mint"><Wallet className="h-5 w-5" aria-hidden="true" /></span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-mut">Connected wallet</p>
+          <div className="mt-1"><AddressChip address={wallet.address} /></div>
+        </div>
+        <span className="rounded-full bg-[var(--success-dim)] px-2 py-1 text-[9px] font-bold uppercase text-success">Ready</span>
+      </div>
+    </Card>
+  );
 }
 
-function MoreRow({ href, icon: Icon, title, body, external = false }: { href: string; icon: typeof Activity; title: string; body: string; external?: boolean }) {
-  const inner = <><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)] text-mint"><Icon className="h-[18px] w-[18px]" /></span><span className="min-w-0 flex-1"><span className="block text-[13px] font-semibold">{title}</span><span className="mt-0.5 block truncate text-[10.5px] text-mut">{body}</span></span><ChevronRight className="h-4 w-4 shrink-0 text-[var(--mut-2)]" /></>;
+function WalletNotConfigured() {
+  return (
+    <Card className="border-[rgba(255,194,102,.24)]">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-warn">Wallet unavailable</p>
+      <p className="mt-2 text-[12.5px] leading-relaxed text-mut">This build has no Privy application configured. Protocol pages will remain read-only until a wallet provider is available.</p>
+    </Card>
+  );
+}
+
+function Section({ label, children }: { label: string; children: ReactNode }) {
+  const id = `more-${label.toLowerCase().replace(/\s+/g, '-')}`;
+  return (
+    <section aria-labelledby={id}>
+      <h2 id={id} className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.17em] text-mut">{label}</h2>
+      <div className="overflow-hidden rounded-[22px] border border-[var(--line)] bg-[var(--surface)] divide-y divide-[var(--line)]">{children}</div>
+    </section>
+  );
+}
+
+function MoreRow({ href, icon: Icon, title, body, external = false }: { href: string; icon: LucideIcon; title: string; body: string; external?: boolean }) {
+  const inner = (
+    <>
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)] text-mint"><Icon className="h-[18px] w-[18px]" aria-hidden="true" /></span>
+      <span className="min-w-0 flex-1"><span className="block text-[13px] font-semibold">{title}</span><span className="mt-0.5 block truncate text-[10.5px] text-mut">{body}</span></span>
+      <ChevronRight className="h-4 w-4 shrink-0 text-[var(--mut-2)]" aria-hidden="true" />
+    </>
+  );
   const cls = 'glass-press flex min-h-[68px] items-center gap-3 px-3.5 py-3';
   if (external) return <a href={href} target="_blank" rel="noopener noreferrer" onClick={() => haptic('light')} className={cls}>{inner}</a>;
   return <Link href={href} onClick={() => haptic('light')} className={cls}>{inner}</Link>;

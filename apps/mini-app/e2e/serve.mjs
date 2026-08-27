@@ -2,18 +2,13 @@
  * Tiny dependency-free static server for the Next.js static export (`dist/`),
  * used as Playwright's `webServer`. It:
  *   - builds the export first if `dist/index.html` is missing (or E2E_BUILD=1),
- *     baking the SAME deterministic env the tests assume;
+ *     baking the deterministic no-credentials env the tests assume;
  *   - serves clean URLs the way Cloudflare Pages does (`/portfolio` → `portfolio.html`);
  *   - serves `_next/**` assets with correct content-types;
  *   - falls back to `404.html` so the app's not-found page renders.
  *
- * The build env is pinned here so the running app's behaviour matches the test
- * fixtures exactly:
- *   NEXT_PUBLIC_BOT_API_URL          = http://localhost:<PORT>  (same-origin → no CORS;
- *                                      Playwright intercepts these requests)
- *   NEXT_PUBLIC_TELEGRAM_BOT_USERNAME= FxAeonBot
- *   NEXT_PUBLIC_PRIVY_APP_ID         = ""  (login shows the deterministic
- *                                      "not configured" gate; no heavy Privy SDK)
+ * The build env is pinned here so the running app's behaviour matches the
+ * no-backend, no-wallet, no-RPC test contract.
  */
 import { createServer } from 'node:http';
 import { spawnSync } from 'node:child_process';
@@ -28,9 +23,10 @@ const DIST = join(ROOT, 'dist');
 const PORT = Number(process.env.PORT || 4321);
 
 const BUILD_ENV = {
-  NEXT_PUBLIC_BOT_API_URL: `http://localhost:${PORT}`,
-  NEXT_PUBLIC_TELEGRAM_BOT_USERNAME: 'FxAeonBot',
   NEXT_PUBLIC_PRIVY_APP_ID: '',
+  NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL: '',
+  NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL: '',
+  NEXT_PUBLIC_TELEGRAM_APP_URL: 'https://t.me/FxAeonBot/app',
 };
 
 function buildIfNeeded() {

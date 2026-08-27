@@ -5,10 +5,11 @@ import { AlertTriangle, MessageCircle, RefreshCw, RotateCcw } from 'lucide-react
 import FxLogo from '@/components/FxLogo';
 import { haptic } from '@/lib/telegram';
 
+const TELEGRAM_APP_URL = process.env.NEXT_PUBLIC_TELEGRAM_APP_URL || 'https://t.me/FxAeonBot/app';
+
 interface Props {
   children: ReactNode;
   fallback?: ReactNode;
-  onError?: (error: Error, errorInfo: ErrorInfo) => void;
 }
 
 interface State {
@@ -31,9 +32,10 @@ class ErrorBoundaryInner extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('FxAeon ErrorBoundary caught:', error, errorInfo);
-    this.setState({ errorInfo });
-    this.props.onError?.(error, errorInfo);
+    // Do not write raw RPC errors, calldata, wallet context, or provider URLs
+    // to production logs. Development details stay in the local fallback UI
+    // only, where they are never transmitted by FxAeon.
+    this.setState({ error, errorInfo });
     haptic('error');
   }
 
@@ -97,7 +99,7 @@ function ErrorFallback({
           This screen hit a snag
         </h1>
         <p className="mx-auto mt-2 max-w-[300px] text-[13px] leading-relaxed text-mut">
-          Your wallet and funds are unaffected. Retry the screen, or reload the Mini App if the issue persists.
+          The screen stopped unexpectedly. If you approved a transaction, verify its status in your wallet or chain explorer before retrying. Otherwise, retry or reload the Mini App.
         </p>
 
         {showTechnicalDetails && error && (
@@ -146,12 +148,12 @@ function ErrorFallback({
 
         <p className="mt-5 text-[12px] text-mut">
           <a
-            href="https://t.me/FxAeonBot"
-            className="inline-flex items-center gap-1.5 text-mint hover:underline"
+            href={TELEGRAM_APP_URL}
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-2 text-mint hover:bg-[var(--mint-dim)] hover:underline"
             target="_blank"
             rel="noopener noreferrer"
           >
-            <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" /> Contact support
+            <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" /> Reopen FxAeon in Telegram
           </a>
         </p>
       </section>
@@ -159,9 +161,9 @@ function ErrorFallback({
   );
 }
 
-export default function ErrorBoundary({ children, fallback, onError }: Props) {
+export default function ErrorBoundary({ children, fallback }: Props) {
   return (
-    <ErrorBoundaryInner fallback={fallback} onError={onError}>
+    <ErrorBoundaryInner fallback={fallback}>
       {children}
     </ErrorBoundaryInner>
   );

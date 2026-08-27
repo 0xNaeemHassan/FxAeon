@@ -1,0 +1,88 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index d1b42864fdfb2717e6d6046bee21de033228ff25..ada9e93a7cca6ee27a790d64af8a512bd4900ba6 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -11894,9 +11894,9 @@ var Pool = class {
+       return {
+         collateralCapacity: poolInfoRes[0],
+         collateralBalance: poolInfoRes[1],
+-        rawCollateral: poolInfoRes[2],
+-        debtCapacity: poolInfoRes[3],
+-        debtBalance: poolInfoRes[4] || 0n,
++        rawCollateral: this.config.isShort ? 0n : poolInfoRes[2],
++        debtCapacity: this.config.isShort ? poolInfoRes[2] : poolInfoRes[3],
++        debtBalance: this.config.isShort ? poolInfoRes[3] : poolInfoRes[4],
+         isPaused: pausedRes,
+         poolMinDebtRatio: debtRatioRangeRes[0],
+         poolMaxDebtRatio: debtRatioRangeRes[1],
+diff --git a/dist/index.js b/dist/index.js
+index 0c7b00528fe5ff3ca17ae8292bf407bef984dcbe..486f1518c2c78550af99517178a437652561da5f 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -11887,9 +11887,9 @@ var Pool = class {
+       return {
+         collateralCapacity: poolInfoRes[0],
+         collateralBalance: poolInfoRes[1],
+-        rawCollateral: poolInfoRes[2],
+-        debtCapacity: poolInfoRes[3],
+-        debtBalance: poolInfoRes[4] || 0n,
++        rawCollateral: this.config.isShort ? 0n : poolInfoRes[2],
++        debtCapacity: this.config.isShort ? poolInfoRes[2] : poolInfoRes[3],
++        debtBalance: this.config.isShort ? poolInfoRes[3] : poolInfoRes[4],
+         isPaused: pausedRes,
+         poolMinDebtRatio: debtRatioRangeRes[0],
+         poolMaxDebtRatio: debtRatioRangeRes[1],
+diff --git a/dist/index.cjs b/dist/index.cjs
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -4964,7 +4964,6 @@ var Position = class {
+         ]
+       });
+     } catch (err) {
+-      console.log("err------", name, err);
+       if (name === "FxRoute" /* FX_ROUTE */) {
+         mainError = err;
+       }
+@@ -11920,7 +11919,6 @@ var Pool = class {
+     const buyPrice = cBN(await this.price.getBuyPrice()).times(1e18).div(rateRes).toString();
+     const sellPrice = cBN(await this.price.getSellPrice()).times(1e18).div(rateRes).toString();
+     const averagePrice = cBN(buyPrice).add(cBN(sellPrice)).div(2).toString();
+-    console.log("poolData-->", poolData);
+     const poolInfo = {
+       ...this.config,
+       ...poolData,
+@@ -11935,7 +11933,6 @@ var Pool = class {
+       closeFeeRatio: cBN(poolData.withdrawFeeRatio ?? 0).div(1e9).toNumber(),
+       repayFeeRatio: cBN(poolData.repayFeeRatio ?? 0).div(1e9).toNumber()
+     };
+-    console.log("poolInfo-->", poolInfo);
+     return poolInfo;
+   }
+ };
+diff --git a/dist/index.js b/dist/index.js
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -4957,7 +4957,6 @@ var Position = class {
+         ]
+       });
+     } catch (err) {
+-      console.log("err------", name, err);
+       if (name === "FxRoute" /* FX_ROUTE */) {
+         mainError = err;
+       }
+@@ -11913,7 +11912,6 @@ var Pool = class {
+     const buyPrice = cBN(await this.price.getBuyPrice()).times(1e18).div(rateRes).toString();
+     const sellPrice = cBN(await this.price.getSellPrice()).times(1e18).div(rateRes).toString();
+     const averagePrice = cBN(buyPrice).add(cBN(sellPrice)).div(2).toString();
+-    console.log("poolData-->", poolData);
+     const poolInfo = {
+       ...this.config,
+       ...poolData,
+@@ -11928,7 +11926,6 @@ var Pool = class {
+       closeFeeRatio: cBN(poolData.withdrawFeeRatio ?? 0).div(1e9).toNumber(),
+       repayFeeRatio: cBN(poolData.repayFeeRatio ?? 0).div(1e9).toNumber()
+     };
+-    console.log("poolInfo-->", poolInfo);
+     return poolInfo;
+   }
+ };

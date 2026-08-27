@@ -1,59 +1,57 @@
 'use client';
 
-/**
- * Deposit — the authenticated user's policy-wallet address as QR + copy.
- * Query-string addresses are deliberately ignored to prevent substitution.
- */
-import { Suspense, useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
+import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
-import { Copy, Check, AlertTriangle, PlugZap } from 'lucide-react';
-import { isTMA, getInitData, haptic } from '@/lib/telegram';
-import { apiConfigured, getMe } from '@/lib/api';
-import { AppShell, Button, Card, copyText, EmptyState, FullScreenSpinner, LoadingRegion, Skeleton } from '@/components/ui';
-import { useT } from '@/lib/i18n';
+import { AlertTriangle, Check, Copy, Link2, Wallet } from 'lucide-react';
+import { usePrivy } from '@privy-io/react-auth';
+import { AppShell, Button, Card, copyText, EmptyState } from '@/components/ui';
+import { haptic } from '@/lib/telegram';
+import { privyConfigured } from '@/lib/privyConfig';
+import { usePrivyWallet } from '@/lib/wallet';
 
-const TOKENS = ['ETH', 'WETH', 'stETH', 'wstETH', 'WBTC', 'USDC', 'USDT', 'fxUSD', 'fxSAVE'];
+/**
+ * Receive screen. The address is read from the selected Privy wallet only;
+ * query strings, Telegram user IDs, and server responses never get to choose
+ * a deposit destination.
+ */
+export default function QRPage() {
+  return (
+    <AppShell title="Receive" subtitle="Fund the wallet you control before using an f(x) flow.">
+      {privyConfigured() ? <WalletQr /> : <EmptyState icon={Wallet} title="Wallet unavailable" body="This build has no Privy application configured, so no deposit address can be shown." />}
+    </AppShell>
+  );
+}
 
-function QRContent() {
-  const t = useT();
-  const [address, setAddress] = useState('');
-  const [loading, setLoading] = useState(true);
+function WalletQr() {
+  const { ready, authenticated } = usePrivy();
+  const walletState = usePrivyWallet();
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
-  const [unavailable, setUnavailable] = useState('');
+  const wallet = walletState.selectedWallet;
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setUnavailable('');
-    setAddress('');
-    // Never render a query-string address. Query parameters are attacker-
-    // controlled and a crafted deep link could otherwise replace the user's
-    // deposit destination. The authenticated API is the only authority.
-    if (!isTMA() || !getInitData() || !apiConfigured()) {
-      setLoading(false);
-      setUnavailable(t('deposit.noAddress'));
-      return;
-    }
-    try {
-      const me = await getMe();
-      if (me.onboarded && me.walletAddress) setAddress(me.walletAddress);
-      else setUnavailable(t('deposit.noWallet'));
-    } catch (cause) {
-      setUnavailable(cause instanceof Error ? cause.message : t('deposit.noAddress'));
-    } finally {
-      setLoading(false);
-    }
-  }, [t]);
+  if (!ready || !walletState.ready) {
+    return <Card className="h-72 animate-pulse"><span className="sr-only">Loading wallet</span></Card>;
+  }
 
-  useEffect(() => { void load(); }, [load]);
+  if (!authenticated || !wallet) {
+    return (
+      <EmptyState
+        icon={Wallet}
+        title={authenticated ? 'Choose a wallet first' : 'Connect a wallet first'}
+        body="The receive address appears only after Privy confirms the wallet selected for this session."
+        action={<Link href="/login" className="button button-primary glass-press flex min-h-12 w-full items-center justify-center rounded-2xl px-4 py-3 text-[15px] font-semibold">{authenticated ? 'Choose wallet' : 'Connect wallet'}</Link>}
+      />
+    );
+  }
 
+  const address = wallet.address;
   const copy = async () => {
-    if (!address) return;
     setCopyFailed(false);
     if (await copyText(address)) {
       haptic('success');
       setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
+      window.setTimeout(() => setCopied(false), 1800);
     } else {
       haptic('error');
       setCopyFailed(true);
@@ -61,80 +59,34 @@ function QRContent() {
   };
 
   return (
-    <AppShell title={t('deposit.title')} subtitle={t('deposit.subtitle')}>
-      <div className="stagger flex flex-col gap-3.5">
-        {loading ? (
-          <LoadingRegion label="Loading your deposit address"><Skeleton className="h-72" /></LoadingRegion>
-        ) : address ? (
-          <>
-            <Card glow className="flex flex-col items-center gap-4 p-6">
-              <div className="anim-scale-in rounded-[22px] bg-white p-3.5 shadow-[0_22px_50px_rgba(0,0,0,0.32)]">
-                <QRCodeSVG value={address} size={208} level="M" title="Ethereum wallet deposit address" />
-              </div>
-              <div className="flex flex-wrap justify-center gap-1.5">
-                {TOKENS.map((t) => (
-                  <span
-                    key={t}
-                    className="rounded-full bg-[var(--mint-dim)] px-2.5 py-1 text-[11px] font-medium text-mint"
-                  >
-                    {t}
-                  </span>
-                ))}
-              </div>
-            </Card>
+    <div className="stagger flex flex-col gap-3.5">
+      <Card glow className="flex flex-col items-center gap-4 p-6">
+        <div className="rounded-[22px] bg-white p-3.5 shadow-[0_22px_50px_rgba(0,0,0,0.32)]">
+          <QRCodeSVG value={address} size={208} level="M" title="Your EVM wallet address" />
+        </div>
+        <div className="flex items-center gap-2 rounded-full bg-[var(--mint-dim)] px-3 py-1.5 text-[11px] font-semibold text-mint">
+          <Link2 className="h-3.5 w-3.5" aria-hidden="true" /> Ethereum + Base address
+        </div>
+      </Card>
 
-            <Card>
-              <p className="text-[11px] uppercase tracking-wide text-mut">{t('deposit.address')}</p>
-              <div className="mt-2 flex items-center justify-between gap-3">
-                <p className="break-all font-mono text-[12.5px] leading-relaxed">{address}</p>
-                <button
-                  type="button"
-                  onClick={copy}
-                  aria-label="Copy address"
-                  className="glass glass-press flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl p-2.5"
-                >
-                  {copied ? (
-                    <Check className="h-[18px] w-[18px] text-success" />
-                  ) : (
-                    <Copy className="h-[18px] w-[18px] text-mut" />
-                  )}
-                </button>
-              </div>
-              <Button onClick={copy} variant="ghost" className="mt-3">
-                {copied ? t('common.copied') : t('common.copyAddress')}
-              </Button>
-              <p className={`mt-2 min-h-4 text-center text-[11px] ${copyFailed ? 'text-danger' : 'text-mut'}`} aria-live="polite">
-                {copyFailed ? 'Copy was blocked. Press and hold the address above to copy it manually.' : copied ? 'Address copied to clipboard.' : ''}
-              </p>
-            </Card>
+      <Card>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-mut">Wallet address</p>
+        <div className="mt-2 flex items-start justify-between gap-3">
+          <p className="break-all font-mono text-[12px] leading-relaxed">{address}</p>
+          <button type="button" onClick={copy} aria-label={copied ? 'Address copied' : 'Copy wallet address'} className="glass glass-press flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl p-2.5">
+            {copied ? <Check className="h-[18px] w-[18px] text-success" aria-hidden="true" /> : <Copy className="h-[18px] w-[18px] text-mut" aria-hidden="true" />}
+          </button>
+        </div>
+        <Button onClick={copy} variant="ghost" className="mt-3">{copied ? 'Copied' : 'Copy address'}</Button>
+        <p className={`mt-2 min-h-4 text-center text-[11px] ${copyFailed ? 'text-danger' : 'text-mut'}`} aria-live="polite">
+          {copyFailed ? 'Copy was blocked. Press and hold the address to copy it manually.' : copied ? 'Address copied to clipboard.' : ''}
+        </p>
+      </Card>
 
-            <Card className="flex items-start gap-2.5 border-[rgba(255,194,75,0.3)]">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
-              <p className="text-[12.5px] leading-relaxed text-mut">
-                <span className="font-medium text-warn">{t('deposit.mainnetOnlyBold')}</span>{' '}
-                {t('deposit.mainnetOnlyBody')}
-              </p>
-            </Card>
-          </>
-        ) : (
-          <EmptyState
-            icon={PlugZap}
-            title={t('deposit.unavailableTitle')}
-            body={unavailable}
-            action={isTMA() && getInitData() && apiConfigured()
-              ? <Button onClick={() => void load()}>Retry</Button>
-              : undefined}
-          />
-        )}
-      </div>
-    </AppShell>
-  );
-}
-
-export default function QRPage() {
-  return (
-    <Suspense fallback={<FullScreenSpinner />}>
-      <QRContent />
-    </Suspense>
+      <Card className="flex items-start gap-2.5 border-[rgba(255,194,75,0.3)]">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warn" aria-hidden="true" />
+        <p className="text-[12px] leading-relaxed text-mut"><span className="font-medium text-warn">Check the chain before sending.</span> This screen only displays your EVM address; use the official flow’s supported network and token. Unsupported assets or networks may be unrecoverable.</p>
+      </Card>
+    </div>
   );
 }

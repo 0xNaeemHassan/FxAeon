@@ -3,41 +3,20 @@
 /**
  * Mini-app i18n runtime.
  *
- * Locale resolution (client-only; SSR/first paint use 'en' to avoid a
- * hydration mismatch, then the effect upgrades it):
- *   1. an explicit choice persisted in localStorage (set from Settings)
- *   2. the saved User.language, pushed in by pages after getMe() via setLocale
- *   3. Telegram's UI language (initDataUnsafe.user.language_code)
- *   4. 'en'
- *
- * Missing keys fall back to English, then to the raw key — so a half-finished
- * locale degrades gracefully instead of rendering blanks.
+ * FxAeon intentionally ships one complete English interface. The previous
+ * locale switch translated navigation/authentication but left financial
+ * forms in English, producing a misleading mixed-language transaction UX.
+ * Additional locales should return only when every retained financial screen
+ * and review state has complete, audited copy.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { getTelegramLanguage } from '@/lib/telegram';
 import { DEFAULT_LOCALE, Locale, normalizeLocale } from './config';
 import en from './en';
-import es from './es';
-import zhCN from './zh-CN';
-import ru from './ru';
-import ja from './ja';
-import ko from './ko';
-import tr from './tr';
-import pt from './pt';
 import type { Messages } from './config';
 
 const DICT: Record<Locale, Messages> = {
   en,
-  es,
-  'zh-CN': zhCN,
-  ru,
-  ja,
-  ko,
-  tr,
-  pt,
 };
-
-const STORAGE_KEY = 'fxaeon.locale';
 
 export type TFunction = (key: string, vars?: Record<string, string | number>) => string;
 
@@ -55,19 +34,9 @@ function interpolate(template: string, vars?: Record<string, string | number>): 
 }
 
 export function LocaleProvider({ children }: { children: React.ReactNode }) {
-  // Start at the default so server and first client render match; upgrade
-  // to the real locale in the mount effect below.
+  // Keep state so the public context remains stable for existing components;
+  // normalizeLocale deliberately resolves every input to English.
   const [locale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE);
-
-  useEffect(() => {
-    let next: string | null = null;
-    try {
-      next = window.localStorage.getItem(STORAGE_KEY);
-    } catch {
-      /* storage blocked — fall through */
-    }
-    setLocaleState(normalizeLocale(next || getTelegramLanguage()));
-  }, []);
 
   useEffect(() => {
     // The server starts in English for hydration safety; keep the document
@@ -77,13 +46,7 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
   }, [locale]);
 
   const setLocale = useCallback((input: string | undefined | null) => {
-    const resolved = normalizeLocale(input);
-    setLocaleState(resolved);
-    try {
-      window.localStorage.setItem(STORAGE_KEY, resolved);
-    } catch {
-      /* storage blocked — keep in-memory choice */
-    }
+    setLocaleState(normalizeLocale(input));
   }, []);
 
   const t = useCallback<TFunction>(

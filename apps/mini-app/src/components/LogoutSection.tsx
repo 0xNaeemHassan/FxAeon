@@ -1,26 +1,20 @@
 'use client';
 
 /**
- * Logout button — wrapped in its own PrivyClientProvider so the useLogout()
- * hook has the React context it needs.
+ * Logout control for the single global Privy session.
  *
- * The root layout intentionally omits PrivyClientProvider (PERF: the Privy
- * SDK is heavy). The Settings page therefore cannot call useLogout() at the
- * top level — it would run outside any Privy context and throw. This
- * component isolates the hook inside a provider, matching the same pattern
- * WalletSection already uses for wallet controls.
- *
- * Loaded via next/dynamic from the Settings page so the Privy SDK chunk
- * is lazy-loaded only when the Settings tab is actually visited.
+ * This component must not create a nested provider. A nested Privy context can
+ * leave the settings screen signed into a different client session than the
+ * protocol pages.
  */
 import { useCallback, useState } from 'react';
 import { LogOut } from 'lucide-react';
 import { useLogout } from '@privy-io/react-auth';
 import { haptic } from '@/lib/telegram';
 import { privyConfigured } from '@/lib/privyConfig';
-import PrivyClientProvider from '@/components/PrivyClientProvider';
 import { Button, Card, SectionTitle } from '@/components/ui';
 import { useLocale } from '@/lib/i18n';
+import { userSafeError } from '@/lib/errors';
 
 function PrivyLogoutControls() {
   const { logout } = useLogout();
@@ -35,7 +29,7 @@ function PrivyLogoutControls() {
       await logout();
       haptic('success');
     } catch (e) {
-      setError((e as Error).message || 'Logout failed.');
+      setError(userSafeError(e, 'Logout is temporarily unavailable. Try again.'));
     } finally {
       setLoggingOut(false);
     }
@@ -77,10 +71,5 @@ export default function LogoutSection() {
   if (!privyConfigured()) {
     return null;
   }
-
-  return (
-    <PrivyClientProvider>
-      <PrivyLogoutControls />
-    </PrivyClientProvider>
-  );
+  return <PrivyLogoutControls />;
 }

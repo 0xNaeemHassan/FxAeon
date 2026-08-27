@@ -1,460 +1,142 @@
 'use client';
 
-/**
- * Settings — loads the user's REAL preferences from the bot and saves them
- * back through the authenticated API. (The old screen kept everything in
- * local state and "saved" via a sendData payload the bot rejected — a dead
- * button by design.)
- *
- * Privy context: the root layout intentionally omits PrivyClientProvider
- * (the SDK is heavy). The useLogout() hook MUST run inside a Privy context,
- * so the logout section is isolated into a component rendered inside the
- * same PrivyClientProvider that WalletSection uses. This prevents the hook
- * from running outside the provider and crashing the Settings tab.
- */
-import { useCallback, useEffect, useState } from 'react';
-import { Globe, Sliders, Shield, Check, PlugZap, RefreshCw, Send, Palette, Fingerprint, Volume2, Radio } from 'lucide-react';
-import { isTMA, getInitData, haptic } from '@/lib/telegram';
-import { apiConfigured, getMe, saveSettings } from '@/lib/api';
-import { AppShell, Button, ButtonLink, Card, EmptyState, LoadingRegion, SectionTitle, Skeleton } from '@/components/ui';
-import { useLocale } from '@/lib/i18n';
-import { THEMES, getSavedTheme, applyTheme, type ThemeId } from '@/lib/theme';
-import { biometrics } from '@/lib/biometrics';
-import { sound } from '@/lib/sound';
-import { announcer, getAnnouncerSettings, saveAnnouncerSettings, type VoicePersona } from '@/lib/announcer';
+import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
+import { Check, Palette, ShieldCheck, Sliders } from 'lucide-react';
+import { AppShell, Button, Card, SectionTitle, Skeleton } from '@/components/ui';
+import { useLocale } from '@/lib/i18n';
+import { THEMES, applyTheme, type ThemeId } from '@/lib/theme';
+import { haptic } from '@/lib/telegram';
+import { SETTINGS_KEY } from '@/lib/settings';
 
-// PERF (W-20): Settings → Wallet is the only Privy surface outside /login.
-// Loading it dynamically keeps the heavy SDK out of this page's bundle.
 const WalletSection = dynamic(() => import('@/components/WalletSection'), {
   ssr: false,
   loading: () => <Skeleton className="h-24" />,
 });
-
-// Logout section — dynamically loaded so the Privy SDK chunk isn't in the
-// Settings page's critical bundle. The component is rendered inside a
-// PrivyClientProvider so useLogout() has the context it needs.
 const LogoutSection = dynamic(() => import('@/components/LogoutSection'), {
   ssr: false,
   loading: () => <Skeleton className="h-24" />,
 });
 
-const BOT_USERNAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || 'FxAeonBot';
+const SLIPPAGE_PRESETS = [10, 50, 100, 200] as const;
+type SettingsV1 = {
+  slippageBps: number;
+  theme: ThemeId;
+};
 
-const LANGUAGES = [
-  { code: 'en', name: 'English' },
-  { code: 'zh-CN', name: '中文' },
-  { code: 'ko', name: '한국어' },
-  { code: 'ja', name: '日本語' },
-  { code: 'ru', name: 'Русский' },
-  { code: 'es', name: 'Español' },
-  { code: 'tr', name: 'Türkçe' },
-  { code: 'pt', name: 'Português' },
-];
+const DEFAULT_SETTINGS: SettingsV1 = {
+  slippageBps: 50,
+  theme: 'violet',
+};
 
-const SLIPPAGE_PRESETS = [10, 50, 100, 200]; // bps
+function readSettings(): SettingsV1 {
+  if (typeof window === 'undefined') return DEFAULT_SETTINGS;
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || '{}') as Partial<SettingsV1>;
+    const slippageBps = SLIPPAGE_PRESETS.includes(parsed.slippageBps as (typeof SLIPPAGE_PRESETS)[number]) ? parsed.slippageBps! : DEFAULT_SETTINGS.slippageBps;
+    const theme = parsed.theme && Object.prototype.hasOwnProperty.call(THEMES, parsed.theme) ? parsed.theme : DEFAULT_SETTINGS.theme;
+    return { slippageBps, theme };
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+}
 
 export default function SettingsPage() {
-  const { t, setLocale } = useLocale();
+  const { t } = useLocale();
   const [mounted, setMounted] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
-  const [error, setError] = useState('');
-  const [lang, setLang] = useState('en');
-  const [slippageBps, setSlippageBps] = useState(50);
-  const [mev, setMev] = useState<'on' | 'off'>('off');
-  const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [settings, setSettings] = useState<SettingsV1>(DEFAULT_SETTINGS);
   const [saved, setSaved] = useState(false);
-  const [currentTheme, setCurrentTheme] = useState<ThemeId>('violet');
-  const [biometricAuth, setBiometricAuth] = useState(true);
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const [voiceEnabled, setVoiceEnabled] = useState(true);
-  const [voicePersona, setVoicePersona] = useState<VoicePersona>('cyberpunk');
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
+    const next = readSettings();
+    setSettings(next);
+    applyTheme(next.theme);
     setMounted(true);
-    setCurrentTheme(getSavedTheme());
-    setBiometricAuth(biometrics.isUserEnabled());
-    setSoundEnabled(sound.isEnabled());
-    const voiceSettings = getAnnouncerSettings();
-    setVoiceEnabled(voiceSettings.enabled);
-    setVoicePersona(voiceSettings.persona);
   }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError('');
-    try {
-      const me = await getMe();
-      if (me.onboarded) {
-        setLang(me.language ?? 'en');
-        setLocale(me.language ?? 'en');
-        setSlippageBps(me.slippageBps ?? 50);
-        setMev((me.mevProtection as 'on' | 'off') ?? 'off');
-      }
-    } catch (cause) {
-      setLoadError(cause instanceof Error ? cause.message : 'Settings could not be loaded.');
-    } finally {
-      setLoading(false);
-    }
-  }, [setLocale]);
-
-  useEffect(() => {
-    if (!mounted) return;
-    if (!isTMA() || !getInitData() || !apiConfigured()) {
-      setLoading(false);
-      return;
-    }
-    void load();
-  }, [load, mounted]);
-
-  const save = async () => {
-    setSaving(true);
-    setError('');
-    try {
-      await saveSettings({ language: lang, slippageBps, mevProtection: mev });
-      haptic('success');
-      setDirty(false);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2200);
-    } catch (e) {
-      haptic('error');
-      setError((e as Error).message);
-    } finally {
-      setSaving(false);
-    }
+  const update = <K extends keyof SettingsV1>(key: K, value: SettingsV1[K]) => {
+    setSaved(false);
+    setSaveError('');
+    setSettings((current) => ({ ...current, [key]: value }));
+    if (key === 'theme') applyTheme(value as ThemeId);
+    haptic('selection');
   };
 
-  const touch = () => {
-    setDirty(true);
-    setSaved(false);
+  const save = () => {
+    setSaveError('');
+    try {
+      window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+      setSaved(true);
+      haptic('success');
+      window.setTimeout(() => setSaved(false), 2200);
+    } catch {
+      setSaved(false);
+      setSaveError('This browser blocked local preference storage. Your wallet and on-chain state were not affected.');
+      haptic('error');
+    }
   };
 
   if (!mounted) return <AppShell title={t('settings.title')}>{null}</AppShell>;
 
-  if (!isTMA()) {
-    return (
-      <AppShell title={t('settings.title')} tabs={false}>
-        <EmptyState
-          icon={Send}
-          title={t('settings.openInTgTitle')}
-          body={t('settings.openInTgBody')}
-          action={
-            <ButtonLink href={`https://t.me/${BOT_USERNAME}`} external>
-              {t('common.openBot', { bot: BOT_USERNAME })}
-            </ButtonLink>
-          }
-        />
-      </AppShell>
-    );
-  }
-
-  if (!getInitData() || !apiConfigured()) {
-    return (
-      <AppShell title={t('settings.title')}>
-        <EmptyState
-          icon={PlugZap}
-          title={t('settings.cantSyncTitle')}
-          body={!getInitData() ? t('settings.cantSyncNoInit') : t('settings.cantSyncNoBackend')}
-        />
-      </AppShell>
-    );
-  }
-
-  if (loading) {
-    return (
-      <AppShell title={t('settings.title')}>
-        <LoadingRegion label="Loading settings" className="flex flex-col gap-3">
-          <Skeleton className="h-40" />
-          <Skeleton className="h-28" />
-          <Skeleton className="h-20" />
-        </LoadingRegion>
-      </AppShell>
-    );
-  }
-
-  if (loadError) {
-    return (
-      <AppShell title={t('settings.title')}>
-        <EmptyState
-          icon={RefreshCw}
-          title="Settings unavailable"
-          body={loadError}
-          action={<Button onClick={() => void load()}>Retry</Button>}
-        />
-      </AppShell>
-    );
-  }
-
   return (
-    <AppShell title={t('settings.title')} subtitle={t('settings.subtitle')}>
+    <AppShell title={t('settings.title')} subtitle="Wallet controls and preferences stay on this device.">
       <div className="stagger flex flex-col">
         <WalletSection />
 
         <SectionTitle>
-          <span className="flex items-center gap-1.5">
-            <Globe className="h-3.5 w-3.5" /> {t('settings.language')}
-          </span>
+          <span className="flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" /> Wallet authority</span>
         </SectionTitle>
-        <ChoiceGrid
-          ariaLabel={t('settings.language')}
-          value={lang}
-          options={LANGUAGES.map((language) => ({ value: language.code, label: language.name }))}
-          columns="grid-cols-3"
-          onChange={(next) => {
-            setLang(next);
-            setLocale(next);
-            touch();
-          }}
-        />
+        <Card className="border-[rgba(139,109,255,.22)] bg-[rgba(139,109,255,.06)]">
+          <p className="text-[13px] font-medium">You approve every transaction</p>
+          <p className="mt-1 text-[12px] leading-relaxed text-mut">FxAeon does not keep a session signer or execute trades in the background. Each SDK transaction opens your wallet confirmation on the selected chain.</p>
+        </Card>
 
         <SectionTitle>
-          <span className="flex items-center gap-1.5">
-            <Sliders className="h-3.5 w-3.5" /> {t('settings.maxSlippage')}
-          </span>
+          <span className="flex items-center gap-1.5"><Sliders className="h-3.5 w-3.5" aria-hidden="true" /> {t('settings.maxSlippage')}</span>
         </SectionTitle>
         <ChoiceGrid
           ariaLabel={t('settings.maxSlippage')}
-          value={slippageBps}
-          options={SLIPPAGE_PRESETS.map((bps) => ({
-            value: bps,
-            label: `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 1)}%`,
-          }))}
-          columns="grid-cols-4"
-          onChange={(next) => {
-            setSlippageBps(next);
-            touch();
-          }}
+          value={settings.slippageBps}
+          options={SLIPPAGE_PRESETS.map((bps) => ({ value: bps, label: `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 1)}%` }))}
+          onChange={(value) => update('slippageBps', value)}
         />
+        <p className="mt-2 px-1 text-[11px] leading-relaxed text-mut">This is a client preference passed to the official SDK. Protocol quotes and transaction data remain authoritative.</p>
 
         <SectionTitle>
-          <span className="flex items-center gap-1.5">
-            <Palette className="h-3.5 w-3.5" /> Cyber Theme Studio
-          </span>
+          <span className="flex items-center gap-1.5"><Palette className="h-3.5 w-3.5" aria-hidden="true" /> Appearance</span>
         </SectionTitle>
         <div className="grid grid-cols-2 gap-2.5">
           {(Object.keys(THEMES) as ThemeId[]).map((themeKey) => {
-            const th = THEMES[themeKey];
-            const active = currentTheme === themeKey;
+            const theme = THEMES[themeKey];
+            const active = settings.theme === themeKey;
             return (
               <button
                 key={themeKey}
                 type="button"
-                onClick={() => {
-                  sound.confirm();
-                  haptic('medium');
-                  setCurrentTheme(themeKey);
-                  applyTheme(themeKey);
-                }}
-                className={`flex flex-col text-left p-3 rounded-2xl border transition-all ${
-                  active
-                    ? 'border-[var(--mint)] bg-[var(--mint-dim)] shadow-[0_0_15px_var(--mint-glow)]'
-                    : 'border-[var(--line)] bg-[var(--surface)] hover:border-[rgba(255,255,255,0.2)]'
-                }`}
+                aria-pressed={active}
+                onClick={() => update('theme', themeKey)}
+                className={`flex min-h-[74px] flex-col rounded-2xl border p-3 text-left transition-colors ${active ? 'border-[var(--mint)] bg-[var(--mint-dim)]' : 'border-[var(--line)] bg-[var(--surface)]'}`}
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-[13px] font-bold text-white">{th.name}</span>
-                  <span
-                    className="h-3.5 w-3.5 rounded-full border border-white/20 shadow"
-                    style={{ backgroundColor: th.accent }}
-                  />
-                </div>
-                <span className="mt-1 text-[10.5px] text-mut">{th.subtitle}</span>
+                <span className="flex items-center justify-between text-[13px] font-semibold"><span>{theme.name}</span><span className="h-3.5 w-3.5 rounded-full border border-white/20" style={{ backgroundColor: theme.accent }} /></span>
+                <span className="mt-1 text-[10.5px] text-mut">{theme.subtitle}</span>
               </button>
             );
           })}
         </div>
 
-        <SectionTitle>
-          <span className="flex items-center gap-1.5">
-            <Fingerprint className="h-3.5 w-3.5" /> Biometric Authentication
-          </span>
-        </SectionTitle>
-        <Card className="flex items-center justify-between">
-          <div>
-            <p className="text-[14px] font-medium">FaceID / TouchID Confirmation</p>
-            <p className="mt-0.5 text-[12px] text-mut">Authorize trades and private key exports using device biometrics</p>
+        <Card className="mt-7 border-[rgba(255,194,102,.22)]">
+          <div className="flex items-start gap-2.5">
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-mint" aria-hidden="true" />
+            <p className="text-[11.5px] leading-relaxed text-mut">Local preferences are convenience only. They never authorize a transaction or replace blockchain, Privy, or SDK state.</p>
           </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={biometricAuth}
-            aria-label="Biometric confirmation"
-            onClick={() => {
-              sound.toggle();
-              haptic('selection');
-              const next = !biometricAuth;
-              setBiometricAuth(next);
-              biometrics.setUserEnabled(next);
-            }}
-            className="flex min-h-11 min-w-14 items-center justify-center rounded-xl"
-          >
-            <span aria-hidden="true" className={`relative h-7 w-12 rounded-full transition-colors ${biometricAuth ? 'bg-mint' : 'bg-[rgba(255,255,255,0.12)]'}`}>
-              <span
-                className={`absolute top-0.5 h-6 w-6 rounded-full bg-white transition-transform ${
-                  biometricAuth ? 'translate-x-[22px]' : 'translate-x-0.5'
-                }`}
-              />
-            </span>
-          </button>
         </Card>
-
-        <SectionTitle>
-          <span className="flex items-center gap-1.5">
-            <Volume2 className="h-3.5 w-3.5" /> Procedural Sound FX
-          </span>
-        </SectionTitle>
-        <Card className="flex items-center justify-between">
-          <div>
-            <p className="text-[14px] font-medium">Web Audio UI Synthesis</p>
-            <p className="mt-0.5 text-[12px] text-mut">Subtle audio cues for taps, confirmations, and alerts</p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={soundEnabled}
-            aria-label="Sound FX"
-            onClick={() => {
-              const next = !soundEnabled;
-              setSoundEnabled(next);
-              sound.setEnabled(next);
-              if (next) sound.confirm();
-              haptic('selection');
-            }}
-            className="flex min-h-11 min-w-14 items-center justify-center rounded-xl"
-          >
-            <span aria-hidden="true" className={`relative h-7 w-12 rounded-full transition-colors ${soundEnabled ? 'bg-mint' : 'bg-[rgba(255,255,255,0.12)]'}`}>
-              <span
-                className={`absolute top-0.5 h-6 w-6 rounded-full bg-white transition-transform ${
-                  soundEnabled ? 'translate-x-[22px]' : 'translate-x-0.5'
-                }`}
-              />
-            </span>
-          </button>
-        </Card>
-
-        <SectionTitle>
-          <span className="flex items-center gap-1.5">
-            <Radio className="h-3.5 w-3.5" /> Cyberpunk Voice Announcer
-          </span>
-        </SectionTitle>
-        <Card className="p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[14px] font-medium">Live Terminal Audio Commentary</p>
-              <p className="mt-0.5 text-[12px] text-mut">Voice feedback for trades, Take-Profit, and whale alerts</p>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={voiceEnabled}
-              aria-label="Voice Announcer"
-              onClick={() => {
-                sound.toggle();
-                haptic('selection');
-                const next = !voiceEnabled;
-                setVoiceEnabled(next);
-                saveAnnouncerSettings({ enabled: next });
-                if (next) announcer.testPersona(voicePersona);
-              }}
-              className="flex min-h-11 min-w-14 items-center justify-center rounded-xl"
-            >
-              <span aria-hidden="true" className={`relative h-7 w-12 rounded-full transition-colors ${voiceEnabled ? 'bg-mint' : 'bg-[rgba(255,255,255,0.12)]'}`}>
-                <span
-                  className={`absolute top-0.5 h-6 w-6 rounded-full bg-white transition-transform ${
-                    voiceEnabled ? 'translate-x-[22px]' : 'translate-x-0.5'
-                  }`}
-                />
-              </span>
-            </button>
-          </div>
-
-          {voiceEnabled && (
-            <div className="pt-2 border-t border-[var(--line)] space-y-2.5">
-              <label className="text-[10px] font-semibold text-mut uppercase tracking-wider block">
-                Select Voice Persona
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { id: 'cyberpunk' as const, name: 'Cyber AI 🤖', desc: 'Synthetic & sharp' },
-                  { id: 'hype' as const, name: 'Hype Desk 🔥', desc: 'Esports high-energy' },
-                  { id: 'zen' as const, name: 'Zen Master 🧘', desc: 'Calm & disciplined' },
-                ].map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => {
-                      sound.tap();
-                      haptic('selection');
-                      setVoicePersona(p.id);
-                      saveAnnouncerSettings({ persona: p.id });
-                      announcer.testPersona(p.id);
-                    }}
-                    className={`p-2.5 rounded-xl border text-left transition-all ${
-                      voicePersona === p.id
-                        ? 'border-mint bg-mint/15 shadow-[0_0_12px_var(--mint-glow)]'
-                        : 'border-[var(--line)] bg-[rgba(255,255,255,0.03)] hover:border-white/20'
-                    }`}
-                  >
-                    <span className="block text-[12px] font-bold text-white">{p.name}</span>
-                    <span className="block text-[9.5px] text-mut">{p.desc}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </Card>
-
-        <SectionTitle>
-          <span className="flex items-center gap-1.5">
-            <Shield className="h-3.5 w-3.5" /> {t('settings.mevProtection')}
-          </span>
-        </SectionTitle>
-        <Card className="flex items-center justify-between">
-          <div>
-            <p className="text-[14px] font-medium">{t('settings.privateTx')}</p>
-            <p className="mt-0.5 text-[12px] text-mut">{t('settings.privateTxSub')}</p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={mev === 'on'}
-            aria-label={t('settings.privateTx')}
-            onClick={() => {
-              sound.toggle();
-              haptic('selection');
-              setMev(mev === 'on' ? 'off' : 'on');
-              touch();
-            }}
-            className="flex min-h-11 min-w-14 items-center justify-center rounded-xl"
-          >
-            <span aria-hidden="true" className={`relative h-7 w-12 rounded-full transition-colors ${mev === 'on' ? 'bg-mint' : 'bg-[rgba(255,255,255,0.12)]'}`}>
-              <span
-                className={`absolute top-0.5 h-6 w-6 rounded-full bg-white transition-transform ${
-                  mev === 'on' ? 'translate-x-[22px]' : 'translate-x-0.5'
-                }`}
-              />
-            </span>
-          </button>
-        </Card>
-
-        {error && (
-          <Card className="mt-4 border-[rgba(255, 90, 95,0.35)]">
-            <p role="alert" className="text-[13px] text-danger">{error}</p>
-          </Card>
-        )}
 
         <div className="mt-6">
-          <Button onClick={save} disabled={!dirty} loading={saving}>
-            {saved ? (
-              <>
-                <Check className="h-4 w-4" /> {t('common.saved')}
-              </>
-            ) : (
-              t('common.save')
-            )}
+          <Button onClick={save}>
+            {saved ? <><Check className="h-4 w-4" aria-hidden="true" /> {t('common.saved')}</> : t('common.save')}
           </Button>
+          {saveError && <p role="alert" className="mt-2 text-center text-[11px] leading-relaxed text-danger">{saveError}</p>}
         </div>
 
         <LogoutSection />
@@ -467,46 +149,27 @@ function ChoiceGrid<T extends string | number>({
   ariaLabel,
   value,
   options,
-  columns,
+  columns = 'grid-cols-4',
   onChange,
 }: {
   ariaLabel: string;
   value: T;
   options: Array<{ value: T; label: string }>;
-  columns: string;
+  columns?: string;
   onChange: (value: T) => void;
 }) {
   return (
     <div className={`grid ${columns} gap-2`} role="radiogroup" aria-label={ariaLabel}>
-      {options.map((option, index) => {
+      {options.map((option) => {
         const active = value === option.value;
         return (
           <button
-            key={option.value}
+            key={String(option.value)}
             type="button"
             role="radio"
             aria-checked={active}
-            tabIndex={active ? 0 : -1}
-            onClick={() => {
-              haptic('selection');
-              onChange(option.value);
-            }}
-            onKeyDown={(event) => {
-              if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
-              event.preventDefault();
-              const backwards = event.key === 'ArrowLeft' || event.key === 'ArrowUp';
-              const next = event.key === 'Home'
-                ? 0
-                : event.key === 'End'
-                  ? options.length - 1
-                  : (index + (backwards ? -1 : 1) + options.length) % options.length;
-              onChange(options[next].value);
-              event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
-              haptic('selection');
-            }}
-            className={`glass glass-press min-h-11 rounded-2xl px-2 py-2.5 text-[13px] ${
-              active ? 'border-[rgba(124,92,255,0.45)] bg-[var(--mint-dim)] text-mint' : 'text-mut'
-            }`}
+            onClick={() => onChange(option.value)}
+            className={`glass glass-press min-h-11 rounded-2xl px-2 py-2.5 text-[13px] ${active ? 'border-[rgba(124,92,255,0.45)] bg-[var(--mint-dim)] text-mint' : 'text-mut'}`}
           >
             {option.label}
           </button>

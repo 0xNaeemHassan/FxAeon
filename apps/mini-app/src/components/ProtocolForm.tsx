@@ -82,6 +82,50 @@ export function FieldLabel({
   );
 }
 
+export function SlippageField({
+  value,
+  onChange,
+  max,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  max: number;
+}) {
+  const inputId = useId();
+  const errorId = `${inputId}-error`;
+  const [touched, setTouched] = useState(false);
+  const numeric = Number(value);
+  const error = value
+    ? (!Number.isFinite(numeric) || numeric <= 0 || numeric > max
+        ? `Enter a slippage tolerance greater than 0% and no more than ${max}%.`
+        : null)
+    : touched
+      ? 'Enter a slippage tolerance.'
+      : null;
+
+  return (
+    <div>
+      <FieldLabel htmlFor={inputId}>Slippage tolerance · max {max}%</FieldLabel>
+      <div className={`flex min-h-14 items-center gap-2 rounded-2xl border bg-[rgba(255,255,255,.035)] px-4 transition-colors focus-within:border-[rgba(139,109,255,.5)] ${error ? 'border-[rgba(255,107,118,.55)]' : 'border-[var(--line)]'}`}>
+        <input
+          id={inputId}
+          value={value}
+          onChange={(event) => onChange(event.target.value.replace(',', '.').slice(0, 32))}
+          onBlur={() => setTouched(true)}
+          inputMode="decimal"
+          autoComplete="off"
+          aria-label="Slippage tolerance percentage"
+          aria-invalid={Boolean(error)}
+          aria-errormessage={error ? errorId : undefined}
+          className="min-h-11 min-w-0 flex-1 bg-transparent font-mono text-[17px] font-semibold outline-none"
+        />
+        <span className="text-[12px] text-mut">%</span>
+      </div>
+      {error && <p id={errorId} role="alert" className="mt-1.5 px-1 text-[11px] leading-relaxed text-danger">{error}</p>}
+    </div>
+  );
+}
+
 export function AmountField({
   value,
   onChange,
@@ -114,7 +158,7 @@ export function AmountField({
   const errorId = `${inputId}-error`;
   const [touched, setTouched] = useState(false);
   const inputError = decimalInputError(value, maxDecimals, { allowAll, allowZero });
-  const error = inputError ?? constraintError ?? (touched && !value ? 'Enter an amount.' : null);
+  const error = inputError ?? constraintError ?? (touched && !value && !allowZero ? 'Enter an amount.' : null);
   const normalise = (raw: string) => {
     if (allowAll && raw.toLowerCase() === 'all') return 'all';
     // Keep malformed pasted text visible and invalid. Stripping an exponent or
@@ -140,7 +184,7 @@ export function AmountField({
           aria-describedby={`${hintId}${error ? ` ${errorId}` : ''}`}
           aria-errormessage={error ? errorId : undefined}
           aria-invalid={Boolean(error)}
-          required
+          required={!allowZero}
           className="min-h-11 min-w-0 flex-1 bg-transparent font-mono text-[27px] font-semibold tracking-[-0.04em] text-[var(--text)] outline-none placeholder:text-[var(--mut-2)]"
         />
         <span className="flex shrink-0 items-center gap-2 rounded-xl bg-[rgba(255,255,255,.055)] px-2.5 py-2 text-[12px] font-semibold">
@@ -166,7 +210,7 @@ export function AmountField({
                   const fraction = calculateFractionDecimal(balance, pct, maxDecimals);
                   if (fraction) onChange(fraction);
                 }}
-                className="min-h-7 rounded-lg border border-[var(--line)] bg-[rgba(255,255,255,0.04)] px-2 py-0.5 text-[10.5px] font-semibold text-mut transition-colors hover:border-[var(--mint)]/40 hover:bg-[var(--mint-dim)] hover:text-mint"
+                className="min-h-11 min-w-11 rounded-lg border border-[var(--line)] bg-[rgba(255,255,255,0.04)] px-2 py-0.5 text-[10.5px] font-semibold text-mut transition-colors hover:border-[var(--mint)]/40 hover:bg-[var(--mint-dim)] hover:text-mint"
               >
                 {pct}%
               </button>
@@ -178,7 +222,7 @@ export function AmountField({
                   haptic('selection');
                   onChange('all');
                 }}
-                className="min-h-7 rounded-lg bg-[var(--mint-dim)] px-2.5 py-0.5 text-[10.5px] font-bold text-mint transition-colors hover:brightness-110"
+                className="min-h-11 min-w-11 rounded-lg bg-[var(--mint-dim)] px-2.5 py-0.5 text-[10.5px] font-bold text-mint transition-colors hover:brightness-110"
               >
                 MAX
               </button>
@@ -190,7 +234,7 @@ export function AmountField({
                   const fraction = calculateFractionDecimal(balance, 100, maxDecimals);
                   if (fraction) onChange(fraction);
                 }}
-                className="min-h-7 rounded-lg bg-[var(--mint-dim)] px-2.5 py-0.5 text-[10.5px] font-bold text-mint transition-colors hover:brightness-110"
+                className="min-h-11 min-w-11 rounded-lg bg-[var(--mint-dim)] px-2.5 py-0.5 text-[10.5px] font-bold text-mint transition-colors hover:brightness-110"
               >
                 MAX
               </button>
@@ -265,7 +309,7 @@ export function RangeField({
       <div className="rounded-[20px] border border-[var(--line)] bg-[rgba(255,255,255,.03)] p-4">
         <div className="mb-4 flex items-end justify-between">
           <span className="text-display text-[30px] font-semibold text-gradient">{value.toFixed(value % 1 ? 1 : 0)}{suffix}</span>
-          <span className="rounded-lg bg-[var(--mint-dim)] px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-mint">Live risk bounds</span>
+          <span className="rounded-lg bg-[var(--mint-dim)] px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-mint">Interface safety range</span>
         </div>
         <input
           id={rangeId}
@@ -282,6 +326,51 @@ export function RangeField({
           style={{ '--fill': `${fill}%` } as React.CSSProperties}
           aria-valuetext={`${value}${suffix}`}
         />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Leverage is bounded by live pool debt-ratio configuration, not a universal
+ * 7x/3x constant. Keep the input open-ended and let the pinned SDK validate
+ * the current pool when it plans the route.
+ */
+export function LeverageField({
+  value,
+  onChange,
+  label = 'Leverage',
+}: {
+  value: number;
+  onChange: (value: number) => void;
+  label?: string;
+}) {
+  const inputId = useId();
+  return (
+    <div>
+      <FieldLabel htmlFor={inputId} hint="Validated from live pool state">{label}</FieldLabel>
+      <div className="rounded-[20px] border border-[var(--line)] bg-[rgba(255,255,255,.03)] p-4">
+        <div className="flex items-center gap-3">
+          <input
+            id={inputId}
+            type="number"
+            inputMode="decimal"
+            min="0.1"
+            step="0.1"
+            value={Number.isFinite(value) ? value : ''}
+            onChange={(event) => {
+              const next = Number(event.target.value);
+              onChange(Number.isFinite(next) ? next : 0);
+            }}
+            onBlur={() => haptic('selection')}
+            className="min-h-12 min-w-0 flex-1 rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-4 text-[20px] font-semibold outline-none focus:border-[rgba(139,109,255,.5)]"
+            aria-describedby={`${inputId}-help`}
+          />
+          <span className="text-display text-[24px] font-semibold text-gradient" aria-hidden="true">×</span>
+        </div>
+        <p id={`${inputId}-help`} className="mt-2 text-[10.5px] leading-relaxed text-mut">
+          The official SDK accepts a positive target and rejects values outside the pool&apos;s current on-chain limits.
+        </p>
       </div>
     </div>
   );

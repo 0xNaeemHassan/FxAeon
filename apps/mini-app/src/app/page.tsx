@@ -1,24 +1,22 @@
 'use client';
 
 /**
- * Entry router. Decides where this launch should land:
- *  - inside Telegram with signed initData → check real onboarding state via
- *    the bot API → /portfolio or /login
- *  - inside Telegram via keyboard launch (empty initData) → /login (the
- *    sendData onboarding path)
- *  - plain browser → "Open in Telegram" splash (the app is a Telegram
- *    product; pretending otherwise created dead screens)
+ * Entry router.
+ *
+ * Telegram is the launch surface; Privy is the identity and wallet authority.
+ * There is deliberately no account/API probe here. The first screen must not
+ * depend on a FxAeon server being alive, and the portfolio page can show the
+ * correct connect/read-only state from the client SDK.
  */
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeftRight, ArrowUpRight, ShieldCheck, Sparkles } from 'lucide-react';
-import { isTMA, getInitData } from '@/lib/telegram';
-import { apiAvailable, getMe } from '@/lib/api';
+import { isTMA } from '@/lib/telegram';
 import { ButtonLink, FullScreenSpinner } from '@/components/ui';
 import { useT } from '@/lib/i18n';
 import FxLogo from '@/components/FxLogo';
 
-const BOT_USERNAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || 'FxAeonBot';
+const TELEGRAM_APP_URL = process.env.NEXT_PUBLIC_TELEGRAM_APP_URL || 'https://t.me/FxAeonBot/app';
 
 export default function HomePage() {
   const t = useT();
@@ -26,26 +24,15 @@ export default function HomePage() {
   const [browser, setBrowser] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!isTMA()) {
-        setBrowser(true);
-        return;
-      }
-      if (getInitData() && apiAvailable()) {
-        try {
-          const me = await getMe();
-          if (!cancelled) router.replace(me.onboarded ? '/portfolio' : '/login');
-          return;
-        } catch {
-          /* fall through — portfolio renders its own degraded state */
-        }
-      }
-      if (!cancelled) router.replace(getInitData() ? '/portfolio' : '/login');
-    })();
-    return () => {
-      cancelled = true;
-    };
+    document.title = 'FxAeon — f(x) Protocol Gateway';
+  }, []);
+
+  useEffect(() => {
+    if (!isTMA()) {
+      setBrowser(true);
+      return;
+    }
+    router.replace('/portfolio');
   }, [router]);
 
   if (browser) {
@@ -76,7 +63,7 @@ export default function HomePage() {
             ))}
           </div>
 
-          <ButtonLink href={`https://t.me/${BOT_USERNAME}`} external className="w-full">
+          <ButtonLink href={TELEGRAM_APP_URL} external className="w-full">
             {t('common.openInTelegram')} <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
           </ButtonLink>
           <p className="mt-4 text-[10.5px] uppercase tracking-[0.14em] text-[var(--mut-2)]">
@@ -87,5 +74,5 @@ export default function HomePage() {
     );
   }
 
-  return <FullScreenSpinner />;
+  return <FullScreenSpinner asMain />;
 }

@@ -1,44 +1,31 @@
 # Security policy
 
-## Supported version
-
-Security fixes are made against the current `main` branch and the latest released version. Older tags are not guaranteed to receive backports.
+FxAeon is unaudited application software that prepares financial transactions
+in a static browser client. Protocol audits do not audit FxAeon's UI, Privy
+configuration, dependency lockfile, deployment, or transaction validation.
 
 ## Report a vulnerability privately
 
-Do not open a public issue, discussion, Telegram message, or pull request containing exploit details, secrets, private keys, user data, or an unpatched funds-risk bug.
+Do not publish exploit details, private keys, wallet data, Telegram launch data,
+Privy tokens, raw calldata, or provider credentials in an issue, chat, or pull
+request. Use the repository's **Security** tab to create a private GitHub
+security advisory. Include the affected commit, component, reproducible steps,
+impact, and mitigation if known.
 
-Use the repository's **Security** tab to create a private GitHub security advisory. Include:
+## Security boundaries
 
-- affected commit or version;
-- affected component and deployment assumptions;
-- reproducible steps or a minimal proof of concept;
-- impact on funds, signer authority, authentication, privacy, or availability;
-- whether the issue has been exploited or publicly disclosed;
-- a suggested mitigation, if known.
+- FxAeon has no backend, webhook, database, Redis, worker, queue, or delegated
+  signer.
+- Privy is the wallet custody and explicit signing boundary. No private key is
+  accepted by FxAeon code or stored in browser state.
+- The official f(x) SDK is the only protocol planner. The client validates its
+  transaction targets, selectors, sender, chain, value, approvals, nonce, and
+  order before every visible wallet prompt.
+- A rejected, reverted, timed-out, or nonce-drifted step stops the route.
+- Local storage is only a UI/recovery hint and never an authority for balances,
+  receipts, permissions, or bridge delivery.
+- Test against local fixtures, safe simulations, or a local fork. Never use
+  another user's wallet or production funds to reproduce a bug.
 
-If private advisories are unavailable, contact a maintainer through a private channel and ask for a secure reporting route without sending the exploit in the first message. This repository does not publish a verified security email address.
-
-## Sensitive testing rules
-
-- Test against local fixtures or an Anvil fork, not other users or production funds.
-- Never use or request another user's Telegram `initData`, wallet key, Privy token, bot token, webhook secret, or authorization key.
-- Do not submit a harmful order to the live relay, flood Telegram/Privy/RPC providers, or probe infrastructure outside this repository's scope.
-- Preserve evidence, minimize data access, and stop once impact is demonstrated.
-
-## Response expectations
-
-Maintainers should acknowledge a complete report as soon as practical, reproduce it, classify severity, prepare a fix, rotate exposed credentials, and coordinate disclosure with the reporter. No guaranteed response or remediation deadline is promised by this community project.
-
-## Security status
-
-FxAeon is **unaudited application software**. Internal tests and reviews are not an independent security audit and do not establish that funds are safe. The f(x) protocol's audits do not audit FxAeon's bot, Mini App, backend, Privy integration, or operational configuration.
-
-Current defenses and residual risks are documented in:
-
-- [Security model](docs/security.md)
-- [Threat model](docs/threat-model.md)
-- [Signer-policy decision](docs/adr/signer-policy.md)
-- [Known gaps](docs/GAPS.md)
-
-Users should keep bot trading disabled when it is not needed, verify transaction links independently, and never risk funds they cannot afford to lose.
+The active model and release gates are documented in
+[`docs/security.md`](docs/security.md) and [`docs/testing.md`](docs/testing.md).
