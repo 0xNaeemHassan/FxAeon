@@ -10,7 +10,7 @@ The release process is intentionally layered. Credential-free checks run on ever
 - `pnpm test`: transaction normalization, validation, approval, nonce, lock, journal, receipt ordering, and failure-stop tests.
 - `pnpm test:chaos`: seeded property-style route and runner campaigns. It mutates sender, chain, target, selector, value, operation, nonce, and route shape, then injects wallet rejection, on-chain reverts, and receipt-RPC outages. Set `FX_CHAOS_SEED`, `FX_CHAOS_ITERATIONS`, or `FX_CHAOS_RUNNER_ITERATIONS` to reproduce or expand a campaign.
 - `pnpm test:stress`: runs the credential-free chaos campaign and then the protected Anvil fork gate.
-- `pnpm test:e2e`: official-route and mobile/Telegram viewport navigation, semantic landmarks, 44px controls, no horizontal overflow at 320/360/375/390/412/430px, honest disconnected state, and absence of backend traffic.
+- `pnpm test:e2e`: browser entry without Telegram, official-route and mobile/Telegram viewport navigation, semantic landmarks, 44px controls, no horizontal overflow at 320/360/375/390/412/430px, honest disconnected state, and absence of backend traffic.
 - `pnpm build`: browser-only static export with no Node runtime.
 - `pnpm check:bundle`: checks total, JavaScript, gzip, and largest-asset budgets and scans the export for forbidden telemetry and server artifacts.
 
@@ -45,6 +45,6 @@ Keep `pnpm verify` credential-free. Run this fork gate only in a protected local
 
 Every transaction case must prove chain and parameter correctness, visible plan and simulation, explicit approval per step, preserved order, successful receipt before continuation, failure-stop behavior, one additional block, and a fresh authoritative read.
 
-Mainnet-fork impersonation or protocol-supported safe simulation is required for money-path integration tests. Production user funds are never a fixture. Telegram Android, iOS, Desktop, and Web must pass manual interaction checks before production promotion.
+Mainnet-fork impersonation or protocol-supported safe simulation is required for money-path integration tests. Production user funds are never a fixture. Current Chrome, Firefox, Safari, and Edge plus Telegram Android, iOS, Desktop, and Web must pass the applicable manual interaction checks before production promotion.
 
 The browser suite deliberately keeps accessibility checks dependency-light: route landmarks, labels, keyboard-visible focus, target sizing, and overflow are asserted directly. A full axe scan and real-device Telegram pass remain promotion-time checks when those environments are available.

@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Globe2, RefreshCw } from 'lucide-react';
 import { FullScreenSpinner } from '@/components/ui';
 import { getWebApp, hasTelegramLaunchSignal, waitForTelegramWebApp } from '@/lib/telegram';
 
@@ -51,6 +51,13 @@ export default function WalletProviderBoundary({ children }: { children: React.R
         </p>
         <button type="button" onClick={() => window.location.reload()} className="button button-primary glass-press mt-5 flex min-h-12 w-full max-w-[280px] items-center justify-center gap-2 rounded-2xl px-4 py-3 text-[14px] font-semibold">
           <RefreshCw className="h-4 w-4" aria-hidden="true" /> Reload FxAeon
+        </button>
+        <button
+          type="button"
+          onClick={() => window.location.assign(pathname ?? '/portfolio')}
+          className="button button-ghost glass-press mt-2 flex min-h-12 w-full max-w-[280px] items-center justify-center gap-2 rounded-2xl px-4 py-3 text-[14px] font-semibold"
+        >
+          <Globe2 className="h-4 w-4" aria-hidden="true" /> Continue in browser
         </button>
       </main>
     );

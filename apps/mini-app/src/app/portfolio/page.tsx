@@ -103,7 +103,7 @@ function PortfolioWallet() {
 
   if (!ready || !walletState.ready) {
     if (walletTimedOut) {
-       return <EmptyState icon={RefreshCw} title="Wallet did not load" body="Check your connection, update Telegram, or reopen FxAeon." action={<button type="button" onClick={() => window.location.reload()} className="button button-primary min-h-11 w-full rounded-xl px-4">Reload wallet</button>} />;
+       return <EmptyState icon={RefreshCw} title="Wallet did not load" body="Check your connection, update your browser or Telegram, then reopen FxAeon." action={<button type="button" onClick={() => window.location.reload()} className="button button-primary min-h-11 w-full rounded-xl px-4">Reload wallet</button>} />;
     }
     return <Card className="h-36 animate-pulse"><span className="sr-only">Loading wallet</span></Card>;
   }

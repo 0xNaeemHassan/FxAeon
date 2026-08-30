@@ -1,6 +1,6 @@
 # Roadmap and release posture
 
-This document describes the product that is actually shipped. FxAeon is a static Telegram Mini App: Privy owns the selected wallet, the pinned official f(x) SDK supplies protocol reads and unsigned plans, Alchemy RPC provides browser read infrastructure, and Ethereum/Base remain the source of truth.
+This document describes the product that is actually shipped. FxAeon is one static application with first-class web and Telegram launch surfaces: Privy owns the selected wallet, the pinned official f(x) SDK supplies protocol reads and unsigned plans, Alchemy RPC provides browser read infrastructure, and Ethereum/Base remain the source of truth.
 
 ## Non-negotiable product invariants
 
@@ -28,9 +28,9 @@ Transitive `ioredis` and `workerd` entries may remain in the frozen dependency g
 
 These are measurements from the local release gate, not universal performance claims. Re-run them on the pinned Node 22 CI environment for each release baseline.
 
-- Static bundle: `224 assets`, `7.03 MiB` total.
-- JavaScript: `191 assets`, `6.50 MiB` raw, `2.00 MiB` gzip; largest asset `1.21 MiB`.
-- Release E2E: `18` tests across official routes and Telegram/mobile safety checks.
+- Static bundle: `224 assets`, `7.04 MiB` total.
+- JavaScript: `191 assets`, `6.51 MiB` raw, `2.00 MiB` gzip; largest asset `1.21 MiB`.
+- Release E2E: `19` tests covering browser entry, official routes, and Telegram/mobile safety checks.
 - Unit/security suite: `96` total tests (`94` passed, `2` skipped when the protected fork environment is absent).
 - Chaos campaign: `2` campaigns passed, including 2,000 route mutations and 600 runner iterations.
 - Anvil fork gate: 24 snapshot/revert and 24 ordered-route iterations passed in the protected local run.
@@ -40,7 +40,7 @@ These are measurements from the local release gate, not universal performance cl
 
 1. Keep scope, wallet authority, validation, simulation, sequencing, bridge recovery, and fxSAVE lifecycle green.
 2. Re-run static build, dependency audit, bundle check, and mobile route tests for every release.
-3. Test Telegram Android, iOS, Desktop, and Web launch behavior and wallet prompts manually; automated tests use no production funds or live signing authority.
+3. Test current desktop/mobile browsers and Telegram Android, iOS, Desktop, and Web launch behavior and wallet prompts manually; automated tests use no production funds or live signing authority.
 4. Add a new SDK capability only through a reviewed scope-lock change and a matching matrix entry, tests, review UI, recovery behavior, and documentation.
 
 The next meaningful work is upstream/runtime validation, safe fork fixtures, and real Telegram device coverage—not more infrastructure or decorative UI.

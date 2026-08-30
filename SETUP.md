@@ -1,12 +1,12 @@
 # Local setup and deployment
 
-FxAeon is a single static Next.js Mini App. There is no FxAeon API, Telegram webhook process, database, Redis instance, worker, queue, or production container to configure.
+FxAeon is a single static Next.js application for modern browsers and Telegram Mini Apps. There is no FxAeon API, Telegram webhook process, database, Redis instance, worker, queue, or production container to configure.
 
 ## Prerequisites
 
 - Node.js 22
 - Corepack with pnpm 11.19.0
-- A Privy application configured for Telegram login and Ethereum/Base
+- A Privy application configured for the web origins you use, optional Telegram login, and Ethereum/Base
 - Domain-restricted browser RPC endpoints for Ethereum and Base
 - Optional: a Telegram test bot for validating the Mini App launch context
 
@@ -33,7 +33,7 @@ The client accepts only public configuration:
 | `NEXT_PUBLIC_PRIVY_APP_ID` | Public Privy application identifier |
 | `NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL` | Domain-restricted Ethereum RPC endpoint |
 | `NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL` | Domain-restricted Base RPC endpoint |
-| `NEXT_PUBLIC_TELEGRAM_APP_URL` | Telegram Main Mini App or menu URL |
+| `NEXT_PUBLIC_TELEGRAM_APP_URL` | Secondary Telegram Main Mini App or menu URL; browser entry does not depend on it |
 
 `NEXT_PUBLIC_*` values are embedded in the browser bundle. Never place a bot token, Privy secret, authorization key, private key, unrestricted RPC key, or other signing authority in this file. Inject production values through the protected deployment environment, not through committed files.
 
@@ -45,7 +45,7 @@ Privy should allow the exact local, preview, and production origins and expose o
 pnpm dev
 ```
 
-The app can render outside Telegram, but wallet login and native Telegram viewport behavior are best tested from a Mini App launch context. Use a disposable test wallet for local work.
+Open `http://localhost:3000` to use the complete browser application. Telegram is optional: use a Mini App launch only when testing seamless Telegram authentication, native theme/viewport behavior, haptics, or the host Back button. Use a disposable test wallet for local work in either environment.
 
 ## Verification
 
@@ -61,7 +61,7 @@ For the built artifact, run the Playwright suite:
 pnpm test:e2e
 ```
 
-The suite builds and serves the static export with empty wallet credentials. In CI, `pnpm build` runs once and `E2E_BUILD=0 pnpm test:e2e` reuses that exact artifact. It covers mobile routing, unavailable states, accessibility, and the absence of a backend request path. It never uses production funds.
+The suite builds and serves the static export with empty wallet credentials. In CI, `pnpm build` runs once and `E2E_BUILD=0 pnpm test:e2e` reuses that exact artifact. It covers browser entry, mobile and Telegram-sized routing, unavailable states, accessibility, and the absence of a backend request path. It never uses production funds.
 
 The deterministic stress harness is opt-in:
 

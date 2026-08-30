@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * The single Privy boundary for the Mini App.
+ * The single Privy boundary for the web and Telegram app.
  *
  * Privy is deliberately configured as a client-side wallet and signing
  * provider. FxAeon never receives a private key, authorization key, session

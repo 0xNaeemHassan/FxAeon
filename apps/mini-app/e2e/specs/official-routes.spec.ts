@@ -35,12 +35,27 @@ test.describe("official f(x) client routes", () => {
   }
 });
 
-test("landing page describes the official scope and remains backend-free", async ({ page, requests }) => {
-  await page.goto("/", { waitUntil: "domcontentloaded" });
-  await expect(page.locator("main")).toBeVisible();
-  await expect(page.locator("body")).toContainText(/f\(x\)|FxAeon/i);
-  await expect(page.locator("body")).not.toContainText(/DCA|take[- ]?profit|stop[- ]?loss|whale|arbitrage|copy trading/i);
-  assertNoBackendRequests(requests);
+test.describe("browser entry", () => {
+  test.use({ telegram: false });
+
+  test("landing page describes the official scope and remains backend-free", async ({ page, requests }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("main")).toBeVisible();
+    await expect(page.locator("body")).toContainText(/f\(x\)|FxAeon/i);
+    await expect(page.getByRole("link", { name: /launch web app/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: /open in telegram/i })).toBeVisible();
+    await expect(page.locator("body")).not.toContainText(/DCA|take[- ]?profit|stop[- ]?loss|whale|arbitrage|copy trading/i);
+    assertNoBackendRequests(requests);
+  });
+
+  test("plain browser users can enter the app without Telegram", async ({ page, requests }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.getByRole("link", { name: /launch web app/i }).click();
+    await expect(page).toHaveURL(/\/portfolio\/?$/);
+    await expect(page.getByRole("heading", { name: /portfolio/i })).toBeVisible();
+    await expect(page.locator("body")).not.toContainText(/runs inside Telegram|open the .*Mini App from Telegram to continue/i);
+    assertNoBackendRequests(requests);
+  });
 });
 
 test.describe("Telegram bridge availability", () => {
@@ -50,6 +65,7 @@ test.describe("Telegram bridge availability", () => {
     await page.route("**/telegram-web-app.js", (route) => route.abort("failed"));
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("link", { name: /open.*telegram/i })).toBeVisible({ timeout: 3_000 });
+    await expect(page.getByRole("link", { name: /launch web app/i })).toBeVisible();
     await expect(page.locator("body")).not.toContainText(/Loading live protocol state/i);
     assertNoBackendRequests(requests);
   });
@@ -59,6 +75,7 @@ test.describe("Telegram bridge availability", () => {
     await page.goto("/#tgWebAppData=query_id%3Dtest&tgWebAppVersion=8.0&tgWebAppPlatform=tdesktop", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: /Telegram bridge unavailable/i })).toBeVisible({ timeout: 7_000 });
     await expect(page.getByRole("button", { name: /Reload FxAeon/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Continue in browser/i })).toBeVisible();
     assertNoBackendRequests(requests);
   });
 
@@ -68,6 +85,7 @@ test.describe("Telegram bridge availability", () => {
     await expect(page.getByRole("heading", { name: /Telegram bridge unavailable/i })).toBeVisible({ timeout: 7_000 });
     await expect(page.locator("body")).not.toContainText(/Wallet service unavailable/i);
     await expect(page.getByRole("button", { name: /Reload FxAeon/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Continue in browser/i })).toBeVisible();
     assertNoBackendRequests(requests);
   });
 });

@@ -44,6 +44,7 @@ function PrivyLoginFlow() {
   const [phase, setPhase] = useState<Phase>('intro');
   const [error, setError] = useState('');
   const phaseHeadingRef = useRef<HTMLHeadingElement>(null);
+  const telegramContext = isTMA();
 
   const embeddedWallet = useMemo(
     () => wallets.find((wallet) => wallet.walletClientType === 'privy' || wallet.walletClientType === 'privy-v2'),
@@ -241,15 +242,19 @@ function PrivyLoginFlow() {
             {t('loginCard.signIn')}
           </h1>
           <p className="mt-2 text-center text-[14px] leading-relaxed text-mut">
-            Continue with Telegram, email, or a wallet you already use.
+            {telegramContext
+              ? 'Continue with Telegram, email, or a wallet you already use.'
+              : 'Continue with email, a wallet you already use, or Telegram.'}
           </p>
           <div className="mt-6 flex flex-col gap-2.5">
-            <Button onClick={startTelegramLogin} loading={busy}>
-              {!busy && <Send className="h-[18px] w-[18px]" strokeWidth={2} />}
-              {t('loginCard.telegram')}
-            </Button>
-            <p className="pt-1 text-center text-[13px] font-medium text-mut">Other ways to continue</p>
-            <Button variant="ghost" onClick={startEmailLogin} disabled={busy}>
+            {telegramContext && (
+              <Button onClick={startTelegramLogin} loading={busy}>
+                {!busy && <Send className="h-[18px] w-[18px]" strokeWidth={2} />}
+                {t('loginCard.telegram')}
+              </Button>
+            )}
+            {telegramContext && <p className="pt-1 text-center text-[13px] font-medium text-mut">Other ways to continue</p>}
+            <Button variant={telegramContext ? 'ghost' : 'primary'} onClick={startEmailLogin} disabled={busy}>
               <Mail className="h-[18px] w-[18px] text-mint" strokeWidth={2} />
               {t('loginCard.email')}
             </Button>
@@ -257,6 +262,15 @@ function PrivyLoginFlow() {
               <Wallet className="h-[18px] w-[18px] text-mint" strokeWidth={2} />
               {t('loginCard.wallet')}
             </Button>
+            {!telegramContext && (
+              <>
+                <p className="pt-1 text-center text-[13px] font-medium text-mut">Another way to continue</p>
+                <Button variant="ghost" onClick={startTelegramLogin} loading={busy}>
+                  {!busy && <Send className="h-[18px] w-[18px] text-mint" strokeWidth={2} />}
+                  {t('loginCard.telegram')}
+                </Button>
+              </>
+            )}
           </div>
           {phase === 'error' && (
             <Card className="mt-4 border-[rgba(255,194,75,0.35)]">

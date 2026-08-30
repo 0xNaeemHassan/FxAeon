@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
-/** Browser contract for the client-first Telegram Mini App.
+/** Browser contract for the client-first web and Telegram app.
  *
  * The test build intentionally has no Privy app ID, RPC URL, or FxAeon API
  * URL. Tests therefore exercise routing, unavailable states, accessibility,
