@@ -51,10 +51,48 @@ export interface TgWebApp {
   };
 }
 
+function locationHasTelegramLaunchParams(): boolean {
+  if (typeof window === 'undefined') return false;
+  const locationValue = `${window.location.search}&${window.location.hash}`;
+  return /(?:^|[?&#])tgWebApp(?:Data|Version|Platform|ThemeParams)=/i.test(locationValue);
+}
+
+// Capture the launch marker before client navigation or an authentication SDK
+// can consume/replace the initial hash. This is only an availability hint;
+// signed WebApp.initData remains the authentication authority.
+let initialTelegramLaunchSignal = locationHasTelegramLaunchParams();
+
+/** True when this document was launched with Telegram Web App parameters. */
+export function hasTelegramLaunchSignal(): boolean {
+  if (locationHasTelegramLaunchParams()) initialTelegramLaunchSignal = true;
+  return initialTelegramLaunchSignal;
+}
+
 /** The WebApp object, or null outside Telegram / during SSR. */
 export function getWebApp(): TgWebApp | null {
   if (typeof window === 'undefined') return null;
   return (window as any).Telegram?.WebApp ?? null;
+}
+
+/**
+ * Wait a bounded time for Telegram's asynchronously loaded WebApp bridge.
+ * This is never authentication proof; it only prevents a slow/failed bridge
+ * request from leaving the Mini App in an indefinite loading state.
+ */
+export async function waitForTelegramWebApp(timeoutMs = 5_000): Promise<TgWebApp | null> {
+  const available = getWebApp();
+  if (available || typeof window === 'undefined' || timeoutMs <= 0) return available;
+
+  return new Promise((resolve) => {
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      const webApp = getWebApp();
+      if (webApp || Date.now() - startedAt >= timeoutMs) {
+        window.clearInterval(timer);
+        resolve(webApp);
+      }
+    }, 100);
+  });
 }
 
 /**

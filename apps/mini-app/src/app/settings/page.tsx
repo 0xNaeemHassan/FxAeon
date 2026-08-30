@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { Check, Palette, ShieldCheck, Sliders } from 'lucide-react';
-import { AppShell, Button, Card, SectionTitle, Skeleton } from '@/components/ui';
+import { Check, Palette, Sliders } from 'lucide-react';
+import { AppShell, Button, SectionTitle, Skeleton } from '@/components/ui';
 import { useLocale } from '@/lib/i18n';
 import { THEMES, applyTheme, type ThemeId } from '@/lib/theme';
 import { haptic } from '@/lib/telegram';
@@ -19,6 +19,12 @@ const LogoutSection = dynamic(() => import('@/components/LogoutSection'), {
 });
 
 const SLIPPAGE_PRESETS = [10, 50, 100, 200] as const;
+const THEME_LABELS: Record<ThemeId, string> = {
+  violet: 'Violet',
+  matrix: 'Green',
+  neon: 'Magenta',
+  titanium: 'Slate',
+};
 type SettingsV1 = {
   slippageBps: number;
   theme: ThemeId;
@@ -80,17 +86,9 @@ export default function SettingsPage() {
   if (!mounted) return <AppShell title={t('settings.title')}>{null}</AppShell>;
 
   return (
-    <AppShell title={t('settings.title')} subtitle="Wallet controls and preferences stay on this device.">
-      <div className="stagger flex flex-col">
+    <AppShell title={t('settings.title')} subtitle="Wallet and preferences">
+      <div className="flex flex-col">
         <WalletSection />
-
-        <SectionTitle>
-          <span className="flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" /> Wallet authority</span>
-        </SectionTitle>
-        <Card className="border-[rgba(139,109,255,.22)] bg-[rgba(139,109,255,.06)]">
-          <p className="text-[13px] font-medium">You approve every transaction</p>
-          <p className="mt-1 text-[12px] leading-relaxed text-mut">FxAeon does not keep a session signer or execute trades in the background. Each SDK transaction opens your wallet confirmation on the selected chain.</p>
-        </Card>
 
         <SectionTitle>
           <span className="flex items-center gap-1.5"><Sliders className="h-3.5 w-3.5" aria-hidden="true" /> {t('settings.maxSlippage')}</span>
@@ -101,7 +99,6 @@ export default function SettingsPage() {
           options={SLIPPAGE_PRESETS.map((bps) => ({ value: bps, label: `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 1)}%` }))}
           onChange={(value) => update('slippageBps', value)}
         />
-        <p className="mt-2 px-1 text-[11px] leading-relaxed text-mut">This is a client preference passed to the official SDK. Protocol quotes and transaction data remain authoritative.</p>
 
         <SectionTitle>
           <span className="flex items-center gap-1.5"><Palette className="h-3.5 w-3.5" aria-hidden="true" /> Appearance</span>
@@ -116,21 +113,14 @@ export default function SettingsPage() {
                 type="button"
                 aria-pressed={active}
                 onClick={() => update('theme', themeKey)}
-                className={`flex min-h-[74px] flex-col rounded-2xl border p-3 text-left transition-colors ${active ? 'border-[var(--mint)] bg-[var(--mint-dim)]' : 'border-[var(--line)] bg-[var(--surface)]'}`}
+                className={`flex min-h-14 items-center justify-between rounded-2xl border p-3 text-left transition-colors ${active ? 'border-[var(--mint)] bg-[var(--mint-dim)]' : 'border-[var(--line)] bg-[var(--surface)]'}`}
               >
-                <span className="flex items-center justify-between text-[13px] font-semibold"><span>{theme.name}</span><span className="h-3.5 w-3.5 rounded-full border border-white/20" style={{ backgroundColor: theme.accent }} /></span>
-                <span className="mt-1 text-[10.5px] text-mut">{theme.subtitle}</span>
+                <span className="text-[13.5px] font-medium">{THEME_LABELS[themeKey]}</span>
+                <span className="h-3.5 w-3.5 rounded-full border border-white/20" style={{ backgroundColor: theme.accent }} aria-hidden="true" />
               </button>
             );
           })}
         </div>
-
-        <Card className="mt-7 border-[rgba(255,194,102,.22)]">
-          <div className="flex items-start gap-2.5">
-            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-mint" aria-hidden="true" />
-            <p className="text-[11.5px] leading-relaxed text-mut">Local preferences are convenience only. They never authorize a transaction or replace blockchain, Privy, or SDK state.</p>
-          </div>
-        </Card>
 
         <div className="mt-6">
           <Button onClick={save}>

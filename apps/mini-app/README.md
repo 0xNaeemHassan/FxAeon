@@ -1,11 +1,8 @@
 # FxAeon Mini App
 
-FxAeon is the official f(x) SDK experience wrapped in a polished,
-Telegram-native interface. This package is a Next.js 15 static export for the
-Telegram WebView. Reads, transaction planning, simulation, and explicit user
-signing happen in the browser; FxAeon has no API server or delegated signer.
+This package is the official f(x) SDK experience wrapped in a Telegram-native interface. It is a Next.js 15 static export for the Telegram WebView. Reads, transaction planning, simulation, and explicit wallet signing happen in the browser; there is no FxAeon API server or delegated signer.
 
-## Develop and verify
+## Commands
 
 Run workspace commands from the repository root:
 
@@ -15,27 +12,23 @@ pnpm verify
 pnpm typecheck
 pnpm lint
 pnpm test
+pnpm test:chaos
 pnpm build
 pnpm check:bundle
 pnpm test:e2e
 ```
 
-Production output is `apps/mini-app/dist/`. Development output is kept in
-`apps/mini-app/.next/`.
+From this directory, the package-level equivalents are available through its `package.json` scripts.
 
-## Build-time environment
+## Environment
 
-Every `NEXT_PUBLIC_*` value is exposed in the browser bundle and fixed at build
-time. The supported values are documented in
-[`apps/mini-app/.env.example`](.env.example). They contain no signing secret.
+Every `NEXT_PUBLIC_*` value is exposed in the browser bundle and fixed at build time. The supported variables are documented in [`.env.example`](.env.example); none is a signing secret. Configure separate, domain-restricted Ethereum and Base RPC endpoints and the allowed Privy origins before a real-wallet test.
 
-The app uses exactly Ethereum and Base. Alchemy keys must be domain-restricted
-and capped. Privy must be configured for the deployed origins and visible
-wallet confirmation UIs.
+The app supports exactly Ethereum (chain ID `1`) and Base (chain ID `8453`). Unavailable provider or wallet data is shown as unavailable rather than inferred.
 
-## Static deployment
+## Output and deployment
 
-Cloudflare Pages serves `apps/mini-app/dist/` as static assets. The root
-workflow runs frozen installation and the complete `pnpm verify` gate before
-deployment. No Cloudflare Function, Worker, Render service, Docker container,
-bot webhook, database, or Redis service is needed.
+- Development output: `apps/mini-app/.next/`
+- Production output: `apps/mini-app/dist/`
+
+Cloudflare Pages serves the static `dist/` directory. The root workflow runs a frozen installation, validates the production environment, and completes the release verification gate before deployment. No Cloudflare Function, Worker, container, bot webhook, database, or Redis service is required.

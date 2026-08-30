@@ -2,11 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowDownRight, ArrowUpRight, ShieldCheck, WalletCards } from 'lucide-react';
 import { AppShell, Card } from '@/components/ui';
 import { ActionReview } from '@/components/ActionReview';
 import WalletConnectCTA from '@/components/WalletConnectCTA';
-import { AmountField, InfoNote, LeverageField, Segmented, SlippageField, TokenSelect } from '@/components/ProtocolForm';
+import { AmountField, LeverageField, Segmented, SlippageField, TokenSelect } from '@/components/ProtocolForm';
 import { MAX_FX_SLIPPAGE_PERCENT, planIncreasePosition } from '@/lib/fx';
 import { usePrivyWallet } from '@/lib/wallet';
 import { positiveDecimal } from '@/lib/amount';
@@ -60,45 +59,37 @@ export default function TradePage() {
   }, [leverage, market, side, slippage, token, validAmount, wallet.address]);
 
   return (
-    <AppShell title="Trade" subtitle="Open a long or short position through the official f(x) SDK.">
-      <div className="stagger flex flex-col gap-3.5">
-        <Card glow className="p-5">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-mint">SDK position builder</p>
-              <h2 className="text-display mt-2 text-[25px] font-semibold">Trade with live protocol routes</h2>
-              <p className="mt-1 text-[11px] leading-relaxed text-mut">No synthetic prices, PnL, liquidation estimates, or off-chain quotes are used here.</p>
-            </div>
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--mint-dim)] text-mint"><ShieldCheck className="h-5 w-5" /></span>
-          </div>
-        </Card>
+    <AppShell title="Trade">
+      <div className="flex flex-col gap-3">
+        <div className="grid grid-cols-2 rounded-xl border border-[var(--line)] bg-[rgba(0,0,0,.18)] p-1" aria-label="Trade views">
+          <span aria-current="page" className="flex min-h-11 items-center justify-center rounded-lg bg-[var(--mint-dim)] px-3 text-[13px] font-semibold text-[var(--text)]">New position</span>
+          <Link href="/positions" className="glass-press flex min-h-11 items-center justify-center rounded-lg px-3 text-[13px] font-semibold text-mut">Positions</Link>
+        </div>
 
-        <Segmented value={market} onChange={(next) => { setMarket(next); setToken(next === 'ETH' ? 'ETH' : 'WBTC'); }} ariaLabel="Market" options={[{ value: 'ETH', label: 'ETH market', sub: 'Long / short' }, { value: 'BTC', label: 'BTC market', sub: 'Long / short' }]} />
+        <Segmented value={market} onChange={(next) => { setMarket(next); setToken(next === 'ETH' ? 'ETH' : 'WBTC'); }} ariaLabel="Market" options={[{ value: 'ETH', label: 'ETH' }, { value: 'BTC', label: 'BTC' }]} />
         <Segmented value={side} onChange={setSide} ariaLabel="Position side" options={[{ value: 'long', label: 'Long', sub: 'Price rises' }, { value: 'short', label: 'Short', sub: 'Price falls' }]} />
 
         <Card className="p-4">
-          <div className="mb-4 flex items-center gap-3">
-            <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${side === 'long' ? 'bg-[var(--success-dim)] text-success' : 'bg-[var(--danger-dim)] text-danger'}`}>
-              {side === 'long' ? <ArrowUpRight className="h-5 w-5" /> : <ArrowDownRight className="h-5 w-5" />}
-            </span>
-            <div><h2 className="text-[14px] font-semibold">Open {market} {side}</h2><p className="mt-0.5 text-[10.5px] text-mut">The SDK chooses and returns the available execution routes.</p></div>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[12px] text-mut">New position</p>
+              <h2 className="mt-0.5 text-[16px] font-semibold">{market} {side === 'long' ? 'Long' : 'Short'}</h2>
+            </div>
+            <span className={`rounded-lg px-2.5 py-1 text-[12px] font-semibold ${side === 'long' ? 'bg-[var(--success-dim)] text-success' : 'bg-[var(--danger-dim)] text-danger'}`}>{side === 'long' ? 'Long' : 'Short'}</span>
           </div>
           <div className="flex flex-col gap-4">
             <TokenSelect label="Input asset" value={token} options={tokenOptions} onChange={setToken} />
-            <AmountField label="Input amount" symbol={token} value={amount} onChange={setAmount} maxDecimals={tokenDecimals(token)} />
+            <AmountField label="Amount" symbol={token} value={amount} onChange={setAmount} maxDecimals={tokenDecimals(token)} />
             <LeverageField value={leverage} onChange={setLeverage} />
-            <SlippageField value={slippage} onChange={setSlippage} max={MAX_FX_SLIPPAGE_PERCENT} />
-            <InfoNote>Every route is simulated before review. You approve each SDK transaction in Privy, in the exact order returned by the protocol.</InfoNote>
+            <details className="group rounded-xl border border-[var(--line)] px-3">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-[13px] font-semibold [&::-webkit-details-marker]:hidden">Advanced <span aria-hidden="true" className="text-mut transition-transform group-open:rotate-180">⌄</span></summary>
+              <div className="border-t border-[var(--line)] py-3"><SlippageField value={slippage} onChange={setSlippage} max={MAX_FX_SLIPPAGE_PERCENT} /></div>
+            </details>
           </div>
         </Card>
 
-        {!wallet.address && <WalletConnectCTA ready={wallet.ready} authenticated={wallet.authenticated} body="Choose or connect the wallet that will authorize every SDK transaction. Nothing is signed until you approve it in Privy." />}
-        <ActionReview planBuilder={planBuilder} label={`Review open ${market} ${side}`} operationLabel={`Open ${market} ${side}`} onComplete={async () => { if (wallet.address) await readAllPositions(wallet.address); }} />
-
-        <div className="grid grid-cols-2 gap-2.5">
-          <Link href="/positions" className="glass glass-press flex min-h-16 items-center gap-2.5 p-3 text-[11px] font-semibold"><WalletCards className="h-4 w-4 text-mint" aria-hidden="true" /> Manage positions</Link>
-          <Link href="/borrow" className="glass glass-press flex min-h-16 items-center gap-2.5 p-3 text-[11px] font-semibold"><ShieldCheck className="h-4 w-4 text-mint" aria-hidden="true" /> Mint fxUSD</Link>
-        </div>
+        {!wallet.address && <WalletConnectCTA ready={wallet.ready} authenticated={wallet.authenticated} body="Connect a wallet to review this trade." />}
+        <ActionReview planBuilder={planBuilder} label={`Review ${market} ${side === 'long' ? 'Long' : 'Short'}`} operationLabel={`Open ${market} ${side}`} onComplete={async () => { if (wallet.address) await readAllPositions(wallet.address); }} />
       </div>
     </AppShell>
   );

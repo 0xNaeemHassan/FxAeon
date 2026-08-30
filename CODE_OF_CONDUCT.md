@@ -1,27 +1,31 @@
 # Code of Conduct
 
-## Our Pledge
+## Our commitment
 
-We pledge to make participation in our project a harassment-free experience for everyone, regardless of age, body size, disability, ethnicity, gender identity, level of experience, nationality, personal appearance, race, religion, or sexual identity.
+We want FxAeon to be a welcoming, inclusive, and technically rigorous project. Participation is open to people of all backgrounds and experience levels. Treat contributors, reviewers, users, and maintainers with dignity and respect.
 
-## Our Standards
+## Expected behavior
 
-**Positive behavior:**
-- Using welcoming and inclusive language
-- Being respectful of differing viewpoints
-- Gracefully accepting constructive criticism
-- Focusing on what is best for the community
+- Use welcoming, inclusive language.
+- Give and receive feedback constructively.
+- Explain technical disagreements with evidence and assume good intent.
+- Respect different viewpoints, identities, and levels of experience.
+- Protect other people's privacy and never request or publish credentials, private keys, or wallet data.
 
-**Unacceptable behavior:**
-- Trolling, insulting/derogatory comments, personal attacks
-- Public or private harassment
-- Publishing others' private information without permission
-- Other conduct which could reasonably be considered inappropriate
+## Unacceptable behavior
 
-## Enforcement
-
-Instances of abusive behavior may be reported by contacting the project team. All complaints will be reviewed and investigated promptly.
+- Harassment, discrimination, threats, intimidation, or personal attacks.
+- Trolling, deliberate disruption, or sustained bad-faith participation.
+- Publishing private information without permission.
+- Social engineering, credential solicitation, or attempts to move financial activity outside the documented wallet flow.
+- Any conduct that would reasonably make a project space unsafe or unwelcoming.
 
 ## Scope
 
-This Code of Conduct applies within project spaces and in public spaces when an individual is representing the project.
+This policy applies in repository issues, pull requests, discussions, project-controlled channels, and public spaces when someone is representing FxAeon.
+
+## Enforcement
+
+Report a concern privately through the repository's **Security** tab. Maintainers will review reports promptly, keep information confidential where practical, and take proportionate action, including moderation, removal of content, or restricting participation. Retaliation against a good-faith report is not acceptable.
+
+For security vulnerabilities, follow [SECURITY.md](SECURITY.md) and do not include exploitable secrets in public project spaces.

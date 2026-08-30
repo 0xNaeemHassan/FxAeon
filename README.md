@@ -1,8 +1,8 @@
 # FxAeon
 
-FxAeon is the official f(x) SDK experience in a polished Telegram Mini App. It is a static, client-first interface: the SDK reads protocol state and plans transactions, Privy asks the user to approve every transaction, and Ethereum/Base remain the source of truth.
+FxAeon is the official f(x) SDK experience delivered as a polished Telegram Mini App. It is a static, client-first interface: the SDK reads protocol state and prepares transaction plans, Privy asks the connected wallet to approve each transaction, and Ethereum/Base remain the source of truth.
 
-FxAeon is deliberately not a separate trading platform. It has no automation engine, delegated signer, bot runtime, backend API, database, Redis, price oracle, custom indexer, or off-chain portfolio ledger.
+FxAeon is not a separate trading platform. The repository contains no application API, bot runtime, delegated signer, automation engine, database, Redis service, custom indexer, price oracle, or off-chain portfolio ledger.
 
 ## Architecture
 
@@ -12,61 +12,71 @@ Telegram launcher
        ▼
 Cloudflare Pages static Mini App
        │
-       ├── Privy: authentication, selected wallet, explicit prompts
+       ├── Privy: authentication, wallet selection, explicit prompts
        ├── @aladdindao/fx-sdk: official reads and transaction plans
-       └── Viem: Alchemy RPC, simulation, receipts, post-confirm reads
+       └── Viem: Alchemy RPC, simulation, receipts, post-confirmation reads
                     │
                     ▼
           Ethereum / Base / LayerZero
 ```
 
-The active product exposes exactly the 15 methods locked in [`fx-scope.lock.json`](./fx-scope.lock.json): position reads and management, deposit/mint, repay/withdraw, Ethereum↔Base bridge planning, and the complete fxSAVE read/deposit/withdraw/claim surface.
+The active product exposes exactly the 15 methods locked in [`fx-scope.lock.json`](fx-scope.lock.json): position reads and management, deposit/mint, repay/withdraw, Ethereum↔Base bridge planning, and the complete fxSAVE read/deposit/withdraw/claim surface.
 
-## Run locally
+## Quick start
 
-Requirements: Node 22 and pnpm 11.19.0.
+Requirements: Node.js 22 and pnpm 11.19.0.
 
 ```bash
-cp apps/mini-app/.env.example apps/mini-app/.env.local
-pnpm install
+corepack enable
+corepack prepare pnpm@11.19.0 --activate
+pnpm install --frozen-lockfile
+Copy-Item apps/mini-app/.env.example apps/mini-app/.env.local
 pnpm dev
 ```
 
-Configure a public Privy app ID and domain-restricted Alchemy Ethereum/Base browser endpoints. Every `NEXT_PUBLIC_*` value is shipped to the browser; never place a Telegram bot token, Privy secret, authorization key, or unrestricted credential there.
+Configure a public Privy application ID and domain-restricted Ethereum and Base browser RPC endpoints. Every `NEXT_PUBLIC_*` value is embedded in the browser bundle; never put a Telegram bot token, Privy secret, authorization key, private key, or unrestricted provider credential in the client environment.
 
-## Verify
+For the full setup and deployment procedure, see [`SETUP.md`](SETUP.md).
+
+## Verification
 
 ```bash
-pnpm verify:scope
-pnpm lint
-pnpm typecheck
-pnpm test
+pnpm verify
 pnpm test:e2e
-pnpm build
-pnpm check:bundle
 ```
 
-`verify:scope` fails if the installed SDK surface differs from the 15-method contract, an unsupported route returns, or active Mini App source regains backend/delegated-signing dependencies.
+The aggregate gate verifies the locked scope, lint, types, unit tests, production dependency audit, static build, bundle budget, and built-artifact end-to-end tests. `pnpm test:chaos` adds deterministic route and runner mutation campaigns. `pnpm test:anvil` is an explicit, opt-in local-fork test and never consumes credentials from the repository.
+
+`verify:production-env` is the deployment-only configuration gate. It rejects missing or placeholder values, unexpected RPC hosts or URL shapes, malformed Telegram launcher URLs, and malformed Cloudflare account IDs before a production build is deployed.
 
 ## Transaction safety
 
-For every SDK transaction route FxAeon:
+For every SDK transaction route, FxAeon:
 
 1. binds the plan to the selected Privy address and expected chain;
-2. validates transaction shape, target, selector, value, approvals, and nonce;
+2. validates transaction shape, target, selector, value, approvals, nonce, and order;
 3. simulates the ordered calls before exposing the approval action;
 4. opens a visible wallet confirmation for each step;
 5. waits for a successful receipt before sending the next step;
-6. stops immediately on rejection, revert, timeout, or nonce drift;
+6. stops immediately on rejection, revert, timeout, or nonce drift; and
 7. waits one additional block and rereads authoritative state.
 
-Local storage contains preferences plus a non-authoritative recovery journal of submitted hashes and the minimum bridge facts needed to re-run LayerZero GUID verification after a reload. Every fact is revalidated against chain receipts/events; local storage never proves a balance, permission, receipt, or bridge delivery.
+Local storage contains preferences plus a non-authoritative recovery journal of submitted hashes and the minimum bridge facts needed to re-run LayerZero GUID verification after a reload. Every fact is revalidated against chain receipts and events; local storage never proves a balance, permission, receipt, or bridge delivery.
 
 ## Deployment
 
-The production artifact is `apps/mini-app/dist`, a pure static export. The Cloudflare workflow is manual and uses a protected `production` environment. It creates no Worker, Function, server, database, queue, or scheduled process.
+The release artifact is `apps/mini-app/dist`, a pure static export. The manual Cloudflare Pages workflow uses a protected production environment, runs the complete verification gate, and deploys only that directory. It creates no Worker, Function, server, database, queue, or scheduled process.
 
-See [`docs/architecture.md`](./docs/architecture.md), [`docs/security.md`](./docs/security.md), and [`docs/testing.md`](./docs/testing.md).
+## Documentation
+
+- [`SETUP.md`](SETUP.md) — local development and static deployment
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — contribution rules and review checklist
+- [`docs/architecture.md`](docs/architecture.md) — runtime boundaries and state ownership
+- [`docs/sdk-scope.md`](docs/sdk-scope.md) — the pinned 15-method capability contract
+- [`docs/security.md`](docs/security.md) — controls, threat model, and residual trust
+- [`docs/testing.md`](docs/testing.md) — release gates, fork tests, and acceptance coverage
+- [`docs/roadmap.md`](docs/roadmap.md) — release posture and deliberately deferred work
+- [`SECURITY.md`](SECURITY.md) — private vulnerability reporting
 
 ## License
 

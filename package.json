@@ -10,12 +10,20 @@
     "lint": "eslint apps/mini-app/src",
     "lint:fix": "eslint apps/mini-app/src --fix",
     "test": "pnpm --dir apps/mini-app test",
+    "test:chaos": "pnpm --dir apps/mini-app test:chaos",
+    "test:anvil": "node scripts/run_anvil_tests.mjs",
+    "test:stress": "pnpm test:chaos && pnpm test:anvil",
     "test:e2e": "pnpm --dir apps/mini-app test:e2e",
     "typecheck": "pnpm --dir apps/mini-app typecheck",
+    "verify:production-env": "node scripts/validate_production_env.mjs",
     "verify:scope": "node scripts/verify_fx_scope.mjs",
     "check:bundle": "node scripts/check_bundle_size.mjs",
-    "verify": "pnpm verify:scope && pnpm lint && pnpm typecheck && pnpm test && pnpm audit --prod --audit-level=high && pnpm build && pnpm check:bundle && node scripts/run_built_e2e.mjs",
+    "verify": "pnpm verify:scope && pnpm lint && pnpm typecheck && pnpm test && pnpm test:chaos && pnpm audit --prod --audit-level=high && pnpm build && pnpm check:bundle && node scripts/run_built_e2e.mjs",
     "audit": "pnpm audit --prod --audit-level=high"
+  },
+  "engines": {
+    "node": "22.x",
+    "pnpm": "11.19.0"
   },
   "devDependencies": {
     "@eslint/js": "9.39.4",

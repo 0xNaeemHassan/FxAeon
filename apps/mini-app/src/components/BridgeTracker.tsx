@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getEidByChainId } from '@aladdindao/fx-sdk';
 import { type Address, type Hex } from 'viem';
-import { CheckCircle2, Clock3, ExternalLink, Network, Radio, RefreshCw, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock3, ExternalLink, LoaderCircle, Network, RefreshCw, XCircle } from 'lucide-react';
 import { assertPublicClientChain, getPublicClient } from '@/lib/fx';
 import { userSafeError } from '@/lib/errors';
 import {
@@ -125,10 +125,30 @@ export function BridgeTracker({
     destinationCursorRef.current = null;
   }, [verificationContextKey]);
 
+  // A Telegram WebView may be backgrounded while LayerZero is delivering.
+  // Pause the bounded poll loop while hidden and revalidate immediately when
+  // the user returns or the network becomes reachable again.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const resume = () => {
+      if (document.visibilityState === 'visible' || navigator.onLine) {
+        setRetrySequence((value) => value + 1);
+      }
+    };
+    document.addEventListener('visibilitychange', resume);
+    window.addEventListener('online', resume);
+    window.addEventListener('focus', resume);
+    return () => {
+      document.removeEventListener('visibilitychange', resume);
+      window.removeEventListener('online', resume);
+      window.removeEventListener('focus', resume);
+    };
+  }, []);
+
   useEffect(() => {
     if (!sourceStatusConfirmed || !sourceTxHash || (!autoStart && !manualStarted)) return;
     if (!sourceOftAddress || !destinationOftAddress || !recipient || !sourceSender || amountLD === undefined || minAmountLD === undefined || destinationBaselineBlock === undefined) {
-      setVerificationError('Bridge verification context is incomplete. Delivery will not be marked from a source hash alone.');
+      setVerificationError('Required recovery details are missing, so destination delivery cannot be verified from this hash alone.');
       return;
     }
 
@@ -249,10 +269,12 @@ export function BridgeTracker({
         }
         return;
       } catch (cause) {
-        if (!cancelled) setVerificationError(userSafeError(cause, 'LayerZero delivery is not confirmed yet. Check again shortly.'));
+        if (!cancelled) setVerificationError(userSafeError(cause, 'Destination delivery is not verified yet. Check again shortly.'));
       }
       attempts += 1;
-      if (!cancelled && attempts < maxAttempts) window.setTimeout(verify, pollMs);
+      if (!cancelled && attempts < maxAttempts) {
+        if (document.visibilityState === 'visible') window.setTimeout(verify, pollMs);
+      }
       else if (!cancelled) setCanRetry(true);
     };
 
@@ -269,12 +291,13 @@ export function BridgeTracker({
   const sourceDone = Boolean(sourceTxHash) && effectiveStatus !== 'pending' && effectiveStatus !== 'failed';
   const delivered = effectiveStatus === 'destination_verified';
   const failed = effectiveStatus === 'failed';
+  const submitted = Boolean(sourceTxHash);
   const sourceExplorer = sourceTxHash ? `${explorerFor(sourceChain)}/tx/${sourceTxHash}` : null;
   const destinationExplorer = detectedDestinationTxHash ? `${explorerFor(destinationChain)}/tx/${detectedDestinationTxHash}` : null;
   const layerzeroScan = sourceTxHash ? `https://layerzeroscan.com/tx/${sourceTxHash}` : null;
 
   return (
-    <section aria-label="Bridge status" aria-live="polite" aria-atomic="false" className={`flex flex-col rounded-2xl border border-[var(--line-strong)] bg-[rgba(18,18,29,0.7)] p-4 ${className}`}>
+    <section aria-label="Bridge status" aria-live="polite" aria-atomic="false" className={`flex flex-col rounded-xl border border-[var(--line-strong)] bg-[rgba(18,18,29,0.7)] p-4 ${className}`}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-[var(--mint-dim)] text-mint"><Network aria-hidden="true" className="h-4 w-4" /></span>
@@ -283,31 +306,45 @@ export function BridgeTracker({
             <p className="text-[10px] text-mut">{amount ? `${amount} ${token} · ` : ''}{sourceChain} → {destinationChain}</p>
           </div>
         </div>
-        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9.5px] font-bold ${delivered ? 'bg-[var(--success-dim)] text-success' : failed ? 'bg-[var(--danger-dim)] text-danger' : 'bg-[var(--mint-dim)] text-mint'}`}>
-          {delivered ? 'Verified' : failed ? 'Failed' : sourceDone ? 'Source confirmed' : 'Pending'}
+        <span className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10.5px] font-semibold ${delivered ? 'bg-[var(--success-dim)] text-success' : failed ? 'bg-[var(--danger-dim)] text-danger' : sourceDone ? 'bg-[var(--warn-dim)] text-warn' : 'bg-[var(--mint-dim)] text-mint'}`}>
+          {delivered ? 'Received' : failed ? 'Reverted' : sourceDone ? 'In transit' : submitted ? 'Submitted' : 'Not submitted'}
         </span>
       </div>
 
       <div className="mt-4 flex flex-col gap-3">
         <TimelineRow
-          state={failed ? 'failed' : sourceDone ? 'done' : 'active'}
-          title={`${sourceChain} transaction`}
-          body={failed ? 'The source transaction did not complete.' : sourceDone ? sourceEventFound ? 'Receipt confirmed and the reviewed OFTSent event was found.' : 'Receipt confirmed; checking for the reviewed OFTSent event.' : 'Waiting for the source transaction receipt.'}
+          state={failed ? 'failed' : submitted ? 'done' : 'active'}
+          title="Submitted"
+          body={failed ? `Submitted on ${sourceChain}, but the transaction reverted.` : submitted ? `Transaction hash saved on ${sourceChain}.` : 'Waiting for the wallet to submit the transaction.'}
           action={sourceExplorer ? { label: 'Explorer', onClick: () => openLink(sourceExplorer) } : undefined}
         />
         <TimelineRow
+          state={failed ? 'failed' : sourceDone ? 'done' : submitted ? 'active' : 'pending'}
+          title="Confirmed on source"
+          body={failed ? 'The source receipt shows a revert.' : sourceDone ? sourceEventFound ? 'Source receipt and bridge message confirmed.' : 'Source receipt confirmed. Checking the bridge message.' : submitted ? 'Waiting for the source-chain receipt.' : 'Starts after submission.'}
+        />
+        <TimelineRow
           state={delivered ? 'done' : sourceDone ? 'active' : 'pending'}
-          title="LayerZero delivery"
-          body={delivered ? `The matching OFTReceived event remained canonical for ${DESTINATION_CONFIRMATIONS.toString()} destination confirmations.` : sourceDone ? verificationError ?? 'FxAeon is correlating the source OFTSent GUID with the destination OFTReceived event.' : 'Starts only after the source transaction is confirmed.'}
-          action={layerzeroScan ? { label: 'LayerZero Scan', onClick: () => openLink(layerzeroScan) } : undefined}
+          title="Waiting for destination"
+          body={delivered ? `Delivery was verified on ${destinationChain}.` : sourceDone ? `Checking ${destinationChain} for the matching delivery. No ETA is available.` : 'Starts after source confirmation.'}
+          action={layerzeroScan ? { label: 'Track', onClick: () => openLink(layerzeroScan) } : undefined}
         />
         <TimelineRow
           state={delivered ? 'done' : 'pending'}
-          title={`${destinationChain} OFTReceived`}
-          body={delivered ? `Destination delivery was verified from the canonical LayerZero V2 event after ${DESTINATION_CONFIRMATIONS.toString()} confirmations.` : 'Not verified yet. A balance increase or source hash can never claim delivery.'}
+          title="Received"
+          body={delivered ? `${amount ? `${amount} ${token}` : token} was verified at the recipient on ${destinationChain}.` : 'Not verified on the destination yet.'}
           action={destinationExplorer ? { label: 'Explorer', onClick: () => openLink(destinationExplorer) } : undefined}
         />
       </div>
+      {(verificationError || hasVerificationContext) && (
+        <details className="mt-3 border-t border-[var(--line)] pt-1">
+          <summary className="flex min-h-11 cursor-pointer items-center text-[11px] font-semibold text-mut">Verification details</summary>
+          <div className="pb-2 text-[10.5px] leading-relaxed text-mut">
+            <p>Delivery requires the matching bridge message, recipient, amount, and {DESTINATION_CONFIRMATIONS.toString()} destination confirmations.</p>
+            {verificationError && !delivered && <p className="mt-2 break-words text-[var(--mut-2)]">Last check: {verificationError}</p>}
+          </div>
+        </details>
+      )}
       {sourceDone && !delivered && !failed && (canRetry || (!autoStart && !manualStarted)) && (
         <button
           type="button"
@@ -320,7 +357,7 @@ export function BridgeTracker({
           }}
           className="button glass-press mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 text-[11px] font-semibold text-mint"
         >
-          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /> {manualStarted || canRetry ? 'Check delivery again' : 'Check delivery'}
+          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /> {manualStarted || canRetry ? 'Check destination again' : 'Check destination'}
         </button>
       )}
     </section>
@@ -343,7 +380,7 @@ function TimelineRow({
     : state === 'failed'
       ? <XCircle className="h-4 w-4" />
       : state === 'active'
-        ? <Radio className="h-3.5 w-3.5 animate-pulse" />
+        ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
         : <Clock3 className="h-3.5 w-3.5" />;
   const tone = state === 'done' ? 'bg-[var(--success-dim)] text-success' : state === 'failed' ? 'bg-[var(--danger-dim)] text-danger' : state === 'active' ? 'bg-[var(--mint-dim)] text-mint' : 'bg-[rgba(255,255,255,.05)] text-mut';
   return (

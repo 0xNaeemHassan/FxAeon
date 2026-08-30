@@ -27,43 +27,14 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Validate public build configuration
-        shell: bash
         env:
-          PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID }}
-          ETHEREUM_RPC_URL: ${{ secrets.NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL }}
-          BASE_RPC_URL: ${{ secrets.NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL }}
-          TELEGRAM_APP_URL: ${{ vars.NEXT_PUBLIC_TELEGRAM_APP_URL }}
+          NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID }}
+          NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL: ${{ secrets.NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL }}
+          NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL: ${{ secrets.NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL }}
+          NEXT_PUBLIC_TELEGRAM_APP_URL: ${{ vars.NEXT_PUBLIC_TELEGRAM_APP_URL }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          reject_placeholder() {
-            local key="$1"
-            local value="$2"
-            case "$value" in
-              *YOUR_*|*your_*|*PLACEHOLDER*|*placeholder*|*CHANGE_ME*|*change_me*|*REPLACE_ME*|*replace_me*|*EXAMPLE*|*example*)
-                echo "::error::$key contains a placeholder value"
-                return 1
-                ;;
-            esac
-          }
-          for key in PRIVY_APP_ID ETHEREUM_RPC_URL BASE_RPC_URL TELEGRAM_APP_URL; do
-            if [ -z "${!key}" ]; then
-              echo "::error::$key is required"
-              exit 1
-            fi
-            reject_placeholder "$key" "${!key}"
-          done
-          for key in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
-            if [ -z "${!key}" ]; then
-              echo "::error::$key is required"
-              exit 1
-            fi
-            reject_placeholder "$key" "${!key}"
-          done
-          case "$TELEGRAM_APP_URL" in
-            https://t.me/*) ;;
-            *) echo "::error::TELEGRAM_APP_URL must be an https://t.me/... Mini App URL"; exit 1 ;;
-          esac
+        run: pnpm verify:production-env
       - name: Run complete repository verification
         run: pnpm verify
         env:

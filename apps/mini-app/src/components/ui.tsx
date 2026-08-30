@@ -50,17 +50,12 @@ export function AppShell({
   }, [documentTitle]);
 
   return (
-    <div className={`app-shell mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-[430px] flex-col px-5 pt-[calc(env(safe-area-inset-top,0px)+1.25rem)] ${tabs ? 'pb-safe' : 'pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)]'}`}>
+    <div className={`app-shell mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-[430px] flex-col px-4 pt-[calc(env(safe-area-inset-top,0px)+1rem)] ${tabs ? 'pb-safe' : 'pb-[calc(env(safe-area-inset-bottom,0px)+1rem)]'}`}>
       <a href="#main-content" className="skip-link">Skip to main content</a>
       {title && (
-        <header className="page-header anim-fade-up mb-5">
-          <div>
-            <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-mint">
-              <span className="status-dot" aria-hidden="true" /> FxAeon
-            </div>
-            <h1 ref={headingRef} tabIndex={-1} className="text-display text-[27px] font-semibold leading-tight tracking-[-0.035em] outline-none">{title}</h1>
-            {subtitle && <p className="mt-1.5 text-[13px] leading-relaxed text-mut">{subtitle}</p>}
-          </div>
+        <header className="page-header mb-4">
+          <h1 ref={headingRef} tabIndex={-1} className="text-display text-[24px] font-semibold leading-tight outline-none">{title}</h1>
+          {subtitle && <p className="mt-1 text-[13px] leading-relaxed text-mut">{subtitle}</p>}
         </header>
       )}
       <main ref={contentRef} id="main-content" tabIndex={-1} className="flex-1 outline-none">{children}</main>
@@ -82,8 +77,8 @@ export function TabBar() {
   const t = useT();
   return (
     <nav className="pointer-events-none fixed inset-x-0 bottom-0 z-40" aria-label="Primary navigation">
-      <div className="tabbar-safe mx-auto w-full max-w-[430px] px-4 pb-3">
-        <div className="tabbar pointer-events-auto flex items-center justify-between rounded-[24px] px-1.5 py-1.5">
+      <div className="tabbar-safe mx-auto w-full max-w-[430px]">
+        <div className="tabbar pointer-events-auto flex items-center justify-between px-1 py-1">
           {TABS.map(({ href, labelKey, icon: Icon, also }) => {
             const active = pathname === href || Boolean(also?.some((prefix) => pathname.startsWith(prefix)));
             return (
@@ -92,7 +87,7 @@ export function TabBar() {
                 href={href}
                 onClick={() => haptic('selection')}
                 aria-current={active ? 'page' : undefined}
-                className={`nav-item flex min-h-14 flex-1 flex-col items-center justify-center gap-1 rounded-[16px] text-[9px] font-semibold ${
+                className={`nav-item flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 rounded-[10px] text-[11px] font-semibold leading-none ${
                   active ? 'nav-item-active text-mint' : 'text-mut'
                 }`}
               >
@@ -139,7 +134,7 @@ function buttonClasses(variant: 'primary' | 'ghost' | 'danger' | 'outline' | 'gl
           : variant === 'glass'
             ? 'astryx-card text-white hover:border-[var(--astryx-border-strong)]'
             : 'button-ghost text-[var(--text)]';
-  return `button glass-press astryx-interactive flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-[15px] disabled:cursor-not-allowed disabled:opacity-50 ${styles} ${className}`;
+  return `button glass-press astryx-interactive flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-[15px] disabled:cursor-not-allowed disabled:opacity-50 ${styles} ${className}`;
 }
 
 export const Button = forwardRef<HTMLButtonElement, {
@@ -215,10 +210,10 @@ export function Stat({
   accent?: boolean;
 }) {
   return (
-    <div className="stat-card glass glass-press flex flex-col gap-1.5 p-4">
-      <span className="text-[10px] font-semibold uppercase tracking-[0.13em] text-mut">{label}</span>
+    <div className="stat-card glass flex flex-col gap-1.5 p-4">
+      <span className="text-[11px] font-medium text-mut">{label}</span>
       <span
-        className={`text-display text-[20px] font-semibold leading-none ${accent ? 'text-gradient' : ''}`}
+        className={`text-display text-[20px] font-semibold leading-none ${accent ? 'text-mint' : ''}`}
       >
         {value}
       </span>
@@ -311,7 +306,7 @@ export function AddressChip({ address }: { address: string }) {
           haptic('error');
         }
       }}
-      className="address-chip glass glass-press inline-flex min-h-11 items-center gap-2 rounded-full px-3 py-1.5 font-mono text-[12px] text-mut"
+      className="address-chip glass glass-press inline-flex min-h-11 items-center gap-2 rounded-xl px-3 py-1.5 font-mono text-[12px] text-mut"
     >
       {short}
       {copied ? (
@@ -336,7 +331,7 @@ export function EmptyState({
 }) {
   return (
     <div className="empty-state glass anim-scale-in flex flex-col items-center gap-2 px-6 py-9 text-center">
-      <span className="empty-icon anim-float flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--mint-dim)]">
+      <span className="empty-icon flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--mint-dim)]">
         <Icon aria-hidden="true" className="h-6 w-6 text-mint" strokeWidth={1.8} />
       </span>
       <p className="mt-1 text-[15px] font-medium">{title}</p>
@@ -348,8 +343,8 @@ export function EmptyState({
 
 export function SectionTitle({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
-    <div className="mb-2.5 mt-7 flex items-center justify-between">
-      <h2 className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-mut">
+    <div className="mb-2.5 mt-6 flex items-center justify-between">
+      <h2 className="text-[14px] font-semibold text-[var(--text)]">
         {children}
       </h2>
       {right}
@@ -390,7 +385,7 @@ export function FullScreenSpinner({ asMain = false }: { asMain?: boolean } = {})
         <FxLogo size={56} />
       </div>
       <div>
-        <h1 className="text-display text-2xl font-semibold tracking-[-0.04em]">
+        <h1 className="text-display text-2xl font-semibold">
           Fx<span className="text-gradient">Aeon</span>
         </h1>
         <p className="mt-1.5 text-[12.5px] text-mut">{t('common.loading')}</p>

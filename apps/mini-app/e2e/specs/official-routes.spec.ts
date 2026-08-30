@@ -43,6 +43,35 @@ test("landing page describes the official scope and remains backend-free", async
   assertNoBackendRequests(requests);
 });
 
+test.describe("Telegram bridge availability", () => {
+  test.use({ telegram: false });
+
+  test("a failed Telegram script cannot block the plain browser landing", async ({ page, requests }) => {
+    await page.route("**/telegram-web-app.js", (route) => route.abort("failed"));
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("link", { name: /open.*telegram/i })).toBeVisible({ timeout: 3_000 });
+    await expect(page.locator("body")).not.toContainText(/Loading live protocol state/i);
+    assertNoBackendRequests(requests);
+  });
+
+  test("a Telegram launch fails visibly when its bridge never arrives", async ({ page, requests }) => {
+    await page.route("**/telegram-web-app.js", (route) => route.abort("failed"));
+    await page.goto("/#tgWebAppData=query_id%3Dtest&tgWebAppVersion=8.0&tgWebAppPlatform=tdesktop", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: /Telegram bridge unavailable/i })).toBeVisible({ timeout: 7_000 });
+    await expect(page.getByRole("button", { name: /Reload FxAeon/i })).toBeVisible();
+    assertNoBackendRequests(requests);
+  });
+
+  test("a direct Telegram protocol route also fails visibly when its bridge never arrives", async ({ page, requests }) => {
+    await page.route("**/telegram-web-app.js", (route) => route.abort("failed"));
+    await page.goto("/portfolio#tgWebAppData=query_id%3Dtest&tgWebAppVersion=8.0&tgWebAppPlatform=tdesktop", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: /Telegram bridge unavailable/i })).toBeVisible({ timeout: 7_000 });
+    await expect(page.locator("body")).not.toContainText(/Wallet service unavailable/i);
+    await expect(page.getByRole("button", { name: /Reload FxAeon/i })).toBeVisible();
+    assertNoBackendRequests(requests);
+  });
+});
+
 test("missing wallet configuration is an honest unavailable state", async ({ page, requests }) => {
   await page.goto("/login", { waitUntil: "domcontentloaded" });
   await expect(page.locator("body")).toContainText(/unavailable|not configured|connect|Telegram/i);
@@ -54,7 +83,7 @@ test("unknown routes render the scoped FxAeon recovery screen", async ({ page, r
   const response = await page.goto("/outside-official-scope", { waitUntil: "domcontentloaded" });
   expect(response?.status()).toBe(404);
   await expect(page.locator("main")).toBeVisible();
-  await expect(page.locator("body")).toContainText(/outside FxAeon|official f\(x\) SDK/i);
+  await expect(page.locator("body")).toContainText(/outside FxAeon|That page is not available/i);
   await expect(page.getByRole("link", { name: /back to portfolio/i })).toBeVisible();
   assertNoBackendRequests(requests);
 });

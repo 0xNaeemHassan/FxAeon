@@ -9,7 +9,7 @@
  * wallet at the time it is submitted.
  */
 import { useCallback, useMemo, useState } from 'react';
-import { KeyRound, Plus, ShieldCheck, Wallet } from 'lucide-react';
+import { KeyRound, Plus, Wallet } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import {
   useConnectWallet,
@@ -95,7 +95,7 @@ function PrivyWalletControls() {
   }, [embedded?.address, exportWallet]);
 
   if (!ready) {
-    if (readyTimedOut) return <div role="alert"><Card><p className="text-[13px] font-semibold">Wallet provider did not load</p><p className="mt-1 text-[11px] leading-relaxed text-mut">No wallet state was assumed.</p><Button onClick={() => window.location.reload()} className="mt-3">Reload wallet provider</Button></Card></div>;
+    if (readyTimedOut) return <div role="alert"><Card><p className="text-[13px] font-semibold">Wallet did not load</p><p className="mt-1 text-[12px] leading-relaxed text-mut">Check your connection or reopen FxAeon.</p><Button onClick={() => window.location.reload()} className="mt-3">Reload wallet</Button></Card></div>;
     return <Card className="h-24 animate-pulse"><span className="sr-only">Loading wallet provider</span></Card>;
   }
 
@@ -103,7 +103,7 @@ function PrivyWalletControls() {
     return (
       <Card className="flex flex-col gap-3">
         <p className="text-[13px] leading-relaxed text-mut">
-          Connect a wallet to view its address and approve f(x) transactions directly.
+          Connect a wallet to view your account and use FxAeon.
         </p>
         <Button onClick={() => router.push('/login')}>Connect wallet</Button>
       </Card>
@@ -113,22 +113,11 @@ function PrivyWalletControls() {
   return (
     <div className="flex flex-col gap-3">
       <Card className="flex flex-col gap-3">
-        <div className="flex items-start gap-3">
-          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)]">
-            <ShieldCheck className="h-[18px] w-[18px] text-mint" strokeWidth={2} />
-          </span>
-          <span className="flex-1">
-            <p className="text-[14px] font-medium">Explicit approval on every transaction</p>
-            <p className="mt-0.5 text-[12.5px] leading-relaxed text-mut">
-              FxAeon only prepares official f(x) SDK calls. Privy shows the transaction details and
-              you approve each step in your wallet.
-            </p>
-          </span>
-        </div>
+        <p className="text-[12px] font-medium text-mut">Selected wallet</p>
         {selectedWallet?.address && <AddressChip address={selectedWallet.address} />}
         {wallets.length > 1 && (
           <div className="flex flex-col gap-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-mut">Connected wallets</p>
+            <p className="text-[12px] font-medium text-mut">Connected wallets</p>
             {wallets.filter((wallet) => wallet.type === 'ethereum').map((wallet) => (
               <button
                 key={wallet.address}
@@ -157,10 +146,8 @@ function PrivyWalletControls() {
             <Plus className="h-[18px] w-[18px] text-mint" strokeWidth={2} />
           </span>
           <span className="flex-1">
-            <p className="text-[14px] font-medium">Create a Privy wallet</p>
-            <p className="mt-0.5 text-[12.5px] leading-relaxed text-mut">
-              Add an embedded wallet secured by Privy. Creation is explicit and does not replace your connected wallet.
-            </p>
+            <p className="text-[14px] font-medium">Create wallet</p>
+            <p className="mt-0.5 text-[12.5px] leading-relaxed text-mut">Add a wallet secured by Privy to this account.</p>
             <Button onClick={handleCreate} loading={busy === 'create'} className="mt-3">Create wallet</Button>
           </span>
         </Card>
@@ -173,7 +160,7 @@ function PrivyWalletControls() {
         <span className="flex-1">
           <p className="text-[14px] font-medium">Connect another wallet</p>
           <p className="mt-0.5 text-[12.5px] leading-relaxed text-mut">
-            Add an external EVM wallet for user-approved signing. No private key is shared with FxAeon.
+            Use another EVM wallet with FxAeon.
           </p>
           <Button variant="ghost" onClick={handleConnect} loading={busy === 'connect'} className="mt-3">
             Connect external wallet
@@ -187,10 +174,8 @@ function PrivyWalletControls() {
             <KeyRound className="h-[18px] w-[18px] text-mint" strokeWidth={2} />
           </span>
           <span className="flex-1">
-            <p className="text-[14px] font-medium">Export your Privy wallet</p>
-            <p className="mt-0.5 text-[12.5px] leading-relaxed text-mut">
-              Privy opens an isolated export screen. FxAeon never receives or stores the key.
-            </p>
+            <p className="text-[14px] font-medium">Export wallet</p>
+            <p className="mt-0.5 text-[12.5px] leading-relaxed text-mut">Open Privy&apos;s secure export flow.</p>
             <Button variant="ghost" onClick={handleExport} loading={busy === 'export'} className="mt-3">
               Export wallet
             </Button>

@@ -53,17 +53,29 @@ function statusCopy(view: RecoveryViewModel): {
   if (view.status === 'failed') {
     return { label: 'Reverted', icon: XCircle, className: 'text-danger' };
   }
-  if (view.verification === 'rpc-error' || view.verification === 'mismatch') {
-    return { label: 'Needs another check', icon: CircleAlert, className: 'text-warn' };
+  if (view.verification === 'rpc-error') {
+    return { label: 'Check unavailable', icon: CircleAlert, className: 'text-warn' };
+  }
+  if (view.verification === 'mismatch') {
+    return { label: 'Unverified', icon: CircleAlert, className: 'text-warn' };
   }
   return { label: 'Pending', icon: Clock3, className: 'text-mint' };
+}
+
+function statusSummary(view: RecoveryViewModel): string {
+  if (view.status === 'confirmed' && view.record.bridge) return 'Confirmed on source. Destination delivery is tracked below.';
+  if (view.status === 'confirmed') return 'Receipt and mined transaction verified on-chain.';
+  if (view.status === 'failed') return 'The transaction reverted on-chain. No later step is resumed automatically.';
+  if (view.verification === 'not-found') return 'No receipt yet. The transaction may still be pending.';
+  if (view.verification === 'rpc-error') return 'The network could not be checked. Nothing was marked failed.';
+  return 'The available chain data did not match the saved transaction details, so it remains unverified.';
 }
 
 function RecoveryItem({ view, trackBridge, autoTrackBridge }: { view: RecoveryViewModel; trackBridge: boolean; autoTrackBridge: boolean }) {
   const status = statusCopy(view);
   const Icon = status.icon;
   return (
-    <li className="rounded-2xl border border-[var(--line)] bg-[rgba(255,255,255,0.025)] p-3">
+    <li className="rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.025)] p-3">
       <div className="flex items-start gap-3">
         <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)] ${status.className}`}>
           <Icon className="h-4 w-4" aria-hidden="true" />
@@ -76,7 +88,7 @@ function RecoveryItem({ view, trackBridge, autoTrackBridge }: { view: RecoveryVi
             </div>
             <span className={`shrink-0 text-[10px] font-semibold uppercase tracking-[0.1em] ${status.className}`}>{status.label}</span>
           </div>
-          <p className="mt-2 break-words text-[11px] leading-relaxed text-mut">{view.message}</p>
+          <p className="mt-2 break-words text-[11.5px] leading-relaxed text-mut">{statusSummary(view)}</p>
           <div className="mt-2.5 flex items-center justify-between gap-2">
             <span className="font-mono text-[10px] text-[var(--mut-2)]">{shortHash(view.record.hash)}</span>
             <a
@@ -88,6 +100,14 @@ function RecoveryItem({ view, trackBridge, autoTrackBridge }: { view: RecoveryVi
               Explorer <ExternalLink className="h-3 w-3" aria-hidden="true" />
             </a>
           </div>
+          <details className="mt-1 border-t border-[var(--line)] pt-1">
+            <summary className="flex min-h-11 cursor-pointer items-center text-[11px] font-semibold text-mut">Recovery details</summary>
+            <div className="pb-2 text-[10.5px] leading-relaxed text-mut">
+              <p>{view.message}</p>
+              {view.receiptBlockNumber !== undefined && <p className="mt-1">Block {view.receiptBlockNumber.toString()}</p>}
+              <p className="mt-1 font-mono text-[10px] text-[var(--mut-2)]">{view.record.hash}</p>
+            </div>
+          </details>
           {trackBridge && view.record.bridge && view.status === 'confirmed' && (
             <BridgeTracker
               className="mt-3"
@@ -122,7 +142,7 @@ function formatBridgeAmount(value: string): string {
 
 /**
  * A read-only recovery surface for wallet-submitted hashes. This component
- * never resumes an SDK route: a confirmed prerequisite only tells the user to
+ * never resumes a route: a confirmed prerequisite only tells the user to
  * open the original flow and plan it again from fresh chain state.
  */
 export default function PendingTransactionRecovery({ walletAddress }: Props) {
@@ -171,16 +191,16 @@ export default function PendingTransactionRecovery({ walletAddress }: Props) {
           </button>
         )}
       >
-        <span id="transaction-recovery-title">Transaction recovery</span>
+        <span id="transaction-recovery-title">Transaction status</span>
       </SectionTitle>
       <Card className="p-3.5">
         {loading ? (
           <div role="status" className="flex items-center gap-2 px-1 py-3 text-[11px] text-mut">
             <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-mint border-t-transparent" aria-hidden="true" />
-            Checking receipts on the correct chain…
+            Checking saved transactions…
           </div>
         ) : views.length === 0 ? (
-          <p className="px-1 py-2 text-[11px] leading-relaxed text-mut">No locally recorded transaction steps for this wallet. New hashes are checked against chain receipts; local storage never proves completion.</p>
+          <p className="px-1 py-2 text-[12px] leading-relaxed text-mut">No submitted transactions need checking for this wallet.</p>
         ) : (
           <ul className="flex flex-col gap-2.5" aria-live="polite">
             {views.map((view) => (
@@ -197,7 +217,7 @@ export default function PendingTransactionRecovery({ walletAddress }: Props) {
           </ul>
         )}
         {!loading && views.length > 0 && (
-          <p className="mt-3 px-1 text-[10px] leading-relaxed text-[var(--mut-2)]">Recovery is read-only. After a confirmed prerequisite, re-open the flow to get a fresh SDK plan; later steps are never resumed from a saved hash.</p>
+          <p className="mt-3 px-1 text-[11px] leading-relaxed text-mut">Checking is read-only. A saved transaction is never resent, and later steps are never resumed automatically.</p>
         )}
         <Button
           variant="ghost"
@@ -205,7 +225,7 @@ export default function PendingTransactionRecovery({ walletAddress }: Props) {
           loading={refreshing}
           onClick={() => void refresh()}
         >
-          Check receipts again
+          Check status again
         </Button>
       </Card>
     </section>

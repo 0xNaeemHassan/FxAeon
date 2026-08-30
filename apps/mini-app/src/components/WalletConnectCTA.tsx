@@ -28,8 +28,8 @@ export default function WalletConnectCTA({
       return (
         <div role="alert"><Card className="border-[rgba(255,194,102,.24)] p-4">
           <p className="text-[14px] font-semibold">Wallet provider did not load</p>
-          <p className="mt-1 text-[11.5px] leading-relaxed text-mut">Check your connection, update Telegram, or reopen FxAeon. No wallet state or balance has been assumed.</p>
-          <button type="button" onClick={() => window.location.reload()} className="button button-primary mt-3 min-h-11 w-full rounded-2xl px-4 text-[13px] font-semibold">Reload wallet provider</button>
+          <p className="mt-1 text-[12px] leading-relaxed text-mut">Check your connection, update Telegram, or reopen FxAeon.</p>
+          <button type="button" onClick={() => window.location.reload()} className="button button-primary mt-3 min-h-11 w-full rounded-xl px-4 text-[13px] font-semibold">Reload wallet</button>
         </Card></div>
       );
     }
@@ -54,7 +54,7 @@ export default function WalletConnectCTA({
           <p className="mt-1 text-[11.5px] leading-relaxed text-mut">{body}</p>
           <Link
             href="/login"
-            className="button button-primary glass-press mt-3 flex min-h-11 w-full items-center justify-center rounded-2xl px-4 py-2.5 text-[13px] font-semibold"
+            className="button button-primary glass-press mt-3 flex min-h-11 w-full items-center justify-center rounded-xl px-4 py-2.5 text-[13px] font-semibold"
           >
             {action}
           </Link>

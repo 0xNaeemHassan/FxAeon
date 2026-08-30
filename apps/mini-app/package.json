@@ -8,6 +8,8 @@
     "start": "node e2e/serve.mjs",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test \"test/**/*.test.ts\"",
+    "test:chaos": "tsx --test \"test/chaos.test.ts\"",
+    "test:anvil": "tsx --test \"test/anvil.integration.test.ts\"",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:update": "playwright test --update-snapshots",
@@ -32,7 +34,6 @@
     "postcss": "8.5.23",
     "autoprefixer": "10.5.0",
     "@playwright/test": "1.61.0",
-    "tsx": "4.22.4",
-    "@lhci/cli": "0.15.1"
+    "tsx": "4.22.4"
   }
 }

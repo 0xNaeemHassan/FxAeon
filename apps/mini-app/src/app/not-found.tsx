@@ -11,7 +11,7 @@ export default function NotFound() {
       </span>
       <p className="mt-5 text-[10px] font-semibold uppercase tracking-[0.18em] text-mint">404 · route not found</p>
       <h1 className="text-display mt-2 text-[28px] font-semibold tracking-[-0.04em]">This screen is outside FxAeon</h1>
-      <p className="mt-2 max-w-[310px] text-[12.5px] leading-relaxed text-mut">FxAeon exposes only the official f(x) SDK flows. Return to the portfolio to continue safely.</p>
+      <p className="mt-2 max-w-[310px] text-[12.5px] leading-relaxed text-mut">That page is not available here. Return to your portfolio to continue.</p>
       <Link href="/portfolio" className="button button-primary glass-press mt-6 flex min-h-12 w-full max-w-[280px] items-center justify-center gap-2 rounded-2xl px-4 py-3 text-[14px] font-semibold">
         <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back to portfolio
       </Link>

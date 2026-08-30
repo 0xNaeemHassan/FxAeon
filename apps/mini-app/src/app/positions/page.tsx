@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowDownRight, ArrowUpRight, Gauge, Layers2, RefreshCw } from 'lucide-react';
+import Link from 'next/link';
 import { AppShell, Button, Card, EmptyState, LoadingRegion, Skeleton } from '@/components/ui';
 import { ActionReview } from '@/components/ActionReview';
 import WalletConnectCTA from '@/components/WalletConnectCTA';
-import { AmountField, InfoNote, LeverageField, RangeField, Segmented, SlippageField, TokenSelect } from '@/components/ProtocolForm';
+import { AmountField, LeverageField, RangeField, Segmented, SlippageField, TokenSelect } from '@/components/ProtocolForm';
 import { MAX_FX_SLIPPAGE_PERCENT, planAdjustPositionLeverage, planIncreasePosition, planReducePosition } from '@/lib/fx';
 import { usePrivyWallet } from '@/lib/wallet';
 import { positiveDecimal } from '@/lib/amount';
@@ -119,39 +120,46 @@ export default function PositionsPage() {
   }, [action, fraction, leverage, selected, slippage, token, validAmount, wallet.address]);
 
   return (
-    <AppShell title="Positions" subtitle="Read live ETH/BTC positions, then use only the official increase, reduce, close, and leverage methods.">
-      <div className="stagger flex flex-col gap-3.5">
+    <AppShell title="Positions">
+      <div className="flex flex-col gap-3">
+        <div className="grid grid-cols-2 rounded-xl border border-[var(--line)] bg-[rgba(0,0,0,.18)] p-1" aria-label="Trade views">
+          <Link href="/trade" className="glass-press flex min-h-11 items-center justify-center rounded-lg px-3 text-[13px] font-semibold text-mut">New position</Link>
+          <span aria-current="page" className="flex min-h-11 items-center justify-center rounded-lg bg-[var(--mint-dim)] px-3 text-[13px] font-semibold text-[var(--text)]">Positions</span>
+        </div>
         {!wallet.address ? (
-          <WalletConnectCTA ready={wallet.ready} authenticated={wallet.authenticated} body="Choose or connect a wallet to read live ETH/BTC positions from Ethereum and authorize position actions." />
+          <WalletConnectCTA ready={wallet.ready} authenticated={wallet.authenticated} body="Choose or connect a wallet to see and manage your open positions." />
         ) : loading && !positions.length ? (
-          <LoadingRegion label="Reading positions from the official SDK" className="flex flex-col gap-3.5"><Skeleton className="h-24" /><Skeleton className="h-48" /></LoadingRegion>
+          <LoadingRegion label="Reading positions" className="flex flex-col gap-3.5"><Skeleton className="h-24" /><Skeleton className="h-48" /></LoadingRegion>
         ) : error ? (
           <EmptyState icon={RefreshCw} title="Position read unavailable" body={error} action={<Button onClick={() => void load()}>Retry</Button>} />
         ) : !positions.length ? (
-          <EmptyState icon={Layers2} title="No open positions" body="The SDK returned no positions across ETH/BTC long/short pools. Open one from Trade." />
+          <EmptyState icon={Layers2} title="No open positions" body="Open an ETH or BTC position to get started." action={<Link href="/trade" className="button button-primary flex min-h-12 items-center justify-center rounded-xl px-4 font-semibold">Open a position</Link>} />
         ) : (
           <>
-            <div className="no-scrollbar flex snap-x gap-2 overflow-x-auto pb-1" role="radiogroup" aria-label="Open positions">
+            <div className="flex flex-col gap-2" role="radiogroup" aria-label="Open positions">
               {positions.map((position) => {
                 const active = positionKey(position) === selectedKey;
+                const leverageValue = position.side === 'short' ? position.info.lsdLeverage : position.info.currentLeverage;
                 return (
-                  <button key={positionKey(position)} type="button" role="radio" aria-checked={active} onClick={() => setSelectedKey(positionKey(position))} className={`glass-press min-w-[178px] snap-start rounded-[20px] border p-3.5 text-left ${active ? 'border-[rgba(139,109,255,.5)] bg-[var(--mint-dim)]' : 'border-[var(--line)] bg-[var(--surface)]'}`}>
-                    <div className="flex items-center justify-between gap-2"><span className="text-display text-[15px] font-semibold">{position.market}</span><span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase ${position.side === 'long' ? 'bg-[var(--success-dim)] text-success' : 'bg-[var(--danger-dim)] text-danger'}`}>{position.side}</span></div>
-                    <p className="mt-3 text-[19px] font-semibold">{(position.side === 'short' ? position.info.lsdLeverage : position.info.currentLeverage).toFixed(2)}×</p>
-                    <p className="mt-0.5 truncate text-[10px] text-mut">#{position.info.positionId} · {formatAmount(position.info.rawColls, positionCollateralDecimals(position))} {position.info.rawCollsToken}</p>
+                  <button key={positionKey(position)} type="button" role="radio" aria-checked={active} onClick={() => setSelectedKey(positionKey(position))} className={`glass-press flex min-h-[72px] w-full items-center justify-between rounded-xl border px-3.5 py-3 text-left ${active ? 'border-mint bg-[var(--mint-dim)]' : 'border-[var(--line)] bg-[var(--surface)]'}`}>
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-2"><span className="text-[15px] font-semibold">{position.market} {position.side === 'long' ? 'Long' : 'Short'}</span><span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${position.side === 'long' ? 'bg-[var(--success-dim)] text-success' : 'bg-[var(--danger-dim)] text-danger'}`}>{position.side}</span></span>
+                      <span className="mt-1 block truncate text-[11px] text-mut">{formatAmount(position.info.rawColls, positionCollateralDecimals(position))} {position.info.rawCollsToken} collateral · #{position.info.positionId}</span>
+                    </span>
+                    <span className="ml-3 shrink-0 text-[17px] font-semibold tabular-nums">{leverageValue.toFixed(2)}×</span>
                   </button>
                 );
               })}
             </div>
 
-            {selected && <Card glow className="p-4"><div className="flex items-start justify-between gap-3"><div><span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-mut">Selected position</span><h2 className="text-display mt-1 text-[18px] font-semibold">{selected.market} {selected.side} · #{selected.info.positionId}</h2></div><button type="button" onClick={() => void load()} className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--mint-dim)] text-mint" aria-label="Refresh positions"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button></div><div className="mt-4 grid grid-cols-2 gap-2"><Metric label="Collateral" value={`${formatAmount(selected.info.rawColls, positionCollateralDecimals(selected))} ${selected.info.rawCollsToken}`} /><Metric label="Debt" value={`${formatAmount(selected.info.rawDebts, positionDebtDecimals(selected))} ${selected.info.rawDebtsToken}`} /><Metric label="SDK leverage" value={`${(selected.side === 'short' ? selected.info.lsdLeverage : selected.info.currentLeverage).toFixed(2)}×`} /><Metric label="Position ID" value={`#${selected.info.positionId}`} /></div><p className="mt-3 text-[10.5px] leading-relaxed text-mut">Short-pool leverage is shown in the SDK’s lsdLeverage units. Health, PnL, liquidation price, and market prices are not returned by the official SDK, so FxAeon does not invent them.</p></Card>}
+            {selected && <Card className="p-4"><div className="flex items-start justify-between gap-3"><div><span className="text-[12px] text-mut">Selected</span><h2 className="mt-0.5 text-[18px] font-semibold">{selected.market} {selected.side === 'long' ? 'Long' : 'Short'}</h2><p className="mt-0.5 text-[11px] text-mut">Position #{selected.info.positionId}</p></div><button type="button" onClick={() => void load()} className="flex h-11 w-11 items-center justify-center rounded-xl text-mut hover:bg-[var(--mint-dim)] hover:text-mint" aria-label="Refresh positions"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button></div><div className="mt-4 grid grid-cols-2 gap-2"><Metric label="Collateral" value={`${formatAmount(selected.info.rawColls, positionCollateralDecimals(selected))} ${selected.info.rawCollsToken}`} /><Metric label="Debt" value={`${formatAmount(selected.info.rawDebts, positionDebtDecimals(selected))} ${selected.info.rawDebtsToken}`} /><Metric label="Leverage" value={`${(selected.side === 'short' ? selected.info.lsdLeverage : selected.info.currentLeverage).toFixed(2)}×`} /></div>{selected.side === 'long' && <Link href="/borrow" className="glass-press mt-3 flex min-h-11 items-center justify-between rounded-xl border border-[var(--line)] px-3 text-[12px] font-semibold text-mint">Manage debt <span aria-hidden="true">→</span></Link>}</Card>}
 
-            <Segmented value={action} onChange={setAction} ariaLabel="Position action" options={[{ value: 'increase', label: 'Increase' }, { value: 'reduce', label: 'Reduce / close' }, { value: 'leverage', label: 'Leverage' }]} />
+            <Segmented value={action} onChange={setAction} ariaLabel="Position action" options={[{ value: 'increase', label: 'Increase' }, { value: 'reduce', label: 'Reduce' }, { value: 'leverage', label: 'Leverage' }]} />
             <Card className="p-4">
-              {action === 'increase' && <div className="flex flex-col gap-4"><Header icon={ArrowUpRight} title="Increase exposure" body="Add an SDK-supported asset and choose the target leverage for the selected position." /><TokenSelect label="Input asset" value={token} options={marketTokens} onChange={setToken} /><AmountField label="Amount to add" symbol={token} value={amount} onChange={setAmount} maxDecimals={tokenDecimals(token)} /><LeverageField label={selected?.side === 'short' ? 'Target LSD leverage' : 'Target leverage'} value={leverage} onChange={setLeverage} /><InfoNote>The SDK route preserves the selected position ID and computes the resulting leverage from live pool state. Review the returned route before approving.</InfoNote></div>}
-              {action === 'reduce' && <div className="flex flex-col gap-4"><Header icon={ArrowDownRight} title={fraction === 100 ? 'Close position' : 'Reduce exposure'} body="The SDK amount is derived from the live side-specific position state." /><RangeField label="Position reduction" value={fraction} onChange={setFraction} min={1} max={100} step={1} suffix="%" /><div className="grid grid-cols-4 gap-2">{[25, 50, 75, 100].map((value) => <button key={value} type="button" aria-pressed={fraction === value} onClick={() => setFraction(value)} className={`min-h-11 rounded-xl text-[11px] font-semibold ${fraction === value ? 'bg-[var(--mint-dim)] text-mint' : 'bg-[rgba(255,255,255,.035)] text-mut'}`}>{value === 100 ? 'Close' : `${value}%`}</button>)}</div><TokenSelect label="Receive asset" value={token} options={marketTokens} onChange={setToken} /><InfoNote>Close is an official reduce operation with isClosePosition=true. No off-chain estimate is shown.</InfoNote></div>}
-              {action === 'leverage' && <div className="flex flex-col gap-4"><Header icon={Gauge} title="Adjust leverage" body="Set a positive target; the SDK validates the live pool bounds." /><LeverageField label="Target leverage" value={leverage} onChange={setLeverage} /><InfoNote>The protocol route and bounds are authoritative. FxAeon does not display an invented health score.</InfoNote></div>}
-              <div className="mt-4"><SlippageField value={slippage} onChange={setSlippage} max={MAX_FX_SLIPPAGE_PERCENT} /></div>
+              {action === 'increase' && <div className="flex flex-col gap-4"><Header icon={ArrowUpRight} title="Increase exposure" body="Add collateral and choose the target leverage for this position." /><TokenSelect label="Input asset" value={token} options={marketTokens} onChange={setToken} /><AmountField label="Amount to add" symbol={token} value={amount} onChange={setAmount} maxDecimals={tokenDecimals(token)} /><LeverageField label={selected?.side === 'short' ? 'Target LSD leverage' : 'Target leverage'} value={leverage} onChange={setLeverage} /></div>}
+              {action === 'reduce' && <div className="flex flex-col gap-4"><Header icon={ArrowDownRight} title={fraction === 100 ? 'Close position' : 'Reduce exposure'} body="Choose how much of this position to reduce and what asset to receive." /><RangeField label="Position reduction" value={fraction} onChange={setFraction} min={1} max={100} step={1} suffix="%" /><div className="grid grid-cols-4 gap-2">{[25, 50, 75, 100].map((value) => <button key={value} type="button" aria-pressed={fraction === value} onClick={() => setFraction(value)} className={`min-h-11 rounded-xl text-[11px] font-semibold ${fraction === value ? 'bg-[var(--mint-dim)] text-mint' : 'bg-[rgba(255,255,255,.035)] text-mut'}`}>{value === 100 ? 'Close' : `${value}%`}</button>)}</div><TokenSelect label="Receive asset" value={token} options={marketTokens} onChange={setToken} /></div>}
+              {action === 'leverage' && <div className="flex flex-col gap-4"><Header icon={Gauge} title="Adjust leverage" body="Set the target leverage for this position." /><LeverageField label="Target leverage" value={leverage} onChange={setLeverage} /></div>}
+              <details className="group mt-4 rounded-xl border border-[var(--line)] px-3"><summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-[13px] font-semibold [&::-webkit-details-marker]:hidden">Advanced <span aria-hidden="true" className="text-mut transition-transform group-open:rotate-180">⌄</span></summary><div className="border-t border-[var(--line)] py-3"><SlippageField value={slippage} onChange={setSlippage} max={MAX_FX_SLIPPAGE_PERCENT} /></div></details>
             </Card>
             <ActionReview planBuilder={planBuilder} label={action === 'reduce' && fraction === 100 ? 'Review close' : `Review ${action}`} operationLabel={action === 'reduce' && fraction === 100 ? `Close ${selected?.market} position` : `${action[0].toUpperCase()}${action.slice(1)} ${selected?.market} position`} onComplete={load} />
           </>
@@ -161,5 +169,5 @@ export default function PositionsPage() {
   );
 }
 
-function Header({ icon: Icon, title, body }: { icon: typeof ArrowUpRight; title: string; body: string }) { return <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--mint-dim)] text-mint"><Icon className="h-5 w-5" /></span><div><h2 className="text-[14px] font-semibold">{title}</h2><p className="mt-0.5 text-[10.5px] text-mut">{body}</p></div></div>; }
-function Metric({ label, value }: { label: string; value: string }) { return <div className="rounded-2xl bg-[rgba(255,255,255,.035)] p-3"><span className="block text-[9px] uppercase tracking-[0.1em] text-mut">{label}</span><span className="mt-1 block truncate text-[12px] font-semibold">{value}</span></div>; }
+function Header({ icon: Icon, title, body }: { icon: typeof ArrowUpRight; title: string; body: string }) { return <div><div className="flex items-center gap-2"><Icon className="h-4 w-4 text-mint" aria-hidden="true" /><h2 className="text-[15px] font-semibold">{title}</h2></div><p className="mt-1 text-[12px] text-mut">{body}</p></div>; }
+function Metric({ label, value }: { label: string; value: string }) { return <div className="rounded-xl bg-[rgba(255,255,255,.035)] p-3"><span className="block text-[11px] text-mut">{label}</span><span className="mt-1 block truncate text-[13px] font-semibold tabular-nums" title={value}>{value}</span></div>; }

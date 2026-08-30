@@ -47,6 +47,11 @@ try {
   const largest = [...jsSizes].sort((a, b) => b.bytes - a.bytes)[0];
   const deployedHeaders = await fs.readFile(path.join(dist, '_headers'), 'utf8');
   const deployedScriptDirective = deployedHeaders.match(/script-src\s+([^;]+)/)?.[1] ?? '';
+  const forbiddenTelemetryPattern = /(?:sentry\.hcaptcha\.com|@hcaptcha\/sentry|@sentry\/(?:node|browser)|SENTRY_DSN)/i;
+  const telemetryAssets = [];
+  for (const file of javascript) {
+    if (forbiddenTelemetryPattern.test(await fs.readFile(file, 'utf8'))) telemetryAssets.push(file);
+  }
 
   const failures = [];
   if (sourceMaps.length) failures.push(`source maps must not be published (${sourceMaps.length} found)`);
@@ -61,6 +66,9 @@ try {
   }
   if (deployedScriptDirective.includes("'unsafe-inline'")) {
     failures.push("deployed script-src must not allow 'unsafe-inline'");
+  }
+  if (telemetryAssets.length) {
+    failures.push(`paid/error telemetry code or DSN found in JavaScript (${telemetryAssets.length} assets)`);
   }
 
   console.log(`[bundle] ${assets.length} assets, ${formatBytes(staticBytes)} total`);

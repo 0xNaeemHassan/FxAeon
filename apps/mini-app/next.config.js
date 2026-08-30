@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+const path = require('node:path');
+
 const nextConfig = {
   output: 'export',
   // `pnpm lint` is an explicit release gate. Skipping Next's duplicate build
@@ -11,6 +13,14 @@ const nextConfig = {
   distDir: process.env.NODE_ENV === 'development' ? '.next' : 'dist',
   images: { unoptimized: true },
   webpack: (config, { webpack }) => {
+    // Privy's optional CAPTCHA screen imports @hcaptcha/loader. The upstream
+    // loader bundles a hCaptcha-owned Sentry client and DSN; FxAeon has no
+    // telemetry authority, so keep the script/token API but remove that
+    // diagnostic implementation from the shipped browser artifact.
+    config.resolve.alias = {
+      ...(config.resolve.alias ?? {}),
+      '@hcaptcha/loader$': path.resolve(__dirname, 'src/lib/hcaptcha-loader.ts'),
+    };
     // Privy publishes optional integrations as dynamic imports in its main
     // entrypoint. FxAeon does not enable Stripe onramping or Farcaster/Solana;
     // explicitly ignore those optional peers instead of shipping dead code or

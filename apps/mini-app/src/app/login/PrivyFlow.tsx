@@ -9,7 +9,7 @@
  * There is no raw private-key field and no delegated/session signer step.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Lock, Mail, PartyPopper, Plus, Send, Wallet } from 'lucide-react';
+import { Check, Lock, Mail, Plus, Send, Wallet } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import {
   useConnectWallet,
@@ -155,23 +155,22 @@ function PrivyLoginFlow() {
   if (phase === 'done') {
     return (
       <main className="mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col justify-center gap-5 px-6">
-        <div className="stagger flex flex-col items-center gap-4 text-center">
-          <span className="anim-glow flex h-16 w-16 items-center justify-center rounded-3xl bg-[var(--success-dim)]">
-            <PartyPopper className="h-8 w-8 text-success" strokeWidth={1.6} />
+        <div className="flex flex-col items-center gap-4 text-center">
+          <span className="flex h-16 w-16 items-center justify-center rounded-[20px] bg-[var(--success-dim)]">
+            <Check className="h-8 w-8 text-success" strokeWidth={1.8} />
           </span>
           <h1 ref={phaseHeadingRef} tabIndex={-1} className="text-display text-2xl font-semibold outline-none">
-            Your wallet is ready
+            Wallet ready
           </h1>
           {walletAddress && <AddressChip address={walletAddress} />}
           <Card className="w-full text-left">
-            <p className="text-[13px] leading-relaxed text-mut">
+            <p className="text-[14px] leading-relaxed text-mut">
               <span className="font-medium text-[var(--text)]">You stay in control.</span>{' '}
-              Every f(x) transaction is reviewed and approved in your wallet. FxAeon never
-              receives a private key or signs on your behalf.
+              Every transaction still requires your wallet approval. FxAeon never receives your private key.
             </p>
           </Card>
-          <Button onClick={() => router.push('/settings')}>
-            <Check className="h-4 w-4" /> Manage wallet
+          <Button onClick={() => router.push('/portfolio')}>
+            Continue
           </Button>
         </div>
       </main>
@@ -181,13 +180,12 @@ function PrivyLoginFlow() {
   if (phase === 'choose' || phase === 'creating') {
     return (
       <main className="mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col justify-center gap-4 px-6">
-        <div className="stagger flex flex-col gap-4">
+        <div className="flex flex-col gap-4">
           <h1 ref={phaseHeadingRef} tabIndex={-1} className="text-display text-[26px] font-semibold leading-tight outline-none">
-            Your wallet, <span className="text-gradient">your call</span>
+            Choose your wallet
           </h1>
-          <p className="text-[13.5px] leading-relaxed text-mut">
-            Use a Privy wallet created for this account, or connect a wallet you already own.
-            FxAeon cannot export, delegate, or sign with it without your approval.
+          <p className="text-[14px] leading-relaxed text-mut">
+            Create a wallet for this account or connect one you already use. Nothing is created or connected automatically.
           </p>
           <Card className="flex items-start gap-3">
             <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)]">
@@ -195,8 +193,8 @@ function PrivyLoginFlow() {
             </span>
             <span className="flex-1">
               <p className="text-[14px] font-medium">Create a new wallet</p>
-              <p className="mt-0.5 text-[12.5px] leading-relaxed text-mut">
-                A fresh Ethereum wallet secured by Privy. Creation is explicit and never automatic.
+              <p className="mt-1 text-[13px] leading-relaxed text-mut">
+                Create a wallet secured by Privy for this account.
               </p>
               <Button onClick={handleCreate} loading={phase === 'creating'} className="mt-3">
                 {phase === 'creating' ? 'Creating…' : 'Create wallet'}
@@ -209,7 +207,7 @@ function PrivyLoginFlow() {
             </span>
             <span className="flex-1">
               <p className="text-[14px] font-medium">Connect an existing wallet</p>
-              <p className="mt-0.5 text-[12.5px] leading-relaxed text-mut">
+              <p className="mt-1 text-[13px] leading-relaxed text-mut">
                 Connect MetaMask, Coinbase Wallet, WalletConnect, or another supported EVM wallet.
               </p>
               <Button variant="ghost" onClick={startExternalWallet} className="mt-3">
@@ -231,23 +229,26 @@ function PrivyLoginFlow() {
   const busy = phase === 'authenticating';
   return (
     <main className="mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col justify-center px-6 py-10">
-      <div className="stagger flex flex-col">
-        <div className="glass anim-scale-in mx-auto w-full max-w-sm rounded-[28px] p-7" style={{ borderColor: 'rgba(124,92,255,0.30)' }}>
+      <div className="flex flex-col">
+        <div className="glass mx-auto w-full max-w-sm p-6">
           <div className="flex flex-col items-center text-center">
-            <FxLogo size={54} className="anim-float" />
+            <span className="flex h-16 w-16 items-center justify-center rounded-[18px] border border-[var(--line)] bg-[var(--surface-2)]">
+              <FxLogo size={48} />
+            </span>
             <p className="text-display mt-2.5 text-[20px] font-semibold tracking-tight">Fx<span className="text-gradient">Aeon</span></p>
           </div>
           <h1 ref={phaseHeadingRef} tabIndex={-1} className="text-display mt-5 text-center text-[23px] font-semibold leading-tight outline-none">
             {t('loginCard.signIn')}
           </h1>
-          <p className="mt-1.5 text-center text-[13px] leading-relaxed text-mut">
-            A Telegram-native interface for the official f(x) SDK.
+          <p className="mt-2 text-center text-[14px] leading-relaxed text-mut">
+            Continue with Telegram, email, or a wallet you already use.
           </p>
           <div className="mt-6 flex flex-col gap-2.5">
-            <Button onClick={startTelegramLogin} loading={busy} className="anim-glow">
+            <Button onClick={startTelegramLogin} loading={busy}>
               {!busy && <Send className="h-[18px] w-[18px]" strokeWidth={2} />}
               {t('loginCard.telegram')}
             </Button>
+            <p className="pt-1 text-center text-[13px] font-medium text-mut">Other ways to continue</p>
             <Button variant="ghost" onClick={startEmailLogin} disabled={busy}>
               <Mail className="h-[18px] w-[18px] text-mint" strokeWidth={2} />
               {t('loginCard.email')}
@@ -265,12 +266,12 @@ function PrivyLoginFlow() {
               </Button>
             </Card>
           )}
-          <p className="mt-5 text-center text-[11px] leading-relaxed text-mut">
+          <p className="mt-5 text-center text-[13px] leading-relaxed text-mut">
             {t('loginCard.terms')}
           </p>
         </div>
         <div className="mt-5 flex justify-center">
-          <span className="glass inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] text-mut">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-[13px] text-mut">
             <Lock className="h-3 w-3 text-mint" strokeWidth={2.2} />
             {t('loginCard.poweredBy')} <span className="font-semibold text-[var(--text)]">privy</span>
           </span>
