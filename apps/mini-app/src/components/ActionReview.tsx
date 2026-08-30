@@ -6,17 +6,18 @@ import {
   ArrowLeft,
   CheckCircle2,
   Circle,
+  CircleAlert,
+  Clock3,
   ExternalLink,
-  Fuel,
   LoaderCircle,
   ShieldCheck,
-  Sparkles,
   XCircle,
 } from 'lucide-react';
 import { decodeFunctionData, formatEther, formatUnits } from 'viem';
 import {
   getPublicClient,
   defaultTransactionPolicy,
+  FX_TOKENS,
   runTransactionRoute,
   simulatePlannedRoute,
   validateRoute,
@@ -47,7 +48,7 @@ type Stage = 'input' | 'review' | 'executing' | 'result';
 
 function asRoutes(value: PlannedRoute | readonly PlannedRoute[]): PlannedRoute[] {
   const routes = Array.isArray(value) ? [...value] : [value];
-  if (!routes.length) throw new Error('The SDK returned no executable route.');
+  if (!routes.length) throw new Error('No executable transaction route was returned.');
   return routes;
 }
 
@@ -59,13 +60,109 @@ function shortHash(hash: string): string {
   return `${hash.slice(0, 8)}…${hash.slice(-6)}`;
 }
 
-function displayBigint(value: bigint): string {
-  if (value === 0n) return '0';
-  try {
-    return formatEther(value);
-  } catch {
-    return value.toString();
+function trimDecimal(value: string): string {
+  return value.includes('.') ? value.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '') : value;
+}
+
+function compactAddress(value: string): string {
+  return `${value.slice(0, 6)}…${value.slice(-4)}`;
+}
+
+function tokenForAddress(address: string | undefined) {
+  if (!address) return undefined;
+  return Object.values(FX_TOKENS).find((token) => token.address.toLowerCase() === address.toLowerCase());
+}
+
+function formatTokenAmount(value: bigint, tokenAddress?: string, fallback = 'raw units'): string {
+  const token = tokenForAddress(tokenAddress);
+  if (!token) return `${value.toString()} ${fallback}`;
+  return `${trimDecimal(formatUnits(value, token.decimals))} ${token.key}`;
+}
+
+type ReviewFact = { label: string; value: string };
+
+function addFact(facts: ReviewFact[], label: string, value: string | undefined): void {
+  if (!value || facts.some((fact) => fact.label === label)) return;
+  facts.push({ label, value });
+}
+
+function primaryReviewFacts(route: PlannedRoute): ReviewFact[] {
+  const facts: ReviewFact[] = [];
+  const intent = route.policy?.reviewedAction;
+  if (intent) {
+    switch (intent.kind) {
+      case 'position-increase':
+        addFact(facts, 'Amount', formatTokenAmount(intent.inputAmount, intent.inputTokenAddress));
+        if (intent.requestedLeverage !== undefined) addFact(facts, 'Target leverage', `${intent.requestedLeverage}×`);
+        if (intent.slippagePercent !== undefined) addFact(facts, 'Slippage', `${intent.slippagePercent}%`);
+        addFact(facts, 'Position', intent.positionId === 0 ? 'New position' : `#${intent.positionId}`);
+        break;
+      case 'position-reduce':
+        addFact(facts, 'Position', `#${intent.positionId}`);
+        addFact(facts, 'Action', intent.isClosePosition ? 'Close position' : 'Reduce position');
+        if (intent.slippagePercent !== undefined) addFact(facts, 'Slippage', `${intent.slippagePercent}%`);
+        break;
+      case 'position-adjust':
+        addFact(facts, 'Position', `#${intent.positionId}`);
+        if (intent.requestedLeverage !== undefined) addFact(facts, 'Target leverage', `${intent.requestedLeverage}×`);
+        if (intent.slippagePercent !== undefined) addFact(facts, 'Slippage', `${intent.slippagePercent}%`);
+        break;
+      case 'deposit-and-mint':
+        addFact(facts, 'Deposit', formatTokenAmount(intent.depositAmount, intent.depositTokenAddress));
+        addFact(facts, 'Mint', formatTokenAmount(intent.mintAmount, FX_TOKENS.fxUSD.address));
+        addFact(facts, 'Position', intent.positionId === 0 ? 'New position' : `#${intent.positionId}`);
+        break;
+      case 'repay-and-withdraw':
+        addFact(facts, 'Repay', formatTokenAmount(intent.minimumRepayAmount, intent.repayTokenAddress));
+        addFact(facts, 'Withdraw', formatTokenAmount(intent.withdrawAmount, intent.withdrawTokenAddress));
+        addFact(facts, 'Position', `#${intent.positionId}`);
+        break;
+      case 'fxsave-deposit':
+        addFact(facts, 'Deposit', formatTokenAmount(intent.amount, intent.tokenInAddress));
+        addFact(facts, 'Recipient', compactAddress(intent.receiver));
+        if (intent.slippagePercent !== undefined) addFact(facts, 'Slippage', `${intent.slippagePercent}%`);
+        break;
+      case 'fxsave-withdraw':
+        addFact(facts, 'Shares', formatTokenAmount(intent.amount, FX_TOKENS.fxSAVE.address));
+        addFact(facts, 'Receive', tokenForAddress(intent.tokenOutAddress)?.key ?? compactAddress(intent.tokenOutAddress));
+        addFact(facts, 'Mode', intent.directBasePool ? 'Direct' : intent.instant ? 'Instant' : 'Queued');
+        if (intent.slippagePercent !== undefined) addFact(facts, 'Slippage', `${intent.slippagePercent}%`);
+        break;
+      case 'fxsave-claim':
+        addFact(facts, 'Recipient', compactAddress(intent.receiver));
+        break;
+    }
   }
+
+  if (route.details?.routeType) addFact(facts, 'Route', route.details.routeType);
+  if (route.details?.requestedLeverage !== undefined) addFact(facts, 'Target leverage', `${route.details.requestedLeverage}×`);
+  if (route.details?.slippagePercent !== undefined) addFact(facts, 'Slippage', `${route.details.slippagePercent}%`);
+  if (route.details?.leverage !== undefined) addFact(facts, 'Leverage', `${route.details.leverage}×`);
+  addFact(facts, 'Execution price', route.details?.executionPrice);
+  addFact(facts, 'Minimum received', route.details?.minOut);
+  addFact(facts, 'Collateral', route.details?.colls);
+  addFact(facts, 'Debt', route.details?.debts);
+  route.details?.economicLimits?.forEach((limit) => {
+    const label = limit.label
+      .replace(/^fxSAVE\s+/i, '')
+      .replace(/minimum output$/i, 'minimum received')
+      .replace(/^./, (value) => value.toUpperCase());
+    addFact(facts, label, `${limit.value} raw units`);
+  });
+
+  if (isBridgeQuote(route.quote)) {
+    addFact(facts, 'Asset', route.quote.bridgeToken ?? 'Bridge asset');
+    if (route.quote.bridgeAmount !== undefined) {
+      addFact(facts, 'Amount', `${trimDecimal(formatUnits(route.quote.bridgeAmount, 18))} ${route.quote.bridgeToken ?? 'tokens'}`);
+    }
+    if (route.quote.minAmountLD !== undefined) {
+      addFact(facts, 'Minimum received', `${trimDecimal(formatUnits(route.quote.minAmountLD, 18))} ${route.quote.bridgeToken ?? 'tokens'}`);
+    }
+    if (route.quote.recipient) addFact(facts, 'Recipient', route.quote.recipient);
+    addFact(facts, 'Network fee', `${trimDecimal(formatEther(route.quote.nativeFee))} ETH`);
+  }
+
+  return facts;
 }
 
 const APPROVE_ABI = [{
@@ -82,7 +179,7 @@ const APPROVE_ABI = [{
 function approvalFacts(transaction: PlannedTransaction): {
   spender: string;
   valueLabel: string;
-  value: string;
+  value: bigint;
 } | null {
   if (transaction.kind !== 'approval') return null;
   try {
@@ -91,11 +188,21 @@ function approvalFacts(transaction: PlannedTransaction): {
     return {
       spender,
       valueLabel: transaction.type === 'approvePosition' ? 'Position NFT ID' : 'Exact amount (raw units)',
-      value: amountOrTokenId.toString(),
+      value: amountOrTokenId,
     };
   } catch {
     return null;
   }
+}
+
+function approvalSummary(transaction: PlannedTransaction, approval: NonNullable<ReturnType<typeof approvalFacts>>): string {
+  if (transaction.type === 'approvePosition') return `Position #${approval.value.toString()}`;
+  return formatTokenAmount(approval.value, transaction.to);
+}
+
+function stepTitle(transaction: PlannedTransaction): string {
+  if (transaction.kind !== 'approval') return 'Confirm action';
+  return transaction.type === 'approvePosition' ? 'Approve position' : `Approve ${tokenForAddress(transaction.to)?.key ?? 'token'}`;
 }
 
 function stepProgress(step: TransactionStepResult | undefined): {
@@ -107,6 +214,128 @@ function stepProgress(step: TransactionStepResult | undefined): {
   if (step?.status === 'failed') return { label: 'Stopped', className: 'text-danger', icon: <XCircle className="h-3.5 w-3.5" /> };
   if (step?.status === 'submitted') return { label: 'Submitted', className: 'text-mint', icon: <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> };
   return { label: 'Ready', className: 'text-mut', icon: <Circle className="h-3.5 w-3.5" /> };
+}
+
+function looksLikeWalletRejection(value: string | undefined): boolean {
+  return Boolean(value && /(reject|denied|declin|cancel(?:led|ed)|user refused|user denied)/i.test(value));
+}
+
+function resultPresentation(result: TransactionExecutionResult, bridge: boolean): {
+  title: string;
+  body: string;
+  tone: 'success' | 'warning' | 'danger';
+  icon: typeof CheckCircle2;
+} {
+  const submitted = result.steps.filter((step) => Boolean(step.hash));
+  const confirmationUnknown = submitted.some((step) => step.hash && !step.receipt);
+  const reverted = result.steps.some((step) => step.receipt?.status === 'reverted');
+
+  if (result.status === 'confirmed') {
+    return bridge
+      ? {
+          title: 'Confirmed on source',
+          body: 'The source route is confirmed. Destination delivery is verified separately below.',
+          tone: 'success',
+          icon: CheckCircle2,
+        }
+      : {
+          title: 'Confirmed',
+          body: `All transaction steps are confirmed on ${chainName(result.chainId)}.`,
+          tone: 'success',
+          icon: CheckCircle2,
+        };
+  }
+  if (result.status === 'partial') {
+    return {
+      title: 'Partially completed',
+      body: 'At least one earlier transaction confirmed before the route stopped. Do not repeat the full action; review each step below.',
+      tone: 'warning',
+      icon: AlertTriangle,
+    };
+  }
+  if (confirmationUnknown) {
+    return {
+      title: 'Confirmation unknown',
+      body: 'A transaction hash exists, but its receipt could not be verified. Do not submit this action again. Check Transaction status on Portfolio.',
+      tone: 'warning',
+      icon: Clock3,
+    };
+  }
+  if (reverted) {
+    return {
+      title: 'Reverted',
+      body: 'The submitted transaction reverted on-chain. No later step was submitted.',
+      tone: 'danger',
+      icon: XCircle,
+    };
+  }
+  if (looksLikeWalletRejection(result.error)) {
+    return {
+      title: 'Wallet request declined',
+      body: 'This transaction was not submitted. No later step was opened.',
+      tone: 'danger',
+      icon: XCircle,
+    };
+  }
+  return {
+    title: 'Not submitted',
+    body: userSafeError(result.error, 'The route stopped before a transaction could be confirmed.'),
+    tone: 'danger',
+    icon: CircleAlert,
+  };
+}
+
+function statusPresentation(params: {
+  stage: Stage;
+  status: PlanStatus;
+  detail: string;
+  stepResults: readonly TransactionStepResult[];
+  stepCount: number;
+}): { label: string; body: string; className: string; icon: ReactNode } {
+  const confirmed = params.stepResults.filter((step) => step?.status === 'confirmed').length;
+  if (params.status === 'planning') {
+    return {
+      label: params.stage === 'executing' ? 'Preparing wallet request' : 'Preparing review',
+      body: params.stage === 'executing' ? 'Rechecking the reviewed route before signing.' : 'Building a fresh route from current on-chain state.',
+      className: 'text-mint',
+      icon: <LoaderCircle className="h-4 w-4 animate-spin" />,
+    };
+  }
+  if (params.status === 'reviewing') {
+    return params.stage === 'review'
+      ? { label: 'Ready to confirm', body: 'Checks passed. Review the amounts, limits, and transaction steps.', className: 'text-success', icon: <CheckCircle2 className="h-4 w-4" /> }
+      : { label: 'Checking transaction', body: 'Simulating the ordered route against current chain state.', className: 'text-mint', icon: <LoaderCircle className="h-4 w-4 animate-spin" /> };
+  }
+  if (params.status === 'awaiting-user') {
+    return {
+      label: 'Wallet approval',
+      body: params.detail ? `${params.detail.replace(/^transaction/i, 'Transaction')}. Review it in your wallet.` : 'Review and approve the transaction in your wallet.',
+      className: 'text-warn',
+      icon: <Clock3 className="h-4 w-4" />,
+    };
+  }
+  if (params.status === 'submitted') {
+    return {
+      label: 'Submitted',
+      body: 'Waiting for on-chain confirmation. A saved hash can be checked again if this screen closes.',
+      className: 'text-mint',
+      icon: <LoaderCircle className="h-4 w-4 animate-spin" />,
+    };
+  }
+  if (params.status === 'confirmed') {
+    return confirmed < params.stepCount
+      ? { label: 'Step confirmed', body: `${confirmed} of ${params.stepCount} confirmed. Preparing the next transaction.`, className: 'text-success', icon: <CheckCircle2 className="h-4 w-4" /> }
+      : { label: 'Confirmed', body: 'All transaction steps are confirmed.', className: 'text-success', icon: <CheckCircle2 className="h-4 w-4" /> };
+  }
+  if (params.status === 'partial') {
+    return { label: 'Partially completed', body: 'An earlier step confirmed before the route stopped.', className: 'text-warn', icon: <AlertTriangle className="h-4 w-4" /> };
+  }
+  return {
+    label: 'Route stopped',
+    body: userSafeError(params.detail, 'The route could not continue. Review it again before signing.'),
+    className: 'text-danger',
+    icon: <CircleAlert className="h-4 w-4" />,
+  };
 }
 
 export function ActionReview({
@@ -128,8 +357,10 @@ export function ActionReview({
   const [stepResults, setStepResults] = useState<TransactionStepResult[]>([]);
   const [reviewTitle, setReviewTitle] = useState<string | null>(null);
   const [reviewAcknowledged, setReviewAcknowledged] = useState(false);
+  const [reviewContext, setReviewContext] = useState<{ walletAddress: string; chainId?: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const previousPlanBuilder = useRef<ActionPlanBuilder | null>(planBuilder);
 
   const route = routes[selectedRoute];
 
@@ -147,11 +378,51 @@ export function ActionReview({
     setResult(null);
     setStepResults([]);
     setReviewTitle(null);
+    setReviewContext(null);
     setReviewAcknowledged(false);
     setStatus('planning');
     setStatusDetail('');
     window.requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
   }, []);
+
+  const invalidatePreparedRoute = useCallback((message: string) => {
+    setStage('input');
+    setRoutes([]);
+    setSelectedRoute(0);
+    setResult(null);
+    setStepResults([]);
+    setReviewTitle(null);
+    setReviewAcknowledged(false);
+    setReviewContext(null);
+    setStatus('failed');
+    setStatusDetail('');
+    setError(message);
+  }, []);
+
+  // The route is a snapshot of the wallet, network, and form inputs at review
+  // time. Any change invalidates it before another signing prompt can open.
+  useEffect(() => {
+    if (previousPlanBuilder.current !== planBuilder) {
+      previousPlanBuilder.current = planBuilder;
+      if (stage === 'review' || stage === 'result') {
+        invalidatePreparedRoute('The inputs changed. Review the action again before signing.');
+      }
+    }
+  }, [invalidatePreparedRoute, planBuilder, stage]);
+
+  useEffect(() => {
+    if (!reviewContext || (stage !== 'review' && stage !== 'result')) return;
+    const currentWallet = wallet.address?.toLowerCase();
+    const walletChanged = !wallet.authenticated || !currentWallet || currentWallet !== reviewContext.walletAddress;
+    const chainChanged = reviewContext.chainId !== undefined
+      && wallet.chainId !== undefined
+      && wallet.chainId !== reviewContext.chainId;
+    if (walletChanged || chainChanged) {
+      invalidatePreparedRoute(walletChanged
+        ? 'The selected wallet changed. Review the action again before signing.'
+        : 'The wallet network changed. Review the action again before signing.');
+    }
+  }, [invalidatePreparedRoute, reviewContext, stage, wallet.address, wallet.authenticated, wallet.chainId]);
 
   const review = useCallback(async () => {
     if (!planBuilder || disabled || loading) return;
@@ -162,13 +433,15 @@ export function ActionReview({
     setLoading(true);
     setError(null);
     setStatus('planning');
-    setStatusDetail('Building a fresh route from the official f(x) SDK…');
+    setStatusDetail('Preparing a fresh route.');
     try {
       const planned = asRoutes(await planBuilder());
+      setStatus('reviewing');
+      setStatusDetail('Checking the ordered transactions against current chain state.');
       const walletAddress = wallet.address.toLowerCase();
       for (const candidate of planned) {
         if (candidate.walletAddress.toLowerCase() !== walletAddress) {
-          throw new Error('The SDK route is not bound to the selected wallet.');
+          throw new Error('The prepared route is not bound to the selected wallet.');
         }
       }
       // Pre-simulate every alternative before displaying a signing action. A
@@ -188,7 +461,7 @@ export function ActionReview({
         }
       }
       if (!viable.length) {
-        throw new Error(`The SDK route could not be simulated: ${failures.join('; ')}`);
+        throw new Error(`The transaction could not be simulated: ${failures.join('; ')}`);
       }
       setRoutes(viable);
       setSelectedRoute(0);
@@ -198,29 +471,31 @@ export function ActionReview({
       // visible above the review card, but later form edits must never rename
       // an already reviewed route.
       setReviewTitle(operationLabel ?? viable[0].operation);
+      setReviewContext({ walletAddress, chainId: wallet.chainId });
       setStatus('reviewing');
-      setStatusDetail('Simulation passed. Review the exact ordered transactions.');
+      setStatusDetail('Checks passed. Review the amounts, limits, and transaction steps.');
       setStage('review');
       haptic('selection');
     } catch (cause) {
-      setError(userSafeError(cause, 'The SDK route could not be prepared. Check the inputs and network, then try again.'));
+      setStatus('failed');
+      setError(userSafeError(cause, 'The transaction could not be prepared. Check the inputs and network, then try again.'));
       haptic('error');
     } finally {
       setLoading(false);
     }
-  }, [disabled, loading, operationLabel, planBuilder, wallet.address, wallet.authenticated]);
+  }, [disabled, loading, operationLabel, planBuilder, wallet.address, wallet.authenticated, wallet.chainId]);
 
   const execute = useCallback(async () => {
     if (!route || loading) return;
     if (!reviewAcknowledged) {
-      setError('Confirm that you reviewed the exact amounts, minimum outputs, route paths, and contracts before signing.');
+      setError('Confirm that you checked the amounts, limits, recipient, and transaction steps before signing.');
       return;
     }
     setLoading(true);
     setError(null);
     setStage('executing');
     setStatus('awaiting-user');
-    setStatusDetail('Each step will open an explicit wallet confirmation.');
+    setStatusDetail('Each transaction opens in your wallet separately.');
     setStepResults([]);
     try {
       const execution = await runTransactionRoute({
@@ -237,14 +512,14 @@ export function ActionReview({
               nonce: request.nonce,
             }, {
               action: `${reviewTitle ?? route.operation} · ${request.to}`,
-              description: `Review step on ${chainName(request.chainId)} in your wallet.`,
-              buttonText: 'Approve transaction',
+              description: `Review this transaction on ${chainName(request.chainId)}.`,
+              buttonText: 'Review transaction',
             });
             return signed.hash;
           },
           onStatus: (next, detail) => {
             setStatus(next);
-            setStatusDetail(detail ? userSafeError(detail, 'The route could not continue. Check the chain and try again.') : '');
+            setStatusDetail(detail ? userSafeError(detail, 'The transaction could not continue. Check the network and try again.') : '');
           },
           onStep: (step) => {
             setStepResults((current) => {
@@ -264,9 +539,9 @@ export function ActionReview({
       });
       setResult(execution);
       setStage('result');
-      haptic(execution.status === 'confirmed' ? 'success' : 'error');
+      haptic(execution.status === 'confirmed' ? 'success' : execution.status === 'partial' ? 'warning' : 'error');
     } catch (cause) {
-      setError(userSafeError(cause, 'The transaction route could not continue. No later step was submitted.'));
+      setError(userSafeError(cause, 'The transaction could not continue. No later step was submitted.'));
       setStage('review');
       setStatus('failed');
       // A failed or stale route must be explicitly reviewed again. This is
@@ -280,63 +555,77 @@ export function ActionReview({
   }, [loading, onComplete, reviewAcknowledged, reviewTitle, route, wallet]);
 
   const routeSummaries = useMemo(() => routes.map((candidate) => {
-    const routeType = candidate.details?.routeType ?? 'Official SDK route';
+    const routeType = candidate.details?.routeType ?? 'Route';
     const approvals = candidate.transactions.filter((transaction) => transaction.kind === 'approval').length;
     return { routeType, approvals, count: candidate.transactions.length };
   }), [routes]);
 
   if (stage === 'input') {
+    const progress = statusPresentation({ stage, status, detail: statusDetail, stepResults, stepCount: 0 });
     return (
       <div className="flex flex-col gap-2.5">
         {error && <InlineError message={error} />}
         <Button ref={triggerRef} disabled={!planBuilder || disabled || !wallet.ready} loading={loading} onClick={() => void review()}>
-          <Sparkles aria-hidden="true" className="h-4 w-4" /> {label}
+          <ShieldCheck aria-hidden="true" className="h-4 w-4" /> {label}
         </Button>
-        <p className="px-1 text-center text-[10.5px] leading-relaxed text-mut">
-          Nothing is signed yet. The official SDK builds and simulates a fresh route first.
-        </p>
+        {loading && <StatusNotice {...progress} />}
       </div>
     );
   }
 
   if (stage === 'result' && result) {
-    const confirmed = result.status === 'confirmed';
-    const hashes = result.steps.flatMap((step) => step.hash ? [step.hash] : []);
+    const bridgeQuote = route?.operation === 'buildBridgeTx' && isBridgeQuote(route.quote) ? route.quote : null;
+    const bridge = Boolean(bridgeQuote);
+    const presentation = resultPresentation(result, bridge);
+    const ResultIcon = presentation.icon;
+    const bridgeStep = bridge
+      ? [...result.steps].reverse().find((step) => step.transaction.kind === 'action' && step.hash)
+      : undefined;
+    const bridgeStatus = bridgeStep?.receipt?.status === 'reverted'
+      ? 'failed'
+      : bridgeStep?.status === 'confirmed' && bridgeStep.receipt?.status === 'success'
+        ? 'source_confirmed'
+        : 'pending';
+    const tone = presentation.tone === 'success'
+      ? 'bg-[var(--success-dim)] text-success'
+      : presentation.tone === 'warning'
+        ? 'bg-[var(--warn-dim)] text-warn'
+        : 'bg-[var(--danger-dim)] text-danger';
     return (
       <Card glow className="anim-scale-in p-5">
         <div className="flex flex-col items-center text-center">
-          <span className={`flex h-14 w-14 items-center justify-center rounded-2xl ${confirmed ? 'bg-[var(--success-dim)] text-success' : 'bg-[var(--danger-dim)] text-danger'}`}>
-            {confirmed ? <CheckCircle2 className="h-7 w-7" /> : <XCircle className="h-7 w-7" />}
+          <span className={`flex h-12 w-12 items-center justify-center rounded-xl ${tone}`}>
+            <ResultIcon className="h-6 w-6" aria-hidden="true" />
           </span>
           <h3 ref={headingRef} tabIndex={-1} className="text-display mt-4 text-[21px] font-semibold outline-none">
-            {confirmed ? 'Confirmed on-chain' : result.status === 'partial' ? 'Route partially completed' : 'Transaction failed'}
+            {presentation.title}
           </h3>
           <p className="mt-1.5 text-[12px] leading-relaxed text-mut">
-            {confirmed ? 'State will refresh from Ethereum/Base after confirmation.' : userSafeError(result.error, 'No later route step was submitted after the failure.')}
+            {presentation.body}
           </p>
-          {hashes.length > 0 && (
+          {result.steps.some((step) => step.hash) && (
             <div className="mt-4 flex w-full flex-col gap-2 text-left">
-              {hashes.map((hash, index) => (
-                <HashButton key={hash} hash={hash} chainId={result.chainId} index={index} />
-              ))}
+              {result.steps.map((step) => step.hash ? (
+                <HashButton key={step.hash} step={step} chainId={result.chainId} />
+              ) : null)}
             </div>
           )}
-          {route?.operation === 'buildBridgeTx' && hashes[0] && isBridgeQuote(route.quote) && (
+          {bridgeQuote && bridgeStep?.hash && (
             <BridgeTracker
               className="mt-4 w-full text-left"
               sourceChain={route.chainId === 1 ? 'Ethereum' : 'Base'}
               destinationChain={route.chainId === 1 ? 'Base' : 'Ethereum'}
-              token={route.quote.bridgeToken ?? 'Bridge asset'}
-              amount={route.quote.bridgeAmount === undefined ? '' : formatUnits(route.quote.bridgeAmount, 18)}
-              sourceTxHash={hashes[hashes.length - 1]}
-              status={confirmed ? 'source_confirmed' : 'failed'}
-              sourceOftAddress={route.quote.sourceOftAddress}
-              destinationOftAddress={route.quote.destinationOftAddress}
-              recipient={route.quote.recipient}
+              token={bridgeQuote.bridgeToken ?? 'Bridge asset'}
+              amount={bridgeQuote.bridgeAmount === undefined ? '' : formatUnits(bridgeQuote.bridgeAmount, 18)}
+              sourceTxHash={bridgeStep.hash}
+              status={bridgeStatus}
+              sourceOftAddress={bridgeQuote.sourceOftAddress}
+              destinationOftAddress={bridgeQuote.destinationOftAddress}
+              recipient={bridgeQuote.recipient}
               sourceSender={route.walletAddress}
-              amountLD={route.quote.amountLD}
-              minAmountLD={route.quote.minAmountLD}
-              destinationBaselineBlock={route.quote.destinationBaselineBlock}
+              amountLD={bridgeQuote.amountLD}
+              minAmountLD={bridgeQuote.minAmountLD}
+              destinationBaselineBlock={bridgeQuote.destinationBaselineBlock}
             />
           )}
           <Button variant="ghost" className="mt-4" onClick={reset}>Done</Button>
@@ -347,6 +636,9 @@ export function ActionReview({
 
   if (!route) return null;
   const stepCount = route.transactions.length;
+  const approvalCount = route.transactions.filter((transaction) => transaction.kind === 'approval').length;
+  const facts = primaryReviewFacts(route);
+  const progress = statusPresentation({ stage, status, detail: statusDetail, stepResults, stepCount });
   return (
     <Card glow className="anim-scale-in p-5">
       <button
@@ -360,18 +652,21 @@ export function ActionReview({
 
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.17em] text-mint">Client-side review</p>
+          <p className="text-[12px] font-medium text-mint">Review</p>
           <h3 ref={headingRef} tabIndex={-1} className="text-display mt-1.5 text-[22px] font-semibold leading-tight outline-none">
             {reviewTitle ?? route.operation}
           </h3>
-          <p className="mt-1 text-[12px] text-mut">{chainName(route.chainId)} · {stepCount} ordered {stepCount === 1 ? 'transaction' : 'transactions'}</p>
+          <p className="mt-1 text-[12px] text-mut">
+            {chainName(route.chainId)} · {stepCount} {stepCount === 1 ? 'transaction' : 'transactions'}
+            {approvalCount > 0 ? ` · ${approvalCount} approval${approvalCount === 1 ? '' : 's'}` : ''}
+          </p>
         </div>
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)] text-mint"><ShieldCheck className="h-5 w-5" /></span>
       </div>
 
       {routes.length > 1 && (
-        <div className="mt-4 flex flex-col gap-2" role="radiogroup" aria-label="SDK route options">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.13em] text-mut">Choose route</p>
+        <div className="mt-4 flex flex-col gap-2" role="radiogroup" aria-label="Route options">
+          <p className="text-[12px] font-medium text-mut">Choose route</p>
           {routes.map((candidate, index) => (
             <button
               type="button"
@@ -387,7 +682,7 @@ export function ActionReview({
               className={`flex min-h-12 items-center justify-between rounded-xl border px-3 text-left ${selectedRoute === index ? 'border-[rgba(139,109,255,.55)] bg-[var(--mint-dim)]' : 'border-[var(--line)] bg-[rgba(255,255,255,.025)]'}`}
             >
               <span className="text-[12px] font-semibold">{routeSummaries[index].routeType}</span>
-              <span className="text-[10px] text-mut">{routeSummaries[index].count} tx · {routeSummaries[index].approvals} approval{routeSummaries[index].approvals === 1 ? '' : 's'}</span>
+              <span className="text-[11px] text-mut">{routeSummaries[index].count} tx · {routeSummaries[index].approvals} approval{routeSummaries[index].approvals === 1 ? '' : 's'}</span>
             </button>
           ))}
         </div>
@@ -396,61 +691,32 @@ export function ActionReview({
       <div className="my-4 hairline" />
       <div className="flex flex-col gap-2.5">
         <ReviewRow label="Network" value={chainName(route.chainId)} />
-        <ReviewRow label="Wallet" value={`${route.walletAddress.slice(0, 6)}…${route.walletAddress.slice(-4)}`} />
-        {route.details?.routeType && <ReviewRow label="SDK route" value={route.details.routeType} />}
-        {route.details?.requestedAmount && <ReviewRow label="Reviewed input (raw units)" value={route.details.requestedAmount} />}
-        {route.details?.requestedLeverage !== undefined && <ReviewRow label="Requested leverage" value={`${route.details.requestedLeverage}×`} />}
-        {route.details?.slippagePercent !== undefined && <ReviewRow label="Slippage tolerance" value={`${route.details.slippagePercent}%`} />}
-        {route.details?.leverage !== undefined && <ReviewRow label="SDK projected leverage" value={`${route.details.leverage}×`} />}
-        {route.details?.executionPrice && <ReviewRow label="SDK execution price" value={route.details.executionPrice} />}
-        {route.details?.minOut !== undefined && <ReviewRow label="SDK minimum output" value={route.details.minOut} />}
-        {route.details?.colls && <ReviewRow label="SDK projected collateral" value={route.details.colls} />}
-        {route.details?.debts && <ReviewRow label="SDK projected debt" value={route.details.debts} />}
-        {route.details?.economicLimits?.map((limit, index) => (
-          <ReviewRow key={`${limit.label}-${index}`} label={limit.label} value={`${limit.value} raw units`} />
-        ))}
-        {route.details?.conversionPaths?.map((path, index) => (
-          <ReviewRow key={`${path.label}-${index}`} label={`${path.label} path hash`} value={path.fingerprint} />
-        ))}
-        {route.policy?.reviewedAction?.expectedActionDataFingerprint && (
-          <ReviewRow label="Protocol calldata fingerprint" value={route.policy.reviewedAction.expectedActionDataFingerprint} />
-        )}
-        {isBridgeQuote(route.quote) && <ReviewRow label="LayerZero native fee" value={`${displayBigint(route.quote.nativeFee)} ETH`} />}
-        {isBridgeQuote(route.quote) && route.quote.sourceOftAddress && <ReviewRow label="Reviewed source OFT" value={route.quote.sourceOftAddress} />}
-        {isBridgeQuote(route.quote) && route.quote.destinationOftAddress && <ReviewRow label="Reviewed destination OFT" value={route.quote.destinationOftAddress} />}
-        {isBridgeQuote(route.quote) && route.quote.sourceTokenAddress && <ReviewRow label="Source local token" value={route.quote.sourceTokenAddress} />}
-        {isBridgeQuote(route.quote) && route.quote.destinationTokenAddress && <ReviewRow label="Destination local token" value={route.quote.destinationTokenAddress} />}
-        {isBridgeQuote(route.quote) && route.quote.sourceApprovalRequired !== undefined && <ReviewRow label="Source approval" value={route.quote.sourceApprovalRequired ? 'Required when allowance is insufficient' : 'Not required'} />}
-        {isBridgeQuote(route.quote) && route.quote.destinationApprovalRequired !== undefined && <ReviewRow label="Destination approval" value={route.quote.destinationApprovalRequired ? 'Adapter metadata: required' : 'Not required'} />}
-        {isBridgeQuote(route.quote) && route.quote.approvalTokenAddress && <ReviewRow label="Approval token" value={route.quote.approvalTokenAddress} />}
-        {isBridgeQuote(route.quote) && route.quote.destinationEid !== undefined && <ReviewRow label="Destination EID" value={String(route.quote.destinationEid)} />}
-        {isBridgeQuote(route.quote) && route.quote.recipient && <ReviewRow label="Recipient" value={route.quote.recipient} />}
-        {isBridgeQuote(route.quote) && route.quote.recipientBytes32 && <ReviewRow label="Recipient bytes32" value={route.quote.recipientBytes32} />}
-        {isBridgeQuote(route.quote) && route.quote.amountLD !== undefined && <ReviewRow label="Bridge amount" value={`${formatUnits(route.quote.amountLD, 18)} tokens`} />}
-        {isBridgeQuote(route.quote) && route.quote.minAmountLD !== undefined && <ReviewRow label="Minimum delivered" value={`${formatUnits(route.quote.minAmountLD, 18)} tokens`} />}
-        {isBridgeQuote(route.quote) && route.quote.extraOptions !== undefined && <ReviewRow label="LayerZero extra options" value={route.quote.extraOptions} />}
-        {isBridgeQuote(route.quote) && route.quote.composeMsg !== undefined && <ReviewRow label="Compose message" value={route.quote.composeMsg} />}
-        {isBridgeQuote(route.quote) && route.quote.oftCmd !== undefined && <ReviewRow label="OFT command" value={route.quote.oftCmd} />}
-        {isBridgeQuote(route.quote) && route.quote.refundAddress && <ReviewRow label="Fee refund" value={route.quote.refundAddress} />}
+        <ReviewRow label="Wallet" value={compactAddress(route.walletAddress)} title={route.walletAddress} />
+        {facts.map((fact) => <ReviewRow key={`${fact.label}-${fact.value}`} label={fact.label} value={fact.value} />)}
       </div>
 
-      <div className="mt-4 flex flex-col gap-2" aria-label="Ordered transaction steps">
+      <AdvancedReviewDetails route={route} />
+
+      <div className="mt-4 flex flex-col gap-2" aria-label="Transaction steps">
+        <p className="text-[12px] font-medium text-mut">What you will approve</p>
         {route.transactions.map((transaction, index) => {
           const approval = approvalFacts(transaction);
           const progress = stepProgress(stepResults[index]);
           return (
           <div key={`${transaction.to}-${index}`} className="rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.025)] p-3">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-[11px] font-semibold">Step {index + 1} · {transaction.kind === 'approval' ? 'Exact approval' : 'Protocol action'}</span>
+              <span className="text-[12px] font-semibold">{index + 1}. {stepTitle(transaction)}</span>
               <span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${progress.className}`}>{progress.icon}{progress.label}</span>
             </div>
-            <p className="mt-1 break-all font-mono text-[10px] text-mut">Contract: {transaction.to}</p>
-            <p className="mt-1 text-[10px] text-mut">{transaction.nonce === undefined ? 'Nonce is checked immediately before signing' : `Reviewed nonce: ${transaction.nonce}`}</p>
-            {approval && <p className="mt-1 break-all text-[10px] text-mut">Approval spender: <span className="font-mono">{approval.spender}</span></p>}
-            {approval && <p className="mt-1 text-[10px] text-mut">{approval.valueLabel}: <span className="break-all font-mono">{approval.value}</span></p>}
-            {transaction.value > 0n && <p className="mt-1 text-[10px] text-mut">Native value: {displayBigint(transaction.value)} ETH</p>}
-            <details className="mt-2 border-t border-[var(--line)] pt-1.5">
-              <summary className="flex min-h-11 cursor-pointer items-center text-[10px] font-semibold text-mint">Inspect raw transaction</summary>
+            {approval && <p className="mt-1 text-[11px] text-mut">{approvalSummary(transaction, approval)} to <span className="font-mono">{compactAddress(approval.spender)}</span></p>}
+            {transaction.value > 0n && <p className="mt-1 text-[11px] text-mut">Network value: {trimDecimal(formatEther(transaction.value))} ETH</p>}
+            {transaction.kind !== 'approval' && <p className="mt-1 text-[11px] text-mut">Contract <span className="font-mono">{compactAddress(transaction.to)}</span></p>}
+            <details className="mt-2 border-t border-[var(--line)] pt-1">
+              <summary className="flex min-h-11 cursor-pointer items-center text-[11px] font-semibold text-mint">Transaction details</summary>
+              <ReviewRow label="Contract" value={transaction.to} />
+              <ReviewRow label="Nonce" value={transaction.nonce === undefined ? 'Checked before signing' : String(transaction.nonce)} />
+              {approval && <ReviewRow label="Approval spender" value={approval.spender} />}
+              {approval && <ReviewRow label={approval.valueLabel} value={approval.value.toString()} />}
               <p className="mt-1 font-mono text-[10px] text-mut">Selector: {transaction.data.slice(0, 10)}</p>
               <p className="mt-1 break-all font-mono text-[9px] leading-relaxed text-[var(--mut-2)]">{transaction.data}</p>
             </details>
@@ -459,12 +725,9 @@ export function ActionReview({
         })}
       </div>
 
-      <div role="status" aria-live="polite" aria-atomic="true" className="mt-4 flex items-start gap-2.5 rounded-2xl bg-[var(--mint-dim)] p-3 text-[11px] leading-relaxed text-mut">
-        <Fuel aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-mint" />
-        <span>{statusDetail || 'Simulation passed. Your wallet will show every transaction before it is sent.'}</span>
-      </div>
+      <div className="mt-4"><StatusNotice {...progress} /></div>
       {error && <div className="mt-3"><InlineError message={error} /></div>}
-      <label className="mt-4 flex min-h-12 cursor-pointer items-start gap-3 rounded-2xl border border-[var(--line)] bg-[rgba(255,255,255,.025)] p-3 text-[11px] leading-relaxed text-mut">
+      <label className="mt-4 flex min-h-12 cursor-pointer items-start gap-3 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.025)] p-3 text-[11.5px] leading-relaxed text-mut">
         <input
           type="checkbox"
           checked={reviewAcknowledged}
@@ -472,31 +735,92 @@ export function ActionReview({
           disabled={loading || status === 'failed'}
           className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--mint)]"
         />
-        <span>I reviewed the exact transaction amounts, minimum outputs, converter paths, recipient, and contracts above. I understand that each wallet prompt is a separate on-chain approval.</span>
+        <span>I have reviewed the amounts and transaction steps above.</span>
       </label>
       <Button disabled={loading || status === 'failed' || !reviewAcknowledged} loading={loading || stage === 'executing'} className="mt-3" onClick={() => void execute()}>
-        <ShieldCheck aria-hidden="true" className="h-4 w-4" /> Confirm each step in wallet
+        <ShieldCheck aria-hidden="true" className="h-4 w-4" /> {stepCount === 1 ? 'Confirm in wallet' : `Confirm ${stepCount} transactions`}
       </Button>
-      <p className="mt-2 text-center text-[10px] leading-relaxed text-mut">
-        FxAeon never receives your private key. A later step is locked until the previous receipt succeeds.
-      </p>
     </Card>
   );
 }
 
-function ReviewRow({ label, value }: { label: string; value: string }) {
-  return <div className="flex items-start justify-between gap-4 text-[12px]"><span className="text-mut">{label}</span><span className="max-w-[62%] break-all text-right font-semibold">{value}</span></div>;
+function ReviewRow({ label, value, title }: { label: string; value: string; title?: string }) {
+  return <div className="flex items-start justify-between gap-4 text-[12px]"><span className="text-mut">{label}</span><span title={title ?? value} className="max-w-[62%] break-all text-right font-semibold tabular-nums">{value}</span></div>;
 }
 
-function HashButton({ hash, chainId, index }: { hash: string; chainId: number; index: number }) {
+function AdvancedReviewDetails({ route }: { route: PlannedRoute }) {
+  const bridgeQuote = isBridgeQuote(route.quote) ? route.quote : null;
+  const hasDetails = Boolean(
+    route.details?.requestedAmount
+      || route.details?.sdkSlippagePercent !== undefined
+      || route.details?.economicLimits?.length
+      || route.details?.conversionPaths?.length
+      || route.policy?.reviewedAction?.expectedActionDataFingerprint
+      || bridgeQuote,
+  );
+  if (!hasDetails) return null;
+
+  return (
+    <details className="group mt-4 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.02)] px-3">
+      <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-[12px] font-semibold text-mut">
+        <span>Advanced details</span>
+        <span className="text-[11px] font-normal text-[var(--mut-2)] group-open:hidden">Route and contract data</span>
+      </summary>
+      <div className="flex flex-col gap-2.5 border-t border-[var(--line)] py-3">
+        {route.details?.requestedAmount && <ReviewRow label="Requested amount (raw units)" value={route.details.requestedAmount} />}
+        {route.details?.sdkSlippagePercent !== undefined && <ReviewRow label="Quoted slippage" value={`${route.details.sdkSlippagePercent}%`} />}
+        {route.details?.economicLimits?.map((limit, index) => <ReviewRow key={`limit-${index}`} label={limit.label} value={`${limit.value} raw units`} />)}
+        {route.details?.conversionPaths?.map((path, index) => <ReviewRow key={`path-${index}`} label={`${path.label} fingerprint`} value={path.fingerprint} />)}
+        {route.policy?.reviewedAction?.expectedActionDataFingerprint && <ReviewRow label="Action fingerprint" value={route.policy.reviewedAction.expectedActionDataFingerprint} />}
+        {bridgeQuote && (
+          <>
+            {bridgeQuote.sourceOftAddress && <ReviewRow label="Source OFT" value={bridgeQuote.sourceOftAddress} />}
+            {bridgeQuote.destinationOftAddress && <ReviewRow label="Destination OFT" value={bridgeQuote.destinationOftAddress} />}
+            {bridgeQuote.sourceTokenAddress && <ReviewRow label="Source token" value={bridgeQuote.sourceTokenAddress} />}
+            {bridgeQuote.destinationTokenAddress && <ReviewRow label="Destination token" value={bridgeQuote.destinationTokenAddress} />}
+            {bridgeQuote.sourceApprovalRequired !== undefined && <ReviewRow label="Source approval" value={bridgeQuote.sourceApprovalRequired ? 'Required if allowance is low' : 'Not required'} />}
+            {bridgeQuote.destinationApprovalRequired !== undefined && <ReviewRow label="Destination approval" value={bridgeQuote.destinationApprovalRequired ? 'Required by adapter' : 'Not required'} />}
+            {bridgeQuote.approvalTokenAddress && <ReviewRow label="Approval token" value={bridgeQuote.approvalTokenAddress} />}
+            {bridgeQuote.destinationEid !== undefined && <ReviewRow label="Destination endpoint" value={String(bridgeQuote.destinationEid)} />}
+            {bridgeQuote.recipientBytes32 && <ReviewRow label="Recipient (bytes32)" value={bridgeQuote.recipientBytes32} />}
+            {bridgeQuote.amountLD !== undefined && <ReviewRow label="Bridge amount (raw units)" value={bridgeQuote.amountLD.toString()} />}
+            {bridgeQuote.minAmountLD !== undefined && <ReviewRow label="Minimum delivered (raw units)" value={bridgeQuote.minAmountLD.toString()} />}
+            {bridgeQuote.extraOptions !== undefined && <ReviewRow label="Extra options" value={bridgeQuote.extraOptions} />}
+            {bridgeQuote.composeMsg !== undefined && <ReviewRow label="Compose message" value={bridgeQuote.composeMsg} />}
+            {bridgeQuote.oftCmd !== undefined && <ReviewRow label="OFT command" value={bridgeQuote.oftCmd} />}
+            {bridgeQuote.refundAddress && <ReviewRow label="Fee refund" value={bridgeQuote.refundAddress} />}
+            {bridgeQuote.destinationBaselineBlock !== undefined && <ReviewRow label="Destination baseline block" value={bridgeQuote.destinationBaselineBlock.toString()} />}
+          </>
+        )}
+      </div>
+    </details>
+  );
+}
+
+function HashButton({ step, chainId }: { step: TransactionStepResult; chainId: number }) {
+  if (!step.hash) return null;
   const open = () => {
     const base = chainId === 8453 ? 'https://basescan.org' : 'https://etherscan.io';
-    const url = `${base}/tx/${hash}`;
+    const url = `${base}/tx/${step.hash}`;
     const telegram = getWebApp();
     if (telegram?.openLink) telegram.openLink(url);
     else window.open(url, '_blank', 'noopener,noreferrer');
   };
-  return <button type="button" onClick={open} className="flex min-h-11 items-center justify-between gap-3 rounded-xl bg-[var(--mint-dim)] px-3 text-[11.5px] font-semibold text-mint"><span>Step {index + 1} · {shortHash(hash)}</span><span className="inline-flex items-center gap-1">Explorer <ExternalLink aria-hidden="true" className="h-3.5 w-3.5" /></span></button>;
+  const state = step.receipt?.status === 'reverted'
+    ? 'Reverted'
+    : step.status === 'confirmed'
+      ? 'Confirmed'
+      : 'Submitted';
+  return <button type="button" onClick={open} className="flex min-h-11 items-center justify-between gap-3 rounded-xl bg-[var(--mint-dim)] px-3 text-[11.5px] font-semibold text-mint"><span>Step {step.index + 1} · {state} · {shortHash(step.hash)}</span><span className="inline-flex items-center gap-1">Explorer <ExternalLink aria-hidden="true" className="h-3.5 w-3.5" /></span></button>;
+}
+
+function StatusNotice({ label, body, className, icon }: { label: string; body: string; className: string; icon: ReactNode }) {
+  return (
+    <div role="status" aria-live="polite" aria-atomic="true" className="flex items-start gap-2.5 rounded-xl bg-[rgba(255,255,255,.035)] p-3 text-[11.5px] leading-relaxed">
+      <span className={`mt-0.5 shrink-0 ${className}`}>{icon}</span>
+      <span><span className={`font-semibold ${className}`}>{label}</span><span className="mt-0.5 block text-mut">{body}</span></span>
+    </div>
+  );
 }
 
 function InlineError({ message }: { message: string }) {

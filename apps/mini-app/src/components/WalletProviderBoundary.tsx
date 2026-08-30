@@ -15,6 +15,12 @@ const PrivyClientProvider = dynamic(
   { loading: () => <FullScreenSpinner /> },
 );
 
+// Keep the direct-route launch gate comfortably inside Telegram's native
+// startup budget. A failed script should resolve to a recovery screen instead
+// of leaving the user on an indefinite loading state while the wallet chunk
+// hydrates.
+const TELEGRAM_BRIDGE_TIMEOUT_MS = 3_000;
+
 export default function WalletProviderBoundary({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [telegramBridge, setTelegramBridge] = useState<'ready' | 'waiting' | 'unavailable'>(() => {
@@ -25,7 +31,7 @@ export default function WalletProviderBoundary({ children }: { children: React.R
   useEffect(() => {
     if (telegramBridge !== 'waiting') return;
     let cancelled = false;
-    void waitForTelegramWebApp().then((webApp) => {
+    void waitForTelegramWebApp(TELEGRAM_BRIDGE_TIMEOUT_MS).then((webApp) => {
       if (!cancelled) setTelegramBridge(webApp ? 'ready' : 'unavailable');
     });
     return () => { cancelled = true; };

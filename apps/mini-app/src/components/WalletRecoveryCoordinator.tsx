@@ -34,13 +34,18 @@ export default function WalletRecoveryCoordinator() {
     const onVisible = () => {
       if (document.visibilityState === 'visible') void reconcile();
     };
+    const onResume = () => void reconcile();
     const onStorage = () => void reconcile();
     void reconcile();
     document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onResume);
+    window.addEventListener('online', onResume);
     window.addEventListener('storage', onStorage);
     return () => {
       cancelled = true;
       document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onResume);
+      window.removeEventListener('online', onResume);
       window.removeEventListener('storage', onStorage);
     };
   }, [wallet.address, wallet.authenticated, wallet.ready]);

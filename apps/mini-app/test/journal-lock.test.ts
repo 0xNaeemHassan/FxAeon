@@ -295,6 +295,38 @@ test("the wallet-chain lock serializes concurrent signing flows", async () => {
   assert.deepEqual(events, ["first:start", "first:end", "second:start", "second:end"]);
 });
 
+test("the wallet lock serializes Ethereum and Base flows for the same external wallet", async () => {
+  const events: string[] = [];
+  let releaseEthereum!: () => void;
+  const ethereum = withWalletChainLock({
+    walletAddress: WALLET,
+    chainId: 1,
+    run: async () => {
+      events.push("ethereum:start");
+      await new Promise<void>((resolve) => { releaseEthereum = resolve; });
+      events.push("ethereum:end");
+      return "ethereum";
+    },
+  });
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+  const base = withWalletChainLock({
+    walletAddress: WALLET,
+    chainId: 8453,
+    run: async () => {
+      events.push("base:start");
+      events.push("base:end");
+      return "base";
+    },
+  });
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(events, ["ethereum:start"]);
+  releaseEthereum();
+  assert.deepEqual(await Promise.all([ethereum, base]), ["ethereum", "base"]);
+  assert.deepEqual(events, ["ethereum:start", "ethereum:end", "base:start", "base:end"]);
+});
+
 test("the storage lease preserves the original route error", async () => {
   const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
   const values = new Map<string, string>();

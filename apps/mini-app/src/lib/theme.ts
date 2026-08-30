@@ -1,5 +1,5 @@
 /**
- * FxAeon Cyber Theme Studio
+ * FxAeon semantic theme tokens
  *
  * Provides instant dynamic theme switching using CSS custom properties with zero
  * external image assets or bundle overhead.
@@ -26,17 +26,15 @@ export const THEMES: Record<ThemeId, ThemeConfig> = {
     colors: {
       '--bg': '#07070d',
       '--bg-raised': '#0b0b14',
+      '--surface': 'rgba(18, 18, 30, 0.88)',
+      '--surface-2': 'rgba(26, 26, 42, 0.90)',
+      '--surface-3': 'rgba(34, 33, 54, 0.92)',
       '--card': '#12121d',
       '--mint': '#8b6dff',
       '--mint-bright': '#aa96ff',
       '--mint-dim': 'rgba(139, 109, 255, 0.14)',
       '--mint-glow': 'rgba(139, 109, 255, 0.28)',
       '--cyan': '#b9a8ff',
-      '--astryx-surface-canvas': '#07070d',
-      '--astryx-surface-default': '#12121d',
-      '--astryx-surface-raised': '#181829',
-      '--astryx-text-accent': '#8b6dff',
-      '--astryx-border-glow': 'rgba(139, 109, 255, 0.35)',
     },
   },
   matrix: {
@@ -48,17 +46,15 @@ export const THEMES: Record<ThemeId, ThemeConfig> = {
     colors: {
       '--bg': '#050906',
       '--bg-raised': '#08120a',
+      '--surface': 'rgba(13, 26, 15, 0.88)',
+      '--surface-2': 'rgba(18, 36, 21, 0.90)',
+      '--surface-3': 'rgba(23, 46, 27, 0.92)',
       '--card': '#0d1a0f',
       '--mint': '#00ff88',
       '--mint-bright': '#4dffaa',
       '--mint-dim': 'rgba(0, 255, 136, 0.14)',
       '--mint-glow': 'rgba(0, 255, 136, 0.32)',
       '--cyan': '#66ffbb',
-      '--astryx-surface-canvas': '#050906',
-      '--astryx-surface-default': '#0d1a0f',
-      '--astryx-surface-raised': '#122415',
-      '--astryx-text-accent': '#00ff88',
-      '--astryx-border-glow': 'rgba(0, 255, 136, 0.35)',
     },
   },
   neon: {
@@ -70,17 +66,15 @@ export const THEMES: Record<ThemeId, ThemeConfig> = {
     colors: {
       '--bg': '#0a0610',
       '--bg-raised': '#110a1c',
+      '--surface': 'rgba(25, 14, 40, 0.88)',
+      '--surface-2': 'rgba(36, 20, 58, 0.90)',
+      '--surface-3': 'rgba(47, 26, 75, 0.92)',
       '--card': '#190e28',
       '--mint': '#ff2a85',
       '--mint-bright': '#ff5ba3',
       '--mint-dim': 'rgba(255, 42, 133, 0.14)',
       '--mint-glow': 'rgba(255, 42, 133, 0.32)',
       '--cyan': '#00e5ff',
-      '--astryx-surface-canvas': '#0a0610',
-      '--astryx-surface-default': '#190e28',
-      '--astryx-surface-raised': '#24143a',
-      '--astryx-text-accent': '#ff2a85',
-      '--astryx-border-glow': 'rgba(255, 42, 133, 0.35)',
     },
   },
   titanium: {
@@ -92,17 +86,15 @@ export const THEMES: Record<ThemeId, ThemeConfig> = {
     colors: {
       '--bg': '#09090b',
       '--bg-raised': '#121216',
+      '--surface': 'rgba(24, 24, 31, 0.90)',
+      '--surface-2': 'rgba(34, 34, 44, 0.92)',
+      '--surface-3': 'rgba(44, 44, 56, 0.94)',
       '--card': '#18181f',
       '--mint': '#e2e8f0',
       '--mint-bright': '#f8fafc',
       '--mint-dim': 'rgba(226, 232, 240, 0.14)',
       '--mint-glow': 'rgba(226, 232, 240, 0.25)',
       '--cyan': '#94a3b8',
-      '--astryx-surface-canvas': '#09090b',
-      '--astryx-surface-default': '#18181f',
-      '--astryx-surface-raised': '#22222c',
-      '--astryx-text-accent': '#e2e8f0',
-      '--astryx-border-glow': 'rgba(226, 232, 240, 0.25)',
     },
   },
 };

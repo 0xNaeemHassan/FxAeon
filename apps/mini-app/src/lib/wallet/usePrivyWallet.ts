@@ -52,6 +52,8 @@ export type FxPrivyWallet = {
   authenticated: boolean;
   wallets: ConnectedWallet[];
   selectedWallet?: FxSelectedWallet;
+  /** Current selected wallet network when Privy has a supported chain value. */
+  chainId?: FxChainId;
   address?: string;
   isEmbedded: boolean;
   selectWallet: (address: string) => void;
@@ -119,6 +121,13 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
       wallets.find((wallet) => isEmbedded(wallet)) ?? wallets.find((wallet) => wallet.type === 'ethereum')
     ) as FxSelectedWallet | undefined;
   }, [selectedAddress, wallets]);
+
+  const selectedChainId = useMemo(() => {
+    const chainId = asChainNumber(selectedWallet?.chainId);
+    return chainId === FX_CHAIN_IDS.ethereum || chainId === FX_CHAIN_IDS.base
+      ? chainId
+      : undefined;
+  }, [selectedWallet]);
 
   useEffect(() => {
     if (!selectedAddress || !wallets.some((wallet) => wallet.address.toLowerCase() === selectedAddress.toLowerCase())) {
@@ -238,6 +247,7 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
     authenticated,
     wallets,
     selectedWallet,
+    chainId: selectedChainId,
     address: selectedWallet?.address,
     isEmbedded: isEmbedded(selectedWallet),
     selectWallet,
@@ -259,6 +269,7 @@ const unavailableWallet: FxPrivyWallet = {
   authenticated: false,
   wallets: [],
   selectedWallet: undefined,
+  chainId: undefined,
   address: undefined,
   isEmbedded: false,
   selectWallet: () => undefined,

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter, Space_Grotesk } from 'next/font/google';
+import { Inter } from 'next/font/google';
 import './globals.css';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { TelegramProvider } from '@/components/TelegramProvider';
@@ -7,14 +7,13 @@ import WalletProviderBoundary from '@/components/WalletProviderBoundary';
 import { LocaleProvider } from '@/lib/i18n';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
-const grotesk = Space_Grotesk({ subsets: ['latin'], variable: '--font-display' });
 
 export const metadata: Metadata = {
   title: {
-    default: 'FxAeon — f(x) Protocol Gateway',
+    default: 'FxAeon',
     template: '%s · FxAeon',
   },
-  description: 'The self-custodial f(x) Protocol gateway for trading, borrowing, saving, bridging, and position management in Telegram.',
+  description: 'Trade, borrow, earn, and move assets with f(x) Protocol in Telegram.',
   applicationName: 'FxAeon',
   formatDetection: { telephone: false, email: false, address: false },
   appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'FxAeon' },
@@ -37,7 +36,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${inter.variable} ${grotesk.variable}`}>
+    <html lang="en" className={inter.variable}>
       <head>
         {/* Start Telegram's bridge immediately, but do not let a slow or
             unreachable telegram.org block FxAeon's React hydration. Client

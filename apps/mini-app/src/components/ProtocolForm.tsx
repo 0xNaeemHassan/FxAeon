@@ -18,7 +18,7 @@ export function Segmented<T extends string>({
   ariaLabel: string;
 }) {
   return (
-    <div className="grid grid-flow-col auto-cols-fr rounded-2xl border border-[var(--line)] bg-[rgba(0,0,0,.18)] p-1" role="radiogroup" aria-label={ariaLabel}>
+    <div className="grid grid-flow-col auto-cols-fr rounded-xl border border-[var(--line)] bg-[rgba(0,0,0,.18)] p-1" role="radiogroup" aria-label={ariaLabel}>
       {options.map((option) => {
         const active = option.value === value;
         return (
@@ -48,14 +48,14 @@ export function Segmented<T extends string>({
               buttons?.[next]?.focus();
               haptic('selection');
             }}
-            className={`glass-press min-h-11 rounded-xl px-2.5 py-2 text-center transition-colors ${
+            className={`glass-press min-h-11 rounded-lg px-2 py-2 text-center transition-colors ${
               active
                 ? 'bg-[var(--mint-dim)] text-[var(--text)] shadow-[inset_0_0_0_1px_rgba(139,109,255,.26)]'
                 : 'text-mut'
             }`}
           >
-            <span className="block text-[12px] font-semibold">{option.label}</span>
-            {option.sub && <span className="mt-0.5 block text-[9px] opacity-70">{option.sub}</span>}
+            <span className="block text-[13px] font-semibold">{option.label}</span>
+            {option.sub && <span className="mt-0.5 block text-[11px] opacity-70">{option.sub}</span>}
           </button>
         );
       })}
@@ -76,8 +76,8 @@ export function FieldLabel({
 }) {
   return (
     <div className="mb-2 flex items-center justify-between gap-3">
-      <label htmlFor={htmlFor} className="text-[10px] font-semibold uppercase tracking-[0.15em] text-mut">{children}</label>
-      {hint && <span id={hintId} className="text-[10px] text-[var(--mut-2)]">{hint}</span>}
+      <label htmlFor={htmlFor} className="text-[12px] font-medium text-mut">{children}</label>
+      {hint && <span id={hintId} className="text-[11px] text-[var(--mut-2)]">{hint}</span>}
     </div>
   );
 }
@@ -105,8 +105,8 @@ export function SlippageField({
 
   return (
     <div>
-      <FieldLabel htmlFor={inputId}>Slippage tolerance · max {max}%</FieldLabel>
-      <div className={`flex min-h-14 items-center gap-2 rounded-2xl border bg-[rgba(255,255,255,.035)] px-4 transition-colors focus-within:border-[rgba(139,109,255,.5)] ${error ? 'border-[rgba(255,107,118,.55)]' : 'border-[var(--line)]'}`}>
+      <FieldLabel htmlFor={inputId} hint={`Max ${max}%`}>Slippage</FieldLabel>
+      <div className={`flex min-h-[52px] items-center gap-2 rounded-xl border bg-[rgba(255,255,255,.035)] px-4 transition-colors focus-within:border-mint ${error ? 'border-danger' : 'border-[var(--line)]'}`}>
         <input
           id={inputId}
           value={value}
@@ -117,7 +117,7 @@ export function SlippageField({
           aria-label="Slippage tolerance percentage"
           aria-invalid={Boolean(error)}
           aria-errormessage={error ? errorId : undefined}
-          className="min-h-11 min-w-0 flex-1 bg-transparent font-mono text-[17px] font-semibold outline-none"
+          className="min-h-11 min-w-0 flex-1 bg-transparent font-mono text-[16px] font-semibold outline-none"
         />
         <span className="text-[12px] text-mut">%</span>
       </div>
@@ -159,6 +159,7 @@ export function AmountField({
   const [touched, setTouched] = useState(false);
   const inputError = decimalInputError(value, maxDecimals, { allowAll, allowZero });
   const error = inputError ?? constraintError ?? (touched && !value && !allowZero ? 'Enter an amount.' : null);
+  const describedBy = [hint ? hintId : null, error ? errorId : null].filter(Boolean).join(' ') || undefined;
   const normalise = (raw: string) => {
     if (allowAll && raw.toLowerCase() === 'all') return 'all';
     // Keep malformed pasted text visible and invalid. Stripping an exponent or
@@ -170,8 +171,8 @@ export function AmountField({
 
   return (
     <div>
-      <FieldLabel hint={hint ?? `Up to ${maxDecimals} decimals`} hintId={hintId} htmlFor={inputId}>{label}</FieldLabel>
-      <div className={`group flex min-h-[76px] items-center gap-3 rounded-[20px] border bg-[rgba(255,255,255,.035)] px-4 transition-colors focus-within:border-[rgba(139,109,255,.5)] ${error ? 'border-[rgba(255,107,118,.55)]' : 'border-[var(--line)]'}`}>
+      <FieldLabel hint={hint} hintId={hintId} htmlFor={inputId}>{label}</FieldLabel>
+      <div className={`group flex min-h-[72px] items-center gap-3 rounded-xl border bg-[rgba(255,255,255,.035)] px-4 transition-colors focus-within:border-mint ${error ? 'border-danger' : 'border-[var(--line)]'}`}>
         <input
           id={inputId}
           value={value}
@@ -181,13 +182,13 @@ export function AmountField({
           autoComplete="off"
           placeholder={placeholder}
           aria-label={`${label} in ${symbol}`}
-          aria-describedby={`${hintId}${error ? ` ${errorId}` : ''}`}
+          aria-describedby={describedBy}
           aria-errormessage={error ? errorId : undefined}
           aria-invalid={Boolean(error)}
           required={!allowZero}
-          className="min-h-11 min-w-0 flex-1 bg-transparent font-mono text-[27px] font-semibold tracking-[-0.04em] text-[var(--text)] outline-none placeholder:text-[var(--mut-2)]"
+          className="min-h-11 min-w-0 flex-1 bg-transparent font-mono text-[25px] font-semibold text-[var(--text)] outline-none placeholder:text-[var(--mut-2)]"
         />
-        <span className="flex shrink-0 items-center gap-2 rounded-xl bg-[rgba(255,255,255,.055)] px-2.5 py-2 text-[12px] font-semibold">
+        <span className="flex shrink-0 items-center gap-2 rounded-lg border border-[var(--line)] bg-[rgba(255,255,255,.04)] px-2.5 py-2 text-[12px] font-semibold">
           <TokenIcon symbol={symbol} size={22} /> {symbol}
         </span>
       </div>
@@ -196,7 +197,7 @@ export function AmountField({
           <div className="flex min-w-0 items-center gap-1 truncate">
             {balance !== undefined && (
               <span className="truncate" title={balance ?? 'Balance unavailable'}>
-                Available: <span className="font-semibold text-[var(--text)]">{balance ? formatExactDecimal(balance, 4) : 'unavailable'}</span>
+                Balance: <span className="font-semibold text-[var(--text)]">{balance ? formatExactDecimal(balance, 4) : 'unavailable'}</span>
               </span>
             )}
           </div>
@@ -274,7 +275,7 @@ export function TokenSelect<T extends string>({
             haptic('selection');
             onChange(event.target.value as T);
           }}
-          className="min-h-14 w-full appearance-none rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-4 pr-11 text-[14px] font-semibold text-[var(--text)] outline-none transition-colors focus:border-[rgba(139,109,255,.5)]"
+          className="min-h-[52px] w-full appearance-none rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 pr-11 text-[16px] font-semibold text-[var(--text)] outline-none transition-colors focus:border-mint"
         >
           {options.map((option) => <option key={option} value={option}>{option}</option>)}
         </select>
@@ -306,10 +307,10 @@ export function RangeField({
   return (
     <div>
       <FieldLabel htmlFor={rangeId} hint={`${min}${suffix} – ${max}${suffix}`}>{label}</FieldLabel>
-      <div className="rounded-[20px] border border-[var(--line)] bg-[rgba(255,255,255,.03)] p-4">
-        <div className="mb-4 flex items-end justify-between">
-          <span className="text-display text-[30px] font-semibold text-gradient">{value.toFixed(value % 1 ? 1 : 0)}{suffix}</span>
-          <span className="rounded-lg bg-[var(--mint-dim)] px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-mint">Interface safety range</span>
+      <div className="rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.03)] p-4">
+        <div className="mb-3 flex items-end justify-between">
+          <span className="text-display text-[26px] font-semibold text-mint">{value.toFixed(value % 1 ? 1 : 0)}{suffix}</span>
+          <span className="text-[11px] text-mut">{min}{suffix} to {max}{suffix}</span>
         </div>
         <input
           id={rangeId}
@@ -348,8 +349,8 @@ export function LeverageField({
   const inputId = useId();
   return (
     <div>
-      <FieldLabel htmlFor={inputId} hint="Validated from live pool state">{label}</FieldLabel>
-      <div className="rounded-[20px] border border-[var(--line)] bg-[rgba(255,255,255,.03)] p-4">
+      <FieldLabel htmlFor={inputId} hint="Target multiplier">{label}</FieldLabel>
+      <div className="rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.03)] p-3">
         <div className="flex items-center gap-3">
           <input
             id={inputId}
@@ -363,14 +364,10 @@ export function LeverageField({
               onChange(Number.isFinite(next) ? next : 0);
             }}
             onBlur={() => haptic('selection')}
-            className="min-h-12 min-w-0 flex-1 rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-4 text-[20px] font-semibold outline-none focus:border-[rgba(139,109,255,.5)]"
-            aria-describedby={`${inputId}-help`}
+            className="min-h-[52px] min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 text-[20px] font-semibold outline-none focus:border-mint"
           />
-          <span className="text-display text-[24px] font-semibold text-gradient" aria-hidden="true">×</span>
+          <span className="text-display text-[22px] font-semibold text-mint" aria-hidden="true">×</span>
         </div>
-        <p id={`${inputId}-help`} className="mt-2 text-[10.5px] leading-relaxed text-mut">
-          The official SDK accepts a positive target and rejects values outside the pool&apos;s current on-chain limits.
-        </p>
       </div>
     </div>
   );
@@ -396,7 +393,7 @@ export function ToggleRow({
         haptic('selection');
         onChange(!checked);
       }}
-      className="glass-press flex w-full items-center gap-3 rounded-2xl border border-[var(--line)] bg-[rgba(255,255,255,.03)] p-3.5 text-left"
+      className="glass-press flex w-full items-center gap-3 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.03)] p-3.5 text-left"
     >
       <span className="min-w-0 flex-1">
         <span className="block text-[13px] font-semibold">{title}</span>
@@ -411,7 +408,7 @@ export function ToggleRow({
 
 export function InfoNote({ children }: { children: ReactNode }) {
   return (
-    <div className="flex gap-2.5 rounded-2xl bg-[rgba(139,109,255,.08)] p-3 text-[11px] leading-relaxed text-mut">
+    <div className="flex gap-2.5 rounded-xl bg-[var(--mint-dim)] p-3 text-[12px] leading-relaxed text-mut">
       <Info aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-mint" /> {children}
     </div>
   );

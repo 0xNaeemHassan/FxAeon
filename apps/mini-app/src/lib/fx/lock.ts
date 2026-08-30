@@ -5,8 +5,13 @@ const localTails = new Map<string, Promise<void>>();
 const LOCK_PREFIX = "fxaeon:tx-lock:v1:";
 export type AssertLockOwned = () => void;
 
-function keyFor(walletAddress: Address, chainId: FxChainId): string {
-  return `${chainId}:${walletAddress.toLowerCase()}`;
+function keyFor(walletAddress: Address): string {
+  // External EIP-1193 wallets expose one mutable selected network per wallet
+  // provider. Two routes for the same wallet therefore cannot safely sign on
+  // Ethereum and Base at the same time: either route may switch the provider
+  // after the other's final chain check but before eth_sendTransaction.
+  // Serialize the signing boundary per wallet across every supported chain.
+  return walletAddress.toLowerCase();
 }
 
 function sleep(ms: number): Promise<void> {
@@ -196,9 +201,12 @@ async function withStorageLease<T>(key: string, run: (assertOwned: AssertLockOwn
 }
 
 /**
- * Serialize transaction planning/signing per wallet and chain. Web Locks is
- * authoritative where available; localStorage is an advisory cross-tab lease
- * fallback and never a balance, receipt, or authorization source of truth.
+ * Serialize transaction planning/signing per wallet across Ethereum and Base.
+ * The chain remains an explicit route invariant, but it is deliberately not
+ * part of the lock key because an external wallet's selected network is shared
+ * mutable state. Web Locks is authoritative where available; localStorage is
+ * an advisory cross-tab lease fallback and never a balance, receipt, or
+ * authorization source of truth.
  */
 export async function withWalletChainLock<T>(params: {
   walletAddress: Address;
@@ -214,7 +222,7 @@ export async function withWalletChainLock<T>(params: {
    */
   requireWebLocks?: boolean;
 }): Promise<T> {
-  const key = keyFor(params.walletAddress, params.chainId);
+  const key = keyFor(params.walletAddress);
   return withInTabLock(key, async () => {
     const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
     if (locks) {

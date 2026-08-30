@@ -83,7 +83,7 @@ test("unknown routes render the scoped FxAeon recovery screen", async ({ page, r
   const response = await page.goto("/outside-official-scope", { waitUntil: "domcontentloaded" });
   expect(response?.status()).toBe(404);
   await expect(page.locator("main")).toBeVisible();
-  await expect(page.locator("body")).toContainText(/outside FxAeon|official f\(x\) SDK/i);
+  await expect(page.locator("body")).toContainText(/outside FxAeon|That page is not available/i);
   await expect(page.getByRole("link", { name: /back to portfolio/i })).toBeVisible();
   assertNoBackendRequests(requests);
 });

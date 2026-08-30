@@ -1,11 +1,11 @@
 'use client';
 
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowLeftRight, Network, Route } from 'lucide-react';
+import { AlertTriangle, ArrowLeftRight } from 'lucide-react';
 import { AppShell, Card } from '@/components/ui';
 import { ActionReview } from '@/components/ActionReview';
 import WalletConnectCTA from '@/components/WalletConnectCTA';
-import { AmountField, InfoNote, Segmented, TokenSelect } from '@/components/ProtocolForm';
+import { AmountField, TokenSelect } from '@/components/ProtocolForm';
 import {
   advancedBridgePolicy,
   assertAddress,
@@ -48,6 +48,7 @@ export default function MovePage() {
   const [destinationOft, setDestinationOft] = useState('');
   const [approvalToken, setApprovalToken] = useState('');
   const [recipientInput, setRecipientInput] = useState('');
+  const [customRecipient, setCustomRecipient] = useState(false);
   const reviewedBridgeRef = useRef<{
     sourceChainId: FxChainId;
     destinationChainId: FxChainId;
@@ -66,7 +67,7 @@ export default function MovePage() {
   // SDK's 18-decimal amount model.
   const amountWei = parseAmount(amount, 'fxUSD');
   const advanced = mode === 'advanced';
-  const recipientValue = recipientInput.trim() || wallet.address || '';
+  const recipientValue = customRecipient ? recipientInput.trim() : wallet.address || '';
 
   const planBuilder = useMemo(() => {
     if (!wallet.address || !amountWei) return null;
@@ -207,30 +208,179 @@ export default function MovePage() {
   }, [wallet.address]);
 
   return (
-    <AppShell title="Move" subtitle="Bridge canonical assets—or validate an explicit 18-decimal OFT contract pair—between Ethereum and Base.">
-      <div className="stagger flex flex-col gap-3.5">
-        <Card glow className="p-5"><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-mint">Cross-chain gateway</p><h2 className="text-display mt-2 text-[25px] font-semibold">Ethereum ↔ Base</h2><p className="mt-1 text-[11px] leading-relaxed text-mut">Choose the destination recipient. A source receipt alone is never treated as delivery.</p></div><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--mint-dim)] text-mint"><Network className="h-5 w-5" /></span></div><div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-2"><ChainCard name={sourceName} chainId={sourceChainId} /><span aria-hidden="true" className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--bg)] text-mint"><ArrowLeftRight className="h-4 w-4" /></span><ChainCard name={destinationName} chainId={destinationChainId} /></div></Card>
-        {!wallet.address && <WalletConnectCTA ready={wallet.ready} authenticated={wallet.authenticated} body="Choose the signing wallet that pays source-chain gas and receives any fee refund. You may enter a separate validated destination recipient below." />}
-        <Segmented value={direction} onChange={setDirection} ariaLabel="Bridge direction" options={[{ value: 'ethereum_to_base', label: 'To Base', sub: 'Ethereum → Base' }, { value: 'base_to_ethereum', label: 'To Ethereum', sub: 'Base → Ethereum' }]} />
-        <Segmented value={mode} onChange={setMode} ariaLabel="Bridge asset mode" options={[{ value: 'canonical', label: 'Canonical assets', sub: 'fxUSD / fxSAVE' }, { value: 'advanced', label: 'Advanced OFT', sub: 'Explicit contract review' }]} />
-        <Card className="p-4"><div className="flex flex-col gap-4"><div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--mint-dim)] text-mint"><Route className="h-5 w-5" /></span><div><h2 className="text-[14px] font-semibold">Bridge {sourceName} → {destinationName}</h2><p className="mt-0.5 text-[10.5px] text-mut">LayerZero V2 quote and SDK transaction plan.</p></div></div>{!advanced ? <TokenSelect label="Asset" value={token} options={['fxUSD', 'fxSAVE'] as const} onChange={setToken} /> : <AdvancedAddressFields sourceName={sourceName} destinationName={destinationName} sourceChainId={sourceChainId} sourceOft={sourceOft} destinationOft={destinationOft} approvalToken={approvalToken} onSourceOftChange={setSourceOft} onDestinationOftChange={setDestinationOft} onApprovalTokenChange={setApprovalToken} /> }<AmountField label={`Amount on ${sourceName}`} symbol={advanced ? 'OFT' : token} value={amount} onChange={setAmount} maxDecimals={18} /><AddressField label={`${destinationName} recipient`} value={recipientValue} onChange={setRecipientInput} placeholder="0x… destination wallet" /><div className="rounded-2xl border border-[var(--line)] bg-[rgba(255,255,255,.025)] p-3.5"><Row label="Source chain" value={`${sourceName} (${sourceChainId})`} /><Row label="Destination chain" value={`${destinationName} (${destinationChainId})`} /><Row label="Signer / fee refund" value={wallet.address ? `${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)}` : 'Connect wallet'} /><Row label="Recipient" value={recipientValue ? `${recipientValue.slice(0, 6)}…${recipientValue.slice(-4)}` : 'Enter address'} /></div>{advanced ? <AdvancedRiskSummary sourceName={sourceName} destinationName={destinationName} sourceOft={sourceOft} destinationOft={destinationOft} approvalToken={approvalToken} /> : <InfoNote>Ethereum-source routes include an exact token approval when needed. Base routes use one bridge transaction. Every step is shown and signed separately.</InfoNote>}</div></Card>
-        <ActionReview planBuilder={planBuilder} label={`Review bridge to ${destinationName}`} operationLabel={`${advanced ? 'Advanced OFT' : token} · ${sourceName} to ${destinationName}`} onComplete={rereadBridgeState} />
+    <AppShell title="Move" subtitle="Move assets between Ethereum and Base.">
+      <div className="flex flex-col gap-3.5">
+        {!wallet.address && (
+          <WalletConnectCTA
+            ready={wallet.ready}
+            authenticated={wallet.authenticated}
+            body="Connect the wallet that will sign the move and pay the source-network fee."
+          />
+        )}
+
+        <Card className="p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-[16px] font-semibold">Bridge</h2>
+              <p className="mt-0.5 text-[12px] text-mut">{sourceName} to {destinationName}</p>
+            </div>
+            <span className="rounded-lg bg-[var(--mint-dim)] px-2.5 py-1 text-[11px] font-semibold text-mint">
+              {advanced ? 'Advanced OFT' : token}
+            </span>
+          </div>
+
+          <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+            <NetworkField label="From" name={sourceName} />
+            <button
+              type="button"
+              aria-label={`Reverse route to ${sourceName}`}
+              onClick={() => setDirection((current) => current === 'ethereum_to_base' ? 'base_to_ethereum' : 'ethereum_to_base')}
+              className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--bg)] text-mint"
+            >
+              <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <NetworkField label="To" name={destinationName} />
+          </div>
+
+          <div className="my-4 hairline" />
+          <div className="flex flex-col gap-4">
+            {!advanced && (
+              <TokenSelect label="Asset" value={token} options={['fxUSD', 'fxSAVE'] as const} onChange={setToken} />
+            )}
+
+            <details
+              open={advanced}
+              onToggle={(event) => setMode(event.currentTarget.open ? 'advanced' : 'canonical')}
+              className="rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.025)]"
+            >
+              <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-3 text-[12px] font-semibold text-mut">
+                <span>Advanced OFT</span>
+                <span className="text-[11px] font-normal text-[var(--mut-2)]">Custom contracts</span>
+              </summary>
+              <div className="border-t border-[var(--line)] p-3">
+                <AdvancedAddressFields
+                  sourceName={sourceName}
+                  destinationName={destinationName}
+                  sourceChainId={sourceChainId}
+                  sourceOft={sourceOft}
+                  destinationOft={destinationOft}
+                  approvalToken={approvalToken}
+                  onSourceOftChange={setSourceOft}
+                  onDestinationOftChange={setDestinationOft}
+                  onApprovalTokenChange={setApprovalToken}
+                />
+                <AdvancedRiskSummary sourceName={sourceName} destinationName={destinationName} />
+              </div>
+            </details>
+
+            <AmountField
+              label="Amount"
+              hint={`From ${sourceName}`}
+              symbol={advanced ? 'OFT' : token}
+              value={amount}
+              onChange={setAmount}
+              maxDecimals={18}
+            />
+
+            <div>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <span className="text-[12px] font-medium text-mut">Recipient</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !customRecipient;
+                    setCustomRecipient(next);
+                    if (next && !recipientInput && wallet.address) setRecipientInput(wallet.address);
+                  }}
+                  className="min-h-11 rounded-lg px-2 text-[11px] font-semibold text-mint"
+                >
+                  {customRecipient ? 'Use connected wallet' : 'Change'}
+                </button>
+              </div>
+              {customRecipient ? (
+                <AddressField
+                  label="Destination wallet"
+                  value={recipientInput}
+                  onChange={setRecipientInput}
+                  placeholder="0x… destination wallet"
+                />
+              ) : (
+                <div className="flex min-h-[52px] items-center justify-between gap-3 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.035)] px-3">
+                  <span className="text-[12px] text-mut">Connected wallet</span>
+                  <span className="font-mono text-[12px] font-semibold">
+                    {wallet.address ? `${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)}` : 'Connect wallet'}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        </Card>
+
+        <ActionReview
+          planBuilder={planBuilder}
+          label={`Review move to ${destinationName}`}
+          operationLabel={`Move ${advanced ? 'advanced OFT' : token} to ${destinationName}`}
+          onComplete={rereadBridgeState}
+        />
       </div>
     </AppShell>
   );
 }
 
 function AdvancedAddressFields({ sourceName, destinationName, sourceChainId, sourceOft, destinationOft, approvalToken, onSourceOftChange, onDestinationOftChange, onApprovalTokenChange }: { sourceName: string; destinationName: string; sourceChainId: FxChainId; sourceOft: string; destinationOft: string; approvalToken: string; onSourceOftChange: (value: string) => void; onDestinationOftChange: (value: string) => void; onApprovalTokenChange: (value: string) => void }) {
-  return <div className="flex flex-col gap-3"><AddressField label={`${sourceName} source OFT`} value={sourceOft} onChange={onSourceOftChange} placeholder="0x… (EIP-55 checksum)" /><AddressField label={`${destinationName} destination OFT`} value={destinationOft} onChange={onDestinationOftChange} placeholder="0x… (EIP-55 checksum)" />{sourceChainId === 1 && <AddressField label="Ethereum approval token (only if source adapter requires it)" value={approvalToken} onChange={onApprovalTokenChange} placeholder="0x… (EIP-55 checksum)" />}<InfoNote>FxAeon checksummed-validates both OFT contracts, reads each OFT's token() local-token address and approvalRequired(), requires deployed local tokens with decimals() = 18, probes quoteSend in both directions through the official SDK, verifies the symmetric LayerZero peers, and binds the send target to the reviewed source OFT. The destination field must be the destination OFT contract, never its underlying token(). A direct OFT must leave approval blank.</InfoNote></div>;
+  return (
+    <div className="flex flex-col gap-3">
+      <AddressField label={`${sourceName} OFT`} value={sourceOft} onChange={onSourceOftChange} placeholder="0x… checksummed address" />
+      <AddressField label={`${destinationName} OFT`} value={destinationOft} onChange={onDestinationOftChange} placeholder="0x… checksummed address" />
+      {sourceChainId === 1 && (
+        <AddressField
+          label="Ethereum approval token"
+          hint="Only when required"
+          value={approvalToken}
+          onChange={onApprovalTokenChange}
+          placeholder="0x… checksummed address"
+        />
+      )}
+    </div>
+  );
 }
 
-function AdvancedRiskSummary({ sourceName, destinationName, sourceOft, destinationOft, approvalToken }: { sourceName: string; destinationName: string; sourceOft: string; destinationOft: string; approvalToken: string }) {
-  return <div className="flex gap-2.5 rounded-2xl border border-[rgba(255,194,102,.28)] bg-[rgba(255,194,102,.08)] p-3 text-[11px] leading-relaxed text-warn"><AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" /><div><p className="font-semibold">Advanced bridge risk review</p><p className="mt-1">You are reviewing custom contracts, not FxAeon’s canonical asset list. Enter the source and destination OFT contracts only. FxAeon will read each OFT’s local token() and approvalRequired() metadata, verify both LayerZero peers, and accept an Ethereum token() address only when the source adapter requires an exact approval. The detected local tokens are shown in the immutable transaction review; they are not taken from editable form state. {sourceName} → {destinationName} calldata is shown again before each wallet approval.</p><p className="mt-1 break-all font-mono text-[9px]">Source OFT: {sourceOft || 'required'} · Destination OFT: {destinationOft || 'required'}{sourceName === 'Ethereum' ? ` · Approval input: ${approvalToken || 'blank unless required'}` : ''}</p></div></div>;
+function AdvancedRiskSummary({ sourceName, destinationName }: { sourceName: string; destinationName: string }) {
+  return (
+    <div className="mt-3 rounded-xl border border-[rgba(255,194,102,.28)] bg-[var(--warn-dim)] p-3 text-[11.5px] leading-relaxed text-warn">
+      <div className="flex gap-2.5">
+        <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+        <p><span className="font-semibold">Custom contract risk.</span> Only continue if you trust both OFT addresses for {sourceName} and {destinationName}.</p>
+      </div>
+      <details className="mt-2 border-t border-[rgba(255,194,102,.18)] pt-1">
+        <summary className="flex min-h-11 cursor-pointer items-center text-[11px] font-semibold">Validation checks</summary>
+        <ul className="space-y-1 pb-1 pl-4 text-mut">
+          <li>Checksummed, deployed 18-decimal contracts</li>
+          <li>Matching LayerZero peers and live quotes in both directions</li>
+          <li>Exact bridge target and approval token when required</li>
+        </ul>
+      </details>
+    </div>
+  );
 }
 
-function AddressField({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (value: string) => void; placeholder: string }) {
-  return <label className="block"><span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.13em] text-mut">{label}</span><input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} autoComplete="off" spellCheck={false} inputMode="text" className="min-h-12 w-full rounded-2xl border border-[var(--line)] bg-[rgba(255,255,255,.035)] px-3 font-mono text-[11px] outline-none focus:border-[rgba(139,109,255,.5)]" /></label>;
+function AddressField({ label, hint, value, onChange, placeholder }: { label: string; hint?: string; value: string; onChange: (value: string) => void; placeholder: string }) {
+  return (
+    <label className="block">
+      <span className="mb-2 flex items-center justify-between gap-3 text-[12px] font-medium text-mut">
+        <span>{label}</span>
+        {hint && <span className="text-[11px] text-[var(--mut-2)]">{hint}</span>}
+      </span>
+      <input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} autoComplete="off" spellCheck={false} inputMode="text" className="min-h-[52px] w-full rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.035)] px-3 font-mono text-[16px] outline-none focus:border-mint" />
+    </label>
+  );
 }
 
-function ChainCard({ name, chainId }: { name: string; chainId: number }) { return <div className="rounded-2xl border border-[var(--line)] bg-[rgba(255,255,255,.035)] p-3"><span className="block text-[9px] uppercase tracking-[0.13em] text-mut">Network</span><span className="mt-1 block text-[13px] font-semibold">{name}</span><span className="mt-0.5 block text-[10px] text-mut">Chain {chainId}</span></div>; }
-function Row({ label, value }: { label: string; value: string }) { return <div className="flex items-center justify-between gap-3 py-1 text-[11px]"><span className="text-mut">{label}</span><span className="text-right font-semibold">{value}</span></div>; }
+function NetworkField({ label, name }: { label: 'From' | 'To'; name: string }) {
+  return (
+    <div className="rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.035)] p-3">
+      <span className="block text-[11px] text-mut">{label}</span>
+      <span className="mt-1 block text-[14px] font-semibold">{name}</span>
+    </div>
+  );
+}
