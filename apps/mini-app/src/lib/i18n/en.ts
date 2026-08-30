@@ -11,9 +11,9 @@ const en: Messages = {
   'common.saved': 'Saved',
   'common.loading': 'Loading live protocol state…',
   'splash.tagline':
-    'Trade, borrow, save, bridge, and manage f(x) Protocol positions from one self-custodial Telegram app.',
-  'loginGate.tgTitle': 'FxAeon runs inside Telegram',
-  'loginGate.tgBody': 'Open the FxAeon Mini App from Telegram to continue.',
+    'Trade, borrow, save, bridge, and manage f(x) Protocol positions from one self-custodial web and Telegram app.',
+  'loginGate.tgTitle': 'Use FxAeon anywhere',
+  'loginGate.tgBody': 'Continue in your browser or open the Telegram Mini App.',
   'loginGate.notConfTitle': 'Wallet service not configured',
   'loginGate.notConfBody':
     'This build is missing NEXT_PUBLIC_PRIVY_APP_ID. Add the public Privy app ID and rebuild.',

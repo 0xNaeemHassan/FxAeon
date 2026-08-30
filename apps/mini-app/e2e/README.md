@@ -1,6 +1,6 @@
 # Mini App end-to-end tests
 
-The Playwright suite runs against the real static export and a small local file server. It uses empty Privy and RPC configuration, so it covers mobile routing, Telegram viewport behavior, accessibility, unavailable states, and the client-only boundary without touching a wallet or production chain.
+The Playwright suite runs against the real static export and a small local file server. It uses empty Privy and RPC configuration, so it covers first-class browser entry, mobile routing, Telegram viewport behavior, accessibility, unavailable states, and the client-only boundary without touching a wallet or production chain.
 
 ## Run the suite
 

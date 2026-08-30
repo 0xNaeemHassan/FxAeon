@@ -46,7 +46,7 @@ async function withStorageLease<T>(key: string, run: (assertOwned: AssertLockOwn
     throw new Error("Transaction lock storage is unavailable");
   }
   if (typeof BroadcastChannel === "undefined") {
-    throw new Error("This browser cannot provide a safe cross-tab transaction lock; update Telegram and try again");
+    throw new Error("This browser cannot provide a safe cross-tab transaction lock; update your browser or Telegram and try again");
   }
   const storageKey = `${LOCK_PREFIX}${key}`;
   const owner = typeof crypto !== "undefined" && "randomUUID" in crypto

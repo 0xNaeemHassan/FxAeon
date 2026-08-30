@@ -3,7 +3,7 @@ import { expect, test, assertNoBackendRequests } from "../fixtures/test";
 const ROUTES = ["/", "/login", "/portfolio", "/trade", "/positions", "/borrow", "/earn", "/move", "/more", "/settings", "/qr"];
 const MOBILE_WIDTHS = [320, 360, 375, 390, 412, 430];
 
-test.describe("Telegram-sized accessibility contract", () => {
+test.describe("mobile web and Telegram accessibility contract", () => {
   test("every official screen fits a narrow viewport and exposes a main landmark", async ({ page, requests }) => {
     for (const width of MOBILE_WIDTHS) {
       await page.setViewportSize({ width, height: 844 });

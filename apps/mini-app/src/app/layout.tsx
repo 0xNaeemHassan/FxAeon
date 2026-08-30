@@ -13,7 +13,7 @@ export const metadata: Metadata = {
     default: 'FxAeon',
     template: '%s · FxAeon',
   },
-  description: 'Trade, borrow, earn, and move assets with f(x) Protocol in Telegram.',
+  description: 'Trade, borrow, earn, and bridge with f(x) Protocol from the web or Telegram.',
   applicationName: 'FxAeon',
   formatDetection: { telephone: false, email: false, address: false },
   appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'FxAeon' },

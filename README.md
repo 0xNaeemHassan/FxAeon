@@ -1,83 +1,214 @@
-# FxAeon
+<div align="center">
+  <img src="brand/fxaeon-wordmark.png" alt="FxAeon" width="720" />
 
-FxAeon is the official f(x) SDK experience delivered as a polished Telegram Mini App. It is a static, client-first interface: the SDK reads protocol state and prepares transaction plans, Privy asks the connected wallet to approve each transaction, and Ethereum/Base remain the source of truth.
+  <h3>The high-integrity, self-custodial interface for f(x) Protocol.</h3>
 
-FxAeon is not a separate trading platform. The repository contains no application API, bot runtime, delegated signer, automation engine, database, Redis service, custom indexer, price oracle, or off-chain portfolio ledger.
+  <p>
+    Trade positions, mint fxUSD, manage fxSAVE, and bridge across Ethereum and Base<br />
+    from the web or Telegram—without handing control of your wallet to an application server.
+  </p>
+
+  <p>
+    <a href="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/ci.yml"><img src="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/ci.yml/badge.svg" alt="Client CI" /></a>
+    <a href="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/e2e-mini-app.yml"><img src="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/e2e-mini-app.yml/badge.svg" alt="End-to-end tests" /></a>
+    <a href="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/supply-chain.yml"><img src="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/supply-chain.yml/badge.svg" alt="Supply-chain checks" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-8b6dff.svg" alt="MIT License" /></a>
+  </p>
+
+  <p>
+    <img src="https://img.shields.io/badge/Next.js-15-000000?logo=next.js" alt="Next.js 15" />
+    <img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript&logoColor=white" alt="TypeScript 5.9" />
+    <img src="https://img.shields.io/badge/Node.js-22-339933?logo=node.js&logoColor=white" alt="Node.js 22" />
+    <img src="https://img.shields.io/badge/pnpm-11.19-f69220?logo=pnpm&logoColor=white" alt="pnpm 11.19" />
+    <img src="https://img.shields.io/badge/chains-Ethereum%20%7C%20Base-627eea" alt="Ethereum and Base" />
+  </p>
+
+  <p>
+    <a href="#product">Product</a> ·
+    <a href="#security-by-construction">Security</a> ·
+    <a href="#architecture">Architecture</a> ·
+    <a href="#quick-start">Quick start</a> ·
+    <a href="#verification">Verification</a> ·
+    <a href="docs/README.md">Documentation</a>
+  </p>
+</div>
+
+---
+
+## Product
+
+FxAeon turns the official f(x) SDK into a focused, reviewable product surface for both ordinary browsers and Telegram Mini Apps. The same static application, wallet boundary, SDK adapter, and transaction policy run in both environments.
+
+<img src="docs/assets/fxaeon-web.png" alt="FxAeon web landing page" width="100%" />
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <img src="docs/assets/fxaeon-bridge.png" alt="FxAeon Ethereum to Base bridge workflow" width="100%" />
+      <br /><strong>Ethereum ↔ Base bridge workflow</strong>
+    </td>
+    <td width="50%" align="center">
+      <img src="docs/assets/fxaeon-trade.png" alt="FxAeon position builder" width="100%" />
+      <br /><strong>Reviewable position workflows</strong>
+    </td>
+  </tr>
+</table>
+
+### A complete, deliberately scoped protocol interface
+
+| Capability | What FxAeon provides |
+| --- | --- |
+| Positions | Read ETH/BTC long and short positions; open, increase, reduce, close, and adjust leverage |
+| Borrow | Deposit collateral and mint fxUSD; repay debt and withdraw collateral |
+| fxSAVE | Read balances/configuration, deposit assets, queue or execute redemptions, and claim completed withdrawals |
+| Bridge | Quote and build Ethereum ↔ Base LayerZero routes with source-receipt and destination-GUID verification |
+| Wallet | Privy embedded wallets plus supported external EVM wallets, with an explicit prompt for every transaction |
+| Recovery | Reload-safe pending transaction and bridge journals that are always revalidated against chain data |
+
+The immutable public surface contains exactly 15 SDK methods. [`fx-scope.lock.json`](fx-scope.lock.json) and the scope verifier prevent protocol internals, unsupported routes, or backend authority from silently entering the product.
+
+### Why the design matters
+
+- **Web and Telegram parity.** Users can launch the full app in a modern browser or inside Telegram; Telegram is an enhanced host, not a requirement.
+- **Self-custodial execution.** Privy or the connected external wallet remains the only signing authority. FxAeon never accepts a private key.
+- **Official planning path.** Protocol reads and unsigned transaction plans come from the pinned <code>@aladdindao/fx-sdk</code> package.
+- **Chain-authoritative state.** Ethereum, Base, receipts, and matching LayerZero events establish financial truth—not a database or browser cache.
+- **Inspectable transaction review.** Targets, selectors, values, approvals, chains, nonces, and route order are validated before wallet confirmation.
+- **Static delivery.** The production artifact is a deterministic Cloudflare Pages export with no application server, Worker, queue, or privileged runtime.
+
+## Security by construction
+
+Every write follows the same guarded lifecycle:
+
+1. build a fresh plan from current wallet, chain, and form inputs;
+2. bind it to the selected sender and supported network;
+3. validate destinations, selectors, calldata shape, value, approvals, nonce, and order;
+4. simulate the ordered calls when supported;
+5. show a human-readable and raw transaction review;
+6. request a visible wallet confirmation for each step;
+7. wait for a successful, fingerprint-matching receipt before continuing;
+8. wait one additional block and reread authoritative protocol state.
+
+A rejection, revert, timeout, provider inconsistency, or nonce drift stops the route. Bridge source confirmation is never presented as destination delivery.
+
+> [!IMPORTANT]
+> FxAeon is unaudited application software for financial transactions. Review the transaction details shown by your wallet and use the software at your own risk. See [`SECURITY.md`](SECURITY.md) and [`docs/security.md`](docs/security.md) for the complete security model.
 
 ## Architecture
 
-```text
-Telegram launcher
-       │
-       ▼
-Cloudflare Pages static Mini App
-       │
-       ├── Privy: authentication, wallet selection, explicit prompts
-       ├── @aladdindao/fx-sdk: official reads and transaction plans
-       └── Viem: Alchemy RPC, simulation, receipts, post-confirmation reads
-                    │
-                    ▼
-          Ethereum / Base / LayerZero
+```mermaid
+flowchart LR
+    WEB[Modern web browser] --> APP
+    TG[Telegram Mini App] --> APP[Next.js static application]
+    APP --> PRIVY[Privy wallet boundary]
+    APP --> SDK["Pinned official f(x) SDK"]
+    APP --> VIEM[Viem public clients]
+    SDK --> ETH[Ethereum]
+    VIEM --> ETH
+    VIEM --> BASE[Base]
+    ETH <--> LZ[LayerZero]
+    BASE <--> LZ
 ```
 
-The active product exposes exactly the 15 methods locked in [`fx-scope.lock.json`](fx-scope.lock.json): position reads and management, deposit/mint, repay/withdraw, Ethereum↔Base bridge planning, and the complete fxSAVE read/deposit/withdraw/claim surface.
+| Layer | Responsibility |
+| --- | --- |
+| Interface | Responsive web/Telegram navigation, forms, transaction review, recovery, and accessible states |
+| Wallet boundary | Authentication, wallet selection, chain switching, and explicit transaction prompts |
+| SDK façade | The exact 15-method official capability contract |
+| Policy and runner | Plan binding, validation, simulation, serialization, receipts, and authoritative refresh |
+| Chain clients | Restricted Ethereum/Base RPC reads, simulations, receipts, and bridge-event verification |
+| Hosting | Pure static assets with generated CSP hashes and reviewed network destinations |
+
+Read the detailed runtime and state-ownership model in [`docs/architecture.md`](docs/architecture.md).
 
 ## Quick start
 
-Requirements: Node.js 22 and pnpm 11.19.0.
+### Requirements
+
+- Node.js 22
+- pnpm 11.19.0 through Corepack
+
+### Install and run
 
 ```bash
 corepack enable
 corepack prepare pnpm@11.19.0 --activate
 pnpm install --frozen-lockfile
-Copy-Item apps/mini-app/.env.example apps/mini-app/.env.local
+cp apps/mini-app/.env.example apps/mini-app/.env.local
 pnpm dev
 ```
 
-Configure a public Privy application ID and domain-restricted Ethereum and Base browser RPC endpoints. Every `NEXT_PUBLIC_*` value is embedded in the browser bundle; never put a Telegram bot token, Privy secret, authorization key, private key, or unrestricted provider credential in the client environment.
+Open <http://localhost:3000> in a browser. Telegram is optional for local development; use a Telegram test launch only when validating host-specific viewport, theme, haptic, or seamless-login behavior.
 
-For the full setup and deployment procedure, see [`SETUP.md`](SETUP.md).
+### Public build configuration
+
+| Variable | Purpose |
+| --- | --- |
+| `NEXT_PUBLIC_PRIVY_APP_ID` | Public Privy application identifier |
+| `NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL` | Origin-restricted Ethereum browser endpoint |
+| `NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL` | Origin-restricted Base browser endpoint |
+| `NEXT_PUBLIC_TELEGRAM_APP_URL` | Secondary Telegram launch link; browser entry does not depend on it |
+
+Every `NEXT_PUBLIC_*` value is embedded in the browser bundle. Never place a private key, Telegram bot token, Privy secret, authorization key, or unrestricted provider credential in client configuration.
+
+See [`SETUP.md`](SETUP.md) for provider restrictions, protected deployment variables, fork-test configuration, and Cloudflare Pages deployment.
 
 ## Verification
 
 ```bash
 pnpm verify
-pnpm test:e2e
 ```
 
-The aggregate gate verifies the locked scope, lint, types, unit tests, production dependency audit, static build, bundle budget, and built-artifact end-to-end tests. `pnpm test:chaos` adds deterministic route and runner mutation campaigns. `pnpm test:anvil` is an explicit, opt-in local-fork test and never consumes credentials from the repository.
+The release gate includes:
 
-`verify:production-env` is the deployment-only configuration gate. It rejects missing or placeholder values, unexpected RPC hosts or URL shapes, malformed Telegram launcher URLs, and malformed Cloudflare account IDs before a production build is deployed.
+- exact SDK scope and route-boundary verification;
+- ESLint and strict TypeScript checks;
+- unit and adversarial money-path tests;
+- seeded route and wallet-runner chaos campaigns;
+- high-severity production dependency audit;
+- static Next.js export and CSP generation;
+- bundle-size and forbidden-telemetry inspection; and
+- Playwright coverage against the built artifact.
 
-## Transaction safety
+For additional commands:
 
-For every SDK transaction route, FxAeon:
+```bash
+pnpm test:chaos   # deterministic mutation and failure-injection campaigns
+pnpm test:anvil   # protected, operator-supplied Ethereum mainnet fork
+pnpm test:stress  # chaos plus the protected Anvil gate
+pnpm test:e2e     # browser and Telegram-sized static-artifact coverage
+```
 
-1. binds the plan to the selected Privy address and expected chain;
-2. validates transaction shape, target, selector, value, approvals, nonce, and order;
-3. simulates the ordered calls before exposing the approval action;
-4. opens a visible wallet confirmation for each step;
-5. waits for a successful receipt before sending the next step;
-6. stops immediately on rejection, revert, timeout, or nonce drift; and
-7. waits one additional block and rereads authoritative state.
+Anvil uses disposable local accounts and snapshots. Its provider URL is supplied only at invocation time and is never committed, printed, or forwarded to the application test process.
 
-Local storage contains preferences plus a non-authoritative recovery journal of submitted hashes and the minimum bridge facts needed to re-run LayerZero GUID verification after a reload. Every fact is revalidated against chain receipts and events; local storage never proves a balance, permission, receipt, or bridge delivery.
+## Repository structure
 
-## Deployment
-
-The release artifact is `apps/mini-app/dist`, a pure static export. The manual Cloudflare Pages workflow uses a protected production environment, runs the complete verification gate, and deploys only that directory. It creates no Worker, Function, server, database, queue, or scheduled process.
+```text
+apps/mini-app/       Next.js web and Telegram application
+brand/               Repository and product identity assets
+docs/                Architecture, SDK scope, security, testing, and roadmap
+patches/             Reviewed patch for the pinned official f(x) SDK
+scripts/             Scope, environment, CSP, bundle, and fork verification
+fx-scope.lock.json   Immutable public SDK capability contract
+```
 
 ## Documentation
 
-- [`SETUP.md`](SETUP.md) — local development and static deployment
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) — contribution rules and review checklist
-- [`docs/architecture.md`](docs/architecture.md) — runtime boundaries and state ownership
-- [`docs/sdk-scope.md`](docs/sdk-scope.md) — the pinned 15-method capability contract
-- [`docs/security.md`](docs/security.md) — controls, threat model, and residual trust
-- [`docs/testing.md`](docs/testing.md) — release gates, fork tests, and acceptance coverage
-- [`docs/roadmap.md`](docs/roadmap.md) — release posture and deliberately deferred work
-- [`SECURITY.md`](SECURITY.md) — private vulnerability reporting
+| Guide | Purpose |
+| --- | --- |
+| [`SETUP.md`](SETUP.md) | Local development, public configuration, testing, and deployment |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contribution workflow, scope rules, and pull-request expectations |
+| [`docs/architecture.md`](docs/architecture.md) | Runtime boundaries, transaction lifecycle, and state ownership |
+| [`docs/sdk-scope.md`](docs/sdk-scope.md) | Exact official SDK capability contract |
+| [`docs/security.md`](docs/security.md) | Threats, controls, supply chain, and residual trust |
+| [`docs/testing.md`](docs/testing.md) | Release gates, fork testing, and acceptance matrix |
+| [`docs/roadmap.md`](docs/roadmap.md) | Release posture and deliberately deferred work |
+| [`SECURITY.md`](SECURITY.md) | Private vulnerability reporting |
+
+## Contributing
+
+Focused security, accessibility, test, and official-capability improvements are welcome. Read [`CONTRIBUTING.md`](CONTRIBUTING.md), preserve the client-only trust boundary, and run `pnpm verify` before opening a pull request.
 
 ## License
 
-MIT
+FxAeon is available under the [MIT License](LICENSE).

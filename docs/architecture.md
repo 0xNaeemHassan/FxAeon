@@ -3,24 +3,22 @@
 ## Runtime data flow
 
 ```text
-Telegram / browser
-       │
-       ▼
-Next.js static export on Cloudflare Pages
-       │
-       ├── Privy React client
-       │     └── user-owned wallet and explicit confirmation
-       ├── pinned official f(x) SDK
-       │     └── protocol reads and ordered unsigned plans
-       └── Viem public clients
-             ├── Alchemy Ethereum (chain 1)
-             └── Alchemy Base (chain 8453)
-                    │
-                    ▼
-              Ethereum / Base / LayerZero
+Modern browser ─┐
+                ├──▶ Next.js static export on Cloudflare Pages
+Telegram Mini ──┘                 │
+                                  ├── Privy React client
+                                  │     └── user-owned wallet + explicit confirmation
+                                  ├── pinned official f(x) SDK
+                                  │     └── reads + ordered unsigned plans
+                                  └── Viem public clients
+                                        ├── Alchemy Ethereum (chain 1)
+                                        └── Alchemy Base (chain 8453)
+                                                   │
+                                                   ▼
+                                         Ethereum / Base / LayerZero
 ```
 
-There is no FxAeon server process. Telegram is a launch surface, not a wallet-authority boundary. Privy supplies identity and wallet ownership; a selected wallet address is never accepted from a query parameter, Telegram user record, or local storage.
+There is no FxAeon server process. The ordinary web app and Telegram Mini App are equal launch surfaces over the same static artifact. Telegram adds host-specific authentication, theme, viewport, haptic, and navigation integration; it is not a wallet-authority boundary or a requirement. Privy supplies identity and wallet ownership, and a selected address is never accepted from a query parameter, Telegram user record, or local storage.
 
 ## Module boundaries
 
@@ -30,7 +28,7 @@ There is no FxAeon server process. Telegram is a launch surface, not a wallet-au
 - `src/lib/fx/runner.ts` simulates, requests one signature per step, awaits each receipt, stops on failure, waits one additional block, and triggers an authoritative reread.
 - `src/lib/wallet/` is a narrow Privy adapter. It has no server credential or delegated authority.
 - `ActionReview.tsx` is the common user-visible state machine from plan review through receipt confirmation.
-- `src/lib/telegram.ts` handles launch-context presentation and passes signed Telegram data only to Privy's authentication flow.
+- `src/lib/telegram.ts` treats Telegram as an optional host adapter and passes signed launch data only to Privy's authentication flow.
 
 ## State ownership
 
