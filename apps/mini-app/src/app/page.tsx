@@ -98,10 +98,10 @@ export default function HomePage() {
           <header className="landing-nav">
             <div className="landing-brand">
               <span className="landing-brand-mark"><FxLogo size={30} /></span>
-              <span><strong>FxAeon</strong><small>f(x) protocol interface</small></span>
+              <span><strong>FxAeon</strong><small>Ethereum interface</small></span>
             </div>
             <div className="landing-nav-actions">
-              <span className="landing-live"><span className="status-dot" /> Ethereum + Base</span>
+              <span className="landing-live"><span className="status-dot" /> Ethereum</span>
               <ButtonLink href={TELEGRAM_APP_URL} external variant="ghost" className="!min-h-10 !w-auto !px-3 !text-[12px]">
                 Telegram <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
               </ButtonLink>
@@ -110,10 +110,10 @@ export default function HomePage() {
 
           <div className="landing-grid">
             <section className="landing-hero">
-              <p className="landing-kicker"><span>01</span> Self-custodial f(x) execution</p>
+              <p className="landing-kicker"><span>01</span> Wallet-controlled markets</p>
               <h1>One interface.<br /><span className="text-gradient">Every f(x) move.</span></h1>
               <p className="landing-lede">
-                Trade positions, mint fxUSD, manage fxSAVE, and bridge between Ethereum and Base. Review the route here; approve every transaction in your wallet.
+                Trade positions, mint fxUSD, manage fxSAVE, and move fxUSD between Ethereum and Base. Review each action, then confirm it in your wallet.
               </p>
               <div className="landing-actions">
                 <ButtonLink href="/portfolio" className="!w-auto !px-6">
@@ -126,7 +126,7 @@ export default function HomePage() {
               <div className="landing-assurance">
                 <span><ShieldCheck aria-hidden="true" /> Wallet-confirmed</span>
                 <span><Globe2 aria-hidden="true" /> Web or Telegram</span>
-                <span><WalletCards aria-hidden="true" /> No backend signer</span>
+                <span><WalletCards aria-hidden="true" /> Your wallet signs</span>
               </div>
             </section>
 
@@ -144,7 +144,7 @@ export default function HomePage() {
               </div>
               <div className="terminal-assets">
                 <span><TokenIcon symbol="fxUSD" size={24} /><TokenIcon symbol="fxSAVE" size={24} /></span>
-                <span><strong>Official protocol assets</strong><small>Live SDK routes, no estimated values</small></span>
+                <span><strong>Protocol assets</strong><small>fxUSD and fxSAVE</small></span>
               </div>
               <div className="terminal-capabilities">
                 {CAPABILITIES.map(({ icon: Icon, title, copy }, index) => (
@@ -156,13 +156,13 @@ export default function HomePage() {
                   </div>
                 ))}
               </div>
-              <div className="terminal-footer"><ShieldCheck className="h-4 w-4" aria-hidden="true" /> Built on the official f(x) SDK</div>
+              <div className="terminal-footer"><ShieldCheck className="h-4 w-4" aria-hidden="true" /> Every action is wallet-confirmed</div>
             </section>
           </div>
 
           <footer className="landing-footer">
-            <span>FxAeon / Browser-first DeFi interface</span>
-            <span>Self-custodial · Reviewable · No application signer</span>
+            <span>FxAeon / Ethereum-native interface</span>
+            <span>Reviewable · Wallet-confirmed · Built for web and Telegram</span>
           </footer>
         </div>
       </main>

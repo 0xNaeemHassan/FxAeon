@@ -83,7 +83,7 @@ export default function SettingsPage() {
     }
   };
 
-  if (!mounted) return <AppShell title={t('settings.title')}>{null}</AppShell>;
+  if (!mounted) return <AppShell title={t('settings.title')} subtitle="Wallet and preferences"><Skeleton className="h-24" /></AppShell>;
 
   return (
     <AppShell title={t('settings.title')} subtitle="Wallet and preferences">

@@ -17,7 +17,7 @@ test('position token choices match the SDK input and output allow-lists', () => 
   assert.deepEqual(positionOutputTokenOptions('BTC', 'long'), positionOutputTokenOptions('BTC', 'short'));
 });
 
-test('position display precision follows the returned token, including BTC 8-decimal units', () => {
+test('position display precision preserves the pool accounting units returned by the SDK', () => {
   const btcLong = {
     market: 'BTC',
     side: 'long',
@@ -29,12 +29,13 @@ test('position display precision follows the returned token, including BTC 8-dec
       lsdLeverage: 2,
       rawCollsToken: 'WBTC',
       rawDebtsToken: 'fxUSD',
-      // The pinned SDK currently reports 18 for both fields here.
+      // Position contracts use WAD-scaled accounting units, even though WBTC
+      // wallet inputs use the token's native 8-decimal precision.
       rawCollsDecimals: 18,
       rawDebtsDecimals: 18,
     },
   } as const;
-  assert.equal(positionTokenDecimals(btcLong, 'collateral'), 8);
+  assert.equal(positionTokenDecimals(btcLong, 'collateral'), 18);
   assert.equal(positionTokenDecimals(btcLong, 'debt'), 18);
 });
 

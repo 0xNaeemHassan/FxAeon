@@ -11,6 +11,14 @@ const ALCHEMY_HOST_BY_CHAIN: Record<FxChainId, string> = {
   8453: "base-mainnet.g.alchemy.com",
 };
 
+const SCREENSHOT_MODE = typeof process !== "undefined" && process.env.NEXT_PUBLIC_FX_SCREENSHOT_MODE === "1";
+
+function screenshotRpcEnv(): string | undefined {
+  if (!SCREENSHOT_MODE || typeof process === "undefined") return undefined;
+  const value = process.env.NEXT_PUBLIC_FX_ANVIL_RPC_URL;
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
 function ethereumRpcEnv(): string | undefined {
   // Keep each access literal: Next statically inlines literal
   // process.env.NEXT_PUBLIC_* expressions, but cannot inline indexed env access
@@ -27,6 +35,8 @@ function baseRpcEnv(): string | undefined {
 }
 
 export function requireRpcUrl(chainId: FxChainId): string {
+  const localFork = screenshotRpcEnv();
+  if (localFork) return assertLocalForkRpcUrl(localFork, "Screenshot fork RPC URL");
   const name = chainId === ETHEREUM_CHAIN_ID
     ? "NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL"
     : "NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL";
@@ -35,6 +45,30 @@ export function requireRpcUrl(chainId: FxChainId): string {
     throw new Error(`${name} is required for browser blockchain operations`);
   }
   return assertAlchemyRpcUrl(value, chainId, name);
+}
+
+/**
+ * A local fork is available only to the explicit, disposable screenshot build.
+ * Keeping this opt-in and localhost-only prevents production bundles from
+ * accepting arbitrary HTTP endpoints while making real read-only fork captures
+ * reproducible for documentation work.
+ */
+export function assertLocalForkRpcUrl(value: string, label = "Local fork RPC URL"): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`${label} must be an absolute HTTP URL`);
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)
+    || !['127.0.0.1', 'localhost'].includes(parsed.hostname)
+    || parsed.username
+    || parsed.password
+    || parsed.search
+    || parsed.hash) {
+    throw new Error(`${label} must point to localhost without credentials, query, or fragment`);
+  }
+  return parsed.toString().replace(/\/$/, '');
 }
 
 /**

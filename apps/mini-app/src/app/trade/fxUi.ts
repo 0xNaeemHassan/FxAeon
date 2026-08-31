@@ -85,20 +85,15 @@ export interface UiPosition {
 }
 
 /**
- * Resolve the display/input precision from the token symbol, not only from
- * the SDK's decimal metadata.  The pinned SDK currently reports 18 for both
- * position fields even for the BTC pools, whose WBTC amounts are 8-decimal
- * token units.  Raw values remain untouched; this helper only prevents the
- * UI from rendering a BTC amount with the wrong scale.
+ * Position contracts expose collateral and debt in their own accounting units.
+ * Keep the SDK's returned precision for position fields; it is intentionally
+ * distinct from the ERC-20 precision used by editable token inputs (for
+ * example, WBTC input is 8 decimals while a BTC pool position is WAD-scaled).
  */
 export function positionTokenDecimals(
   position: UiPosition,
   field: 'collateral' | 'debt',
 ): number {
-  const symbol = (field === 'collateral' ? position.info.rawCollsToken : position.info.rawDebtsToken).toLowerCase();
-  if (symbol === 'wbtc' || symbol === 'wbtc.e') return 8;
-  if (symbol === 'usdc' || symbol === 'usdt') return 6;
-  if (symbol === 'eth' || symbol === 'weth' || symbol === 'steth' || symbol === 'wsteth' || symbol === 'fxusd') return 18;
   return field === 'collateral' ? position.info.rawCollsDecimals : position.info.rawDebtsDecimals;
 }
 
@@ -119,7 +114,12 @@ export async function readAllPositions(walletAddress: string): Promise<UiPositio
       type: request.side,
     }),
   })));
-  return results.flatMap((result) => result.positions.map((info) => ({ market: result.market, side: result.side, info })));
+  return results.flatMap((result) => result.positions
+    // The indexer retains closed NFT positions for history. The Positions
+    // surface is an open-position workspace, so omit records whose accounting
+    // fields are both zero rather than presenting them as actionable exposure.
+    .filter((info) => info.rawColls > 0n || info.rawDebts > 0n)
+    .map((info) => ({ market: result.market, side: result.side, info })));
 }
 
 export function positionCollateralDecimals(position: UiPosition): number {

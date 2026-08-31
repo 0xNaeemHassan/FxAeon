@@ -48,3 +48,20 @@ Every transaction case must prove chain and parameter correctness, visible plan 
 Mainnet-fork impersonation or protocol-supported safe simulation is required for money-path integration tests. Production user funds are never a fixture. Current Chrome, Firefox, Safari, and Edge plus Telegram Android, iOS, Desktop, and Web must pass the applicable manual interaction checks before production promotion.
 
 The browser suite deliberately keeps accessibility checks dependency-light: route landmarks, labels, keyboard-visible focus, target sizing, and overflow are asserted directly. A full axe scan and real-device Telegram pass remain promotion-time checks when those environments are available.
+
+## Real-position documentation captures
+
+The checked-in position screenshot is read from a disposable Ethereum fork, not a demo fixture. To reproduce it locally, start Anvil with a restricted fork URL and build the explicitly opt-in screenshot mode:
+
+```powershell
+$env:ANVIL_FORK_URL = (Get-Secret FXAEON_ANVIL_FORK_URL)
+$env:NEXT_PUBLIC_FX_SCREENSHOT_MODE = "1"
+$env:NEXT_PUBLIC_FX_ANVIL_RPC_URL = "http://127.0.0.1:8547"
+$env:NEXT_PUBLIC_FX_SCREENSHOT_WALLET_ADDRESS = "0xYourRealPositionOwner"
+
+anvil --fork-url $env:ANVIL_FORK_URL --host 127.0.0.1 --port 8547 --chain-id 1 --accounts 20 --balance 10000
+pnpm build
+pnpm --dir apps/mini-app start
+```
+
+Open `/positions` on the local server and wait for the official SDK reads to settle before capturing. The screenshot provider is read-only, accepts only localhost, rejects transaction requests, and is gated behind `NEXT_PUBLIC_FX_SCREENSHOT_MODE`; normal builds remain wallet-connected and production-safe.

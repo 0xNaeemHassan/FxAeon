@@ -40,6 +40,7 @@ export function AppShell({
   const headingRef = useRef<HTMLHeadingElement>(null);
   const contentRef = useRef<HTMLElement>(null);
   const documentTitle = title ?? (pathname === '/portfolio' ? 'Portfolio' : undefined);
+  const networkLabel = pathname === '/move' ? 'Ethereum + Base' : 'Ethereum';
 
   useEffect(() => {
     const target = headingRef.current ?? contentRef.current;
@@ -60,7 +61,7 @@ export function AppShell({
               <FxLogo size={24} />
               <span className="text-display text-[15px] font-semibold">FxAeon</span>
             </span>
-            <span className="network-state"><span className="status-dot" /> Ethereum + Base</span>
+            <span className="network-state"><span className="status-dot" /> {networkLabel}</span>
           </div>
         )}
         {title && (
@@ -70,7 +71,7 @@ export function AppShell({
               <h1 ref={headingRef} tabIndex={-1} className="text-display outline-none">{title}</h1>
               {subtitle && <p className="page-subtitle">{subtitle}</p>}
             </div>
-            <span className="page-network"><span className="status-dot" /> Ethereum + Base</span>
+            <span className="page-network"><span className="status-dot" /> {networkLabel}</span>
           </header>
         )}
         <main ref={contentRef} id="main-content" tabIndex={-1} className="app-content flex-1 outline-none">{children}</main>
@@ -91,6 +92,8 @@ const TABS: { href: string; labelKey: string; icon: LucideIcon; also?: string[] 
 export function TabBar() {
   const pathname = usePathname();
   const t = useT();
+  const networkLabel = pathname === '/move' ? 'Ethereum + Base' : 'Ethereum';
+  const networkDescription = pathname === '/move' ? 'Bridge route' : 'Primary network';
   const links = (compact: boolean) => TABS.map(({ href, labelKey, icon: Icon, also }) => {
     const active = pathname === href || Boolean(also?.some((prefix) => pathname.startsWith(prefix)));
     return (
@@ -117,17 +120,17 @@ export function TabBar() {
       <nav className="desktop-rail" aria-label="Primary navigation">
         <Link href="/portfolio" className="rail-brand" aria-label="FxAeon portfolio">
           <span className="rail-brand-mark"><FxLogo size={30} /></span>
-          <span><strong>FxAeon</strong><small>f(x) interface</small></span>
+          <span><strong>FxAeon</strong><small>Ethereum interface</small></span>
         </Link>
         <div className="rail-network">
           <span className="status-dot" />
-          <span><strong>Protocol live</strong><small>Ethereum + Base</small></span>
+          <span><strong>Network</strong><small>{networkLabel} · {networkDescription}</small></span>
         </div>
         <div className="rail-label">Workspace</div>
         <div className="rail-links">{links(false)}</div>
         <div className="rail-assurance">
           <ShieldCheck className="h-4 w-4 text-mint" aria-hidden="true" />
-          <span><strong>Self-custodial</strong><small>Every action is wallet-confirmed</small></span>
+          <span><strong>Wallet-confirmed</strong><small>You stay in control</small></span>
         </div>
       </nav>
       <nav className="mobile-tabbar pointer-events-none fixed inset-x-0 bottom-0 z-40" aria-label="Primary navigation">

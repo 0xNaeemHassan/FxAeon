@@ -22,7 +22,7 @@ export default function MorePage() {
 
         <Section label="Resources">
           <MoreRow external href="https://fx.aladdin.club/" icon={BookOpen} title="f(x) Protocol" body="Open the protocol app" />
-          <MoreRow external href="https://fxprotocol.gitbook.io/fx-docs6" icon={CircleHelp} title="Documentation" body="Markets, mechanics, and risks" />
+          <MoreRow external href="https://fxprotocol.gitbook.io/fx-docs" icon={CircleHelp} title="Documentation" body="Markets, mechanics, and risks" />
         </Section>
       </div>
     </AppShell>

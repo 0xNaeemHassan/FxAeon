@@ -8,7 +8,7 @@ import {
   type ConnectedWallet,
   type SendTransactionModalUIOptions,
 } from '@privy-io/react-auth';
-import { assertAlchemyRpcUrl } from '@/lib/fx/config';
+import { assertAlchemyRpcUrl, assertLocalForkRpcUrl } from '@/lib/fx/config';
 
 export const FX_CHAIN_IDS = {
   ethereum: 1,
@@ -118,7 +118,41 @@ const CHAIN_METADATA: Record<FxChainId, { chainId: string; chainName: string; na
 };
 
 function browserProvider(): Eip1193Provider | undefined {
-  return typeof window !== 'undefined' ? window.ethereum : undefined;
+  if (typeof window === 'undefined') return undefined;
+  if (process.env.NEXT_PUBLIC_FX_SCREENSHOT_MODE === '1') {
+    const address = process.env.NEXT_PUBLIC_FX_SCREENSHOT_WALLET_ADDRESS;
+    const rpcUrl = process.env.NEXT_PUBLIC_FX_ANVIL_RPC_URL;
+    if (address && rpcUrl) return screenshotProvider(address, rpcUrl);
+  }
+  return window.ethereum;
+}
+
+let screenshotProviderInstance: Eip1193Provider | undefined;
+function screenshotProvider(address: string, rpcUrl: string): Eip1193Provider {
+  if (screenshotProviderInstance) return screenshotProviderInstance;
+  const normalizedAddress = address.toLowerCase();
+  const localRpc = assertLocalForkRpcUrl(rpcUrl, 'Screenshot fork RPC URL');
+  const listeners = new Map<string, Set<(...args: unknown[]) => void>>();
+  screenshotProviderInstance = {
+    request: async ({ method, params }) => {
+      if (method === 'eth_accounts' || method === 'eth_requestAccounts') return [normalizedAddress];
+      if (method === 'eth_chainId') return '0x1';
+      if (method === 'wallet_switchEthereumChain' || method === 'wallet_addEthereumChain') return null;
+      if (method === 'eth_sendTransaction') throw new Error('Screenshot fork wallet is read-only.');
+      const response = await fetch(localRpc, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method, params: params ?? [] }),
+      });
+      if (!response.ok) throw new Error(`Screenshot fork RPC returned HTTP ${response.status}`);
+      const payload = await response.json() as { result?: unknown; error?: { message?: string } };
+      if (payload.error) throw new Error(payload.error.message ?? 'Screenshot fork RPC request failed');
+      return payload.result;
+    },
+    on: (event, listener) => { (listeners.get(event) ?? (listeners.set(event, new Set()), listeners.get(event)!)).add(listener); },
+    removeListener: (event, listener) => { listeners.get(event)?.delete(listener); },
+  };
+  return screenshotProviderInstance;
 }
 
 function walletDescriptor(provider: Eip1193Provider, address: string, chainId?: number): FxSelectedWallet {
@@ -137,9 +171,14 @@ async function switchBrowserChain(provider: Eip1193Provider, chainId: FxChainId)
   const configured = chainId === FX_CHAIN_IDS.ethereum
     ? process.env.NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL
     : process.env.NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL;
+  const localFork = process.env.NEXT_PUBLIC_FX_SCREENSHOT_MODE === '1'
+    ? process.env.NEXT_PUBLIC_FX_ANVIL_RPC_URL
+    : undefined;
   let rpcUrl: string;
   try {
-    rpcUrl = assertAlchemyRpcUrl(String(configured || ''), chainId, 'Browser chain RPC URL');
+    rpcUrl = localFork
+      ? assertLocalForkRpcUrl(localFork, 'Screenshot fork RPC URL')
+      : assertAlchemyRpcUrl(String(configured || ''), chainId, 'Browser chain RPC URL');
   } catch {
     throw new Error('This wallet does not have the requested network yet. Add Ethereum or Base in the wallet, then try again.');
   }

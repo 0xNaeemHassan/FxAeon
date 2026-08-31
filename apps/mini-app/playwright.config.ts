@@ -15,14 +15,13 @@ const E2E_BUILD = process.env.E2E_BUILD ?? (process.env.CI ? '0' : '1');
 
 export default defineConfig({
   testDir: './e2e/specs',
-  // One browser worker is deliberately boring and deterministic on Windows,
-  // constrained CI runners, and Telegram-like WebView environments. The
-  // suite is small; parallel Chromium processes add launch/teardown flakiness
-  // without improving the release signal.
+  // The long mobile sweep and route sweep are independent and each owns its
+  // browser context, so two workers reduce release-gate time without changing
+  // coverage. Set E2E_WORKERS=1 on especially constrained runners.
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: 1,
+  workers: Number(process.env.E2E_WORKERS ?? 2),
   reporter: process.env.CI
     ? [['github'], ['html', { open: 'never' }], ['list']]
     : [['html', { open: 'never' }], ['list']],

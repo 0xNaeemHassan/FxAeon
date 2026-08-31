@@ -4,7 +4,8 @@ const ROUTES = ["/", "/login", "/portfolio", "/trade", "/positions", "/borrow", 
 const MOBILE_WIDTHS = [320, 360, 375, 390, 412, 430];
 
 test.describe("mobile web and Telegram accessibility contract", () => {
-  test("every official screen fits a narrow viewport and exposes a main landmark", async ({ page, requests }) => {
+  test("every official screen fits a narrow viewport, exposes a main landmark, and keeps controls reachable", async ({ page, requests }) => {
+    test.setTimeout(90_000);
     for (const width of MOBILE_WIDTHS) {
       await page.setViewportSize({ width, height: 844 });
       for (const route of ROUTES) {
@@ -17,16 +18,7 @@ test.describe("mobile web and Telegram accessibility contract", () => {
         }));
         expect(geometry.content, `${route} must not overflow horizontally at ${width}px`).toBeLessThanOrEqual(geometry.viewport + 1);
         expect(geometry.lang).toMatch(/^[a-z]{2}(?:-[A-Z]{2})?$/);
-      }
-    }
-    assertNoBackendRequests(requests);
-  });
 
-  test("visible app controls meet the mobile target size", async ({ page, requests }) => {
-    for (const width of MOBILE_WIDTHS) {
-      await page.setViewportSize({ width, height: 844 });
-      for (const route of ROUTES) {
-        await page.goto(route, { waitUntil: "domcontentloaded" });
         const undersized = await page.locator("button, [role=button], nav a").evaluateAll((nodes) =>
           nodes.flatMap((node) => {
             const element = node as HTMLElement;
