@@ -59,13 +59,13 @@ function BrowserWalletFlow() {
   return (
     <main className="auth-shell">
       <section className="auth-context" aria-label="FxAeon wallet security">
-        <Link href="/" className="auth-brand"><FxLogo size={32} /><span><strong>FxAeon</strong><small>f(x) protocol interface</small></span></Link>
+        <Link href="/" className="auth-brand"><FxLogo size={32} /><span><strong>FxAeon</strong><small>Ethereum interface</small></span></Link>
         <div className="auth-context-copy">
           <p className="landing-kicker"><span>02</span> Wallet access</p>
           <h2>Connect once.<br /><span className="text-gradient">Stay in control.</span></h2>
           <p>Your wallet is the signer. FxAeon prepares and validates each route without holding your keys.</p>
         </div>
-        <div className="auth-assurance"><ShieldCheck className="h-4 w-4 text-mint" aria-hidden="true" /> No application signer · No private-key form</div>
+        <div className="auth-assurance"><ShieldCheck className="h-4 w-4 text-mint" aria-hidden="true" /> Your wallet stays the signer</div>
       </section>
       <section className="auth-panel">
         <div className="auth-mode"><Globe2 className="h-4 w-4 text-mint" aria-hidden="true" /> Browser wallet</div>

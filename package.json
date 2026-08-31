@@ -18,7 +18,7 @@
     "verify:production-env": "node scripts/validate_production_env.mjs",
     "verify:scope": "node scripts/verify_fx_scope.mjs",
     "check:bundle": "node scripts/check_bundle_size.mjs",
-    "verify": "pnpm verify:scope && pnpm lint && pnpm typecheck && pnpm test && pnpm test:chaos && pnpm audit --prod --audit-level=high && pnpm build && pnpm check:bundle && node scripts/run_built_e2e.mjs",
+    "verify": "node scripts/verify.mjs",
     "audit": "pnpm audit --prod --audit-level=high"
   },
   "engines": {

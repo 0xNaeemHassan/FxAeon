@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assertAlchemyRpcUrl } from "../src/lib/fx/config";
+import { assertAlchemyRpcUrl, assertLocalForkRpcUrl } from "../src/lib/fx/config";
 
 test("accepts only the reviewed Alchemy host for each supported chain", () => {
   assert.equal(
@@ -38,4 +38,11 @@ test("rejects credential-bearing and non-v2 RPC URLs", () => {
     () => assertAlchemyRpcUrl("https://eth-mainnet.g.alchemy.com/", 1),
     /\/v2 application endpoint/,
   );
+});
+
+test("local fork URLs are limited to credential-free localhost endpoints", () => {
+  assert.equal(assertLocalForkRpcUrl("http://127.0.0.1:8547"), "http://127.0.0.1:8547");
+  assert.equal(assertLocalForkRpcUrl("http://localhost:8547/"), "http://localhost:8547");
+  assert.throws(() => assertLocalForkRpcUrl("https://rpc.example/v2/key"), /localhost/);
+  assert.throws(() => assertLocalForkRpcUrl("http://127.0.0.1:8547/?key=secret"), /credentials/);
 });

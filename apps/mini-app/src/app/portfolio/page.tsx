@@ -32,7 +32,7 @@ export default function PortfolioPage() {
       <div className="stagger flex flex-col">
         <header className="mb-6 flex items-start justify-between gap-4">
           <div>
-            <p className="page-kicker">Overview / Ethereum + Base</p>
+            <p className="page-kicker">Overview / Ethereum</p>
             <h1 className="text-display mt-1.5 text-[30px] font-semibold leading-tight">Portfolio</h1>
           </div>
           <Link href="/settings" onClick={() => haptic('light')} aria-label="Open wallet settings" className="glass-press flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface)]">
@@ -84,7 +84,7 @@ function PortfolioWallet() {
       setProtocol({
         status: fulfilled === 3 ? 'ready' : fulfilled > 0 ? 'partial' : 'unavailable',
         positions: positions.status === 'fulfilled'
-          ? positions.value.reduce((total, marketPositions) => total + marketPositions.length, 0)
+          ? positions.value.reduce((total, marketPositions) => total + marketPositions.filter((position) => position.rawColls > 0n || position.rawDebts > 0n).length, 0)
           : null,
         fxSaveShares: fxSave.status === 'fulfilled' ? formatProtocolAmount(fxSave.value.balanceWei) : null,
         fxSaveAssets: fxSave.status === 'fulfilled' && fxSave.value.assetsWei !== undefined ? formatProtocolAmount(fxSave.value.assetsWei) : null,

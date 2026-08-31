@@ -48,7 +48,7 @@ FxAeon turns the official f(x) SDK into a focused, reviewable product surface fo
       <br /><strong>Ethereum ↔ Base bridge workflow</strong>
     </td>
     <td width="50%" align="center">
-      <img src="docs/assets/fxaeon-trade.png" alt="FxAeon position builder" width="100%" />
+      <img src="docs/assets/fxaeon-trade.png" alt="FxAeon trading form" width="100%" />
       <br /><strong>Reviewable position workflows</strong>
     </td>
   </tr>
@@ -60,6 +60,16 @@ FxAeon turns the official f(x) SDK into a focused, reviewable product surface fo
     <td width="50%" align="center">
       <img src="docs/assets/fxaeon-portfolio.png" alt="FxAeon portfolio with wallet connection state" width="100%" />
       <br /><strong>Portfolio at a glance</strong>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <img src="docs/assets/fxaeon-positions.png" alt="FxAeon live ETH and BTC positions workspace" width="100%" />
+      <br /><strong>Live position workspace</strong>
+    </td>
+    <td width="50%" align="center">
+      <strong>Fork-backed position capture</strong><br />
+      <span>Official SDK reads only — no demo balances or synthetic PnL.</span>
     </td>
   </tr>
 </table>
