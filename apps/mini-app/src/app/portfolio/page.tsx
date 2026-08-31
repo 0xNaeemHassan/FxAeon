@@ -30,12 +30,12 @@ export default function PortfolioPage() {
   return (
     <AppShell tabs>
       <div className="stagger flex flex-col">
-        <header className="mb-5 flex items-start justify-between gap-4">
+        <header className="mb-6 flex items-start justify-between gap-4">
           <div>
-            <p className="mb-1.5 text-[12px] font-medium text-mut">Ethereum · Base</p>
-            <h1 className="text-display text-[26px] font-semibold leading-tight">Portfolio</h1>
+            <p className="page-kicker">Overview / Ethereum + Base</p>
+            <h1 className="text-display mt-1.5 text-[30px] font-semibold leading-tight">Portfolio</h1>
           </div>
-          <Link href="/settings" onClick={() => haptic('light')} aria-label="Open wallet settings" className="glass-press flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)]">
+          <Link href="/settings" onClick={() => haptic('light')} aria-label="Open wallet settings" className="glass-press flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface)]">
             <Wallet className="h-5 w-5 text-mint" aria-hidden="true" />
           </Link>
         </header>
@@ -43,7 +43,7 @@ export default function PortfolioPage() {
         <PortfolioWallet />
 
         <SectionTitle>Actions</SectionTitle>
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
           <ActionTile icon={QrCode} label="Receive" hint="Fund wallet" href="/qr" />
           <ActionTile icon={CandlestickChart} label="Trade" hint="Open a position" href="/trade" />
           <ActionTile icon={Layers2} label="Positions" hint="Manage exposure" href="/positions" />

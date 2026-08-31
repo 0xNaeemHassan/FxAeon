@@ -3,10 +3,9 @@
 import { useId } from 'react';
 
 /**
- * FxAeon logo mark — an inline SVG so it stays crisp at any size, paints with
- * no extra network request. The blue-to-coral face nods to f(x)'s official
- * spectrum without copying its mark, while the offset stroke gives FxAeon a
- * distinct, layered silhouette at small sizes.
+ * FxAeon logo mark — two opposing ribbons join into an abstract x / bridge.
+ * The silhouette is deliberately distinct from the f(x) protocol mark while
+ * keeping the shared blue-to-coral family visible at favicon size.
  */
 
 export function FxLogo({ size = 56, className = '' }: { size?: number; className?: string }) {
@@ -24,35 +23,23 @@ export function FxLogo({ size = 56, className = '' }: { size?: number; className
       aria-label="FxAeon"
     >
       <defs>
-        <linearGradient id={id} x1="14" y1="10" x2="50" y2="54" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#62d8ff" />
-          <stop offset="52%" stopColor="#6f86ff" />
-          <stop offset="1" stopColor="#ff5a70" />
+        <linearGradient id={id} x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#52c7ff" />
+          <stop offset="0.48" stopColor="#4f7cff" />
+          <stop offset="1" stopColor="#ff5368" />
         </linearGradient>
       </defs>
-      {/* ghost layer — a lighter, offset duplicate for the layered look */}
-      <g
-        stroke="#8ca5ff"
-        strokeOpacity="0.34"
-        strokeWidth="7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M27 17 L27 51" />
-        <path d="M27 17 C27 14 29 13 33 13 L47 13" />
-        <path d="M27 33 L43 33" />
-      </g>
-      {/* face layer — the gradient F */}
-      <g
-        stroke={`url(#${id})`}
-        strokeWidth="7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M23 17 L23 51" />
-        <path d="M23 17 C23 14 25 13 29 13 L43 13" />
-        <path d="M23 33 L39 33" />
-      </g>
+      <path
+        d="M8 26.5C8 15.7 16.6 7 27.3 7H48c3.6 0 5.6 4.1 3.4 7L40.7 28.2A16 16 0 0 1 27.9 34H15.5A7.5 7.5 0 0 1 8 26.5Z"
+        fill={`url(#${id})`}
+      />
+      <path
+        d="M56 37.5C56 48.3 47.4 57 36.7 57H16c-3.6 0-5.6-4.1-3.4-7l10.7-14.2A16 16 0 0 1 36.1 30h12.4a7.5 7.5 0 0 1 7.5 7.5Z"
+        fill={`url(#${id})`}
+        stroke="var(--bg)"
+        strokeWidth="2.5"
+      />
+      <path d="M24 32h16" stroke="#fff" strokeOpacity="0.92" strokeWidth="3" strokeLinecap="round" />
     </svg>
   );
 }

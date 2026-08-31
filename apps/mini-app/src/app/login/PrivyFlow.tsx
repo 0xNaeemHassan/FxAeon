@@ -157,7 +157,7 @@ function PrivyLoginFlow() {
     return (
       <main className="mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col justify-center gap-5 px-6">
         <div className="flex flex-col items-center gap-4 text-center">
-          <span className="flex h-16 w-16 items-center justify-center rounded-[20px] bg-[var(--success-dim)]">
+          <span className="flex h-16 w-16 items-center justify-center rounded-lg bg-[var(--success-dim)]">
             <Check className="h-8 w-8 text-success" strokeWidth={1.8} />
           </span>
           <h1 ref={phaseHeadingRef} tabIndex={-1} className="text-display text-2xl font-semibold outline-none">
@@ -233,7 +233,7 @@ function PrivyLoginFlow() {
       <div className="flex flex-col">
         <div className="glass mx-auto w-full max-w-sm p-6">
           <div className="flex flex-col items-center text-center">
-            <span className="flex h-16 w-16 items-center justify-center rounded-[18px] border border-[var(--line)] bg-[var(--surface-2)]">
+            <span className="flex h-16 w-16 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface-2)]">
               <FxLogo size={48} />
             </span>
             <p className="text-display mt-2.5 text-[20px] font-semibold tracking-tight">Fx<span className="text-gradient">Aeon</span></p>

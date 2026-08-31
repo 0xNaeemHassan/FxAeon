@@ -84,7 +84,7 @@ function Section({ label, children }: { label: string; children: ReactNode }) {
   return (
     <section aria-labelledby={id}>
       <h2 id={id} className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-mut">{label}</h2>
-      <div className="divide-y divide-[var(--line)] overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)]">{children}</div>
+      <div className="divide-y divide-[var(--line)] overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)]">{children}</div>
     </section>
   );
 }

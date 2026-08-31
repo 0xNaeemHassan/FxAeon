@@ -17,6 +17,7 @@ import {
   Check,
   LucideIcon,
   ChevronRight,
+  ShieldCheck,
 } from 'lucide-react';
 import { haptic } from '@/lib/telegram';
 import { useT } from '@/lib/i18n';
@@ -50,15 +51,30 @@ export function AppShell({
   }, [documentTitle]);
 
   return (
-    <div className={`app-shell mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-[430px] flex-col px-4 pt-[calc(env(safe-area-inset-top,0px)+1rem)] ${tabs ? 'pb-safe' : 'pb-[calc(env(safe-area-inset-bottom,0px)+1rem)]'}`}>
+    <div className={`app-shell mx-auto min-h-[var(--tg-viewport-stable-height)] w-full ${tabs ? 'app-shell-tabs pb-safe' : 'pb-[calc(env(safe-area-inset-bottom,0px)+1rem)]'}`}>
       <a href="#main-content" className="skip-link">Skip to main content</a>
-      {title && (
-        <header className="page-header mb-4">
-          <h1 ref={headingRef} tabIndex={-1} className="text-display text-[24px] font-semibold leading-tight outline-none">{title}</h1>
-          {subtitle && <p className="mt-1 text-[13px] leading-relaxed text-mut">{subtitle}</p>}
-        </header>
-      )}
-      <main ref={contentRef} id="main-content" tabIndex={-1} className="flex-1 outline-none">{children}</main>
+      <div className="app-workspace">
+        {tabs && (
+          <div className="app-topbar" aria-hidden="true">
+            <span className="flex items-center gap-2.5">
+              <FxLogo size={24} />
+              <span className="text-display text-[15px] font-semibold">FxAeon</span>
+            </span>
+            <span className="network-state"><span className="status-dot" /> Ethereum + Base</span>
+          </div>
+        )}
+        {title && (
+          <header className="page-header">
+            <div>
+              <p className="page-kicker">FxAeon / {title}</p>
+              <h1 ref={headingRef} tabIndex={-1} className="text-display outline-none">{title}</h1>
+              {subtitle && <p className="page-subtitle">{subtitle}</p>}
+            </div>
+            <span className="page-network"><span className="status-dot" /> Ethereum + Base</span>
+          </header>
+        )}
+        <main ref={contentRef} id="main-content" tabIndex={-1} className="app-content flex-1 outline-none">{children}</main>
+      </div>
       {tabs && <TabBar />}
     </div>
   );
@@ -75,32 +91,51 @@ const TABS: { href: string; labelKey: string; icon: LucideIcon; also?: string[] 
 export function TabBar() {
   const pathname = usePathname();
   const t = useT();
+  const links = (compact: boolean) => TABS.map(({ href, labelKey, icon: Icon, also }) => {
+    const active = pathname === href || Boolean(also?.some((prefix) => pathname.startsWith(prefix)));
+    return (
+      <Link
+        key={`${compact ? 'mobile' : 'desktop'}-${href}`}
+        href={href}
+        onClick={() => haptic('selection')}
+        aria-current={active ? 'page' : undefined}
+        className={`nav-item ${compact ? 'nav-item-mobile' : 'nav-item-desktop'} ${
+          active ? 'nav-item-active text-mint' : 'text-mut'
+        }`}
+      >
+        <span className="nav-icon">
+          <Icon aria-hidden="true" className="h-[18px] w-[18px]" strokeWidth={active ? 2.25 : 1.8} />
+        </span>
+        <span>{t(labelKey)}</span>
+        {!compact && <ChevronRight className="nav-chevron h-3.5 w-3.5" aria-hidden="true" />}
+      </Link>
+    );
+  });
+
   return (
-    <nav className="pointer-events-none fixed inset-x-0 bottom-0 z-40" aria-label="Primary navigation">
-      <div className="tabbar-safe mx-auto w-full max-w-[430px]">
-        <div className="tabbar pointer-events-auto flex items-center justify-between px-1 py-1">
-          {TABS.map(({ href, labelKey, icon: Icon, also }) => {
-            const active = pathname === href || Boolean(also?.some((prefix) => pathname.startsWith(prefix)));
-            return (
-              <Link
-                key={href}
-                href={href}
-                onClick={() => haptic('selection')}
-                aria-current={active ? 'page' : undefined}
-                className={`nav-item flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 rounded-[10px] text-[11px] font-semibold leading-none ${
-                  active ? 'nav-item-active text-mint' : 'text-mut'
-                }`}
-              >
-                <span className="nav-icon relative flex h-6 w-8 items-center justify-center rounded-full">
-                  <Icon aria-hidden="true" className="h-[18px] w-[18px]" strokeWidth={active ? 2.35 : 1.8} />
-                </span>
-                {t(labelKey)}
-              </Link>
-            );
-          })}
+    <>
+      <nav className="desktop-rail" aria-label="Primary navigation">
+        <Link href="/portfolio" className="rail-brand" aria-label="FxAeon portfolio">
+          <span className="rail-brand-mark"><FxLogo size={30} /></span>
+          <span><strong>FxAeon</strong><small>f(x) interface</small></span>
+        </Link>
+        <div className="rail-network">
+          <span className="status-dot" />
+          <span><strong>Protocol live</strong><small>Ethereum + Base</small></span>
         </div>
-      </div>
-    </nav>
+        <div className="rail-label">Workspace</div>
+        <div className="rail-links">{links(false)}</div>
+        <div className="rail-assurance">
+          <ShieldCheck className="h-4 w-4 text-mint" aria-hidden="true" />
+          <span><strong>Self-custodial</strong><small>Every action is wallet-confirmed</small></span>
+        </div>
+      </nav>
+      <nav className="mobile-tabbar pointer-events-none fixed inset-x-0 bottom-0 z-40" aria-label="Primary navigation">
+        <div className="tabbar-safe mx-auto w-full max-w-[520px]">
+          <div className="tabbar pointer-events-auto">{links(true)}</div>
+        </div>
+      </nav>
+    </>
   );
 }
 
@@ -117,7 +152,7 @@ export function Card({
   glow?: boolean;
   elevation?: 1 | 2 | 3;
 }) {
-  const elevationClass = elevation === 2 ? 'astryx-card-elevated' : elevation === 3 ? 'astryx-card-elevated shadow-2xl' : 'astryx-card';
+  const elevationClass = elevation === 2 || elevation === 3 ? 'astryx-card-elevated' : 'astryx-card';
   return (
     <div className={`${elevationClass} glass p-4 ${glow ? 'card-glow' : ''} ${className}`}>{children}</div>
   );
@@ -126,7 +161,7 @@ export function Card({
 function buttonClasses(variant: 'primary' | 'ghost' | 'danger' | 'outline' | 'glass', className = ''): string {
   const styles =
     variant === 'primary'
-      ? 'button-primary text-white font-semibold shadow-[0_4px_16px_rgba(139,109,255,0.35)]'
+      ? 'button-primary text-white font-semibold'
       : variant === 'danger'
         ? 'button-danger text-danger'
         : variant === 'outline'
@@ -134,7 +169,7 @@ function buttonClasses(variant: 'primary' | 'ghost' | 'danger' | 'outline' | 'gl
           : variant === 'glass'
             ? 'astryx-card text-white hover:border-[var(--astryx-border-strong)]'
             : 'button-ghost text-[var(--text)]';
-  return `button glass-press astryx-interactive flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-[15px] disabled:cursor-not-allowed disabled:opacity-50 ${styles} ${className}`;
+  return `button glass-press astryx-interactive flex min-h-12 w-full items-center justify-center gap-2 rounded-lg px-4 py-3 text-[14px] disabled:cursor-not-allowed disabled:opacity-50 ${styles} ${className}`;
 }
 
 export const Button = forwardRef<HTMLButtonElement, {
@@ -211,7 +246,7 @@ export function Stat({
 }) {
   return (
     <div className="stat-card glass flex flex-col gap-1.5 p-4">
-      <span className="text-[11px] font-medium text-mut">{label}</span>
+      <span className="micro-label">{label}</span>
       <span
         className={`text-display text-[20px] font-semibold leading-none ${accent ? 'text-mint' : ''}`}
       >
@@ -237,7 +272,7 @@ export function ActionTile({
 }) {
   const inner = (
     <>
-      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--mint-dim)]">
+      <span className="action-icon">
         <Icon aria-hidden="true" className="h-5 w-5 text-mint" strokeWidth={2} />
       </span>
       <span className="flex flex-col text-left">
@@ -247,7 +282,7 @@ export function ActionTile({
       <ChevronRight className="ml-auto h-4 w-4 text-[var(--mut-2)]" aria-hidden="true" />
     </>
   );
-  const cls = 'action-tile glass glass-press flex min-h-16 w-full items-center gap-3 p-3.5';
+  const cls = 'action-tile glass glass-press flex min-h-[68px] w-full items-center gap-3 p-3.5';
   if (href)
     return (
       <Link href={href} className={cls} onClick={() => haptic('light')}>
@@ -306,7 +341,7 @@ export function AddressChip({ address }: { address: string }) {
           haptic('error');
         }
       }}
-      className="address-chip glass glass-press inline-flex min-h-11 items-center gap-2 rounded-xl px-3 py-1.5 font-mono text-[12px] text-mut"
+      className="address-chip glass glass-press inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-1.5 font-mono text-[12px] text-mut"
     >
       {short}
       {copied ? (
@@ -331,7 +366,7 @@ export function EmptyState({
 }) {
   return (
     <div className="empty-state glass anim-scale-in flex flex-col items-center gap-2 px-6 py-9 text-center">
-      <span className="empty-icon flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--mint-dim)]">
+      <span className="empty-icon flex h-14 w-14 items-center justify-center rounded-lg bg-[var(--mint-dim)]">
         <Icon aria-hidden="true" className="h-6 w-6 text-mint" strokeWidth={1.8} />
       </span>
       <p className="mt-1 text-[15px] font-medium">{title}</p>
@@ -343,8 +378,8 @@ export function EmptyState({
 
 export function SectionTitle({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
-    <div className="mb-2.5 mt-6 flex items-center justify-between">
-      <h2 className="text-[14px] font-semibold text-[var(--text)]">
+    <div className="section-heading mb-2.5 mt-6 flex items-center justify-between">
+      <h2 className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--mut)]">
         {children}
       </h2>
       {right}
