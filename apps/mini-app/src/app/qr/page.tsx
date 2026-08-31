@@ -38,7 +38,7 @@ function WalletQr() {
         icon={Wallet}
         title={authenticated ? 'Choose a wallet first' : 'Connect a wallet first'}
         body="Connect or choose a wallet to show its receive address."
-        action={<Link href="/login" className="button button-primary glass-press flex min-h-12 w-full items-center justify-center rounded-2xl px-4 py-3 text-[15px] font-semibold">{authenticated ? 'Choose wallet' : 'Connect wallet'}</Link>}
+        action={<Link href="/login" className="button button-primary glass-press flex min-h-12 w-full items-center justify-center rounded-lg px-4 py-3 text-[15px] font-semibold">{authenticated ? 'Choose wallet' : 'Connect wallet'}</Link>}
       />
     );
   }
@@ -59,7 +59,7 @@ function WalletQr() {
   return (
     <div className="flex flex-col gap-3.5">
       <Card className="flex flex-col items-center gap-4 p-5">
-        <div className="rounded-[22px] bg-white p-3.5 shadow-[0_22px_50px_rgba(0,0,0,0.32)]">
+        <div className="rounded-lg bg-white p-3.5">
           <QRCodeSVG value={address} size={208} level="M" title="Your EVM wallet address" />
         </div>
         <p className="text-center text-[12px] text-mut">Ethereum and Base</p>

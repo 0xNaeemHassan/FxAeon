@@ -824,7 +824,7 @@ function StatusNotice({ label, body, className, icon }: { label: string; body: s
 }
 
 function InlineError({ message }: { message: string }) {
-  return <div role="alert" className="flex gap-2.5 rounded-2xl border border-[rgba(255,107,118,.2)] bg-[var(--danger-dim)] p-3 text-[11.5px] leading-relaxed text-danger"><AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" /><span>{message}</span></div>;
+  return <div role="alert" className="flex gap-2.5 rounded-lg border border-[rgba(255,107,118,.2)] bg-[var(--danger-dim)] p-3 text-[11.5px] leading-relaxed text-danger"><AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" /><span>{message}</span></div>;
 }
 
 type BridgeReviewQuote = {

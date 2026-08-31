@@ -18,7 +18,7 @@ export function Segmented<T extends string>({
   ariaLabel: string;
 }) {
   return (
-    <div className="grid grid-flow-col auto-cols-fr rounded-xl border border-[var(--line)] bg-[rgba(0,0,0,.18)] p-1" role="radiogroup" aria-label={ariaLabel}>
+    <div className="segmented grid grid-flow-col auto-cols-fr p-1" role="radiogroup" aria-label={ariaLabel}>
       {options.map((option) => {
         const active = option.value === value;
         return (
@@ -48,9 +48,9 @@ export function Segmented<T extends string>({
               buttons?.[next]?.focus();
               haptic('selection');
             }}
-            className={`glass-press min-h-11 rounded-lg px-2 py-2 text-center transition-colors ${
+            className={`segmented-option glass-press min-h-11 px-2 py-2 text-center transition-colors ${
               active
-                ? 'bg-[var(--mint-dim)] text-[var(--text)] shadow-[inset_0_0_0_1px_rgba(139,109,255,.26)]'
+                ? 'segmented-option-active text-[var(--text)]'
                 : 'text-mut'
             }`}
           >
@@ -106,7 +106,7 @@ export function SlippageField({
   return (
     <div>
       <FieldLabel htmlFor={inputId} hint={`Max ${max}%`}>Slippage</FieldLabel>
-      <div className={`flex min-h-[52px] items-center gap-2 rounded-xl border bg-[rgba(255,255,255,.035)] px-4 transition-colors focus-within:border-mint ${error ? 'border-danger' : 'border-[var(--line)]'}`}>
+      <div className={`field-control flex min-h-[52px] items-center gap-2 px-4 ${error ? 'field-error' : ''}`}>
         <input
           id={inputId}
           value={value}
@@ -172,7 +172,7 @@ export function AmountField({
   return (
     <div>
       <FieldLabel hint={hint} hintId={hintId} htmlFor={inputId}>{label}</FieldLabel>
-      <div className={`group flex min-h-[72px] items-center gap-3 rounded-xl border bg-[rgba(255,255,255,.035)] px-4 transition-colors focus-within:border-mint ${error ? 'border-danger' : 'border-[var(--line)]'}`}>
+      <div className={`amount-control group flex min-h-[76px] items-center gap-3 px-4 ${error ? 'field-error' : ''}`}>
         <input
           id={inputId}
           value={value}
@@ -188,7 +188,7 @@ export function AmountField({
           required={!allowZero}
           className="min-h-11 min-w-0 flex-1 bg-transparent font-mono text-[25px] font-semibold text-[var(--text)] outline-none placeholder:text-[var(--mut-2)]"
         />
-        <span className="flex shrink-0 items-center gap-2 rounded-lg border border-[var(--line)] bg-[rgba(255,255,255,.04)] px-2.5 py-2 text-[12px] font-semibold">
+        <span className="token-pill flex shrink-0 items-center gap-2 px-2.5 py-2 text-[12px] font-semibold">
           <TokenIcon symbol={symbol} size={22} /> {symbol}
         </span>
       </div>
@@ -211,7 +211,7 @@ export function AmountField({
                   const fraction = calculateFractionDecimal(balance, pct, maxDecimals);
                   if (fraction) onChange(fraction);
                 }}
-                className="min-h-11 min-w-11 rounded-lg border border-[var(--line)] bg-[rgba(255,255,255,0.04)] px-2 py-0.5 text-[10.5px] font-semibold text-mut transition-colors hover:border-[var(--mint)]/40 hover:bg-[var(--mint-dim)] hover:text-mint"
+                className="fraction-button min-h-11 min-w-11 px-2 py-0.5 text-[10.5px] font-semibold text-mut"
               >
                 {pct}%
               </button>
@@ -223,7 +223,7 @@ export function AmountField({
                   haptic('selection');
                   onChange('all');
                 }}
-                className="min-h-11 min-w-11 rounded-lg bg-[var(--mint-dim)] px-2.5 py-0.5 text-[10.5px] font-bold text-mint transition-colors hover:brightness-110"
+                className="fraction-button fraction-button-active min-h-11 min-w-11 px-2.5 py-0.5 text-[10.5px] font-bold text-mint"
               >
                 MAX
               </button>
@@ -235,7 +235,7 @@ export function AmountField({
                   const fraction = calculateFractionDecimal(balance, 100, maxDecimals);
                   if (fraction) onChange(fraction);
                 }}
-                className="min-h-11 min-w-11 rounded-lg bg-[var(--mint-dim)] px-2.5 py-0.5 text-[10.5px] font-bold text-mint transition-colors hover:brightness-110"
+                className="fraction-button fraction-button-active min-h-11 min-w-11 px-2.5 py-0.5 text-[10.5px] font-bold text-mint"
               >
                 MAX
               </button>
@@ -275,7 +275,7 @@ export function TokenSelect<T extends string>({
             haptic('selection');
             onChange(event.target.value as T);
           }}
-          className="min-h-[52px] w-full appearance-none rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 pr-11 text-[16px] font-semibold text-[var(--text)] outline-none transition-colors focus:border-mint"
+          className="field-control min-h-[52px] w-full appearance-none px-4 pr-11 text-[15px] font-semibold text-[var(--text)] outline-none"
         >
           {options.map((option) => <option key={option} value={option}>{option}</option>)}
         </select>
@@ -307,7 +307,7 @@ export function RangeField({
   return (
     <div>
       <FieldLabel htmlFor={rangeId} hint={`${min}${suffix} – ${max}${suffix}`}>{label}</FieldLabel>
-      <div className="rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.03)] p-4">
+      <div className="range-control p-4">
         <div className="mb-3 flex items-end justify-between">
           <span className="text-display text-[26px] font-semibold text-mint">{value.toFixed(value % 1 ? 1 : 0)}{suffix}</span>
           <span className="text-[11px] text-mut">{min}{suffix} to {max}{suffix}</span>
@@ -350,7 +350,7 @@ export function LeverageField({
   return (
     <div>
       <FieldLabel htmlFor={inputId} hint="Target multiplier">{label}</FieldLabel>
-      <div className="rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.03)] p-3">
+      <div className="range-control p-3">
         <div className="flex items-center gap-3">
           <input
             id={inputId}
@@ -364,7 +364,7 @@ export function LeverageField({
               onChange(Number.isFinite(next) ? next : 0);
             }}
             onBlur={() => haptic('selection')}
-            className="min-h-[52px] min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 text-[20px] font-semibold outline-none focus:border-mint"
+            className="field-control min-h-[52px] min-w-0 flex-1 px-4 text-[20px] font-semibold outline-none"
           />
           <span className="text-display text-[22px] font-semibold text-mint" aria-hidden="true">×</span>
         </div>
@@ -393,7 +393,7 @@ export function ToggleRow({
         haptic('selection');
         onChange(!checked);
       }}
-      className="glass-press flex w-full items-center gap-3 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.03)] p-3.5 text-left"
+      className="toggle-row glass-press flex w-full items-center gap-3 p-3.5 text-left"
     >
       <span className="min-w-0 flex-1">
         <span className="block text-[13px] font-semibold">{title}</span>
@@ -408,7 +408,7 @@ export function ToggleRow({
 
 export function InfoNote({ children }: { children: ReactNode }) {
   return (
-    <div className="flex gap-2.5 rounded-xl bg-[var(--mint-dim)] p-3 text-[12px] leading-relaxed text-mut">
+    <div className="info-note flex gap-2.5 p-3 text-[12px] leading-relaxed text-mut">
       <Info aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-mint" /> {children}
     </div>
   );

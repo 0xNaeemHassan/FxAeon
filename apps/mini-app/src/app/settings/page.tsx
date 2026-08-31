@@ -113,7 +113,7 @@ export default function SettingsPage() {
                 type="button"
                 aria-pressed={active}
                 onClick={() => update('theme', themeKey)}
-                className={`flex min-h-14 items-center justify-between rounded-2xl border p-3 text-left transition-colors ${active ? 'border-[var(--mint)] bg-[var(--mint-dim)]' : 'border-[var(--line)] bg-[var(--surface)]'}`}
+                className={`flex min-h-14 items-center justify-between rounded-lg border p-3 text-left transition-colors ${active ? 'border-[var(--mint)] bg-[var(--mint-dim)]' : 'border-[var(--line)] bg-[var(--surface)]'}`}
               >
                 <span className="text-[13.5px] font-medium">{THEME_LABELS[themeKey]}</span>
                 <span className="h-3.5 w-3.5 rounded-full border border-white/20" style={{ backgroundColor: theme.accent }} aria-hidden="true" />
@@ -159,7 +159,7 @@ function ChoiceGrid<T extends string | number>({
             role="radio"
             aria-checked={active}
             onClick={() => onChange(option.value)}
-            className={`glass glass-press min-h-11 rounded-2xl px-2 py-2.5 text-[13px] ${active ? 'border-[rgba(124,92,255,0.45)] bg-[var(--mint-dim)] text-mint' : 'text-mut'}`}
+            className={`glass glass-press min-h-11 rounded-lg px-2 py-2.5 text-[13px] ${active ? 'border-[var(--mint)] bg-[var(--mint-dim)] text-mint' : 'text-mut'}`}
           >
             {option.label}
           </button>

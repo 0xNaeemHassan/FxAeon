@@ -26,7 +26,7 @@ export const viewport: Viewport = {
   maximumScale: 5,
   userScalable: true,
   viewportFit: 'cover',
-  themeColor: '#07070d',
+  themeColor: '#080b10',
   colorScheme: 'dark',
 };
 

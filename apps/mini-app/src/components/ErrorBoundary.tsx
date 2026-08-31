@@ -86,8 +86,8 @@ function ErrorFallback({
   const showTechnicalDetails = process.env.NODE_ENV !== 'production';
   return (
     <main className="app-shell mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-[430px] items-center px-5 py-10">
-      <section className="glass anim-scale-in w-full rounded-[28px] p-6 text-center">
-        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-[26px] border border-[rgba(255,107,118,0.22)] bg-[var(--danger-dim)]">
+      <section className="glass anim-scale-in w-full rounded-lg p-6 text-center">
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-lg border border-[rgba(255,107,118,0.22)] bg-[var(--danger-dim)]">
           <AlertTriangle className="h-9 w-9 text-danger" strokeWidth={1.7} aria-hidden="true" />
         </div>
 
@@ -103,7 +103,7 @@ function ErrorFallback({
         </p>
 
         {showTechnicalDetails && error && (
-          <details className="mt-5 rounded-2xl border border-[var(--line)] bg-[rgba(0,0,0,0.18)] p-3 text-left">
+          <details className="mt-5 rounded-lg border border-[var(--line)] bg-[rgba(0,0,0,0.18)] p-3 text-left">
             <summary className="cursor-pointer text-[12px] text-mut transition-colors hover:text-[var(--text)]">
               Technical details
             </summary>
@@ -122,7 +122,7 @@ function ErrorFallback({
             onClick={onRetry}
             disabled={isRetrying}
             aria-busy={isRetrying || undefined}
-            className="button button-primary glass-press flex min-h-12 items-center justify-center gap-2 rounded-2xl px-3 text-[14px] font-semibold text-white disabled:opacity-50"
+            className="button button-primary glass-press flex min-h-12 items-center justify-center gap-2 rounded-lg px-3 text-[14px] font-semibold text-white disabled:opacity-50"
           >
             {isRetrying ? (
               <>
@@ -139,7 +139,7 @@ function ErrorFallback({
           <button
             type="button"
             onClick={onReload}
-            className="button button-ghost glass-press flex min-h-12 items-center justify-center gap-2 rounded-2xl px-3 text-[14px] font-medium"
+            className="button button-ghost glass-press flex min-h-12 items-center justify-center gap-2 rounded-lg px-3 text-[14px] font-medium"
           >
             <RefreshCw className="h-4 w-4" aria-hidden="true" />
             <span>Reload</span>
