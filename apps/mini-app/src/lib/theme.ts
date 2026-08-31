@@ -20,8 +20,8 @@ export const THEMES: Record<ThemeId, ThemeConfig> = {
   violet: {
     id: 'violet',
     name: 'Deep Space',
-    subtitle: 'Classic FxAeon Violet & Aurora',
-    accent: '#8b6dff',
+    subtitle: 'Indigo, blue, and coral',
+    accent: '#6f86ff',
     badge: 'Violet',
     colors: {
       '--bg': '#07070d',
@@ -30,11 +30,11 @@ export const THEMES: Record<ThemeId, ThemeConfig> = {
       '--surface-2': 'rgba(26, 26, 42, 0.90)',
       '--surface-3': 'rgba(34, 33, 54, 0.92)',
       '--card': '#12121d',
-      '--mint': '#8b6dff',
-      '--mint-bright': '#aa96ff',
-      '--mint-dim': 'rgba(139, 109, 255, 0.14)',
-      '--mint-glow': 'rgba(139, 109, 255, 0.28)',
-      '--cyan': '#b9a8ff',
+      '--mint': '#6f86ff',
+      '--mint-bright': '#a9b5ff',
+      '--mint-dim': 'rgba(111, 134, 255, 0.14)',
+      '--mint-glow': 'rgba(111, 134, 255, 0.28)',
+      '--cyan': '#63d8ff',
     },
   },
   matrix: {

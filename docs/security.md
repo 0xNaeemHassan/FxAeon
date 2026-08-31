@@ -6,7 +6,7 @@ FxAeon prepares financial transactions in an untrusted browser environment. The 
 
 - No private key enters FxAeon React state, the DOM, logs, storage, or build output.
 - No server authorization key, session signer, delegated wallet, or background executor exists.
-- The selected Privy wallet is the only accepted sender.
+- The explicitly selected Privy or browser-injected wallet is the only accepted sender.
 - Supported chains are exactly Ethereum `1` and Base `8453`.
 - Every SDK step gets a separate visible wallet confirmation.
 - A later step is never submitted before the previous receipt succeeds.
@@ -21,7 +21,7 @@ FxAeon prepares financial transactions in an untrusted browser environment. The 
 
 | Threat | Control |
 | --- | --- |
-| A stale or tampered plan targets the wrong account or chain | Bind every plan to the selected Privy address and supported chain; revalidate immediately before signing |
+| A stale or tampered plan targets the wrong account or chain | Bind every plan to the selected wallet address and supported chain; revalidate immediately before signing |
 | Malicious or malformed calldata | Validate destination, selector, value, approval spender/amount, route order, and nonce; display the reviewed request |
 | A multi-step route continues after failure | Wait for each receipt and stop on rejection, revert, timeout, or nonce drift |
 | Local storage is manipulated | Treat recovery records as hints only; re-read receipts, events, and SDK state |
@@ -38,7 +38,7 @@ The human-readable transaction summary is convenience UI, not authority. The val
 
 ## Browser and hosting
 
-- CSP restricts network requests to reviewed Privy, Alchemy, and wallet-connector hosts.
+- CSP restricts network requests to reviewed Privy, Alchemy, wallet-connector, and maintained token-asset hosts.
 - The static build hashes every generated inline Next.js bootstrap script into `script-src`; production does not rely on `script-src 'unsafe-inline'`.
 - Browser RPC keys are public by design but must use exact origin allowlists, network restrictions, quotas, and alerts.
 - Static previews and production use separate Privy and provider applications.
@@ -51,4 +51,4 @@ Runtime financial dependencies use exact versions. `@aladdindao/fx-sdk@1.0.5` ca
 
 ## Residual trust
 
-Users still trust the delivered static JavaScript, Privy custody/signing UI, Alchemy availability, wallet-connector providers, official SDK correctness, token contracts, LayerZero, and the underlying chains. A compromised deployment can mislead a user even if the wallet remains explicit; protected production access, dependency review, CSP, transaction validation, and wallet-detail inspection remain mandatory.
+Users still trust the delivered static JavaScript, Privy or browser-wallet signing UI, Alchemy availability, wallet-connector providers, official SDK correctness, token-asset hosts, token contracts, LayerZero, and the underlying chains. A compromised deployment can mislead a user even if the wallet remains explicit; protected production access, dependency review, CSP, transaction validation, and wallet-detail inspection remain mandatory.

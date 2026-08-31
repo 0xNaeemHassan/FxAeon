@@ -52,6 +52,16 @@ FxAeon turns the official f(x) SDK into a focused, reviewable product surface fo
       <br /><strong>Reviewable position workflows</strong>
     </td>
   </tr>
+  <tr>
+    <td width="50%" align="center">
+      <img src="docs/assets/fxaeon-login.png" alt="FxAeon browser wallet connection screen" width="100%" />
+      <br /><strong>Browser wallet entry</strong>
+    </td>
+    <td width="50%" align="center">
+      <img src="docs/assets/fxaeon-portfolio.png" alt="FxAeon portfolio with wallet connection state" width="100%" />
+      <br /><strong>Portfolio at a glance</strong>
+    </td>
+  </tr>
 </table>
 
 ### A complete, deliberately scoped protocol interface
@@ -62,10 +72,12 @@ FxAeon turns the official f(x) SDK into a focused, reviewable product surface fo
 | Borrow | Deposit collateral and mint fxUSD; repay debt and withdraw collateral |
 | fxSAVE | Read balances/configuration, deposit assets, queue or execute redemptions, and claim completed withdrawals |
 | Bridge | Quote and build Ethereum ↔ Base LayerZero routes with source-receipt and destination-GUID verification |
-| Wallet | Privy embedded wallets plus supported external EVM wallets, with an explicit prompt for every transaction |
+| Wallet | Privy embedded wallets when configured, or a browser-injected EVM wallet in a zero-service build; every transaction is explicitly approved |
 | Recovery | Reload-safe pending transaction and bridge journals that are always revalidated against chain data |
 
 The immutable public surface contains exactly 15 SDK methods. [`fx-scope.lock.json`](fx-scope.lock.json) and the scope verifier prevent protocol internals, unsupported routes, or backend authority from silently entering the product.
+
+Token and network marks use maintained AladdinDAO/SmolDapp assets (with local SVG fallbacks), so fxUSD, fxSAVE, ETH, WETH, stETH, wstETH, USDC, USDT, BTC, Ethereum, and Base remain recognizable even when an asset host is unavailable.
 
 ### Why the design matters
 
@@ -144,12 +156,12 @@ Open <http://localhost:3000> in a browser. Telegram is optional for local develo
 
 | Variable | Purpose |
 | --- | --- |
-| `NEXT_PUBLIC_PRIVY_APP_ID` | Public Privy application identifier |
+| `NEXT_PUBLIC_PRIVY_APP_ID` | Optional public Privy application identifier; omit it to use an injected browser wallet |
 | `NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL` | Origin-restricted Ethereum browser endpoint |
 | `NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL` | Origin-restricted Base browser endpoint |
 | `NEXT_PUBLIC_TELEGRAM_APP_URL` | Secondary Telegram launch link; browser entry does not depend on it |
 
-Every `NEXT_PUBLIC_*` value is embedded in the browser bundle. Never place a private key, Telegram bot token, Privy secret, authorization key, or unrestricted provider credential in client configuration.
+Every `NEXT_PUBLIC_*` value is embedded in the browser bundle. Never place a private key, Telegram bot token, Privy secret, authorization key, or unrestricted provider credential in client configuration. Without Privy, FxAeon connects directly to the wallet extension through EIP-1193; signing still happens in that wallet and no fallback server is involved.
 
 See [`SETUP.md`](SETUP.md) for provider restrictions, protected deployment variables, fork-test configuration, and Cloudflare Pages deployment.
 

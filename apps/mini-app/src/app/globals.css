@@ -16,11 +16,13 @@
   --text: #f8f7ff;
   --mut: #b2b0c5;
   --mut-2: #908ea5;
-  --mint: #8b6dff;
-  --mint-bright: #aa96ff;
-  --mint-dim: rgba(139, 109, 255, 0.14);
-  --mint-glow: rgba(139, 109, 255, 0.28);
-  --cyan: #b9a8ff;
+  /* FxAeon identity: f(x)-inspired indigo/blue with a measured coral edge. */
+  --mint: #6f86ff;
+  --mint-bright: #a9b5ff;
+  --mint-dim: rgba(111, 134, 255, 0.14);
+  --mint-glow: rgba(111, 134, 255, 0.28);
+  --cyan: #63d8ff;
+  --brand-coral: #ff5a70;
   --success: #36dfa6;
   --success-dim: rgba(54, 223, 166, 0.13);
   --danger: #ff6b76;
@@ -291,7 +293,7 @@ summary:focus-visible {
 }
 
 .text-gradient {
-  background: linear-gradient(105deg, var(--text) 3%, var(--mint-bright) 48%, var(--mint) 100%);
+  background: linear-gradient(105deg, var(--text) 3%, var(--cyan) 42%, var(--mint) 72%, var(--brand-coral) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;

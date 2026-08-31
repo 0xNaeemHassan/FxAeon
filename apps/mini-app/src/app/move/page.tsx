@@ -25,6 +25,7 @@ import {
 } from '@/lib/fx';
 import { usePrivyWallet } from '@/lib/wallet';
 import { parseAmount } from '@/app/trade/fxUi';
+import { ChainIcon } from '@/components/TokenIcon';
 
 const ERC20_BALANCE_ABI = [{
   type: 'function',
@@ -230,7 +231,7 @@ export default function MovePage() {
           </div>
 
           <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-            <NetworkField label="From" name={sourceName} />
+            <NetworkField label="From" name={sourceName} chainId={sourceChainId} />
             <button
               type="button"
               aria-label={`Reverse route to ${sourceName}`}
@@ -239,7 +240,7 @@ export default function MovePage() {
             >
               <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
             </button>
-            <NetworkField label="To" name={destinationName} />
+            <NetworkField label="To" name={destinationName} chainId={destinationChainId} />
           </div>
 
           <div className="my-4 hairline" />
@@ -376,11 +377,11 @@ function AddressField({ label, hint, value, onChange, placeholder }: { label: st
   );
 }
 
-function NetworkField({ label, name }: { label: 'From' | 'To'; name: string }) {
+function NetworkField({ label, name, chainId }: { label: 'From' | 'To'; name: string; chainId: FxChainId }) {
   return (
     <div className="rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.035)] p-3">
       <span className="block text-[11px] text-mut">{label}</span>
-      <span className="mt-1 block text-[14px] font-semibold">{name}</span>
+      <span className="mt-1 flex items-center gap-1.5 text-[14px] font-semibold"><ChainIcon chainId={chainId} size={18} />{name}</span>
     </div>
   );
 }

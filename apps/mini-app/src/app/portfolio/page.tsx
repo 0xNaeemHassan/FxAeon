@@ -13,11 +13,9 @@ import {
   Wallet,
 } from 'lucide-react';
 import Link from 'next/link';
-import { usePrivy } from '@privy-io/react-auth';
 import { formatUnits } from 'viem';
 import { AppShell, ActionTile, AddressChip, Card, EmptyState, SectionTitle } from '@/components/ui';
 import { haptic } from '@/lib/telegram';
-import { privyConfigured } from '@/lib/privyConfig';
 import { assertConfiguredPublicClientChain, getFxSdk } from '@/lib/fx';
 import { usePrivyWallet, useWalletReadyTimeout } from '@/lib/wallet';
 import PendingTransactionRecovery from '@/components/PendingTransactionRecovery';
@@ -42,7 +40,7 @@ export default function PortfolioPage() {
           </Link>
         </header>
 
-        {privyConfigured() ? <PortfolioWallet /> : <WalletUnavailable />}
+        <PortfolioWallet />
 
         <SectionTitle>Actions</SectionTitle>
         <div className="grid grid-cols-2 gap-2.5">
@@ -59,8 +57,8 @@ export default function PortfolioPage() {
 }
 
 function PortfolioWallet() {
-  const { ready, authenticated } = usePrivy();
   const walletState = usePrivyWallet();
+  const { ready, authenticated } = walletState;
   const wallet = walletState.selectedWallet;
   const [refreshed, setRefreshed] = useState(false);
   const walletTimedOut = useWalletReadyTimeout(ready && walletState.ready);
@@ -175,15 +173,4 @@ type ProtocolSnapshot = {
 function formatProtocolAmount(value: bigint): string {
   const formatted = formatUnits(value, 18).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
   return formatted || '0';
-}
-
-function WalletUnavailable() {
-  return (
-    <EmptyState
-      icon={Wallet}
-      title="Wallet service unavailable"
-      body="Wallet access is not configured in this build, so your positions and fxSAVE state cannot be shown."
-      action={<Link href="/settings" className="button button-primary glass-press flex min-h-12 w-full items-center justify-center rounded-xl px-4 py-3 text-[15px] font-semibold">Open settings</Link>}
-    />
-  );
 }

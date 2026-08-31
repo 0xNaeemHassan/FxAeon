@@ -4,10 +4,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import { AlertTriangle, Check, Copy, Wallet } from 'lucide-react';
-import { usePrivy } from '@privy-io/react-auth';
 import { AppShell, Button, Card, copyText, EmptyState } from '@/components/ui';
 import { haptic } from '@/lib/telegram';
-import { privyConfigured } from '@/lib/privyConfig';
 import { usePrivyWallet } from '@/lib/wallet';
 
 /**
@@ -18,14 +16,14 @@ import { usePrivyWallet } from '@/lib/wallet';
 export default function QRPage() {
   return (
     <AppShell title="Receive" subtitle="Your wallet address">
-      {privyConfigured() ? <WalletQr /> : <EmptyState icon={Wallet} title="Wallet unavailable" body="Wallet access is not available right now, so no address can be shown." />}
+      <WalletQr />
     </AppShell>
   );
 }
 
 function WalletQr() {
-  const { ready, authenticated } = usePrivy();
   const walletState = usePrivyWallet();
+  const { ready, authenticated } = walletState;
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
   const wallet = walletState.selectedWallet;

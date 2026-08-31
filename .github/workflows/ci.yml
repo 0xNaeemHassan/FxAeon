@@ -24,6 +24,10 @@ jobs:
           node-version: '22'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # `pnpm verify` includes the built-artifact Playwright gate. Install the
+      # pinned browser here as well as in the focused E2E workflow so the CI
+      # badge reflects the same release gate instead of failing at launch.
+      - run: pnpm --dir apps/mini-app exec playwright install --with-deps chromium
       - name: Run complete repository verification
         run: pnpm verify
         env:

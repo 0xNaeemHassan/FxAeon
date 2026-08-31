@@ -1,11 +1,14 @@
 'use client';
 
+/* eslint-disable @next/next/no-img-element */
+
+import { useState } from 'react';
+
 /**
  * Token / asset logos used across the Mini App.
  *
- * Every logo is an inline SVG (no external requests, no broken images, crisp at
- * any size). They are simplified, recognizable marks for the assets the product
- * actually touches:
+ * Prefer maintained AladdinDAO/SmolDapp token assets (with a resilient local
+ * fallback) for the assets the product actually touches:
  *   ETH, wstETH, WBTC, BTC, FXN, fxUSD, fxSAVE, FRAX (governance token, prev. FXS).
  *
  * For tokens without a dedicated mark we fall back to a clean gradient circle
@@ -37,6 +40,15 @@ const common = 'rounded-full object-contain';
 export function TokenIcon({ symbol, size = 44, className = '' }: TokenIconProps) {
   const s = symbol.toUpperCase();
   const style = { width: size, height: size };
+  const [remoteFailed, setRemoteFailed] = useState(false);
+
+  // SmolDapp's tokenAssets CDN is the maintained AladdinDAO asset source. It
+  // keeps logos current without shipping a second icon library in the app;
+  // the inline marks below remain a resilient offline/error fallback.
+  const officialLogo = OFFICIAL_TOKEN_LOGOS[s];
+  if (officialLogo && !remoteFailed) {
+    return <img src={officialLogo} style={style} className={`${common} ${className}`} alt={`${symbol} logo`} width={size} height={size} loading="lazy" decoding="async" onError={() => setRemoteFailed(true)} />;
+  }
 
   // Ethereum diamond
   if (s === 'ETH' || s === 'WETH') {
@@ -160,6 +172,33 @@ export function TokenIcon({ symbol, size = 44, className = '' }: TokenIconProps)
       <circle cx="16" cy="16" r="16" fill={`url(#fallback-${symbol})`} />
       <text x="16" y="20" textAnchor="middle" fill="white" fontSize="10" fontWeight="700" fontFamily="sans-serif">{initials}</text>
     </svg>
+  );
+}
+
+const OFFICIAL_TOKEN_LOGOS: Record<string, string> = {
+  ETH: 'https://assets.smold.app/api/token/1/0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee/logo-32.png',
+  WETH: 'https://assets.smold.app/api/token/1/0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2/logo-32.png',
+  STETH: 'https://assets.smold.app/api/token/1/0xae7ab96520de3a18e5e111b5eaab095312d7fe84/logo-32.png',
+  WSTETH: 'https://assets.smold.app/api/token/1/0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0/logo-32.png',
+  WBTC: 'https://assets.smold.app/api/token/1/0x2260fac5e5542a773aa44fbcfedf7c193bc2c599/logo-32.png',
+  BTC: 'https://assets.smold.app/api/token/1/0x2260fac5e5542a773aa44fbcfedf7c193bc2c599/logo-32.png',
+  USDC: 'https://assets.smold.app/api/token/1/0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48/logo-32.png',
+  USDT: 'https://assets.smold.app/api/token/1/0xdac17f958d2ee523a2206206994597c13d831ec7/logo-32.png',
+  FXUSD: 'https://raw.githubusercontent.com/AladdinDAO/aladdin-assets/main/images/branding/fxusd.svg',
+  FXSAVE: 'https://raw.githubusercontent.com/AladdinDAO/aladdin-assets/main/images/branding/fxSave.svg',
+};
+
+export function ChainIcon({ chainId, size = 28, className = '' }: { chainId: 1 | 8453; size?: number; className?: string }) {
+  const [remoteFailed, setRemoteFailed] = useState(false);
+  const style = { width: size, height: size };
+  const url = chainId === 1
+    ? 'https://assets.smold.app/api/chain/1/logo-32.png'
+    : 'https://assets.smold.app/api/chain/8453/logo-32.png';
+  if (!remoteFailed) return <img src={url} style={style} className={`${common} ${className}`} alt={chainId === 1 ? 'Ethereum logo' : 'Base logo'} width={size} height={size} loading="lazy" decoding="async" onError={() => setRemoteFailed(true)} />;
+  return (
+    <span style={style} className={`${common} inline-flex items-center justify-center bg-[var(--surface-3)] text-[10px] font-bold text-mint ${className}`} aria-label={chainId === 1 ? 'Ethereum' : 'Base'}>
+      {chainId === 1 ? 'Ξ' : 'B'}
+    </span>
   );
 }
 

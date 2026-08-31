@@ -90,9 +90,11 @@ test.describe("Telegram bridge availability", () => {
   });
 });
 
-test("missing wallet configuration is an honest unavailable state", async ({ page, requests }) => {
+test("missing Privy configuration still offers a browser wallet entry", async ({ page, requests }) => {
   await page.goto("/login", { waitUntil: "domcontentloaded" });
-  await expect(page.locator("body")).toContainText(/unavailable|not configured|connect|Telegram/i);
+  await expect(page.getByRole("heading", { name: /connect your wallet/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /connect browser wallet/i })).toBeVisible();
+  await expect(page.locator("body")).not.toContainText(/wallet setup unavailable|wallet service unavailable|wallet controls are unavailable/i);
   await expect(page.locator("body")).not.toContainText(/private key|session signer|delegat(?:ed|ion)/i);
   assertNoBackendRequests(requests);
 });
