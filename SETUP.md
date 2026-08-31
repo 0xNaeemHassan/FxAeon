@@ -6,7 +6,7 @@ FxAeon is a single static Next.js application for modern browsers and Telegram M
 
 - Node.js 22
 - Corepack with pnpm 11.19.0
-- A Privy application configured for the web origins you use, optional Telegram login, and Ethereum/Base
+- Optional Privy application configured for the web origins you use and Telegram login; browser users can connect an injected EVM wallet without Privy
 - Domain-restricted browser RPC endpoints for Ethereum and Base
 - Optional: a Telegram test bot for validating the Mini App launch context
 
@@ -30,14 +30,14 @@ The client accepts only public configuration:
 
 | Variable | Purpose |
 | --- | --- |
-| `NEXT_PUBLIC_PRIVY_APP_ID` | Public Privy application identifier |
+| `NEXT_PUBLIC_PRIVY_APP_ID` | Optional public Privy application identifier; omit it for direct browser-wallet access |
 | `NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL` | Domain-restricted Ethereum RPC endpoint |
 | `NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL` | Domain-restricted Base RPC endpoint |
 | `NEXT_PUBLIC_TELEGRAM_APP_URL` | Secondary Telegram Main Mini App or menu URL; browser entry does not depend on it |
 
 `NEXT_PUBLIC_*` values are embedded in the browser bundle. Never place a bot token, Privy secret, authorization key, private key, unrestricted RPC key, or other signing authority in this file. Inject production values through the protected deployment environment, not through committed files.
 
-Privy should allow the exact local, preview, and production origins and expose only Ethereum (chain ID `1`) and Base (chain ID `8453`). Provider applications should use separate preview and production credentials with origin allowlists, network restrictions, usage caps, and alerts.
+When configured, Privy should allow the exact local, preview, and production origins and expose only Ethereum (chain ID `1`) and Base (chain ID `8453`). Provider applications should use separate preview and production credentials with origin allowlists, network restrictions, usage caps, and alerts. If Privy is omitted, FxAeon uses the browser wallet's EIP-1193 provider directly; no account is requested until the user presses Connect.
 
 ## Development
 

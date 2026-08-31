@@ -427,7 +427,7 @@ export function ActionReview({
   const review = useCallback(async () => {
     if (!planBuilder || disabled || loading) return;
     if (!wallet.authenticated || !wallet.address) {
-      setError('Connect a Privy wallet before preparing a transaction.');
+      setError('Connect a wallet before preparing a transaction.');
       return;
     }
     setLoading(true);

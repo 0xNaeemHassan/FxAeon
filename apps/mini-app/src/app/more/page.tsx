@@ -4,10 +4,8 @@ import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { ArrowUpRight, BookOpen, ChevronRight, CircleHelp, QrCode, Settings, Wallet } from 'lucide-react';
 import Link from 'next/link';
-import { usePrivy } from '@privy-io/react-auth';
 import { AppShell, AddressChip, Card } from '@/components/ui';
 import { haptic } from '@/lib/telegram';
-import { privyConfigured } from '@/lib/privyConfig';
 import { usePrivyWallet, useWalletReadyTimeout } from '@/lib/wallet';
 
 /** Secondary destinations only. Primary trading flows stay in the tab bar. */
@@ -15,7 +13,7 @@ export default function MorePage() {
   return (
     <AppShell title="More">
       <div className="flex flex-col gap-5">
-        {privyConfigured() ? <WalletSummary /> : <WalletNotConfigured />}
+        <WalletSummary />
 
         <Section label="Account">
           <MoreRow href="/qr" icon={QrCode} title="Receive" body="Wallet address and QR code" />
@@ -24,7 +22,7 @@ export default function MorePage() {
 
         <Section label="Resources">
           <MoreRow external href="https://fx.aladdin.club/" icon={BookOpen} title="f(x) Protocol" body="Open the protocol app" />
-          <MoreRow external href="https://docs.aladdin.club/fx-protocol" icon={CircleHelp} title="Documentation" body="Markets, mechanics, and risks" />
+          <MoreRow external href="https://fxprotocol.gitbook.io/fx-docs6" icon={CircleHelp} title="Documentation" body="Markets, mechanics, and risks" />
         </Section>
       </div>
     </AppShell>
@@ -32,8 +30,8 @@ export default function MorePage() {
 }
 
 function WalletSummary() {
-  const { ready, authenticated } = usePrivy();
   const walletState = usePrivyWallet();
+  const { ready, authenticated } = walletState;
   const wallet = walletState.selectedWallet;
   const timedOut = useWalletReadyTimeout(ready && walletState.ready);
 
@@ -77,15 +75,6 @@ function WalletSummary() {
         </div>
         <span className="text-[12px] font-medium text-success">Ready</span>
       </div>
-    </Card>
-  );
-}
-
-function WalletNotConfigured() {
-  return (
-    <Card className="border-[rgba(255,194,102,.24)] p-4">
-      <p className="text-[13.5px] font-medium">Wallet unavailable</p>
-      <p className="mt-1 text-[12px] leading-relaxed text-mut">Connect a wallet when wallet access is enabled.</p>
     </Card>
   );
 }

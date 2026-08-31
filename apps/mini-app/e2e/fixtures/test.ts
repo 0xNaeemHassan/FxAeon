@@ -40,7 +40,11 @@ export const test = base.extend<{
       observed.all.push(url);
       try {
         const pathname = new URL(url).pathname;
-        if (/\/api(?:\/|$)/i.test(pathname)) observed.backend.push(url);
+        // The maintained token-assets CDN exposes image files under `/api`.
+        // That is an asset host, not an FxAeon application backend; keep the
+        // client-first assertion focused on same-origin/unknown API routes.
+        const host = new URL(url).hostname;
+        if (/\/api(?:\/|$)/i.test(pathname) && host !== "assets.smold.app") observed.backend.push(url);
       } catch {
         // Ignore malformed URLs; Playwright normally supplies absolute URLs.
       }

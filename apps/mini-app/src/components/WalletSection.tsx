@@ -196,6 +196,52 @@ function PrivyWalletControls() {
     </div>
   );
 }
+
+function BrowserWalletControls() {
+  const wallet = usePrivyWallet();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const connect = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      await wallet.connect();
+      haptic('success');
+    } catch (cause) {
+      setError(userSafeError(cause, 'Browser wallet connection was cancelled.'));
+      haptic('error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!wallet.ready) return <Card className="h-24 animate-pulse"><span className="sr-only">Loading wallet provider</span></Card>;
+  if (!wallet.authenticated || !wallet.selectedWallet) {
+    return (
+      <Card className="flex flex-col gap-3">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)]"><Wallet className="h-[18px] w-[18px] text-mint" strokeWidth={2} /></span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[14px] font-medium">Connect a browser wallet</p>
+            <p className="mt-0.5 text-[12.5px] leading-relaxed text-mut">Use any EVM wallet extension. FxAeon never sees your private key.</p>
+          </div>
+        </div>
+        <Button onClick={connect} loading={busy}>Connect wallet</Button>
+        {error && <p role="alert" className="rounded-xl border border-[var(--danger-dim)] bg-[var(--danger-dim)] px-3 py-2.5 text-[12px] leading-relaxed text-danger">{error}</p>}
+      </Card>
+    );
+  }
+  return (
+    <Card className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-3"><span className="text-[12px] font-medium text-mut">Connected wallet</span><span className="text-[11px] font-medium text-success">Browser</span></div>
+      <AddressChip address={wallet.selectedWallet.address} />
+      <Button variant="ghost" onClick={connect} loading={busy}>Reconnect wallet</Button>
+      {error && <p role="alert" className="rounded-xl border border-[var(--danger-dim)] bg-[var(--danger-dim)] px-3 py-2.5 text-[12px] leading-relaxed text-danger">{error}</p>}
+    </Card>
+  );
+}
+
 export default function WalletSection() {
   return (
     <section className="flex flex-col gap-3">
@@ -203,11 +249,7 @@ export default function WalletSection() {
       {privyConfigured() ? (
         <PrivyWalletControls />
       ) : (
-        <Card>
-          <p className="text-[13px] leading-relaxed text-mut">
-            Wallet controls are unavailable: this build is missing its Privy configuration.
-          </p>
-        </Card>
+        <BrowserWalletControls />
       )}
     </section>
   );

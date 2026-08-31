@@ -8,6 +8,7 @@ import {
   type ConnectedWallet,
   type SendTransactionModalUIOptions,
 } from '@privy-io/react-auth';
+import { assertAlchemyRpcUrl } from '@/lib/fx/config';
 
 export const FX_CHAIN_IDS = {
   ethereum: 1,
@@ -56,6 +57,8 @@ export type FxPrivyWallet = {
   chainId?: FxChainId;
   address?: string;
   isEmbedded: boolean;
+  /** Request an account from the user's browser wallet. No private key leaves the wallet. */
+  connect: () => Promise<void>;
   selectWallet: (address: string) => void;
   switchChain: (chainId: FxChainId) => Promise<void>;
   sendTransaction: (
@@ -91,6 +94,64 @@ function asHexQuantity(value: string | number | bigint | undefined): string | un
 
 function isEmbedded(wallet: ConnectedWallet | undefined): boolean {
   return wallet?.walletClientType === 'privy' || wallet?.walletClientType === 'privy-v2';
+}
+
+type Eip1193Provider = {
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+  on?: (event: string, listener: (...args: unknown[]) => void) => void;
+  removeListener?: (event: string, listener: (...args: unknown[]) => void) => void;
+};
+
+const CHAIN_METADATA: Record<FxChainId, { chainId: string; chainName: string; nativeCurrency: { name: string; symbol: string; decimals: number }; blockExplorerUrls: string[] }> = {
+  [FX_CHAIN_IDS.ethereum]: {
+    chainId: '0x1',
+    chainName: 'Ethereum Mainnet',
+    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    blockExplorerUrls: ['https://etherscan.io'],
+  },
+  [FX_CHAIN_IDS.base]: {
+    chainId: '0x2105',
+    chainName: 'Base',
+    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    blockExplorerUrls: ['https://basescan.org'],
+  },
+};
+
+function browserProvider(): Eip1193Provider | undefined {
+  return typeof window !== 'undefined' ? window.ethereum : undefined;
+}
+
+function walletDescriptor(provider: Eip1193Provider, address: string, chainId?: number): FxSelectedWallet {
+  const selectedChain = chainId === FX_CHAIN_IDS.ethereum || chainId === FX_CHAIN_IDS.base ? chainId : undefined;
+  return {
+    address,
+    type: 'ethereum',
+    walletClientType: 'browser',
+    chainId: selectedChain ? `eip155:${selectedChain}` : undefined,
+    getEthereumProvider: async () => provider,
+    switchChain: async (nextChain: FxChainId) => switchBrowserChain(provider, nextChain),
+  } as unknown as FxSelectedWallet;
+}
+
+async function switchBrowserChain(provider: Eip1193Provider, chainId: FxChainId): Promise<void> {
+  const configured = chainId === FX_CHAIN_IDS.ethereum
+    ? process.env.NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL
+    : process.env.NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL;
+  let rpcUrl: string;
+  try {
+    rpcUrl = assertAlchemyRpcUrl(String(configured || ''), chainId, 'Browser chain RPC URL');
+  } catch {
+    throw new Error('This wallet does not have the requested network yet. Add Ethereum or Base in the wallet, then try again.');
+  }
+  const metadata = { ...CHAIN_METADATA[chainId], rpcUrls: [rpcUrl] };
+  try {
+    await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: metadata.chainId }] });
+  } catch (cause) {
+    // 4902 means the wallet knows the provider but not this chain yet.
+    if (typeof cause !== 'object' || cause === null || !('code' in cause) || (cause as { code?: unknown }).code !== 4902) throw cause;
+    await provider.request({ method: 'wallet_addEthereumChain', params: [metadata] });
+    await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: metadata.chainId }] });
+  }
 }
 
 /**
@@ -250,6 +311,9 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
     chainId: selectedChainId,
     address: selectedWallet?.address,
     isEmbedded: isEmbedded(selectedWallet),
+    connect: async () => {
+      throw new Error('Use the wallet sign-in flow to connect an account.');
+    },
     selectWallet,
     switchChain,
     sendTransaction,
@@ -264,26 +328,98 @@ export function PrivyWalletBridge({ children }: { children: ReactNode }) {
   return createElement(FxWalletContext.Provider, { value: wallet }, children);
 }
 
-const unavailableWallet: FxPrivyWallet = {
-  ready: true,
-  authenticated: false,
-  wallets: [],
-  selectedWallet: undefined,
-  chainId: undefined,
-  address: undefined,
-  isEmbedded: false,
-  selectWallet: () => undefined,
-  switchChain: async () => {
-    throw new Error('Wallet service is not configured for this build.');
-  },
-  sendTransaction: async () => {
-    throw new Error('Wallet service is not configured for this build.');
-  },
-};
+/** Browser-only wallet provider used when the optional Privy service is not configured. */
+export function BrowserWalletProvider({ children }: { children: ReactNode }) {
+  const [ready, setReady] = useState(false);
+  const [address, setAddress] = useState<string>();
+  const [chainId, setChainId] = useState<FxChainId>();
+  const provider = browserProvider();
 
-/** Honest no-wallet state for local builds that intentionally omit Privy. */
+  const sync = useCallback(async (requestAccounts = false) => {
+    const currentProvider = browserProvider();
+    if (!currentProvider) throw new Error('No browser wallet detected. Install MetaMask, Coinbase Wallet, or another EVM wallet to continue.');
+    const accounts = await currentProvider.request({ method: requestAccounts ? 'eth_requestAccounts' : 'eth_accounts' });
+    const nextAddress = Array.isArray(accounts) && typeof accounts[0] === 'string' ? accounts[0] : undefined;
+    setAddress(nextAddress);
+    const rawChain = await currentProvider.request({ method: 'eth_chainId' });
+    const parsed = asChainNumber(typeof rawChain === 'string' ? rawChain : String(rawChain));
+    setChainId(parsed === FX_CHAIN_IDS.ethereum || parsed === FX_CHAIN_IDS.base ? parsed : undefined);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void sync().catch(() => undefined).finally(() => { if (!cancelled) setReady(true); });
+    if (!provider?.on) return () => { cancelled = true; };
+    const onAccounts = (...args: unknown[]) => {
+      const accounts = Array.isArray(args[0]) ? args[0] : [];
+      setAddress(typeof accounts[0] === 'string' ? accounts[0] : undefined);
+    };
+    const onChain = (...args: unknown[]) => {
+      const parsed = asChainNumber(typeof args[0] === 'string' ? args[0] : undefined);
+      setChainId(parsed === FX_CHAIN_IDS.ethereum || parsed === FX_CHAIN_IDS.base ? parsed : undefined);
+    };
+    const onDisconnect = () => { setAddress(undefined); setChainId(undefined); };
+    provider.on('accountsChanged', onAccounts);
+    provider.on('chainChanged', onChain);
+    provider.on('disconnect', onDisconnect);
+    return () => {
+      cancelled = true;
+      provider.removeListener?.('accountsChanged', onAccounts);
+      provider.removeListener?.('chainChanged', onChain);
+      provider.removeListener?.('disconnect', onDisconnect);
+    };
+  }, [provider, sync]);
+
+  const connect = useCallback(async () => { await sync(true); }, [sync]);
+  const selectedWallet = useMemo(
+    () => address && provider ? walletDescriptor(provider, address, chainId) : undefined,
+    [address, chainId, provider],
+  );
+  const switchChain = useCallback(async (nextChain: FxChainId) => {
+    if (!provider || !selectedWallet) throw new Error('Connect a browser wallet before switching networks.');
+    await switchBrowserChain(provider, nextChain);
+    setChainId(nextChain);
+  }, [provider, selectedWallet]);
+  const sendTransaction = useCallback(async (transaction: FxWalletTransaction) => {
+    if (!provider || !selectedWallet?.address) throw new Error('Connect a browser wallet before signing a transaction.');
+    if (transaction.from && transaction.from.toLowerCase() !== selectedWallet.address.toLowerCase()) throw new Error('Transaction sender does not match the selected wallet.');
+    if (chainId !== transaction.chainId) {
+      await switchBrowserChain(provider, transaction.chainId);
+      setChainId(transaction.chainId);
+    }
+    const providerChain = await provider.request({ method: 'eth_chainId' });
+    if (asChainNumber(typeof providerChain === 'string' ? providerChain : String(providerChain)) !== transaction.chainId) throw new Error('The connected wallet is on the wrong network. Switch chains and try again.');
+    const accounts = await provider.request({ method: 'eth_accounts' });
+    if (!Array.isArray(accounts) || !accounts.some((account): account is string => typeof account === 'string' && account.toLowerCase() === selectedWallet.address!.toLowerCase())) throw new Error('The connected wallet account does not match the selected wallet.');
+    const request: Record<string, string> = { from: selectedWallet.address, to: transaction.to };
+    if (transaction.data !== undefined) request.data = transaction.data;
+    for (const [key, value] of [['value', transaction.value], ['nonce', transaction.nonce], ['gas', transaction.gasLimit], ['gasPrice', transaction.gasPrice], ['maxFeePerGas', transaction.maxFeePerGas], ['maxPriorityFeePerGas', transaction.maxPriorityFeePerGas] ] as const) {
+      const normalized = asHexQuantity(value);
+      if (normalized !== undefined) request[key] = normalized;
+    }
+    const result = await provider.request({ method: 'eth_sendTransaction', params: [request] });
+    if (typeof result !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(result)) throw new Error('The connected wallet returned an invalid transaction hash.');
+    return { hash: result as `0x${string}` };
+  }, [chainId, provider, selectedWallet]);
+  const wallet: FxPrivyWallet = useMemo(() => ({
+    ready,
+    authenticated: Boolean(address),
+    wallets: selectedWallet ? [selectedWallet] : [],
+    selectedWallet,
+    chainId,
+    address,
+    isEmbedded: false,
+    connect,
+    selectWallet: () => undefined,
+    switchChain,
+    sendTransaction,
+  }), [address, chainId, connect, ready, selectedWallet, sendTransaction, switchChain]);
+  return createElement(FxWalletContext.Provider, { value: wallet }, children);
+}
+
+/** Backwards-compatible name for builds that intentionally omit Privy. */
 export function UnavailableWalletProvider({ children }: { children: ReactNode }) {
-  return createElement(FxWalletContext.Provider, { value: unavailableWallet }, children);
+  return createElement(BrowserWalletProvider, null, children);
 }
 
 export function usePrivyWallet(): FxPrivyWallet {

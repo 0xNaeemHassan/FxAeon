@@ -109,13 +109,13 @@ export default function HomePage() {
           <div className="grid flex-1 items-center gap-10 py-12 md:grid-cols-[1.05fr_.95fr] md:py-16">
             <section className="text-left">
               <p className="inline-flex items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-mint">
-                <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" /> Self-custodial f(x) interface
+                <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" /> f(x) protocol · Ethereum + Base
               </p>
               <h1 className="text-display mt-5 max-w-[620px] text-[42px] font-semibold leading-[1.02] tracking-[-0.055em] sm:text-[58px]">
-                One interface for f(x), <span className="text-gradient">anywhere.</span>
+                Trade, borrow, earn, <span className="text-gradient">move.</span>
               </h1>
               <p className="mt-5 max-w-[570px] text-[15px] leading-relaxed text-mut sm:text-[17px]">
-                Trade positions, mint fxUSD, manage fxSAVE, and bridge between Ethereum and Base from the web or Telegram—with every action reviewed and approved in your wallet.
+                A focused f(x) experience for your browser or Telegram. Review every action, then approve it in your wallet.
               </p>
               <div className="mt-7 flex flex-col gap-3 sm:flex-row">
                 <ButtonLink href="/portfolio" className="sm:!w-auto sm:!px-6">
@@ -126,9 +126,9 @@ export default function HomePage() {
                 </ButtonLink>
               </div>
               <div className="mt-7 flex flex-wrap gap-x-5 gap-y-2 text-[12px] text-[var(--mut-2)]">
-                <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-4 w-4 text-mint" aria-hidden="true" /> Explicit wallet approval</span>
-                <span className="inline-flex items-center gap-1.5"><Layers3 className="h-4 w-4 text-mint" aria-hidden="true" /> 15 official SDK methods</span>
-                <span className="inline-flex items-center gap-1.5"><WalletCards className="h-4 w-4 text-mint" aria-hidden="true" /> No delegated signer</span>
+                <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-4 w-4 text-mint" aria-hidden="true" /> Wallet-confirmed actions</span>
+                <span className="inline-flex items-center gap-1.5"><Globe2 className="h-4 w-4 text-mint" aria-hidden="true" /> Browser or Telegram</span>
+                <span className="inline-flex items-center gap-1.5"><WalletCards className="h-4 w-4 text-mint" aria-hidden="true" /> Your wallet, your keys</span>
               </div>
             </section>
 
@@ -137,8 +137,8 @@ export default function HomePage() {
               <div className="relative">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-mut">Official f(x) capabilities</p>
-                    <h2 className="text-display mt-1.5 text-[22px] font-semibold">Your protocol command center</h2>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-mut">Your next move</p>
+                    <h2 className="text-display mt-1.5 text-[22px] font-semibold">Everything in one place</h2>
                   </div>
                   <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--mint-dim)]"><FxLogo size={27} /></span>
                 </div>
@@ -152,7 +152,7 @@ export default function HomePage() {
                   ))}
                 </div>
                 <div className="mt-3 flex items-center justify-between rounded-2xl border border-[rgba(107,230,184,.20)] bg-[var(--success-dim)] px-4 py-3">
-                  <span className="text-[12px] font-medium text-success">Chain state stays authoritative</span>
+                  <span className="text-[12px] font-medium text-success">Ready when you are</span>
                   <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-success">Ethereum · Base</span>
                 </div>
               </div>

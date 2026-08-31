@@ -4,9 +4,9 @@ import { useId } from 'react';
 
 /**
  * FxAeon logo mark — an inline SVG so it stays crisp at any size, paints with
- * no extra network request, and tints from the brand violet tokens. A clean
- * geometric "F" built from two overlapping rounded strokes (a lighter offset
- * ghost behind the gradient face) to give the layered depth in the brand mark.
+ * no extra network request. The blue-to-coral face nods to f(x)'s official
+ * spectrum without copying its mark, while the offset stroke gives FxAeon a
+ * distinct, layered silhouette at small sizes.
  */
 
 export function FxLogo({ size = 56, className = '' }: { size?: number; className?: string }) {
@@ -25,13 +25,14 @@ export function FxLogo({ size = 56, className = '' }: { size?: number; className
     >
       <defs>
         <linearGradient id={id} x1="14" y1="10" x2="50" y2="54" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#A88BFF" />
-          <stop offset="1" stopColor="#7C5CFF" />
+          <stop offset="0" stopColor="#62d8ff" />
+          <stop offset="52%" stopColor="#6f86ff" />
+          <stop offset="1" stopColor="#ff5a70" />
         </linearGradient>
       </defs>
       {/* ghost layer — a lighter, offset duplicate for the layered look */}
       <g
-        stroke="#A88BFF"
+        stroke="#8ca5ff"
         strokeOpacity="0.34"
         strokeWidth="7"
         strokeLinecap="round"

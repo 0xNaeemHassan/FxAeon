@@ -6,8 +6,9 @@
 Modern browser ─┐
                 ├──▶ Next.js static export on Cloudflare Pages
 Telegram Mini ──┘                 │
-                                  ├── Privy React client
+                                  ├── Privy React client (optional)
                                   │     └── user-owned wallet + explicit confirmation
+                                  ├── injected EIP-1193 wallet (browser fallback)
                                   ├── pinned official f(x) SDK
                                   │     └── reads + ordered unsigned plans
                                   └── Viem public clients
@@ -18,7 +19,7 @@ Telegram Mini ──┘                 │
                                          Ethereum / Base / LayerZero
 ```
 
-There is no FxAeon server process. The ordinary web app and Telegram Mini App are equal launch surfaces over the same static artifact. Telegram adds host-specific authentication, theme, viewport, haptic, and navigation integration; it is not a wallet-authority boundary or a requirement. Privy supplies identity and wallet ownership, and a selected address is never accepted from a query parameter, Telegram user record, or local storage.
+There is no FxAeon server process. The ordinary web app and Telegram Mini App are equal launch surfaces over the same static artifact. Telegram adds host-specific authentication, theme, viewport, haptic, and navigation integration; it is not a wallet-authority boundary or a requirement. Privy supplies identity and wallet ownership when configured; a plain browser can instead connect an injected EIP-1193 wallet after an explicit user action. A selected address is never accepted from a query parameter, Telegram user record, or local storage.
 
 ## Module boundaries
 
@@ -26,7 +27,7 @@ There is no FxAeon server process. The ordinary web app and Telegram Mini App ar
 - `src/lib/fx/service.ts` normalizes only official SDK results into reviewable ordered plans. Plans are rebuilt on demand and invalidated when wallet, network, or inputs change.
 - `src/lib/fx/validation.ts` and the transaction policy reject malformed senders, chains, destinations, selectors, values, approvals, and nonces.
 - `src/lib/fx/runner.ts` simulates, requests one signature per step, awaits each receipt, stops on failure, waits one additional block, and triggers an authoritative reread.
-- `src/lib/wallet/` is a narrow Privy adapter. It has no server credential or delegated authority.
+- `src/lib/wallet/` is a narrow Privy/EIP-1193 adapter. It has no server credential or delegated authority.
 - `ActionReview.tsx` is the common user-visible state machine from plan review through receipt confirmation.
 - `src/lib/telegram.ts` treats Telegram as an optional host adapter and passes signed launch data only to Privy's authentication flow.
 
@@ -37,7 +38,7 @@ There is no FxAeon server process. The ordinary web app and Telegram Mini App ar
 | Positions, collateral, debt, and leverage | Ethereum through the official SDK |
 | fxSAVE configuration, balance, cooldown, and claimability | Ethereum through the official SDK |
 | Bridge source confirmation and LayerZero delivery | Matching `OFTSent`/`OFTReceived` GUIDs on Ethereum/Base |
-| Selected address and signing permission | Privy wallet |
+| Selected address and signing permission | Privy wallet or explicitly connected browser wallet |
 | Theme and slippage preset | Versioned local storage |
 | Pending hashes and bridge recheck context | Local recovery hint, revalidated from receipts and matching bridge events |
 
@@ -56,7 +57,7 @@ The launch UI is English-only. A locale may return only when the complete retain
 ## Transaction lifecycle
 
 1. A page requests an official SDK read or transaction plan.
-2. The client binds the result to the selected Privy address, supported chain, and current form inputs.
+2. The client binds the result to the selected wallet address, supported chain, and current form inputs.
 3. Validation checks target, selector, native value, approvals, nonce, and ordered route shape.
 4. The route is simulated when the provider supports the ordered call set.
 5. The user reviews the plan and approves each wallet step visibly.
