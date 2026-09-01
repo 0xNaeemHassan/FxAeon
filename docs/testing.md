@@ -16,7 +16,7 @@ The release process is intentionally layered. Credential-free checks run on ever
 
 ## Anvil fork testing
 
-`pnpm test:anvil` starts a disposable local Anvil fork of Ethereum mainnet, runs the integration route campaign, and tears the node down. It requires Foundry's `anvil` binary (or an executable path in `ANVIL_BIN`) and a fresh, restricted provider endpoint supplied at invocation time:
+`pnpm test:anvil` starts a disposable local Anvil fork of Ethereum mainnet, runs the integration route campaign, and tears the node down. It requires Foundry's `anvil` binary (or an executable path in `ANVIL_BIN`) and a fresh, restricted provider endpoint supplied at invocation time. Set `ANVIL_FORK_URL` explicitly, or let the runner use `NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL` as its reviewed Ethereum fallback:
 
 ```powershell
 $env:ANVIL_FORK_URL = (Get-Secret FXAEON_ANVIL_FORK_URL)

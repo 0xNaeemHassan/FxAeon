@@ -8,6 +8,7 @@
  */
 import { test as base, expect, type Page } from "@playwright/test";
 import { telegramInitScript, type TelegramShimOptions } from "./telegram";
+import { browserWalletInitScript, type BrowserWalletShimOptions } from "./wallet";
 
 export interface ObservedRequests {
   all: string[];
@@ -30,9 +31,11 @@ async function installTelegram(page: Page, telegram: boolean | TelegramShimOptio
 
 export const test = base.extend<{
   telegram: boolean | TelegramShimOptions;
+  browserWallet: false | BrowserWalletShimOptions;
   requests: ObservedRequests;
 }>({
   telegram: [true, { option: true }],
+  browserWallet: [false, { option: true }],
   requests: async ({ page }, use) => {
     const observed: ObservedRequests = { all: [], backend: [] };
     page.on("request", (request) => {
@@ -51,8 +54,9 @@ export const test = base.extend<{
     });
     await use(observed);
   },
-  page: async ({ page, telegram }, use) => {
+  page: async ({ page, telegram, browserWallet }, use) => {
     await installTelegram(page, telegram);
+    if (browserWallet !== false) await page.addInitScript(browserWalletInitScript(browserWallet), browserWallet);
     await use(page);
   },
 });

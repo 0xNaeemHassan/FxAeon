@@ -7,7 +7,7 @@ import { AppShell, Button, Card, EmptyState, LoadingRegion, Skeleton } from '@/c
 import { ActionReview } from '@/components/ActionReview';
 import WalletConnectCTA from '@/components/WalletConnectCTA';
 import { AmountField, LeverageField, RangeField, Segmented, SlippageField, TokenSelect } from '@/components/ProtocolForm';
-import { MAX_FX_SLIPPAGE_PERCENT, planAdjustPositionLeverage, planIncreasePosition, planReducePosition } from '@/lib/fx';
+import { MAX_FX_SLIPPAGE_PERCENT, clampLeverage, leverageBoundsFor, planAdjustPositionLeverage, planIncreasePosition, planReducePosition, readLeverageBounds, type LeverageBounds } from '@/lib/fx';
 import { usePrivyWallet } from '@/lib/wallet';
 import { positiveDecimal } from '@/lib/amount';
 import { DEFAULT_SLIPPAGE_PERCENT, readSlippagePercent } from '@/lib/settings';
@@ -40,6 +40,7 @@ export default function PositionsPage() {
   const [fraction, setFraction] = useState(25);
   const [leverage, setLeverage] = useState(2);
   const [slippage, setSlippage] = useState(String(DEFAULT_SLIPPAGE_PERCENT));
+  const [leverageBounds, setLeverageBounds] = useState<LeverageBounds>(() => leverageBoundsFor('ETH', 'long'));
 
   useEffect(() => {
     setSlippage(String(readSlippagePercent()));
@@ -80,8 +81,26 @@ export default function PositionsPage() {
     if (!selected) return;
     setToken((current) => marketTokens.includes(current) ? current : marketTokens[0]);
     const sdkLeverage = selected.side === 'short' ? selected.info.lsdLeverage : selected.info.currentLeverage;
-    setLeverage(Math.max(0.1, sdkLeverage));
-  }, [marketTokens, selected]);
+    setLeverage(clampLeverage(Math.max(0.1, sdkLeverage), leverageBounds));
+  }, [leverageBounds, marketTokens, selected]);
+
+  useEffect(() => {
+    let active = true;
+    if (!selected) return () => { active = false; };
+    const fallback = leverageBoundsFor(selected.market, selected.side);
+    setLeverageBounds(fallback);
+    void readLeverageBounds(selected.market, selected.side).then((next) => {
+      if (active) setLeverageBounds(next);
+    }).catch(() => {
+      // Keep the conservative fallback; the SDK remains the final planner
+      // authority when the user asks to review a transaction.
+    });
+    return () => { active = false; };
+  }, [selected]);
+
+  const leverageError = leverage > 0 && leverage < leverageBounds.min
+    ? `Minimum pool leverage is ${leverageBounds.min.toFixed(1)}×.`
+    : null;
 
   const planBuilder = useMemo(() => {
     if (!selected || !wallet.address) return null;
@@ -156,9 +175,9 @@ export default function PositionsPage() {
 
             <Segmented value={action} onChange={setAction} ariaLabel="Position action" options={[{ value: 'increase', label: 'Increase' }, { value: 'reduce', label: 'Reduce' }, { value: 'leverage', label: 'Leverage' }]} />
             <Card className="p-4">
-              {action === 'increase' && <div className="flex flex-col gap-4"><Header icon={ArrowUpRight} title="Increase exposure" body="Add collateral and choose the target leverage for this position." /><TokenSelect label="Input asset" value={token} options={marketTokens} onChange={setToken} /><AmountField label="Amount to add" symbol={token} value={amount} onChange={setAmount} maxDecimals={tokenDecimals(token)} /><LeverageField label={selected?.side === 'short' ? 'Target LSD leverage' : 'Target leverage'} value={leverage} onChange={setLeverage} /></div>}
+              {action === 'increase' && <div className="flex flex-col gap-4"><Header icon={ArrowUpRight} title="Increase exposure" body="Add collateral and choose the target leverage for this position." /><TokenSelect label="Input asset" value={token} options={marketTokens} onChange={setToken} /><AmountField label="Amount to add" symbol={token} value={amount} onChange={setAmount} maxDecimals={tokenDecimals(token)} /><LeverageField label={selected?.side === 'short' ? 'Target LSD leverage' : 'Target leverage'} value={leverage} onChange={setLeverage} min={leverageBounds.min} max={leverageBounds.max} error={leverageError} /></div>}
               {action === 'reduce' && <div className="flex flex-col gap-4"><Header icon={ArrowDownRight} title={fraction === 100 ? 'Close position' : 'Reduce exposure'} body="Choose how much of this position to reduce and what asset to receive." /><RangeField label="Position reduction" value={fraction} onChange={setFraction} min={1} max={100} step={1} suffix="%" /><div className="grid grid-cols-4 gap-2">{[25, 50, 75, 100].map((value) => <button key={value} type="button" aria-pressed={fraction === value} onClick={() => setFraction(value)} className={`min-h-11 rounded-xl text-[11px] font-semibold ${fraction === value ? 'bg-[var(--mint-dim)] text-mint' : 'bg-[rgba(255,255,255,.035)] text-mut'}`}>{value === 100 ? 'Close' : `${value}%`}</button>)}</div><TokenSelect label="Receive asset" value={token} options={marketTokens} onChange={setToken} /></div>}
-              {action === 'leverage' && <div className="flex flex-col gap-4"><Header icon={Gauge} title="Adjust leverage" body="Set the target leverage for this position." /><LeverageField label="Target leverage" value={leverage} onChange={setLeverage} /></div>}
+              {action === 'leverage' && <div className="flex flex-col gap-4"><Header icon={Gauge} title="Adjust leverage" body="Set the target leverage for this position." /><LeverageField label={selected?.side === 'short' ? 'Target LSD leverage' : 'Target leverage'} value={leverage} onChange={setLeverage} min={leverageBounds.min} max={leverageBounds.max} error={leverageError} /></div>}
               <details className="group mt-4 rounded-xl border border-[var(--line)] px-3"><summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-[13px] font-semibold [&::-webkit-details-marker]:hidden">Advanced <span aria-hidden="true" className="text-mut transition-transform group-open:rotate-180">⌄</span></summary><div className="border-t border-[var(--line)] py-3"><SlippageField value={slippage} onChange={setSlippage} max={MAX_FX_SLIPPAGE_PERCENT} /></div></details>
             </Card>
             <ActionReview planBuilder={planBuilder} label={action === 'reduce' && fraction === 100 ? 'Review close' : `Review ${action}`} operationLabel={action === 'reduce' && fraction === 100 ? `Close ${selected?.market} position` : `${action[0].toUpperCase()}${action.slice(1)} ${selected?.market} position`} onComplete={load} />

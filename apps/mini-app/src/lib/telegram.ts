@@ -79,7 +79,7 @@ export function getWebApp(): TgWebApp | null {
  * This is never authentication proof; it only prevents a slow/failed bridge
  * request from leaving the Mini App in an indefinite loading state.
  */
-export async function waitForTelegramWebApp(timeoutMs = 5_000): Promise<TgWebApp | null> {
+export async function waitForTelegramWebApp(timeoutMs = 8_000): Promise<TgWebApp | null> {
   const available = getWebApp();
   if (available || typeof window === 'undefined' || timeoutMs <= 0) return available;
 

@@ -15,8 +15,9 @@ import {
 import Link from 'next/link';
 import { formatUnits } from 'viem';
 import { AppShell, ActionTile, AddressChip, Card, EmptyState, SectionTitle } from '@/components/ui';
+import TokenIcon from '@/components/TokenIcon';
 import { haptic } from '@/lib/telegram';
-import { assertConfiguredPublicClientChain, getFxSdk } from '@/lib/fx';
+import { assertConfiguredPublicClientChain, getFxSdk, readWalletBalances, type WalletBalancesResult, type WalletTokenBalance } from '@/lib/fx';
 import { usePrivyWallet, useWalletReadyTimeout } from '@/lib/wallet';
 import PendingTransactionRecovery from '@/components/PendingTransactionRecovery';
 
@@ -62,7 +63,7 @@ function PortfolioWallet() {
   const wallet = walletState.selectedWallet;
   const [refreshed, setRefreshed] = useState(false);
   const walletTimedOut = useWalletReadyTimeout(ready && walletState.ready);
-  const [protocol, setProtocol] = useState<ProtocolSnapshot>({ status: 'idle', positions: null, fxSaveShares: null, fxSaveAssets: null, redeemReady: null });
+  const [protocol, setProtocol] = useState<ProtocolSnapshot>({ status: 'idle', positions: null, fxSaveShares: null, fxSaveAssets: null, redeemReady: null, balances: null });
 
   const loadProtocol = useCallback(async () => {
     if (!wallet?.address) return;
@@ -70,7 +71,7 @@ function PortfolioWallet() {
     try {
       await assertConfiguredPublicClientChain(1);
       const sdk = getFxSdk();
-      const [positions, fxSave, redeem] = await Promise.allSettled([
+      const [positions, fxSave, redeem, balances] = await Promise.allSettled([
         Promise.all([
           sdk.getPositions({ userAddress: wallet.address, market: 'ETH', type: 'long' }),
           sdk.getPositions({ userAddress: wallet.address, market: 'ETH', type: 'short' }),
@@ -79,19 +80,21 @@ function PortfolioWallet() {
         ]),
         sdk.getFxSaveBalance({ userAddress: wallet.address }),
         sdk.getFxSaveClaimable({ userAddress: wallet.address }),
+        readWalletBalances(wallet.address),
       ]);
-      const fulfilled = [positions, fxSave, redeem].filter((result) => result.status === 'fulfilled').length;
+      const fulfilled = [positions, fxSave, redeem, balances].filter((result) => result.status === 'fulfilled').length;
       setProtocol({
-        status: fulfilled === 3 ? 'ready' : fulfilled > 0 ? 'partial' : 'unavailable',
+        status: fulfilled === 4 ? 'ready' : fulfilled > 0 ? 'partial' : 'unavailable',
         positions: positions.status === 'fulfilled'
           ? positions.value.reduce((total, marketPositions) => total + marketPositions.filter((position) => position.rawColls > 0n || position.rawDebts > 0n).length, 0)
           : null,
         fxSaveShares: fxSave.status === 'fulfilled' ? formatProtocolAmount(fxSave.value.balanceWei) : null,
         fxSaveAssets: fxSave.status === 'fulfilled' && fxSave.value.assetsWei !== undefined ? formatProtocolAmount(fxSave.value.assetsWei) : null,
         redeemReady: redeem.status === 'fulfilled' ? redeem.value.isCooldownComplete : null,
+        balances: balances.status === 'fulfilled' ? balances.value : null,
       });
     } catch {
-      setProtocol({ status: 'unavailable', positions: null, fxSaveShares: null, fxSaveAssets: null, redeemReady: null });
+      setProtocol({ status: 'unavailable', positions: null, fxSaveShares: null, fxSaveAssets: null, redeemReady: null, balances: null });
     }
   }, [wallet?.address]);
 
@@ -157,6 +160,7 @@ function PortfolioWallet() {
         )}
       </div>
     </Card>
+    <WalletBalancesCard balances={protocol.balances} loading={protocol.status === 'loading'} />
     <PendingTransactionRecovery walletAddress={wallet.address as `0x${string}`} />
     </>
   );
@@ -168,7 +172,61 @@ type ProtocolSnapshot = {
   fxSaveShares: string | null;
   fxSaveAssets: string | null;
   redeemReady: boolean | null;
+  balances: WalletBalancesResult | null;
 };
+
+function WalletBalancesCard({ balances, loading }: { balances: WalletBalancesResult | null; loading: boolean }) {
+  const nonZero = balances?.balances.filter((balance) => balance.amountWei > 0n) ?? [];
+
+  return (
+    <Card className="relative mt-3 overflow-hidden p-4">
+      <div className="relative">
+        <div className="flex items-baseline justify-between gap-3">
+          <div>
+            <p className="text-[13px] font-semibold">Wallet balances</p>
+            <p className="mt-0.5 text-[11px] text-mut">Ethereum · exact on-chain units</p>
+          </div>
+          {balances && <span className="text-[10px] uppercase tracking-[0.14em] text-mut">{nonZero.length} assets</span>}
+        </div>
+
+        {loading && <div className="mt-4 h-20 animate-pulse rounded-xl bg-[var(--surface-2)]" aria-label="Loading wallet balances" />}
+        {!loading && !balances && <p className="mt-4 rounded-xl bg-[var(--warn-dim)] px-3 py-2 text-[11px] leading-relaxed text-warn">Token balances are unavailable right now. Refresh when Ethereum responds.</p>}
+        {!loading && balances && nonZero.length === 0 && <p className="mt-4 text-[12px] text-mut">No supported token balances found in this wallet.</p>}
+        {!loading && nonZero.length > 0 && (
+          <div className="mt-3 divide-y divide-[var(--line)] border-y border-[var(--line)]">
+            {nonZero.map((balance) => <WalletBalanceRow key={balance.key} balance={balance} />)}
+          </div>
+        )}
+        {!loading && balances && balances.failedTokens.length > 0 && (
+          <p role="status" className="mt-3 rounded-xl bg-[var(--warn-dim)] px-3 py-2 text-[11px] leading-relaxed text-warn">Some token balances could not be read. Refresh to try again.</p>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function WalletBalanceRow({ balance }: { balance: WalletTokenBalance }) {
+  const label = balance.key === 'fxUSDBasePool' ? 'fxUSD base pool' : balance.key;
+  return (
+    <div className="flex min-h-[62px] items-center justify-between gap-3 py-2.5">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <TokenIcon symbol={balance.key} size={28} />
+        <div className="min-w-0">
+          <p className="truncate text-[13px] font-semibold">{label}</p>
+          <p className="truncate text-[10px] text-mut">{balance.address.slice(0, 6)}…{balance.address.slice(-4)}</p>
+        </div>
+      </div>
+      <p className="shrink-0 text-right font-mono text-[13px] text-hi">{formatWalletAmount(balance)}</p>
+    </div>
+  );
+}
+
+function formatWalletAmount(balance: WalletTokenBalance): string {
+  const value = formatUnits(balance.amountWei, balance.decimals);
+  const [whole, fraction = ''] = value.split('.');
+  const trimmed = fraction.slice(0, 8).replace(/0+$/, '');
+  return trimmed ? `${whole}.${trimmed} ${balance.key}` : `${whole} ${balance.key}`;
+}
 
 function formatProtocolAmount(value: bigint): string {
   const formatted = formatUnits(value, 18).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');

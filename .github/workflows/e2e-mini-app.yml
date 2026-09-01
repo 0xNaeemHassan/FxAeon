@@ -41,7 +41,7 @@ jobs:
         env:
           NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL: https://eth-mainnet.g.alchemy.com/v2/e2e-placeholder
           NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL: https://base-mainnet.g.alchemy.com/v2/e2e-placeholder
-          NEXT_PUBLIC_TELEGRAM_APP_URL: https://t.me/FxAeonBot/app
+          NEXT_PUBLIC_TELEGRAM_APP_URL: https://t.me/FxAeonBot
       - name: Run browser and Telegram viewport tests
         run: pnpm test:e2e
         env:

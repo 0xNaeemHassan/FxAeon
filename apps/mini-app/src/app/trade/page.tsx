@@ -6,7 +6,7 @@ import { AppShell, Card } from '@/components/ui';
 import { ActionReview } from '@/components/ActionReview';
 import WalletConnectCTA from '@/components/WalletConnectCTA';
 import { AmountField, LeverageField, Segmented, SlippageField, TokenSelect } from '@/components/ProtocolForm';
-import { MAX_FX_SLIPPAGE_PERCENT, planIncreasePosition } from '@/lib/fx';
+import { MAX_FX_SLIPPAGE_PERCENT, clampLeverage, leverageBoundsFor, planIncreasePosition, readLeverageBounds, type LeverageBounds } from '@/lib/fx';
 import { usePrivyWallet } from '@/lib/wallet';
 import { positiveDecimal } from '@/lib/amount';
 import { DEFAULT_SLIPPAGE_PERCENT, readSlippagePercent } from '@/lib/settings';
@@ -29,6 +29,7 @@ export default function TradePage() {
   const [amount, setAmount] = useState('');
   const [leverage, setLeverage] = useState(2);
   const [slippage, setSlippage] = useState(String(DEFAULT_SLIPPAGE_PERCENT));
+  const [leverageBounds, setLeverageBounds] = useState<LeverageBounds>(() => leverageBoundsFor('ETH', 'long'));
 
   useEffect(() => {
     setSlippage(String(readSlippagePercent()));
@@ -36,6 +37,27 @@ export default function TradePage() {
 
   const tokenOptions = positionInputTokenOptions(market);
   const validAmount = positiveDecimal(amount, tokenDecimals(token));
+
+  useEffect(() => {
+    let active = true;
+    const fallback = leverageBoundsFor(market, side);
+    setLeverageBounds(fallback);
+    void readLeverageBounds(market, side).then((next) => {
+      if (active) setLeverageBounds(next);
+    }).catch(() => {
+      // The input remains guarded by the conservative fallback while a public
+      // RPC is unavailable; the SDK is still the final route authority.
+    });
+    return () => { active = false; };
+  }, [market, side]);
+
+  useEffect(() => {
+    setLeverage((current) => clampLeverage(current, leverageBounds));
+  }, [leverageBounds]);
+
+  const leverageError = leverage > 0 && leverage < leverageBounds.min
+    ? `Minimum pool leverage is ${leverageBounds.min.toFixed(1)}×.`
+    : null;
 
   useEffect(() => {
     if (!tokenOptions.includes(token)) setToken(tokenOptions[0]);
@@ -80,7 +102,7 @@ export default function TradePage() {
           <div className="flex flex-col gap-4">
             <TokenSelect label="Input asset" value={token} options={tokenOptions} onChange={setToken} />
             <AmountField label="Amount" symbol={token} value={amount} onChange={setAmount} maxDecimals={tokenDecimals(token)} />
-            <LeverageField value={leverage} onChange={setLeverage} />
+            <LeverageField label={side === 'short' ? 'Target LSD leverage' : 'Target leverage'} value={leverage} onChange={setLeverage} min={leverageBounds.min} max={leverageBounds.max} error={leverageError} />
             <details className="group rounded-xl border border-[var(--line)] px-3">
               <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-[13px] font-semibold [&::-webkit-details-marker]:hidden">Advanced <span aria-hidden="true" className="text-mut transition-transform group-open:rotate-180">⌄</span></summary>
               <div className="border-t border-[var(--line)] py-3"><SlippageField value={slippage} onChange={setSlippage} max={MAX_FX_SLIPPAGE_PERCENT} /></div>

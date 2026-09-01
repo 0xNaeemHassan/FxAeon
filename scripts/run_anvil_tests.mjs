@@ -6,7 +6,14 @@ import { join } from "node:path";
 const root = fileURLToPath(new URL("..", import.meta.url));
 const port = parsePort(process.env.ANVIL_PORT ?? "8547");
 const rpcUrl = `http://127.0.0.1:${port}`;
-const forkUrl = process.env.ANVIL_FORK_URL?.trim();
+// Prefer the dedicated fork secret, but make the operator's reviewed
+// Ethereum Alchemy endpoint usable for the heavy fork gate too. The URL is
+// consumed only by Anvil and is scrubbed before the application test process.
+const forkUrl = [
+  process.env.ANVIL_FORK_URL,
+  process.env.NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL,
+  process.env.ALCHEMY_RPC_URL,
+].map((value) => value?.trim()).find(Boolean);
 
 function parsePort(value) {
   const parsed = Number.parseInt(value, 10);
@@ -17,7 +24,7 @@ function parsePort(value) {
 }
 
 function assertForkUrl(value) {
-  if (!value) throw new Error("ANVIL_FORK_URL is required (supply a fresh restricted HTTPS fork URL through your secret store)");
+  if (!value) throw new Error("ANVIL_FORK_URL (or NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL) is required; supply a fresh restricted HTTPS fork URL through your secret store");
   let url;
   try {
     url = new URL(value);

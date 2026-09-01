@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { Check, Palette, Sliders } from 'lucide-react';
 import { AppShell, Button, SectionTitle, Skeleton } from '@/components/ui';
 import { useLocale } from '@/lib/i18n';
-import { THEMES, applyTheme, type ThemeId } from '@/lib/theme';
+import { THEMES, applyTheme, getSavedTheme, type ThemeId } from '@/lib/theme';
 import { haptic } from '@/lib/telegram';
 import { SETTINGS_KEY } from '@/lib/settings';
 
@@ -20,7 +20,9 @@ const LogoutSection = dynamic(() => import('@/components/LogoutSection'), {
 
 const SLIPPAGE_PRESETS = [10, 50, 100, 200] as const;
 const THEME_LABELS: Record<ThemeId, string> = {
-  violet: 'Violet',
+  violet: 'Official',
+  black: 'Black',
+  light: 'Light',
   matrix: 'Green',
   neon: 'Magenta',
   titanium: 'Slate',
@@ -40,7 +42,7 @@ function readSettings(): SettingsV1 {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || '{}') as Partial<SettingsV1>;
     const slippageBps = SLIPPAGE_PRESETS.includes(parsed.slippageBps as (typeof SLIPPAGE_PRESETS)[number]) ? parsed.slippageBps! : DEFAULT_SETTINGS.slippageBps;
-    const theme = parsed.theme && Object.prototype.hasOwnProperty.call(THEMES, parsed.theme) ? parsed.theme : DEFAULT_SETTINGS.theme;
+    const theme = parsed.theme && Object.prototype.hasOwnProperty.call(THEMES, parsed.theme) ? parsed.theme : getSavedTheme();
     return { slippageBps, theme };
   } catch {
     return DEFAULT_SETTINGS;

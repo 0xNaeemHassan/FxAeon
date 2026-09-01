@@ -129,7 +129,9 @@ body {
   color: var(--text);
   font-size: 13px;
   font-weight: 700;
-  transform: translate(-50%, -160%);
+  /* Move clear of the Telegram/browser safe area. A percentage-only offset
+     leaves the lower half visible when the host reports a tall top inset. */
+  transform: translate(-50%, calc(-100% - env(safe-area-inset-top, 0px) - 16px));
   transition: transform 140ms ease;
 }
 
