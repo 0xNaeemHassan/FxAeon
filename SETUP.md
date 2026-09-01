@@ -93,6 +93,19 @@ Optional `ANVIL_FORK_BLOCK`, `ANVIL_PORT`, and `FX_ANVIL_ITERATIONS` variables c
 
 The release artifact is `apps/mini-app/dist/`. The checked-in Cloudflare Pages workflow targets the `fxaeon-mini-app` project and performs a frozen install, production-environment validation, the complete `pnpm verify` gate, and then deploys that directory. Verify that the target project exists before dispatching the manual workflow.
 
+### Cloudflare dashboard build settings
+
+The pasted build log reaches `Success: Build command completed` and then fails because `npx wrangler deploy` is a Workers deploy command running from the root of this pnpm workspace. Configure the Cloudflare project as **Pages** and use:
+
+| Setting | Value |
+| --- | --- |
+| Root directory | `/` |
+| Build command | `pnpm --filter @fxaeon/mini-app build` |
+| Build output directory | `apps/mini-app/dist` |
+| Deploy command | Leave blank for Pages; Pages publishes the output directory automatically |
+
+If the provider requires an explicit deploy command, use `pnpm exec wrangler pages deploy apps/mini-app/dist --project-name=fxaeon-mini-app` instead of `npx wrangler deploy`. The repository workflow already uses this Pages-specific command. Do not configure a Worker deploy for this static export.
+
 The protected environment supplies:
 
 - `CLOUDFLARE_API_TOKEN`
