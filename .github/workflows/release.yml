@@ -31,7 +31,7 @@ jobs:
         env:
           NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL: https://eth-mainnet.g.alchemy.com/v2/release-placeholder
           NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL: https://base-mainnet.g.alchemy.com/v2/release-placeholder
-          NEXT_PUBLIC_TELEGRAM_APP_URL: https://t.me/FxAeonBot/app
+          NEXT_PUBLIC_TELEGRAM_APP_URL: https://t.me/FxAeonBot
 
       - name: Create Release
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1

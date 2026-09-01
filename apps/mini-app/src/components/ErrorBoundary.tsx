@@ -5,7 +5,7 @@ import { AlertTriangle, MessageCircle, RefreshCw, RotateCcw } from 'lucide-react
 import FxLogo from '@/components/FxLogo';
 import { haptic } from '@/lib/telegram';
 
-const TELEGRAM_APP_URL = process.env.NEXT_PUBLIC_TELEGRAM_APP_URL || 'https://t.me/FxAeonBot/app';
+const TELEGRAM_APP_URL = process.env.NEXT_PUBLIC_TELEGRAM_APP_URL || 'https://t.me/FxAeonBot';
 
 interface Props {
   children: ReactNode;

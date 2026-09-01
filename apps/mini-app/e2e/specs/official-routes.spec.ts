@@ -1,4 +1,16 @@
 import { expect, test, assertNoBackendRequests } from "../fixtures/test";
+import type { Page } from "@playwright/test";
+
+async function assertNoTopOverlay(page: Page) {
+  const overlays = await page.evaluate(() => Array.from(document.querySelectorAll<HTMLElement>("*"), (element) => {
+    const style = getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    if (element.classList.contains("skip-link") || style.position !== "fixed" || rect.height === 0 || rect.width === 0) return null;
+    if (style.visibility === "hidden" || style.display === "none" || Number(style.opacity) === 0 || style.pointerEvents === "none") return null;
+    return rect.top < 80 ? { tag: element.tagName, role: element.getAttribute("role"), className: element.className } : null;
+  }).filter(Boolean));
+  expect(overlays, "wallet connection must not leave an app-owned overlay under the host chrome").toEqual([]);
+}
 
 const OFFICIAL_ROUTES = [
   "/portfolio",
@@ -73,7 +85,7 @@ test.describe("Telegram bridge availability", () => {
   test("a Telegram launch fails visibly when its bridge never arrives", async ({ page, requests }) => {
     await page.route("**/telegram-web-app.js", (route) => route.abort("failed"));
     await page.goto("/#tgWebAppData=query_id%3Dtest&tgWebAppVersion=8.0&tgWebAppPlatform=tdesktop", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { name: /Telegram bridge unavailable/i })).toBeVisible({ timeout: 7_000 });
+    await expect(page.getByRole("heading", { name: /Telegram bridge unavailable/i })).toBeVisible({ timeout: 12_000 });
     await expect(page.getByRole("button", { name: /Reload FxAeon/i })).toBeVisible();
     await expect(page.getByRole("button", { name: /Continue in browser/i })).toBeVisible();
     assertNoBackendRequests(requests);
@@ -82,7 +94,7 @@ test.describe("Telegram bridge availability", () => {
   test("a direct Telegram protocol route also fails visibly when its bridge never arrives", async ({ page, requests }) => {
     await page.route("**/telegram-web-app.js", (route) => route.abort("failed"));
     await page.goto("/portfolio#tgWebAppData=query_id%3Dtest&tgWebAppVersion=8.0&tgWebAppPlatform=tdesktop", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { name: /Telegram bridge unavailable/i })).toBeVisible({ timeout: 7_000 });
+    await expect(page.getByRole("heading", { name: /Telegram bridge unavailable/i })).toBeVisible({ timeout: 12_000 });
     await expect(page.locator("body")).not.toContainText(/Wallet service unavailable/i);
     await expect(page.getByRole("button", { name: /Reload FxAeon/i })).toBeVisible();
     await expect(page.getByRole("button", { name: /Continue in browser/i })).toBeVisible();
@@ -97,6 +109,91 @@ test("missing Privy configuration still offers a browser wallet entry", async ({
   await expect(page.locator("body")).not.toContainText(/wallet setup unavailable|wallet service unavailable|wallet controls are unavailable/i);
   await expect(page.locator("body")).not.toContainText(/private key|session signer|delegat(?:ed|ion)/i);
   assertNoBackendRequests(requests);
+});
+
+test.describe("connected browser wallet flows", () => {
+  test.use({
+    telegram: false,
+    browserWallet: {
+      address: "0x930f0000000000000000000000000000000098b9",
+      initiallyConnected: true,
+    },
+  });
+
+  test("portfolio shows the selected account and honest balance state", async ({ page, requests }) => {
+    await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: /portfolio/i })).toBeVisible();
+    await expect(page.getByText(/0x930f/i).first()).toBeVisible();
+    await expect(page.getByText("Wallet balances", { exact: true })).toBeVisible();
+    await expect(page.locator("body")).not.toContainText(/\$\s*\d/);
+    await assertNoTopOverlay(page);
+    assertNoBackendRequests(requests);
+  });
+
+  test("trade exposes the full official input set and clamps an over-limit target", async ({ page, requests }) => {
+    await page.goto("/trade", { waitUntil: "domcontentloaded" });
+    const asset = page.getByLabel("Input asset");
+    await asset.click();
+    const picker = page.getByRole("listbox", { name: "Input asset options" });
+    await expect(picker.getByRole("option")).toHaveCount(7);
+    for (const option of ["ETH", "WETH", "stETH", "wstETH", "USDC", "USDT", "fxUSD"]) {
+      await expect(picker.getByRole("option", { name: new RegExp(`^${option}`) })).toBeVisible();
+    }
+    await picker.getByRole("option", { name: /^ETH selected/i }).click();
+    await page.getByRole("radio", { name: "BTC" }).click();
+    await asset.click();
+    const btcPicker = page.getByRole("listbox", { name: "Input asset options" });
+    await expect(btcPicker.getByRole("option")).toHaveCount(4);
+    await expect(btcPicker.getByRole("option", { name: /^WBTC selected/i })).toBeVisible();
+    await btcPicker.getByRole("option", { name: /^WBTC selected/i }).click();
+    await page.getByRole("radio", { name: "ETH" }).click();
+    await page.getByRole("radio", { name: "Short" }).click();
+    await asset.click();
+    await expect(page.getByRole("listbox", { name: "Input asset options" }).getByRole("option", { name: /^stETH/i })).toBeVisible();
+    await page.getByRole("listbox", { name: "Input asset options" }).getByRole("option", { name: /^ETH selected/i }).click();
+    const leverage = page.getByLabel("Target LSD leverage");
+    await leverage.fill("20");
+    await expect(leverage).toHaveValue("6.9");
+    assertNoBackendRequests(requests);
+  });
+
+});
+
+test.describe("browser wallet connection", () => {
+  test.use({
+    telegram: false,
+    browserWallet: {
+      address: "0x930f0000000000000000000000000000000098b9",
+      initiallyConnected: false,
+    },
+  });
+
+  test("browser users can connect an injected wallet without Telegram", async ({ page, requests }) => {
+    await page.goto("/login", { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: /connect browser wallet/i }).click();
+    await expect(page.getByText("0x930f0000000000000000000000000000000098b9", { exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: /continue to fxaeon/i })).toBeVisible();
+    await assertNoTopOverlay(page);
+    assertNoBackendRequests(requests);
+  });
+});
+
+test.describe("More theme controls", () => {
+  test.use({ telegram: false });
+
+  test("offers official, black, and light themes with persisted selection", async ({ page, requests }) => {
+    await page.goto("/more", { waitUntil: "domcontentloaded" });
+    const themes = page.getByRole("radiogroup", { name: "Theme" });
+    await expect(themes.getByRole("radio")).toHaveCount(3);
+    await themes.getByRole("radio", { name: "Black theme" }).click();
+    await expect(themes.getByRole("radio", { name: "Black theme" })).toHaveAttribute("aria-checked", "true");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "black");
+    await themes.getByRole("radio", { name: "Light theme" }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await themes.getByRole("radio", { name: "Official theme" }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "violet");
+    assertNoBackendRequests(requests);
+  });
 });
 
 test("unknown routes render the scoped FxAeon recovery screen", async ({ page, requests }) => {

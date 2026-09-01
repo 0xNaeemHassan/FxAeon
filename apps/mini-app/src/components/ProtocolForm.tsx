@@ -1,6 +1,7 @@
 'use client';
 
-import { useId, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, Info } from 'lucide-react';
 import TokenIcon from '@/components/TokenIcon';
 import { haptic } from '@/lib/telegram';
@@ -264,23 +265,125 @@ export function TokenSelect<T extends string>({
   label: string;
 }) {
   const selectId = useId();
+  const labelId = `${selectId}-label`;
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const selectedIndex = Math.max(0, options.indexOf(value));
+    window.requestAnimationFrame(() => optionRefs.current[selectedIndex]?.focus());
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open, options, value]);
+
+  const choose = (next: T) => {
+    haptic('selection');
+    onChange(next);
+    setOpen(false);
+    window.requestAnimationFrame(() => triggerRef.current?.focus());
+  };
+
+  const moveFocus = (current: number, direction: 'next' | 'previous' | 'first' | 'last') => {
+    const next = direction === 'first'
+      ? 0
+      : direction === 'last'
+        ? options.length - 1
+        : (current + (direction === 'next' ? 1 : -1) + options.length) % options.length;
+    optionRefs.current[next]?.focus();
+  };
+
   return (
     <div>
-      <FieldLabel htmlFor={selectId}>{label}</FieldLabel>
-      <div className="relative">
-        <select
-          id={selectId}
-          value={value}
-          onChange={(event) => {
-            haptic('selection');
-            onChange(event.target.value as T);
-          }}
-          className="field-control min-h-[52px] w-full appearance-none px-4 pr-11 text-[15px] font-semibold text-[var(--text)] outline-none"
+      <span id={labelId} className="mb-2 block text-[12px] font-medium text-mut">{label}</span>
+      <button
+        ref={triggerRef}
+        id={selectId}
+        type="button"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={`${selectId}-menu`}
+        aria-labelledby={labelId}
+        onClick={() => setOpen((current) => !current)}
+        className="field-control glass-press flex min-h-[52px] w-full items-center justify-between gap-3 px-4 text-left text-[15px] font-semibold text-[var(--text)] outline-none"
+      >
+        <span className="flex min-w-0 items-center gap-2.5">
+          <TokenIcon symbol={value} size={26} />
+          <span className="truncate">{value}</span>
+        </span>
+        <ChevronDown aria-hidden="true" className={`h-4 w-4 shrink-0 text-mut transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 p-3 backdrop-blur-[2px] sm:items-center"
+          role="presentation"
+          onMouseDown={(event) => { if (event.target === event.currentTarget) { setOpen(false); triggerRef.current?.focus(); } }}
         >
-          {options.map((option) => <option key={option} value={option}>{option}</option>)}
-        </select>
-        <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-mut" />
-      </div>
+          <div
+            id={`${selectId}-menu`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={labelId}
+            className="w-full max-w-[430px] overflow-hidden rounded-2xl border border-[var(--line-strong)] bg-[var(--bg-raised)] shadow-[0_24px_80px_rgba(0,0,0,.55)]"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-3.5">
+              <div>
+                <p className="text-[14px] font-semibold">{label}</p>
+                <p className="mt-0.5 text-[11px] text-mut">Choose an asset</p>
+              </div>
+              <button type="button" aria-label="Close asset picker" onClick={() => { setOpen(false); triggerRef.current?.focus(); }} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-lg text-mut hover:text-[var(--text)]">×</button>
+            </div>
+            <div role="listbox" aria-label={`${label} options`} className="max-h-[min(64dvh,480px)] overflow-y-auto p-2">
+              {options.map((option, index) => {
+                const active = option === value;
+                return (
+                  <button
+                    key={option}
+                    ref={(element) => { optionRefs.current[index] = element; }}
+                    type="button"
+                    role="option"
+                    aria-selected={active}
+                    aria-label={`${option}${active ? ' selected' : ''}`}
+                    tabIndex={active ? 0 : -1}
+                    onClick={() => choose(option)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'ArrowDown') { event.preventDefault(); moveFocus(index, 'next'); }
+                      else if (event.key === 'ArrowUp') { event.preventDefault(); moveFocus(index, 'previous'); }
+                      else if (event.key === 'Home') { event.preventDefault(); moveFocus(index, 'first'); }
+                      else if (event.key === 'End') { event.preventDefault(); moveFocus(index, 'last'); }
+                      else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(option); }
+                    }}
+                    className={`flex min-h-14 w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-left transition-colors ${active ? 'bg-[var(--mint-dim)] text-[var(--text)]' : 'text-mut hover:bg-[var(--surface-2)] hover:text-[var(--text)]'}`}
+                  >
+                    <TokenIcon symbol={option} size={30} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[14px] font-semibold">{option === 'fxUSDBasePool' ? 'fxUSD base pool' : option}</span>
+                      <span className="mt-0.5 block text-[10.5px] text-mut">{active ? 'Selected asset' : 'Available asset'}</span>
+                    </span>
+                    <span className={`flex h-5 w-5 items-center justify-center rounded-full border ${active ? 'border-[var(--mint)] bg-[var(--mint)] text-white' : 'border-[var(--line-strong)]'}`} aria-hidden="true">{active ? '✓' : ''}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+      <span className="sr-only" aria-live="polite">{label}: {value}</span>
     </div>
   );
 }
@@ -333,42 +436,64 @@ export function RangeField({
 }
 
 /**
- * Leverage is bounded by live pool debt-ratio configuration, not a universal
- * 7x/3x constant. Keep the input open-ended and let the pinned SDK validate
- * the current pool when it plans the route.
+ * Leverage is bounded by the live pool debt-ratio configuration (with a
+ * conservative fallback while RPC metadata is unavailable). The SDK remains
+ * the final authority when it plans the reviewed route.
  */
 export function LeverageField({
   value,
   onChange,
   label = 'Leverage',
+  min = 0.1,
+  max = 20,
+  error,
 }: {
   value: number;
   onChange: (value: number) => void;
   label?: string;
+  min?: number;
+  max?: number;
+  error?: string | null;
 }) {
   const inputId = useId();
+  const errorId = `${inputId}-error`;
+  const invalid = Boolean(error);
   return (
     <div>
-      <FieldLabel htmlFor={inputId} hint="Target multiplier">{label}</FieldLabel>
-      <div className="range-control p-3">
+      <FieldLabel htmlFor={inputId} hint={`${min}× – ${max}×`}>{label}</FieldLabel>
+      <div className={`range-control p-3 ${invalid ? 'field-error' : ''}`}>
         <div className="flex items-center gap-3">
           <input
             id={inputId}
             type="number"
             inputMode="decimal"
-            min="0.1"
+            min={min}
+            max={max}
             step="0.1"
             value={Number.isFinite(value) ? value : ''}
             onChange={(event) => {
+              if (!event.target.value) {
+                onChange(0);
+                return;
+              }
               const next = Number(event.target.value);
-              onChange(Number.isFinite(next) ? next : 0);
+              // Clamp an over-limit paste/keystroke immediately. Values below
+              // the live minimum remain editable until blur so decimals can be
+              // entered naturally, then the field is normalized below.
+              onChange(Number.isFinite(next) ? Math.min(max, next) : 0);
             }}
-            onBlur={() => haptic('selection')}
+            onBlur={() => {
+              haptic('selection');
+              if (Number.isFinite(value) && value > 0 && value < min) onChange(min);
+            }}
+            aria-invalid={invalid}
+            aria-describedby={invalid ? errorId : undefined}
             className="field-control min-h-[52px] min-w-0 flex-1 px-4 text-[20px] font-semibold outline-none"
           />
           <span className="text-display text-[22px] font-semibold text-mint" aria-hidden="true">×</span>
         </div>
       </div>
+      {error && <p id={errorId} role="alert" className="mt-1.5 px-1 text-[11px] leading-relaxed text-danger">{error}</p>}
     </div>
   );
 }

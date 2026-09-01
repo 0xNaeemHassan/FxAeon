@@ -155,7 +155,7 @@ export interface TransactionExecutionResult {
  */
 export type FxPublicClient = Pick<
   PublicClient,
-  "simulateCalls" | "getTransactionCount" | "getTransactionReceipt" | "getTransaction" | "getBlockNumber" | "getChainId" | "readContract"
+  "simulateCalls" | "getTransactionCount" | "getTransactionReceipt" | "getTransaction" | "getBlockNumber" | "getChainId" | "getBalance" | "readContract"
   | "getBytecode" | "getLogs"
 > & { chain?: { id?: number } };
 

@@ -40,8 +40,8 @@ function assertTelegramMiniAppUrl() {
     throw new Error('NEXT_PUBLIC_TELEGRAM_APP_URL must be a clean Mini App launcher URL without credentials, query, or fragment');
   }
   const segments = url.pathname.split('/').filter(Boolean);
-  if (segments.length < 2) {
-    throw new Error('NEXT_PUBLIC_TELEGRAM_APP_URL must include both bot and Mini App path segments');
+  if (segments.length < 1) {
+    throw new Error('NEXT_PUBLIC_TELEGRAM_APP_URL must include the FxAeon bot path');
   }
 }
 

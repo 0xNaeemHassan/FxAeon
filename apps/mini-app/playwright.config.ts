@@ -74,7 +74,7 @@ export default defineConfig({
       NEXT_PUBLIC_PRIVY_APP_ID: '',
       NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL: '',
       NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL: '',
-      NEXT_PUBLIC_TELEGRAM_APP_URL: 'https://t.me/FxAeonBot/app',
+      NEXT_PUBLIC_TELEGRAM_APP_URL: 'https://t.me/FxAeonBot',
     },
   },
 });

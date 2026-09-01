@@ -1,5 +1,7 @@
 export * from "./config";
 export * from "./tokens";
+export * from "./balances";
+export * from "./leverage";
 export * from "./clients";
 export * from "./types";
 export * from "./sdk";

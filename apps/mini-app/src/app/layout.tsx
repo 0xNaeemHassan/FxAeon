@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
+import Script from 'next/script';
 import './globals.css';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { TelegramProvider } from '@/components/TelegramProvider';
@@ -42,9 +43,9 @@ export default function RootLayout({
             unreachable telegram.org block FxAeon's React hydration. Client
             launch gates wait a bounded time for the bridge when Telegram
             launch parameters prove that this document came from Telegram. */}
-        <script
+        <Script
           src="https://telegram.org/js/telegram-web-app.js"
-          async
+          strategy="beforeInteractive"
         />
       </head>
       <body className={inter.className}>

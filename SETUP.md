@@ -39,6 +39,15 @@ The client accepts only public configuration:
 
 When configured, Privy should allow the exact local, preview, and production origins and expose only Ethereum (chain ID `1`) and Base (chain ID `8453`). Provider applications should use separate preview and production credentials with origin allowlists, network restrictions, usage caps, and alerts. If Privy is omitted, FxAeon uses the browser wallet's EIP-1193 provider directly; no account is requested until the user presses Connect.
 
+### Where production values go
+
+The checked-in deployment workflow reads build-time values before it creates the static `dist/` artifact. Add them in **GitHub → repository Settings → Secrets and variables → Actions**:
+
+- **Secrets:** `NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL`, `NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL`, and (when used) `NEXT_PUBLIC_PRIVY_APP_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`.
+- **Variables:** `NEXT_PUBLIC_TELEGRAM_APP_URL` — for this deployment use `https://t.me/FxAeonBot` (or a Telegram direct Mini App link if BotFather assigns one).
+
+For a local build, copy `apps/mini-app/.env.example` to `apps/mini-app/.env.local` and replace the two Alchemy placeholders with the matching `/v2/<key>` endpoints. Cloudflare Pages dashboard builds must define the same values under **Workers & Pages → project → Settings → Environment variables** for the selected Preview/Production environment; they are consumed at build time, not dynamically at runtime.
+
 ## Development
 
 ```bash
@@ -69,12 +78,14 @@ The deterministic stress harness is opt-in:
 pnpm test:chaos
 ```
 
-Anvil fork tests require a locally running Anvil binary and an operator-supplied fork endpoint. Keep the endpoint in the process environment or a secret manager; do not commit it:
+Anvil fork tests require a locally running Anvil binary and an operator-supplied Ethereum fork endpoint. Keep the endpoint in the process environment or a secret manager; do not commit it. The dedicated `ANVIL_FORK_URL` is preferred; the reviewed `NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL` is accepted as a convenient fallback for the heavy fork gate:
 
 ```powershell
 $env:ANVIL_FORK_URL = (Get-Secret FXAEON_ANVIL_FORK_URL)
 pnpm test:anvil
 ```
+
+If the Alchemy endpoint is already loaded in the shell, `pnpm test:anvil` uses `NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL` automatically when `ANVIL_FORK_URL` is absent. The URL is passed to Anvil only, redacted from logs, and removed before application tests start.
 
 Optional `ANVIL_FORK_BLOCK`, `ANVIL_PORT`, and `FX_ANVIL_ITERATIONS` variables control the fork block, port, and randomized iteration count. The test script refuses to run when the endpoint or binary is missing.
 

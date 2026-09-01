@@ -5,7 +5,7 @@
  * external image assets or bundle overhead.
  */
 
-export type ThemeId = 'violet' | 'matrix' | 'neon' | 'titanium';
+export type ThemeId = 'violet' | 'black' | 'light' | 'matrix' | 'neon' | 'titanium';
 
 export interface ThemeConfig {
   id: ThemeId;
@@ -42,6 +42,60 @@ export const THEMES: Record<ThemeId, ThemeConfig> = {
       '--mint-glow': 'rgba(79, 124, 255, 0.22)',
       '--cyan': '#52c7ff',
       '--brand-coral': '#ff5368',
+    },
+  },
+  black: {
+    id: 'black',
+    name: 'Midnight Black',
+    subtitle: 'True black with restrained blue',
+    accent: '#6f8cff',
+    badge: 'Dark',
+    colors: {
+      '--bg': '#000000',
+      '--bg-raised': '#050506',
+      '--surface': '#0b0b0e',
+      '--surface-2': '#121216',
+      '--surface-3': '#1a1a20',
+      '--card': '#0b0b0e',
+      '--input': '#050506',
+      '--line': '#23232a',
+      '--line-strong': '#3b3b46',
+      '--text': '#fafafa',
+      '--mut': '#a1a1aa',
+      '--mut-2': '#71717a',
+      '--mint': '#6f8cff',
+      '--mint-bright': '#9aabff',
+      '--mint-dim': 'rgba(111, 140, 255, 0.14)',
+      '--mint-glow': 'rgba(111, 140, 255, 0.22)',
+      '--cyan': '#70d7ff',
+      '--brand-coral': '#ff6276',
+    },
+  },
+  light: {
+    id: 'light',
+    name: 'Paper White',
+    subtitle: 'Clean white with high-contrast ink',
+    accent: '#315efb',
+    badge: 'Light',
+    colors: {
+      '--bg': '#f5f7fb',
+      '--bg-raised': '#ffffff',
+      '--surface': '#ffffff',
+      '--surface-2': '#eef2f7',
+      '--surface-3': '#e3e8f0',
+      '--card': '#ffffff',
+      '--input': '#ffffff',
+      '--line': '#d9e0ea',
+      '--line-strong': '#aab5c4',
+      '--text': '#11151c',
+      '--mut': '#596579',
+      '--mut-2': '#7c8798',
+      '--mint': '#315efb',
+      '--mint-bright': '#2149d8',
+      '--mint-dim': 'rgba(49, 94, 251, 0.11)',
+      '--mint-glow': 'rgba(49, 94, 251, 0.18)',
+      '--cyan': '#087ca7',
+      '--brand-coral': '#d83f59',
     },
   },
   matrix: {
@@ -129,8 +183,13 @@ export const THEMES: Record<ThemeId, ThemeConfig> = {
 
 export function getSavedTheme(): ThemeId {
   if (typeof window === 'undefined') return 'violet';
-  const saved = localStorage.getItem('fxaeon_theme_id') as ThemeId;
-  return saved && THEMES[saved] ? saved : 'violet';
+  try {
+    const saved = localStorage.getItem('fxaeon_theme_id') as ThemeId;
+    return saved && THEMES[saved] ? saved : 'violet';
+  } catch {
+    // A privacy mode or blocked storage should not make the app unusable.
+    return 'violet';
+  }
 }
 
 export function applyTheme(themeId: ThemeId) {
@@ -142,6 +201,22 @@ export function applyTheme(themeId: ThemeId) {
     root.style.setProperty(key, value);
   });
 
+  root.style.colorScheme = themeId === 'light' ? 'light' : 'dark';
   root.setAttribute('data-theme', themeId);
-  localStorage.setItem('fxaeon_theme_id', themeId);
+  document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute('content', theme.colors['--bg']);
+  const telegram = (window as unknown as { Telegram?: { WebApp?: { setHeaderColor?: (color: string) => void; setBackgroundColor?: (color: string) => void; setBottomBarColor?: (color: string) => void } } }).Telegram?.WebApp;
+  try {
+    telegram?.setHeaderColor?.(theme.colors['--bg']);
+    telegram?.setBackgroundColor?.(theme.colors['--bg']);
+    telegram?.setBottomBarColor?.(theme.colors['--bg']);
+  } catch {
+    // Older Telegram clients can reject dynamic chrome colors.
+  }
+  try {
+    localStorage.setItem('fxaeon_theme_id', themeId);
+    const settings = JSON.parse(localStorage.getItem('fxaeon.settings.v1') || '{}') as Record<string, unknown>;
+    localStorage.setItem('fxaeon.settings.v1', JSON.stringify({ ...settings, theme: themeId }));
+  } catch {
+    // Theme changes still apply for this session when storage is unavailable.
+  }
 }

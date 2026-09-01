@@ -30,7 +30,7 @@ import { useT } from '@/lib/i18n';
 import FxLogo from '@/components/FxLogo';
 import TokenIcon, { ChainIcon } from '@/components/TokenIcon';
 
-const TELEGRAM_APP_URL = process.env.NEXT_PUBLIC_TELEGRAM_APP_URL || 'https://t.me/FxAeonBot/app';
+const TELEGRAM_APP_URL = process.env.NEXT_PUBLIC_TELEGRAM_APP_URL || 'https://t.me/FxAeonBot';
 const CAPABILITIES = [
   { icon: CandlestickChart, title: 'Trade', copy: 'Open and manage positions' },
   { icon: Layers3, title: 'Borrow', copy: 'Mint, repay, and withdraw' },
@@ -59,7 +59,7 @@ export default function HomePage() {
       return () => { cancelled = true; };
     }
 
-    void waitForTelegramWebApp().then((webApp) => {
+    void waitForTelegramWebApp(8_000).then((webApp) => {
       if (cancelled) return;
       if (webApp && isTMA()) router.replace('/portfolio');
       else setTelegramUnavailable(true);

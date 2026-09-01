@@ -19,7 +19,7 @@ const PrivyClientProvider = dynamic(
 // startup budget. A failed script should resolve to a recovery screen instead
 // of leaving the user on an indefinite loading state while the wallet chunk
 // hydrates.
-const TELEGRAM_BRIDGE_TIMEOUT_MS = 3_000;
+const TELEGRAM_BRIDGE_TIMEOUT_MS = 8_000;
 
 export default function WalletProviderBoundary({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
