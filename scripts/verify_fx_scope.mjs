@@ -29,6 +29,7 @@ if (JSON.stringify([...scopeLock.methods].sort()) !== JSON.stringify(expectedMet
 
 const allowedRoutes = new Set([
   '',
+  'activity',
   'borrow',
   'earn',
   'login',

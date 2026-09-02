@@ -1,5 +1,6 @@
-# New client-first deployment name. This is configuration only; no Cloudflare
-# project is created or changed by the repository audit.
-name = "fxaeon-mini-app"
+# Static Cloudflare Pages configuration. Deploy the exported directory with
+# `wrangler pages deploy apps/mini-app/dist --project-name=fxaeon`;
+# `wrangler deploy` is a Worker command and is not valid for this workspace.
+name = "fxaeon"
 compatibility_date = "2026-06-09"
 pages_build_output_dir = "apps/mini-app/dist"

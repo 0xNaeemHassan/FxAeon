@@ -5,6 +5,7 @@ import './globals.css';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { TelegramProvider } from '@/components/TelegramProvider';
 import WalletProviderBoundary from '@/components/WalletProviderBoundary';
+import PriceProvider from '@/components/PriceProvider';
 import { LocaleProvider } from '@/lib/i18n';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
@@ -39,22 +40,24 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable}>
       <head>
-        {/* Start Telegram's bridge immediately, but do not let a slow or
-            unreachable telegram.org block FxAeon's React hydration. Client
-            launch gates wait a bounded time for the bridge when Telegram
-            launch parameters prove that this document came from Telegram. */}
+        {/* Hydrate the public web app before loading Telegram's optional host
+            bridge. Telegram launch routes already wait a bounded time for the
+            bridge, while ordinary browsers must never be held on the splash
+            screen by a slow or blocked telegram.org request. */}
         <Script
           src="https://telegram.org/js/telegram-web-app.js"
-          strategy="beforeInteractive"
+          strategy="afterInteractive"
         />
       </head>
       <body className={inter.className}>
         <LocaleProvider>
-          <WalletProviderBoundary>
-            <TelegramProvider>
-              <ErrorBoundary>{children}</ErrorBoundary>
-            </TelegramProvider>
-          </WalletProviderBoundary>
+          <PriceProvider>
+            <WalletProviderBoundary>
+              <TelegramProvider>
+                <ErrorBoundary>{children}</ErrorBoundary>
+              </TelegramProvider>
+            </WalletProviderBoundary>
+          </PriceProvider>
         </LocaleProvider>
       </body>
     </html>

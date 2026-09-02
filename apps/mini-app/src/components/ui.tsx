@@ -22,6 +22,9 @@ import {
 import { haptic } from '@/lib/telegram';
 import { useT } from '@/lib/i18n';
 import FxLogo from '@/components/FxLogo';
+import LiveMarketStrip from '@/components/LiveMarketStrip';
+import ThemeToggle from '@/components/ThemeToggle';
+import WalletProfile from '@/components/WalletProfile';
 
 /* ------------------------------------------------------------------ shell */
 
@@ -56,14 +59,19 @@ export function AppShell({
       <a href="#main-content" className="skip-link">Skip to main content</a>
       <div className="app-workspace">
         {tabs && (
-          <div className="app-topbar" aria-hidden="true">
-            <span className="flex items-center gap-2.5">
+          <div className="app-topbar">
+            <Link href="/portfolio" aria-label="FxAeon portfolio" className="flex items-center gap-2.5">
               <FxLogo size={24} />
               <span className="text-display text-[15px] font-semibold">FxAeon</span>
+            </Link>
+            <span className="app-topbar-actions">
+              <span className="network-state"><span className="status-dot" /> {networkLabel}</span>
+              <ThemeToggle />
+              <WalletProfile />
             </span>
-            <span className="network-state"><span className="status-dot" /> {networkLabel}</span>
           </div>
         )}
+        {tabs && <LiveMarketStrip />}
         {title && (
           <header className="page-header">
             <div>
@@ -71,7 +79,6 @@ export function AppShell({
               <h1 ref={headingRef} tabIndex={-1} className="text-display outline-none">{title}</h1>
               {subtitle && <p className="page-subtitle">{subtitle}</p>}
             </div>
-            <span className="page-network"><span className="status-dot" /> {networkLabel}</span>
           </header>
         )}
         <main ref={contentRef} id="main-content" tabIndex={-1} className="app-content flex-1 outline-none">{children}</main>
@@ -83,10 +90,10 @@ export function AppShell({
 
 const TABS: { href: string; labelKey: string; icon: LucideIcon; also?: string[] }[] = [
   { href: '/portfolio', labelKey: 'nav.home', icon: Home },
-  { href: '/trade', labelKey: 'nav.trade', icon: CandlestickChart, also: ['/positions', '/borrow'] },
-  { href: '/earn', labelKey: 'nav.earn', icon: PiggyBank },
+  { href: '/trade', labelKey: 'nav.trade', icon: CandlestickChart, also: ['/positions'] },
+  { href: '/earn', labelKey: 'nav.earn', icon: PiggyBank, also: ['/borrow'] },
   { href: '/move', labelKey: 'nav.move', icon: ArrowLeftRight, also: ['/qr'] },
-  { href: '/more', labelKey: 'nav.more', icon: LayoutGrid, also: ['/settings'] },
+  { href: '/more', labelKey: 'nav.more', icon: LayoutGrid, also: ['/settings', '/activity'] },
 ];
 
 export function TabBar() {

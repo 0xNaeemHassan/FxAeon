@@ -29,6 +29,8 @@ import { ButtonLink, FullScreenSpinner } from '@/components/ui';
 import { useT } from '@/lib/i18n';
 import FxLogo from '@/components/FxLogo';
 import TokenIcon, { ChainIcon } from '@/components/TokenIcon';
+import ThemeToggle from '@/components/ThemeToggle';
+import LiveMarketStrip from '@/components/LiveMarketStrip';
 
 const TELEGRAM_APP_URL = process.env.NEXT_PUBLIC_TELEGRAM_APP_URL || 'https://t.me/FxAeonBot';
 const CAPABILITIES = [
@@ -102,11 +104,14 @@ export default function HomePage() {
             </div>
             <div className="landing-nav-actions">
               <span className="landing-live"><span className="status-dot" /> Ethereum</span>
+              <ThemeToggle />
               <ButtonLink href={TELEGRAM_APP_URL} external variant="ghost" className="!min-h-10 !w-auto !px-3 !text-[12px]">
                 Telegram <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
               </ButtonLink>
             </div>
           </header>
+
+          <LiveMarketStrip className="landing-market-strip" />
 
           <div className="landing-grid">
             <section className="landing-hero">

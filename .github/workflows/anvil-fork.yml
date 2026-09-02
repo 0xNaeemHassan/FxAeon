@@ -1,0 +1,42 @@
+name: Protected Anvil mainnet fork
+
+on:
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: Randomized snapshot and ordered-route iterations
+        required: false
+        default: '64'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fxaeon-anvil-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ethereum-fork:
+    name: Heavy Ethereum fork campaign
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    env:
+      ANVIL_FORK_URL: ${{ secrets.NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL }}
+      FX_ANVIL_ITERATIONS: ${{ inputs.iterations }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: pnpm
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1
+        with:
+          version: v1.8.1
+          cache: 'false'
+      - run: pnpm install --frozen-lockfile
+      - name: Run protected randomized Anvil campaign
+        run: pnpm test:anvil

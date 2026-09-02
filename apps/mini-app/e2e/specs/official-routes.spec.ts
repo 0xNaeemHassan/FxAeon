@@ -21,6 +21,7 @@ const OFFICIAL_ROUTES = [
   "/move",
   "/more",
   "/settings",
+  "/activity",
   "/qr",
 ] as const;
 
@@ -28,7 +29,7 @@ test.describe("official f(x) client routes", () => {
   for (const route of OFFICIAL_ROUTES) {
     test(`${route} loads without an FxAeon backend`, async ({ page, requests }) => {
       await page.goto(route, { waitUntil: "domcontentloaded" });
-      await expect(page.locator("main")).toBeVisible();
+      await expect(page.locator("main:visible")).toBeVisible();
       await expect(page).toHaveURL(new RegExp(`${route.replace("/", "\\/")}(?:\\/)?$`));
       assertNoBackendRequests(requests);
 
@@ -52,7 +53,7 @@ test.describe("browser entry", () => {
 
   test("landing page describes the official scope and remains backend-free", async ({ page, requests }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("main")).toBeVisible();
+    await expect(page.locator("main:visible")).toBeVisible();
     await expect(page.locator("body")).toContainText(/f\(x\)|FxAeon/i);
     await expect(page.getByRole("link", { name: /launch web app/i })).toBeVisible();
     await expect(page.getByRole("link", { name: /open in telegram/i })).toBeVisible();
@@ -126,7 +127,21 @@ test.describe("connected browser wallet flows", () => {
     await expect(page.getByText(/0x930f/i).first()).toBeVisible();
     await expect(page.getByText("Wallet balances", { exact: true })).toBeVisible();
     await expect(page.locator("body")).not.toContainText(/\$\s*\d/);
+    await expect(page.locator("body")).not.toContainText("Transaction status");
     await assertNoTopOverlay(page);
+    assertNoBackendRequests(requests);
+  });
+
+  test("wallet profile opens only on demand and exposes Activity", async ({ page, requests }) => {
+    await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
+    await assertNoTopOverlay(page);
+    await page.getByRole("button", { name: "Open wallet profile" }).click();
+    const profile = page.getByRole("dialog", { name: "Wallet profile" });
+    await expect(profile).toBeVisible();
+    await expect(profile.getByRole("link", { name: /Activity/ })).toBeVisible();
+    await profile.getByRole("link", { name: /Activity/ }).click();
+    await expect(page).toHaveURL(/\/activity\/?$/);
+    await expect(page.getByRole("heading", { name: "Activity", level: 1 })).toBeVisible();
     assertNoBackendRequests(requests);
   });
 
@@ -151,12 +166,55 @@ test.describe("connected browser wallet flows", () => {
     await asset.click();
     await expect(page.getByRole("listbox", { name: "Input asset options" }).getByRole("option", { name: /^stETH/i })).toBeVisible();
     await page.getByRole("listbox", { name: "Input asset options" }).getByRole("option", { name: /^ETH selected/i }).click();
-    const leverage = page.getByLabel("Target LSD leverage");
+    const leverage = page.getByRole("spinbutton", { name: "Target LSD leverage", exact: true });
     await leverage.fill("20");
     await expect(leverage).toHaveValue("6.9");
     assertNoBackendRequests(requests);
   });
 
+});
+
+test.describe("live USD context", () => {
+  test.use({
+    telegram: false,
+    marketPrices: true,
+    browserWallet: {
+      address: "0x930f0000000000000000000000000000000098b9",
+      initiallyConnected: true,
+    },
+  });
+
+  test("shows market prices, input USD value, token prices, and a leverage slider", async ({ page, requests }) => {
+    await page.goto("/trade", { waitUntil: "domcontentloaded" });
+    await expect(page.getByText("$2,400.00", { exact: true }).first()).toBeVisible();
+    await page.getByLabel("Amount in ETH").fill("2");
+    await expect(page.getByText("≈ $4,800.00", { exact: true })).toBeVisible();
+    await page.getByLabel("Input asset").click();
+    await expect(page.getByRole("listbox", { name: "Input asset options" }).getByText("$2,400.00", { exact: true }).first()).toBeVisible();
+    await page.keyboard.press("Escape");
+    const slider = page.getByRole("slider", { name: "Target leverage slider" });
+    await expect(slider).toBeVisible();
+    await slider.fill("3");
+    await expect(page.getByRole("spinbutton", { name: "Target leverage", exact: true })).toHaveValue("3");
+    assertNoBackendRequests(requests);
+  });
+
+  test("keeps live USD context available across every asset workspace", async ({ page, requests }) => {
+    for (const route of ["/portfolio", "/positions", "/borrow", "/earn", "/move", "/more", "/settings", "/activity", "/qr"]) {
+      await page.goto(route, { waitUntil: "domcontentloaded" });
+      await expect(page.getByRole("region", { name: "Live USD prices" }).getByText("$2,400.00", { exact: true })).toBeVisible();
+    }
+    assertNoBackendRequests(requests);
+  });
+});
+
+test("Earn exposes Borrow and fxMINT as a first-class product", async ({ page, requests }) => {
+  await page.goto("/earn", { waitUntil: "domcontentloaded" });
+  await page.getByRole("link", { name: "Borrow / fxMINT" }).click();
+  await expect(page).toHaveURL(/\/borrow\/?$/);
+  await expect(page.getByRole("heading", { name: "Borrow" })).toBeVisible();
+  await expect(page.getByText("Borrow / fxMINT", { exact: true })).toBeVisible();
+  assertNoBackendRequests(requests);
 });
 
 test.describe("browser wallet connection", () => {
@@ -178,20 +236,18 @@ test.describe("browser wallet connection", () => {
   });
 });
 
-test.describe("More theme controls", () => {
+test.describe("official theme control", () => {
   test.use({ telegram: false });
 
-  test("offers official, black, and light themes with persisted selection", async ({ page, requests }) => {
+  test("switches between the official light and dark themes and persists the choice", async ({ page, requests }) => {
     await page.goto("/more", { waitUntil: "domcontentloaded" });
-    const themes = page.getByRole("radiogroup", { name: "Theme" });
-    await expect(themes.getByRole("radio")).toHaveCount(3);
-    await themes.getByRole("radio", { name: "Black theme" }).click();
-    await expect(themes.getByRole("radio", { name: "Black theme" })).toHaveAttribute("aria-checked", "true");
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "black");
-    await themes.getByRole("radio", { name: "Light theme" }).click();
+    await expect(page.getByRole("radiogroup", { name: "Theme" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Switch to light theme" }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-    await themes.getByRole("radio", { name: "Official theme" }).click();
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "violet");
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await page.getByRole("button", { name: "Switch to dark theme" }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     assertNoBackendRequests(requests);
   });
 });
@@ -199,7 +255,7 @@ test.describe("More theme controls", () => {
 test("unknown routes render the scoped FxAeon recovery screen", async ({ page, requests }) => {
   const response = await page.goto("/outside-official-scope", { waitUntil: "domcontentloaded" });
   expect(response?.status()).toBe(404);
-  await expect(page.locator("main")).toBeVisible();
+  await expect(page.locator("main:visible")).toBeVisible();
   await expect(page.locator("body")).toContainText(/outside FxAeon|That page is not available/i);
   await expect(page.getByRole("link", { name: /back to portfolio/i })).toBeVisible();
   assertNoBackendRequests(requests);

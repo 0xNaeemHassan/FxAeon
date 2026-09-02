@@ -1,8 +1,7 @@
 /**
  * A deterministic `window.Telegram.WebApp` shim, injected via addInitScript so
- * it exists BEFORE any page code runs (the real app loads telegram-web-app.js
- * with `strategy="beforeInteractive"`; the suite blocks that network script and
- * substitutes this).
+ * it exists before any page code runs. The real app loads telegram-web-app.js
+ * after hydration; the suite blocks that network script and substitutes this.
  *
  * It implements exactly the surface lib/telegram.ts touches: initData / platform
  * (so isTMA() is true), ready/expand/close/sendData/openTelegramLink, the
