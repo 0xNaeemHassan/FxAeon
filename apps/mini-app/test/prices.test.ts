@@ -3,6 +3,7 @@ import test from "node:test";
 import { FX_TOKENS, type FxTokenKey } from "../src/lib/fx/tokens";
 import {
   formatUsd,
+  parseUsdPriceCache,
   parseUsdPriceResponse,
   priceKeyForSymbol,
   usdValueForDecimal,
@@ -55,4 +56,15 @@ test("calculates display-only USD values without changing token units", () => {
   assert.equal(usdValueForDecimal("all", 1), null);
   assert.equal(formatUsd(6_000), "$6,000.00");
   assert.equal(formatUsd(0.001), "<$0.01");
+});
+
+test("restores only a recent, validated USD snapshot", () => {
+  const now = 2_000_000_000_000;
+  const prices = parseUsdPriceResponse(validPayload(Math.floor(now / 1_000)), Math.floor(now / 1_000)).prices;
+  assert.deepEqual(parseUsdPriceCache({ prices, updatedAt: now - 12_000 }, now), {
+    prices,
+    updatedAt: now - 12_000,
+  });
+  assert.equal(parseUsdPriceCache({ prices, updatedAt: now - 121_000 }, now), null);
+  assert.equal(parseUsdPriceCache({ prices: { ...prices, fxUSD: 0 }, updatedAt: now - 12_000 }, now), null);
 });
