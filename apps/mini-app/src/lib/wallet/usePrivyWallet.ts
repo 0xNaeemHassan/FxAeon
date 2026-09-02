@@ -8,7 +8,8 @@ import {
   type ConnectedWallet,
   type SendTransactionModalUIOptions,
 } from '@privy-io/react-auth';
-import { assertAlchemyRpcUrl, assertLocalForkRpcUrl } from '@/lib/fx/config';
+import { assertLocalForkRpcUrl } from '@/lib/fx/config';
+import { switchBrowserChain as switchBrowserChainWithConfig } from './switchBrowserChain';
 
 export const FX_CHAIN_IDS = {
   ethereum: 1,
@@ -102,21 +103,6 @@ type Eip1193Provider = {
   removeListener?: (event: string, listener: (...args: unknown[]) => void) => void;
 };
 
-const CHAIN_METADATA: Record<FxChainId, { chainId: string; chainName: string; nativeCurrency: { name: string; symbol: string; decimals: number }; blockExplorerUrls: string[] }> = {
-  [FX_CHAIN_IDS.ethereum]: {
-    chainId: '0x1',
-    chainName: 'Ethereum Mainnet',
-    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-    blockExplorerUrls: ['https://etherscan.io'],
-  },
-  [FX_CHAIN_IDS.base]: {
-    chainId: '0x2105',
-    chainName: 'Base',
-    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-    blockExplorerUrls: ['https://basescan.org'],
-  },
-};
-
 function browserProvider(): Eip1193Provider | undefined {
   if (typeof window === 'undefined') return undefined;
   if (process.env.NEXT_PUBLIC_FX_SCREENSHOT_MODE === '1') {
@@ -168,29 +154,15 @@ function walletDescriptor(provider: Eip1193Provider, address: string, chainId?: 
 }
 
 async function switchBrowserChain(provider: Eip1193Provider, chainId: FxChainId): Promise<void> {
-  const configured = chainId === FX_CHAIN_IDS.ethereum
-    ? process.env.NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL
-    : process.env.NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL;
-  const localFork = process.env.NEXT_PUBLIC_FX_SCREENSHOT_MODE === '1'
-    ? process.env.NEXT_PUBLIC_FX_ANVIL_RPC_URL
-    : undefined;
-  let rpcUrl: string;
-  try {
-    rpcUrl = localFork
-      ? assertLocalForkRpcUrl(localFork, 'Screenshot fork RPC URL')
-      : assertAlchemyRpcUrl(String(configured || ''), chainId, 'Browser chain RPC URL');
-  } catch {
-    throw new Error('This wallet does not have the requested network yet. Add Ethereum or Base in the wallet, then try again.');
-  }
-  const metadata = { ...CHAIN_METADATA[chainId], rpcUrls: [rpcUrl] };
-  try {
-    await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: metadata.chainId }] });
-  } catch (cause) {
-    // 4902 means the wallet knows the provider but not this chain yet.
-    if (typeof cause !== 'object' || cause === null || !('code' in cause) || (cause as { code?: unknown }).code !== 4902) throw cause;
-    await provider.request({ method: 'wallet_addEthereumChain', params: [metadata] });
-    await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: metadata.chainId }] });
-  }
+  return switchBrowserChainWithConfig(provider, chainId, () => ({
+    // Keep literal env accesses so Next can inline the static browser build.
+    configuredRpcUrl: chainId === FX_CHAIN_IDS.ethereum
+      ? process.env.NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL
+      : process.env.NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL,
+    localForkRpcUrl: process.env.NEXT_PUBLIC_FX_SCREENSHOT_MODE === '1'
+      ? process.env.NEXT_PUBLIC_FX_ANVIL_RPC_URL
+      : undefined,
+  }));
 }
 
 /**

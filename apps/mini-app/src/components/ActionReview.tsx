@@ -32,6 +32,7 @@ import { getWebApp, haptic } from '@/lib/telegram';
 import { Button, Card } from '@/components/ui';
 import { userSafeError } from '@/lib/errors';
 import { BridgeTracker } from '@/components/BridgeTracker';
+import { rawQuoteReviewFacts, routeFinancialReviewFacts, type ReviewFact } from '@/lib/fx/reviewFormatting';
 
 export type ActionPlanBuilder = () => Promise<PlannedRoute | readonly PlannedRoute[]>;
 
@@ -78,8 +79,6 @@ function formatTokenAmount(value: bigint, tokenAddress?: string, fallback = 'raw
   if (!token) return `${value.toString()} ${fallback}`;
   return `${trimDecimal(formatUnits(value, token.decimals))} ${token.key}`;
 }
-
-type ReviewFact = { label: string; value: string };
 
 function addFact(facts: ReviewFact[], label: string, value: string | undefined): void {
   if (!value || facts.some((fact) => fact.label === label)) return;
@@ -138,17 +137,7 @@ function primaryReviewFacts(route: PlannedRoute): ReviewFact[] {
   if (route.details?.requestedLeverage !== undefined) addFact(facts, 'Target leverage', `${route.details.requestedLeverage}×`);
   if (route.details?.slippagePercent !== undefined) addFact(facts, 'Slippage', `${route.details.slippagePercent}%`);
   if (route.details?.leverage !== undefined) addFact(facts, 'Leverage', `${route.details.leverage}×`);
-  addFact(facts, 'Execution price', route.details?.executionPrice);
-  addFact(facts, 'Minimum received', route.details?.minOut);
-  addFact(facts, 'Collateral', route.details?.colls);
-  addFact(facts, 'Debt', route.details?.debts);
-  route.details?.economicLimits?.forEach((limit) => {
-    const label = limit.label
-      .replace(/^fxSAVE\s+/i, '')
-      .replace(/minimum output$/i, 'minimum received')
-      .replace(/^./, (value) => value.toUpperCase());
-    addFact(facts, label, `${limit.value} raw units`);
-  });
+  facts.push(...routeFinancialReviewFacts(route));
 
   if (isBridgeQuote(route.quote)) {
     addFact(facts, 'Asset', route.quote.bridgeToken ?? 'Bridge asset');
@@ -692,7 +681,7 @@ export function ActionReview({
       <div className="flex flex-col gap-2.5">
         <ReviewRow label="Network" value={chainName(route.chainId)} />
         <ReviewRow label="Wallet" value={compactAddress(route.walletAddress)} title={route.walletAddress} />
-        {facts.map((fact) => <ReviewRow key={`${fact.label}-${fact.value}`} label={fact.label} value={fact.value} />)}
+        {facts.map((fact) => <ReviewRow key={`${fact.label}-${fact.value}`} label={fact.label} value={fact.value} title={fact.title} />)}
       </div>
 
       <AdvancedReviewDetails route={route} />
@@ -750,8 +739,10 @@ function ReviewRow({ label, value, title }: { label: string; value: string; titl
 
 function AdvancedReviewDetails({ route }: { route: PlannedRoute }) {
   const bridgeQuote = isBridgeQuote(route.quote) ? route.quote : null;
+  const rawQuoteFacts = rawQuoteReviewFacts(route);
   const hasDetails = Boolean(
     route.details?.requestedAmount
+      || rawQuoteFacts.length
       || route.details?.sdkSlippagePercent !== undefined
       || route.details?.economicLimits?.length
       || route.details?.conversionPaths?.length
@@ -768,6 +759,7 @@ function AdvancedReviewDetails({ route }: { route: PlannedRoute }) {
       </summary>
       <div className="flex flex-col gap-2.5 border-t border-[var(--line)] py-3">
         {route.details?.requestedAmount && <ReviewRow label="Requested amount (raw units)" value={route.details.requestedAmount} />}
+        {rawQuoteFacts.map((fact) => <ReviewRow key={fact.label} label={fact.label} value={fact.value} />)}
         {route.details?.sdkSlippagePercent !== undefined && <ReviewRow label="Quoted slippage" value={`${route.details.sdkSlippagePercent}%`} />}
         {route.details?.economicLimits?.map((limit, index) => <ReviewRow key={`limit-${index}`} label={limit.label} value={`${limit.value} raw units`} />)}
         {route.details?.conversionPaths?.map((path, index) => <ReviewRow key={`path-${index}`} label={`${path.label} fingerprint`} value={path.fingerprint} />)}

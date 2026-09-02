@@ -131,7 +131,9 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
+// Test and screenshot builds can contain disposable local-fork configuration.
+// Never expose their server on the machine's LAN interfaces.
+server.listen(PORT, '127.0.0.1', () => {
    
   console.log(`[e2e] serving ${DIST} at http://localhost:${PORT}`);
 });

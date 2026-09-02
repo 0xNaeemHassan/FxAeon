@@ -87,6 +87,30 @@
   --tabbar-reserve: calc(var(--tabbar-panel-height) + var(--tabbar-edge-gap) + 12px);
 }
 
+/* The saved light preference is applied by a tiny pre-hydration initializer
+   in the root layout. Keeping its first-paint variables in CSS prevents the
+   dark palette flashing before React mounts. */
+:root[data-theme='light'] {
+  --bg: #f5f7fb;
+  --bg-raised: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #eef2f7;
+  --surface-3: #e3e8f0;
+  --card: #ffffff;
+  --input: #ffffff;
+  --line: #d9e0ea;
+  --line-strong: #aab5c4;
+  --text: #11151c;
+  --mut: #596579;
+  --mut-2: #7c8798;
+  --mint: #315efb;
+  --mint-bright: #2149d8;
+  --mint-dim: rgba(49, 94, 251, 0.11);
+  --mint-glow: rgba(49, 94, 251, 0.18);
+  --cyan: #087ca7;
+  --brand-coral: #d83f59;
+}
+
 * {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
@@ -132,11 +156,15 @@ body {
   /* Move clear of the Telegram/browser safe area. A percentage-only offset
      leaves the lower half visible when the host reports a tall top inset. */
   transform: translate(-50%, calc(-100% - env(safe-area-inset-top, 0px) - 16px));
+  opacity: 0;
+  pointer-events: none;
   transition: transform 140ms ease;
 }
 
 .skip-link:focus {
   transform: translate(-50%, 0);
+  opacity: 1;
+  pointer-events: auto;
 }
 
 body::before,
@@ -530,6 +558,7 @@ summary:focus-visible {
 .button-primary {
   background: var(--mint);
   border-color: var(--mint);
+  color: #fff;
   box-shadow: none;
 }
 
@@ -756,6 +785,25 @@ select.field-control option {
   border-radius: 12px;
   background: var(--mint-dim);
 }
+
+.market-chart-toggle {
+  display: none;
+  min-width: 44px;
+  min-height: 44px;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  color: var(--mint);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.market-chart-toggle:hover { background: var(--mint-dim); }
+.market-chart-toggle-chevron { margin-left: auto; }
+.market-chart-toggle[aria-expanded='true'] .market-chart-toggle-chevron { transform: rotate(180deg); }
+.market-chart-content[hidden] { display: none; }
 
 .market-chart-frame {
   position: relative;
@@ -2042,6 +2090,24 @@ input[type='range'].lever::-moz-range-thumb {
   .portfolio-value-card { padding: 22px !important; }
 
   .portfolio-quick-action { min-height: 82px; }
+}
+
+@media (max-width: 640px) {
+  .market-chart-toggle { display: flex; }
+
+  /* Keep the first mobile paint compact before the viewport effect runs. */
+  .market-chart-panel[data-mobile-expanded='false'] .market-chart-content { display: none; }
+
+  .market-chart-panel .market-chart-frame,
+  .market-chart-panel .market-chart-graphic,
+  .market-chart-panel .market-chart-empty {
+    min-height: 168px;
+  }
+
+  .market-chart-panel .market-chart-graphic,
+  .market-chart-panel .market-chart-frame > .market-chart-skeleton {
+    height: 168px !important;
+  }
 }
 
 @media (max-width: 430px) {

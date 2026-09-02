@@ -19,6 +19,7 @@ import { PRIVY_APP_ID } from '@/lib/privyConfig';
 import { restoreTelegramLaunchHash } from '@/lib/telegram';
 import { PrivyWalletBridge, UnavailableWalletProvider } from '@/lib/wallet';
 import WalletRecoveryCoordinator from '@/components/WalletRecoveryCoordinator';
+import ProtocolPositionProvider from '@/components/ProtocolPositionProvider';
 
 export default function PrivyClientProvider({ children }: { children: React.ReactNode }) {
   // P0 login fix: Privy's seamless Telegram Mini-App login triggers at SDK
@@ -34,7 +35,7 @@ export default function PrivyClientProvider({ children }: { children: React.Reac
     if (PRIVY_APP_ID) restoreTelegramLaunchHash();
     return true;
   });
-  if (!PRIVY_APP_ID) return <UnavailableWalletProvider>{children}</UnavailableWalletProvider>;
+  if (!PRIVY_APP_ID) return <UnavailableWalletProvider><ProtocolPositionProvider>{children}</ProtocolPositionProvider></UnavailableWalletProvider>;
   return (
     <PrivyProvider
       appId={PRIVY_APP_ID}
@@ -60,8 +61,10 @@ export default function PrivyClientProvider({ children }: { children: React.Reac
       }}
     >
       <PrivyWalletBridge>
-        <WalletRecoveryCoordinator />
-        {children}
+        <ProtocolPositionProvider>
+          <WalletRecoveryCoordinator />
+          {children}
+        </ProtocolPositionProvider>
       </PrivyWalletBridge>
     </PrivyProvider>
   );

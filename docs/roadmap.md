@@ -1,6 +1,6 @@
 # Roadmap and release posture
 
-This document describes the product that is actually shipped. FxAeon is one static application with first-class web and Telegram launch surfaces: Privy owns the selected wallet, the pinned official f(x) SDK supplies protocol reads and unsigned plans, Alchemy RPC provides browser read infrastructure, and Ethereum/Base remain the source of truth.
+This document describes the current implementation. FxAeon is one static application with first-class web and Telegram launch surfaces: Privy or the connected browser wallet owns signing, the pinned official f(x) SDK supplies protocol reads and unsigned plans, Alchemy RPC provides browser read infrastructure, and Ethereum/Base remain the source of truth.
 
 ## Non-negotiable product invariants
 
@@ -28,12 +28,12 @@ Transitive `ioredis` and `workerd` entries may remain in the frozen dependency g
 
 These are measurements from the local release gate, not universal performance claims. Re-run them on the pinned Node 22 CI environment for each release baseline.
 
-- Static bundle: `222 assets`, `7.22 MiB` total.
-- JavaScript: `187 assets`, `6.52 MiB` raw, `2.00 MiB` gzip; largest asset `1.95 MiB`.
-- Release E2E: `28` tests covering browser entry, 12 scoped routes, cross-workspace USD context, validated price continuity across hard navigation/feed retries, wallet profile/Activity, Earn-to-fxMINT access, official light/dark theming, and Telegram/mobile safety checks.
-- Unit/security suite: `106` total tests (`104` passed, `2` skipped when the protected fork environment is absent).
+- Static bundle: `223 assets`, `7.28 MiB` total.
+- JavaScript: `188 assets`, `6.56 MiB` raw, `2.01 MiB` gzip; largest asset `1.95 MiB`.
+- Release E2E: `30` tests covering browser entry, 12 scoped routes, cross-workspace USD context, validated price continuity across hard navigation/feed retries, wallet profile/Activity, Earn-to-fxMINT access, official light/dark theming, accessible skip navigation, responsive charts, and Telegram/mobile safety checks.
+- Unit/security suite: `140` total tests (`137` passed, `3` skipped when the protected fork environment is absent).
 - Chaos campaign: `2` campaigns passed, including 2,000 route mutations and 600 runner iterations.
-- Anvil fork gate: 24 snapshot/revert and 24 ordered-route iterations passed in the protected local run.
+- Local Anvil gates: `64` snapshot/revert iterations, `64` ordered-route stress iterations, and the Node four-position protocol proof passed. The separate browser gate opened and verified coexisting ETH/BTC long/short positions, checked delayed discovery and cross-workspace views, and restored its snapshot. The protected workflow now requires all three gates; an older green badge is not evidence for the new browser gate.
 - Bundle guardrails: 12 MiB total, 8 MiB JavaScript, 3 MiB gzip, and 2 MiB largest JavaScript asset; these are regression limits, not UX guarantees.
 
 ## Delivery order
@@ -43,4 +43,4 @@ These are measurements from the local release gate, not universal performance cl
 3. Test current desktop/mobile browsers and Telegram Android, iOS, Desktop, and Web launch behavior and wallet prompts manually; automated tests use no production funds or live signing authority.
 4. Add a new SDK capability only through a reviewed scope-lock change and a matching matrix entry, tests, review UI, recovery behavior, and documentation.
 
-The next meaningful work is upstream/runtime validation, safe fork fixtures, and broader real-device coverage across ordinary mobile browsers and Telegram.
+The next promotion checks are the protected Alchemy workflow for the release commit and broader real-device coverage across ordinary mobile browsers and Telegram.

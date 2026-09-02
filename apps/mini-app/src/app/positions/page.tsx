@@ -1,32 +1,32 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowDownRight, ArrowUpRight, Gauge, Layers2, RefreshCw } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowDownRight, ArrowUpRight, Gauge, Layers2 } from 'lucide-react';
 import Link from 'next/link';
-import { AppShell, Button, Card, EmptyState, LoadingRegion, Skeleton } from '@/components/ui';
+import { AppShell, Card, EmptyState } from '@/components/ui';
 import { ActionReview } from '@/components/ActionReview';
 import WalletConnectCTA from '@/components/WalletConnectCTA';
-import { useUsdPrices } from '@/components/PriceProvider';
+import {
+  positionIsStale,
+  ProtocolPositionCard,
+  ProtocolPositionNotice,
+  ProtocolPositionSkeleton,
+} from '@/components/ProtocolPositionCard';
+import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
 import { AmountField, LeverageField, RangeField, Segmented, SlippageField, TokenSelect } from '@/components/ProtocolForm';
 import { MAX_FX_SLIPPAGE_PERCENT, clampLeverage, leverageBoundsFor, planAdjustPositionLeverage, planIncreasePosition, planReducePosition, readLeverageBounds, type LeverageBounds } from '@/lib/fx';
 import { usePrivyWallet } from '@/lib/wallet';
 import { positiveDecimal } from '@/lib/amount';
 import { DEFAULT_SLIPPAGE_PERCENT, readSlippagePercent } from '@/lib/settings';
-import { userSafeError } from '@/lib/errors';
-import { formatUsd, formatUsdPrice, priceKeyForSymbol, usdValueForUnits, type UsdPriceMap } from '@/lib/prices';
 import {
-  formatAmount,
   getSdkReductionAmountWei,
   parseAmount,
   positionCollateralDecimals,
-  positionDebtDecimals,
   positionKey,
   positionInputTokenOptions,
   positionOutputTokenOptions,
-  readAllPositions,
   tokenAddress,
   tokenDecimals,
-  type UiPosition,
   type UiToken,
 } from '@/app/trade/fxUi';
 
@@ -34,8 +34,8 @@ type PositionAction = 'increase' | 'reduce' | 'leverage';
 
 export default function PositionsPage() {
   const wallet = usePrivyWallet();
-  const { prices } = useUsdPrices();
-  const [positions, setPositions] = useState<UiPosition[]>([]);
+  const positionState = useProtocolPositions();
+  const positions = positionState.positions;
   const [selectedKey, setSelectedKey] = useState('');
   const [action, setAction] = useState<PositionAction>('increase');
   const [token, setToken] = useState<UiToken>('ETH');
@@ -48,31 +48,14 @@ export default function PositionsPage() {
   useEffect(() => {
     setSlippage(String(readSlippagePercent()));
   }, []);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const load = useCallback(async () => {
-    if (!wallet.address) {
-      setPositions([]);
-      setSelectedKey('');
-      return;
-    }
-    setLoading(true);
-    setError('');
-    try {
-      const next = await readAllPositions(wallet.address);
-      setPositions(next);
-      setSelectedKey((current) => current && next.some((position) => positionKey(position) === current) ? current : next[0] ? positionKey(next[0]) : '');
-    } catch (cause) {
-      setError(userSafeError(cause, 'Position state is unavailable. Check the Ethereum connection and try again.'));
-    } finally {
-      setLoading(false);
-    }
-  }, [wallet.address]);
-
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    setSelectedKey((current) => current && positions.some((position) => positionKey(position) === current)
+      ? current
+      : positions[0] ? positionKey(positions[0]) : '');
+  }, [positions]);
 
   const selected = positions.find((position) => positionKey(position) === selectedKey);
+  const selectedStale = selected ? positionIsStale(selected, positionState.failedGroups) : false;
   const marketTokens = selected
     ? action === 'reduce'
       ? positionOutputTokenOptions(selected.market, selected.side)
@@ -84,7 +67,10 @@ export default function PositionsPage() {
     if (!selected) return;
     setToken((current) => marketTokens.includes(current) ? current : marketTokens[0]);
     const sdkLeverage = selected.side === 'short' ? selected.info.lsdLeverage : selected.info.currentLeverage;
-    setLeverage(clampLeverage(Math.max(0.1, sdkLeverage), leverageBounds));
+    // This is an editable target, not the measured position metric. Seed a
+    // readable target and pass that exact displayed value into the review.
+    const targetLeverage = Number(Math.max(0.1, sdkLeverage).toFixed(2));
+    setLeverage(clampLeverage(targetLeverage, leverageBounds));
   }, [leverageBounds, marketTokens, selected]);
 
   useEffect(() => {
@@ -106,7 +92,7 @@ export default function PositionsPage() {
     : null;
 
   const planBuilder = useMemo(() => {
-    if (!selected || !wallet.address) return null;
+    if (!selected || !wallet.address || selectedStale) return null;
     const slippageValue = Number(slippage);
     if (!Number.isFinite(slippageValue) || slippageValue <= 0 || slippageValue > MAX_FX_SLIPPAGE_PERCENT) return null;
     const common = {
@@ -118,7 +104,7 @@ export default function PositionsPage() {
     } as const;
     if (action === 'increase') {
       const amountWei = validAmount ? parseAmount(validAmount, token) : null;
-      if (!amountWei) return null;
+      if (!amountWei || !Number.isFinite(leverage) || leverage < leverageBounds.min || leverage > leverageBounds.max) return null;
       // The SDK's short-pool increase path expects the LSD leverage field,
       // while long pools use the regular leverage field. Both are exposed as
       // an editable target so an existing position can actually exercise the
@@ -137,9 +123,9 @@ export default function PositionsPage() {
         return planReducePosition({ ...common, amount: reduction, outputTokenAddress: tokenAddress(token), isClosePosition: fraction === 100 });
       };
     }
-    if (!Number.isFinite(leverage) || leverage <= 0) return null;
+    if (!Number.isFinite(leverage) || leverage < leverageBounds.min || leverage > leverageBounds.max) return null;
     return () => planAdjustPositionLeverage({ ...common, leverage });
-  }, [action, fraction, leverage, selected, slippage, token, validAmount, wallet.address]);
+  }, [action, fraction, leverage, leverageBounds, selected, selectedStale, slippage, token, validAmount, wallet.address]);
 
   return (
     <AppShell title="Positions">
@@ -150,31 +136,40 @@ export default function PositionsPage() {
         </div>
         {!wallet.address ? (
           <WalletConnectCTA ready={wallet.ready} authenticated={wallet.authenticated} body="Choose or connect a wallet to see and manage your open positions." />
-        ) : loading && !positions.length ? (
-          <LoadingRegion label="Reading positions" className="flex flex-col gap-3.5"><Skeleton className="h-24" /><Skeleton className="h-48" /></LoadingRegion>
-        ) : error ? (
-          <EmptyState icon={RefreshCw} title="Position read unavailable" body={error} action={<Button onClick={() => void load()}>Retry</Button>} />
-        ) : !positions.length ? (
-          <EmptyState icon={Layers2} title="No open positions" body="Open an ETH or BTC position to get started." action={<Link href="/trade" className="button button-primary flex min-h-12 items-center justify-center rounded-xl px-4 font-semibold">Open a position</Link>} />
         ) : (
+          <ProtocolPositionNotice
+            status={positionState.status}
+            failedGroups={positionState.failedGroups}
+            hasPositions={positions.length > 0}
+            refreshing={positionState.refreshing}
+            onRefresh={() => void positionState.refresh()}
+          />
+        )}
+        {wallet.address && positionState.status === 'loading' && !positions.length ? (
+          <div className="flex flex-col gap-3"><ProtocolPositionSkeleton /><ProtocolPositionSkeleton /></div>
+        ) : wallet.address && positionState.status === 'unavailable' && !positions.length ? (
+          <EmptyState icon={Layers2} title="Position state unavailable" body="FxAeon could not verify any position pool. Your wallet remains connected; retry when Ethereum responds." />
+        ) : wallet.address && positionState.status === 'partial' && !positions.length ? (
+          <EmptyState icon={Layers2} title="No positions in verified pools" body="At least one position pool is unavailable, so FxAeon cannot confirm that this wallet has no open positions." />
+        ) : wallet.address && positionState.status === 'ready' && !positions.length ? (
+          <EmptyState icon={Layers2} title="No open positions" body="Open an ETH or BTC position to get started." action={<Link href="/trade" className="button button-primary flex min-h-12 items-center justify-center rounded-xl px-4 font-semibold">Open a position</Link>} />
+        ) : wallet.address && positions.length > 0 ? (
           <>
-            <div className="flex flex-col gap-2" role="radiogroup" aria-label="Open positions">
-              {positions.map((position) => {
-                const active = positionKey(position) === selectedKey;
-                const leverageValue = position.side === 'short' ? position.info.lsdLeverage : position.info.currentLeverage;
-                return (
-                  <button key={positionKey(position)} type="button" role="radio" aria-checked={active} onClick={() => setSelectedKey(positionKey(position))} className={`glass-press flex min-h-[72px] w-full items-center justify-between rounded-xl border px-3.5 py-3 text-left ${active ? 'border-mint bg-[var(--mint-dim)]' : 'border-[var(--line)] bg-[var(--surface)]'}`}>
-                    <span className="min-w-0">
-                      <span className="flex items-center gap-2"><span className="text-[15px] font-semibold">{position.market} {position.side === 'long' ? 'Long' : 'Short'}</span><span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${position.side === 'long' ? 'bg-[var(--success-dim)] text-success' : 'bg-[var(--danger-dim)] text-danger'}`}>{position.side}</span></span>
-                      <span className="mt-1 block truncate text-[11px] text-mut">{formatAmount(position.info.rawColls, positionCollateralDecimals(position))} {position.info.rawCollsToken} · {formatUsd(positionFieldUsd(position, 'collateral', prices))} · #{position.info.positionId}</span>
-                    </span>
-                    <span className="ml-3 shrink-0 text-[17px] font-semibold tabular-nums">{leverageValue.toFixed(2)}×</span>
-                  </button>
-                );
-              })}
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" aria-label="Open positions">
+              {positions.map((position) => (
+                <ProtocolPositionCard
+                  key={positionKey(position)}
+                  position={position}
+                  compact={positionKey(position) !== selectedKey}
+                  selected={positionKey(position) === selectedKey}
+                  stale={positionIsStale(position, positionState.failedGroups)}
+                  onSelect={() => setSelectedKey(positionKey(position))}
+                />
+              ))}
             </div>
 
-            {selected && <Card className="p-4"><div className="flex items-start justify-between gap-3"><div><span className="text-[12px] text-mut">Selected</span><h2 className="mt-0.5 text-[18px] font-semibold">{selected.market} {selected.side === 'long' ? 'Long' : 'Short'}</h2><p className="mt-0.5 text-[11px] text-mut">Position #{selected.info.positionId} · {selected.market} {formatUsdPrice(prices[selected.market === 'ETH' ? 'ETH' : 'WBTC'])}</p></div><button type="button" onClick={() => void load()} className="flex h-11 w-11 items-center justify-center rounded-xl text-mut hover:bg-[var(--mint-dim)] hover:text-mint" aria-label="Refresh positions"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button></div><div className="mt-4 grid grid-cols-2 gap-2"><Metric label="Collateral" value={`${formatAmount(selected.info.rawColls, positionCollateralDecimals(selected))} ${selected.info.rawCollsToken}`} sub={formatUsd(positionFieldUsd(selected, 'collateral', prices))} /><Metric label="Debt" value={`${formatAmount(selected.info.rawDebts, positionDebtDecimals(selected))} ${selected.info.rawDebtsToken}`} sub={formatUsd(positionFieldUsd(selected, 'debt', prices))} /><Metric label="Leverage" value={`${(selected.side === 'short' ? selected.info.lsdLeverage : selected.info.currentLeverage).toFixed(2)}×`} /></div>{selected.side === 'long' && <Link href="/borrow" className="glass-press mt-3 flex min-h-11 items-center justify-between rounded-xl border border-[var(--line)] px-3 text-[12px] font-semibold text-mint">Manage debt <span aria-hidden="true">→</span></Link>}</Card>}
+            {selected && <div className="mt-2 flex flex-wrap items-center justify-between gap-2"><h2 className="text-[14px] font-semibold">Manage {selected.market} {selected.side} · #{selected.info.positionId}</h2>{selected.side === 'long' && <Link href="/borrow" className="glass-press inline-flex min-h-11 items-center gap-2 rounded-xl px-2 text-[12px] font-semibold text-mint">Manage debt <span aria-hidden="true">→</span></Link>}</div>}
+            {selectedStale && <p role="status" className="text-[12px] text-warn">Refresh this position before reviewing an action. Its retained balances are not a live quote.</p>}
 
             <Segmented value={action} onChange={setAction} ariaLabel="Position action" options={[{ value: 'increase', label: 'Increase' }, { value: 'reduce', label: 'Reduce' }, { value: 'leverage', label: 'Leverage' }]} />
             <Card className="p-4">
@@ -183,24 +178,12 @@ export default function PositionsPage() {
               {action === 'leverage' && <div className="flex flex-col gap-4"><Header icon={Gauge} title="Adjust leverage" body="Set the target leverage for this position." /><LeverageField label={selected?.side === 'short' ? 'Target LSD leverage' : 'Target leverage'} value={leverage} onChange={setLeverage} min={leverageBounds.min} max={leverageBounds.max} error={leverageError} /></div>}
               <details className="group mt-4 rounded-xl border border-[var(--line)] px-3"><summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-[13px] font-semibold [&::-webkit-details-marker]:hidden">Advanced <span aria-hidden="true" className="text-mut transition-transform group-open:rotate-180">⌄</span></summary><div className="border-t border-[var(--line)] py-3"><SlippageField value={slippage} onChange={setSlippage} max={MAX_FX_SLIPPAGE_PERCENT} /></div></details>
             </Card>
-            <ActionReview planBuilder={planBuilder} label={action === 'reduce' && fraction === 100 ? 'Review close' : `Review ${action}`} operationLabel={action === 'reduce' && fraction === 100 ? `Close ${selected?.market} position` : `${action[0].toUpperCase()}${action.slice(1)} ${selected?.market} position`} onComplete={load} />
+            <ActionReview planBuilder={planBuilder} label={action === 'reduce' && fraction === 100 ? 'Review close' : `Review ${action}`} operationLabel={action === 'reduce' && fraction === 100 ? `Close ${selected?.market} position` : `${action[0].toUpperCase()}${action.slice(1)} ${selected?.market} position`} onComplete={async () => { await positionState.refresh(); }} />
           </>
-        )}
+        ) : null}
       </div>
     </AppShell>
   );
 }
 
 function Header({ icon: Icon, title, body }: { icon: typeof ArrowUpRight; title: string; body: string }) { return <div><div className="flex items-center gap-2"><Icon className="h-4 w-4 text-mint" aria-hidden="true" /><h2 className="text-[15px] font-semibold">{title}</h2></div><p className="mt-1 text-[12px] text-mut">{body}</p></div>; }
-function Metric({ label, value, sub }: { label: string; value: string; sub?: string }) { return <div className="rounded-xl bg-[rgba(255,255,255,.035)] p-3"><span className="block text-[11px] text-mut">{label}</span><span className="mt-1 block truncate text-[13px] font-semibold tabular-nums" title={value}>{value}</span>{sub && <span className="mt-1 block text-[10.5px] text-mut tabular-nums">{sub}</span>}</div>; }
-
-function positionFieldUsd(position: UiPosition, field: 'collateral' | 'debt', prices: UsdPriceMap): number | null {
-  const symbol = field === 'collateral' ? position.info.rawCollsToken : position.info.rawDebtsToken;
-  const key = priceKeyForSymbol(symbol);
-  if (!key) return null;
-  return usdValueForUnits(
-    field === 'collateral' ? position.info.rawColls : position.info.rawDebts,
-    field === 'collateral' ? positionCollateralDecimals(position) : positionDebtDecimals(position),
-    prices[key],
-  );
-}

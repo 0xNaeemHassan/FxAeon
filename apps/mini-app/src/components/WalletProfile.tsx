@@ -3,11 +3,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
-import { Activity, ChevronRight, RefreshCw, Settings, Wallet, X } from 'lucide-react';
+import { Activity, ChevronRight, ExternalLink, RefreshCw, Settings, Wallet, X, type LucideIcon } from 'lucide-react';
 import { formatUnits } from 'viem';
 import TokenIcon from '@/components/TokenIcon';
 import { AddressChip } from '@/components/ui';
 import { useUsdPrices } from '@/components/PriceProvider';
+import {
+  positionIsStale,
+  ProtocolPositionCard,
+  ProtocolPositionNotice,
+  ProtocolPositionSkeleton,
+} from '@/components/ProtocolPositionCard';
+import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
 import { readWalletBalances, type WalletBalancesResult, type WalletTokenBalance } from '@/lib/fx';
 import { formatUsd, priceKeyForSymbol, usdValueForUnits } from '@/lib/prices';
 import { haptic } from '@/lib/telegram';
@@ -15,49 +22,87 @@ import { usePrivyWallet } from '@/lib/wallet';
 
 export default function WalletProfile() {
   const wallet = usePrivyWallet();
+  const positionState = useProtocolPositions();
+  const refreshPositions = positionState.refresh;
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [balances, setBalances] = useState<WalletBalancesResult | null>(null);
   const [error, setError] = useState('');
+  const openerRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const balanceRequestRef = useRef(0);
   const { prices } = useUsdPrices();
 
   const load = useCallback(async () => {
     if (!wallet.address) return;
+    const requestId = ++balanceRequestRef.current;
     setLoading(true);
     setError('');
     try {
-      setBalances(await readWalletBalances(wallet.address));
+      const result = await readWalletBalances(wallet.address);
+      if (requestId === balanceRequestRef.current) setBalances(result);
     } catch {
-      setBalances(null);
-      setError('Wallet balances are temporarily unavailable.');
+      if (requestId === balanceRequestRef.current) {
+        setBalances(null);
+        setError('Wallet balances are temporarily unavailable.');
+      }
     } finally {
-      setLoading(false);
+      if (requestId === balanceRequestRef.current) setLoading(false);
     }
   }, [wallet.address]);
 
+  useEffect(() => () => { balanceRequestRef.current += 1; }, [wallet.address]);
+
+  useEffect(() => {
+    if (open) {
+      void load();
+      void refreshPositions();
+    }
+  }, [load, open, refreshPositions]);
+
   useEffect(() => {
     if (!open) return;
-    void load();
+    const restoreFocusTo = openerRef.current;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    const close = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = [...(dialogRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ) ?? [])].filter((element) => element.getAttribute('aria-hidden') !== 'true');
+      if (focusable.length === 0) {
+        event.preventDefault();
+        closeRef.current?.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || !dialogRef.current?.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
-    document.addEventListener('keydown', close);
+    document.addEventListener('keydown', handleKeyDown);
     window.requestAnimationFrame(() => closeRef.current?.focus());
     return () => {
       document.body.style.overflow = previousOverflow;
-      document.removeEventListener('keydown', close);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.requestAnimationFrame(() => restoreFocusTo?.focus());
     };
-  }, [load, open]);
+  }, [open]);
 
   const nonZero = useMemo(() => balances?.balances.filter((balance) => balance.amountWei > 0n) ?? [], [balances]);
-  const totalUsd = useMemo(() => nonZero.reduce((total, balance) => {
-    const priceKey = priceKeyForSymbol(balance.key);
-    const value = usdValueForUnits(balance.amountWei, balance.decimals, priceKey ? prices[priceKey] : undefined);
-    return value === null ? total : total + value;
-  }, 0), [nonZero, prices]);
+  const valuation = useMemo(() => walletValuation(balances, prices), [balances, prices]);
 
   if (!wallet.ready) return <span className="h-11 w-11 animate-pulse rounded-xl bg-[var(--surface)]" aria-label="Loading wallet" />;
   if (!wallet.address) {
@@ -71,6 +116,7 @@ export default function WalletProfile() {
   return (
     <>
       <button
+        ref={openerRef}
         type="button"
         aria-label="Open wallet profile"
         onClick={() => { setOpen(true); haptic('light'); }}
@@ -81,7 +127,7 @@ export default function WalletProfile() {
       </button>
       {open && typeof document !== 'undefined' && createPortal(
         <div className="wallet-profile-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
-          <aside role="dialog" aria-modal="true" aria-labelledby="wallet-profile-title" className="wallet-profile-sheet" onMouseDown={(event) => event.stopPropagation()}>
+          <aside ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="wallet-profile-title" className="wallet-profile-sheet" onMouseDown={(event) => event.stopPropagation()}>
             <header className="wallet-profile-header">
               <div>
                 <p className="page-kicker">FxAeon account</p>
@@ -93,25 +139,47 @@ export default function WalletProfile() {
             <div className="wallet-profile-summary">
               <div className="flex items-center justify-between gap-3">
                 <AddressChip address={wallet.address} />
-                <button type="button" onClick={() => void load()} disabled={loading} aria-label="Refresh wallet profile" className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-mut hover:text-mint"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button>
+                <div className="flex items-center gap-1">
+                  <a href={`https://etherscan.io/address/${wallet.address}`} target="_blank" rel="noopener noreferrer" aria-label="View wallet on Etherscan" className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-mut hover:text-mint"><ExternalLink className="h-4 w-4" /></a>
+                  <button type="button" onClick={() => void Promise.all([load(), refreshPositions()])} disabled={loading || positionState.refreshing} aria-label="Refresh wallet profile" className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-mut hover:text-mint"><RefreshCw className={`h-4 w-4 ${loading || positionState.refreshing ? 'animate-spin' : ''}`} /></button>
+                </div>
               </div>
               <p className="mt-5 text-[12px] font-medium text-mut">Tracked wallet value</p>
-              <p className="text-display mt-1 text-[38px] font-semibold tabular-nums">{nonZero.length && totalUsd > 0 ? formatUsd(totalUsd) : '—'}</p>
-              <p className="mt-1 text-[11px] text-mut">Current supported assets · USD prices update every 30 seconds</p>
+              <p className="text-display mt-1 text-[38px] font-semibold tabular-nums">{!loading && valuation.complete ? formatUsd(valuation.totalUsd) : '—'}</p>
+              <p className={`mt-1 text-[11px] ${!loading && !valuation.complete ? 'text-warn' : 'text-mut'}`} aria-live="polite">
+                {loading ? 'Reading supported balances…' : valuation.reason || 'Complete supported-asset total · USD prices update every 30 seconds'}
+              </p>
             </div>
+
+            <section className="wallet-profile-assets" aria-labelledby="wallet-profile-positions-title">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div><p className="page-kicker">f(x) protocol</p><h3 id="wallet-profile-positions-title" className="mt-1 text-[15px] font-semibold">Open positions</h3></div>
+                <Link href="/positions" onClick={() => setOpen(false)} className="glass-press inline-flex min-h-11 items-center gap-1 px-1 text-[11px] font-semibold text-mint">{positionState.positions.length > 2 ? `View all ${positionState.positions.length}` : 'Manage'} <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" /></Link>
+              </div>
+              <div className="flex flex-col gap-2">
+                <ProtocolPositionNotice status={positionState.status} failedGroups={positionState.failedGroups} hasPositions={positionState.positions.length > 0} refreshing={positionState.refreshing} onRefresh={() => void refreshPositions()} compact />
+                {positionState.status === 'loading' && !positionState.positions.length ? <ProtocolPositionSkeleton compact /> : positionState.positions.length > 0 ? (
+                  positionState.positions.slice(0, 2).map((position) => <ProtocolPositionCard key={`${position.market}:${position.side}:${position.info.positionId}`} position={position} compact href="/positions" onNavigate={() => setOpen(false)} stale={positionIsStale(position, positionState.failedGroups)} />)
+                ) : positionState.status === 'ready' ? <p className="rounded-xl border border-[var(--line)] p-3 text-[12px] text-mut">No open protocol positions.</p> : null}
+              </div>
+            </section>
 
             <div className="wallet-profile-assets" aria-label="Wallet assets">
               {loading && !balances && <div className="h-28 animate-pulse rounded-xl bg-[var(--surface-2)]" />}
+              {loading && balances && <p role="status" className="text-[11px] text-mut">Refreshing · showing last verified asset balances.</p>}
               {!loading && error && <p role="status" className="rounded-xl bg-[var(--warn-dim)] p-3 text-[12px] text-warn">{error}</p>}
-              {!loading && balances && nonZero.length === 0 && <p className="p-3 text-[12px] text-mut">No supported balances found.</p>}
+              {!loading && balances && nonZero.length === 0 && <p className="p-3 text-[12px] text-mut">{balances.failedTokens.length > 0 ? 'No positive balances in the assets verified so far.' : 'No supported balances found.'}</p>}
               {nonZero.map((balance) => {
                 const priceKey = priceKeyForSymbol(balance.key);
                 return <WalletAssetRow key={balance.key} balance={balance} price={priceKey ? prices[priceKey] : undefined} />;
               })}
+              {!loading && balances && balances.failedTokens.length > 0 && (
+                <p role="status" className="rounded-xl bg-[var(--warn-dim)] p-3 text-[12px] text-warn">Some supported balance reads failed. Asset rows may be incomplete, so no wallet total is shown.</p>
+              )}
             </div>
 
             <nav className="wallet-profile-links" aria-label="Wallet profile actions">
-              <ProfileLink href="/activity" icon={Activity} label="Activity" body="Pending and confirmed wallet transactions" onNavigate={() => setOpen(false)} />
+              <ProfileLink href="/activity" icon={Activity} label="Activity" body="This device's journal, checked against chain receipts" onNavigate={() => setOpen(false)} />
               <ProfileLink href="/settings" icon={Settings} label="Wallet settings" body="Change wallet, slippage, or sign out" onNavigate={() => setOpen(false)} />
             </nav>
           </aside>
@@ -135,7 +203,7 @@ function WalletAssetRow({ balance, price }: { balance: WalletTokenBalance; price
   );
 }
 
-function ProfileLink({ href, icon: Icon, label, body, onNavigate }: { href: string; icon: typeof Activity; label: string; body: string; onNavigate: () => void }) {
+function ProfileLink({ href, icon: Icon, label, body, onNavigate }: { href: string; icon: LucideIcon; label: string; body: string; onNavigate: () => void }) {
   return (
     <Link href={href} onClick={onNavigate} className="glass-press flex min-h-[66px] items-center gap-3 border-b border-[var(--line)] px-1 last:border-b-0">
       <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--mint-dim)] text-mint"><Icon className="h-[18px] w-[18px]" aria-hidden="true" /></span>
@@ -143,6 +211,32 @@ function ProfileLink({ href, icon: Icon, label, body, onNavigate }: { href: stri
       <ChevronRight className="h-4 w-4 text-mut" aria-hidden="true" />
     </Link>
   );
+}
+
+type WalletValuation = {
+  complete: boolean;
+  totalUsd: number | null;
+  reason: string;
+};
+
+function walletValuation(balances: WalletBalancesResult | null, prices: ReturnType<typeof useUsdPrices>['prices']): WalletValuation {
+  if (!balances) return { complete: false, totalUsd: null, reason: 'Supported balances are unavailable.' };
+  if (balances.failedTokens.length > 0) {
+    return { complete: false, totalUsd: null, reason: 'Some supported balances could not be verified, so the total is hidden.' };
+  }
+  const held = balances.balances.filter((balance) => balance.amountWei > 0n);
+  const values = held.map((balance) => {
+    const priceKey = priceKeyForSymbol(balance.key);
+    return usdValueForUnits(balance.amountWei, balance.decimals, priceKey ? prices[priceKey] : undefined);
+  });
+  if (values.some((value) => value === null)) {
+    return { complete: false, totalUsd: null, reason: 'A validated USD price is missing for a held asset, so the total is hidden.' };
+  }
+  return {
+    complete: true,
+    totalUsd: values.reduce<number>((total, value) => total + (value ?? 0), 0),
+    reason: '',
+  };
 }
 
 function formatTokenAmount(value: string): string {
