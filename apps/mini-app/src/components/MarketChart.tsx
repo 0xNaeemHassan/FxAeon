@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Activity, BarChart3, RefreshCw, TrendingDown, TrendingUp } from 'lucide-react';
+import { Activity, BarChart3, ChevronDown, RefreshCw, TrendingDown, TrendingUp } from 'lucide-react';
 import TokenIcon from '@/components/TokenIcon';
 import { useUsdPrices } from '@/components/PriceProvider';
 import {
@@ -84,6 +84,10 @@ export function useMarketHistory(market: MarketSymbol, range: MarketRange): Hist
 
 export function TradeMarketChart({ market }: { market: MarketSymbol }) {
   const [range, setRange] = useState<MarketRange>('1D');
+  const [isMobile, setIsMobile] = useState(false);
+  const [mobileExpanded, setMobileExpanded] = useState(false);
+  const chartId = useId();
+  const expanded = !isMobile || mobileExpanded;
   const history = useMarketHistory(market, range);
   const { prices } = useUsdPrices();
   const livePrice = prices[market === 'ETH' ? 'ETH' : 'WBTC'] ?? history.snapshot?.currentPrice;
@@ -91,8 +95,16 @@ export function TradeMarketChart({ market }: { market: MarketSymbol }) {
   const positive = change !== undefined && change >= 0;
   const ChangeIcon = positive ? TrendingUp : TrendingDown;
 
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 640px)');
+    const updateViewport = () => setIsMobile(media.matches);
+    updateViewport();
+    media.addEventListener('change', updateViewport);
+    return () => media.removeEventListener('change', updateViewport);
+  }, []);
+
   return (
-    <section className="market-chart-panel" aria-label={`${market} market chart`}>
+    <section className="market-chart-panel" data-mobile-expanded={mobileExpanded} aria-label={`${market} market chart`}>
       <div className="market-chart-header">
         <div className="flex min-w-0 items-center gap-3">
           <span className="market-chart-token"><TokenIcon symbol={market === 'BTC' ? 'WBTC' : 'ETH'} size={34} /></span>
@@ -109,33 +121,47 @@ export function TradeMarketChart({ market }: { market: MarketSymbol }) {
         </div>
       </div>
 
-      <div className="market-chart-frame">
-        {history.status === 'loading' && <ChartSkeleton />}
-        {history.status === 'unavailable' && (
-          <div className="market-chart-empty" role="status">
-            <BarChart3 className="h-6 w-6 text-mut" aria-hidden="true" />
-            <span><strong>Chart temporarily unavailable</strong><small>Live trading controls remain available.</small></span>
-            <button type="button" aria-label="Retry market chart" onClick={history.retry} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-lg text-mut hover:text-mint"><RefreshCw className="h-4 w-4" /></button>
-          </div>
-        )}
-        {history.status === 'ready' && history.snapshot && <MarketChartGraphic snapshot={history.snapshot} />}
-      </div>
+      <button
+        type="button"
+        className="market-chart-toggle"
+        aria-expanded={expanded}
+        aria-controls={chartId}
+        onClick={() => { setMobileExpanded((current) => !current); haptic('selection'); }}
+      >
+        <BarChart3 className="h-4 w-4" aria-hidden="true" />
+        <span>{expanded ? 'Hide chart' : 'Show chart'}</span>
+        <ChevronDown className="market-chart-toggle-chevron h-4 w-4" aria-hidden="true" />
+      </button>
 
-      <div className="market-chart-footer">
-        <span className="inline-flex items-center gap-1.5 text-[10px] text-mut"><Activity className="h-3.5 w-3.5 text-mint" aria-hidden="true" />CoinGecko history · display only</span>
-        <div role="radiogroup" aria-label="Chart range" className="chart-range-tabs">
-          {RANGE_OPTIONS.map((option) => (
-            <button
-              key={option}
-              type="button"
-              role="radio"
-              aria-checked={range === option}
-              onClick={() => { setRange(option); haptic('selection'); }}
-              className={range === option ? 'chart-range-active' : ''}
-            >
-              {option}
-            </button>
-          ))}
+      <div id={chartId} className="market-chart-content" hidden={!expanded}>
+        <div className="market-chart-frame">
+          {history.status === 'loading' && <ChartSkeleton />}
+          {history.status === 'unavailable' && (
+            <div className="market-chart-empty" role="status">
+              <BarChart3 className="h-6 w-6 text-mut" aria-hidden="true" />
+              <span><strong>Chart temporarily unavailable</strong><small>Live trading controls remain available.</small></span>
+              <button type="button" aria-label="Retry market chart" onClick={history.retry} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-lg text-mut hover:text-mint"><RefreshCw className="h-4 w-4" /></button>
+            </div>
+          )}
+          {history.status === 'ready' && history.snapshot && <MarketChartGraphic snapshot={history.snapshot} />}
+        </div>
+
+        <div className="market-chart-footer">
+          <span className="inline-flex items-center gap-1.5 text-[10px] text-mut"><Activity className="h-3.5 w-3.5 text-mint" aria-hidden="true" />CoinGecko history · display only</span>
+          <div role="radiogroup" aria-label="Chart range" className="chart-range-tabs">
+            {RANGE_OPTIONS.map((option) => (
+              <button
+                key={option}
+                type="button"
+                role="radio"
+                aria-checked={range === option}
+                onClick={() => { setRange(option); haptic('selection'); }}
+                className={range === option ? 'chart-range-active' : ''}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </section>

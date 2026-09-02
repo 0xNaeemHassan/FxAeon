@@ -36,6 +36,7 @@ lerna-debug.log*
 coverage/
 .nyc_output/
 *.lcov
+/artifacts/
 
 # OS
 .DS_Store

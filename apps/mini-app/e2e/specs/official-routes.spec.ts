@@ -138,6 +138,7 @@ test.describe("connected browser wallet flows", () => {
     await page.getByRole("button", { name: "Open wallet profile" }).click();
     const profile = page.getByRole("dialog", { name: "Wallet profile" });
     await expect(profile).toBeVisible();
+    await expect(profile.getByRole("link", { name: "View wallet on Etherscan" })).toHaveAttribute("href", /etherscan\.io\/address\/0x930f/i);
     await expect(profile.getByRole("link", { name: /Activity/ })).toBeVisible();
     await profile.getByRole("link", { name: /Activity/ }).click();
     await expect(page).toHaveURL(/\/activity\/?$/);
@@ -147,10 +148,19 @@ test.describe("connected browser wallet flows", () => {
 
   test("trade exposes the full official input set and clamps an over-limit target", async ({ page, requests }) => {
     await page.goto("/trade", { waitUntil: "domcontentloaded" });
+    // Restoring the fixture's account starts a new wallet-scoped form session.
+    // Establish this connected-flow precondition before interacting with it.
+    await expect(page.getByRole("button", { name: "Open wallet profile" })).toBeVisible();
     const asset = page.getByLabel("Input asset");
     await asset.click();
     const picker = page.getByRole("listbox", { name: "Input asset options" });
     await expect(picker.getByRole("option")).toHaveCount(7);
+    const search = page.getByRole("searchbox", { name: "Search assets" });
+    await expect(search).toBeFocused();
+    await search.fill("tether");
+    await expect(picker.getByRole("option")).toHaveCount(1);
+    await expect(picker.getByRole("option", { name: /^USDT/i })).toBeVisible();
+    await search.fill("");
     for (const option of ["ETH", "WETH", "stETH", "wstETH", "USDC", "USDT", "fxUSD"]) {
       await expect(picker.getByRole("option", { name: new RegExp(`^${option}`) })).toBeVisible();
     }
@@ -172,6 +182,56 @@ test.describe("connected browser wallet flows", () => {
     assertNoBackendRequests(requests);
   });
 
+  test("skip link stays hidden during connected Trade scrolling and remains keyboard accessible", async ({ page, requests }) => {
+    await page.goto("/trade", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("button", { name: "Open wallet profile" })).toBeVisible();
+    const skipLink = page.getByRole("link", { name: "Skip to main content", exact: true });
+    const brandLink = page.getByRole("link", { name: "FxAeon portfolio", exact: true });
+    const main = page.locator("#main-content");
+    const assertSkipLinkHidden = async () => {
+      // Off-screen translation alone is insufficient: the mobile compositor
+      // must have neither a painted nor pointer-interactive resting overlay.
+      await expect(skipLink).not.toBeFocused();
+      await expect(skipLink).toHaveCSS("opacity", "0");
+      await expect(skipLink).toHaveCSS("pointer-events", "none");
+    };
+
+    await assertSkipLinkHidden();
+    await page.getByRole("spinbutton", { name: "Target leverage", exact: true }).scrollIntoViewIfNeeded();
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+    await assertSkipLinkHidden();
+
+    const asset = page.getByLabel("Input asset");
+    await asset.click();
+    await expect(page.getByRole("searchbox", { name: "Search assets" })).toBeFocused();
+    await assertSkipLinkHidden();
+    await page.getByRole("listbox", { name: "Input asset options" }).getByRole("option", { name: /^USDC/i }).click();
+    await expect(asset).toContainText("USDC");
+    await assertSkipLinkHidden();
+
+    // Enter the skip link through real keyboard navigation from the next
+    // focusable link, not a forced click on an otherwise invisible element.
+    await brandLink.focus();
+    await page.keyboard.press("Shift+Tab");
+    await expect(skipLink).toBeFocused();
+    await expect(skipLink).toHaveCSS("opacity", "1");
+    await expect(skipLink).toHaveCSS("pointer-events", "auto");
+    await expect(skipLink).toBeInViewport();
+
+    await page.keyboard.press("Tab");
+    await expect(brandLink).toBeFocused();
+    await assertSkipLinkHidden();
+
+    await page.keyboard.press("Shift+Tab");
+    await expect(skipLink).toBeFocused();
+    await expect(skipLink).toHaveAttribute("href", "#main-content");
+    await page.keyboard.press("Enter");
+    await expect(main).toBeFocused();
+    await expect(page).toHaveURL(/\/trade\/?#main-content$/);
+    await assertSkipLinkHidden();
+    assertNoBackendRequests(requests);
+  });
+
 });
 
 test.describe("live USD context", () => {
@@ -187,12 +247,25 @@ test.describe("live USD context", () => {
   test("shows market prices, input USD value, token prices, and a leverage slider", async ({ page, requests }) => {
     await page.goto("/trade", { waitUntil: "domcontentloaded" });
     await expect(page.getByText("$2,400.00", { exact: true }).first()).toBeVisible();
+    const chartContent = page.locator(".market-chart-content");
+    const showChart = page.getByRole("button", { name: "Show chart", exact: true });
+    await expect(showChart).toHaveAttribute("aria-expanded", "false");
+    await expect(chartContent).toBeHidden();
+    await expect(showChart).toHaveAttribute("aria-controls", (await chartContent.getAttribute("id"))!);
+    expect((await showChart.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await showChart.click();
+    await expect(page.getByRole("button", { name: "Hide chart", exact: true })).toHaveAttribute("aria-expanded", "true");
     await expect(page.getByRole("img", { name: /^ETH 1D USD price chart/ })).toBeVisible();
+    await expect.poll(async () => page.locator(".market-chart-frame").evaluate((element) => element.getBoundingClientRect().height)).toBeLessThanOrEqual(170);
     await page.getByRole("radio", { name: "7D" }).click();
     await expect(page.getByRole("img", { name: /^ETH 7D USD price chart/ })).toBeVisible();
     await page.getByRole("radio", { name: "BTC" }).click();
     await expect(page.getByRole("img", { name: /^BTC 7D USD price chart/ })).toBeVisible();
     await page.getByRole("radio", { name: "ETH" }).click();
+    await page.getByRole("button", { name: "Hide chart", exact: true }).click();
+    await expect(chartContent).toBeHidden();
+    await expect(showChart).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByLabel("Input asset")).toBeVisible();
     await page.getByLabel("Amount in ETH").fill("2");
     await expect(page.getByText("≈ $4,800.00", { exact: true })).toBeVisible();
     await page.getByLabel("Input asset").click();
@@ -202,6 +275,41 @@ test.describe("live USD context", () => {
     await expect(slider).toBeVisible();
     await slider.fill("3");
     await expect(page.getByRole("spinbutton", { name: "Target leverage", exact: true })).toHaveValue("3");
+    assertNoBackendRequests(requests);
+  });
+
+  test("shows the desktop chart by default and keeps its disclosure state correct across resizing", async ({ page, requests }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/trade", { waitUntil: "domcontentloaded" });
+    const chartContent = page.locator(".market-chart-content");
+    const toggle = page.locator(".market-chart-toggle");
+    await expect(page.getByRole("img", { name: /^ETH 1D USD price chart/ })).toBeVisible();
+    await expect(toggle).toBeHidden();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    await page.setViewportSize({ width: 640, height: 844 });
+    await expect(toggle).toBeVisible();
+    await expect(toggle).toHaveText("Show chart");
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(chartContent).toBeHidden();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(chartContent).toBeVisible();
+
+    await page.setViewportSize({ width: 641, height: 844 });
+    await expect(chartContent).toBeVisible();
+    await expect(toggle).toBeHidden();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(toggle).toHaveText("Hide chart");
+    await toggle.click();
+    await expect(chartContent).toBeHidden();
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await expect(chartContent).toBeVisible();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(chartContent).toBeHidden();
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
     assertNoBackendRequests(requests);
   });
 
@@ -282,6 +390,9 @@ test.describe("official theme control", () => {
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("link", { name: "Connect wallet", exact: true })).toHaveCSS("color", "rgb(255, 255, 255)");
+    await page.goto("/more", { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "Switch to dark theme" }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     assertNoBackendRequests(requests);

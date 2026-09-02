@@ -86,6 +86,63 @@ export interface UiPosition {
   info: PositionInfo;
 }
 
+export interface PositionGroup {
+  market: UiMarket;
+  side: UiSide;
+}
+
+export interface PositionGroupFailure extends PositionGroup {
+  /** Retained for diagnostics; UI callers must pass it through userSafeError. */
+  reason: unknown;
+}
+
+export interface PositionReadResult {
+  positions: UiPosition[];
+  successfulGroups: PositionGroup[];
+  failedGroups: PositionGroupFailure[];
+  status: 'ready' | 'partial' | 'unavailable';
+}
+
+export const POSITION_GROUPS: readonly PositionGroup[] = [
+  { market: 'ETH', side: 'long' },
+  { market: 'ETH', side: 'short' },
+  { market: 'BTC', side: 'long' },
+  { market: 'BTC', side: 'short' },
+] as const;
+
+/** A chain-level failure invalidates every pool, including retained rows. */
+export function unavailablePositionResult(reason: unknown): PositionReadResult {
+  return {
+    positions: [],
+    successfulGroups: [],
+    failedGroups: POSITION_GROUPS.map((group) => ({ ...group, reason })),
+    status: 'unavailable',
+  };
+}
+
+/** Short routes use the SDK's LSD exposure, not collateral/debt leverage. */
+export function positionDisplayLeverage(position: UiPosition): { value: number | null; label: string } {
+  const value = position.side === 'short' ? position.info.lsdLeverage : position.info.currentLeverage;
+  return { value: Number.isFinite(value) && value >= 0 ? value : null, label: position.side === 'short' ? 'LSD leverage' : 'leverage' };
+}
+
+/** Scope asynchronous refreshes to one mounted wallet session. */
+export function createPositionReadGuard() {
+  let active = true;
+  let generation = 0;
+  return {
+    begin: (): number | null => active ? ++generation : null,
+    isCurrent: (request: number): boolean => active && request === generation,
+    activate: (): void => { active = true; },
+    invalidate: (): void => { active = false; generation += 1; },
+  };
+}
+
+export function positionIsStale(position: UiPosition, failedGroups: readonly PositionGroupFailure[]): boolean {
+  const group = positionGroupKey(position);
+  return failedGroups.some((failure) => positionGroupKey(failure) === group);
+}
+
 /**
  * Position contracts expose collateral and debt in their own accounting units.
  * Keep the SDK's returned precision for position fields; it is intentionally
@@ -99,29 +156,75 @@ export function positionTokenDecimals(
   return field === 'collateral' ? position.info.rawCollsDecimals : position.info.rawDebtsDecimals;
 }
 
-export async function readAllPositions(walletAddress: string): Promise<UiPosition[]> {
+/**
+ * Settle every supported position group independently. A transient failure in
+ * one pool must not hide positions already verified in the other pools.
+ * Ordering remains the canonical POSITION_GROUPS order rather than network
+ * completion order, which keeps UI selection and screenshot output stable.
+ */
+export async function settlePositionGroups(
+  readGroup: (group: PositionGroup) => Promise<PositionInfo[]>,
+): Promise<PositionReadResult> {
+  const settled = await Promise.allSettled(POSITION_GROUPS.map(async (group) => {
+    const positions = await readGroup(group);
+    if (!Array.isArray(positions)) throw new TypeError('Position group response must be an array');
+    return { group, positions };
+  }));
+
+  const positions: UiPosition[] = [];
+  const successfulGroups: PositionGroup[] = [];
+  const failedGroups: PositionGroupFailure[] = [];
+
+  settled.forEach((result, index) => {
+    const group = POSITION_GROUPS[index];
+    if (result.status === 'rejected') {
+      failedGroups.push({ ...group, reason: result.reason });
+      return;
+    }
+    successfulGroups.push(group);
+    positions.push(...result.value.positions
+      // The indexer retains closed NFT positions for history. The Positions
+      // surface is an open-position workspace, so omit records whose accounting
+      // fields are both zero rather than presenting them as actionable exposure.
+      .filter((info) => info.rawColls > 0n || info.rawDebts > 0n)
+      .map((info) => ({ market: group.market, side: group.side, info })));
+  });
+
+  return {
+    positions,
+    successfulGroups,
+    failedGroups,
+    status: failedGroups.length === 0
+      ? 'ready'
+      : successfulGroups.length === 0
+        ? 'unavailable'
+        : 'partial',
+  };
+}
+
+export async function readAllPositionsDetailed(walletAddress: string): Promise<PositionReadResult> {
   await assertConfiguredPublicClientChain(1);
   const sdk = getFxSdk();
-  const requests: Array<{ market: UiMarket; side: UiSide }> = [
-    { market: 'ETH', side: 'long' },
-    { market: 'ETH', side: 'short' },
-    { market: 'BTC', side: 'long' },
-    { market: 'BTC', side: 'short' },
-  ];
-  const results = await Promise.all(requests.map(async (request) => ({
-    ...request,
-    positions: await sdk.getPositions({
-      userAddress: walletAddress,
-      market: request.market,
-      type: request.side,
-    }),
-  })));
-  return results.flatMap((result) => result.positions
-    // The indexer retains closed NFT positions for history. The Positions
-    // surface is an open-position workspace, so omit records whose accounting
-    // fields are both zero rather than presenting them as actionable exposure.
-    .filter((info) => info.rawColls > 0n || info.rawDebts > 0n)
-    .map((info) => ({ market: result.market, side: result.side, info })));
+  return settlePositionGroups((group) => sdk.getPositions({
+    userAddress: walletAddress,
+    market: group.market,
+    type: group.side,
+  }));
+}
+
+/**
+ * Backwards-compatible position array reader. Partial reads return every
+ * verified position; a total outage still rejects so existing callers cannot
+ * mistake an unavailable RPC/indexer for an empty portfolio.
+ */
+export async function readAllPositions(walletAddress: string): Promise<UiPosition[]> {
+  const result = await readAllPositionsDetailed(walletAddress);
+  if (result.status === 'unavailable') {
+    throw new Error('Position state is unavailable for every supported market', {
+      cause: result.failedGroups.map((failure) => failure.reason),
+    });
+  }
+  return result.positions;
 }
 
 export function positionCollateralDecimals(position: UiPosition): number {
@@ -134,6 +237,49 @@ export function positionDebtDecimals(position: UiPosition): number {
 
 export function positionKey(position: UiPosition): string {
   return `${position.market}:${position.side}:${position.info.positionId}`;
+}
+
+export function positionGroupKey(group: PositionGroup): string {
+  return `${group.market}:${group.side}`;
+}
+
+/**
+ * Reconcile a fresh independently-settled read with the last verified
+ * snapshot. Successful groups replace their previous rows (including an
+ * honestly empty response), while failed groups retain their last verified
+ * rows until that pool can be checked again.
+ */
+export function mergeVerifiedPositions(
+  previous: readonly UiPosition[],
+  result: PositionReadResult,
+): UiPosition[] {
+  const successful = new Set(result.successfulGroups.map(positionGroupKey));
+  const nextByGroup = new Map<string, UiPosition[]>();
+
+  for (const group of POSITION_GROUPS) {
+    nextByGroup.set(positionGroupKey(group), []);
+  }
+  for (const item of previous) {
+    const group = positionGroupKey(item);
+    if (!successful.has(group)) nextByGroup.get(group)?.push(item);
+  }
+  for (const item of result.positions) {
+    const group = positionGroupKey(item);
+    if (successful.has(group)) nextByGroup.get(group)?.push(item);
+  }
+
+  return POSITION_GROUPS.flatMap((group) => nextByGroup.get(positionGroupKey(group)) ?? []);
+}
+
+/** Return only IDs newly verified by this read; retained failed-group data is excluded. */
+export function newlyVerifiedPositions(
+  previous: readonly UiPosition[],
+  result: PositionReadResult,
+  baselineGroups: readonly PositionGroup[] = result.successfulGroups,
+): UiPosition[] {
+  const previousKeys = new Set(previous.map(positionKey));
+  const baselined = new Set(baselineGroups.map(positionGroupKey));
+  return result.positions.filter((position) => baselined.has(positionGroupKey(position)) && !previousKeys.has(positionKey(position)));
 }
 
 /**

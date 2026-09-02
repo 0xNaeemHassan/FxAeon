@@ -18,6 +18,13 @@ import Link from 'next/link';
 import { formatUnits, type Address } from 'viem';
 import { MarketMiniCard } from '@/components/MarketChart';
 import { useUsdPrices } from '@/components/PriceProvider';
+import {
+  positionIsStale,
+  ProtocolPositionCard,
+  ProtocolPositionNotice,
+  ProtocolPositionSkeleton,
+} from '@/components/ProtocolPositionCard';
+import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
 import RecentActivityPreview from '@/components/RecentActivityPreview';
 import TokenIcon from '@/components/TokenIcon';
 import { AddressChip, AppShell, Card, EmptyState, SectionTitle } from '@/components/ui';
@@ -34,7 +41,6 @@ import { usePrivyWallet, useWalletReadyTimeout } from '@/lib/wallet';
 
 const EMPTY_PROTOCOL: ProtocolSnapshot = {
   status: 'idle',
-  positions: null,
   fxSaveShares: null,
   fxSaveAssets: null,
   redeemReady: null,
@@ -73,6 +79,7 @@ export default function PortfolioPage() {
 
 function PortfolioWallet() {
   const walletState = usePrivyWallet();
+  const positionState = useProtocolPositions();
   const { ready, authenticated } = walletState;
   const wallet = walletState.selectedWallet;
   const walletTimedOut = useWalletReadyTimeout(ready && walletState.ready);
@@ -88,28 +95,16 @@ function PortfolioWallet() {
     try {
       await assertConfiguredPublicClientChain(1);
       const sdk = getFxSdk();
-      const [positions, fxSave, redeem, balances] = await Promise.allSettled([
-        Promise.all([
-          sdk.getPositions({ userAddress: wallet.address, market: 'ETH', type: 'long' }),
-          sdk.getPositions({ userAddress: wallet.address, market: 'ETH', type: 'short' }),
-          sdk.getPositions({ userAddress: wallet.address, market: 'BTC', type: 'long' }),
-          sdk.getPositions({ userAddress: wallet.address, market: 'BTC', type: 'short' }),
-        ]),
+      const [fxSave, redeem, balances] = await Promise.allSettled([
         sdk.getFxSaveBalance({ userAddress: wallet.address }),
         sdk.getFxSaveClaimable({ userAddress: wallet.address }),
         readWalletBalances(wallet.address),
       ]);
       if (requestId.current !== activeRequest) return;
 
-      const fulfilled = [positions, fxSave, redeem, balances].filter((result) => result.status === 'fulfilled').length;
+      const fulfilled = [fxSave, redeem, balances].filter((result) => result.status === 'fulfilled').length;
       setProtocol({
-        status: fulfilled === 4 ? 'ready' : fulfilled > 0 ? 'partial' : 'unavailable',
-        positions: positions.status === 'fulfilled'
-          ? positions.value.reduce(
-            (total, marketPositions) => total + marketPositions.filter((position) => position.rawColls > 0n || position.rawDebts > 0n).length,
-            0,
-          )
-          : null,
+        status: fulfilled === 3 ? 'ready' : fulfilled > 0 ? 'partial' : 'unavailable',
         fxSaveShares: fxSave.status === 'fulfilled' ? formatProtocolAmount(fxSave.value.balanceWei) : null,
         fxSaveAssets: fxSave.status === 'fulfilled' && fxSave.value.assetsWei !== undefined
           ? formatProtocolAmount(fxSave.value.assetsWei)
@@ -161,22 +156,34 @@ function PortfolioWallet() {
         onRefresh={() => {
           haptic('light');
           setRefreshing(true);
-          void loadProtocol().finally(() => setRefreshing(false));
+          void Promise.all([loadProtocol(), positionState.refresh()]).finally(() => setRefreshing(false));
         }}
+        positionValue={positionState.status === 'idle' || positionState.status === 'loading'
+          ? '…'
+          : positionState.status === 'ready'
+            ? String(positionState.positions.length)
+            : positionState.status === 'partial' && positionState.positions.length > 0
+              ? `${positionState.positions.length} shown`
+              : positionState.status === 'unavailable' && positionState.lastVerifiedAt !== null
+                ? `${positionState.positions.length} last`
+                : '—'}
       />
 
       <QuickActions />
       <MarketOverview />
 
-      <SectionTitle>Protocol</SectionTitle>
+      <SectionTitle right={<Link href="/positions" className="glass-press flex min-h-11 items-center gap-1 px-1 text-[11px] font-semibold text-mint">{positionState.positions.length > 2 ? `View all ${positionState.positions.length}` : 'Manage positions'} <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" /></Link>}>Protocol positions</SectionTitle>
+      <div className="flex flex-col gap-2.5">
+        <ProtocolPositionNotice status={positionState.status} failedGroups={positionState.failedGroups} hasPositions={positionState.positions.length > 0} refreshing={positionState.refreshing} onRefresh={() => void positionState.refresh()} compact />
+        {positionState.status === 'loading' && !positionState.positions.length ? <ProtocolPositionSkeleton compact /> : positionState.positions.length > 0 ? (
+          positionState.positions.slice(0, 2).map((position) => <ProtocolPositionCard key={`${position.market}:${position.side}:${position.info.positionId}`} position={position} compact href="/positions" stale={positionIsStale(position, positionState.failedGroups)} />)
+        ) : positionState.status === 'ready' ? (
+          <ProtocolCard icon={Layers2} label="Positions" value="0 open" hint="Open an ETH or BTC position" href="/trade" />
+        ) : null}
+      </div>
+
+      <SectionTitle>Protocol tools</SectionTitle>
       <div className="portfolio-protocol-grid">
-        <ProtocolCard
-          icon={Layers2}
-          label="Positions"
-          value={protocol.positions !== null ? `${protocol.positions} open` : loading ? 'Loading…' : 'Unavailable'}
-          hint="ETH and BTC exposure"
-          href="/positions"
-        />
         <ProtocolCard
           icon={PiggyBank}
           label="fxSAVE"
@@ -242,6 +249,7 @@ function SupportedValueCard({
   updatedAt,
   refreshing,
   onRefresh,
+  positionValue,
 }: {
   walletAddress: string;
   protocol: ProtocolSnapshot;
@@ -251,6 +259,7 @@ function SupportedValueCard({
   updatedAt: number | null;
   refreshing: boolean;
   onRefresh: () => void;
+  positionValue: string;
 }) {
   const priceContext = updatedAt
     ? `${priceStatus === 'stale' ? 'Cached prices' : 'Live prices'} · ${new Date(updatedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
@@ -263,7 +272,7 @@ function SupportedValueCard({
           <p className="micro-label">Supported wallet value</p>
           <div className="mt-2"><AddressChip address={walletAddress} /></div>
         </div>
-        <button type="button" aria-label="Refresh portfolio" onClick={onRefresh} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-xl text-mut hover:text-mint">
+        <button type="button" aria-label="Refresh portfolio" onClick={onRefresh} disabled={refreshing} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-xl text-mut hover:text-mint disabled:opacity-50">
           <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
         </button>
       </div>
@@ -285,7 +294,7 @@ function SupportedValueCard({
       </div>
 
       <div className="portfolio-value-metrics">
-        <ValueMetric label="Open positions" value={protocol.positions !== null ? String(protocol.positions) : loading ? '…' : '—'} />
+        <ValueMetric label="Open positions" value={positionValue} />
         <ValueMetric label="fxSAVE assets" value={protocol.fxSaveAssets !== null ? `${protocol.fxSaveAssets} fxUSD` : loading ? '…' : '—'} />
         <ValueMetric label="Supported assets" value={loading ? '…' : String(valuation.assetCount)} />
       </div>
@@ -378,7 +387,7 @@ function WalletBalancesCard({ balances, loading, prices }: { balances: WalletBal
         {!loading && balances && nonZero.length === 0 && (
           <div className="flex items-center gap-3 px-4 py-5">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] text-mut"><Coins className="h-5 w-5" aria-hidden="true" /></span>
-            <span><strong className="block text-[12.5px]">No supported assets found</strong><span className="mt-1 block text-[11px] text-mut">Receive a supported token to see it here.</span></span>
+            <span><strong className="block text-[12.5px]">{balances.failedTokens.length > 0 ? 'No positive balances verified yet' : 'No supported assets found'}</strong><span className="mt-1 block text-[11px] text-mut">{balances.failedTokens.length > 0 ? 'Retry the unavailable asset reads before confirming this wallet is empty.' : 'Receive a supported token to see it here.'}</span></span>
           </div>
         )}
         {!loading && nonZero.length > 0 && (
@@ -427,7 +436,6 @@ function PortfolioLoading() {
 
 type ProtocolSnapshot = {
   status: 'idle' | 'loading' | 'ready' | 'partial' | 'unavailable';
-  positions: number | null;
   fxSaveShares: string | null;
   fxSaveAssets: string | null;
   redeemReady: boolean | null;

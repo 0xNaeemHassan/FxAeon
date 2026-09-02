@@ -59,6 +59,50 @@ diff --git a/dist/index.cjs b/dist/index.cjs
      return poolInfo;
    }
  };
+diff --git a/dist/index.cjs b/dist/index.cjs
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -2874,3 +2874,17 @@
+ var getEncodeMiscData = (minDebtRatio, maxDebtRatio) => {
+-  return cBN(maxDebtRatio).times(cBN(2).pow(60)).plus(minDebtRatio).toFixed(0);
++  // Each bound occupies exactly 60 bits. Decimal's default precision can
++  // round away the low bound when packing the approximately 36-digit word.
++  if (typeof minDebtRatio !== "string" || typeof maxDebtRatio !== "string" || !minDebtRatio || !maxDebtRatio || /\D/.test(minDebtRatio) || /\D/.test(maxDebtRatio)) {
++    throw new TypeError("Debt ratio bounds must be unsigned integer strings");
++  }
++  const min = BigInt(minDebtRatio);
++  const max = BigInt(maxDebtRatio);
++  const limit = 1n << 60n;
++  if (min >= limit || max >= limit) {
++    throw new RangeError("Debt ratio bounds must fit uint60");
++  }
++  if (min > max) {
++    throw new RangeError("Minimum debt ratio cannot exceed maximum debt ratio");
++  }
++  return ((max << 60n) | min).toString();
+ };
+diff --git a/dist/index.js b/dist/index.js
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -2867,3 +2867,17 @@
+ var getEncodeMiscData = (minDebtRatio, maxDebtRatio) => {
+-  return cBN(maxDebtRatio).times(cBN(2).pow(60)).plus(minDebtRatio).toFixed(0);
++  // Each bound occupies exactly 60 bits. Decimal's default precision can
++  // round away the low bound when packing the approximately 36-digit word.
++  if (typeof minDebtRatio !== "string" || typeof maxDebtRatio !== "string" || !minDebtRatio || !maxDebtRatio || /\D/.test(minDebtRatio) || /\D/.test(maxDebtRatio)) {
++    throw new TypeError("Debt ratio bounds must be unsigned integer strings");
++  }
++  const min = BigInt(minDebtRatio);
++  const max = BigInt(maxDebtRatio);
++  const limit = 1n << 60n;
++  if (min >= limit || max >= limit) {
++    throw new RangeError("Debt ratio bounds must fit uint60");
++  }
++  if (min > max) {
++    throw new RangeError("Minimum debt ratio cannot exceed maximum debt ratio");
++  }
++  return ((max << 60n) | min).toString();
+ };
 diff --git a/dist/index.js b/dist/index.js
 --- a/dist/index.js
 +++ b/dist/index.js

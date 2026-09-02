@@ -9,6 +9,7 @@ import PriceProvider from '@/components/PriceProvider';
 import { LocaleProvider } from '@/lib/i18n';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
+const themeInitializer = `(()=>{try{const t=localStorage.getItem('fxaeon_theme_id')==='light'?'light':'dark';const r=document.documentElement;r.dataset.theme=t;r.style.colorScheme=t;}catch{}})();`;
 
 export const metadata: Metadata = {
   title: {
@@ -38,8 +39,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitializer }} />
         {/* Hydrate the public web app before loading Telegram's optional host
             bridge. Telegram launch routes already wait a bounded time for the
             bridge, while ordinary browsers must never be held on the splash

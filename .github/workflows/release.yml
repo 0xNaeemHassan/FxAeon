@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install browser verification runtime
+        run: pnpm --dir apps/mini-app exec playwright install --with-deps chromium
+
       - name: Run complete repository verification
         run: pnpm verify
         env:

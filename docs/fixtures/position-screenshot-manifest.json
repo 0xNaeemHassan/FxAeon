@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 1,
+  "proof": "fxaeon-position-screenshot-fixture",
+  "executionSurface": "browser",
+  "sourceCommand": "pnpm test:anvil:browser",
+  "sourceProofSha256": "b920abdabecf4a7fad3c776f96b0753bf5603ddec8706502c67e3fe7cc42c883",
+  "chainId": 1,
+  "forkBlock": 25892172,
+  "assertions": {
+    "scenarioCount": 4,
+    "browserDriven": true,
+    "coexistingInSingleSnapshot": true,
+    "ownershipVerified": true,
+    "nonzeroCollateralAndDebtVerified": true,
+    "delayedIndexDiscoveryVerified": true,
+    "snapshotRevertedAfterProof": true,
+    "readSurfaces": [
+      "trade",
+      "positions",
+      "portfolio",
+      "earn",
+      "move"
+    ],
+    "productionSdkExecution": true,
+    "indexerDiscoveryOnlyIsIntercepted": true,
+    "positionStateReadFromFork": true
+  },
+  "positions": [
+    {
+      "market": "ETH",
+      "side": "long",
+      "pool": "0x6Ecfa38FeE8a5277B91eFdA204c235814F0122E8",
+      "graphSubgraph": "fx-v2-wsteth/3.0.0",
+      "positionId": 2004
+    },
+    {
+      "market": "ETH",
+      "side": "short",
+      "pool": "0x25707b9e6690B52C60aE6744d711cf9C1dFC1876",
+      "graphSubgraph": "fx-v2-wsteth-short/v0.1.0",
+      "positionId": 173
+    },
+    {
+      "market": "BTC",
+      "side": "long",
+      "pool": "0xAB709e26Fa6B0A30c119D8c55B887DeD24952473",
+      "graphSubgraph": "fx-v2-wbtc/3.0.0",
+      "positionId": 914
+    },
+    {
+      "market": "BTC",
+      "side": "short",
+      "pool": "0xA0cC8162c523998856D59065fAa254F87D20A5b0",
+      "graphSubgraph": "fx-v2-wbtc-short/v2.0.0",
+      "positionId": 107
+    }
+  ],
+  "browserCapture": {
+    "profile": "positions",
+    "capturedAt": "2026-09-02T21:18:23.743Z",
+    "marketData": "external-display-data-unmodified",
+    "positionDiscovery": "exact-four-sdk-owner-id-queries-only",
+    "assertions": {
+      "allFramesAtDocumentOrigin": true
+    },
+    "captures": [
+      {
+        "file": "fxaeon-portfolio-positions.png",
+        "route": "/portfolio",
+        "viewport": {
+          "width": 1180,
+          "height": 900
+        },
+        "renderedPositionKeys": [
+          "ETH:long:2004",
+          "ETH:short:173"
+        ],
+        "sha256": "cae288e6bcf9d585720cb07e03f10e2a7aa55bfd7e7cccfbf8fb43141b54ed21"
+      },
+      {
+        "file": "fxaeon-positions.png",
+        "route": "/positions",
+        "viewport": {
+          "width": 1180,
+          "height": 900
+        },
+        "renderedPositionKeys": [
+          "BTC:long:914",
+          "BTC:short:107",
+          "ETH:long:2004",
+          "ETH:short:173"
+        ],
+        "sha256": "76e85cb08106ef5ed8fecf6b817f165540b570122a8b3926656d050fd3ad5048"
+      },
+      {
+        "file": "fxaeon-trade-connected.png",
+        "route": "/trade",
+        "viewport": {
+          "width": 1180,
+          "height": 900
+        },
+        "renderedPositionKeys": [
+          "ETH:long:2004",
+          "ETH:short:173"
+        ],
+        "sha256": "b47c4d433e4f94c83146cf94b44d400b322f7448d1d124d9a0b3dd2c4fb0207f"
+      },
+      {
+        "file": "fxaeon-positions-mobile.png",
+        "route": "/positions",
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "renderedPositionKeys": [
+          "BTC:long:914",
+          "BTC:short:107",
+          "ETH:long:2004",
+          "ETH:short:173"
+        ],
+        "sha256": "c5ae954cfa666543ae089ba62355495e39c11d1ddd0e279fb3c6dfe4ff96a646"
+      }
+    ]
+  },
+  "scope": "Positions were opened through the app's review and confirmation flow on a disposable Ethereum fork. The documentation captures then reused those positions with a read-only wallet. External display prices were not modified. No production funds were used."
+}

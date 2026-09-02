@@ -12,7 +12,7 @@
     <a href="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/ci.yml"><img src="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/ci.yml/badge.svg" alt="Client CI" /></a>
     <a href="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/e2e-mini-app.yml"><img src="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/e2e-mini-app.yml/badge.svg" alt="End-to-end tests" /></a>
     <a href="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/supply-chain.yml"><img src="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/supply-chain.yml/badge.svg" alt="Supply-chain checks" /></a>
-    <a href="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/anvil-fork.yml?query=branch%3Amain+event%3Aworkflow_dispatch"><img src="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/anvil-fork.yml/badge.svg?branch=main&amp;event=workflow_dispatch" alt="Protected Anvil fork on main" /></a>
+    <a href="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/anvil-fork.yml?query=branch%3Amain+event%3Aworkflow_dispatch"><img src="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/anvil-fork.yml/badge.svg?branch=main&amp;event=workflow_dispatch" alt="Protected Anvil workflow on main" /></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-8b6dff.svg" alt="MIT License" /></a>
   </p>
 
@@ -22,6 +22,10 @@
     <img src="https://img.shields.io/badge/Node.js-22-339933?logo=node.js&logoColor=white" alt="Node.js 22" />
     <img src="https://img.shields.io/badge/pnpm-11.19-f69220?logo=pnpm&logoColor=white" alt="pnpm 11.19" />
     <img src="https://img.shields.io/badge/chains-Ethereum%20%7C%20Base-627eea" alt="Ethereum and Base" />
+  </p>
+
+  <p>
+    <a href="https://fxaeon.pages.dev/"><img src="https://img.shields.io/badge/Launch_FxAeon-Open_the_production_app-315efb?style=for-the-badge" alt="Launch FxAeon production app" /></a>
   </p>
 
   <p>
@@ -50,30 +54,42 @@ FxAeon turns the official f(x) SDK into a focused, reviewable product surface fo
     </td>
     <td width="50%" align="center">
       <img src="docs/assets/fxaeon-trade.png" alt="FxAeon trading form" width="100%" />
-      <br /><strong>Reviewable position workflows</strong>
+      <br /><strong>Unobstructed trading workspace</strong>
     </td>
   </tr>
   <tr>
+    <td width="50%" align="center">
+      <img src="docs/assets/fxaeon-trade-mobile.png" alt="FxAeon Trade workspace at a 390 by 844 mobile viewport" width="390" />
+      <br /><strong>Mobile Trade workspace</strong>
+    </td>
+    <td width="50%" align="center">
+      <img src="docs/assets/fxaeon-portfolio-mobile.png" alt="FxAeon Portfolio in the official light theme at a 390 by 844 mobile viewport" width="390" />
+      <br /><strong>Mobile Portfolio · official light</strong>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <img src="docs/assets/fxaeon-token-picker.png" alt="FxAeon searchable input-asset picker" width="100%" />
+      <br /><strong>Polished token selection</strong>
+    </td>
     <td width="50%" align="center">
       <img src="docs/assets/fxaeon-login.png" alt="FxAeon browser wallet connection screen" width="100%" />
       <br /><strong>Browser wallet entry</strong>
     </td>
-    <td width="50%" align="center">
-      <img src="docs/assets/fxaeon-portfolio.png" alt="FxAeon portfolio with wallet connection state" width="100%" />
-      <br /><strong>Portfolio at a glance</strong>
-    </td>
   </tr>
   <tr>
     <td width="50%" align="center">
-      <img src="docs/assets/fxaeon-positions.png" alt="FxAeon live ETH and BTC positions workspace" width="100%" />
-      <br /><strong>Live position workspace</strong>
+      <img src="docs/assets/fxaeon-portfolio-positions.png" alt="FxAeon portfolio with four verified positions on a disposable Ethereum fork" width="100%" />
+      <br /><strong>Portfolio · verified fork positions</strong>
     </td>
     <td width="50%" align="center">
-      <strong>Fork-backed position capture</strong><br />
-      <span>Official SDK reads only — no demo balances or synthetic PnL.</span>
+      <img src="docs/assets/fxaeon-positions.png" alt="Real ETH and BTC long and short positions opened through FxAeon on a disposable Ethereum fork" width="100%" />
+      <br /><strong>Long or short. One position workspace.</strong>
     </td>
   </tr>
 </table>
+
+Populated views show positions opened through FxAeon's review and confirmation flow on a disposable Ethereum fork—not production funds. Display prices are unmodified external observations. [Mobile positions](docs/assets/fxaeon-positions-mobile.png) · [Connected Trade](docs/assets/fxaeon-trade-connected.png) · [Capture provenance](docs/position-screenshot-fixture.md).
 
 ### A complete, deliberately scoped protocol interface
 
@@ -202,14 +218,19 @@ For additional commands:
 
 ```bash
 pnpm test:chaos   # deterministic mutation and failure-injection campaigns
-pnpm test:anvil   # protected, operator-supplied Ethereum mainnet fork
-pnpm test:stress  # chaos plus the protected Anvil gate
+pnpm test:anvil   # real ETH/BTC long/short positions on a protected mainnet fork
+pnpm test:anvil:stress # fast dummy-route transport stress on the fork
+pnpm test:anvil:all    # real protocol proof followed by fork stress in one node
+pnpm test:anvil:browser # open all four positions through the mobile browser UI
+pnpm test:stress  # credential-free chaos plus protected dummy-route fork stress
 pnpm test:e2e     # browser and Telegram-sized static-artifact coverage
 ```
 
-Anvil uses disposable local accounts and snapshots. Its provider URL is supplied only at invocation time and is never committed, printed, or forwarded to the application test process.
+Anvil uses disposable local accounts and snapshots. The default proof funds an unlocked account with fork-only USDC impersonation, opens coexisting ETH/BTC long and short positions through the official SDK, verifies ownership and nonzero pool state, reverts the snapshot, and emits `artifacts/anvil/protocol-proof.json`. Its upstream provider URL is supplied only to the Anvil parent process and is never committed, printed, forwarded to the test child, or written to the proof artifact.
 
-The manual **Protected Anvil mainnet fork** workflow runs a heavier 64-iteration campaign by default using the origin-restricted Ethereum Alchemy URL already stored in the protected GitHub environment. It never exposes that URL to the static application artifact or job output. The repository badge is intentionally scoped to the latest manual run on `main`; dispatch that workflow from `main` and let the successful run finish to turn or keep it green.
+The manual **Protected Anvil mainnet fork** workflow runs three gates: the Node four-position proof, 64 snapshot/revert plus 64 dummy ordered-route stress iterations, and real position opening through the mobile browser UI. The browser gate checks review-before-signing, successful receipts, delayed position discovery, and shared position views across Trade, Positions, Portfolio, Earn, and Move. It also captures the populated interface before restoring the snapshot.
+
+The protected workflow uses the Ethereum Alchemy URL stored in the GitHub environment. A dispatch input or protected `ANVIL_FORK_BLOCK` repository variable can pin the release block. The badge follows the latest completed manual run on `main`: all three gates must pass for this workflow revision to be green. An older green run without the browser step is not browser-execution evidence. See [testing and proof artifacts](docs/testing.md) and [screenshot provenance](docs/position-screenshot-fixture.md).
 
 ## Repository structure
 
@@ -217,7 +238,7 @@ The manual **Protected Anvil mainnet fork** workflow runs a heavier 64-iteration
 apps/mini-app/       Next.js web and Telegram application
 brand/               Repository and product identity assets
 docs/                Architecture, SDK scope, security, testing, and roadmap
-patches/             Reviewed patch for the pinned official f(x) SDK
+patches/             Reviewed SDK and dependency compatibility patches
 scripts/             Scope, environment, CSP, bundle, and fork verification
 fx-scope.lock.json   Immutable public SDK capability contract
 ```

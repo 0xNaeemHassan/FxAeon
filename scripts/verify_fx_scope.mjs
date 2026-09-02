@@ -1,4 +1,5 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { join, relative, resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
@@ -63,6 +64,10 @@ function fail(message) {
   throw new Error(`FxAeon scope verification failed: ${message}`);
 }
 
+function failInstalledDependency(message) {
+  fail(`${message}. Restore dependencies in a clean checkout with pnpm install --frozen-lockfile, then rerun pnpm verify:scope. An incremental install may retain unpatched files; do not hand-edit node_modules.`);
+}
+
 const packageJson = JSON.parse(await readFile(join(mini, 'package.json'), 'utf8'));
 if (packageJson.dependencies?.['@aladdindao/fx-sdk'] !== '1.0.5') {
   fail('@aladdindao/fx-sdk must remain exactly pinned to 1.0.5');
@@ -78,12 +83,37 @@ for (const [name, version] of Object.entries({
 
 const declarationPath = join(mini, 'node_modules', '@aladdindao', 'fx-sdk', 'dist', 'index.d.ts');
 const declaration = await readFile(declarationPath, 'utf8');
-const sdkRuntime = await readFile(
-  join(mini, 'node_modules', '@aladdindao', 'fx-sdk', 'dist', 'index.js'),
-  'utf8',
-);
-if (/console\.log\("(?:err------|poolData-->|poolInfo-->)"/.test(sdkRuntime)) {
-  fail('the installed SDK still contains audited-out production diagnostic logs');
+const shortPoolFix = [
+  'rawCollateral: this.config.isShort ? 0n : poolInfoRes[2]',
+  'debtCapacity: this.config.isShort ? poolInfoRes[2] : poolInfoRes[3]',
+  'debtBalance: this.config.isShort ? poolInfoRes[3] : poolInfoRes[4]',
+];
+const debtRatioPackingFix = [
+  'const min = BigInt(minDebtRatio);',
+  'const max = BigInt(maxDebtRatio);',
+  'const limit = 1n << 60n;',
+  'return ((max << 60n) | min).toString();',
+  'Debt ratio bounds must be unsigned integer strings',
+  'Debt ratio bounds must fit uint60',
+  'Minimum debt ratio cannot exceed maximum debt ratio',
+];
+// A correct patch file/lock hash does not prove the installed files were
+// patched. Check both entry points used by browser builds and Node tooling.
+for (const bundle of ['index.js', 'index.cjs']) {
+  const sdkRuntime = await readFile(
+    join(mini, 'node_modules', '@aladdindao', 'fx-sdk', 'dist', bundle),
+    'utf8',
+  ).catch(() => failInstalledDependency(`the installed SDK ${bundle} could not be inspected`));
+  if (shortPoolFix.some((required) => !sdkRuntime.includes(required))) {
+    failInstalledDependency(`the installed SDK ${bundle} is missing the audited short-pool tuple fix`);
+  }
+  if (debtRatioPackingFix.some((required) => !sdkRuntime.includes(required))
+    || sdkRuntime.includes('return cBN(maxDebtRatio).times(cBN(2).pow(60)).plus(minDebtRatio).toFixed(0);')) {
+    failInstalledDependency(`the installed SDK ${bundle} is missing exact integer debt-ratio packing`);
+  }
+  if (/console\.log\("(?:err------|poolData-->|poolInfo-->)"/.test(sdkRuntime)) {
+    failInstalledDependency(`the installed SDK ${bundle} still contains audited-out production diagnostic logs`);
+  }
 }
 const classStart = declaration.indexOf('declare class FxSdk');
 const classEnd = declaration.indexOf('\n}\n\ndeclare const tokens', classStart);
@@ -97,12 +127,49 @@ if (JSON.stringify(methods) !== JSON.stringify(expectedMethods)) {
 }
 
 const patch = await readFile(join(root, 'patches', '@aladdindao__fx-sdk.patch'), 'utf8');
-for (const required of [
-  'rawCollateral: this.config.isShort ? 0n : poolInfoRes[2]',
-  'debtCapacity: this.config.isShort ? poolInfoRes[2] : poolInfoRes[3]',
-  'debtBalance: this.config.isShort ? poolInfoRes[3] : poolInfoRes[4]',
-]) {
+for (const required of shortPoolFix) {
   if (!patch.includes(required)) fail('the audited upstream short-pool fix is missing');
+}
+for (const required of debtRatioPackingFix) {
+  if (!patch.includes(required)) fail('the local exact debt-ratio packing fix is missing');
+}
+
+try {
+  // Resolve through the actual pinned wallet dependency tree, not a possibly
+  // different root-hoisted query-string. Resolution does not execute wallet
+  // modules. x402 exposes subpaths only, so use its client entry as the anchor.
+  let dependencyRequire = createRequire(join(mini, 'package.json'));
+  for (const dependency of [
+    '@privy-io/react-auth',
+    'x402/client',
+    'wagmi',
+    '@wagmi/connectors',
+    '@walletconnect/ethereum-provider',
+    '@walletconnect/utils',
+  ]) {
+    dependencyRequire = createRequire(dependencyRequire.resolve(dependency));
+  }
+  // Only this pure parser is executed: no provider initialization or network.
+  // Its v7 CJS adapter must unwrap the overridden ESM decoder's default export.
+  const queryString = dependencyRequire('query-string');
+  const decoded = queryString.parseUrl(
+    'https://fxaeon.invalid/wallet?unicode=%E2%9C%93%20%F0%9F%9A%80&percent=100%25&space=one+two&malformed=%E0%A4%A&invalid=%ZZ%&mixed=%E2%9C%93%ZZ',
+  );
+  const expected = {
+    unicode: '✓ 🚀',
+    percent: '100%',
+    space: 'one two',
+    malformed: '%E0%A4%A',
+    invalid: '%ZZ%',
+    mixed: '✓%ZZ',
+  };
+  if (decoded.url !== 'https://fxaeon.invalid/wallet'
+    || Object.keys(decoded.query).length !== Object.keys(expected).length
+    || Object.entries(expected).some(([key, value]) => decoded.query[key] !== value)) {
+    throw new Error('Unicode, percent, or malformed-encoding decoding returned an unexpected result');
+  }
+} catch (error) {
+  failInstalledDependency(`the installed WalletConnect query-string URL decoder failed its compatibility smoke (${error instanceof Error ? error.message : 'unknown decoder failure'})`);
 }
 
 const staticHeaders = await readFile(join(mini, 'public', '_headers'), 'utf8');

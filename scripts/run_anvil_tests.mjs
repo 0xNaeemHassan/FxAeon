@@ -1,11 +1,16 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { join } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
+import { createServer } from "node:net";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-const port = parsePort(process.env.ANVIL_PORT ?? "8547");
+const port = parsePort(process.env.ANVIL_PORT ?? "8547", "ANVIL_PORT");
 const rpcUrl = `http://127.0.0.1:${port}`;
+const suite = parseSuite(process.argv.slice(2));
+const browserPort = suite === "browser" ? parsePort(process.env.FX_FORK_BROWSER_PORT ?? "4325", "FX_FORK_BROWSER_PORT") : undefined;
+if (browserPort === port) throw new Error("Anvil and browser server must use different ports");
+const manifestPath = resolveManifestPath(process.env.FX_ANVIL_MANIFEST_PATH);
 // Prefer the dedicated fork secret, but make the operator's reviewed
 // Ethereum Alchemy endpoint usable for the heavy fork gate too. The URL is
 // consumed only by Anvil and is scrubbed before the application test process.
@@ -15,10 +20,39 @@ const forkUrl = [
   process.env.ALCHEMY_RPC_URL,
 ].map((value) => value?.trim()).find(Boolean);
 
-function parsePort(value) {
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isInteger(parsed) || parsed < 1024 || parsed > 65_535) {
-    throw new Error("ANVIL_PORT must be an integer between 1024 and 65535");
+function parseSuite(args) {
+  let requested = process.env.FX_ANVIL_SUITE?.trim().toLowerCase() || "protocol";
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+    if (argument === "--suite") {
+      requested = args[index + 1]?.trim().toLowerCase();
+      index += 1;
+    } else if (argument.startsWith("--suite=")) {
+      requested = argument.slice("--suite=".length).trim().toLowerCase();
+    } else {
+      throw new Error("unknown Anvil test argument; use --suite protocol, stress, all, or browser");
+    }
+  }
+  if (!["protocol", "stress", "all", "browser"].includes(requested)) {
+    throw new Error("Anvil test suite must be protocol, stress, all, or browser");
+  }
+  return requested;
+}
+
+function resolveManifestPath(configured) {
+  const candidate = configured?.trim() || join("artifacts", "anvil", suite === "browser" ? "browser-proof.json" : "protocol-proof.json");
+  const resolved = isAbsolute(candidate) ? resolve(candidate) : resolve(root, candidate);
+  const fromRoot = relative(root, resolved);
+  if (!fromRoot || fromRoot.startsWith("..") || isAbsolute(fromRoot)) {
+    throw new Error("FX_ANVIL_MANIFEST_PATH must be a file below the repository root");
+  }
+  return resolved;
+}
+
+function parsePort(value, label) {
+  const parsed = Number(value);
+  if (!/^\d+$/.test(value) || !Number.isInteger(parsed) || parsed < 1024 || parsed > 65_535) {
+    throw new Error(`${label} must be a decimal integer between 1024 and 65535`);
   }
   return parsed;
 }
@@ -52,7 +86,19 @@ function redacted(value) {
 }
 
 function scrubChildEnvironment() {
-  const childEnv = { ...process.env, ANVIL_RPC_URL: rpcUrl, FX_ANVIL_FORKED: "1" };
+  const childEnv = {
+    ...process.env,
+    ANVIL_RPC_URL: rpcUrl,
+    FX_ANVIL_FORKED: "1",
+    FX_ANVIL_SUITE: suite,
+    NEXT_PUBLIC_FX_LOCAL_FORK_TEST_MODE: "1",
+    NEXT_PUBLIC_FX_LOCAL_FORK_RPC_URL: rpcUrl,
+  };
+  if (suite !== "stress") {
+    childEnv.FX_ANVIL_MANIFEST_PATH = manifestPath;
+  } else {
+    delete childEnv.FX_ANVIL_MANIFEST_PATH;
+  }
   // The integration test uses only the local fork. Do not unnecessarily pass
   // production provider, bot, wallet, or deployment credentials to it.
   for (const name of [
@@ -65,15 +111,93 @@ function scrubChildEnvironment() {
     "PRIVY_APP_SECRET",
     "CLOUDFLARE_API_TOKEN",
   ]) delete childEnv[name];
+  const allowedLocalEndpoints = new Set([
+    "ANVIL_RPC_URL",
+    "NEXT_PUBLIC_FX_LOCAL_FORK_RPC_URL",
+  ]);
+  for (const name of Object.keys(childEnv)) {
+    if (allowedLocalEndpoints.has(name)) continue;
+    if (/(?:^|_)(?:SECRET|TOKEN|PRIVATE_KEY|MNEMONIC|API_KEY|FORK_URL|RPC_URL)$/i.test(name)) {
+      delete childEnv[name];
+    }
+  }
   return childEnv;
 }
 
+async function assertLoopbackPortAvailable(localPort) {
+  const probe = createServer();
+  await new Promise((resolveProbe, reject) => {
+    probe.once("error", () => reject(new Error(`loopback port ${localPort} is already in use; choose another test port`)));
+    probe.listen(localPort, "127.0.0.1", () => probe.close(resolveProbe));
+  });
+}
+
+function validateProtocolManifest() {
+  if (!existsSync(manifestPath)) {
+    throw new Error("real protocol proof passed without producing its manifest");
+  }
+  const text = readFileSync(manifestPath, "utf8");
+  if (forkUrl && text.includes(forkUrl)) {
+    throw new Error("protocol proof manifest contains the upstream fork URL");
+  }
+  if (/https?:\/\//i.test(text)) {
+    throw new Error("protocol proof manifest contains a forbidden URL");
+  }
+  const manifest = JSON.parse(text);
+  const containsSensitiveField = (value) => {
+    if (!value || typeof value !== "object") return false;
+    return Object.entries(value).some(([key, nested]) => (
+      /^(private.?key|mnemonic|fork.?url|rpc.?url|provider.?credential)$/i.test(key)
+      || containsSensitiveField(nested)
+    ));
+  };
+  if (containsSensitiveField(manifest)) {
+    throw new Error("protocol proof manifest contains a forbidden credential field");
+  }
+  const positions = Array.isArray(manifest?.positions) ? manifest.positions : [];
+  const scenarios = new Set(positions.map((position) => `${position?.market}:${position?.side}`));
+  const expectedScenarios = ["ETH:long", "ETH:short", "BTC:long", "BTC:short"];
+  const positionEvidenceValid = positions.length === 4 && positions.every((position) => (
+    /^0x[0-9a-f]{40}$/i.test(position?.pool ?? "")
+    && Number.isSafeInteger(position?.positionId)
+    && position.positionId > 0
+    && BigInt(position?.rawCollateral ?? "0") > 0n
+    && BigInt(position?.rawDebt ?? "0") > 0n
+    && Array.isArray(position?.transactions)
+    && position.transactions.some((transaction) => (
+      transaction?.kind === "action"
+      && /^0x[0-9a-f]{64}$/i.test(transaction?.hash ?? "")
+      && BigInt(transaction?.blockNumber ?? "0") > 0n
+    ))
+  ));
+  if (
+    manifest?.proof !== "fxaeon-real-fx-position-fork"
+    || manifest?.chainId !== 1
+    || manifest?.assertions?.scenarioCount !== 4
+    || manifest?.assertions?.coexistingInSingleSnapshot !== true
+    || manifest?.assertions?.ownershipVerified !== true
+    || manifest?.assertions?.nonzeroCollateralAndDebtVerified !== true
+    || manifest?.assertions?.snapshotRevertedAfterProof !== true
+    || (suite === "browser" && manifest?.assertions?.browserDriven !== true)
+    || expectedScenarios.some((scenario) => !scenarios.has(scenario))
+    || !positionEvidenceValid
+  ) {
+    throw new Error("protocol proof manifest is incomplete or failed its release-evidence schema");
+  }
+  process.stdout.write(`Verified redacted four-position protocol proof manifest at ${relative(root, manifestPath)}\n`);
+}
+
 function spawnWithRedaction(command, args, options = {}) {
+  assertNotInterrupted();
   const child = spawn(command, args, {
     ...options,
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
+    // Each Unix subprocess owns an isolated process group, so cleanup never
+    // needs name-based or machine-wide process killing.
+    detached: process.platform !== "win32",
   });
+  child.on("error", (error) => { child.startupError = error; });
   const pipe = (stream, target) => {
     let pending = "";
     stream?.on("data", (chunk) => {
@@ -98,6 +222,8 @@ async function rpc(method, params = []) {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    redirect: "error",
+    signal: AbortSignal.any([AbortSignal.timeout(5_000), shutdownController.signal]),
   });
   if (!response.ok) throw new Error(`local Anvil RPC returned HTTP ${response.status}`);
   const payload = await response.json();
@@ -109,46 +235,121 @@ async function waitForAnvil(child) {
   const deadline = Date.now() + 60_000;
   let lastError;
   while (Date.now() < deadline) {
-    if (child.exitCode !== null) throw new Error(`Anvil exited before its RPC endpoint became ready (exit ${child.exitCode})`);
+    assertNotInterrupted();
+    assertAnvilRunning(child);
+    let chainId;
+    let clientVersion;
     try {
-      const chainId = await rpc("eth_chainId");
-      if (chainId !== "0x1") throw new Error(`Anvil fork chain identity was ${String(chainId)}, expected Ethereum mainnet`);
-      return;
+      chainId = await rpc("eth_chainId");
+      clientVersion = await rpc("web3_clientVersion");
     } catch (error) {
       lastError = error;
+      assertNotInterrupted();
+      assertAnvilRunning(child);
       await new Promise((resolve) => setTimeout(resolve, 250));
+      continue;
     }
+    assertNotInterrupted();
+    assertAnvilRunning(child);
+    if (chainId !== "0x1") throw new Error(`Anvil fork chain identity was ${String(chainId)}, expected Ethereum mainnet`);
+    if (typeof clientVersion !== "string" || !/^anvil\//i.test(clientVersion)) throw new Error("local fork endpoint did not identify as Anvil");
+    return;
   }
   throw new Error(`timed out waiting for Anvil RPC: ${lastError instanceof Error ? lastError.message : "endpoint unavailable"}`);
 }
 
+function assertAnvilRunning(child) {
+  if (child.startupError) throw new Error(child.startupError.code === "ENOENT"
+    ? "Anvil was not found; install Foundry and ensure ANVIL_BIN/anvil is on PATH"
+    : "Anvil could not be started");
+  if (child.exitCode !== null || child.signalCode !== null) throw new Error(`Anvil exited before its RPC endpoint became ready (exit ${child.exitCode})`);
+}
+
 function commandForPnpm() {
   const inherited = process.env.npm_execpath;
-  if (inherited && existsSync(inherited)) return { command: process.execPath, args: [inherited] };
-  return process.platform === "win32" ? { command: "pnpm.cmd", args: [] } : { command: "pnpm", args: [] };
+  if (inherited && existsSync(inherited) && /pnpm(?:\.c?js)?$/i.test(inherited)) return { command: process.execPath, args: [inherited] };
+  return process.platform === "win32"
+    ? { command: process.env.ComSpec || "cmd.exe", args: ["/d", "/s", "/c", "pnpm.cmd"] }
+    : { command: "pnpm", args: [] };
 }
 
 let anvil;
 let tests;
-let cleaned = false;
+let interrupted = false;
+let cleanupPromise;
+const shutdownController = new AbortController();
+
+function assertNotInterrupted() {
+  if (interrupted) throw new Error("Anvil test run was interrupted");
+}
+
+function groupExists(pid) {
+  try { process.kill(-pid, 0); return true; } catch (error) {
+    if (error.code === "ESRCH") return false;
+    throw error;
+  }
+}
+
+async function stopOwnedProcessTree(child) {
+  if (!child?.pid) return;
+  if (child.stopPromise) return child.stopPromise;
+  child.stopPromise = (async () => {
+    if (process.platform === "win32") {
+      // A live ChildProcess handle establishes ownership of this PID. Avoid
+      // targeting an exited/reused PID, and never kill by executable name.
+      if (child.exitCode !== null || child.signalCode !== null) return;
+      const killer = spawn("taskkill.exe", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
+      await new Promise((resolveStop, reject) => {
+        const timer = setTimeout(() => { killer.kill(); reject(new Error("timed out stopping the owned test process tree")); }, 10_000);
+        killer.once("error", (error) => { clearTimeout(timer); reject(error); });
+        killer.once("exit", (code) => {
+          clearTimeout(timer);
+          if (code !== 0 && child.exitCode === null && child.signalCode === null) reject(new Error("could not stop the owned test process tree"));
+          else resolveStop();
+        });
+      });
+      return;
+    }
+    // detached:true created this exact group. Descendants remain members if
+    // the package-manager parent exits before its browser/server children.
+    if (!groupExists(child.pid)) return;
+    try { process.kill(-child.pid, "SIGTERM"); } catch (error) { if (error.code !== "ESRCH") throw error; }
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline && groupExists(child.pid)) await new Promise((resolveStop) => setTimeout(resolveStop, 50));
+    if (groupExists(child.pid)) {
+      try { process.kill(-child.pid, "SIGKILL"); } catch (error) { if (error.code !== "ESRCH") throw error; }
+    }
+  })();
+  return child.stopPromise;
+}
+
 function cleanup() {
-  if (cleaned) return;
-  cleaned = true;
-  tests?.kill();
-  anvil?.kill();
+  cleanupPromise ??= (async () => {
+    // Keep the fork alive until the test process tree has stopped issuing RPCs.
+    try { await stopOwnedProcessTree(tests); } finally { await stopOwnedProcessTree(anvil); }
+  })();
+  return cleanupPromise;
 }
 
 process.once("SIGINT", () => {
-  cleanup();
+  interrupted = true;
+  shutdownController.abort();
+  void cleanup().catch(() => undefined);
   process.exitCode = 130;
 });
 process.once("SIGTERM", () => {
-  cleanup();
+  interrupted = true;
+  shutdownController.abort();
+  void cleanup().catch(() => undefined);
   process.exitCode = 143;
 });
 
 try {
   assertForkUrl(forkUrl);
+  await assertLoopbackPortAvailable(port);
+  if (browserPort !== undefined) await assertLoopbackPortAvailable(browserPort);
+  assertNotInterrupted();
+  if (suite !== "stress") rmSync(manifestPath, { force: true });
   const anvilBin = process.env.ANVIL_BIN?.trim() || "anvil";
   const anvilArgs = [
     "--fork-url", forkUrl,
@@ -166,27 +367,34 @@ try {
   }
 
   anvil = spawnWithRedaction(anvilBin, anvilArgs, { cwd: root, env: scrubChildEnvironment() });
-  const anvilError = new Promise((_, reject) => {
-    anvil.once("error", (error) => reject(error?.code === "ENOENT"
-      ? new Error("Anvil was not found; install Foundry and ensure ANVIL_BIN/anvil is on PATH")
-      : new Error("Anvil could not be started")));
-  });
-  await Promise.race([waitForAnvil(anvil), anvilError]);
+  await waitForAnvil(anvil);
+  assertNotInterrupted();
 
   const pnpm = commandForPnpm();
   tests = spawnWithRedaction(
     pnpm.command,
-    [...pnpm.args, "--dir", join("apps", "mini-app"), "test:anvil"],
+    [...pnpm.args, "--dir", join("apps", "mini-app"), ...(suite === "browser"
+      ? ["exec", "tsx", "e2e/fork/positions.browser.ts"]
+      : ["test:anvil"])],
     { cwd: root, env: scrubChildEnvironment() },
   );
   const testExit = await new Promise((resolve, reject) => {
     tests.once("error", reject);
     tests.once("exit", (code, signal) => resolve(code ?? (signal ? 1 : 0)));
   });
-  process.exitCode = Number(testExit);
+  assertNotInterrupted();
+  if (Number(testExit) !== 0) {
+    process.exitCode = Number(testExit);
+  } else {
+    if (suite !== "stress") validateProtocolManifest();
+    process.exitCode = 0;
+  }
 } catch (error) {
   process.stderr.write(`FxAeon Anvil tests could not run: ${redacted(error instanceof Error ? error.message : String(error))}\n`);
-  process.exitCode = 2;
+  if (!interrupted) process.exitCode = 2;
 } finally {
-  cleanup();
+  try { await cleanup(); } catch (error) {
+    process.stderr.write(`Anvil test cleanup failed: ${redacted(error instanceof Error ? error.message : String(error))}\n`);
+    if (!interrupted) process.exitCode = 2;
+  }
 }

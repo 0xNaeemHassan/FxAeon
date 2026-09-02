@@ -26,6 +26,8 @@ jobs:
           node-version: '22'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Install browser verification runtime
+        run: pnpm --dir apps/mini-app exec playwright install --with-deps chromium
       - name: Validate public build configuration
         env:
           NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID }}

@@ -4,7 +4,23 @@ FxAeon exposes a deliberately narrow, reviewable surface from the official f(x) 
 
 - `AladdinDAO/fx-sdk-skill` — commit `e2c4a6085950a40f238bda1c9159305f6c8acf1f`
 - `AladdinDAO/fx-sdk` — commit `53c0b9805a169e75ad375c92c241e1292b66405f`
-- Installed package `@aladdindao/fx-sdk@1.0.5`, plus the reviewed short-pool correction in `patches/@aladdindao__fx-sdk.patch`
+- Installed package `@aladdindao/fx-sdk@1.0.5`, plus the reviewed short-pool correction, diagnostic-log removal, and exact debt-ratio packing fix in `patches/@aladdindao__fx-sdk.patch`
+
+The debt-ratio packing fix is a local correction, not a claim that the pinned
+upstream commit contains it. The SDK combines two 60-bit integer limits into
+one calldata field. Decimal arithmetic with its default precision can round
+that combined integer and change the lower limit. The patch uses exact
+`BigInt` packing, rejects invalid bounds, and preserves the requested limits
+without widening slippage or changing global decimal precision. Regression
+tests execute the installed helper in both ESM and CommonJS bundles.
+
+The pinned contract references decode the minimum from bits 0–59 and the
+maximum from bits 60–119 and enforce an inclusive range:
+[long V2](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/periphery/facets/PositionOperateFlashLoanFacetV2.sol#L249-L255),
+[short](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/periphery/facets/ShortPositionOperateFlashLoanFacet.sol#L287-L293),
+and [60-bit decoder](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/common/codec/WordCodec.sol#L31-L41).
+Zero and equal limits remain representable; this patch does not change the
+contracts' separate full-close handling.
 
 ## Locked public surface
 

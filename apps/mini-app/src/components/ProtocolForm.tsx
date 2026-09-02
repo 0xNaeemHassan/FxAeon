@@ -1,8 +1,8 @@
 'use client';
 
 import { createPortal } from 'react-dom';
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, Info } from 'lucide-react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ChevronDown, Info, Search } from 'lucide-react';
 import TokenIcon from '@/components/TokenIcon';
 import { useUsdPrices } from '@/components/PriceProvider';
 import { haptic } from '@/lib/telegram';
@@ -283,21 +283,34 @@ export function TokenSelect<T extends string>({
   const selectId = useId();
   const labelId = `${selectId}-label`;
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const { prices } = useUsdPrices();
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const filteredOptions = useMemo(() => {
+    const normalised = query.trim().toLowerCase();
+    if (!normalised) return [...options];
+    return options.filter((option) => `${displayTokenSymbol(option)} ${displayTokenName(option)}`.toLowerCase().includes(normalised));
+  }, [options, query]);
 
   useEffect(() => {
     if (!open) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    const selectedIndex = Math.max(0, options.indexOf(value));
-    window.requestAnimationFrame(() => optionRefs.current[selectedIndex]?.focus());
+    const selectedIndex = Math.max(0, filteredOptions.indexOf(value));
+    window.requestAnimationFrame(() => {
+      if (options.length > 4) searchRef.current?.focus();
+      else optionRefs.current[selectedIndex]?.focus();
+    });
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
         setOpen(false);
         triggerRef.current?.focus();
+      } else if (event.key === 'Tab' && dialogRef.current) {
+        trapDialogFocus(event, dialogRef.current);
       }
     };
     document.addEventListener('keydown', onKeyDown);
@@ -305,11 +318,12 @@ export function TokenSelect<T extends string>({
       document.body.style.overflow = previousOverflow;
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [open, options, value]);
+  }, [filteredOptions, open, options.length, value]);
 
   const choose = (next: T) => {
     haptic('selection');
     onChange(next);
+    setQuery('');
     setOpen(false);
     window.requestAnimationFrame(() => triggerRef.current?.focus());
   };
@@ -318,9 +332,15 @@ export function TokenSelect<T extends string>({
     const next = direction === 'first'
       ? 0
       : direction === 'last'
-        ? options.length - 1
-        : (current + (direction === 'next' ? 1 : -1) + options.length) % options.length;
+        ? filteredOptions.length - 1
+        : (current + (direction === 'next' ? 1 : -1) + filteredOptions.length) % filteredOptions.length;
     optionRefs.current[next]?.focus();
+  };
+
+  const closePicker = () => {
+    setQuery('');
+    setOpen(false);
+    window.requestAnimationFrame(() => triggerRef.current?.focus());
   };
 
   return (
@@ -334,7 +354,10 @@ export function TokenSelect<T extends string>({
         aria-expanded={open}
         aria-controls={`${selectId}-menu`}
         aria-labelledby={labelId}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => setOpen((current) => {
+          if (!current) setQuery('');
+          return !current;
+        })}
         className="field-control glass-press flex min-h-[52px] w-full items-center justify-between gap-3 px-4 text-left text-[15px] font-semibold text-[var(--text)] outline-none"
       >
         <span className="flex min-w-0 items-center gap-2.5">
@@ -347,9 +370,10 @@ export function TokenSelect<T extends string>({
         <div
           className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 p-3 backdrop-blur-[2px] sm:items-center"
           role="presentation"
-          onMouseDown={(event) => { if (event.target === event.currentTarget) { setOpen(false); triggerRef.current?.focus(); } }}
+          onMouseDown={(event) => { if (event.target === event.currentTarget) closePicker(); }}
         >
           <div
+            ref={dialogRef}
             id={`${selectId}-menu`}
             role="dialog"
             aria-modal="true"
@@ -362,10 +386,24 @@ export function TokenSelect<T extends string>({
                 <p className="text-[14px] font-semibold">{label}</p>
                 <p className="mt-0.5 text-[11px] text-mut">Choose an asset</p>
               </div>
-              <button type="button" aria-label="Close asset picker" onClick={() => { setOpen(false); triggerRef.current?.focus(); }} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-lg text-mut hover:text-[var(--text)]">×</button>
+              <button type="button" aria-label="Close asset picker" onClick={closePicker} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-lg text-mut hover:text-[var(--text)]">×</button>
             </div>
+            {options.length > 4 && (
+              <label className="mx-3 mt-3 flex min-h-11 items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--input)] px-3 focus-within:border-[var(--mint)]">
+                <Search className="h-4 w-4 shrink-0 text-mut" aria-hidden="true" />
+                <span className="sr-only">Search assets</span>
+                <input
+                  ref={searchRef}
+                  type="search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search assets"
+                  className="min-h-11 min-w-0 flex-1 bg-transparent text-[13px] text-[var(--text)] outline-none placeholder:text-mut"
+                />
+              </label>
+            )}
             <div role="listbox" aria-label={`${label} options`} className="max-h-[min(64dvh,480px)] overflow-y-auto p-2">
-              {options.map((option, index) => {
+              {filteredOptions.map((option, index) => {
                 const active = option === value;
                 return (
                   <button
@@ -389,7 +427,7 @@ export function TokenSelect<T extends string>({
                     <TokenIcon symbol={option} size={30} />
                     <span className="min-w-0 flex-1">
                       <span className="block text-[14px] font-semibold">{displayTokenSymbol(option)}</span>
-                      <span className="mt-0.5 block text-[10.5px] text-mut">{active ? 'Selected asset' : 'Available asset'}</span>
+                      <span className="mt-0.5 block text-[10.5px] text-mut">{displayTokenName(option)} · Supported asset</span>
                     </span>
                     <span className="shrink-0 text-right">
                       <span className="block text-[12px] font-semibold tabular-nums">{optionPriceLabel(option, prices)}</span>
@@ -398,6 +436,12 @@ export function TokenSelect<T extends string>({
                   </button>
                 );
               })}
+              {filteredOptions.length === 0 && (
+                <div role="status" className="px-4 py-8 text-center">
+                  <p className="text-[13px] font-semibold">No matching assets</p>
+                  <p className="mt-1 text-[11px] text-mut">Try a symbol such as ETH, BTC, or USDC.</p>
+                </div>
+              )}
             </div>
           </div>
         </div>,
@@ -546,9 +590,43 @@ function displayTokenSymbol(symbol: string): string {
   return symbol;
 }
 
+function displayTokenName(symbol: string): string {
+  const names: Record<string, string> = {
+    ETH: 'Ethereum',
+    WETH: 'Wrapped Ether',
+    STETH: 'Lido Staked Ether',
+    WSTETH: 'Wrapped staked Ether',
+    BTC: 'Bitcoin',
+    WBTC: 'Wrapped Bitcoin',
+    USDC: 'USD Coin',
+    USDT: 'Tether USD',
+    FXUSD: 'f(x) USD',
+    FXSAVE: 'f(x) Savings',
+    FXUSDBASEPOOL: 'fxUSD base pool',
+    FXN: 'f(x) Network',
+    FRAX: 'Frax',
+  };
+  return names[symbol.replace(/\s+/g, '').toUpperCase()] ?? 'Protocol token';
+}
+
 function optionPriceLabel(symbol: string, prices: UsdPriceMap): string {
   const key = priceKeyForSymbol(symbol);
   return key ? formatUsdPrice(prices[key]) : '—';
+}
+
+function trapDialogFocus(event: KeyboardEvent, dialog: HTMLElement): void {
+  const focusable = [...dialog.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')]
+    .filter((element) => !element.hasAttribute('hidden') && element.getAttribute('aria-hidden') !== 'true');
+  if (focusable.length === 0) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 export function ToggleRow({
