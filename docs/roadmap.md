@@ -28,10 +28,10 @@ Transitive `ioredis` and `workerd` entries may remain in the frozen dependency g
 
 These are measurements from the local release gate, not universal performance claims. Re-run them on the pinned Node 22 CI environment for each release baseline.
 
-- Static bundle: `222 assets`, `7.21 MiB` total.
+- Static bundle: `222 assets`, `7.22 MiB` total.
 - JavaScript: `187 assets`, `6.52 MiB` raw, `2.00 MiB` gzip; largest asset `1.95 MiB`.
-- Release E2E: `27` tests covering browser entry, 12 scoped routes, cross-workspace USD context, wallet profile/Activity, Earn-to-fxMINT access, official light/dark theming, and Telegram/mobile safety checks.
-- Unit/security suite: `105` total tests (`103` passed, `2` skipped when the protected fork environment is absent).
+- Release E2E: `28` tests covering browser entry, 12 scoped routes, cross-workspace USD context, validated price continuity across hard navigation/feed retries, wallet profile/Activity, Earn-to-fxMINT access, official light/dark theming, and Telegram/mobile safety checks.
+- Unit/security suite: `106` total tests (`104` passed, `2` skipped when the protected fork environment is absent).
 - Chaos campaign: `2` campaigns passed, including 2,000 route mutations and 600 runner iterations.
 - Anvil fork gate: 24 snapshot/revert and 24 ordered-route iterations passed in the protected local run.
 - Bundle guardrails: 12 MiB total, 8 MiB JavaScript, 3 MiB gzip, and 2 MiB largest JavaScript asset; these are regression limits, not UX guarantees.

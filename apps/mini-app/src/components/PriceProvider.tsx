@@ -2,18 +2,54 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { FxTokenKey } from '@/lib/fx/tokens';
-import { fetchUsdPrices, type UsdPriceSnapshot } from '@/lib/prices';
+import {
+  fetchUsdPrices,
+  parseUsdPriceCache,
+  USD_PRICE_CACHE_KEY,
+  type UsdPriceSnapshot,
+} from '@/lib/prices';
 
 const REFRESH_INTERVAL_MS = 30_000;
 const EMPTY_SNAPSHOT: UsdPriceSnapshot = { prices: {}, status: 'loading', updatedAt: null };
 const PriceContext = createContext<UsdPriceSnapshot>(EMPTY_SNAPSHOT);
+
+function readCachedSnapshot(): UsdPriceSnapshot | null {
+  try {
+    const raw = window.localStorage.getItem(USD_PRICE_CACHE_KEY);
+    if (!raw) return null;
+    const cached = parseUsdPriceCache(JSON.parse(raw));
+    return cached ? { ...cached, status: 'stale' } : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedSnapshot(snapshot: Pick<UsdPriceSnapshot, 'prices' | 'updatedAt'>): void {
+  try {
+    window.localStorage.setItem(USD_PRICE_CACHE_KEY, JSON.stringify(snapshot));
+  } catch {
+    // Private browsing or an embedded host may deny storage. Live fetching
+    // remains fully functional without the availability cache.
+  }
+}
+
+async function fetchWithRetry(signal?: AbortSignal) {
+  try {
+    return await fetchUsdPrices(fetch, signal);
+  } catch (firstFailure) {
+    if (signal?.aborted) throw firstFailure;
+    await new Promise((resolve) => window.setTimeout(resolve, 600));
+    return fetchUsdPrices(fetch, signal);
+  }
+}
 
 export default function PriceProvider({ children }: { children: React.ReactNode }) {
   const [snapshot, setSnapshot] = useState<UsdPriceSnapshot>(EMPTY_SNAPSHOT);
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
     try {
-      const next = await fetchUsdPrices(fetch, signal);
+      const next = await fetchWithRetry(signal);
+      writeCachedSnapshot(next);
       setSnapshot({ ...next, status: 'ready' });
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === 'AbortError') return;
@@ -26,6 +62,8 @@ export default function PriceProvider({ children }: { children: React.ReactNode 
 
   useEffect(() => {
     const controller = new AbortController();
+    const cached = readCachedSnapshot();
+    if (cached) setSnapshot(cached);
     void refresh(controller.signal);
     const timer = window.setInterval(() => {
       if (document.visibilityState === 'visible') void refresh(controller.signal);

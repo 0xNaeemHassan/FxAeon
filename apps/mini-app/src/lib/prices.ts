@@ -24,6 +24,8 @@ const PRICE_KEYS = Object.keys(FX_TOKENS) as FxTokenKey[];
 const ETH_PRICE_ADDRESS = FX_TOKENS.WETH.address;
 const MAX_PRICE_AGE_SECONDS = 15 * 60;
 const MIN_CONFIDENCE = 0.5;
+export const USD_PRICE_CACHE_KEY = 'fxaeon:usd-prices:v1';
+export const USD_PRICE_CACHE_MAX_AGE_MS = 2 * 60 * 1000;
 
 function coinId(key: FxTokenKey): string {
   const address = key === 'ETH' ? ETH_PRICE_ADDRESS : FX_TOKENS[key].address;
@@ -76,6 +78,31 @@ export async function fetchUsdPrices(
   });
   if (!response.ok) throw new Error(`Price service returned ${response.status}`);
   return parseUsdPriceResponse(await response.json());
+}
+
+/**
+ * Local storage is an availability aid, not a second price oracle. Only a
+ * recently validated snapshot is accepted, and every value is re-checked
+ * before it can reach the UI. The provider always refreshes it immediately.
+ */
+export function parseUsdPriceCache(
+  payload: unknown,
+  nowMs = Date.now(),
+): { prices: UsdPriceMap; updatedAt: number } | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const candidate = payload as { prices?: unknown; updatedAt?: unknown };
+  const updatedAt = Number(candidate.updatedAt);
+  if (!Number.isFinite(updatedAt) || updatedAt <= 0) return null;
+  if (updatedAt - nowMs > 120_000 || nowMs - updatedAt > USD_PRICE_CACHE_MAX_AGE_MS) return null;
+  if (!candidate.prices || typeof candidate.prices !== 'object') return null;
+
+  const prices: UsdPriceMap = {};
+  for (const key of PRICE_KEYS) {
+    const value = Number((candidate.prices as Partial<Record<FxTokenKey, unknown>>)[key]);
+    if (Number.isFinite(value) && value > 0) prices[key] = value;
+  }
+  if (!prices.ETH || !prices.WBTC || !prices.fxUSD) return null;
+  return { prices, updatedAt };
 }
 
 export function priceKeyForSymbol(symbol: string): FxTokenKey | null {
