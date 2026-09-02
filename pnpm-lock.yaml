@@ -27,7 +27,7 @@ overrides:
 
 patchedDependencies:
   '@aladdindao/fx-sdk': 2c25f3ca0738f06dbb2855cdb10fa511af2238bbaa9e03aac668c4091cf65638
-  query-string@7.1.3: 78e27ee556be7fed2a53eeb9b046c16e7387f8d18094a955098cdc4939a5c31b
+  query-string@7.1.3: 8cf93ecf8b1c3d495bed8d4e8e723569a358e9da0615fb1fbee180f1f41fc33d
 
 importers:
 
@@ -7222,7 +7222,7 @@ snapshots:
       '@walletconnect/window-metadata': 1.0.1
       bs58: 6.0.0
       detect-browser: 5.3.0
-      query-string: 7.1.3(patch_hash=78e27ee556be7fed2a53eeb9b046c16e7387f8d18094a955098cdc4939a5c31b)
+      query-string: 7.1.3(patch_hash=8cf93ecf8b1c3d495bed8d4e8e723569a358e9da0615fb1fbee180f1f41fc33d)
       uint8arrays: 3.1.0
       viem: 2.23.2(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@3.25.76)
     transitivePeerDependencies:
@@ -7266,7 +7266,7 @@ snapshots:
       '@walletconnect/window-metadata': 1.0.1
       bs58: 6.0.0
       detect-browser: 5.3.0
-      query-string: 7.1.3(patch_hash=78e27ee556be7fed2a53eeb9b046c16e7387f8d18094a955098cdc4939a5c31b)
+      query-string: 7.1.3(patch_hash=8cf93ecf8b1c3d495bed8d4e8e723569a358e9da0615fb1fbee180f1f41fc33d)
       uint8arrays: 3.1.0
       viem: 2.23.2(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@3.25.76)
     transitivePeerDependencies:
@@ -8860,7 +8860,7 @@ snapshots:
       pngjs: 5.0.0
       yargs: 15.4.1
 
-  query-string@7.1.3(patch_hash=78e27ee556be7fed2a53eeb9b046c16e7387f8d18094a955098cdc4939a5c31b):
+  query-string@7.1.3(patch_hash=8cf93ecf8b1c3d495bed8d4e8e723569a358e9da0615fb1fbee180f1f41fc33d):
     dependencies:
       decode-uri-component: 0.5.0
       filter-obj: 1.1.0

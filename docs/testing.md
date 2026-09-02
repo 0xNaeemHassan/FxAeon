@@ -5,7 +5,7 @@ The release process is intentionally layered. Credential-free checks run on ever
 ## Automated gates
 
 - `pnpm verify`: aggregate release gate covering scope, lint, types, unit tests, the seeded chaos campaign, high-severity production dependency audit, static build, bundle budget, and built-artifact Playwright tests.
-- `pnpm verify:scope`: exact 15-method SDK contract, reviewed upstream patch, allowed routes, and no active backend/delegated-signing imports.
+- `pnpm verify:scope`: exact 15-method SDK contract, installed SDK patch and wallet dependency compatibility, allowed routes, and no active backend/delegated-signing imports.
 - `pnpm typecheck` and `pnpm lint`: strict client compilation and static checks.
 - `pnpm test`: transaction normalization, validation, approval, nonce, lock, journal, receipt ordering, and failure-stop tests.
 - `pnpm test:chaos`: seeded property-style route and runner campaigns. It mutates sender, chain, target, selector, value, operation, nonce, and route shape, then injects wallet rejection, on-chain reverts, and receipt-RPC outages. Set `FX_CHAOS_SEED`, `FX_CHAOS_ITERATIONS`, or `FX_CHAOS_RUNNER_ITERATIONS` to reproduce or expand a campaign.
@@ -17,6 +17,16 @@ The release process is intentionally layered. Credential-free checks run on ever
 - `pnpm test:e2e`: browser entry without Telegram, official-route and mobile/Telegram viewport navigation, semantic landmarks, 44px controls, no horizontal overflow at 320/360/375/390/412/430px, honest disconnected state, deterministic current-price and market-history validation, and absence of backend traffic.
 - `pnpm build`: browser-only static export with no Node runtime.
 - `pnpm check:bundle`: checks total, JavaScript, gzip, and largest-asset budgets and scans the export for forbidden telemetry and server artifacts.
+
+## Installed dependency verification
+
+After changing a dependency patch, verify the installed code as well as the
+lockfile. An incremental install can retain an unpatched transitive package
+even when its lockfile records the patch hash. The scope gate checks both SDK
+module formats and exercises WalletConnect's query decoder; a missing patch
+fails before build or execution. Recover with a clean frozen dependency
+install, then rerun `pnpm verify`. Do not repair `node_modules` manually or
+bypass the installed-patch checks. CI starts from a clean checkout.
 
 ## Anvil fork testing
 
