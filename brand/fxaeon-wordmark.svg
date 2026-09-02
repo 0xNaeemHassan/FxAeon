@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 240" role="img" aria-labelledby="title desc">
+  <title id="title">FxAeon</title>
+  <desc id="desc">Official interface for reviewed f(x) Protocol actions.</desc>
+  <defs>
+    <linearGradient id="panel" x1="35" y1="15" x2="930" y2="224" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#121927"/>
+      <stop offset="1" stop-color="#06090E"/>
+    </linearGradient>
+    <linearGradient id="ribbon" x1="62" y1="45" x2="205" y2="195" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#52C7FF"/>
+      <stop offset=".48" stop-color="#4F7CFF"/>
+      <stop offset="1" stop-color="#FF5368"/>
+    </linearGradient>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="#AFC2E2" stroke-opacity=".055"/>
+    </pattern>
+  </defs>
+  <rect x="2" y="2" width="956" height="236" rx="34" fill="url(#panel)" stroke="#536887" stroke-opacity=".36" stroke-width="2"/>
+  <rect x="2" y="2" width="956" height="236" rx="34" fill="url(#grid)"/>
+  <path d="M54 106C54 72.2 81 44 114.4 44H179c11.2 0 17.6 12.8 10.6 22l-33.4 44.4a50 50 0 0 1-40 18H77.4A23.4 23.4 0 0 1 54 106Z" fill="url(#ribbon)"/>
+  <path d="M204 142C204 175.8 177 204 143.6 204H79c-11.2 0-17.6-12.8-10.6-22l33.4-44.4a50 50 0 0 1 40-18h38.8A23.4 23.4 0 0 1 204 142Z" fill="url(#ribbon)"/>
+  <path d="M105 124h50" stroke="#fff" stroke-opacity=".92" stroke-width="9" stroke-linecap="round"/>
+  <text x="252" y="124" fill="#F6F8FC" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="76" font-weight="720" letter-spacing="-3">FxAeon</text>
+  <text x="256" y="166" fill="#9BA9C0" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="20" font-weight="560" letter-spacing="3.5">REVIEWED ON-CHAIN EXECUTION</text>
+  <circle cx="878" cy="76" r="6" fill="#50E4A6"/>
+  <text x="897" y="83" fill="#AEBBD0" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="18" font-weight="650" text-anchor="end">ETHEREUM</text>
+</svg>

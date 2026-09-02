@@ -1,6 +1,6 @@
 import { expect, test, assertNoBackendRequests } from "../fixtures/test";
 
-const ROUTES = ["/", "/login", "/portfolio", "/trade", "/positions", "/borrow", "/earn", "/move", "/more", "/settings", "/qr"];
+const ROUTES = ["/", "/login", "/portfolio", "/trade", "/positions", "/borrow", "/earn", "/move", "/more", "/settings", "/activity", "/qr"];
 const MOBILE_WIDTHS = [320, 360, 375, 390, 412, 430];
 
 test.describe("mobile web and Telegram accessibility contract", () => {
@@ -10,7 +10,9 @@ test.describe("mobile web and Telegram accessibility contract", () => {
       await page.setViewportSize({ width, height: 844 });
       for (const route of ROUTES) {
         await page.goto(route, { waitUntil: "domcontentloaded" });
-        await expect(page.locator("main"), `${route} main landmark at ${width}px`).toBeVisible();
+        // Next's client transition may retain the previous page as a hidden
+        // tree for one frame; assert the single visible landmark.
+        await expect(page.locator("main:visible"), `${route} main landmark at ${width}px`).toBeVisible();
         const geometry = await page.evaluate(() => ({
           viewport: document.documentElement.clientWidth,
           content: document.documentElement.scrollWidth,

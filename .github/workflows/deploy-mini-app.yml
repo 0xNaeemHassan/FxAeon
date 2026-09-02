@@ -43,7 +43,7 @@ jobs:
           NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL: ${{ secrets.NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL }}
           NEXT_PUBLIC_TELEGRAM_APP_URL: ${{ vars.NEXT_PUBLIC_TELEGRAM_APP_URL }}
       - name: Deploy to Cloudflare Pages
-        run: pnpm exec wrangler pages deploy apps/mini-app/dist --project-name=fxaeon-mini-app --commit-dirty=true
+        run: pnpm exec wrangler pages deploy apps/mini-app/dist --project-name=fxaeon --commit-dirty=true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

@@ -17,6 +17,7 @@ import { haptic } from '@/lib/telegram';
 
 type Props = {
   walletAddress: Address;
+  embedded?: boolean;
 };
 
 function chainName(chainId: RecoveryViewModel['record']['chainId']): string {
@@ -145,7 +146,7 @@ function formatBridgeAmount(value: string): string {
  * never resumes a route: a confirmed prerequisite only tells the user to
  * open the original flow and plan it again from fresh chain state.
  */
-export default function PendingTransactionRecovery({ walletAddress }: Props) {
+export default function PendingTransactionRecovery({ walletAddress, embedded = false }: Props) {
   const [views, setViews] = useState<RecoveryViewModel[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -175,7 +176,7 @@ export default function PendingTransactionRecovery({ walletAddress }: Props) {
   ), [views]);
   return (
     <section aria-labelledby="transaction-recovery-title">
-      <SectionTitle
+      {!embedded && <SectionTitle
         right={(
           <button
             type="button"
@@ -191,8 +192,9 @@ export default function PendingTransactionRecovery({ walletAddress }: Props) {
           </button>
         )}
       >
-        <span id="transaction-recovery-title">Transaction status</span>
-      </SectionTitle>
+        <span id="transaction-recovery-title">Activity</span>
+      </SectionTitle>}
+      {embedded && <h2 id="transaction-recovery-title" className="sr-only">Activity</h2>}
       <Card className="p-3.5">
         {loading ? (
           <div role="status" className="flex items-center gap-2 px-1 py-3 text-[11px] text-mut">

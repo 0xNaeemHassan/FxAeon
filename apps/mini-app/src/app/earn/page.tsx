@@ -2,10 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, Clock3, RefreshCw } from 'lucide-react';
+import Link from 'next/link';
 import { AppShell, Button, Card, EmptyState, LoadingRegion, Skeleton } from '@/components/ui';
 import { ActionReview } from '@/components/ActionReview';
 import WalletConnectCTA from '@/components/WalletConnectCTA';
-import { AmountField, InfoNote, Segmented, SlippageField, ToggleRow } from '@/components/ProtocolForm';
+import { AmountField, InfoNote, Segmented, SlippageField, ToggleRow, TokenSelect } from '@/components/ProtocolForm';
+import { useUsdPrice } from '@/components/PriceProvider';
+import { formatUsd, usdValueForUnits } from '@/lib/prices';
 import {
   assertConfiguredPublicClientChain,
   getFxSdk,
@@ -111,6 +114,10 @@ export default function EarnPage() {
   return (
     <AppShell title="Earn" subtitle="Deposit, withdraw, and claim fxSAVE.">
       <div className="flex flex-col gap-3.5">
+        <div className="grid grid-cols-2 rounded-xl border border-[var(--line)] bg-[var(--input)] p-1" aria-label="Earn products">
+          <span aria-current="page" className="flex min-h-11 items-center justify-center rounded-lg bg-[var(--mint-dim)] px-3 text-[13px] font-semibold text-[var(--text)]">fxSAVE</span>
+          <Link href="/borrow" className="glass-press flex min-h-11 items-center justify-center rounded-lg px-3 text-[13px] font-semibold text-mut">Borrow / fxMINT</Link>
+        </div>
         {!wallet.address ? (
           <>
             <WalletConnectCTA
@@ -235,6 +242,7 @@ type SaveData = {
 };
 
 function SavingsSummary({ data, loading, onRefresh }: { data: SaveData; loading: boolean; onRefresh: () => Promise<void> }) {
+  const fxUsdPrice = useUsdPrice('fxUSD');
   const hasAssets = data.balance.assetsWei !== undefined;
   const hasPending = data.redeemStatus.hasPendingRedeem || data.claimable.hasPendingRedeem;
   const ready = hasPending && data.claimable.isCooldownComplete;
@@ -253,7 +261,7 @@ function SavingsSummary({ data, loading, onRefresh }: { data: SaveData; loading:
           </h2>
           {hasAssets && (
             <p className="mt-1 text-[12px] text-mut tabular-nums">
-              {formatDisplayAmount(data.balance.balanceWei)} fxSAVE shares
+              {formatUsd(usdValueForUnits(data.balance.assetsWei ?? 0n, 18, fxUsdPrice))} · {formatDisplayAmount(data.balance.balanceWei)} fxSAVE shares
             </p>
           )}
         </div>
@@ -338,26 +346,7 @@ function VaultDetails({ config }: { config: SaveConfig }) {
 }
 
 function TokenPicker({ label, value, onChange }: { label: string; value: SaveToken; onChange: (value: SaveToken) => void }) {
-  return (
-    <div>
-      <p className="mb-2 text-[12px] font-medium text-mut">{label}</p>
-      <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label={`fxSAVE ${label.toLowerCase()}`}>
-        {(['fxUSD', 'usdc', 'fxUSDBasePool'] as const).map((item) => (
-          <button
-            key={item}
-            type="button"
-            role="radio"
-            aria-checked={value === item}
-            aria-label={labelToken(item)}
-            onClick={() => onChange(item)}
-            className={`min-h-12 rounded-xl border px-2 text-[12px] font-semibold ${value === item ? 'border-mint bg-[var(--mint-dim)] text-[var(--text)]' : 'border-[var(--line)] text-mut'}`}
-          >
-            {item === 'fxUSDBasePool' ? 'Base pool' : labelToken(item)}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
+  return <TokenSelect label={label} value={value} options={['fxUSD', 'usdc', 'fxUSDBasePool'] as const} onChange={onChange} />;
 }
 
 function FormHeader({ title, body }: { title: string; body: string }) {

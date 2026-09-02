@@ -2,10 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { Check, Palette, Sliders } from 'lucide-react';
+import { Check, Sliders } from 'lucide-react';
 import { AppShell, Button, SectionTitle, Skeleton } from '@/components/ui';
 import { useLocale } from '@/lib/i18n';
-import { THEMES, applyTheme, getSavedTheme, type ThemeId } from '@/lib/theme';
 import { haptic } from '@/lib/telegram';
 import { SETTINGS_KEY } from '@/lib/settings';
 
@@ -19,22 +18,12 @@ const LogoutSection = dynamic(() => import('@/components/LogoutSection'), {
 });
 
 const SLIPPAGE_PRESETS = [10, 50, 100, 200] as const;
-const THEME_LABELS: Record<ThemeId, string> = {
-  violet: 'Official',
-  black: 'Black',
-  light: 'Light',
-  matrix: 'Green',
-  neon: 'Magenta',
-  titanium: 'Slate',
-};
 type SettingsV1 = {
   slippageBps: number;
-  theme: ThemeId;
 };
 
 const DEFAULT_SETTINGS: SettingsV1 = {
   slippageBps: 50,
-  theme: 'violet',
 };
 
 function readSettings(): SettingsV1 {
@@ -42,8 +31,7 @@ function readSettings(): SettingsV1 {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || '{}') as Partial<SettingsV1>;
     const slippageBps = SLIPPAGE_PRESETS.includes(parsed.slippageBps as (typeof SLIPPAGE_PRESETS)[number]) ? parsed.slippageBps! : DEFAULT_SETTINGS.slippageBps;
-    const theme = parsed.theme && Object.prototype.hasOwnProperty.call(THEMES, parsed.theme) ? parsed.theme : getSavedTheme();
-    return { slippageBps, theme };
+    return { slippageBps };
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -59,7 +47,6 @@ export default function SettingsPage() {
   useEffect(() => {
     const next = readSettings();
     setSettings(next);
-    applyTheme(next.theme);
     setMounted(true);
   }, []);
 
@@ -67,7 +54,6 @@ export default function SettingsPage() {
     setSaved(false);
     setSaveError('');
     setSettings((current) => ({ ...current, [key]: value }));
-    if (key === 'theme') applyTheme(value as ThemeId);
     haptic('selection');
   };
 
@@ -101,28 +87,6 @@ export default function SettingsPage() {
           options={SLIPPAGE_PRESETS.map((bps) => ({ value: bps, label: `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 1)}%` }))}
           onChange={(value) => update('slippageBps', value)}
         />
-
-        <SectionTitle>
-          <span className="flex items-center gap-1.5"><Palette className="h-3.5 w-3.5" aria-hidden="true" /> Appearance</span>
-        </SectionTitle>
-        <div className="grid grid-cols-2 gap-2.5">
-          {(Object.keys(THEMES) as ThemeId[]).map((themeKey) => {
-            const theme = THEMES[themeKey];
-            const active = settings.theme === themeKey;
-            return (
-              <button
-                key={themeKey}
-                type="button"
-                aria-pressed={active}
-                onClick={() => update('theme', themeKey)}
-                className={`flex min-h-14 items-center justify-between rounded-lg border p-3 text-left transition-colors ${active ? 'border-[var(--mint)] bg-[var(--mint-dim)]' : 'border-[var(--line)] bg-[var(--surface)]'}`}
-              >
-                <span className="text-[13.5px] font-medium">{THEME_LABELS[themeKey]}</span>
-                <span className="h-3.5 w-3.5 rounded-full border border-white/20" style={{ backgroundColor: theme.accent }} aria-hidden="true" />
-              </button>
-            );
-          })}
-        </div>
 
         <div className="mt-6">
           <Button onClick={save}>

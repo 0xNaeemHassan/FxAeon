@@ -256,7 +256,7 @@ function resultPresentation(result: TransactionExecutionResult, bridge: boolean)
   if (confirmationUnknown) {
     return {
       title: 'Confirmation unknown',
-      body: 'A transaction hash exists, but its receipt could not be verified. Do not submit this action again. Check Transaction status on Portfolio.',
+      body: 'A transaction hash exists, but its receipt could not be verified. Do not submit this action again. Open Activity from the wallet profile.',
       tone: 'warning',
       icon: Clock3,
     };

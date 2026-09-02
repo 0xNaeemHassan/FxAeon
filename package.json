@@ -18,6 +18,7 @@
     "verify:production-env": "node scripts/validate_production_env.mjs",
     "verify:scope": "node scripts/verify_fx_scope.mjs",
     "check:bundle": "node scripts/check_bundle_size.mjs",
+    "docs:screenshots": "node scripts/capture_docs_screenshots.mjs",
     "verify": "node scripts/verify.mjs",
     "audit": "pnpm audit --prod --audit-level=high"
   },

@@ -10,35 +10,32 @@ import {
   PiggyBank,
   QrCode,
   RefreshCw,
-  Wallet,
 } from 'lucide-react';
 import Link from 'next/link';
 import { formatUnits } from 'viem';
 import { AppShell, ActionTile, AddressChip, Card, EmptyState, SectionTitle } from '@/components/ui';
 import TokenIcon from '@/components/TokenIcon';
+import { useUsdPrices } from '@/components/PriceProvider';
 import { haptic } from '@/lib/telegram';
 import { assertConfiguredPublicClientChain, getFxSdk, readWalletBalances, type WalletBalancesResult, type WalletTokenBalance } from '@/lib/fx';
 import { usePrivyWallet, useWalletReadyTimeout } from '@/lib/wallet';
-import PendingTransactionRecovery from '@/components/PendingTransactionRecovery';
+import { formatUsd, priceKeyForSymbol, usdValueForDecimal, usdValueForUnits } from '@/lib/prices';
 
 /**
  * Portfolio is a navigation and trust surface, not a second accounting
  * system. Positions, fxSAVE state, and balances are rendered by their
- * official SDK-backed pages; this screen never estimates USD value, PnL, or
- * market prices from a generic API.
+ * official SDK-backed pages. Current USD context comes from the shared,
+ * timestamp-validated market-price layer and is never used for execution.
  */
 export default function PortfolioPage() {
   return (
     <AppShell tabs>
       <div className="stagger flex flex-col">
-        <header className="mb-6 flex items-start justify-between gap-4">
+        <header className="mb-6">
           <div>
             <p className="page-kicker">Overview / Ethereum</p>
             <h1 className="text-display mt-1.5 text-[30px] font-semibold leading-tight">Portfolio</h1>
           </div>
-          <Link href="/settings" onClick={() => haptic('light')} aria-label="Open wallet settings" className="glass-press flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface)]">
-            <Wallet className="h-5 w-5 text-mint" aria-hidden="true" />
-          </Link>
         </header>
 
         <PortfolioWallet />
@@ -63,6 +60,7 @@ function PortfolioWallet() {
   const wallet = walletState.selectedWallet;
   const [refreshed, setRefreshed] = useState(false);
   const walletTimedOut = useWalletReadyTimeout(ready && walletState.ready);
+  const { prices } = useUsdPrices();
   const [protocol, setProtocol] = useState<ProtocolSnapshot>({ status: 'idle', positions: null, fxSaveShares: null, fxSaveAssets: null, redeemReady: null, balances: null });
 
   const loadProtocol = useCallback(async () => {
@@ -114,7 +112,7 @@ function PortfolioWallet() {
       <Card glow className="relative overflow-hidden p-5">
         <div className="relative">
           <h2 className="text-display text-[21px] font-semibold">{authenticated ? 'Choose a wallet' : 'Connect your wallet'}</h2>
-          <p className="mt-2 max-w-[310px] text-[13px] leading-relaxed text-mut">View your positions, fxSAVE balance, and pending transactions.</p>
+          <p className="mt-2 max-w-[310px] text-[13px] leading-relaxed text-mut">View your positions, fxSAVE balance, wallet assets, and live USD context.</p>
           <Link href="/login" className="button button-primary glass-press mt-5 flex min-h-12 w-full max-w-[240px] items-center justify-center rounded-xl px-4 py-3 text-[15px] font-semibold">{authenticated ? 'Choose wallet' : 'Connect wallet'}</Link>
         </div>
       </Card>
@@ -149,7 +147,7 @@ function PortfolioWallet() {
             <span><span className="block text-[13px] font-semibold">Positions</span><span className="mt-0.5 block text-[12px] text-mut">{protocol.positions !== null ? `${protocol.positions} open` : protocol.status === 'loading' ? 'Loading…' : 'Unavailable'}</span></span><ChevronRight className="h-4 w-4 text-mut" aria-hidden="true" />
           </Link>
           <Link href="/earn" onClick={() => haptic('light')} className="glass-press flex min-h-[64px] items-center justify-between py-3">
-            <span><span className="block text-[13px] font-semibold">fxSAVE</span><span className="mt-0.5 block text-[12px] text-mut">{protocol.fxSaveAssets !== null ? `${protocol.fxSaveAssets} fxUSD` : protocol.fxSaveShares !== null ? `${protocol.fxSaveShares} shares` : protocol.status === 'loading' ? 'Loading…' : 'Unavailable'}</span></span><ChevronRight className="h-4 w-4 text-mut" aria-hidden="true" />
+            <span><span className="block text-[13px] font-semibold">fxSAVE</span><span className="mt-0.5 block text-[12px] text-mut">{protocol.fxSaveAssets !== null ? `${protocol.fxSaveAssets} fxUSD · ${formatUsd(usdValueForDecimal(protocol.fxSaveAssets, prices.fxUSD))}` : protocol.fxSaveShares !== null ? `${protocol.fxSaveShares} shares` : protocol.status === 'loading' ? 'Loading…' : 'Unavailable'}</span></span><ChevronRight className="h-4 w-4 text-mut" aria-hidden="true" />
           </Link>
         </div>
         {(protocol.status === 'ready' || protocol.status === 'partial') && protocol.redeemReady === true && (
@@ -160,8 +158,7 @@ function PortfolioWallet() {
         )}
       </div>
     </Card>
-    <WalletBalancesCard balances={protocol.balances} loading={protocol.status === 'loading'} />
-    <PendingTransactionRecovery walletAddress={wallet.address as `0x${string}`} />
+    <WalletBalancesCard balances={protocol.balances} loading={protocol.status === 'loading'} prices={prices} />
     </>
   );
 }
@@ -175,8 +172,13 @@ type ProtocolSnapshot = {
   balances: WalletBalancesResult | null;
 };
 
-function WalletBalancesCard({ balances, loading }: { balances: WalletBalancesResult | null; loading: boolean }) {
+function WalletBalancesCard({ balances, loading, prices }: { balances: WalletBalancesResult | null; loading: boolean; prices: ReturnType<typeof useUsdPrices>['prices'] }) {
   const nonZero = balances?.balances.filter((balance) => balance.amountWei > 0n) ?? [];
+  const totalUsd = nonZero.reduce((total, balance) => {
+    const key = priceKeyForSymbol(balance.key);
+    const value = usdValueForUnits(balance.amountWei, balance.decimals, key ? prices[key] : undefined);
+    return value === null ? total : total + value;
+  }, 0);
 
   return (
     <Card className="relative mt-3 overflow-hidden p-4">
@@ -184,9 +186,9 @@ function WalletBalancesCard({ balances, loading }: { balances: WalletBalancesRes
         <div className="flex items-baseline justify-between gap-3">
           <div>
             <p className="text-[13px] font-semibold">Wallet balances</p>
-            <p className="mt-0.5 text-[11px] text-mut">Ethereum · exact on-chain units</p>
+            <p className="mt-0.5 text-[11px] text-mut">Ethereum · exact units with live USD context</p>
           </div>
-          {balances && <span className="text-[10px] uppercase tracking-[0.14em] text-mut">{nonZero.length} assets</span>}
+          {balances && <span className="text-right"><strong className="block text-[14px] tabular-nums">{totalUsd > 0 ? formatUsd(totalUsd) : '—'}</strong><span className="text-[9px] uppercase tracking-[0.12em] text-mut">{nonZero.length} assets</span></span>}
         </div>
 
         {loading && <div className="mt-4 h-20 animate-pulse rounded-xl bg-[var(--surface-2)]" aria-label="Loading wallet balances" />}
@@ -194,7 +196,10 @@ function WalletBalancesCard({ balances, loading }: { balances: WalletBalancesRes
         {!loading && balances && nonZero.length === 0 && <p className="mt-4 text-[12px] text-mut">No supported token balances found in this wallet.</p>}
         {!loading && nonZero.length > 0 && (
           <div className="mt-3 divide-y divide-[var(--line)] border-y border-[var(--line)]">
-            {nonZero.map((balance) => <WalletBalanceRow key={balance.key} balance={balance} />)}
+            {nonZero.map((balance) => {
+              const key = priceKeyForSymbol(balance.key);
+              return <WalletBalanceRow key={balance.key} balance={balance} price={key ? prices[key] : undefined} />;
+            })}
           </div>
         )}
         {!loading && balances && balances.failedTokens.length > 0 && (
@@ -205,7 +210,7 @@ function WalletBalancesCard({ balances, loading }: { balances: WalletBalancesRes
   );
 }
 
-function WalletBalanceRow({ balance }: { balance: WalletTokenBalance }) {
+function WalletBalanceRow({ balance, price }: { balance: WalletTokenBalance; price: number | undefined }) {
   const label = balance.key === 'fxUSDBasePool' ? 'fxUSD base pool' : balance.key;
   return (
     <div className="flex min-h-[62px] items-center justify-between gap-3 py-2.5">
@@ -216,7 +221,7 @@ function WalletBalanceRow({ balance }: { balance: WalletTokenBalance }) {
           <p className="truncate text-[10px] text-mut">{balance.address.slice(0, 6)}…{balance.address.slice(-4)}</p>
         </div>
       </div>
-      <p className="shrink-0 text-right font-mono text-[13px] text-hi">{formatWalletAmount(balance)}</p>
+      <div className="shrink-0 text-right"><p className="font-mono text-[13px] text-hi">{formatWalletAmount(balance)}</p><p className="mt-0.5 text-[10.5px] text-mut">{formatUsd(usdValueForUnits(balance.amountWei, balance.decimals, price))}</p></div>
     </div>
   );
 }

@@ -4,8 +4,10 @@ import { createPortal } from 'react-dom';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, Info } from 'lucide-react';
 import TokenIcon from '@/components/TokenIcon';
+import { useUsdPrices } from '@/components/PriceProvider';
 import { haptic } from '@/lib/telegram';
 import { calculateFractionDecimal, decimalInputError, formatExactDecimal, positiveDecimal } from '@/lib/amount';
+import { formatUsd, formatUsdPrice, priceKeyForSymbol, usdValueForDecimal, type UsdPriceMap } from '@/lib/prices';
 
 export function Segmented<T extends string>({
   value,
@@ -158,6 +160,10 @@ export function AmountField({
   const hintId = `${inputId}-hint`;
   const errorId = `${inputId}-error`;
   const [touched, setTouched] = useState(false);
+  const { prices } = useUsdPrices();
+  const priceKey = priceKeyForSymbol(symbol);
+  const usdPrice = priceKey ? prices[priceKey] : undefined;
+  const usdValue = usdValueForDecimal(value, usdPrice);
   const inputError = decimalInputError(value, maxDecimals, { allowAll, allowZero });
   const error = inputError ?? constraintError ?? (touched && !value && !allowZero ? 'Enter an amount.' : null);
   const describedBy = [hint ? hintId : null, error ? errorId : null].filter(Boolean).join(' ') || undefined;
@@ -193,6 +199,12 @@ export function AmountField({
           <TokenIcon symbol={symbol} size={22} /> {symbol}
         </span>
       </div>
+      {usdPrice && (
+        <div className="mt-2 flex items-center justify-between gap-3 px-1 text-[11px] text-mut" aria-live="polite">
+          <span>{usdValue === null ? 'Enter an amount for USD value' : `≈ ${formatUsd(usdValue)}`}</span>
+          <span>{formatUsdPrice(usdPrice)} / {displayTokenSymbol(symbol)}</span>
+        </div>
+      )}
       {(balance !== undefined || allowAll) && (
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] text-mut">
           <div className="flex min-w-0 items-center gap-1 truncate">
@@ -267,6 +279,7 @@ export function TokenSelect<T extends string>({
   const selectId = useId();
   const labelId = `${selectId}-label`;
   const [open, setOpen] = useState(false);
+  const { prices } = useUsdPrices();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
@@ -322,7 +335,7 @@ export function TokenSelect<T extends string>({
       >
         <span className="flex min-w-0 items-center gap-2.5">
           <TokenIcon symbol={value} size={26} />
-          <span className="truncate">{value}</span>
+          <span className="truncate">{displayTokenSymbol(value)}</span>
         </span>
         <ChevronDown aria-hidden="true" className={`h-4 w-4 shrink-0 text-mut transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -357,7 +370,7 @@ export function TokenSelect<T extends string>({
                     type="button"
                     role="option"
                     aria-selected={active}
-                    aria-label={`${option}${active ? ' selected' : ''}`}
+                    aria-label={`${displayTokenSymbol(option)}${active ? ' selected' : ''}`}
                     tabIndex={active ? 0 : -1}
                     onClick={() => choose(option)}
                     onKeyDown={(event) => {
@@ -371,10 +384,13 @@ export function TokenSelect<T extends string>({
                   >
                     <TokenIcon symbol={option} size={30} />
                     <span className="min-w-0 flex-1">
-                      <span className="block text-[14px] font-semibold">{option === 'fxUSDBasePool' ? 'fxUSD base pool' : option}</span>
+                      <span className="block text-[14px] font-semibold">{displayTokenSymbol(option)}</span>
                       <span className="mt-0.5 block text-[10.5px] text-mut">{active ? 'Selected asset' : 'Available asset'}</span>
                     </span>
-                    <span className={`flex h-5 w-5 items-center justify-center rounded-full border ${active ? 'border-[var(--mint)] bg-[var(--mint)] text-white' : 'border-[var(--line-strong)]'}`} aria-hidden="true">{active ? '✓' : ''}</span>
+                    <span className="shrink-0 text-right">
+                      <span className="block text-[12px] font-semibold tabular-nums">{optionPriceLabel(option, prices)}</span>
+                      <span className={`ml-auto mt-1 flex h-5 w-5 items-center justify-center rounded-full border ${active ? 'border-[var(--mint)] bg-[var(--mint)] text-white' : 'border-[var(--line-strong)]'}`} aria-hidden="true">{active ? '✓' : ''}</span>
+                    </span>
                   </button>
                 );
               })}
@@ -456,8 +472,11 @@ export function LeverageField({
   error?: string | null;
 }) {
   const inputId = useId();
+  const sliderId = `${inputId}-slider`;
   const errorId = `${inputId}-error`;
   const invalid = Boolean(error);
+  const sliderValue = Math.min(max, Math.max(min, Number.isFinite(value) && value > 0 ? value : min));
+  const fill = max === min ? 0 : ((sliderValue - min) / (max - min)) * 100;
   return (
     <div>
       <FieldLabel htmlFor={inputId} hint={`${min}× – ${max}×`}>{label}</FieldLabel>
@@ -492,10 +511,40 @@ export function LeverageField({
           />
           <span className="text-display text-[22px] font-semibold text-mint" aria-hidden="true">×</span>
         </div>
+        <div className="mt-2 border-t border-[var(--line)] pt-2">
+          <input
+            id={sliderId}
+            type="range"
+            className="lever"
+            min={min}
+            max={max}
+            step="0.1"
+            value={sliderValue}
+            aria-label={`${label} slider`}
+            aria-valuetext={`${sliderValue.toFixed(1)}×`}
+            onChange={(event) => onChange(Number(event.target.value))}
+            onPointerUp={() => haptic('selection')}
+            style={{ '--fill': `${fill}%` } as React.CSSProperties}
+          />
+          <div className="flex justify-between px-1 text-[10px] font-medium text-mut" aria-hidden="true">
+            <span>{min.toFixed(1)}×</span><span>{max.toFixed(1)}×</span>
+          </div>
+        </div>
       </div>
       {error && <p id={errorId} role="alert" className="mt-1.5 px-1 text-[11px] leading-relaxed text-danger">{error}</p>}
     </div>
   );
+}
+
+function displayTokenSymbol(symbol: string): string {
+  if (symbol.toLowerCase() === 'usdc') return 'USDC';
+  if (symbol === 'fxUSDBasePool' || symbol.toLowerCase() === 'fxusd base pool') return 'fxUSD base pool';
+  return symbol;
+}
+
+function optionPriceLabel(symbol: string, prices: UsdPriceMap): string {
+  const key = priceKeyForSymbol(symbol);
+  return key ? formatUsdPrice(prices[key]) : '—';
 }
 
 export function ToggleRow({
