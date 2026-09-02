@@ -1,6 +1,6 @@
 # Mini App end-to-end tests
 
-The Playwright suite runs against the real static export and a small local file server. It uses empty Privy and RPC configuration, so it covers first-class browser entry, mobile routing, Telegram viewport behavior, accessibility, unavailable states, and the client-only boundary without touching a production wallet or chain. The external price service is blocked by default; one focused test uses a current deterministic response to prove USD rendering and validation behavior.
+The Playwright suite runs against the real static export and a small local file server. It uses empty Privy and RPC configuration, so it covers first-class browser entry, mobile routing, Telegram viewport behavior, accessibility, unavailable states, and the client-only boundary without touching a production wallet or chain. External price services are blocked by default; focused tests use deterministic DefiLlama current-price and CoinGecko history responses to prove USD rendering, chart ranges, validation behavior, and graceful failure.
 
 ## Run the suite
 

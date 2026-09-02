@@ -1,54 +1,71 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ArrowDownToLine,
   ArrowLeftRight,
-  Banknote,
   CandlestickChart,
   ChevronRight,
+  CircleDollarSign,
+  Coins,
   Layers2,
   PiggyBank,
-  QrCode,
   RefreshCw,
+  ShieldCheck,
+  type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
-import { formatUnits } from 'viem';
-import { AppShell, ActionTile, AddressChip, Card, EmptyState, SectionTitle } from '@/components/ui';
-import TokenIcon from '@/components/TokenIcon';
+import { formatUnits, type Address } from 'viem';
+import { MarketMiniCard } from '@/components/MarketChart';
 import { useUsdPrices } from '@/components/PriceProvider';
+import RecentActivityPreview from '@/components/RecentActivityPreview';
+import TokenIcon from '@/components/TokenIcon';
+import { AddressChip, AppShell, Card, EmptyState, SectionTitle } from '@/components/ui';
+import {
+  assertConfiguredPublicClientChain,
+  getFxSdk,
+  readWalletBalances,
+  type WalletBalancesResult,
+  type WalletTokenBalance,
+} from '@/lib/fx';
+import { formatUsd, priceKeyForSymbol, usdValueForDecimal, usdValueForUnits, type UsdPriceMap } from '@/lib/prices';
 import { haptic } from '@/lib/telegram';
-import { assertConfiguredPublicClientChain, getFxSdk, readWalletBalances, type WalletBalancesResult, type WalletTokenBalance } from '@/lib/fx';
 import { usePrivyWallet, useWalletReadyTimeout } from '@/lib/wallet';
-import { formatUsd, priceKeyForSymbol, usdValueForDecimal, usdValueForUnits } from '@/lib/prices';
+
+const EMPTY_PROTOCOL: ProtocolSnapshot = {
+  status: 'idle',
+  positions: null,
+  fxSaveShares: null,
+  fxSaveAssets: null,
+  redeemReady: null,
+  balances: null,
+};
 
 /**
- * Portfolio is a navigation and trust surface, not a second accounting
- * system. Positions, fxSAVE state, and balances are rendered by their
- * official SDK-backed pages. Current USD context comes from the shared,
- * timestamp-validated market-price layer and is never used for execution.
+ * Portfolio deliberately reports only state that FxAeon can verify. Wallet
+ * value is the sum of supported Ethereum balances and is hidden whenever a
+ * token read or a required USD price is missing. Positions and fxSAVE remain
+ * separate protocol state so they cannot be accidentally double-counted.
  */
 export default function PortfolioPage() {
   return (
     <AppShell tabs>
-      <div className="stagger flex flex-col">
-        <header className="mb-6">
+      <div className="portfolio-dashboard stagger flex flex-col">
+        <header className="portfolio-page-heading">
           <div>
             <p className="page-kicker">Overview / Ethereum</p>
             <h1 className="text-display mt-1.5 text-[30px] font-semibold leading-tight">Portfolio</h1>
+            <p className="mt-1 text-[12px] text-mut">Wallet assets and verified f(x) protocol state.</p>
           </div>
         </header>
 
-        <PortfolioWallet />
+        <nav className="portfolio-context-tabs" aria-label="Portfolio sections">
+          <a href="#overview" aria-current="page">Overview</a>
+          <Link href="/positions">Positions</Link>
+          <Link href="/earn">Earn</Link>
+        </nav>
 
-        <SectionTitle>Actions</SectionTitle>
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-          <ActionTile icon={QrCode} label="Receive" hint="Fund wallet" href="/qr" />
-          <ActionTile icon={CandlestickChart} label="Trade" hint="Open a position" href="/trade" />
-          <ActionTile icon={Layers2} label="Positions" hint="Manage exposure" href="/positions" />
-          <ActionTile icon={PiggyBank} label="fxSAVE" hint="Deposit or redeem" href="/earn" />
-          <ActionTile icon={ArrowLeftRight} label="Move" hint="Ethereum ↔ Base" href="/move" />
-          <ActionTile icon={Banknote} label="Borrow" hint="Mint or repay" href="/borrow" />
-        </div>
+        <PortfolioWallet />
       </div>
     </AppShell>
   );
@@ -58,14 +75,16 @@ function PortfolioWallet() {
   const walletState = usePrivyWallet();
   const { ready, authenticated } = walletState;
   const wallet = walletState.selectedWallet;
-  const [refreshed, setRefreshed] = useState(false);
   const walletTimedOut = useWalletReadyTimeout(ready && walletState.ready);
-  const { prices } = useUsdPrices();
-  const [protocol, setProtocol] = useState<ProtocolSnapshot>({ status: 'idle', positions: null, fxSaveShares: null, fxSaveAssets: null, redeemReady: null, balances: null });
+  const priceSnapshot = useUsdPrices();
+  const [protocol, setProtocol] = useState<ProtocolSnapshot>(EMPTY_PROTOCOL);
+  const [refreshing, setRefreshing] = useState(false);
+  const requestId = useRef(0);
 
   const loadProtocol = useCallback(async () => {
     if (!wallet?.address) return;
-    setProtocol((current) => ({ ...current, status: 'loading' }));
+    const activeRequest = ++requestId.current;
+    setProtocol({ ...EMPTY_PROTOCOL, status: 'loading' });
     try {
       await assertConfiguredPublicClientChain(1);
       const sdk = getFxSdk();
@@ -80,86 +99,329 @@ function PortfolioWallet() {
         sdk.getFxSaveClaimable({ userAddress: wallet.address }),
         readWalletBalances(wallet.address),
       ]);
+      if (requestId.current !== activeRequest) return;
+
       const fulfilled = [positions, fxSave, redeem, balances].filter((result) => result.status === 'fulfilled').length;
       setProtocol({
         status: fulfilled === 4 ? 'ready' : fulfilled > 0 ? 'partial' : 'unavailable',
         positions: positions.status === 'fulfilled'
-          ? positions.value.reduce((total, marketPositions) => total + marketPositions.filter((position) => position.rawColls > 0n || position.rawDebts > 0n).length, 0)
+          ? positions.value.reduce(
+            (total, marketPositions) => total + marketPositions.filter((position) => position.rawColls > 0n || position.rawDebts > 0n).length,
+            0,
+          )
           : null,
         fxSaveShares: fxSave.status === 'fulfilled' ? formatProtocolAmount(fxSave.value.balanceWei) : null,
-        fxSaveAssets: fxSave.status === 'fulfilled' && fxSave.value.assetsWei !== undefined ? formatProtocolAmount(fxSave.value.assetsWei) : null,
+        fxSaveAssets: fxSave.status === 'fulfilled' && fxSave.value.assetsWei !== undefined
+          ? formatProtocolAmount(fxSave.value.assetsWei)
+          : null,
         redeemReady: redeem.status === 'fulfilled' ? redeem.value.isCooldownComplete : null,
         balances: balances.status === 'fulfilled' ? balances.value : null,
       });
     } catch {
-      setProtocol({ status: 'unavailable', positions: null, fxSaveShares: null, fxSaveAssets: null, redeemReady: null, balances: null });
+      if (requestId.current === activeRequest) setProtocol({ ...EMPTY_PROTOCOL, status: 'unavailable' });
     }
   }, [wallet?.address]);
 
   useEffect(() => {
     if (authenticated && wallet?.address && walletState.ready) void loadProtocol();
+    return () => { requestId.current += 1; };
   }, [authenticated, loadProtocol, wallet?.address, walletState.ready]);
 
   if (!ready || !walletState.ready) {
     if (walletTimedOut) {
-       return <EmptyState icon={RefreshCw} title="Wallet did not load" body="Check your connection, update your browser or Telegram, then reopen FxAeon." action={<button type="button" onClick={() => window.location.reload()} className="button button-primary min-h-11 w-full rounded-xl px-4">Reload wallet</button>} />;
+      return (
+        <EmptyState
+          icon={RefreshCw}
+          title="Wallet did not load"
+          body="Check your connection, update your browser or Telegram, then reopen FxAeon."
+          action={<button type="button" onClick={() => window.location.reload()} className="button button-primary min-h-11 w-full rounded-xl px-4">Reload wallet</button>}
+        />
+      );
     }
-    return <Card className="h-36 animate-pulse"><span className="sr-only">Loading wallet</span></Card>;
+    return <PortfolioLoading />;
   }
 
   if (!authenticated || !wallet) {
-    return (
-      <Card glow className="relative overflow-hidden p-5">
-        <div className="relative">
-          <h2 className="text-display text-[21px] font-semibold">{authenticated ? 'Choose a wallet' : 'Connect your wallet'}</h2>
-          <p className="mt-2 max-w-[310px] text-[13px] leading-relaxed text-mut">View your positions, fxSAVE balance, wallet assets, and live USD context.</p>
-          <Link href="/login" className="button button-primary glass-press mt-5 flex min-h-12 w-full max-w-[240px] items-center justify-center rounded-xl px-4 py-3 text-[15px] font-semibold">{authenticated ? 'Choose wallet' : 'Connect wallet'}</Link>
-        </div>
-      </Card>
-    );
+    return <DisconnectedPortfolio authenticated={authenticated} />;
   }
 
+  const loading = protocol.status === 'idle' || protocol.status === 'loading';
+  const valuation = walletValuation(protocol.balances, priceSnapshot.prices);
+
   return (
-    <>
-    <Card className="relative overflow-hidden p-4">
-      <div className="relative">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[12px] font-medium text-mut">Wallet</p>
-            <div className="mt-2"><AddressChip address={wallet.address} /></div>
-          </div>
-          <button
-            type="button"
-            aria-label="Refresh on-chain views"
-            onClick={() => {
-              haptic('light');
-              setRefreshed(true);
-              void loadProtocol();
-              window.setTimeout(() => setRefreshed(false), 1200);
-            }}
-            className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-xl text-mut hover:text-mint"
-          >
-            <RefreshCw className={`h-4 w-4 ${refreshed ? 'animate-spin' : ''}`} aria-hidden="true" />
-          </button>
-        </div>
-        <div className="mt-4 divide-y divide-[var(--line)] border-y border-[var(--line)]">
-          <Link href="/positions" onClick={() => haptic('light')} className="glass-press flex min-h-[64px] items-center justify-between py-3">
-            <span><span className="block text-[13px] font-semibold">Positions</span><span className="mt-0.5 block text-[12px] text-mut">{protocol.positions !== null ? `${protocol.positions} open` : protocol.status === 'loading' ? 'Loading…' : 'Unavailable'}</span></span><ChevronRight className="h-4 w-4 text-mut" aria-hidden="true" />
+    <div id="overview">
+      <SupportedValueCard
+        walletAddress={wallet.address}
+        protocol={protocol}
+        valuation={valuation}
+        loading={loading}
+        priceStatus={priceSnapshot.status}
+        updatedAt={priceSnapshot.updatedAt}
+        refreshing={refreshing}
+        onRefresh={() => {
+          haptic('light');
+          setRefreshing(true);
+          void loadProtocol().finally(() => setRefreshing(false));
+        }}
+      />
+
+      <QuickActions />
+      <MarketOverview />
+
+      <SectionTitle>Protocol</SectionTitle>
+      <div className="portfolio-protocol-grid">
+        <ProtocolCard
+          icon={Layers2}
+          label="Positions"
+          value={protocol.positions !== null ? `${protocol.positions} open` : loading ? 'Loading…' : 'Unavailable'}
+          hint="ETH and BTC exposure"
+          href="/positions"
+        />
+        <ProtocolCard
+          icon={PiggyBank}
+          label="fxSAVE"
+          value={fxSaveLabel(protocol, priceSnapshot.prices, loading)}
+          hint={protocol.redeemReady ? 'Withdrawal ready to claim' : 'Save, request, and claim'}
+          href="/earn"
+          accent={protocol.redeemReady === true}
+        />
+        <ProtocolCard
+          icon={CircleDollarSign}
+          label="Borrow / fxMINT"
+          value="Mint fxUSD"
+          hint="Collateral-backed borrowing"
+          href="/borrow"
+        />
+      </div>
+
+      {(protocol.status === 'partial' || protocol.status === 'unavailable') && (
+        <p role="status" className="mt-3 rounded-xl bg-[var(--warn-dim)] px-3 py-2.5 text-[11px] leading-relaxed text-warn">
+          {protocol.status === 'partial'
+            ? 'Some Ethereum reads are unavailable. FxAeon is showing only the state it could verify.'
+            : 'Ethereum reads are unavailable right now. Your wallet remains connected; refresh to try again.'}
+        </p>
+      )}
+
+      <WalletBalancesCard balances={protocol.balances} loading={loading} prices={priceSnapshot.prices} />
+      <RecentActivityPreview walletAddress={wallet.address as Address} />
+    </div>
+  );
+}
+
+function DisconnectedPortfolio({ authenticated }: { authenticated: boolean }) {
+  return (
+    <div id="overview">
+      <Card glow className="portfolio-connect-card relative overflow-hidden p-5">
+        <div className="relative">
+          <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--mint-dim)] text-mint">
+            <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <p className="micro-label mt-5">Self-custody portfolio</p>
+          <h2 className="text-display mt-1.5 text-[23px] font-semibold">{authenticated ? 'Choose a wallet' : 'Your on-chain home'}</h2>
+          <p className="mt-2 max-w-[390px] text-[12.5px] leading-relaxed text-mut">
+            Connect to see supported wallet value, exact asset balances, positions, fxSAVE, and activity from this device.
+          </p>
+          <Link href="/login" className="button button-primary glass-press mt-5 flex min-h-12 w-full max-w-[280px] items-center justify-center rounded-xl px-4 py-3 text-[14px] font-semibold">
+            {authenticated ? 'Choose wallet' : 'Connect wallet'}
           </Link>
-          <Link href="/earn" onClick={() => haptic('light')} className="glass-press flex min-h-[64px] items-center justify-between py-3">
-            <span><span className="block text-[13px] font-semibold">fxSAVE</span><span className="mt-0.5 block text-[12px] text-mut">{protocol.fxSaveAssets !== null ? `${protocol.fxSaveAssets} fxUSD · ${formatUsd(usdValueForDecimal(protocol.fxSaveAssets, prices.fxUSD))}` : protocol.fxSaveShares !== null ? `${protocol.fxSaveShares} shares` : protocol.status === 'loading' ? 'Loading…' : 'Unavailable'}</span></span><ChevronRight className="h-4 w-4 text-mut" aria-hidden="true" />
-          </Link>
+          <p className="mt-3 flex items-center gap-1.5 text-[10.5px] text-mut"><ShieldCheck className="h-3.5 w-3.5 text-mint" aria-hidden="true" />Works in a browser or Telegram. You confirm every transaction.</p>
         </div>
-        {(protocol.status === 'ready' || protocol.status === 'partial') && protocol.redeemReady === true && (
-          <Link href="/earn" onClick={() => haptic('light')} className="mt-3 flex min-h-11 items-center justify-between rounded-xl bg-[var(--success-dim)] px-3 py-2 text-[12px] font-semibold text-success">fxSAVE ready to claim <ChevronRight className="h-4 w-4" aria-hidden="true" /></Link>
-        )}
-        {(protocol.status === 'unavailable' || protocol.status === 'partial') && (
-          <p role="status" className="mt-3 rounded-xl bg-[var(--warn-dim)] px-3 py-2 text-[11px] leading-relaxed text-warn">{protocol.status === 'partial' ? 'Some on-chain reads are unavailable. Available state is still shown above.' : 'On-chain reads are unavailable right now. Try refreshing when Ethereum responds.'}</p>
-        )}
+      </Card>
+      <QuickActions />
+      <MarketOverview />
+    </div>
+  );
+}
+
+function SupportedValueCard({
+  walletAddress,
+  protocol,
+  valuation,
+  loading,
+  priceStatus,
+  updatedAt,
+  refreshing,
+  onRefresh,
+}: {
+  walletAddress: string;
+  protocol: ProtocolSnapshot;
+  valuation: WalletValuation;
+  loading: boolean;
+  priceStatus: ReturnType<typeof useUsdPrices>['status'];
+  updatedAt: number | null;
+  refreshing: boolean;
+  onRefresh: () => void;
+}) {
+  const priceContext = updatedAt
+    ? `${priceStatus === 'stale' ? 'Cached prices' : 'Live prices'} · ${new Date(updatedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+    : 'Waiting for validated market prices';
+
+  return (
+    <Card glow elevation={2} className="portfolio-value-card relative overflow-hidden p-5">
+      <div className="portfolio-value-topline">
+        <div>
+          <p className="micro-label">Supported wallet value</p>
+          <div className="mt-2"><AddressChip address={walletAddress} /></div>
+        </div>
+        <button type="button" aria-label="Refresh portfolio" onClick={onRefresh} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-xl text-mut hover:text-mint">
+          <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
+        </button>
+      </div>
+
+      <div className="portfolio-value-main">
+        <div>
+          <p className="text-display text-[38px] font-semibold leading-none tabular-nums">
+            {loading ? '—' : valuation.complete ? formatUsd(valuation.totalUsd) : '—'}
+          </p>
+          <p className="mt-2 text-[11px] text-mut">
+            {loading
+              ? 'Reading supported Ethereum balances…'
+              : valuation.complete
+                ? `${valuation.assetCount} supported ${valuation.assetCount === 1 ? 'asset' : 'assets'} · ${priceContext}`
+                : valuation.reason}
+          </p>
+        </div>
+        <span className="portfolio-value-assurance"><ShieldCheck className="h-4 w-4" aria-hidden="true" />Verified units</span>
+      </div>
+
+      <div className="portfolio-value-metrics">
+        <ValueMetric label="Open positions" value={protocol.positions !== null ? String(protocol.positions) : loading ? '…' : '—'} />
+        <ValueMetric label="fxSAVE assets" value={protocol.fxSaveAssets !== null ? `${protocol.fxSaveAssets} fxUSD` : loading ? '…' : '—'} />
+        <ValueMetric label="Supported assets" value={loading ? '…' : String(valuation.assetCount)} />
       </div>
     </Card>
-    <WalletBalancesCard balances={protocol.balances} loading={protocol.status === 'loading'} prices={prices} />
-    </>
+  );
+}
+
+function ValueMetric({ label, value }: { label: string; value: string }) {
+  return <span><small>{label}</small><strong>{value}</strong></span>;
+}
+
+function QuickActions() {
+  const actions: { href: string; label: string; icon: LucideIcon }[] = [
+    { href: '/qr', label: 'Receive', icon: ArrowDownToLine },
+    { href: '/trade', label: 'Trade', icon: CandlestickChart },
+    { href: '/move', label: 'Move', icon: ArrowLeftRight },
+    { href: '/earn', label: 'Earn', icon: PiggyBank },
+  ];
+  return (
+    <section aria-labelledby="portfolio-actions-title">
+      <SectionTitle><span id="portfolio-actions-title">Actions</span></SectionTitle>
+      <div className="portfolio-quick-actions">
+        {actions.map(({ href, label, icon: Icon }) => (
+          <Link key={href} href={href} onClick={() => haptic('light')} className="portfolio-quick-action glass glass-press">
+            <span><Icon className="h-5 w-5" aria-hidden="true" /></span>
+            <strong>{label}</strong>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function MarketOverview() {
+  return (
+    <section aria-labelledby="market-overview-title">
+      <SectionTitle right={<Link href="/trade" className="glass-press flex min-h-11 items-center gap-1 px-1 text-[11px] font-semibold text-mint">Open trade <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" /></Link>}>
+        <span id="market-overview-title">Markets</span>
+      </SectionTitle>
+      <div className="grid grid-cols-2 gap-2.5">
+        <MarketMiniCard market="ETH" />
+        <MarketMiniCard market="BTC" />
+      </div>
+    </section>
+  );
+}
+
+function ProtocolCard({ icon: Icon, label, value, hint, href, accent = false }: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  hint: string;
+  href: string;
+  accent?: boolean;
+}) {
+  return (
+    <Link href={href} onClick={() => haptic('light')} className={`portfolio-protocol-card glass glass-press ${accent ? 'portfolio-protocol-card-accent' : ''}`}>
+      <span className="portfolio-protocol-icon"><Icon className="h-5 w-5" aria-hidden="true" /></span>
+      <span className="min-w-0 flex-1">
+        <small>{label}</small>
+        <strong>{value}</strong>
+        <em>{hint}</em>
+      </span>
+      <ChevronRight className="h-4 w-4 shrink-0 text-mut" aria-hidden="true" />
+    </Link>
+  );
+}
+
+function WalletBalancesCard({ balances, loading, prices }: { balances: WalletBalancesResult | null; loading: boolean; prices: UsdPriceMap }) {
+  const nonZero = balances?.balances.filter((balance) => balance.amountWei > 0n) ?? [];
+  const valuation = walletValuation(balances, prices);
+
+  return (
+    <section aria-labelledby="wallet-balances-title">
+      <SectionTitle><span id="wallet-balances-title">Assets</span></SectionTitle>
+      <Card className="portfolio-balances-card relative overflow-hidden p-0">
+        <div className="flex min-h-[68px] items-center justify-between gap-3 border-b border-[var(--line)] px-4 py-3">
+          <div>
+            <p className="text-[13px] font-semibold">Wallet balances</p>
+            <p className="mt-0.5 text-[10.5px] text-mut">Ethereum · exact on-chain units</p>
+          </div>
+          <span className="text-right">
+            <strong className="block text-[14px] tabular-nums">{loading ? '—' : valuation.complete ? formatUsd(valuation.totalUsd) : '—'}</strong>
+            <span className="text-[9px] uppercase tracking-[0.12em] text-mut">{nonZero.length} assets</span>
+          </span>
+        </div>
+
+        {loading && <div className="m-4 h-24 animate-pulse rounded-xl bg-[var(--surface-2)]" role="status" aria-label="Loading wallet balances" />}
+        {!loading && !balances && <p className="m-4 rounded-xl bg-[var(--warn-dim)] px-3 py-2 text-[11px] leading-relaxed text-warn">Supported token balances are unavailable. Refresh when Ethereum responds.</p>}
+        {!loading && balances && nonZero.length === 0 && (
+          <div className="flex items-center gap-3 px-4 py-5">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] text-mut"><Coins className="h-5 w-5" aria-hidden="true" /></span>
+            <span><strong className="block text-[12.5px]">No supported assets found</strong><span className="mt-1 block text-[11px] text-mut">Receive a supported token to see it here.</span></span>
+          </div>
+        )}
+        {!loading && nonZero.length > 0 && (
+          <div className="divide-y divide-[var(--line)] px-4">
+            {nonZero.map((balance) => {
+              const key = priceKeyForSymbol(balance.key);
+              return <WalletBalanceRow key={balance.key} balance={balance} price={key ? prices[key] : undefined} />;
+            })}
+          </div>
+        )}
+        {!loading && balances && balances.failedTokens.length > 0 && (
+          <p role="status" className="m-3 rounded-xl bg-[var(--warn-dim)] px-3 py-2 text-[11px] leading-relaxed text-warn">Some supported token reads failed, so the wallet total is hidden.</p>
+        )}
+      </Card>
+    </section>
+  );
+}
+
+function WalletBalanceRow({ balance, price }: { balance: WalletTokenBalance; price: number | undefined }) {
+  const label = balance.key === 'fxUSDBasePool' ? 'fxUSD base pool' : balance.key;
+  return (
+    <div className="flex min-h-[68px] items-center justify-between gap-3 py-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <TokenIcon symbol={balance.key} size={32} />
+        <div className="min-w-0">
+          <p className="truncate text-[13px] font-semibold">{label}</p>
+          <p className="truncate text-[10px] text-mut">{balance.address.slice(0, 6)}…{balance.address.slice(-4)}</p>
+        </div>
+      </div>
+      <div className="shrink-0 text-right">
+        <p className="font-mono text-[12.5px] text-hi">{formatWalletAmount(balance)}</p>
+        <p className="mt-0.5 text-[10.5px] text-mut">{formatUsd(usdValueForUnits(balance.amountWei, balance.decimals, price))}</p>
+      </div>
+    </div>
+  );
+}
+
+function PortfolioLoading() {
+  return (
+    <div id="overview" role="status" aria-label="Loading portfolio" className="space-y-3">
+      <Card className="h-[230px] animate-pulse"><span className="sr-only">Loading wallet</span></Card>
+      <div className="grid grid-cols-4 gap-2"><span className="skeleton h-[72px]" /><span className="skeleton h-[72px]" /><span className="skeleton h-[72px]" /><span className="skeleton h-[72px]" /></div>
+    </div>
   );
 }
 
@@ -172,58 +434,41 @@ type ProtocolSnapshot = {
   balances: WalletBalancesResult | null;
 };
 
-function WalletBalancesCard({ balances, loading, prices }: { balances: WalletBalancesResult | null; loading: boolean; prices: ReturnType<typeof useUsdPrices>['prices'] }) {
-  const nonZero = balances?.balances.filter((balance) => balance.amountWei > 0n) ?? [];
-  const totalUsd = nonZero.reduce((total, balance) => {
+type WalletValuation = {
+  complete: boolean;
+  totalUsd: number | null;
+  assetCount: number;
+  reason: string;
+};
+
+function walletValuation(balances: WalletBalancesResult | null, prices: UsdPriceMap): WalletValuation {
+  if (!balances) return { complete: false, totalUsd: null, assetCount: 0, reason: 'Wallet balances are not available yet.' };
+  const nonZero = balances.balances.filter((balance) => balance.amountWei > 0n);
+  if (balances.failedTokens.length > 0) {
+    return { complete: false, totalUsd: null, assetCount: nonZero.length, reason: 'Some supported balances could not be verified.' };
+  }
+  const values = nonZero.map((balance) => {
     const key = priceKeyForSymbol(balance.key);
-    const value = usdValueForUnits(balance.amountWei, balance.decimals, key ? prices[key] : undefined);
-    return value === null ? total : total + value;
-  }, 0);
-
-  return (
-    <Card className="relative mt-3 overflow-hidden p-4">
-      <div className="relative">
-        <div className="flex items-baseline justify-between gap-3">
-          <div>
-            <p className="text-[13px] font-semibold">Wallet balances</p>
-            <p className="mt-0.5 text-[11px] text-mut">Ethereum · exact units with live USD context</p>
-          </div>
-          {balances && <span className="text-right"><strong className="block text-[14px] tabular-nums">{totalUsd > 0 ? formatUsd(totalUsd) : '—'}</strong><span className="text-[9px] uppercase tracking-[0.12em] text-mut">{nonZero.length} assets</span></span>}
-        </div>
-
-        {loading && <div className="mt-4 h-20 animate-pulse rounded-xl bg-[var(--surface-2)]" aria-label="Loading wallet balances" />}
-        {!loading && !balances && <p className="mt-4 rounded-xl bg-[var(--warn-dim)] px-3 py-2 text-[11px] leading-relaxed text-warn">Token balances are unavailable right now. Refresh when Ethereum responds.</p>}
-        {!loading && balances && nonZero.length === 0 && <p className="mt-4 text-[12px] text-mut">No supported token balances found in this wallet.</p>}
-        {!loading && nonZero.length > 0 && (
-          <div className="mt-3 divide-y divide-[var(--line)] border-y border-[var(--line)]">
-            {nonZero.map((balance) => {
-              const key = priceKeyForSymbol(balance.key);
-              return <WalletBalanceRow key={balance.key} balance={balance} price={key ? prices[key] : undefined} />;
-            })}
-          </div>
-        )}
-        {!loading && balances && balances.failedTokens.length > 0 && (
-          <p role="status" className="mt-3 rounded-xl bg-[var(--warn-dim)] px-3 py-2 text-[11px] leading-relaxed text-warn">Some token balances could not be read. Refresh to try again.</p>
-        )}
-      </div>
-    </Card>
-  );
+    return usdValueForUnits(balance.amountWei, balance.decimals, key ? prices[key] : undefined);
+  });
+  if (values.some((value) => value === null)) {
+    return { complete: false, totalUsd: null, assetCount: nonZero.length, reason: 'A validated USD price is missing for a held asset.' };
+  }
+  return {
+    complete: true,
+    totalUsd: values.reduce<number>((total, value) => total + (value ?? 0), 0),
+    assetCount: nonZero.length,
+    reason: '',
+  };
 }
 
-function WalletBalanceRow({ balance, price }: { balance: WalletTokenBalance; price: number | undefined }) {
-  const label = balance.key === 'fxUSDBasePool' ? 'fxUSD base pool' : balance.key;
-  return (
-    <div className="flex min-h-[62px] items-center justify-between gap-3 py-2.5">
-      <div className="flex min-w-0 items-center gap-2.5">
-        <TokenIcon symbol={balance.key} size={28} />
-        <div className="min-w-0">
-          <p className="truncate text-[13px] font-semibold">{label}</p>
-          <p className="truncate text-[10px] text-mut">{balance.address.slice(0, 6)}…{balance.address.slice(-4)}</p>
-        </div>
-      </div>
-      <div className="shrink-0 text-right"><p className="font-mono text-[13px] text-hi">{formatWalletAmount(balance)}</p><p className="mt-0.5 text-[10.5px] text-mut">{formatUsd(usdValueForUnits(balance.amountWei, balance.decimals, price))}</p></div>
-    </div>
-  );
+function fxSaveLabel(protocol: ProtocolSnapshot, prices: UsdPriceMap, loading: boolean): string {
+  if (protocol.fxSaveAssets !== null) {
+    const usdValue = usdValueForDecimal(protocol.fxSaveAssets, prices.fxUSD);
+    return `${protocol.fxSaveAssets} fxUSD${usdValue === null ? '' : ` · ${formatUsd(usdValue)}`}`;
+  }
+  if (protocol.fxSaveShares !== null) return `${protocol.fxSaveShares} shares`;
+  return loading ? 'Loading…' : 'Unavailable';
 }
 
 function formatWalletAmount(balance: WalletTokenBalance): string {

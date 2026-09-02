@@ -42,6 +42,25 @@ await context.route('https://coins.llama.fi/**', async (route) => {
   await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ coins }) });
 });
 
+await context.route('https://api.coingecko.com/**', async (route) => {
+  const url = new URL(route.request().url());
+  const marketId = url.pathname.match(/\/coins\/([^/]+)\/market_chart$/)?.[1];
+  if (marketId !== 'ethereum' && marketId !== 'bitcoin') return route.abort('blockedbyclient');
+  const days = Math.max(1, Math.min(30, Number(url.searchParams.get('days')) || 1));
+  const count = 120;
+  const end = Date.now();
+  const start = end - days * 24 * 60 * 60 * 1_000;
+  const basePrice = marketId === 'bitcoin' ? 104_240 : 2_485.42;
+  const prices = Array.from({ length: count }, (_, index) => {
+    const progress = index / (count - 1);
+    const timestamp = Math.round(start + progress * (end - start));
+    const trend = 0.972 + progress * 0.028;
+    const wave = Math.sin(index / 7) * 0.0035;
+    return [timestamp, Number((basePrice * (trend + wave)).toFixed(6))];
+  });
+  await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ prices }) });
+});
+
 const page = await context.newPage();
 
 async function capture(file, route, prepare) {

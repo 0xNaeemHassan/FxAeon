@@ -12,7 +12,7 @@
     <a href="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/ci.yml"><img src="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/ci.yml/badge.svg" alt="Client CI" /></a>
     <a href="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/e2e-mini-app.yml"><img src="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/e2e-mini-app.yml/badge.svg" alt="End-to-end tests" /></a>
     <a href="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/supply-chain.yml"><img src="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/supply-chain.yml/badge.svg" alt="Supply-chain checks" /></a>
-    <a href="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/anvil-fork.yml"><img src="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/anvil-fork.yml/badge.svg" alt="Protected Anvil fork" /></a>
+    <a href="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/anvil-fork.yml?query=branch%3Amain+event%3Aworkflow_dispatch"><img src="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/anvil-fork.yml/badge.svg?branch=main&amp;event=workflow_dispatch" alt="Protected Anvil fork on main" /></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-8b6dff.svg" alt="MIT License" /></a>
   </p>
 
@@ -83,7 +83,7 @@ FxAeon turns the official f(x) SDK into a focused, reviewable product surface fo
 | Borrow | Deposit collateral and mint fxUSD; repay debt and withdraw collateral |
 | fxSAVE | Read balances/configuration, deposit assets, queue or execute redemptions, and claim completed withdrawals |
 | Bridge | Quote and build Ethereum ↔ Base LayerZero routes with source-receipt and destination-GUID verification |
-| Live USD context | Timestamp- and confidence-validated asset prices across forms, pickers, Portfolio, Earn, positions, and the wallet profile; display-only and never an execution input |
+| Live USD context | Timestamp- and confidence-validated current asset prices across forms, pickers, Portfolio, Earn, positions, and the wallet profile, plus validated ETH/BTC market history for charts; display-only and never an execution input |
 | Wallet profile | Privy embedded wallets or browser-injected EVM wallets, supported-asset balances, live USD totals, and dedicated activity—without a custody server |
 | Recovery | Reload-safe pending transaction and bridge journals in a dedicated Activity view, always revalidated against chain data |
 | Interface | Compact mobile-first controls, polished token pickers, a real leverage slider, and one-tap official light/dark theming |
@@ -98,7 +98,7 @@ Token and network marks use maintained AladdinDAO/SmolDapp assets (with local SV
 - **Self-custodial execution.** Privy or the connected external wallet remains the only signing authority. FxAeon never accepts a private key.
 - **Official planning path.** Protocol reads and unsigned transaction plans come from the pinned <code>@aladdindao/fx-sdk</code> package.
 - **Chain-authoritative state.** Ethereum, Base, receipts, and matching LayerZero events establish financial truth—not a database or browser cache.
-- **Price context without price authority.** DefiLlama prices refresh every 30 seconds, fail closed when stale or low-confidence, and are isolated from SDK planning, validation, simulation, and signing.
+- **Price context without price authority.** DefiLlama supplies the validated current-price snapshot, while CoinGecko supplies separately validated ETH/BTC history for the 1D/7D/30D charts. Both fail closed and remain isolated from SDK planning, validation, simulation, and signing.
 - **Inspectable transaction review.** Targets, selectors, values, approvals, chains, nonces, and route order are validated before wallet confirmation.
 - **Static delivery.** The production artifact is a deterministic Cloudflare Pages export with no application server, Worker, queue, or privileged runtime.
 
@@ -209,7 +209,7 @@ pnpm test:e2e     # browser and Telegram-sized static-artifact coverage
 
 Anvil uses disposable local accounts and snapshots. Its provider URL is supplied only at invocation time and is never committed, printed, or forwarded to the application test process.
 
-The manual **Protected Anvil mainnet fork** workflow runs a heavier 64-iteration campaign by default using the origin-restricted Ethereum Alchemy URL already stored in the protected GitHub environment. It never exposes that URL to the static application artifact or job output.
+The manual **Protected Anvil mainnet fork** workflow runs a heavier 64-iteration campaign by default using the origin-restricted Ethereum Alchemy URL already stored in the protected GitHub environment. It never exposes that URL to the static application artifact or job output. The repository badge is intentionally scoped to the latest manual run on `main`; dispatch that workflow from `main` and let the successful run finish to turn or keep it green.
 
 ## Repository structure
 

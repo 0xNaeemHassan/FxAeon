@@ -8,7 +8,7 @@ This document describes the product that is actually shipped. FxAeon is one stat
 - Only the 15 methods in [`sdk-scope.md`](sdk-scope.md) are product capabilities.
 - Every write is planned from current inputs, validated against SDK calldata, simulated when the provider supports the ordered call, and explicitly approved in the user's wallet one step at a time.
 - Wallet, chain, and form changes invalidate a prepared review. Receipts, bridge GUIDs, and canonical SDK rereads—not local storage—establish state.
-- USD prices are optional display context with freshness/confidence checks; PnL, health, liquidation, APY, ETA, and unsupported balances remain omitted rather than approximated.
+- USD prices and charts are optional display context with freshness, confidence, shape, and range checks; PnL, health, liquidation, APY, ETA, and unsupported balances remain omitted rather than approximated.
 
 ## Deliberately deferred tactics
 
@@ -19,7 +19,7 @@ This document describes the product that is actually shipped. FxAeon is one stat
 | Web Worker | Not used | No measured main-thread blocker justifies moving wallet or protocol lifecycle across a Worker boundary. |
 | Service Worker caching | Removed from the active product | Financial state must remain online and chain-authoritative; a one-time legacy `/sw.js` unregister remains only as stale-client cleanup. |
 | Speculative transaction planning | Not used | Plans are rebuilt during review and must not survive input, wallet, chain, or state changes. |
-| USD display pricing | Read-only, fail-closed | A reviewed batch feed supplies 30-second display context. It is isolated from SDK planning, policy, calldata, simulation, signing, and chain-authoritative state. |
+| USD display pricing | Read-only, fail-closed | DefiLlama supplies the reviewed current-price snapshot and CoinGecko supplies reviewed ETH/BTC chart history. Both are isolated from SDK planning, policy, calldata, simulation, signing, and chain-authoritative state. |
 | Lighthouse upload | Not used | Release evidence comes from browser tests, bundle budgets, dependency audits, and static build checks without a telemetry service. |
 
 Transitive `ioredis` and `workerd` entries may remain in the frozen dependency graph through third-party browser/development tooling. They are not imported by the app, have no configured endpoints, and do not create Redis or Worker production services.

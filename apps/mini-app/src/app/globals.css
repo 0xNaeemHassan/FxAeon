@@ -691,6 +691,659 @@ select.field-control option {
   color: var(--text);
 }
 
+/* Trade workspace and market intelligence */
+.trade-workspace,
+.portfolio-dashboard {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.trade-page-heading,
+.portfolio-page-heading {
+  display: flex;
+  min-width: 0;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 2px;
+}
+
+.trade-page-heading > :first-child,
+.portfolio-page-heading > :first-child {
+  min-width: 0;
+}
+
+.market-chart-panel {
+  position: relative;
+  min-width: 0;
+  overflow: clip;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 16px 46px color-mix(in srgb, var(--bg) 70%, transparent);
+}
+
+.market-chart-panel::before,
+.portfolio-value-card::before,
+.portfolio-connect-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  pointer-events: none;
+  background: linear-gradient(90deg, var(--mint), var(--cyan) 52%, transparent 90%);
+}
+
+.market-chart-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--line);
+  padding: 16px;
+}
+
+.market-chart-token {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--mint) 24%, var(--line));
+  border-radius: 12px;
+  background: var(--mint-dim);
+}
+
+.market-chart-frame {
+  position: relative;
+  min-height: 220px;
+  overflow: hidden;
+  background:
+    linear-gradient(color-mix(in srgb, var(--text) 3%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--text) 3%, transparent) 1px, transparent 1px),
+    linear-gradient(180deg, color-mix(in srgb, var(--mint) 4%, transparent), transparent 48%);
+  background-size: 44px 44px, 44px 44px, auto;
+}
+
+.market-chart-graphic {
+  position: relative;
+  width: 100%;
+  height: 220px;
+  min-width: 0;
+  overflow: hidden;
+  touch-action: pan-y;
+}
+
+.market-chart-graphic svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.market-chart-compact {
+  height: 54px;
+  touch-action: auto;
+}
+
+.market-chart-gridline {
+  stroke: color-mix(in srgb, var(--text) 8%, transparent);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.market-chart-crosshair {
+  stroke: color-mix(in srgb, var(--text) 42%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.market-chart-tooltip {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  min-width: 108px;
+  gap: 2px;
+  pointer-events: none;
+  transform: translate(-50%, -100%);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-raised) 94%, transparent);
+  box-shadow: var(--elevation-2);
+  padding: 7px 9px;
+  color: var(--text);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  backdrop-filter: blur(8px);
+}
+
+.market-chart-tooltip strong {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.market-chart-tooltip small {
+  color: var(--mut);
+  font-size: 8.5px;
+  white-space: nowrap;
+}
+
+.market-chart-footer {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding: 9px 12px 9px 16px;
+}
+
+.chart-range-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--input);
+  padding: 2px;
+}
+
+.chart-range-tabs button {
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 6px;
+  color: var(--mut);
+  font-size: 10px;
+  font-weight: 700;
+  transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+}
+
+.chart-range-tabs button:hover {
+  color: var(--text);
+}
+
+.chart-range-tabs .chart-range-active {
+  background: var(--surface-3);
+  box-shadow: inset 0 -2px 0 var(--mint);
+  color: var(--text);
+}
+
+.market-chart-empty {
+  display: flex;
+  min-height: 220px;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  color: var(--mut);
+  text-align: left;
+}
+
+.market-chart-empty span {
+  min-width: 0;
+  max-width: 250px;
+}
+
+.market-chart-empty strong,
+.market-chart-empty small {
+  display: block;
+}
+
+.market-chart-empty strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.market-chart-empty small {
+  margin-top: 3px;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.market-chart-skeleton {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(165deg, transparent 45%, color-mix(in srgb, var(--mint) 14%, transparent) 46% 49%, transparent 50%),
+    linear-gradient(90deg, color-mix(in srgb, var(--text) 3%, transparent) 1px, transparent 1px),
+    var(--surface);
+  background-size: 100% 100%, 44px 44px, auto;
+}
+
+.market-chart-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 32%, color-mix(in srgb, var(--text) 8%, transparent) 48%, transparent 64%);
+  background-size: 220% 100%;
+  animation: shimmer 1.45s linear infinite;
+}
+
+.market-chart-skeleton span {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  width: 34%;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background: var(--surface-3);
+}
+
+.market-chart-mini-empty {
+  display: inline-flex;
+  width: 100%;
+  height: 54px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-top: 1px dashed var(--line);
+  color: var(--mut-2);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: .015em;
+}
+
+.trade-view-tabs,
+.portfolio-context-tabs {
+  display: grid;
+  min-width: 0;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--input);
+  padding: 3px;
+}
+
+.trade-view-tabs > *,
+.portfolio-context-tabs > * {
+  display: flex;
+  min-width: 0;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border-radius: 7px;
+  padding: 8px 10px;
+  color: var(--mut);
+  font-size: 11px;
+  font-weight: 650;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.trade-view-tabs > [aria-current='page'],
+.portfolio-context-tabs > [aria-current='page'],
+.portfolio-context-tabs > [aria-selected='true'],
+.portfolio-context-tabs > .active {
+  background: var(--surface-3);
+  box-shadow: inset 0 -2px 0 var(--mint);
+  color: var(--text);
+}
+
+.trade-view-tabs a:hover,
+.portfolio-context-tabs a:hover,
+.portfolio-context-tabs button:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.trade-ticket {
+  border-color: color-mix(in srgb, var(--mint) 18%, var(--line));
+  background: color-mix(in srgb, var(--surface) 94%, var(--mint) 6%);
+}
+
+.segmented-sides {
+  margin-bottom: 16px;
+  border-color: var(--line-strong);
+  background: var(--bg-raised);
+}
+
+.segmented-sides .segmented-option-active {
+  box-shadow: none;
+}
+
+.segmented-sides .segmented-option-active[data-value='long'] {
+  background: var(--success-dim);
+  box-shadow: inset 0 -2px 0 var(--success);
+  color: var(--success);
+}
+
+.segmented-sides .segmented-option-active[data-value='short'] {
+  background: var(--danger-dim);
+  box-shadow: inset 0 -2px 0 var(--danger);
+  color: var(--danger);
+}
+
+.trade-route-facts {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.trade-route-facts > span {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg-raised);
+  padding: 10px;
+}
+
+.trade-route-facts svg {
+  grid-row: 1 / span 2;
+  color: var(--mint);
+}
+
+.trade-route-facts strong,
+.trade-route-facts small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trade-route-facts strong {
+  color: var(--text);
+  font-size: 10.5px;
+  font-weight: 650;
+}
+
+.trade-route-facts small {
+  margin-top: 2px;
+  color: var(--mut-2);
+  font-size: 8.5px;
+}
+
+.trade-positions-link {
+  display: flex;
+  min-width: 0;
+  min-height: 68px;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface);
+  padding: 12px;
+  color: var(--text);
+}
+
+.trade-positions-link:hover {
+  border-color: color-mix(in srgb, var(--mint) 34%, var(--line));
+  background: color-mix(in srgb, var(--surface) 92%, var(--mint) 8%);
+}
+
+/* Portfolio dashboard */
+.portfolio-page-heading {
+  align-items: center;
+}
+
+.portfolio-trust-pill {
+  display: inline-flex;
+  min-height: 44px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid color-mix(in srgb, var(--success) 28%, var(--line));
+  border-radius: var(--radius-full);
+  background: var(--success-dim);
+  padding: 0 12px;
+  color: var(--success);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.portfolio-connect-card,
+.portfolio-value-card,
+.portfolio-balances-card,
+.portfolio-activity-card {
+  position: relative;
+  min-width: 0;
+  overflow: clip;
+}
+
+.portfolio-connect-card {
+  border-color: color-mix(in srgb, var(--mint) 28%, var(--line));
+  background:
+    radial-gradient(circle at 92% 8%, color-mix(in srgb, var(--mint) 15%, transparent), transparent 34%),
+    var(--surface);
+  padding: 22px !important;
+}
+
+.portfolio-connect-card .button,
+.portfolio-connect-card a.button {
+  min-height: 48px;
+}
+
+.portfolio-value-card {
+  border-color: color-mix(in srgb, var(--mint) 24%, var(--line));
+  background:
+    radial-gradient(circle at 95% 0%, color-mix(in srgb, var(--mint) 12%, transparent), transparent 38%),
+    var(--surface);
+  padding: 18px !important;
+}
+
+.portfolio-value-topline {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.portfolio-value-main {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, .72fr);
+  align-items: end;
+  gap: 20px;
+  margin-top: 18px;
+}
+
+.portfolio-value-main > * {
+  min-width: 0;
+}
+
+.portfolio-value-spark {
+  min-width: 0;
+  height: 88px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--line);
+}
+
+.portfolio-value-spark svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.portfolio-value-metrics {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 18px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--line);
+}
+
+.portfolio-value-metrics > * {
+  min-width: 0;
+  background: var(--bg-raised);
+  padding: 11px 12px;
+}
+
+.portfolio-value-metrics strong,
+.portfolio-value-metrics small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portfolio-value-metrics strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.portfolio-value-metrics small {
+  margin-top: 3px;
+  color: var(--mut-2);
+  font-size: 8.5px;
+  font-weight: 650;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.portfolio-quick-actions {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.portfolio-quick-action {
+  display: flex;
+  min-width: 0;
+  min-height: 76px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 10px 6px;
+  color: var(--mut);
+  font-size: 10.5px;
+  font-weight: 650;
+  text-align: center;
+}
+
+.portfolio-quick-action svg,
+.portfolio-quick-action > span:first-child {
+  color: var(--mint);
+}
+
+.portfolio-quick-action:hover {
+  border-color: color-mix(in srgb, var(--mint) 32%, var(--line));
+  background: var(--mint-dim);
+  color: var(--text);
+}
+
+.portfolio-market-grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.portfolio-market-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface);
+  padding: 13px;
+}
+
+.portfolio-market-card .market-chart-skeleton {
+  height: 54px;
+  border-radius: 6px;
+}
+
+.portfolio-protocol-grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.portfolio-protocol-card {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 112px;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface);
+  padding: 14px;
+  color: var(--text);
+}
+
+.portfolio-protocol-card:hover {
+  border-color: color-mix(in srgb, var(--mint) 34%, var(--line));
+  background: color-mix(in srgb, var(--surface) 94%, var(--mint) 6%);
+}
+
+.portfolio-protocol-card > * {
+  min-width: 0;
+}
+
+.portfolio-protocol-accent,
+.portfolio-protocol-card .portfolio-accent {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--mint);
+}
+
+.portfolio-balances-card,
+.portfolio-activity-card {
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.portfolio-balances-card {
+  padding: 0 !important;
+}
+
+.portfolio-balances-card > header,
+.portfolio-balances-card > .portfolio-balances-header {
+  border-bottom: 1px solid var(--line);
+  padding: 15px 16px;
+}
+
+.portfolio-balances-card ul,
+.portfolio-balances-card .portfolio-balance-list {
+  margin: 0;
+  padding-inline: 16px;
+}
+
+.portfolio-balances-card li,
+.portfolio-balances-card .portfolio-balance-row {
+  min-width: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.portfolio-balances-card li:last-child,
+.portfolio-balances-card .portfolio-balance-row:last-child {
+  border-bottom: 0;
+}
+
+.portfolio-activity-card {
+  border-radius: 11px;
+}
+
 /* Browser landing */
 .landing-shell {
   min-height: 100dvh;
@@ -1376,6 +2029,19 @@ input[type='range'].lever::-moz-range-thumb {
 
   .wallet-profile-backdrop { align-items: center; }
   .wallet-profile-sheet { border-radius: 22px; }
+
+  .trade-workspace,
+  .portfolio-dashboard { gap: 16px; }
+
+  .market-chart-frame,
+  .market-chart-graphic,
+  .market-chart-empty { min-height: 240px; }
+
+  .market-chart-graphic { height: 240px; }
+
+  .portfolio-value-card { padding: 22px !important; }
+
+  .portfolio-quick-action { min-height: 82px; }
 }
 
 @media (max-width: 430px) {
@@ -1383,6 +2049,123 @@ input[type='range'].lever::-moz-range-thumb {
   .wallet-control-label { display: none; }
   .market-strip-source { display: none; }
   .market-strip-items { justify-content: space-between; gap: 8px; }
+
+  .trade-page-heading,
+  .portfolio-page-heading {
+    align-items: center;
+    gap: 10px;
+  }
+
+  .trade-page-heading h1,
+  .portfolio-page-heading h1 { font-size: 28px; }
+
+  .portfolio-trust-pill {
+    max-width: 110px;
+    overflow: hidden;
+    padding-inline: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .market-chart-header {
+    align-items: flex-start;
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .market-chart-token {
+    width: 40px;
+    height: 40px;
+  }
+
+  .market-chart-header .text-display { font-size: 20px; }
+
+  .market-chart-footer {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 10px 12px 12px;
+  }
+
+  .chart-range-tabs {
+    width: 100%;
+  }
+
+  .chart-range-tabs button {
+    flex: 1;
+  }
+
+  .market-chart-empty {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    padding: 46px 18px 20px;
+  }
+
+  .market-chart-empty span {
+    flex: 1;
+  }
+
+  .trade-view-tabs > *,
+  .portfolio-context-tabs > * {
+    padding-inline: 7px;
+    font-size: 10.5px;
+  }
+
+  .portfolio-value-main {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .portfolio-value-spark { height: 68px; }
+
+  .portfolio-value-metrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .portfolio-value-metrics > * {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding-block: 10px;
+  }
+
+  .portfolio-value-metrics small { margin-top: 0; }
+
+  .portfolio-quick-actions,
+  .portfolio-protocol-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .portfolio-protocol-card { min-height: 104px; }
+}
+
+@media (max-width: 359px) {
+  .app-shell { padding-inline: 10px; }
+
+  .trade-page-heading > a { padding-inline: 9px; }
+
+  .market-chart-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .market-chart-header > :last-child { text-align: left; }
+
+  .market-chart-header > :last-child p:last-child { justify-content: flex-start; }
+
+  .trade-route-facts { grid-template-columns: minmax(0, 1fr); }
+
+  .portfolio-market-grid { grid-template-columns: minmax(0, 1fr); }
+
+  .portfolio-context-tabs {
+    display: flex;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .portfolio-context-tabs::-webkit-scrollbar { display: none; }
+
+  .portfolio-context-tabs > * { min-width: 94px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

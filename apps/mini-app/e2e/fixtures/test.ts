@@ -50,6 +50,26 @@ async function installMarketPrices(page: Page, enabled: boolean): Promise<void> 
     }));
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ coins }) });
   });
+
+  await page.route("https://api.coingecko.com/**", async (route) => {
+    if (!enabled) return route.abort("blockedbyclient");
+    const url = new URL(route.request().url());
+    const marketId = url.pathname.match(/\/coins\/([^/]+)\/market_chart$/)?.[1];
+    if (marketId !== "ethereum" && marketId !== "bitcoin") return route.abort("blockedbyclient");
+    const days = Math.max(1, Math.min(30, Number(url.searchParams.get("days")) || 1));
+    const count = 120;
+    const end = Date.now();
+    const start = end - days * 24 * 60 * 60 * 1_000;
+    const basePrice = marketId === "bitcoin" ? 104_000 : 2_400;
+    const prices = Array.from({ length: count }, (_, index) => {
+      const progress = index / (count - 1);
+      const timestamp = Math.round(start + progress * (end - start));
+      const trend = 0.975 + progress * 0.025;
+      const wave = Math.sin(index / 7) * 0.003;
+      return [timestamp, Number((basePrice * (trend + wave)).toFixed(6))];
+    });
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ prices }) });
+  });
 }
 
 export const test = base.extend<{
@@ -72,7 +92,8 @@ export const test = base.extend<{
         // That is an asset host, not an FxAeon application backend; keep the
         // client-first assertion focused on same-origin/unknown API routes.
         const host = new URL(url).hostname;
-        if (/\/api(?:\/|$)/i.test(pathname) && host !== "assets.smold.app") observed.backend.push(url);
+        const publicDataHosts = new Set(["assets.smold.app", "api.coingecko.com"]);
+        if (/\/api(?:\/|$)/i.test(pathname) && !publicDataHosts.has(host)) observed.backend.push(url);
       } catch {
         // Ignore malformed URLs; Playwright normally supplies absolute URLs.
       }
