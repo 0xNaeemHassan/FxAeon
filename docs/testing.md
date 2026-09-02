@@ -28,6 +28,12 @@ fails before build or execution. Recover with a clean frozen dependency
 install, then rerun `pnpm verify`. Do not repair `node_modules` manually or
 bypass the installed-patch checks. CI starts from a clean checkout.
 
+`test/sdk-debt-ratio-packing.test.ts` also executes the installed SDK's pure
+packing helper in both module formats. It checks exact 60-bit round trips,
+representative limits, and invalid inputs. This protects against a rounded
+packed integer silently changing the on-chain minimum. The protected Anvil
+workflow runs the installed-dependency and packing checks before any route.
+
 ## Anvil fork testing
 
 `pnpm test:anvil` starts a disposable local Anvil fork of Ethereum mainnet, safely funds an unlocked account with fork-only USDC impersonation, and uses the official SDK plus the production route validator/runner to open all four ETH/BTC long/short positions before tearing the node down. It requires Foundry's `anvil` binary (or an executable path in `ANVIL_BIN`) and a fresh, restricted provider endpoint supplied at invocation time. Set `ANVIL_FORK_URL` explicitly, or let the runner use `NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL` as its reviewed Ethereum fallback:

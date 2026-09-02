@@ -48,7 +48,7 @@ The human-readable transaction summary is convenience UI, not authority. The val
 
 ## Supply chain
 
-Runtime financial dependencies use exact versions. `@aladdindao/fx-sdk@1.0.5` carries a reproducible patch matching upstream commit `53c0b9805a169e75ad375c92c241e1292b66405f`; CI asserts the official method surface and patch. Upstream changes create a review issue and never update signing policy automatically.
+Runtime financial dependencies use exact versions. `@aladdindao/fx-sdk@1.0.5` is reviewed against upstream commit `53c0b9805a169e75ad375c92c241e1292b66405f` and carries reproducible short-pool, diagnostic-log, and integer debt-ratio packing corrections. The packing correction is local: it prevents decimal rounding from changing either encoded 60-bit limit. CI checks both installed module formats and regression-tests exact packing before fork execution. It does not relax slippage, simulation, or contract checks. Upstream changes create a review issue and never update signing policy automatically.
 
 ## Residual trust
 

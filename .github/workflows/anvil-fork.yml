@@ -43,6 +43,10 @@ jobs:
           version: v1.8.1
           cache: 'false'
       - run: pnpm install --frozen-lockfile
+      - name: Verify installed financial dependency patches
+        run: |
+          pnpm verify:scope
+          pnpm --dir apps/mini-app exec tsx --test test/sdk-debt-ratio-packing.test.ts
       - name: Open and verify all four real f(x) positions
         run: pnpm test:anvil
         env:

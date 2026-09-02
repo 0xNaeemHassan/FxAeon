@@ -31,7 +31,7 @@ These are measurements from the local release gate, not universal performance cl
 - Static bundle: `223 assets`, `7.28 MiB` total.
 - JavaScript: `188 assets`, `6.56 MiB` raw, `2.01 MiB` gzip; largest asset `1.95 MiB`.
 - Release E2E: `30` tests covering browser entry, 12 scoped routes, cross-workspace USD context, validated price continuity across hard navigation/feed retries, wallet profile/Activity, Earn-to-fxMINT access, official light/dark theming, accessible skip navigation, responsive charts, and Telegram/mobile safety checks.
-- Unit/security suite: `140` total tests (`137` passed, `3` skipped when the protected fork environment is absent).
+- Unit/security suite: `147` total tests (`144` passed, `3` skipped when the protected fork environment is absent), including exact installed SDK debt-ratio packing across both module formats.
 - Chaos campaign: `2` campaigns passed, including 2,000 route mutations and 600 runner iterations.
 - Local Anvil gates: `64` snapshot/revert iterations, `64` ordered-route stress iterations, and the Node four-position protocol proof passed. The separate browser gate opened and verified coexisting ETH/BTC long/short positions, checked delayed discovery and cross-workspace views, and restored its snapshot. The protected workflow now requires all three gates; an older green badge is not evidence for the new browser gate.
 - Bundle guardrails: 12 MiB total, 8 MiB JavaScript, 3 MiB gzip, and 2 MiB largest JavaScript asset; these are regression limits, not UX guarantees.

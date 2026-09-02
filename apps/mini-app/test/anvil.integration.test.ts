@@ -4,8 +4,11 @@ import { dirname, resolve } from "node:path";
 import { test } from "node:test";
 import {
   createPublicClient,
+  decodeAbiParameters,
+  decodeFunctionData,
   encodeFunctionData,
   http,
+  parseAbi,
   parseUnits,
   type Address,
   type Hex,
@@ -376,6 +379,31 @@ test("protocol proof: official SDK opens coexisting ETH/BTC long and short posit
         userAddress: wallet,
       });
       assert.ok(routes.length > 0, `${scenario.market} ${scenario.side} returned no audited SDK route`);
+
+      // Retain only the decoded integer bounds in fork logs. This makes a
+      // future ratio revert diagnosable without publishing full calldata,
+      // wallet history, an upstream endpoint, or signer material.
+      const action = routes[0].transactions.find((transaction) => transaction.kind === "action");
+      assert.ok(action, `${scenario.market} ${scenario.side} returned no protocol action`);
+      const decodedAction = decodeFunctionData({
+        abi: parseAbi([
+          "function openOrAddPositionFlashLoanV2((address tokenIn,uint256 amount,address target,bytes data,uint256 minOut,bytes signature) params,address pool,uint256 positionId,uint256 borrowAmount,bytes data) payable",
+          "function openOrAddShortPositionFlashLoan((address tokenIn,uint256 amount,address target,bytes data,uint256 minOut,bytes signature) params,address pool,uint256 positionId,uint256 debtTokenBorrowAmount,bytes data) payable",
+        ]),
+        data: action.data,
+      });
+      const [miscData] = decodeAbiParameters([
+        { type: "uint256" }, { type: "uint256" }, { type: "address" }, { type: "bytes" },
+      ], decodedAction.args[4]);
+      const minDebtRatio = miscData & ((1n << 60n) - 1n);
+      const maxDebtRatio = (miscData >> 60n) & ((1n << 60n) - 1n);
+      assert.equal(miscData >> 120n, 0n, "position route contains unexpected miscData flags");
+      assert.ok(minDebtRatio <= maxDebtRatio, "position route contains inverted debt-ratio bounds");
+      console.info(`[protocol-plan] ${scenario.market} ${scenario.side} ${JSON.stringify({
+        leverage,
+        minDebtRatio: minDebtRatio.toString(),
+        maxDebtRatio: maxDebtRatio.toString(),
+      })}`);
 
       const result = await runTransactionRoute({
         route: routes[0],

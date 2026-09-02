@@ -88,6 +88,15 @@ const shortPoolFix = [
   'debtCapacity: this.config.isShort ? poolInfoRes[2] : poolInfoRes[3]',
   'debtBalance: this.config.isShort ? poolInfoRes[3] : poolInfoRes[4]',
 ];
+const debtRatioPackingFix = [
+  'const min = BigInt(minDebtRatio);',
+  'const max = BigInt(maxDebtRatio);',
+  'const limit = 1n << 60n;',
+  'return ((max << 60n) | min).toString();',
+  'Debt ratio bounds must be unsigned integer strings',
+  'Debt ratio bounds must fit uint60',
+  'Minimum debt ratio cannot exceed maximum debt ratio',
+];
 // A correct patch file/lock hash does not prove the installed files were
 // patched. Check both entry points used by browser builds and Node tooling.
 for (const bundle of ['index.js', 'index.cjs']) {
@@ -97,6 +106,10 @@ for (const bundle of ['index.js', 'index.cjs']) {
   ).catch(() => failInstalledDependency(`the installed SDK ${bundle} could not be inspected`));
   if (shortPoolFix.some((required) => !sdkRuntime.includes(required))) {
     failInstalledDependency(`the installed SDK ${bundle} is missing the audited short-pool tuple fix`);
+  }
+  if (debtRatioPackingFix.some((required) => !sdkRuntime.includes(required))
+    || sdkRuntime.includes('return cBN(maxDebtRatio).times(cBN(2).pow(60)).plus(minDebtRatio).toFixed(0);')) {
+    failInstalledDependency(`the installed SDK ${bundle} is missing exact integer debt-ratio packing`);
   }
   if (/console\.log\("(?:err------|poolData-->|poolInfo-->)"/.test(sdkRuntime)) {
     failInstalledDependency(`the installed SDK ${bundle} still contains audited-out production diagnostic logs`);
@@ -116,6 +129,9 @@ if (JSON.stringify(methods) !== JSON.stringify(expectedMethods)) {
 const patch = await readFile(join(root, 'patches', '@aladdindao__fx-sdk.patch'), 'utf8');
 for (const required of shortPoolFix) {
   if (!patch.includes(required)) fail('the audited upstream short-pool fix is missing');
+}
+for (const required of debtRatioPackingFix) {
+  if (!patch.includes(required)) fail('the local exact debt-ratio packing fix is missing');
 }
 
 try {
