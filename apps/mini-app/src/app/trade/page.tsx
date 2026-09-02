@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { ChevronRight, Gauge, Layers2, ShieldCheck } from 'lucide-react';
 import { AppShell, Card } from '@/components/ui';
 import { ActionReview } from '@/components/ActionReview';
+import { TradeMarketChart } from '@/components/MarketChart';
 import WalletConnectCTA from '@/components/WalletConnectCTA';
 import { AmountField, LeverageField, Segmented, SlippageField, TokenSelect } from '@/components/ProtocolForm';
 import { MAX_FX_SLIPPAGE_PERCENT, clampLeverage, leverageBoundsFor, planIncreasePosition, readLeverageBounds, type LeverageBounds } from '@/lib/fx';
@@ -81,25 +83,38 @@ export default function TradePage() {
   }, [leverage, market, side, slippage, token, validAmount, wallet.address]);
 
   return (
-    <AppShell title="Trade">
-      <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-2 rounded-xl border border-[var(--line)] bg-[rgba(0,0,0,.18)] p-1" aria-label="Trade views">
-          <span aria-current="page" className="flex min-h-11 items-center justify-center rounded-lg bg-[var(--mint-dim)] px-3 text-[13px] font-semibold text-[var(--text)]">New position</span>
-          <Link href="/positions" className="glass-press flex min-h-11 items-center justify-center rounded-lg px-3 text-[13px] font-semibold text-mut">Positions</Link>
+    <AppShell tabs>
+      <div className="trade-workspace">
+        <header className="trade-page-heading">
+          <div><p className="page-kicker">f(x) leveraged markets</p><h1 className="text-display mt-1.5 text-[30px] font-semibold leading-tight">Trade</h1></div>
+          <Link href="/positions" className="glass-press inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 text-[12px] font-semibold text-mut hover:text-mint"><Layers2 className="h-4 w-4" aria-hidden="true" />Positions</Link>
+        </header>
+
+        <Segmented value={market} onChange={(next) => { setMarket(next); setToken(next === 'ETH' ? 'ETH' : 'WBTC'); }} ariaLabel="Market" options={[{ value: 'ETH', label: 'ETH market', sub: 'Ethereum', ariaLabel: 'ETH' }, { value: 'BTC', label: 'BTC market', sub: 'Wrapped BTC', ariaLabel: 'BTC' }]} />
+        <TradeMarketChart market={market} />
+
+        <div className="trade-view-tabs" aria-label="Trade views">
+          <span aria-current="page">Open position</span>
+          <Link href="/positions">Manage positions <ChevronRight className="h-4 w-4" aria-hidden="true" /></Link>
         </div>
 
-        <Segmented value={market} onChange={(next) => { setMarket(next); setToken(next === 'ETH' ? 'ETH' : 'WBTC'); }} ariaLabel="Market" options={[{ value: 'ETH', label: 'ETH' }, { value: 'BTC', label: 'BTC' }]} />
-        <Segmented value={side} onChange={setSide} ariaLabel="Position side" options={[{ value: 'long', label: 'Long', sub: 'Price rises' }, { value: 'short', label: 'Short', sub: 'Price falls' }]} />
-
-        <Card className="p-4">
-          <div className="mb-4 flex items-center justify-between gap-3">
+        <Card className="trade-ticket p-4">
+          <div className="mb-4 flex items-start justify-between gap-3">
             <div>
-              <p className="text-[12px] text-mut">New position</p>
-              <h2 className="mt-0.5 text-[16px] font-semibold">{market} {side === 'long' ? 'Long' : 'Short'}</h2>
+              <p className="micro-label">New protocol position</p>
+              <h2 className="mt-1 text-[18px] font-semibold">{market} {side === 'long' ? 'Long' : 'Short'}</h2>
+              <p className="mt-1 text-[11px] text-mut">Official f(x) SDK route · wallet confirmed</p>
             </div>
             <span className={`rounded-lg px-2.5 py-1 text-[12px] font-semibold ${side === 'long' ? 'bg-[var(--success-dim)] text-success' : 'bg-[var(--danger-dim)] text-danger'}`}>{side === 'long' ? 'Long' : 'Short'}</span>
           </div>
+
+          <Segmented tone="sides" value={side} onChange={setSide} ariaLabel="Position side" options={[{ value: 'long', label: 'Buy / Long', sub: 'Price rises', ariaLabel: 'Long' }, { value: 'short', label: 'Sell / Short', sub: 'Price falls', ariaLabel: 'Short' }]} />
+
           <div className="flex flex-col gap-4">
+            <div className="trade-route-facts">
+              <span><ShieldCheck className="h-4 w-4" aria-hidden="true" /><strong>Self-custodial</strong><small>No delegated signer</small></span>
+              <span><Gauge className="h-4 w-4" aria-hidden="true" /><strong>{leverage.toFixed(leverage % 1 ? 1 : 0)}× target</strong><small>{leverageBounds.min.toFixed(1)}×–{leverageBounds.max.toFixed(1)}× pool range</small></span>
+            </div>
             <TokenSelect label="Input asset" value={token} options={tokenOptions} onChange={setToken} />
             <AmountField label="Amount" symbol={token} value={amount} onChange={setAmount} maxDecimals={tokenDecimals(token)} />
             <LeverageField label={side === 'short' ? 'Target LSD leverage' : 'Target leverage'} value={leverage} onChange={setLeverage} min={leverageBounds.min} max={leverageBounds.max} error={leverageError} />
@@ -112,6 +127,12 @@ export default function TradePage() {
 
         {!wallet.address && <WalletConnectCTA ready={wallet.ready} authenticated={wallet.authenticated} body="Connect a wallet to review this trade." />}
         <ActionReview planBuilder={planBuilder} label={`Review ${market} ${side === 'long' ? 'Long' : 'Short'}`} operationLabel={`Open ${market} ${side}`} onComplete={async () => { if (wallet.address) await readAllPositions(wallet.address); }} />
+
+        <Link href="/positions" className="trade-positions-link glass-press">
+          <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--mint-dim)] text-mint"><Layers2 className="h-5 w-5" aria-hidden="true" /></span>
+          <span className="min-w-0 flex-1"><strong className="block text-[13px]">Open positions</strong><small className="mt-1 block text-[11px] text-mut">View collateral, debt, live USD context, and adjust exposure.</small></span>
+          <ChevronRight className="h-4 w-4 text-mut" aria-hidden="true" />
+        </Link>
       </div>
     </AppShell>
   );

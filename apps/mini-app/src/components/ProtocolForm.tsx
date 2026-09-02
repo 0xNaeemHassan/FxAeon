@@ -14,14 +14,16 @@ export function Segmented<T extends string>({
   options,
   onChange,
   ariaLabel,
+  tone = 'default',
 }: {
   value: T;
-  options: ReadonlyArray<{ value: T; label: string; sub?: string }>;
+  options: ReadonlyArray<{ value: T; label: string; sub?: string; ariaLabel?: string }>;
   onChange: (value: T) => void;
   ariaLabel: string;
+  tone?: 'default' | 'sides';
 }) {
   return (
-    <div className="segmented grid grid-flow-col auto-cols-fr p-1" role="radiogroup" aria-label={ariaLabel}>
+    <div className={`segmented ${tone === 'sides' ? 'segmented-sides' : ''} grid grid-flow-col auto-cols-fr p-1`} role="radiogroup" aria-label={ariaLabel}>
       {options.map((option) => {
         const active = option.value === value;
         return (
@@ -29,7 +31,9 @@ export function Segmented<T extends string>({
             key={option.value}
             type="button"
             role="radio"
+            aria-label={option.ariaLabel ?? option.label}
             aria-checked={active}
+            data-value={option.value}
             tabIndex={active ? 0 : -1}
             onClick={() => {
               haptic('selection');

@@ -11,8 +11,9 @@ Telegram Mini ──┘                 │
                                   ├── injected EIP-1193 wallet (browser fallback)
                                   ├── pinned official f(x) SDK
                                   │     └── reads + ordered unsigned plans
-                                  ├── validated USD display feed
-                                  │     └── 30 s refresh; stale/confidence guards
+                                  ├── validated USD display feeds
+                                  │     ├── DefiLlama current prices; stale/confidence guards
+                                  │     └── CoinGecko ETH/BTC history; range/freshness guards
                                   └── Viem public clients
                                         ├── Alchemy Ethereum (chain 1)
                                         └── Alchemy Base (chain 8453)
@@ -31,6 +32,7 @@ There is no FxAeon server process. The ordinary web app and Telegram Mini App ar
 - `src/lib/fx/runner.ts` simulates, requests one signature per step, awaits each receipt, stops on failure, waits one additional block, and triggers an authoritative reread.
 - `src/lib/wallet/` is a narrow Privy/EIP-1193 adapter. It has no server credential or delegated authority.
 - `src/lib/prices.ts` validates the external DefiLlama response, rejects stale/low-confidence/incomplete snapshots, and converts supported-token units to display-only USD values. It is not imported by the SDK façade, validation policy, or transaction runner.
+- `src/lib/marketData.ts` validates keyless CoinGecko ETH/BTC history, rejects malformed, sparse, stale, or future-skewed series, and bounds chart density. It is display-only and remains separate from transaction planning.
 - `ActionReview.tsx` is the common user-visible state machine from plan review through receipt confirmation.
 - `src/lib/telegram.ts` treats Telegram as an optional host adapter and passes signed launch data only to Privy's authentication flow.
 
@@ -42,7 +44,7 @@ There is no FxAeon server process. The ordinary web app and Telegram Mini App ar
 | fxSAVE configuration, balance, cooldown, and claimability | Ethereum through the official SDK |
 | Bridge source confirmation and LayerZero delivery | Matching `OFTSent`/`OFTReceived` GUIDs on Ethereum/Base |
 | Selected address and signing permission | Privy wallet or explicitly connected browser wallet |
-| Display-only USD prices | Validated current external price snapshot; never execution authority |
+| Display-only USD prices | Validated DefiLlama current snapshot plus validated CoinGecko ETH/BTC history; never execution authority |
 | Official light/dark theme and slippage preset | Versioned local storage |
 | Pending hashes and bridge recheck context | Local recovery hint, revalidated from receipts and matching bridge events |
 
@@ -68,4 +70,4 @@ The launch UI is English-only. A locale may return only when the complete retain
 6. The runner waits for a successful receipt before continuing, then waits one additional block.
 7. The page rereads chain/SDK state and reconciles or clears its recovery journal.
 
-Any rejection, revert, timeout, nonce drift, provider outage, or bridge-delivery mismatch produces an explicit unavailable/error state. The client never substitutes fabricated zeroes, PnL, liquidation values, transaction success, or bridge completion. If the independent price feed is unavailable or invalid, USD labels degrade to an explicit unavailable state while on-chain amounts remain exact.
+Any rejection, revert, timeout, nonce drift, provider outage, or bridge-delivery mismatch produces an explicit unavailable/error state. The client never substitutes fabricated zeroes, PnL, liquidation values, transaction success, or bridge completion. If a display-price feed is unavailable or invalid, its USD label or chart degrades to an explicit unavailable state while on-chain amounts remain exact.

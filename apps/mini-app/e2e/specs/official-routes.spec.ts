@@ -187,6 +187,12 @@ test.describe("live USD context", () => {
   test("shows market prices, input USD value, token prices, and a leverage slider", async ({ page, requests }) => {
     await page.goto("/trade", { waitUntil: "domcontentloaded" });
     await expect(page.getByText("$2,400.00", { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("img", { name: /^ETH 1D USD price chart/ })).toBeVisible();
+    await page.getByRole("radio", { name: "7D" }).click();
+    await expect(page.getByRole("img", { name: /^ETH 7D USD price chart/ })).toBeVisible();
+    await page.getByRole("radio", { name: "BTC" }).click();
+    await expect(page.getByRole("img", { name: /^BTC 7D USD price chart/ })).toBeVisible();
+    await page.getByRole("radio", { name: "ETH" }).click();
     await page.getByLabel("Amount in ETH").fill("2");
     await expect(page.getByText("≈ $4,800.00", { exact: true })).toBeVisible();
     await page.getByLabel("Input asset").click();
