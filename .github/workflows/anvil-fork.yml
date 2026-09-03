@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   ethereum-fork:
-    name: Real f(x) positions and fork stress
+    name: Real positions, fxSAVE, browser, and fork stress
     runs-on: ubuntu-latest
     timeout-minutes: 60
     environment: production
@@ -51,6 +51,12 @@ jobs:
         run: pnpm test:anvil
         env:
           ANVIL_FORK_URL: ${{ secrets.NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL }}
+      - name: Verify real fxSAVE Earn lifecycle on disposable fork
+        run: pnpm test:anvil:earn
+        env:
+          ANVIL_FORK_URL: ${{ secrets.NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL }}
+          FX_ANVIL_MANIFEST_PATH: artifacts/anvil/earn-proof.json
+          FX_ANVIL_EARN_MANIFEST_PATH: artifacts/anvil/earn-proof.json
       - name: Run disposable fork transport stress
         run: pnpm test:anvil:stress
         env:

@@ -25,6 +25,7 @@ import {
   ProtocolPositionSkeleton,
 } from '@/components/ProtocolPositionCard';
 import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
+import { ConfirmedPositionCards } from '@/components/ConfirmedPositionCards';
 import RecentActivityPreview from '@/components/RecentActivityPreview';
 import TokenIcon from '@/components/TokenIcon';
 import { AddressChip, AppShell, Card, EmptyState, SectionTitle } from '@/components/ui';
@@ -35,7 +36,8 @@ import {
   type WalletBalancesResult,
   type WalletTokenBalance,
 } from '@/lib/fx';
-import { formatUsd, priceKeyForSymbol, usdValueForDecimal, usdValueForUnits, type UsdPriceMap } from '@/lib/prices';
+import { formatUsd, priceKeyForSymbol, usdValueForUnits, type UsdPriceMap } from '@/lib/prices';
+import { FX_SAVE_UNITS, fxSaveUsdValue } from '@/lib/fxSaveUnits';
 import { haptic } from '@/lib/telegram';
 import { usePrivyWallet, useWalletReadyTimeout } from '@/lib/wallet';
 import styles from '@/app/AccountWorkspace.module.css';
@@ -159,7 +161,9 @@ function PortfolioWallet() {
           setRefreshing(true);
           void Promise.all([loadProtocol(), positionState.refresh()]).finally(() => setRefreshing(false));
         }}
-        positionValue={positionState.status === 'idle' || positionState.status === 'loading'
+        positionValue={positionState.pendingPositions.length > 0
+          ? `${positionState.positions.length + positionState.pendingPositions.length} updating`
+          : positionState.status === 'idle' || positionState.status === 'loading'
           ? '…'
           : positionState.status === 'ready'
             ? String(positionState.positions.length)
@@ -175,10 +179,11 @@ function PortfolioWallet() {
 
         <SectionTitle right={<Link href="/positions" className="glass-press flex min-h-11 items-center gap-1 px-1 text-[11px] font-semibold text-mint">{positionState.positions.length > 2 ? `View all ${positionState.positions.length}` : 'Manage positions'} <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" /></Link>}>Protocol positions</SectionTitle>
         <div className="flex flex-col gap-2.5">
-          <ProtocolPositionNotice status={positionState.status} failedGroups={positionState.failedGroups} hasPositions={positionState.positions.length > 0} refreshing={positionState.refreshing} onRefresh={() => void positionState.refresh()} compact />
-          {positionState.status === 'loading' && !positionState.positions.length ? <ProtocolPositionSkeleton compact /> : positionState.positions.length > 0 ? (
+          <ProtocolPositionNotice status={positionState.status} failedGroups={positionState.failedGroups} hasPositions={positionState.positions.length + positionState.pendingPositions.length > 0} refreshing={positionState.refreshing} onRefresh={() => void positionState.refresh()} compact />
+          <ConfirmedPositionCards />
+          {positionState.status === 'loading' && !positionState.positions.length && !positionState.pendingPositions.length ? <ProtocolPositionSkeleton compact /> : positionState.positions.length > 0 ? (
             positionState.positions.slice(0, 2).map((position) => <ProtocolPositionCard key={`${position.market}:${position.side}:${position.info.positionId}`} position={position} compact href="/positions" stale={positionIsStale(position, positionState.failedGroups)} />)
-          ) : positionState.status === 'ready' ? (
+          ) : positionState.status === 'ready' && !positionState.pendingPositions.length ? (
             <ProtocolCard icon={Layers2} label="Positions" value="0 open" hint="Open an ETH or BTC position" href="/trade" />
           ) : null}
         </div>
@@ -307,7 +312,7 @@ function SupportedValueCard({
 
       <div className={`${styles.valueMetrics} portfolio-value-metrics`}>
         <ValueMetric label="Open positions" value={positionValue} />
-        <ValueMetric label="fxSAVE assets" value={protocol.fxSaveAssets !== null ? `${protocol.fxSaveAssets} fxUSD` : loading ? '…' : '—'} />
+        <ValueMetric label="fxSAVE shares" value={protocol.fxSaveShares !== null ? `${protocol.fxSaveShares} fxSAVE` : loading ? '…' : '—'} />
         <ValueMetric label="Supported assets" value={supportedAssetValue} />
       </div>
     </Card>
@@ -488,12 +493,14 @@ function walletValuation(balances: WalletBalancesResult | null, prices: UsdPrice
 }
 
 function fxSaveLabel(protocol: ProtocolSnapshot, prices: UsdPriceMap, loading: boolean): string {
-  if (protocol.fxSaveAssets !== null) {
-    const usdValue = usdValueForDecimal(protocol.fxSaveAssets, prices.fxUSD);
-    return `${protocol.fxSaveAssets} fxUSD${usdValue === null ? '' : ` · ${formatUsd(usdValue)}`}`;
-  }
-  if (protocol.fxSaveShares !== null) return `${protocol.fxSaveShares} shares`;
-  return loading ? 'Loading…' : 'Unavailable';
+  const units = protocol.fxSaveShares !== null
+    ? `${protocol.fxSaveShares} ${FX_SAVE_UNITS.balanceWei.label}`
+    : protocol.fxSaveAssets !== null
+      ? `${protocol.fxSaveAssets} ${FX_SAVE_UNITS.assetsWei.label}`
+      : null;
+  if (units === null) return loading ? 'Loading…' : 'Unavailable';
+  const usdValue = fxSaveUsdValue('assetsWei', protocol.fxSaveAssets, prices);
+  return `${units}${usdValue === null ? '' : ` · ${formatUsd(usdValue)} est.`}`;
 }
 
 function formatWalletAmount(balance: WalletTokenBalance): string {

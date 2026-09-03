@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ChevronRight, Layers2, RefreshCw, ShieldCheck } from 'lucide-react';
+import { ChevronRight, Layers2 } from 'lucide-react';
 import { AppShell, Card } from '@/components/ui';
 import { ActionReview } from '@/components/ActionReview';
 import { TradeMarketChart } from '@/components/MarketChart';
@@ -14,9 +14,12 @@ import {
   ProtocolPositionSkeleton,
 } from '@/components/ProtocolPositionCard';
 import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
+import { ConfirmedPositionCards } from '@/components/ConfirmedPositionCards';
+import { deriveConfirmedPositionHint } from '@/lib/confirmedPositions';
+import { confirmedPositionHintKey } from '@/lib/confirmedPositionStorage';
 import WalletConnectCTA from '@/components/WalletConnectCTA';
 import { AmountField, LeverageField, Segmented, SlippageField, TokenSelect, tokenBalanceFor, useWalletTokenBalances, type TokenBalanceView } from '@/components/ProtocolForm';
-import { MAX_FX_SLIPPAGE_PERCENT, clampLeverage, leverageBoundsFor, planIncreasePosition, readLeverageBounds, type LeverageBounds, type TransactionExecutionResult } from '@/lib/fx';
+import { MAX_FX_SLIPPAGE_PERCENT, clampLeverage, leverageBoundsFor, planIncreasePosition, readLeverageBounds, type LeverageBounds, type PlannedRoute, type TransactionExecutionResult } from '@/lib/fx';
 import { usePrivyWallet } from '@/lib/wallet';
 import styles from '@/components/trade-surfaces.module.css';
 import { positiveDecimal } from '@/lib/amount';
@@ -32,15 +35,6 @@ import {
   type UiToken,
 } from '@/app/trade/fxUi';
 
-type PendingPositionIndex = {
-  market: UiMarket;
-  side: UiSide;
-  tradeKey: string;
-  previousKeys: string[];
-  verifiedBaseline: boolean;
-  phase: 'checking' | 'waiting';
-};
-
 export default function TradePage() {
   const wallet = usePrivyWallet();
   // Trade inputs are settled against the Ethereum FX token registry. Read
@@ -55,25 +49,6 @@ export default function TradePage() {
   const [slippage, setSlippage] = useState(String(DEFAULT_SLIPPAGE_PERCENT));
   const [leverageBounds, setLeverageBounds] = useState<LeverageBounds>(() => leverageBoundsFor('ETH', 'long'));
   const [highlightedPositionKey, setHighlightedPositionKey] = useState('');
-  const [pendingIndex, setPendingIndex] = useState<PendingPositionIndex | null>(null);
-  const indexRequestRef = useRef(0);
-  const positionSnapshotRef = useRef(positionState);
-  const reviewedIndexRef = useRef<PendingPositionIndex | null>(null);
-  const tradeKey = `${wallet.address?.toLowerCase() ?? ''}:${market}:${side}`;
-  const indexContextRef = useRef({ tradeKey, active: true });
-
-  useEffect(() => {
-    indexContextRef.current = { tradeKey, active: true };
-    setPendingIndex(null);
-    setHighlightedPositionKey('');
-    reviewedIndexRef.current = null;
-    return () => {
-      indexContextRef.current.active = false;
-      indexRequestRef.current += 1;
-    };
-  }, [tradeKey]);
-
-  useEffect(() => { positionSnapshotRef.current = positionState; }, [positionState]);
 
   useEffect(() => {
     setSlippage(String(readSlippagePercent()));
@@ -124,13 +99,6 @@ export default function TradePage() {
     const slippageValue = Number(slippage);
     if (!amountWei || !Number.isFinite(leverage) || leverage < leverageBounds.min || leverage > leverageBounds.max || !Number.isFinite(slippageValue) || slippageValue <= 0 || slippageValue > MAX_FX_SLIPPAGE_PERCENT) return null;
     return () => {
-      const baseline = positionSnapshotRef.current;
-      reviewedIndexRef.current = {
-        market, side, tradeKey,
-        previousKeys: baseline.positions.map(positionKey),
-        verifiedBaseline: baseline.verifiedGroups.some((group) => group.market === market && group.side === side),
-        phase: 'checking',
-      };
       return planIncreasePosition({
         market,
         type: side,
@@ -142,7 +110,7 @@ export default function TradePage() {
         slippage: slippageValue,
       });
     };
-  }, [leverage, leverageBounds, market, side, slippage, token, tradeKey, validAmount, wallet.address]);
+  }, [leverage, leverageBounds, market, side, slippage, token, validAmount, wallet.address]);
 
   const marketPositions = positionState.positions.filter((position) => position.market === market);
   const highlightedPosition = marketPositions.find((position) => positionKey(position) === highlightedPositionKey);
@@ -150,42 +118,14 @@ export default function TradePage() {
     ? [highlightedPosition, ...marketPositions.filter((position) => positionKey(position) !== highlightedPositionKey).slice(-1)]
     : marketPositions.slice(-2).reverse();
 
-  const checkPositionIndex = async (pending: PendingPositionIndex) => {
-    if (!indexContextRef.current.active || indexContextRef.current.tradeKey !== pending.tradeKey) return;
-    const requestId = ++indexRequestRef.current;
-    const isCurrent = () => indexContextRef.current.active
-      && indexContextRef.current.tradeKey === pending.tradeKey
-      && requestId === indexRequestRef.current;
-    setPendingIndex({ ...pending, phase: 'checking' });
-    // The official SDK index can trail receipts. Bounded reads run separately
-    // from transaction completion: never hold the signing/result UI open or
-    // invite the user to submit the same transaction again while indexing.
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      if (!isCurrent()) return;
-      const result = await positionState.refresh();
-      if (!isCurrent()) return;
-      const matches = (position: typeof result.positions[number]) => position.market === pending.market && position.side === pending.side;
-      const minted = result.newPositions.findLast(matches)
-        ?? (pending.verifiedBaseline ? result.positions.findLast((position) => matches(position) && !pending.previousKeys.includes(positionKey(position))) : undefined);
-      if (minted) {
-        setHighlightedPositionKey(positionKey(minted));
-        setPendingIndex(null);
-        return;
-      }
-      if (attempt < 2) {
-        await new Promise((resolve) => window.setTimeout(resolve, 1_500 * (attempt + 1)));
-      }
-    }
-    if (isCurrent()) setPendingIndex({ ...pending, phase: 'waiting' });
-  };
-
-  const handleOpenComplete = (execution: TransactionExecutionResult) => {
+  const handleOpenComplete = async (execution: TransactionExecutionResult, route: PlannedRoute) => {
     if (execution.status !== 'confirmed' || execution.operation !== 'increasePosition' || execution.chainId !== 1
-      || execution.walletAddress.toLowerCase() !== wallet.address?.toLowerCase()
-      || !indexContextRef.current.active || indexContextRef.current.tradeKey !== tradeKey) return;
+      || execution.walletAddress.toLowerCase() !== wallet.address?.toLowerCase()) return;
     void walletBalances.refresh(true);
-    const reviewed = reviewedIndexRef.current;
-    if (reviewed?.tradeKey === tradeKey) void checkPositionIndex(reviewed);
+    if (await positionState.trackConfirmedPosition(execution, route)) {
+      const hint = deriveConfirmedPositionHint({ route, result: execution, walletAddress: execution.walletAddress });
+      if (hint) setHighlightedPositionKey(confirmedPositionHintKey(hint));
+    } else void positionState.refresh();
   };
 
   return (
@@ -235,18 +175,14 @@ export default function TradePage() {
               <h2 id="trade-open-positions-title" className="text-[15px] font-semibold">Your positions</h2>
               <Link href="/positions" className="glass-press inline-flex min-h-11 items-center gap-1 px-1 text-[12px] font-semibold text-mint">Manage all <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" /></Link>
             </div>
-            <ProtocolPositionNotice status={positionState.status} failedGroups={positionState.failedGroups} hasPositions={positionState.positions.length > 0} refreshing={positionState.refreshing} onRefresh={() => void positionState.refresh()} compact />
-            {pendingIndex && <div role="status" aria-live="polite" className="flex items-center gap-3 rounded-xl border border-[var(--line)] bg-[var(--mint-dim)] p-3">
-              <ShieldCheck className="h-5 w-5 shrink-0 text-mint" aria-hidden="true" />
-              <div className="min-w-0 flex-1"><p className="text-[13px] font-semibold">Trade confirmed · syncing position</p><p className="mt-1 text-[12px] leading-relaxed text-mut">{pendingIndex.phase === 'checking' ? 'Loading your position ID and balances.' : 'Your trade is confirmed. Position details are still updating. Check again shortly; do not repeat the trade.'}</p></div>
-              <button type="button" aria-label="Check confirmed position" disabled={pendingIndex.phase === 'checking'} onClick={() => void checkPositionIndex(pendingIndex)} className="glass-press flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-mint disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${pendingIndex.phase === 'checking' ? 'animate-spin' : ''}`} aria-hidden="true" /></button>
-            </div>}
-            {highlightedPositionKey && <p role="status" aria-live="polite" className="rounded-lg bg-[rgba(36,211,153,.1)] px-3 py-2 text-[12px] font-medium text-success">New position detected and highlighted.</p>}
-            {positionState.status === 'loading' && !positionState.positions.length ? <ProtocolPositionSkeleton compact /> : marketPositions.length > 0 ? (
+            <ProtocolPositionNotice status={positionState.status} failedGroups={positionState.failedGroups} hasPositions={positionState.positions.length + positionState.pendingPositions.length > 0} refreshing={positionState.refreshing} onRefresh={() => void positionState.refresh()} compact />
+            <ConfirmedPositionCards market={market} />
+            {highlightedPosition && <p role="status" aria-live="polite" className="rounded-lg bg-[rgba(36,211,153,.1)] px-3 py-2 text-[12px] font-medium text-success">New position detected and highlighted.</p>}
+            {positionState.status === 'loading' && !positionState.positions.length && !positionState.pendingPositions.length ? <ProtocolPositionSkeleton compact /> : marketPositions.length > 0 ? (
               <div className="flex flex-col gap-2">
                 {previewPositions.map((position) => <ProtocolPositionCard key={positionKey(position)} position={position} compact href="/positions" highlighted={positionKey(position) === highlightedPositionKey} stale={positionIsStale(position, positionState.failedGroups)} />)}
               </div>
-            ) : positionState.status === 'ready' && !pendingIndex ? (
+            ) : positionState.status === 'ready' && !positionState.pendingPositions.some((hint) => hint.market === market) ? (
               <Link href="/positions" className="trade-positions-link glass-press">
                 <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--mint-dim)] text-mint"><Layers2 className="h-5 w-5" aria-hidden="true" /></span>
                 <span className="min-w-0 flex-1"><strong className="block text-[13px]">No open {market} positions</strong><small className="mt-1 block text-[12px] text-mut">Your position details will appear here after a trade is confirmed.</small></span>

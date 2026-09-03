@@ -7,8 +7,9 @@ import { AppShell, Button, Card, EmptyState, LoadingRegion, Skeleton } from '@/c
 import { ActionReview } from '@/components/ActionReview';
 import WalletConnectCTA from '@/components/WalletConnectCTA';
 import { AmountField, InfoNote, Segmented, SlippageField, ToggleRow, TokenSelect, useWalletTokenBalances, type TokenBalanceMap } from '@/components/ProtocolForm';
-import { useUsdPrice } from '@/components/PriceProvider';
-import { formatUsd, usdValueForUnits } from '@/lib/prices';
+import { useUsdPrices } from '@/components/PriceProvider';
+import { formatUsd } from '@/lib/prices';
+import { FX_SAVE_UNITS, fxSaveUsdValue } from '@/lib/fxSaveUnits';
 import {
   assertConfiguredPublicClientChain,
   getFxSdk,
@@ -331,8 +332,9 @@ type SaveData = {
 };
 
 function SavingsSummary({ data, loading, onRefresh, stale }: { data: SaveData; loading: boolean; onRefresh: () => Promise<void>; stale: boolean }) {
-  const fxUsdPrice = useUsdPrice('fxUSD');
+  const { prices } = useUsdPrices();
   const hasAssets = data.balance?.assetsWei !== undefined;
+  const assetsUsd = fxSaveUsdValue('assetsWei', data.balance?.assetsWei, prices);
   const claimState = claimAvailability(data.claimable);
   const pendingShares = data.claimable?.pendingSharesWei ?? data.redeemStatus?.pendingSharesWei ?? 0n;
   const hasPending = pendingShares > 0n && (data.claimable?.hasPendingRedeem || data.redeemStatus?.hasPendingRedeem || false);
@@ -349,13 +351,11 @@ function SavingsSummary({ data, loading, onRefresh, stale }: { data: SaveData; l
             {stale && <span className="rounded-full bg-[var(--warn-dim)] px-2 py-0.5 text-[10px] font-semibold text-warn">Last verified</span>}
           </div>
           <h2 className="text-display mt-2 break-words text-[30px] font-semibold tabular-nums tracking-[-.03em]">
-            {hasAssets
-              ? `${formatDisplayAmount(data.balance?.assetsWei)} fxUSD`
-              : data.balance ? `${formatDisplayAmount(data.balance.balanceWei)} fxSAVE` : '—'}
+            {data.balance ? `${formatDisplayAmount(data.balance.balanceWei)} fxSAVE` : '—'}
           </h2>
           {hasAssets && (
             <p className="mt-1 text-[12px] text-mut tabular-nums">
-              {formatUsd(usdValueForUnits(data.balance?.assetsWei ?? 0n, 18, fxUsdPrice))} · {formatDisplayAmount(data.balance?.balanceWei)} fxSAVE shares
+              {assetsUsd === null ? 'USD value unavailable' : `${formatUsd(assetsUsd)} estimated value`}
             </p>
           )}
         </div>
@@ -371,16 +371,17 @@ function SavingsSummary({ data, loading, onRefresh, stale }: { data: SaveData; l
       </div>
 
       <div className="mt-5 grid grid-cols-2 gap-2">
-        <Metric label="Shares" value={data.balance ? `${formatDisplayAmount(data.balance.balanceWei)} fxSAVE` : 'Unavailable'} />
-        <Metric label="Assets" value={hasAssets ? `${formatDisplayAmount(data.balance?.assetsWei)} fxUSD` : 'Unavailable'} />
+        <Metric label={FX_SAVE_UNITS.balanceWei.label} value={data.balance ? formatDisplayAmount(data.balance.balanceWei) : 'Unavailable'} />
+        <Metric label={FX_SAVE_UNITS.assetsWei.label} value={hasAssets ? formatDisplayAmount(data.balance?.assetsWei) : 'Unavailable'} />
       </div>
+      <p className="mt-2 text-[11px] leading-relaxed text-mut">fxSAVE holds base-pool shares, not fxUSD one-for-one.</p>
 
       <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[rgba(255,255,255,.025)] px-3 py-3">
         <div className="min-w-0">
           <p className="text-[12px] font-semibold">Pending redemption</p>
-          <p className="mt-0.5 truncate text-[11px] text-mut tabular-nums">
+          <p className="mt-0.5 break-words text-[11px] leading-relaxed text-mut tabular-nums">
             {hasPending
-              ? `${formatDisplayAmount(pendingShares)} fxSAVE${ready ? ' · available now' : formatRedeemableAt(data.claimable?.redeemableAt ?? data.redeemStatus?.redeemableAt ?? null)}`
+              ? `${formatDisplayAmount(pendingShares)} ${FX_SAVE_UNITS.pendingSharesWei.label}${ready ? ' · available now' : formatRedeemableAt(data.claimable?.redeemableAt ?? data.redeemStatus?.redeemableAt ?? null)}`
               : data.claimable || data.redeemStatus ? 'None' : 'Unavailable'}
           </p>
         </div>
@@ -421,8 +422,8 @@ function VaultDetails({ config }: { config: SaveConfig }) {
         <ChevronDown aria-hidden="true" className="h-4 w-4 text-mut transition-transform group-open:rotate-180" />
       </summary>
       <div className="divide-y divide-[var(--line)] border-t border-[var(--line)] pb-1">
-        <DetailRow label="Total assets" value={`${formatDisplayAmount(config.totalAssetsWei)} fxUSD`} />
-        <DetailRow label="Total shares" value={`${formatDisplayAmount(config.totalSupplyWei)} fxSAVE`} />
+        <DetailRow label="Total assets" value={`${formatDisplayAmount(config.totalAssetsWei)} ${FX_SAVE_UNITS.totalAssetsWei.label}`} />
+        <DetailRow label="Total shares" value={`${formatDisplayAmount(config.totalSupplyWei)} ${FX_SAVE_UNITS.totalSupplyWei.label}`} />
         <DetailRow label="Cooldown" value={formatCooldown(config.cooldownPeriodSeconds)} />
         <DetailRow label="Instant fee" value={formatRatio(config.instantRedeemFeeRatio)} />
         <DetailRow label="Expense ratio" value={formatRatio(config.expenseRatio)} />
@@ -450,7 +451,7 @@ function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className={`${styles.metric} p-3`}>
       <span className="block text-[11px] text-mut">{label}</span>
-      <span className="mt-1 block truncate text-[13px] font-semibold tabular-nums" title={value}>{value}</span>
+      <span className="mt-1 block break-words text-[13px] font-semibold tabular-nums" title={value}>{value}</span>
     </div>
   );
 }
@@ -459,7 +460,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex min-h-11 items-center justify-between gap-4 py-2.5 text-[12px]">
       <span className="text-mut">{label}</span>
-      <span className="max-w-[62%] truncate text-right font-semibold tabular-nums" title={value}>{value}</span>
+      <span className="max-w-[62%] break-words text-right font-semibold tabular-nums" title={value}>{value}</span>
     </div>
   );
 }

@@ -15,6 +15,7 @@ import {
   ProtocolPositionSkeleton,
 } from '@/components/ProtocolPositionCard';
 import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
+import { ConfirmedPositionCards } from '@/components/ConfirmedPositionCards';
 import { readWalletBalances, type WalletBalancesResult, type WalletTokenBalance } from '@/lib/fx';
 import { formatUsd, priceKeyForSymbol, usdValueForUnits } from '@/lib/prices';
 import { haptic } from '@/lib/telegram';
@@ -158,10 +159,11 @@ export default function WalletProfile() {
                 <Link href="/positions" onClick={() => setOpen(false)} className="glass-press inline-flex min-h-11 items-center gap-1 px-1 text-[11px] font-semibold text-mint">{positionState.positions.length > 2 ? `View all ${positionState.positions.length}` : 'Manage'} <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" /></Link>
               </div>
               <div className="flex flex-col gap-2">
-                <ProtocolPositionNotice status={positionState.status} failedGroups={positionState.failedGroups} hasPositions={positionState.positions.length > 0} refreshing={positionState.refreshing} onRefresh={() => void refreshPositions()} compact />
-                {positionState.status === 'loading' && !positionState.positions.length ? <ProtocolPositionSkeleton compact /> : positionState.positions.length > 0 ? (
+                <ProtocolPositionNotice status={positionState.status} failedGroups={positionState.failedGroups} hasPositions={positionState.positions.length + positionState.pendingPositions.length > 0} refreshing={positionState.refreshing} onRefresh={() => void refreshPositions()} compact />
+                <ConfirmedPositionCards />
+                {positionState.status === 'loading' && !positionState.positions.length && !positionState.pendingPositions.length ? <ProtocolPositionSkeleton compact /> : positionState.positions.length > 0 ? (
                   positionState.positions.slice(0, 2).map((position) => <ProtocolPositionCard key={`${position.market}:${position.side}:${position.info.positionId}`} position={position} compact href="/positions" onNavigate={() => setOpen(false)} stale={positionIsStale(position, positionState.failedGroups)} />)
-                ) : positionState.status === 'ready' ? <p className="rounded-xl border border-[var(--line)] p-3 text-[12px] text-mut">No open protocol positions.</p> : null}
+                ) : positionState.status === 'ready' && !positionState.pendingPositions.length ? <p className="rounded-xl border border-[var(--line)] p-3 text-[12px] text-mut">No open protocol positions.</p> : null}
               </div>
             </section>
 

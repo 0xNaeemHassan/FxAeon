@@ -30,17 +30,17 @@ function parseSuite(args) {
     } else if (argument.startsWith("--suite=")) {
       requested = argument.slice("--suite=".length).trim().toLowerCase();
     } else {
-      throw new Error("unknown Anvil test argument; use --suite protocol, stress, all, or browser");
+      throw new Error("unknown Anvil test argument; use --suite protocol, earn, stress, all, or browser");
     }
   }
-  if (!["protocol", "stress", "all", "browser"].includes(requested)) {
-    throw new Error("Anvil test suite must be protocol, stress, all, or browser");
+  if (!["protocol", "earn", "stress", "all", "browser"].includes(requested)) {
+    throw new Error("Anvil test suite must be protocol, earn, stress, all, or browser");
   }
   return requested;
 }
 
 function resolveManifestPath(configured) {
-  const candidate = configured?.trim() || join("artifacts", "anvil", suite === "browser" ? "browser-proof.json" : "protocol-proof.json");
+  const candidate = configured?.trim() || join("artifacts", "anvil", suite === "browser" ? "browser-proof.json" : suite === "earn" ? "earn-proof.json" : "protocol-proof.json");
   const resolved = isAbsolute(candidate) ? resolve(candidate) : resolve(root, candidate);
   const fromRoot = relative(root, resolved);
   if (!fromRoot || fromRoot.startsWith("..") || isAbsolute(fromRoot)) {
@@ -96,8 +96,12 @@ function scrubChildEnvironment() {
   };
   if (suite !== "stress") {
     childEnv.FX_ANVIL_MANIFEST_PATH = manifestPath;
+    childEnv.FX_ANVIL_EARN_MANIFEST_PATH = suite === "earn"
+      ? manifestPath
+      : resolve(root, "artifacts", "anvil", "earn-proof.json");
   } else {
     delete childEnv.FX_ANVIL_MANIFEST_PATH;
+    delete childEnv.FX_ANVIL_EARN_MANIFEST_PATH;
   }
   // The integration test uses only the local fork. Do not unnecessarily pass
   // production provider, bot, wallet, or deployment credentials to it.
@@ -178,6 +182,9 @@ function validateProtocolManifest() {
     || manifest?.assertions?.ownershipVerified !== true
     || manifest?.assertions?.nonzeroCollateralAndDebtVerified !== true
     || manifest?.assertions?.snapshotRevertedAfterProof !== true
+    || (suite === "browser" && manifest?.assertions?.submittedExplorerBeforeConfirmation !== true)
+    || (suite === "browser" && manifest?.assertions?.confirmedPositionBeforeIndexer !== true)
+    || (suite === "browser" && manifest?.assertions?.restoredConfirmedPosition !== true)
     || (suite === "browser" && manifest?.assertions?.browserDriven !== true)
     || expectedScenarios.some((scenario) => !scenarios.has(scenario))
     || !positionEvidenceValid
@@ -185,6 +192,91 @@ function validateProtocolManifest() {
     throw new Error("protocol proof manifest is incomplete or failed its release-evidence schema");
   }
   process.stdout.write(`Verified redacted four-position protocol proof manifest at ${relative(root, manifestPath)}\n`);
+}
+
+function validateEarnManifest() {
+  const earnPath = suite === "earn" ? manifestPath : resolve(root, "artifacts", "anvil", "earn-proof.json");
+  if (!existsSync(earnPath)) throw new Error("real fxSAVE proof passed without producing its manifest");
+  const text = readFileSync(earnPath, "utf8");
+  if (forkUrl && text.includes(forkUrl)) throw new Error("fxSAVE proof manifest contains the upstream fork URL");
+  if (/https?:\/\//i.test(text)) throw new Error("fxSAVE proof manifest contains a forbidden URL");
+  const manifest = JSON.parse(text);
+  const containsSensitiveField = (value) => {
+    if (!value || typeof value !== "object") return false;
+    return Object.entries(value).some(([key, nested]) => (
+      /^(private.?key|mnemonic|fork.?url|rpc.?url|provider.?credential)$/i.test(key)
+      || containsSensitiveField(nested)
+    ));
+  };
+  if (containsSensitiveField(manifest)) throw new Error("fxSAVE proof manifest contains a forbidden credential field");
+  const txHash = /^0x[0-9a-f]{64}$/i;
+  const actions = Array.isArray(manifest?.actions) ? manifest.actions : [];
+  const requiredOperations = new Set([
+    "depositFxSave",
+    "withdrawFxSave.instant",
+    "withdrawFxSave.directBasePool",
+    "depositFxSave.directBasePool",
+    "withdrawFxSave.queued",
+    "getRedeemTx",
+    "depositFxSave.fxUSD",
+  ]);
+  const operationNames = new Set(actions.map((action) => action?.operation));
+  const txEvidenceValid = actions.length === requiredOperations.size && actions.every((action) => (
+    typeof action?.operation === "string"
+    && Array.isArray(action?.transactions)
+    && action.transactions.length > 0
+    && action.transactions.some((tx) => tx?.kind === "action")
+    && action.transactions.every((tx) => txHash.test(tx?.hash ?? "") && BigInt(tx?.blockNumber ?? "0") > 0n)
+  ));
+  const feeEvidence = manifest?.feeEvidence;
+  const feeEvidenceFields = [
+    feeEvidence?.instantRedeemFeeRatio,
+    feeEvidence?.grossYield,
+    feeEvidence?.grossStable,
+    feeEvidence?.feeAdjustedYield,
+    feeEvidence?.feeAdjustedStable,
+    feeEvidence?.executionGrossYield,
+    feeEvidence?.executionGrossStable,
+    feeEvidence?.executionFeeAdjustedYield,
+    feeEvidence?.executionFeeAdjustedStable,
+    feeEvidence?.eventShares,
+    feeEvidence?.eventYield,
+    feeEvidence?.eventStable,
+    feeEvidence?.quotedYieldToUsdc,
+    feeEvidence?.quotedStableToUsdc,
+    feeEvidence?.actualUsdc,
+  ];
+  const feeEvidenceValid = feeEvidenceFields.every((value) => typeof value === "string" && /^\d+$/.test(value))
+    && BigInt(feeEvidence.instantRedeemFeeRatio) > 0n
+    && BigInt(feeEvidence.grossYield) > BigInt(feeEvidence.feeAdjustedYield)
+    && BigInt(feeEvidence.grossStable) > BigInt(feeEvidence.feeAdjustedStable)
+    && BigInt(feeEvidence.executionGrossYield) > BigInt(feeEvidence.executionFeeAdjustedYield)
+    && BigInt(feeEvidence.executionGrossStable) > BigInt(feeEvidence.executionFeeAdjustedStable)
+    && BigInt(feeEvidence.eventShares) > 0n
+    && feeEvidence.eventYield === feeEvidence.executionFeeAdjustedYield
+    && feeEvidence.eventStable === feeEvidence.executionFeeAdjustedStable
+    && BigInt(feeEvidence.actualUsdc) > 0n;
+  const assertions = manifest?.assertions;
+  if (
+    manifest?.proof !== "fxaeon-real-fxsave-fork"
+    || manifest?.chainId !== 1
+    || assertions?.sdkDeposit !== true
+    || assertions?.instantWithdraw !== true
+    || assertions?.queuedWithdraw !== true
+    || assertions?.cooldownObserved !== true
+    || assertions?.claim !== true
+    || assertions?.directBasePoolDeposit !== true
+    || assertions?.directBasePoolRedeem !== true
+    || assertions?.balancesVerified !== true
+    || assertions?.sharesVerified !== true
+    || assertions?.eventsVerified !== true
+    || assertions?.feesVerified !== true
+    || assertions?.snapshotRevertedAfterProof !== true
+    || [...requiredOperations].some((operation) => !operationNames.has(operation))
+    || !feeEvidenceValid
+    || !txEvidenceValid
+  ) throw new Error("fxSAVE proof manifest is incomplete or failed its release-evidence schema");
+  process.stdout.write(`Verified redacted fxSAVE proof manifest at ${relative(root, earnPath)}\n`);
 }
 
 function spawnWithRedaction(command, args, options = {}) {
@@ -349,7 +441,10 @@ try {
   await assertLoopbackPortAvailable(port);
   if (browserPort !== undefined) await assertLoopbackPortAvailable(browserPort);
   assertNotInterrupted();
-  if (suite !== "stress") rmSync(manifestPath, { force: true });
+   if (suite !== "stress") {
+     rmSync(manifestPath, { force: true });
+     if (suite === "all") rmSync(resolve(root, "artifacts", "anvil", "earn-proof.json"), { force: true });
+   }
   const anvilBin = process.env.ANVIL_BIN?.trim() || "anvil";
   const anvilArgs = [
     "--fork-url", forkUrl,
@@ -386,7 +481,11 @@ try {
   if (Number(testExit) !== 0) {
     process.exitCode = Number(testExit);
   } else {
-    if (suite !== "stress") validateProtocolManifest();
+    if (suite === "earn") validateEarnManifest();
+    else if (suite === "all") {
+      validateProtocolManifest();
+      validateEarnManifest();
+    } else if (suite !== "stress") validateProtocolManifest();
     process.exitCode = 0;
   }
 } catch (error) {

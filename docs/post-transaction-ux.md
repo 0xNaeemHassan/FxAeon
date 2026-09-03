@@ -1,0 +1,75 @@
+# Post-transaction UX: code study and adoption
+
+Reviewed 2026-09-03. This is a source-code comparison, not an observation of transactions in other dapps' live UIs. It consolidates the local research record at `artifacts/reference-research/post-signing-ux.md` (ignored by Git). All external code links below are pinned to the inspected commits, so this document is independently usable.
+
+## What the reference implementations establish
+
+### Jumper host, matching LI.FI SDK, and separate public widget
+
+These are three distinct evidence sources. Jumper's archived public frontend at `eee099c8390dc8841179f80eaed027756a447e66` resolves `@jumperexchange/widget 4.6.1` and `@lifi/sdk 4.2.0`; the later private frontend is outside this audit. The public LI.FI widget is **not proven identical** to Jumper's scoped fork. See the [Jumper commit](https://github.com/jumperexchange/jumper-exchange/commit/eee099c8390dc8841179f80eaed027756a447e66) and [lockfile](https://github.com/jumperexchange/jumper-exchange/blob/eee099c8390dc8841179f80eaed027756a447e66/pnpm-lock.yaml).
+
+- **Jumper transaction lifecycle:** its executor exposes the broadcast hash while waiting for one confirmation; the flow separates approval/action execution, confirmation, and completion. The form derives a chain-specific explorer URL, but the inspected status-sheet helper explicitly exposes transaction details on success. This proves hash availability, **not that an immediate pending explorer link was observed in Jumper's UI**. Sources: [executor](https://github.com/jumperexchange/jumper-exchange/blob/eee099c8390dc8841179f80eaed027756a447e66/src/hooks/transactions/executors/useSendTransactionExecutor.ts), [flow](https://github.com/jumperexchange/jumper-exchange/blob/eee099c8390dc8841179f80eaed027756a447e66/src/hooks/transactions/useTransactionFlow.ts), [form](https://github.com/jumperexchange/jumper-exchange/blob/eee099c8390dc8841179f80eaed027756a447e66/src/hooks/transactions/useTransactionForm.ts), [status content](https://github.com/jumperexchange/jumper-exchange/blob/eee099c8390dc8841179f80eaed027756a447e66/src/hooks/transactions/useTransactionStatusContent.ts).
+- **Jumper refresh behavior:** completion refreshes address-specific balances, not every protocol position; a destination-position-refresh TODO remains. Its wallet-keyed balance reads distinguish loading, refreshing, stale/placeholder, and error states. Copying the completion callback alone would not solve f(x) indexing latency. Sources: [widget events](https://github.com/jumperexchange/jumper-exchange/blob/eee099c8390dc8841179f80eaed027756a447e66/src/components/Widgets/WidgetEvents.tsx), [orchestration](https://github.com/jumperexchange/jumper-exchange/blob/eee099c8390dc8841179f80eaed027756a447e66/src/providers/PortfolioProvider/hooks/useOrchestrationState.ts), [balance data](https://github.com/jumperexchange/jumper-exchange/blob/eee099c8390dc8841179f80eaed027756a447e66/src/providers/PortfolioProvider/hooks/useBalancesData.ts).
+- **Matching LI.FI SDK:** the signing task records pending state, hash, explorer URL, type, and timestamp after broadcast. Approval has a separate lifecycle. Existing hashes enter receipt/status recovery instead of requesting another signature. Sources: [signing task](https://github.com/lifinance/sdk/blob/0cf54177229e50315a066d178487544c09633ba6/packages/sdk-provider-ethereum/src/core/tasks/EthereumStandardSignAndExecuteTask.ts#L123), [allowance task](https://github.com/lifinance/sdk/blob/0cf54177229e50315a066d178487544c09633ba6/packages/sdk-provider-ethereum/src/core/tasks/EthereumSetAllowanceTask.ts#L33), [restart](https://github.com/lifinance/sdk/blob/0cf54177229e50315a066d178487544c09633ba6/packages/sdk/src/core/prepareRestart.ts#L3).
+- **SDK boundary:** replacement handling can update the hash/link, and some receipt-wait failures use status fallbacks; a resolved wait is not universally proof of a verified successful receipt. Destination completion is separate from source confirmation. Sources: [receipt wrapper](https://github.com/lifinance/sdk/blob/0cf54177229e50315a066d178487544c09633ba6/packages/sdk-provider-ethereum/src/actions/waitForTransactionReceipt.ts#L34), [destination task](https://github.com/lifinance/sdk/blob/0cf54177229e50315a066d178487544c09633ba6/packages/sdk/src/core/tasks/WaitForTransactionStatusTask.ts#L43).
+- **Public LI.FI widget:** its persistent route store supports continued/reloaded execution, while history reconciles local and indexed records by source hash. Its inspected checklist filters explorer rows to completed/failed actions. Immediate pending explorer visibility is therefore an FxAeon design choice, not a claim about that reference UI. Sources: [execution hook](https://github.com/lifinance/widget/blob/6569207b1872706e53e53fe4ecc70f150c7103ae/packages/widget/src/hooks/useRouteExecution.ts#L58), [store](https://github.com/lifinance/widget/blob/6569207b1872706e53e53fe4ecc70f150c7103ae/packages/widget/src/stores/routes/createRouteExecutionStore.ts#L130), [history](https://github.com/lifinance/widget/blob/6569207b1872706e53e53fe4ecc70f150c7103ae/packages/widget/src/hooks/useTransactionHistory.ts#L29), [explorer-row filtering](https://github.com/lifinance/widget/blob/6569207b1872706e53e53fe4ecc70f150c7103ae/packages/widget/src/components/StepActions/executionRows.tsx#L45).
+
+### Uniswap and Aave
+
+- **Uniswap:** the inspected swap saga records pending feedback immediately after broadcast. Transaction identity includes account, chain, hash, request, and timestamp; hash-bearing submission errors can be recovered instead of blindly retried. Explorer links use the transaction's own chain, and targeted on-chain token reads reconcile portfolio state. Sources: [swap saga](https://github.com/Uniswap/interface/blob/da6d36f71c4d2fd665b0aae1a052a4ffda917b31/apps/web/src/state/sagas/transactions/swapSaga.ts), [execution helpers](https://github.com/Uniswap/interface/blob/da6d36f71c4d2fd665b0aae1a052a4ffda917b31/apps/web/src/state/sagas/transactions/utils.ts), [hash row](https://github.com/Uniswap/interface/blob/da6d36f71c4d2fd665b0aae1a052a4ffda917b31/packages/uniswap/src/components/activity/details/TransactionDetailsInfoRows.tsx), [on-chain reconciliation](https://github.com/Uniswap/interface/blob/da6d36f71c4d2fd665b0aae1a052a4ffda917b31/packages/uniswap/src/features/portfolio/portfolioUpdates/refetchQueriesViaOnchainOverrideVariantSaga.ts).
+- **Uniswap limitation:** its web poller can use Trading API terminal status with best-effort receipts and synthesized receipt metadata. This is not FxAeon's receipt-only verification model. Source: [web polling](https://github.com/Uniswap/interface/blob/da6d36f71c4d2fd665b0aae1a052a4ffda917b31/apps/web/src/state/activity/polling/transactions.ts).
+- **Aave:** approval and action loading are separate; its inspected helper waits for one confirmation before exposing modal success/hash and invalidating affected queries. It does not establish immediate pending-hash feedback or durable recovery, and treats wait errors as failures without explicit unknown/replacement branches. Sources: [transaction handler](https://github.com/aave/interface/blob/28f295eccc714d40ff9afd19882fddd127228f52/src/helpers/useTransactionHandler.tsx), [success view](https://github.com/aave/interface/blob/28f295eccc714d40ff9afd19882fddd127228f52/src/components/transactions/FlowCommons/BaseSuccess.tsx), [modal state](https://github.com/aave/interface/blob/28f295eccc714d40ff9afd19882fddd127228f52/src/hooks/useModal.tsx).
+
+## Patterns adopted in FxAeon
+
+The problem had two separate delays: `ActionReview` withheld explorer access until the runner returned, and position discovery could lag the verified receipt. The changes address presentation and read reconciliation, not transaction authority.
+
+1. **Broadcast feedback:** `ActionReview` renders approval/action links as soon as `onStep` supplies a valid hash. Links use the captured execution chain, have accessible names and at least 44px targets, and remain available during receipt and state-read waits. A synchronous latch and disabled execution controls prevent duplicate clicks.
+2. **Separate facts:** submitted, receipt-confirmed, updating position/balances, reverted, partially completed, and confirmation-unknown states are distinct. Approval confirmation is not action completion. A receipt whose transaction verification failed does not become UI success.
+3. **Preserve the safety boundary:** simulation, reviewed-route validation, signer/chain binding, calldata/value/nonce checks, journal writes, and sequential receipt checks remain in the existing runner. `onComplete(result, confirmedRoute)` still runs only through `postConfirmRead`, after the required following block.
+4. **Receipt-identified position hints:** `confirmedPositions.ts` binds the new NFT to the reviewed pool and validated mint receipt, including f(x)'s same-receipt mint-to-router then router-to-wallet transfer. Restored hints must revalidate the chain, canonical receipt/block, following-block boundary, destination, mint event, and current owner before display. Storage is wallet-scoped and is not financial authority.
+5. **Truthful delayed hydration:** the pinned official f(x) SDK has no explicit-ID `getPositions` option. Reads target the proven market/side and select the proven ID after SDK discovery. A verified hint can show **Details updating** and its action explorer while indexing lags; collateral, debt, leverage, and valuation are not invented. Normal position cards replace the hint after verified hydration.
+
+Relevant implementation: [ActionReview](../apps/mini-app/src/components/ActionReview.tsx), [progress presentation](../apps/mini-app/src/lib/transactionProgress.ts), [confirmed-position verification](../apps/mini-app/src/lib/confirmedPositions.ts), and [transaction runner](../apps/mini-app/src/lib/fx/runner.ts).
+
+### Earn units and validation
+
+The fork review also exposed two compatibility errors: SDK identity conversions for USDC/fxUSD deposits legitimately return zero converter output while retaining a positive vault minimum-share limit, and an overlapping action/approval target had overwritten fxSAVE's approval selector. The fixes are operation-specific; exact approval amount/spender, reviewed calldata, simulation, receiver, and minimum-share checks remain enforced.
+
+The pinned SDK's `assetsWei`, `totalAssetsWei`, and `pendingSharesWei` are **fxUSD base-pool shares**, not fxUSD or fxSAVE shares. Earn and Portfolio use the corresponding base-pool price for their display-only USD estimates. Wallet `balanceWei` and vault `totalSupplyWei` remain fxSAVE shares; a missing matching quote is unavailable, never assumed to be $1. See [unit mapping and valuation](../apps/mini-app/src/lib/fxSaveUnits.ts).
+
+## Deliberately not copied
+
+- No Jumper/Uniswap portfolio-history backend dependency or synthesized receipts.
+- No timeout-to-failure shortcut for a transaction with an unverified receipt; preserve its identity and point to the explorer/Activity.
+- No approval-as-action-success shortcut, inferred destination delivery, or optimistic position accounting.
+- No automatic resubmission, replacement-signing behavior, new signer, relaxed simulation, or bypass of the following-block boundary.
+- No unsupported explicit-ID SDK call, private SDK internals, or production indexer override. The fork test's delayed index adapter is test-only.
+
+The extra current-owner verification in this change applies to receipt-derived hints and their targeted hydration. Ordinary all-market discovery still follows the pinned SDK's index; NFTs transferred outside FxAeon can remain in that index briefly. Independent ownership reconciliation for every indexed row is a separate follow-up, not a guarantee made by this change. Transaction planners retain their existing execution checks.
+
+## Verification and evidence
+
+From the repository root, run focused checks before expensive fork proofs:
+
+```sh
+pnpm --dir apps/mini-app exec tsx --test test/transaction-progress.test.ts test/confirmed-positions.test.ts test/earn-state.test.ts test/runner.test.ts
+pnpm typecheck
+pnpm lint
+```
+
+For real-protocol acceptance, provide Anvil and a restricted Ethereum fork endpoint through the existing secret-managed `ANVIL_FORK_URL` environment variable; pin `ANVIL_FORK_BLOCK` for reproducibility. Never paste provider credentials into commands or evidence. Run these serially:
+
+```sh
+pnpm test:anvil:earn
+pnpm test:anvil:browser
+```
+
+The protected harness launches a disposable localhost fork, scrubs upstream credentials from the app/test environment, validates proof manifests, and requires snapshot reversion. The browser command builds a **fork-only** app artifact: do not deploy that build; restore the normal production build configuration before release.
+
+- **Earn proof:** [earn.anvil.test.ts](../apps/mini-app/test/earn.anvil.test.ts) exercises official fxSAVE deposit, instant withdrawal, queued redemption, cooldown and claim, plus direct base-pool paths. It checks real shares, balance deltas, events, and fee accounting. Evidence: `artifacts/anvil/earn-proof.json`.
+- **Browser proof:** [positions.browser.ts](../apps/mini-app/e2e/fork/positions.browser.ts) opens all four ETH/BTC long/short positions through the real review/signing flow. Each actual receipt response is fetched from the fork, then its unmodified delivery is held until the submitted approval/action explorer is visible and no later signature has opened.
+- **Index/reload proof:** only the discovery of already-owned IDs is delayed. Each confirmed placeholder must appear before index disclosure, survive reload while disclosure remains blocked, then hydrate into a real SDK position. Existing coexistence, ownership, nonzero accounting, available-token-balance, post-confirmation refresh, and shared-surface checks remain.
+- **Browser evidence:** `artifacts/anvil/browser-proof.json` requires `submittedExplorerBeforeConfirmation`, `confirmedPositionBeforeIndexer`, and `restoredConfirmedPosition`. Screenshots and trace are under `artifacts/anvil/browser/`.
+
+These commands describe the acceptance gates, not a claim that the current checkout has passed them. Release evidence requires successful exits and fresh, validated manifests from the same revision; test source or old screenshots alone are insufficient.

@@ -47,8 +47,11 @@ There is no FxAeon server process. The ordinary web app and Telegram Mini App ar
 | Display-only USD prices | Validated DefiLlama current snapshot plus validated CoinGecko ETH/BTC history; never execution authority |
 | Official light/dark theme and slippage preset | Versioned local storage |
 | Pending hashes and bridge recheck context | Local recovery hint, revalidated from receipts and matching bridge events |
+| Newly confirmed position IDs awaiting index discovery | Wallet-scoped receipt hints, revalidated against the canonical pool's mint event, receipt/block, and current NFT owner |
 
 No application-owned persistent state remains, so no database is justified. Local storage can help restore a pending view after reload, but it cannot establish a financial fact.
+
+Confirmed-position hints contain no financial values. At most 12 are retained per wallet for reload recovery, with a 24-hour restore lifetime. They remain hidden until chain/receipt/ownership verification succeeds. The shared position provider attempts only the affected official SDK market/side, uses bounded foreground retries, and rejects late responses from superseded sessions or timed-out batches. The normal SDK position replaces the temporary **Details updating** card; no unsupported explicit-ID SDK API or production indexer override is used.
 
 ## Deliberate exclusions
 
@@ -69,5 +72,7 @@ The launch UI is English-only. A locale may return only when the complete retain
 5. The user reviews the plan and approves each wallet step visibly.
 6. The runner waits for a successful receipt before continuing, then waits one additional block.
 7. The page rereads chain/SDK state and reconciles or clears its recovery journal.
+
+Broadcast hashes become explorer links during step execution, before receipt completion. Each link retains its original chain/account context; approval and action states are separate. A confirmed position can appear by its verified mint ID before index discovery finishes, without claiming collateral/debt/valuation before the SDK supplies them. See the [post-transaction code study](post-transaction-ux.md).
 
 Any rejection, revert, timeout, nonce drift, provider outage, or bridge-delivery mismatch produces an explicit unavailable/error state. The client never substitutes fabricated zeroes, PnL, liquidation values, transaction success, or bridge completion. If a display-price feed is unavailable or invalid, its USD label or chart degrades to an explicit unavailable state while on-chain amounts remain exact.
