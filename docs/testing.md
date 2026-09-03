@@ -65,6 +65,8 @@ pnpm test:anvil:browser
 
 The expected evidence is `artifacts/anvil/browser-proof.json`, review/confirmation screenshots, and populated documentation captures under `artifacts/anvil/browser/docs/`. A successful manifest must declare browser-driven execution and snapshot restoration. Presence of screenshots, a built harness, or a passing Node-runner test alone is not a browser gate pass. Inspect a successful run for the current commit before reporting this gate complete. Wallet-drawer checks on Earn and Move verify access to protocol exposure, not fxSAVE deposits or cross-chain bridge execution.
 
+The browser gate also compares the USDC amount displayed in the token picker with the fork's `balanceOf` before each trade, then checks the available amount again after confirmation. Every resulting position card must expose its USD-equity label. External display-price availability is not fabricated to make the test pass; precise valuation math and partial-price failure cases have separate deterministic unit/browser tests.
+
 ## Capability acceptance
 
 | Flow | Required cases |

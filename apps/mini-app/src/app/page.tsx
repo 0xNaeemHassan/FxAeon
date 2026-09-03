@@ -11,6 +11,7 @@
  */
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   AlertTriangle,
   ArrowLeftRight,
@@ -22,7 +23,6 @@ import {
   PiggyBank,
   RefreshCw,
   ShieldCheck,
-  WalletCards,
 } from 'lucide-react';
 import { hasTelegramLaunchSignal, isTMA, waitForTelegramWebApp } from '@/lib/telegram';
 import { ButtonLink, FullScreenSpinner } from '@/components/ui';
@@ -30,14 +30,14 @@ import { useT } from '@/lib/i18n';
 import FxLogo from '@/components/FxLogo';
 import TokenIcon, { ChainIcon } from '@/components/TokenIcon';
 import ThemeToggle from '@/components/ThemeToggle';
-import LiveMarketStrip from '@/components/LiveMarketStrip';
+import styles from '@/components/Welcome.module.css';
 
 const TELEGRAM_APP_URL = process.env.NEXT_PUBLIC_TELEGRAM_APP_URL || 'https://t.me/FxAeonBot';
 const CAPABILITIES = [
-  { icon: CandlestickChart, title: 'Trade', copy: 'Open and manage positions' },
-  { icon: Layers3, title: 'Borrow', copy: 'Mint, repay, and withdraw' },
-  { icon: PiggyBank, title: 'fxSAVE', copy: 'Deposit, redeem, and claim' },
-  { icon: ArrowLeftRight, title: 'Bridge', copy: 'Ethereum ↔ Base' },
+  { icon: CandlestickChart, title: 'Trade', copy: 'ETH & BTC. Long or short.', href: '/trade' },
+  { icon: PiggyBank, title: 'Earn', copy: 'Put fxSAVE to work.', href: '/earn' },
+  { icon: Layers3, title: 'Borrow', copy: 'Unlock fxUSD from collateral.', href: '/borrow' },
+  { icon: ArrowLeftRight, title: 'Move', copy: 'Ethereum. Base. Connected.', href: '/move' },
 ] as const;
 
 export default function HomePage() {
@@ -95,79 +95,62 @@ export default function HomePage() {
 
   if (browser) {
     return (
-      <main className="landing-shell">
-        <div className="landing-frame">
-          <header className="landing-nav">
-            <div className="landing-brand">
-              <span className="landing-brand-mark"><FxLogo size={30} /></span>
-              <span><strong>FxAeon</strong><small>Ethereum interface</small></span>
+      <main className={styles.welcome}>
+        <div className={styles.frame}>
+          <header className={styles.nav}>
+            <div className={styles.brand}>
+              <FxLogo size={36} />
+              <span className="brand-wordmark">FxAeon</span>
             </div>
-            <div className="landing-nav-actions">
-              <span className="landing-live"><span className="status-dot" /> Ethereum</span>
+            <div className={styles.navActions}>
               <ThemeToggle />
-              <ButtonLink href={TELEGRAM_APP_URL} external variant="ghost" className="!min-h-10 !w-auto !px-3 !text-[12px]">
+              <ButtonLink href={TELEGRAM_APP_URL} external variant="ghost" className="!w-auto !px-4">
                 Telegram <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
               </ButtonLink>
             </div>
           </header>
 
-          <LiveMarketStrip className="landing-market-strip" />
-
-          <div className="landing-grid">
-            <section className="landing-hero">
-              <p className="landing-kicker"><span>01</span> Wallet-controlled markets</p>
-              <h1>One interface.<br /><span className="text-gradient">Every f(x) move.</span></h1>
-              <p className="landing-lede">
-                Trade positions, mint fxUSD, manage fxSAVE, and move fxUSD between Ethereum and Base. Review each action, then confirm it in your wallet.
+          <div className={styles.heroGrid}>
+            <section className={styles.hero}>
+              <p className={styles.eyebrow}><span className="status-dot" /> Powered by f(x) Protocol</p>
+              <h1>Your next move.<br /><span className="text-gradient">On your terms.</span></h1>
+              <p className={styles.lede}>
+                Trade ETH and BTC. Put your assets to work.
+                Move between Ethereum and Base — all from your wallet.
               </p>
-              <div className="landing-actions">
-                <ButtonLink href="/portfolio" className="!w-auto !px-6">
+              <div className={styles.actions}>
+                <ButtonLink href="/portfolio" className="!w-auto !px-7">
                   Launch web app <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </ButtonLink>
                 <ButtonLink href={TELEGRAM_APP_URL} external variant="outline" className="!w-auto !px-6">
                   {t('common.openInTelegram')} <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
                 </ButtonLink>
               </div>
-              <div className="landing-assurance">
-                <span><ShieldCheck aria-hidden="true" /> Wallet-confirmed</span>
-                <span><Globe2 aria-hidden="true" /> Web or Telegram</span>
-                <span><WalletCards aria-hidden="true" /> Your wallet signs</span>
+              <div className={styles.assurance}>
+                <ShieldCheck aria-hidden="true" /> Your assets. Your wallet. Your call.
               </div>
             </section>
 
-            <section aria-label="FxAeon protocol workspace preview" className="landing-terminal">
-              <div className="terminal-header">
-                <span>Protocol workspace</span>
-                <span className="terminal-status"><span className="status-dot" /> Ready</span>
+            <section aria-label="Explore FxAeon" className={styles.explore}>
+              <div className={styles.exploreTop}>
+                <span className={styles.assetStack}><TokenIcon symbol="ETH" size={36} /><TokenIcon symbol="WBTC" size={36} /><TokenIcon symbol="fxUSD" size={36} /></span>
+                <span>More possibilities.<br /><strong>One place.</strong></span>
               </div>
-              <div className="network-route" aria-label="Ethereum to Base route">
-                <div className="network-node"><ChainIcon chainId={1} size={30} /><span><strong>Ethereum</strong><small>Source</small></span></div>
-                <span className="route-line" aria-hidden="true"><i /><i /></span>
-                <div className="network-node network-node-aeon"><FxLogo size={30} /><span><strong>FxAeon</strong><small>Review</small></span></div>
-                <span className="route-line" aria-hidden="true"><i /><i /></span>
-                <div className="network-node"><ChainIcon chainId={8453} size={30} /><span><strong>Base</strong><small>Destination</small></span></div>
-              </div>
-              <div className="terminal-assets">
-                <span><TokenIcon symbol="fxUSD" size={24} /><TokenIcon symbol="fxSAVE" size={24} /></span>
-                <span><strong>Protocol assets</strong><small>fxUSD and fxSAVE</small></span>
-              </div>
-              <div className="terminal-capabilities">
-                {CAPABILITIES.map(({ icon: Icon, title, copy }, index) => (
-                  <div key={title} className="terminal-row">
-                    <span className="terminal-index">0{index + 1}</span>
-                    <Icon className="h-[18px] w-[18px] text-mint" aria-hidden="true" />
-                    <span><strong>{title}</strong><small>{copy}</small></span>
-                    <ArrowRight className="ml-auto h-4 w-4 text-[var(--mut-2)]" aria-hidden="true" />
-                  </div>
+              <div className={styles.productGrid}>
+                {CAPABILITIES.map(({ icon: Icon, title, copy, href }) => (
+                  <Link key={title} href={href} className={styles.product}>
+                    <span className={styles.productTop}><Icon aria-hidden="true" /><ArrowUpRight aria-hidden="true" /></span>
+                    <strong>{title}</strong><small>{copy}</small>
+                  </Link>
                 ))}
               </div>
-              <div className="terminal-footer"><ShieldCheck className="h-4 w-4" aria-hidden="true" /> Every action is wallet-confirmed</div>
+              <div className={styles.networks}><span><ChainIcon chainId={1} size={20} /> Ethereum</span><ArrowLeftRight size={16} aria-hidden="true" /><span><ChainIcon chainId={8453} size={20} /> Base</span></div>
             </section>
           </div>
 
-          <footer className="landing-footer">
-            <span>FxAeon / Ethereum-native interface</span>
-            <span>Reviewable · Wallet-confirmed · Built for web and Telegram</span>
+          <footer className={styles.footer}>
+            <span>Made for the way you move.</span>
+            <span><Globe2 size={16} aria-hidden="true" /> Open on the web. At home in Telegram.</span>
           </footer>
         </div>
       </main>

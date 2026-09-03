@@ -1,0 +1,133 @@
+.workspace {
+  width: 100%;
+  max-width: 560px;
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.productSwitch {
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface-2, var(--input));
+}
+
+.productSwitch > a,
+.productSwitch > span {
+  min-height: 44px;
+  border-radius: 12px;
+}
+
+.focusCard {
+  border-radius: 24px;
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--surface) 94%, var(--surface-2));
+}
+
+.summaryCard {
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--surface) 94%, var(--mint) 6%);
+}
+
+.reviewCard {
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--surface) 94%, var(--surface-2));
+}
+
+.eyebrow {
+  color: var(--mint);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sectionTitle {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+}
+
+.supportCopy {
+  color: var(--mut);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.metric {
+  border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface-2) 88%, var(--surface));
+}
+
+.networkFlow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 52px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.networkNode {
+  min-height: 78px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--input);
+}
+
+.networkArrow {
+  display: flex;
+  min-height: 44px;
+  min-width: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--mint) 45%, var(--line));
+  border-radius: 999px;
+  color: var(--mint);
+  background: color-mix(in srgb, var(--mint) 12%, var(--surface));
+}
+
+.amountHero {
+  padding: 6px 0;
+  background: color-mix(in srgb, var(--mint) 7%, var(--surface));
+}
+
+.primaryAction {
+  min-height: 52px;
+  border-radius: 999px;
+  font-weight: 750;
+}
+
+.reviewFacts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface-2) 72%, var(--surface));
+}
+
+.reviewStep {
+  border-radius: 16px;
+  background: var(--surface-2) !important;
+}
+
+.advancedPanel {
+  border-radius: 16px !important;
+  background: var(--surface-2) !important;
+}
+
+@media (max-width: 560px) {
+  .workspace { gap: 12px; }
+  .networkFlow {
+    grid-template-columns: 1fr;
+    justify-items: stretch;
+    gap: 6px;
+  }
+  .networkArrow {
+    justify-self: center;
+    transform: rotate(90deg);
+  }
+  .reviewFacts { grid-template-columns: 1fr; }
+}

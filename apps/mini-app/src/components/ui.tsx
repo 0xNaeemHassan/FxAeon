@@ -17,7 +17,6 @@ import {
   Check,
   LucideIcon,
   ChevronRight,
-  ShieldCheck,
 } from 'lucide-react';
 import { haptic } from '@/lib/telegram';
 import { useT } from '@/lib/i18n';
@@ -61,9 +60,10 @@ export function AppShell({
         {tabs && (
           <div className="app-topbar">
             <Link href="/portfolio" aria-label="FxAeon portfolio" className="flex items-center gap-2.5">
-              <FxLogo size={24} />
-              <span className="text-display text-[15px] font-semibold">FxAeon</span>
+              <FxLogo size={32} />
+              <span className="brand-wordmark">FxAeon</span>
             </Link>
+            <DesktopNavigation />
             <span className="app-topbar-actions">
               <span className="network-state"><span className="status-dot" /> {networkLabel}</span>
               <ThemeToggle />
@@ -75,13 +75,12 @@ export function AppShell({
         {title && (
           <header className="page-header">
             <div>
-              <p className="page-kicker">FxAeon / {title}</p>
               <h1 ref={headingRef} tabIndex={-1} className="text-display outline-none">{title}</h1>
               {subtitle && <p className="page-subtitle">{subtitle}</p>}
             </div>
           </header>
         )}
-        <main ref={contentRef} id="main-content" tabIndex={-1} className="app-content flex-1 outline-none">{children}</main>
+        <main ref={contentRef} id="main-content" tabIndex={-1} className={`app-content flex-1 outline-none ${['/more', '/settings', '/qr'].includes(pathname) ? 'utility-content' : ''}`}>{children}</main>
       </div>
       {tabs && <TabBar />}
     </div>
@@ -93,14 +92,12 @@ const TABS: { href: string; labelKey: string; icon: LucideIcon; also?: string[] 
   { href: '/trade', labelKey: 'nav.trade', icon: CandlestickChart, also: ['/positions'] },
   { href: '/earn', labelKey: 'nav.earn', icon: PiggyBank, also: ['/borrow'] },
   { href: '/move', labelKey: 'nav.move', icon: ArrowLeftRight, also: ['/qr'] },
-  { href: '/more', labelKey: 'nav.more', icon: LayoutGrid, also: ['/settings', '/activity'] },
+  { href: '/more', labelKey: 'nav.more', icon: LayoutGrid, also: ['/settings', '/activity', '/docs'] },
 ];
 
 export function TabBar() {
   const pathname = usePathname();
   const t = useT();
-  const networkLabel = pathname === '/move' ? 'Ethereum + Base' : 'Ethereum';
-  const networkDescription = pathname === '/move' ? 'Bridge route' : 'Primary network';
   const links = (compact: boolean) => TABS.map(({ href, labelKey, icon: Icon, also }) => {
     const active = pathname === href || Boolean(also?.some((prefix) => pathname.startsWith(prefix)));
     return (
@@ -124,28 +121,27 @@ export function TabBar() {
 
   return (
     <>
-      <nav className="desktop-rail" aria-label="Primary navigation">
-        <Link href="/portfolio" className="rail-brand" aria-label="FxAeon portfolio">
-          <span className="rail-brand-mark"><FxLogo size={30} /></span>
-          <span><strong>FxAeon</strong><small>Ethereum interface</small></span>
-        </Link>
-        <div className="rail-network">
-          <span className="status-dot" />
-          <span><strong>Network</strong><small>{networkLabel} · {networkDescription}</small></span>
-        </div>
-        <div className="rail-label">Workspace</div>
-        <div className="rail-links">{links(false)}</div>
-        <div className="rail-assurance">
-          <ShieldCheck className="h-4 w-4 text-mint" aria-hidden="true" />
-          <span><strong>Wallet-confirmed</strong><small>You stay in control</small></span>
-        </div>
-      </nav>
       <nav className="mobile-tabbar pointer-events-none fixed inset-x-0 bottom-0 z-40" aria-label="Primary navigation">
         <div className="tabbar-safe mx-auto w-full max-w-[520px]">
           <div className="tabbar pointer-events-auto">{links(true)}</div>
         </div>
       </nav>
     </>
+  );
+}
+
+function DesktopNavigation() {
+  const pathname = usePathname();
+  const t = useT();
+  return (
+    <nav className="desktop-navigation" aria-label="Primary navigation">
+      {TABS.map(({ href, labelKey, also }) => {
+        const active = pathname === href || Boolean(also?.some((prefix) => pathname.startsWith(prefix)));
+        return <Link key={href} href={href} aria-current={active ? 'page' : undefined} onClick={() => haptic('selection')}>
+          {href === '/portfolio' ? 'Portfolio' : t(labelKey)}
+        </Link>;
+      })}
+    </nav>
   );
 }
 
@@ -164,22 +160,22 @@ export function Card({
 }) {
   const elevationClass = elevation === 2 || elevation === 3 ? 'astryx-card-elevated' : 'astryx-card';
   return (
-    <div className={`${elevationClass} glass p-4 ${glow ? 'card-glow' : ''} ${className}`}>{children}</div>
+    <div className={`ui-card ${elevationClass} p-5 ${glow ? 'card-glow' : ''} ${className}`}>{children}</div>
   );
 }
 
 function buttonClasses(variant: 'primary' | 'ghost' | 'danger' | 'outline' | 'glass', className = ''): string {
   const styles =
     variant === 'primary'
-      ? 'button-primary text-white font-semibold'
+      ? 'button-primary font-semibold'
       : variant === 'danger'
         ? 'button-danger text-danger'
         : variant === 'outline'
           ? 'border border-[var(--astryx-border-default)] bg-[rgba(255,255,255,0.03)] text-[var(--text)] hover:border-[var(--astryx-border-strong)]'
           : variant === 'glass'
-            ? 'astryx-card text-white hover:border-[var(--astryx-border-strong)]'
+            ? 'astryx-card text-[var(--text)] hover:border-[var(--astryx-border-strong)]'
             : 'button-ghost text-[var(--text)]';
-  return `button glass-press astryx-interactive flex min-h-12 w-full items-center justify-center gap-2 rounded-lg px-4 py-3 text-[14px] disabled:cursor-not-allowed disabled:opacity-50 ${styles} ${className}`;
+  return `button glass-press astryx-interactive flex min-h-12 w-full items-center justify-center gap-2 px-5 py-3 text-[14px] disabled:cursor-not-allowed disabled:opacity-50 ${styles} ${className}`;
 }
 
 export const Button = forwardRef<HTMLButtonElement, {
@@ -287,7 +283,7 @@ export function ActionTile({
       </span>
       <span className="flex flex-col text-left">
         <span className="text-[14px] font-medium">{label}</span>
-        {hint && <span className="text-[11px] text-mut">{hint}</span>}
+        {hint && <span className="text-[13px] text-mut">{hint}</span>}
       </span>
       <ChevronRight className="ml-auto h-4 w-4 text-[var(--mut-2)]" aria-hidden="true" />
     </>
@@ -379,8 +375,8 @@ export function EmptyState({
       <span className="empty-icon flex h-14 w-14 items-center justify-center rounded-lg bg-[var(--mint-dim)]">
         <Icon aria-hidden="true" className="h-6 w-6 text-mint" strokeWidth={1.8} />
       </span>
-      <p className="mt-1 text-[15px] font-medium">{title}</p>
-      {body && <p className="text-[12.5px] leading-relaxed text-mut">{body}</p>}
+      <p className="mt-1 text-[17px] font-semibold tracking-tight">{title}</p>
+      {body && <p className="max-w-[340px] text-[14px] leading-relaxed text-mut">{body}</p>}
       {action && <div className="mt-3 w-full">{action}</div>}
     </div>
   );
@@ -389,7 +385,7 @@ export function EmptyState({
 export function SectionTitle({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
     <div className="section-heading mb-2.5 mt-6 flex items-center justify-between">
-      <h2 className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--mut)]">
+      <h2 className="text-[16px] font-semibold tracking-tight text-[var(--text)]">
         {children}
       </h2>
       {right}

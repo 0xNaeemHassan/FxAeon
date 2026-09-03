@@ -31,7 +31,7 @@ There is no FxAeon server process. The ordinary web app and Telegram Mini App ar
 - `src/lib/fx/validation.ts` and the transaction policy reject malformed senders, chains, destinations, selectors, values, approvals, and nonces.
 - `src/lib/fx/runner.ts` simulates, requests one signature per step, awaits each receipt, stops on failure, waits one additional block, and triggers an authoritative reread.
 - `src/lib/wallet/` is a narrow Privy/EIP-1193 adapter. It has no server credential or delegated authority.
-- `src/lib/prices.ts` validates the external DefiLlama response, rejects stale/low-confidence/incomplete snapshots, and converts supported-token units to display-only USD values. It is not imported by the SDK façade, validation policy, or transaction runner.
+- `src/lib/prices.ts` validates token quotes independently, rejects stale/low-confidence values, and uses a bounded, cached CoinGecko fallback for missing current prices. `src/lib/positionValuation.ts` retains exact accounting units for estimated USD equity and owned-token value. These helpers are not imported by the SDK façade, validation policy, or transaction runner.
 - `src/lib/marketData.ts` validates keyless CoinGecko ETH/BTC history, rejects malformed, sparse, stale, or future-skewed series, and bounds chart density. It is display-only and remains separate from transaction planning.
 - `ActionReview.tsx` is the common user-visible state machine from plan review through receipt confirmation.
 - `src/lib/telegram.ts` treats Telegram as an optional host adapter and passes signed launch data only to Privy's authentication flow.

@@ -23,6 +23,7 @@ const OFFICIAL_ROUTES = [
   "/settings",
   "/activity",
   "/qr",
+  "/docs",
 ] as const;
 
 test.describe("official f(x) client routes", () => {
@@ -126,6 +127,10 @@ test.describe("connected browser wallet flows", () => {
     await expect(page.getByRole("heading", { name: /portfolio/i })).toBeVisible();
     await expect(page.getByText(/0x930f/i).first()).toBeVisible();
     await expect(page.getByText("Wallet balances", { exact: true })).toBeVisible();
+    await expect(page.getByText('Ethereum reads are unavailable right now.', { exact: false })).toBeVisible();
+    await expect(page.locator('.portfolio-value-metrics').getByText('—', { exact: true })).toHaveCount(3);
+    await expect(page.getByText('Verified units', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('0 assets', { exact: true })).toHaveCount(0);
     await expect(page.locator("body")).not.toContainText(/\$\s*\d/);
     await expect(page.locator("body")).not.toContainText("Transaction status");
     await assertNoTopOverlay(page);
@@ -197,7 +202,9 @@ test.describe("connected browser wallet flows", () => {
     };
 
     await assertSkipLinkHidden();
-    await page.getByRole("spinbutton", { name: "Target leverage", exact: true }).scrollIntoViewIfNeeded();
+    // The compact mobile ticket now fits leverage in the first fold. Scroll
+    // explicitly to keep exercising the connected-page overlay regression.
+    await page.mouse.wheel(0, 500);
     await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
     await assertSkipLinkHidden();
 
@@ -244,7 +251,7 @@ test.describe("live USD context", () => {
     },
   });
 
-  test("shows market prices, input USD value, token prices, and a leverage slider", async ({ page, requests }) => {
+  test("shows market prices and input USD without confusing token prices with owned balances", async ({ page, requests }) => {
     await page.goto("/trade", { waitUntil: "domcontentloaded" });
     await expect(page.getByText("$2,400.00", { exact: true }).first()).toBeVisible();
     const chartContent = page.locator(".market-chart-content");
@@ -269,7 +276,12 @@ test.describe("live USD context", () => {
     await page.getByLabel("Amount in ETH").fill("2");
     await expect(page.getByText("≈ $4,800.00", { exact: true })).toBeVisible();
     await page.getByLabel("Input asset").click();
-    await expect(page.getByRole("listbox", { name: "Input asset options" }).getByText("$2,400.00", { exact: true }).first()).toBeVisible();
+    const ethOption = page.getByRole("listbox", { name: "Input asset options" }).getByRole("option", { name: /^ETH selected$/ });
+    // This build has no RPC configured: a known token price is not evidence
+    // of an owned balance, and must not appear as the wallet's USD worth.
+    await expect(ethOption).toContainText("Balance unavailable");
+    await expect(ethOption).toContainText("USD unavailable");
+    await expect(ethOption.getByText("$2,400.00", { exact: true })).toHaveCount(0);
     await page.keyboard.press("Escape");
     const slider = page.getByRole("slider", { name: "Target leverage slider" });
     await expect(slider).toBeVisible();
@@ -317,6 +329,23 @@ test.describe("live USD context", () => {
     for (const route of ["/portfolio", "/positions", "/borrow", "/earn", "/move", "/more", "/settings", "/activity", "/qr"]) {
       await page.goto(route, { waitUntil: "domcontentloaded" });
       await expect(page.getByRole("region", { name: "Live USD prices" }).getByText("$2,400.00", { exact: true })).toBeVisible();
+    }
+    assertNoBackendRequests(requests);
+  });
+
+  test("desktop portfolio sparklines stay inside their compact card frames", async ({ page, requests }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto('/portfolio', { waitUntil: 'domcontentloaded' });
+    const charts = page.locator('.portfolio-market-card .market-chart-compact');
+    await expect(charts).toHaveCount(2);
+    for (const chart of await charts.all()) {
+      await expect(chart.getByRole('img')).toBeVisible();
+      const geometry = await chart.evaluate((element) => ({
+        chart: element.getBoundingClientRect().height,
+        frame: element.parentElement!.getBoundingClientRect().height,
+      }));
+      expect(geometry.chart).toBeLessThanOrEqual(54);
+      expect(geometry.chart).toBeLessThanOrEqual(geometry.frame);
     }
     assertNoBackendRequests(requests);
   });
@@ -385,11 +414,14 @@ test.describe("official theme control", () => {
 
   test("switches between the official light and dark themes and persists the choice", async ({ page, requests }) => {
     await page.goto("/more", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("radiogroup", { name: "Theme" })).toHaveCount(0);
+    const appearance = page.getByRole("radiogroup", { name: "Appearance theme", exact: true });
+    await expect(appearance.getByRole("radio")).toHaveCount(2);
+    await expect(appearance.getByRole("radio", { name: /Official dark/ })).toHaveAttribute("aria-checked", "true");
     await page.getByRole("button", { name: "Switch to light theme" }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await expect(appearance.getByRole("radio", { name: /Official light/ })).toHaveAttribute("aria-checked", "true");
     await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("link", { name: "Connect wallet", exact: true })).toHaveCSS("color", "rgb(255, 255, 255)");
     await page.goto("/more", { waitUntil: "domcontentloaded" });

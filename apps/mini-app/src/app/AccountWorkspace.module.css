@@ -1,0 +1,135 @@
+.workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  color: var(--text);
+}
+
+.heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.eyebrow { margin: 0; color: var(--mut); font-size: 12px; font-weight: 600; letter-spacing: .01em; }
+.heading h1 { margin: 4px 0 0; font-size: clamp(28px, 4vw, 38px); line-height: 1.08; letter-spacing: -.035em; }
+.heading p:last-child { margin: 8px 0 0; color: var(--mut); font-size: 14px; line-height: 1.45; }
+
+.tabs { display: flex; gap: 4px; overflow-x: auto; border: 1px solid var(--line); border-radius: 16px; background: var(--input); padding: 4px; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tabs > * { min-width: 92px; min-height: 44px; flex: 1; border-radius: 12px; padding: 8px 14px; color: var(--mut); font-size: 13px; font-weight: 650; text-align: center; white-space: nowrap; transition: background-color 180ms ease, color 180ms ease; }
+.tabs > [aria-current='page'] { background: var(--surface-3); color: var(--text); }
+.tabs > *:hover { color: var(--text); }
+
+.overview { display: grid; gap: 24px; }
+.primaryColumn, .secondaryColumn { display: flex; min-width: 0; flex-direction: column; gap: 18px; }
+.section { min-width: 0; }
+
+.valueCard, .connectCard, .balanceCard, .activityCard, .positionCard, .protocolCard {
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--surface);
+  box-shadow: var(--elevation-1);
+}
+.valueCard, .connectCard { padding: 24px !important; }
+
+.valueTopline, .valueMain, .valueMetrics { display: flex; min-width: 0; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.valueMain { align-items: flex-end; margin-top: 26px; }
+.valueAmount { margin: 0; color: var(--text); font-size: clamp(38px, 6vw, 58px); font-weight: 650; letter-spacing: -.055em; line-height: .95; }
+.valueHint { max-width: 480px; margin: 10px 0 0; color: var(--mut); font-size: 13px; line-height: 1.45; }
+.assurance { display: inline-flex; align-items: center; gap: 7px; flex: 0 0 auto; border: 1px solid color-mix(in srgb, var(--success) 30%, var(--line)); border-radius: 999px; background: color-mix(in srgb, var(--success) 10%, transparent); padding: 8px 11px; color: var(--success); font-size: 12px; font-weight: 650; }
+.valueMetrics { align-items: stretch; margin-top: 24px; border-top: 1px solid var(--line); padding-top: 18px; }
+.valueMetrics > span { display: grid; min-width: 0; gap: 5px; }
+.valueMetrics small { color: var(--mut); font-size: 12px; letter-spacing: normal; text-transform: none; }
+.valueMetrics strong { font-size: 15px; font-weight: 650; }
+
+.actions { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.actions::-webkit-scrollbar { display: none; }
+.action { display: flex; min-width: 112px; min-height: 68px; flex: 1 0 112px; flex-direction: row; align-items: center; justify-content: flex-start; gap: 10px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface-2); padding: 12px; color: var(--text); font-size: 13px; font-weight: 650; transition: transform 180ms ease, border-color 180ms ease, background-color 180ms ease; }
+.action span { display: grid; width: 36px; height: 36px; flex: 0 0 auto; place-items: center; border-radius: 12px; background: color-mix(in srgb, var(--mint) 16%, transparent); color: var(--mint); }
+.action:hover { border-color: color-mix(in srgb, var(--mint) 46%, var(--line)); background: var(--surface-3); transform: translateY(-1px); }
+
+.walletTrigger, .walletConnect, .walletIconAction { border: 1px solid var(--line); background: var(--surface); color: var(--text); }
+.walletTrigger, .walletConnect { min-height: 44px; border-radius: 14px; padding: 0 13px; }
+.walletConnect { display: inline-flex; align-items: center; gap: 8px; color: var(--mint); font-size: 12px; font-weight: 650; }
+.walletIconAction { display: inline-flex; min-height: 44px; min-width: 44px; align-items: center; justify-content: center; border-radius: 14px; color: var(--mut); }
+.walletIconAction:hover { color: var(--mint); }
+
+.market, .protocolTools { display: flex; min-width: 0; gap: 10px; }
+.market > *, .protocolTools > * { min-width: 0; flex: 1 1 0; }
+.market > * { border-radius: 20px !important; }
+.protocolCard { display: flex; min-height: 112px; flex-direction: row; align-items: center; justify-content: flex-start; gap: 14px; padding: 18px !important; color: var(--text); transition: transform 180ms ease, border-color 180ms ease, background-color 180ms ease; }
+.protocolCard > span { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.protocolCard > span:first-child { display: grid; width: 40px; height: 40px; flex: 0 0 auto; place-items: center; border-radius: 14px; background: color-mix(in srgb, var(--mint) 14%, transparent); color: var(--mint); }
+.protocolCard small { color: var(--mut); font-size: 12px; }
+.protocolCard strong { font-size: 16px; font-weight: 650; }
+.protocolCard em { color: var(--mut); font-size: 12px; font-style: normal; }
+.protocolCard:hover { border-color: color-mix(in srgb, var(--mint) 44%, var(--line)); background: var(--surface-2); transform: translateY(-1px); }
+.protocolCardAccent { border-color: color-mix(in srgb, var(--mint) 38%, var(--line)); }
+
+.balanceCard, .activityCard { overflow: hidden; padding: 0 !important; }
+.balanceHeader { border-bottom: 1px solid var(--line); padding: 18px 20px; }
+.balanceHeader strong { font-size: 14px; }
+.balanceHeader p { margin: 4px 0 0; color: var(--mut); font-size: 12px; }
+.balanceHeader > span { color: var(--mut); font-size: 11px; }
+.balanceList { padding-inline: 20px !important; }
+.balanceRow { min-height: 72px !important; border-bottom-color: var(--line) !important; padding-block: 14px !important; }
+.balanceRow p:first-child { font-size: 14px !important; }
+.balanceRow p:last-child { color: var(--mut) !important; font-size: 12px !important; }
+
+.activityNote { border-bottom-color: var(--line) !important; padding: 14px 20px !important; color: var(--mut); font-size: 12px !important; }
+.activityList { padding-inline: 16px !important; }
+.activityRow { min-height: 72px !important; border-bottom-color: var(--line) !important; padding-block: 14px !important; }
+.activityLink { min-height: 52px !important; border-top-color: var(--line) !important; padding-inline: 20px !important; color: var(--mint) !important; }
+.activityIntro { display: flex; align-items: flex-start; gap: 14px; padding: 20px !important; }
+.activitySection { display: flex; flex-direction: column; gap: 14px; }
+.activityIcon { display: grid; width: 42px; height: 42px; flex: 0 0 auto; place-items: center; border-radius: 14px; background: color-mix(in srgb, var(--mint) 14%, transparent); color: var(--mint); }
+.activityEmpty { color: var(--mut); }
+
+.positionCard { padding: 18px !important; }
+.positionCardSelected { border-color: var(--mint) !important; background: color-mix(in srgb, var(--mint) 10%, var(--surface)) !important; }
+.positionCardMetrics { border-top-color: var(--line) !important; }
+.positionCardMetric { border-color: var(--line) !important; background: var(--surface-2) !important; border-radius: 16px !important; }
+.positionSkeleton { border: 1px solid var(--line); border-radius: 24px; background: var(--surface); box-shadow: var(--elevation-1); }
+
+.walletBackdrop { position: fixed; z-index: 60; inset: 0; display: flex; align-items: center; justify-content: flex-end; background: rgba(8, 5, 18, .64); backdrop-filter: blur(8px); padding: 16px; }
+.walletSheet { width: min(100%, 456px); max-height: min(860px, calc(100dvh - 32px)); overflow-y: auto; border: 1px solid var(--line); border-radius: 24px; background: var(--surface); box-shadow: var(--elevation-2); padding: 20px; }
+.walletHeader { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.walletHeader h2 { margin: 4px 0 0; font-size: 24px; letter-spacing: -.03em; }
+.walletHeader p { margin: 0; }
+.walletSummary { margin-top: 18px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface-2); padding: 18px; }
+.walletAmount { margin: 4px 0 0; font-size: 42px; font-weight: 650; letter-spacing: -.055em; line-height: 1; }
+.walletSection { margin-top: 22px; }
+.walletSection h3 { margin: 4px 0 0; font-size: 16px; }
+.walletAssets, .walletLinks { border-top: 1px solid var(--line); }
+.walletAssetRow { min-height: 72px !important; border-bottom-color: var(--line) !important; }
+.walletAssetRow p:first-child { font-size: 14px !important; }
+.walletAssetRow p:last-child { color: var(--mut) !important; }
+.walletLink { min-height: 68px !important; border-bottom-color: var(--line) !important; }
+
+.loadingCard { min-height: 260px; border: 1px solid var(--line); border-radius: 24px; background: linear-gradient(110deg, var(--surface), var(--surface-2), var(--surface)); background-size: 220% 100%; animation: shimmer 1.45s linear infinite; }
+.loadingActions { display: flex; gap: 8px; }
+.loadingActions span { height: 68px; flex: 1; border-radius: 16px; background: var(--surface-2); }
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -20% 0; } }
+
+@media (min-width: 900px) {
+  .overview { grid-template-columns: minmax(0, 1.12fr) minmax(320px, .88fr); align-items: start; }
+  .secondaryColumn { position: sticky; top: 24px; }
+}
+
+@media (max-width: 600px) {
+  .workspace { gap: 16px; }
+  .valueCard, .connectCard { padding: 20px !important; }
+  .valueMain { align-items: flex-start; flex-direction: column; margin-top: 22px; }
+  .valueMetrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .valueMetrics > span { padding-right: 8px; }
+  .assurance { font-size: 11px; }
+  .actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
+  .action { min-width: 0; flex: none; }
+  .market { flex-direction: row; gap: 8px; }
+  .protocolTools { flex-direction: column; }
+  .walletBackdrop { align-items: flex-end; padding: 0; }
+  .walletSheet { width: 100%; max-height: 92dvh; border-radius: 24px 24px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .action, .protocolCard, .tabs > * { transition: none; }
+  .loadingCard { animation: none; }
+}
+
+/* Neutralize the legacy accent strip only where these account surfaces render. */

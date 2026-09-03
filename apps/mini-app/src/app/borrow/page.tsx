@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { AppShell, Button, Card, EmptyState, LoadingRegion, Skeleton } from '@/components/ui';
 import { ActionReview } from '@/components/ActionReview';
 import WalletConnectCTA from '@/components/WalletConnectCTA';
-import { AmountField, InfoNote, Segmented, TokenSelect } from '@/components/ProtocolForm';
+import { AmountField, InfoNote, Segmented, TokenSelect, useWalletTokenBalances } from '@/components/ProtocolForm';
+import { useUsdPrices } from '@/components/PriceProvider';
 import { planDepositAndMint, planRepayAndWithdraw } from '@/lib/fx';
 import { usePrivyWallet } from '@/lib/wallet';
 import { userSafeError } from '@/lib/errors';
@@ -25,6 +26,9 @@ import {
   type UiPosition,
   type UiToken,
 } from '@/app/trade/fxUi';
+import styles from '@/components/FlowWorkspace.module.css';
+import { calculatePositionUsdValuation, formatUsdCents } from '@/lib/positionValuation';
+import { priceKeyForSymbol } from '@/lib/prices';
 
 type BorrowMode = 'mint' | 'manage';
 type PositionState = { walletAddress: string; items: UiPosition[] };
@@ -50,7 +54,17 @@ export default function BorrowPage() {
   const [withdraw, setWithdraw] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
+  // Borrowing is Ethereum-only in the official SDK. Keep the read tied to the
+  // selected address while using Ethereum's reviewed client regardless of the
+  // wallet's currently displayed chain.
+  const balanceSnapshot = useWalletTokenBalances(wallet.address, 1);
+  const refreshBalances = balanceSnapshot.refresh;
+  const balanceStatus = wallet.address
+    ? (balanceSnapshot.status === 'idle' ? 'loading' : balanceSnapshot.status)
+    : undefined;
+  const balanceStateFor = (key: string) => wallet.address
+    ? balanceSnapshot.balances[key] ?? { status: balanceStatus ?? 'loading' as const }
+    : undefined;
   const load = useCallback(async () => {
     const address = wallet.address;
     if (!address) {
@@ -68,6 +82,10 @@ export default function BorrowPage() {
       setLoading(false);
     }
   }, [wallet.address]);
+
+  const refreshAfterAction = useCallback(async () => {
+    await Promise.all([load(), refreshBalances()]);
+  }, [refreshBalances, load]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -135,8 +153,8 @@ export default function BorrowPage() {
 
   return (
     <AppShell title="Borrow" subtitle="Borrow fxUSD without selling your collateral.">
-      <div className="flex flex-col gap-3.5">
-        <div className="grid grid-cols-2 rounded-xl border border-[var(--line)] bg-[var(--input)] p-1" aria-label="Earn products">
+      <div className={styles.workspace}>
+        <div className={`grid grid-cols-2 ${styles.productSwitch}`} aria-label="Earn products">
           <Link href="/earn" className="glass-press flex min-h-11 items-center justify-center rounded-lg px-3 text-[13px] font-semibold text-mut">fxSAVE</Link>
           <span aria-current="page" className="flex min-h-11 items-center justify-center rounded-lg bg-[var(--mint-dim)] px-3 text-[13px] font-semibold text-[var(--text)]">Borrow / fxMINT</span>
         </div>
@@ -161,35 +179,39 @@ export default function BorrowPage() {
           />
         ) : (
           <>
-            <Segmented
-              value={mode}
-              onChange={(next) => {
-                setMode(next);
-                setRepay('');
-                setWithdraw('');
-              }}
-              ariaLabel="Borrow action"
-              options={[
-                { value: 'mint', label: 'Deposit & mint' },
-                { value: 'manage', label: 'Manage debt' },
-              ]}
-            />
+            <div className="rounded-2xl bg-[var(--surface-2,var(--input))] p-1">
+              <Segmented
+                value={mode}
+                onChange={(next) => {
+                  setMode(next);
+                  setRepay('');
+                  setWithdraw('');
+                }}
+                ariaLabel="Borrow action"
+                options={[
+                  { value: 'mint', label: 'Deposit & mint' },
+                  { value: 'manage', label: 'Manage debt' },
+                ]}
+              />
+            </div>
 
             {mode === 'mint' ? (
               <>
-                <Segmented
-                  value={market}
-                  onChange={(next) => {
-                    setMarket(next);
-                    setSelectedKey('new');
-                    setToken(next === 'ETH' ? 'ETH' : 'WBTC');
-                  }}
-                  ariaLabel="Collateral market"
-                  options={[
-                    { value: 'ETH', label: 'ETH' },
-                    { value: 'BTC', label: 'BTC' },
-                  ]}
-                />
+                <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-2,var(--input))] p-1">
+                  <Segmented
+                    value={market}
+                    onChange={(next) => {
+                      setMarket(next);
+                      setSelectedKey('new');
+                      setToken(next === 'ETH' ? 'ETH' : 'WBTC');
+                    }}
+                    ariaLabel="Collateral market"
+                    options={[
+                      { value: 'ETH', label: 'ETH' },
+                      { value: 'BTC', label: 'BTC' },
+                    ]}
+                  />
+                </div>
 
                 <PositionSelect
                   value={selectedKey}
@@ -205,10 +227,10 @@ export default function BorrowPage() {
                   <p className="px-1 text-[12px] text-mut">A new {market} collateral position will be created.</p>
                 )}
 
-                <Card className="p-4">
+                <Card className={`${styles.focusCard} p-5`}>
                   <div className="flex flex-col gap-4">
                     <FormHeader title="Deposit & mint" body="Add collateral, mint fxUSD, or do both." />
-                    <TokenSelect label="Collateral asset" value={token} options={collateralTokens} onChange={setToken} />
+                    <TokenSelect label="Collateral asset" value={token} options={collateralTokens} onChange={setToken} balances={balanceSnapshot.status === 'idle' ? undefined : balanceSnapshot.balances} balanceStatus={wallet.address ? balanceStatus : 'disconnected'} />
                     <AmountField
                       label="Collateral amount"
                       symbol={token}
@@ -217,6 +239,7 @@ export default function BorrowPage() {
                       allowZero
                       maxDecimals={tokenDecimals(token)}
                       placeholder="0 for mint only"
+                      balanceState={balanceStateFor(token)}
                     />
                     <AmountField
                       label="fxUSD to mint"
@@ -235,7 +258,7 @@ export default function BorrowPage() {
                   planBuilder={planBuilder}
                   label="Review deposit & mint"
                   operationLabel="Deposit collateral and mint fxUSD"
-                  onComplete={load}
+                  onComplete={refreshAfterAction}
                 />
               </>
             ) : positions.length === 0 ? (
@@ -250,7 +273,7 @@ export default function BorrowPage() {
                 <PositionSelect value={selectedKey} positions={positions} onChange={setSelectedKey} />
                 {selected && <PositionSummary position={selected} />}
 
-                <Card className="p-4">
+                <Card className={`${styles.focusCard} p-5`}>
                   <div className="flex flex-col gap-4">
                     <FormHeader title="Manage debt" body="Repay fxUSD, withdraw collateral, or do both." />
                     <AmountField
@@ -262,8 +285,9 @@ export default function BorrowPage() {
                       allowZero
                       maxDecimals={18}
                       placeholder="0 for withdraw only"
+                      balanceState={balanceStateFor('fxUSD')}
                     />
-                    <TokenSelect label="Receive collateral as" value={token} options={withdrawalTokens} onChange={setToken} />
+                    <TokenSelect label="Receive collateral as" value={token} options={withdrawalTokens} onChange={setToken} balances={balanceSnapshot.status === 'idle' ? undefined : balanceSnapshot.balances} balanceStatus={wallet.address ? balanceStatus : 'disconnected'} />
                     <AmountField
                       label="Collateral to withdraw"
                       symbol={token}
@@ -281,7 +305,7 @@ export default function BorrowPage() {
                   planBuilder={planBuilder}
                   label="Review changes"
                   operationLabel="Repay fxUSD and withdraw collateral"
-                  onComplete={load}
+                  onComplete={refreshAfterAction}
                 />
               </>
             )}
@@ -307,11 +331,11 @@ function PositionSelect({
 }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-[12px] font-medium text-mut">Position</span>
+      <span className={`mb-2 block ${styles.eyebrow}`}>Position</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="min-h-[52px] w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 text-[16px] font-semibold outline-none focus:border-mint"
+        className="min-h-[56px] w-full rounded-2xl border border-[var(--line)] bg-[var(--input)] px-4 text-[16px] font-semibold outline-none focus:border-mint"
       >
         {allowNew && <option value="new">{newLabel}</option>}
         {positions.map((position) => (
@@ -325,19 +349,35 @@ function PositionSelect({
 }
 
 function PositionSummary({ position }: { position: UiPosition }) {
+  const { prices, status: priceStatus } = useUsdPrices();
+  const collateralKey = priceKeyForSymbol(position.info.rawCollsToken);
+  const debtKey = priceKeyForSymbol(position.info.rawDebtsToken);
+  const valuation = calculatePositionUsdValuation({
+    collateralRaw: position.info.rawColls,
+    collateralDecimals: positionCollateralDecimals(position),
+    collateralPrice: collateralKey ? prices[collateralKey] : undefined,
+    debtRaw: position.info.rawDebts,
+    debtDecimals: positionDebtDecimals(position),
+    debtPrice: debtKey ? prices[debtKey] : undefined,
+  });
+  const collateralUsd = formatUsdCents(valuation.collateralUsdCents);
+  const debtUsd = formatUsdCents(valuation.debtUsdCents);
+  const netEquity = formatUsdCents(valuation.netEquityUsdCents);
   return (
-    <Card className="p-4">
+    <Card className={`${styles.summaryCard} p-5`}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[12px] text-mut">Position</p>
-          <h2 className="text-display mt-1 text-[17px] font-semibold">{position.market} collateral · #{position.info.positionId}</h2>
+          <p className={styles.eyebrow}>Position</p>
+          <h2 className="text-display mt-2 text-[19px] font-semibold">{position.market} collateral · #{position.info.positionId}</h2>
         </div>
         <span className="rounded-lg bg-[var(--mint-dim)] px-2 py-1 text-[11px] font-semibold text-mint">Long</span>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-2">
-        <Metric label="Collateral" value={formatPositionCollateral(position)} />
-        <Metric label="Debt" value={formatPositionDebt(position)} />
+        <Metric label="Est. net equity" value={netEquity} />
+        <Metric label="Collateral value" value={`${formatPositionCollateral(position)} · ${collateralUsd}`} />
+        <Metric label="Debt value" value={`${formatPositionDebt(position)} · ${debtUsd}`} />
       </div>
+      <p className="mt-3 text-[11px] leading-relaxed text-mut">Display estimate: collateral USD minus debt USD, not a close quote or liquidation value.{priceStatus === 'stale' ? ' Last prices.' : ''}</p>
     </Card>
   );
 }
@@ -345,15 +385,15 @@ function PositionSummary({ position }: { position: UiPosition }) {
 function FormHeader({ title, body }: { title: string; body: string }) {
   return (
     <div>
-      <h2 className="text-[15px] font-semibold">{title}</h2>
-      <p className="mt-1 text-[12px] text-mut">{body}</p>
+      <h2 className={styles.sectionTitle}>{title}</h2>
+      <p className={`mt-1 ${styles.supportCopy}`}>{body}</p>
     </div>
   );
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl bg-[rgba(255,255,255,.035)] p-3">
+    <div className={`${styles.metric} p-3`}>
       <span className="block text-[11px] text-mut">{label}</span>
       <span className="mt-1 block truncate text-[13px] font-semibold tabular-nums" title={value}>{value}</span>
     </div>

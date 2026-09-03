@@ -1,13 +1,120 @@
 'use client';
 
 import { createPortal } from 'react-dom';
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, Info, Search } from 'lucide-react';
 import TokenIcon from '@/components/TokenIcon';
 import { useUsdPrices } from '@/components/PriceProvider';
 import { haptic } from '@/lib/telegram';
-import { calculateFractionDecimal, decimalInputError, formatExactDecimal, positiveDecimal } from '@/lib/amount';
+import { calculateFractionDecimal, compareExactDecimals, decimalInputError, formatExactDecimal, positiveDecimal } from '@/lib/amount';
+import { readWalletBalances } from '@/lib/fx';
+import { formatUsdCents } from '@/lib/positionValuation';
 import { formatUsd, formatUsdPrice, priceKeyForSymbol, usdValueForDecimal, type UsdPriceMap } from '@/lib/prices';
+import styles from '@/components/trade-surfaces.module.css';
+import {
+  balanceMapForResult,
+  createWalletBalanceReader,
+  tokenBalanceFor,
+  usdCentsForTokenBalance,
+  type TokenBalanceMap,
+  type TokenBalanceView,
+} from '@/components/wallet-balance-cache';
+
+export { tokenBalanceFor } from '@/components/wallet-balance-cache';
+export type { TokenBalanceMap, TokenBalanceView } from '@/components/wallet-balance-cache';
+
+export type WalletTokenBalanceSnapshot = {
+  status: 'idle' | 'loading' | 'ready' | 'unavailable';
+  balances: TokenBalanceMap;
+  reason?: string;
+  refresh: (force?: boolean) => Promise<void>;
+};
+
+const EMPTY_TOKEN_BALANCES: TokenBalanceMap = {};
+const WALLET_BALANCE_REFRESH_MS = 20_000;
+const walletBalanceReader = createWalletBalanceReader(readWalletBalances);
+
+/**
+ * Shared, short-lived wallet balance read for protocol forms. Reads are
+ * deduplicated by address and deliberately only use the Ethereum reader that
+ * backs the existing FX token registry; other target chains stay honest as
+ * unavailable rather than displaying a misleading zero. `identityChainId`
+ * can invalidate the view on a wallet network change while retaining a
+ * different target chain for read-only previews.
+ */
+export function useWalletTokenBalances(walletAddress?: string, chainId?: number, identityChainId = chainId): WalletTokenBalanceSnapshot {
+  const [snapshot, setSnapshot] = useState<WalletTokenBalanceSnapshot & { identity: string }>({ status: 'idle', balances: EMPTY_TOKEN_BALANCES, identity: 'none', refresh: async () => {} });
+  const requestRef = useRef(0);
+  const address = walletAddress?.trim();
+  const identity = `${address?.toLowerCase() ?? 'none'}:${identityChainId ?? 'none'}`;
+
+  const refresh = useCallback(async (force = true) => {
+    if (!address || chainId !== 1) return;
+    if (!force && walletBalanceReader.isPending(address)) return;
+    const requestId = ++requestRef.current;
+    setSnapshot({ status: 'loading', balances: EMPTY_TOKEN_BALANCES, identity, refresh });
+    try {
+      const result = await walletBalanceReader.read(address, force);
+      if (requestRef.current !== requestId) return;
+      setSnapshot({ status: 'ready', balances: balanceMapForResult(result), identity, refresh });
+    } catch {
+      if (requestRef.current !== requestId) return;
+      setSnapshot({ status: 'unavailable', balances: EMPTY_TOKEN_BALANCES, reason: 'Available balances are temporarily unavailable.', identity, refresh });
+    }
+  }, [address, chainId, identity]);
+
+  const initialSnapshot = useMemo<WalletTokenBalanceSnapshot & { identity: string }>(() => {
+    if (!address) return { status: 'idle', balances: EMPTY_TOKEN_BALANCES, identity, refresh };
+    if (chainId !== 1) return {
+      status: 'unavailable',
+      balances: EMPTY_TOKEN_BALANCES,
+      reason: 'Switch to Ethereum to view available balances.',
+      identity,
+      refresh,
+    };
+    return { status: 'loading', balances: EMPTY_TOKEN_BALANCES, identity, refresh };
+  }, [address, chainId, identity, refresh]);
+
+  useEffect(() => {
+    if (!address) {
+      requestRef.current += 1;
+      setSnapshot(initialSnapshot);
+      return;
+    }
+    if (chainId !== 1) {
+      requestRef.current += 1;
+      setSnapshot(initialSnapshot);
+      return;
+    }
+
+    let active = true;
+    const requestId = ++requestRef.current;
+    setSnapshot(initialSnapshot);
+    void walletBalanceReader.read(address).then((result) => {
+      if (!active || requestRef.current !== requestId) return;
+      setSnapshot({ status: 'ready', balances: balanceMapForResult(result), identity, refresh });
+    }).catch(() => {
+      if (!active || requestRef.current !== requestId) return;
+      setSnapshot({ status: 'unavailable', balances: EMPTY_TOKEN_BALANCES, reason: 'Available balances are temporarily unavailable.', identity, refresh });
+    });
+
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible') void refresh(false);
+    };
+    const interval = window.setInterval(refreshIfVisible, WALLET_BALANCE_REFRESH_MS);
+    window.addEventListener('focus', refreshIfVisible);
+    document.addEventListener('visibilitychange', refreshIfVisible);
+    return () => {
+      active = false;
+      requestRef.current += 1;
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refreshIfVisible);
+      document.removeEventListener('visibilitychange', refreshIfVisible);
+    };
+  }, [address, chainId, identity, identityChainId, initialSnapshot, refresh]);
+
+  return snapshot.identity === identity ? snapshot : initialSnapshot;
+}
 
 export function Segmented<T extends string>({
   value,
@@ -17,13 +124,13 @@ export function Segmented<T extends string>({
   tone = 'default',
 }: {
   value: T;
-  options: ReadonlyArray<{ value: T; label: string; sub?: string; ariaLabel?: string }>;
+  options: ReadonlyArray<{ value: T; label: string; sub?: string; ariaLabel?: string; icon?: ReactNode }>;
   onChange: (value: T) => void;
   ariaLabel: string;
   tone?: 'default' | 'sides';
 }) {
   return (
-    <div className={`segmented ${tone === 'sides' ? 'segmented-sides' : ''} grid grid-flow-col auto-cols-fr p-1`} role="radiogroup" aria-label={ariaLabel}>
+    <div className={`${styles.formSegmented} segmented ${tone === 'sides' ? 'segmented-sides' : ''} grid grid-flow-col auto-cols-fr p-1`} role="radiogroup" aria-label={ariaLabel}>
       {options.map((option) => {
         const active = option.value === value;
         return (
@@ -61,7 +168,12 @@ export function Segmented<T extends string>({
                 : 'text-mut'
             }`}
           >
-            <span className="block text-[13px] font-semibold">{option.label}</span>
+            {option.icon ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="market-option-icon" aria-hidden="true">{option.icon}</span>
+                <span className="text-[13px] font-semibold">{option.label}</span>
+              </span>
+            ) : <span className="block text-[13px] font-semibold">{option.label}</span>}
             {option.sub && <span className="mt-0.5 block text-[11px] opacity-70">{option.sub}</span>}
           </button>
         );
@@ -113,7 +225,7 @@ export function SlippageField({
   return (
     <div>
       <FieldLabel htmlFor={inputId} hint={`Max ${max}%`}>Slippage</FieldLabel>
-      <div className={`field-control flex min-h-[52px] items-center gap-2 px-4 ${error ? 'field-error' : ''}`}>
+      <div className={`${styles.formField} field-control flex min-h-[52px] items-center gap-2 px-4 ${error ? 'field-error' : ''}`}>
         <input
           id={inputId}
           value={value}
@@ -124,7 +236,7 @@ export function SlippageField({
           aria-label="Slippage tolerance percentage"
           aria-invalid={Boolean(error)}
           aria-errormessage={error ? errorId : undefined}
-          className="min-h-11 min-w-0 flex-1 bg-transparent font-mono text-[16px] font-semibold outline-none"
+          className="min-h-11 min-w-0 flex-1 bg-transparent font-sans tabular-nums text-[16px] font-semibold outline-none"
         />
         <span className="text-[12px] text-mut">%</span>
       </div>
@@ -140,12 +252,15 @@ export function AmountField({
   label,
   hint,
   balance,
+  balanceState,
   allowAll = false,
   allowZero = false,
   showPercentages = true,
+  showMax = true,
   maxDecimals = 18,
   placeholder = '0.00',
   constraintError,
+  tokenSelector,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -153,16 +268,20 @@ export function AmountField({
   label: string;
   hint?: string;
   balance?: string | null;
+  balanceState?: TokenBalanceView;
   allowAll?: boolean;
   allowZero?: boolean;
   showPercentages?: boolean;
+  showMax?: boolean;
   maxDecimals?: number;
   placeholder?: string;
   constraintError?: string | null;
+  tokenSelector?: ReactNode;
 }) {
   const inputId = useId();
   const hintId = `${inputId}-hint`;
   const errorId = `${inputId}-error`;
+  const balanceId = `${inputId}-balance`;
   const [touched, setTouched] = useState(false);
   const { prices } = useUsdPrices();
   const priceKey = priceKeyForSymbol(symbol);
@@ -170,7 +289,7 @@ export function AmountField({
   const usdValue = usdValueForDecimal(value, usdPrice);
   const inputError = decimalInputError(value, maxDecimals, { allowAll, allowZero });
   const error = inputError ?? constraintError ?? (touched && !value && !allowZero ? 'Enter an amount.' : null);
-  const describedBy = [hint ? hintId : null, error ? errorId : null].filter(Boolean).join(' ') || undefined;
+  const describedBy = [hint ? hintId : null, balance !== undefined || balanceState !== undefined ? balanceId : null, error ? errorId : null].filter(Boolean).join(' ') || undefined;
   const normalise = (raw: string) => {
     if (allowAll && raw.toLowerCase() === 'all') return 'all';
     // Keep malformed pasted text visible and invalid. Stripping an exponent or
@@ -178,12 +297,19 @@ export function AmountField({
     return raw.replace(',', '.').slice(0, 100);
   };
 
-  const hasValidBalance = Boolean(balance && positiveDecimal(balance, maxDecimals));
+  const availableBalance = balanceState?.status === 'ready' ? balanceState.amount ?? null : balance;
+  const hasValidBalance = Boolean(availableBalance && positiveDecimal(availableBalance, maxDecimals));
+  const insufficientBalance = Boolean(
+    balanceState?.status === 'ready'
+      && availableBalance
+      && value
+      && compareExactDecimals(value, availableBalance, maxDecimals) === 1,
+  );
 
   return (
     <div>
       <FieldLabel hint={hint} hintId={hintId} htmlFor={inputId}>{label}</FieldLabel>
-      <div className={`amount-control group flex min-h-[76px] items-center gap-3 px-4 ${error ? 'field-error' : ''}`}>
+      <div className={`${styles.amountField} amount-control group flex min-h-[76px] items-center gap-3 px-4 ${error ? 'field-error' : ''}`}>
         <input
           id={inputId}
           value={value}
@@ -197,11 +323,11 @@ export function AmountField({
           aria-errormessage={error ? errorId : undefined}
           aria-invalid={Boolean(error)}
           required={!allowZero}
-          className="min-h-11 min-w-0 flex-1 bg-transparent font-mono text-[25px] font-semibold text-[var(--text)] outline-none placeholder:text-[var(--mut-2)]"
+          className={`${styles.amountInput} min-h-11 min-w-0 flex-1 bg-transparent text-[25px] font-semibold text-[var(--text)] outline-none placeholder:text-[var(--mut-2)]`}
         />
-        <span className="token-pill flex shrink-0 items-center gap-2 px-2.5 py-2 text-[12px] font-semibold">
+        {tokenSelector ?? <span className="token-pill flex shrink-0 items-center gap-2 px-2.5 py-2 text-[12px] font-semibold">
           <TokenIcon symbol={symbol} size={22} /> {symbol}
-        </span>
+        </span>}
       </div>
       {usdPrice && (
         <div className="mt-2 flex items-center justify-between gap-3 px-1 text-[11px] text-mut" aria-live="polite">
@@ -209,12 +335,22 @@ export function AmountField({
           <span>{formatUsdPrice(usdPrice)} / {displayTokenSymbol(symbol)}</span>
         </div>
       )}
-      {(balance !== undefined || allowAll) && (
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] text-mut">
+      {(balance !== undefined || balanceState !== undefined || allowAll) && (
+        <div id={balanceId} className="mt-2 flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] text-mut">
           <div className="flex min-w-0 items-center gap-1 truncate">
-            {balance !== undefined && (
-              <span className="truncate" title={balance ?? 'Balance unavailable'}>
-                Balance: <span className="font-semibold text-[var(--text)]">{balance ? formatExactDecimal(balance, 4) : 'unavailable'}</span>
+            {(balance !== undefined || balanceState !== undefined) && (
+              <span className="truncate" title={balanceState?.reason ?? (availableBalance ?? 'Balance unavailable')}>
+                Available: <span className="font-semibold text-[var(--text)]">
+                  {balanceState?.status === 'loading'
+                    ? `loading… ${displayTokenSymbol(symbol)}`
+                    : balanceState?.status === 'disconnected'
+                      ? `connect wallet · ${displayTokenSymbol(symbol)}`
+                    : balanceState?.status === 'unavailable'
+                      ? `unavailable · ${displayTokenSymbol(symbol)}`
+                      : availableBalance
+                        ? `${formatExactDecimal(availableBalance, 4)} ${displayTokenSymbol(symbol)}`
+                        : `unavailable · ${displayTokenSymbol(symbol)}`}
+                </span>
               </span>
             )}
           </div>
@@ -225,7 +361,7 @@ export function AmountField({
                 type="button"
                 onClick={() => {
                   haptic('selection');
-                  const fraction = calculateFractionDecimal(balance, pct, maxDecimals);
+                  const fraction = calculateFractionDecimal(availableBalance, pct, maxDecimals);
                   if (fraction) onChange(fraction);
                 }}
                 className="fraction-button min-h-11 min-w-11 px-2 py-0.5 text-[10.5px] font-semibold text-mut"
@@ -233,7 +369,7 @@ export function AmountField({
                 {pct}%
               </button>
             ))}
-            {allowAll ? (
+            {showMax && allowAll ? (
               <button
                 type="button"
                 onClick={() => {
@@ -244,12 +380,12 @@ export function AmountField({
               >
                 MAX
               </button>
-            ) : showPercentages && hasValidBalance ? (
+            ) : showMax && showPercentages && hasValidBalance ? (
               <button
                 type="button"
                 onClick={() => {
                   haptic('selection');
-                  const fraction = calculateFractionDecimal(balance, 100, maxDecimals);
+                  const fraction = calculateFractionDecimal(availableBalance, 100, maxDecimals);
                   if (fraction) onChange(fraction);
                 }}
                 className="fraction-button fraction-button-active min-h-11 min-w-11 px-2.5 py-0.5 text-[10.5px] font-bold text-mint"
@@ -259,6 +395,11 @@ export function AmountField({
             ) : null}
           </div>
         </div>
+      )}
+      {insufficientBalance && (
+        <p role="status" aria-live="polite" className="mt-1.5 px-1 text-[11px] leading-relaxed text-danger">
+          Amount exceeds your available balance. Review is still available, but this action cannot be funded as entered.
+        </p>
       )}
       {error && (
         <p id={errorId} role="alert" className="mt-1.5 px-1 text-[11px] leading-relaxed text-danger">
@@ -274,58 +415,98 @@ export function TokenSelect<T extends string>({
   options,
   onChange,
   label,
+  compact = false,
+  balances,
+  balanceStatus,
 }: {
   value: T;
   options: readonly T[];
   onChange: (value: T) => void;
   label: string;
+  compact?: boolean;
+  balances?: TokenBalanceMap;
+  balanceStatus?: Exclude<WalletTokenBalanceSnapshot['status'], 'idle'> | 'disconnected';
 }) {
   const selectId = useId();
   const labelId = `${selectId}-label`;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const { prices } = useUsdPrices();
+  const pickerBalances = balances;
+  const pickerStatus = balanceStatus;
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const closingRef = useRef(false);
+  const restoreFocusRef = useRef(false);
   const filteredOptions = useMemo(() => {
     const normalised = query.trim().toLowerCase();
     if (!normalised) return [...options];
     return options.filter((option) => `${displayTokenSymbol(option)} ${displayTokenName(option)}`.toLowerCase().includes(normalised));
   }, [options, query]);
 
+  const closePicker = () => {
+    closingRef.current = true;
+    restoreFocusRef.current = true;
+    setQuery('');
+    setOpen(false);
+  };
+
   useEffect(() => {
     if (!open) return;
+    closingRef.current = false;
+    restoreFocusRef.current = false;
+    const trigger = triggerRef.current;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const selectedIndex = Math.max(0, filteredOptions.indexOf(value));
     window.requestAnimationFrame(() => {
+      if (closingRef.current || !dialogRef.current) return;
       if (options.length > 4) searchRef.current?.focus();
       else optionRefs.current[selectedIndex]?.focus();
     });
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
-        setOpen(false);
-        triggerRef.current?.focus();
+        closePicker();
       } else if (event.key === 'Tab' && dialogRef.current) {
-        trapDialogFocus(event, dialogRef.current);
+        const dialog = dialogRef.current;
+        const focusable = getDialogFocusable(dialog);
+        if (!dialog.contains(document.activeElement)) {
+          event.preventDefault();
+          (event.shiftKey ? focusable[focusable.length - 1] : focusable[0])?.focus();
+        } else {
+          trapDialogFocus(event, dialog);
+        }
       }
     };
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener('keydown', onKeyDown);
+    const onFocusIn = (event: FocusEvent) => {
+      const dialog = dialogRef.current;
+      if (closingRef.current || !dialog || dialog.contains(event.target as Node)) return;
+      getDialogFocusable(dialog)[0]?.focus();
     };
-  }, [filteredOptions, open, options.length, value]);
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('focusin', onFocusIn);
+    return () => {
+      document.removeEventListener('focusin', onFocusIn);
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      if (restoreFocusRef.current) {
+        restoreFocusRef.current = false;
+        closingRef.current = false;
+        trigger?.focus({ preventScroll: true });
+      }
+    };
+    // Picker lifecycle listeners intentionally only follow open/close. Search
+    // and option changes must not restart the initial-focus routine.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const choose = (next: T) => {
     haptic('selection');
     onChange(next);
-    setQuery('');
-    setOpen(false);
-    window.requestAnimationFrame(() => triggerRef.current?.focus());
+    closePicker();
   };
 
   const moveFocus = (current: number, direction: 'next' | 'previous' | 'first' | 'last') => {
@@ -337,15 +518,9 @@ export function TokenSelect<T extends string>({
     optionRefs.current[next]?.focus();
   };
 
-  const closePicker = () => {
-    setQuery('');
-    setOpen(false);
-    window.requestAnimationFrame(() => triggerRef.current?.focus());
-  };
-
   return (
-    <div>
-      <span id={labelId} className="mb-2 block text-[12px] font-medium text-mut">{label}</span>
+    <div className={compact ? styles.compactTokenSelect : undefined}>
+      <span id={labelId} className={compact ? 'sr-only' : 'mb-2 block text-[12px] font-medium text-mut'}>{label}</span>
       <button
         ref={triggerRef}
         id={selectId}
@@ -358,7 +533,7 @@ export function TokenSelect<T extends string>({
           if (!current) setQuery('');
           return !current;
         })}
-        className="field-control glass-press flex min-h-[52px] w-full items-center justify-between gap-3 px-4 text-left text-[15px] font-semibold text-[var(--text)] outline-none"
+        className={`${compact ? '' : 'field-control'} glass-press flex min-h-[52px] w-full items-center justify-between gap-3 px-4 text-left text-[15px] font-semibold text-[var(--text)] outline-none`}
       >
         <span className="flex min-w-0 items-center gap-2.5">
           <TokenIcon symbol={value} size={26} />
@@ -368,7 +543,7 @@ export function TokenSelect<T extends string>({
       </button>
       {open && typeof document !== 'undefined' && createPortal(
         <div
-          className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 p-3 backdrop-blur-[2px] sm:items-center"
+          className={styles.tokenPickerBackdrop}
           role="presentation"
           onMouseDown={(event) => { if (event.target === event.currentTarget) closePicker(); }}
         >
@@ -378,18 +553,18 @@ export function TokenSelect<T extends string>({
             role="dialog"
             aria-modal="true"
             aria-labelledby={labelId}
-            className="w-full max-w-[430px] overflow-hidden rounded-2xl border border-[var(--line-strong)] bg-[var(--bg-raised)] shadow-[0_24px_80px_rgba(0,0,0,.55)]"
+            className={styles.tokenPickerDialog}
             onMouseDown={(event) => event.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-3.5">
+            <div className={styles.tokenPickerHeader}>
               <div>
-                <p className="text-[14px] font-semibold">{label}</p>
-                <p className="mt-0.5 text-[11px] text-mut">Choose an asset</p>
+                <p className={styles.tokenPickerTitle}>{label}</p>
+                <p className={styles.tokenPickerSubtitle}>Choose an asset</p>
               </div>
-              <button type="button" aria-label="Close asset picker" onClick={closePicker} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-lg text-mut hover:text-[var(--text)]">×</button>
+              <button type="button" aria-label="Close asset picker" onClick={closePicker} className={`${styles.tokenPickerClose} glass-press`}>×</button>
             </div>
             {options.length > 4 && (
-              <label className="mx-3 mt-3 flex min-h-11 items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--input)] px-3 focus-within:border-[var(--mint)]">
+              <label className={styles.tokenPickerSearch}>
                 <Search className="h-4 w-4 shrink-0 text-mut" aria-hidden="true" />
                 <span className="sr-only">Search assets</span>
                 <input
@@ -398,14 +573,18 @@ export function TokenSelect<T extends string>({
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Search assets"
-                  className="min-h-11 min-w-0 flex-1 bg-transparent text-[13px] text-[var(--text)] outline-none placeholder:text-mut"
+                  className={styles.tokenPickerSearchInput}
                 />
               </label>
             )}
-            <div role="listbox" aria-label={`${label} options`} className="max-h-[min(64dvh,480px)] overflow-y-auto p-2">
-              {filteredOptions.map((option, index) => {
-                const active = option === value;
-                return (
+            <div role="listbox" aria-label={`${label} options`} className={styles.tokenPickerList}>
+                {filteredOptions.map((option, index) => {
+                  const active = option === value;
+                  const balanceId = `${selectId}-balance-${index}`;
+                  const balanceUsdId = `${balanceId}-usd`;
+                  const balance = tokenBalanceFor(pickerBalances ?? EMPTY_TOKEN_BALANCES, option)
+                    ?? (pickerStatus ? { status: pickerStatus } : undefined);
+                  return (
                   <button
                     key={option}
                     ref={(element) => { optionRefs.current[index] = element; }}
@@ -413,6 +592,7 @@ export function TokenSelect<T extends string>({
                     role="option"
                     aria-selected={active}
                     aria-label={`${displayTokenSymbol(option)}${active ? ' selected' : ''}`}
+                    aria-describedby={(pickerBalances || pickerStatus) ? `${balanceId} ${balanceUsdId}` : undefined}
                     tabIndex={active ? 0 : -1}
                     onClick={() => choose(option)}
                     onKeyDown={(event) => {
@@ -422,16 +602,23 @@ export function TokenSelect<T extends string>({
                       else if (event.key === 'End') { event.preventDefault(); moveFocus(index, 'last'); }
                       else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(option); }
                     }}
-                    className={`flex min-h-14 w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-left transition-colors ${active ? 'bg-[var(--mint-dim)] text-[var(--text)]' : 'text-mut hover:bg-[var(--surface-2)] hover:text-[var(--text)]'}`}
+                    className={`${styles.tokenPickerRow} ${active ? styles.tokenPickerRowActive : ''}`}
                   >
                     <TokenIcon symbol={option} size={30} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[14px] font-semibold">{displayTokenSymbol(option)}</span>
-                      <span className="mt-0.5 block text-[10.5px] text-mut">{displayTokenName(option)} · Supported asset</span>
+                    <span className={styles.tokenPickerRowCopy}>
+                      <span className={styles.tokenPickerSymbol}>{displayTokenSymbol(option)}</span>
+                      <span className={styles.tokenPickerName}>{displayTokenName(option)}</span>
                     </span>
-                    <span className="shrink-0 text-right">
-                      <span className="block text-[12px] font-semibold tabular-nums">{optionPriceLabel(option, prices)}</span>
-                      <span className={`ml-auto mt-1 flex h-5 w-5 items-center justify-center rounded-full border ${active ? 'border-[var(--mint)] bg-[var(--mint)] text-white' : 'border-[var(--line-strong)]'}`} aria-hidden="true">{active ? '✓' : ''}</span>
+                    {(pickerBalances || pickerStatus) && (
+                      <span className={styles.tokenPickerValue}>
+                        <span id={balanceId} className={styles.tokenPickerBalance} title={balance?.amount ? `${balance.amount} ${displayTokenSymbol(option)}` : balance?.reason}>
+                          {balance?.status === 'ready' && <span className="sr-only">Available: </span>}{optionBalanceLabel(balance, option)}
+                        </span>
+                        <span id={balanceUsdId} className={styles.tokenPickerBalanceUsd}>{optionBalanceUsdLabel(balance, option, prices)}</span>
+                      </span>
+                    )}
+                    <span className={styles.tokenPickerCheckWrap}>
+                      <span className={`${styles.tokenPickerCheck} ${active ? styles.tokenPickerCheckActive : ''}`} aria-hidden="true">{active ? '✓' : ''}</span>
                     </span>
                   </button>
                 );
@@ -528,7 +715,7 @@ export function LeverageField({
   return (
     <div>
       <FieldLabel htmlFor={inputId} hint={`${min}× – ${max}×`}>{label}</FieldLabel>
-      <div className={`range-control p-3 ${invalid ? 'field-error' : ''}`}>
+      <div className={`${styles.rangeField} range-control p-3 ${invalid ? 'field-error' : ''}`}>
         <div className="flex items-center gap-3">
           <input
             id={inputId}
@@ -609,14 +796,31 @@ function displayTokenName(symbol: string): string {
   return names[symbol.replace(/\s+/g, '').toUpperCase()] ?? 'Protocol token';
 }
 
-function optionPriceLabel(symbol: string, prices: UsdPriceMap): string {
-  const key = priceKeyForSymbol(symbol);
-  return key ? formatUsdPrice(prices[key]) : '—';
+function optionBalanceLabel(balance: TokenBalanceView | undefined, symbol: string): string {
+  const display = displayTokenSymbol(symbol);
+  if (balance?.status === 'disconnected') return 'Connect wallet';
+  if (!balance || balance.status === 'unavailable') return 'Balance unavailable';
+  if (balance.status === 'loading') return 'Loading balance…';
+  if (balance.amount === undefined) return 'Balance unavailable';
+  return `${formatExactDecimal(balance.amount, 4)} ${display}`;
+}
+
+function optionBalanceUsdLabel(balance: TokenBalanceView | undefined, symbol: string, prices: UsdPriceMap): string {
+  if (balance?.status === 'disconnected') return 'To see balances';
+  if (balance?.status === 'loading') return 'Loading value…';
+  const cents = usdCentsForTokenBalance(balance, symbol, prices);
+  if (cents === null) return 'USD unavailable';
+  if (cents === 0n && /[1-9]/.test(balance?.amount ?? '')) return '≈ <$0.01';
+  return `≈ ${formatUsdCents(cents)}`;
+}
+
+function getDialogFocusable(dialog: HTMLElement): HTMLElement[] {
+  return [...dialog.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')]
+    .filter((element) => !element.hasAttribute('hidden') && element.getAttribute('aria-hidden') !== 'true');
 }
 
 function trapDialogFocus(event: KeyboardEvent, dialog: HTMLElement): void {
-  const focusable = [...dialog.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')]
-    .filter((element) => !element.hasAttribute('hidden') && element.getAttribute('aria-hidden') !== 'true');
+  const focusable = getDialogFocusable(dialog);
   if (focusable.length === 0) return;
   const first = focusable[0];
   const last = focusable[focusable.length - 1];

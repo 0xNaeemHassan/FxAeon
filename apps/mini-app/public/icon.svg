@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="FxAeon">
   <defs>
     <linearGradient id="bg" x1="5" y1="4" x2="59" y2="61" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#161C2B"/><stop offset="1" stop-color="#070A0F"/>
+      <stop stop-color="#242033"/><stop offset="1" stop-color="#100e18"/>
     </linearGradient>
     <linearGradient id="ribbon" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#52C7FF"/><stop offset=".48" stop-color="#4F7CFF"/><stop offset="1" stop-color="#FF5368"/>
+      <stop stop-color="#e4d7ff"/><stop offset=".48" stop-color="#b89aff"/><stop offset="1" stop-color="#8053cd"/>
     </linearGradient>
   </defs>
   <rect width="64" height="64" rx="18" fill="url(#bg)"/>

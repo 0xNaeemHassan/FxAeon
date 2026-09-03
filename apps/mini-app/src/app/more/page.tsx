@@ -7,12 +7,14 @@ import Link from 'next/link';
 import { AppShell, AddressChip, Card } from '@/components/ui';
 import { haptic } from '@/lib/telegram';
 import { usePrivyWallet, useWalletReadyTimeout } from '@/lib/wallet';
+import AppearancePreference from '@/components/AppearancePreference';
+import styles from '@/components/UtilitySurfaces.module.css';
 
 /** Secondary destinations only. Primary trading flows stay in the tab bar. */
 export default function MorePage() {
   return (
     <AppShell title="More">
-      <div className="flex flex-col gap-5">
+      <div className={styles.utilityWorkspace}>
         <WalletSummary />
 
         <Section label="Account">
@@ -21,7 +23,10 @@ export default function MorePage() {
           <MoreRow href="/settings" icon={Settings} title="Settings" body="Wallet and preferences" />
         </Section>
 
+        <AppearancePreference />
+
         <Section label="Resources">
+          <MoreRow href="/docs" icon={BookOpen} title="FxAeon docs" body="Guides, limits, and safety" />
           <MoreRow external href="https://fx.aladdin.club/" icon={BookOpen} title="f(x) Protocol" body="Open the protocol app" />
           <MoreRow external href="https://fxprotocol.gitbook.io/fx-docs" icon={CircleHelp} title="Documentation" body="Markets, mechanics, and risks" />
         </Section>
@@ -53,7 +58,7 @@ function WalletSummary() {
 
   if (!authenticated || !wallet) {
     return (
-      <Card className="flex items-center gap-3 p-4">
+      <Card className={`${styles.utilityCard} flex items-center gap-3 p-4`}>
         <Wallet className="h-5 w-5 shrink-0 text-mint" aria-hidden="true" />
         <div className="min-w-0 flex-1">
           <p className="text-[13.5px] font-medium">Connect a wallet</p>
@@ -67,7 +72,7 @@ function WalletSummary() {
   }
 
   return (
-    <Card className="p-4">
+    <Card className={`${styles.utilityCard} p-4`}>
       <div className="flex items-center gap-3">
         <Wallet className="h-5 w-5 shrink-0 text-mint" aria-hidden="true" />
         <div className="min-w-0 flex-1">
@@ -83,9 +88,9 @@ function WalletSummary() {
 function Section({ label, children }: { label: string; children: ReactNode }) {
   const id = `more-${label.toLowerCase().replace(/\s+/g, '-')}`;
   return (
-    <section aria-labelledby={id}>
-      <h2 id={id} className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-mut">{label}</h2>
-      <div className="divide-y divide-[var(--line)] overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)]">{children}</div>
+    <section className={styles.utilitySection} aria-labelledby={id}>
+      <h2 id={id} className={styles.sectionLabel}>{label}</h2>
+      <div className={`${styles.rowGroup} divide-y divide-[var(--line)]`}>{children}</div>
     </section>
   );
 }
@@ -101,7 +106,7 @@ function MoreRow({ href, icon: Icon, title, body, external = false }: { href: st
       {external ? <ArrowUpRight className="h-4 w-4 shrink-0 text-[var(--mut-2)]" aria-hidden="true" /> : <ChevronRight className="h-4 w-4 shrink-0 text-[var(--mut-2)]" aria-hidden="true" />}
     </>
   );
-  const className = 'glass-press flex min-h-16 items-center gap-3 px-4 py-3';
+  const className = 'glass-press flex min-h-[68px] items-center gap-3 px-4 py-3';
   if (external) return <a href={href} target="_blank" rel="noopener noreferrer" onClick={() => haptic('light')} className={className}>{inner}</a>;
   return <Link href={href} onClick={() => haptic('light')} className={className}>{inner}</Link>;
 }

@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { Check, Sliders } from 'lucide-react';
-import { AppShell, Button, SectionTitle, Skeleton } from '@/components/ui';
+import { AppShell, Button, Skeleton } from '@/components/ui';
 import { useLocale } from '@/lib/i18n';
 import { haptic } from '@/lib/telegram';
 import { SETTINGS_KEY } from '@/lib/settings';
+import styles from '@/components/UtilitySurfaces.module.css';
 
 const WalletSection = dynamic(() => import('@/components/WalletSection'), {
   ssr: false,
@@ -75,18 +76,25 @@ export default function SettingsPage() {
 
   return (
     <AppShell title={t('settings.title')} subtitle="Wallet and preferences">
-      <div className="flex flex-col">
-        <WalletSection />
+      <div className={styles.utilityWorkspace}>
+        <div className={styles.utilitySection}>
+          <WalletSection />
+        </div>
 
-        <SectionTitle>
-          <span className="flex items-center gap-1.5"><Sliders className="h-3.5 w-3.5" aria-hidden="true" /> {t('settings.maxSlippage')}</span>
-        </SectionTitle>
-        <ChoiceGrid
-          ariaLabel={t('settings.maxSlippage')}
-          value={settings.slippageBps}
-          options={SLIPPAGE_PRESETS.map((bps) => ({ value: bps, label: `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 1)}%` }))}
-          onChange={(value) => update('slippageBps', value)}
-        />
+        <section className={styles.utilitySection} aria-labelledby="settings-slippage-title">
+          <h2 id="settings-slippage-title" className={styles.sectionLabel}>
+            <span className="flex items-center gap-1.5"><Sliders className="h-3.5 w-3.5" aria-hidden="true" /> {t('settings.maxSlippage')}</span>
+          </h2>
+          <div className={`${styles.utilityCard} p-4`}>
+            <p className="text-[13px] leading-relaxed text-mut">Set the maximum price movement accepted when a route needs slippage protection.</p>
+            <ChoiceGrid
+              ariaLabel={t('settings.maxSlippage')}
+              value={settings.slippageBps}
+              options={SLIPPAGE_PRESETS.map((bps) => ({ value: bps, label: `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 1)}%` }))}
+              onChange={(value) => update('slippageBps', value)}
+            />
+          </div>
+        </section>
 
         <div className="mt-6">
           <Button onClick={save}>
@@ -95,7 +103,9 @@ export default function SettingsPage() {
           {saveError && <p role="alert" className="mt-2 text-center text-[11px] leading-relaxed text-danger">{saveError}</p>}
         </div>
 
-        <LogoutSection />
+        <div className={styles.utilitySection}>
+          <LogoutSection />
+        </div>
       </div>
     </AppShell>
   );
@@ -125,7 +135,7 @@ function ChoiceGrid<T extends string | number>({
             role="radio"
             aria-checked={active}
             onClick={() => onChange(option.value)}
-            className={`glass glass-press min-h-11 rounded-lg px-2 py-2.5 text-[13px] ${active ? 'border-[var(--mint)] bg-[var(--mint-dim)] text-mint' : 'text-mut'}`}
+            className={styles.preferenceChoice}
           >
             {option.label}
           </button>

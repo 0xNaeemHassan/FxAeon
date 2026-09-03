@@ -2,6 +2,14 @@
 
 These documents describe the active client-first product and its release process.
 
+## User guide
+
+The client includes a searchable, read-only [`/docs` guide](../apps/mini-app/src/app/docs/page.tsx), available from **More → FxAeon docs** in this revision. It covers getting started, wallet signing, Trade, Earn, Borrow, Move, fees, recovery, and risks. The guide uses the app’s dark/light theme and needs neither a connected wallet nor Telegram. A local or preview build of this revision is required until it is deployed.
+
+![FxAeon’s in-app documentation with searchable section navigation](assets/fxaeon-docs.png)
+
+## Engineering references
+
 | Document | Audience | Covers |
 | --- | --- | --- |
 | [`architecture.md`](architecture.md) | Developers and reviewers | Runtime data flow, module boundaries, and state ownership |

@@ -3,9 +3,9 @@
   "proof": "fxaeon-position-screenshot-fixture",
   "executionSurface": "browser",
   "sourceCommand": "pnpm test:anvil:browser",
-  "sourceProofSha256": "b920abdabecf4a7fad3c776f96b0753bf5603ddec8706502c67e3fe7cc42c883",
+  "sourceProofSha256": "3804ceaae0bc229e80cc17f757f67a763f4a6fe209b0f2856aa1d553e58ba013",
   "chainId": 1,
-  "forkBlock": 25892172,
+  "forkBlock": 25893155,
   "assertions": {
     "scenarioCount": 4,
     "browserDriven": true,
@@ -23,7 +23,10 @@
     ],
     "productionSdkExecution": true,
     "indexerDiscoveryOnlyIsIntercepted": true,
-    "positionStateReadFromFork": true
+    "positionStateReadFromFork": true,
+    "availableTokenBalancesVerified": true,
+    "postConfirmationBalanceRefreshVerified": true,
+    "positionUsdLabelsVerified": true
   },
   "positions": [
     {
@@ -57,7 +60,7 @@
   ],
   "browserCapture": {
     "profile": "positions",
-    "capturedAt": "2026-09-02T21:18:23.743Z",
+    "capturedAt": "2026-09-03T01:27:44.031Z",
     "marketData": "external-display-data-unmodified",
     "positionDiscovery": "exact-four-sdk-owner-id-queries-only",
     "assertions": {
@@ -75,7 +78,7 @@
           "ETH:long:2004",
           "ETH:short:173"
         ],
-        "sha256": "cae288e6bcf9d585720cb07e03f10e2a7aa55bfd7e7cccfbf8fb43141b54ed21"
+        "sha256": "6f05345c139180ae51be9f82a9d8a7e732ebbd277acfe8f58294bd6a6e1b0555"
       },
       {
         "file": "fxaeon-positions.png",
@@ -90,7 +93,7 @@
           "ETH:long:2004",
           "ETH:short:173"
         ],
-        "sha256": "76e85cb08106ef5ed8fecf6b817f165540b570122a8b3926656d050fd3ad5048"
+        "sha256": "fc055aa796684919ec11c9134a4f2e3e0bf340ce179ee51fb619bd36b668d622"
       },
       {
         "file": "fxaeon-trade-connected.png",
@@ -103,7 +106,7 @@
           "ETH:long:2004",
           "ETH:short:173"
         ],
-        "sha256": "b47c4d433e4f94c83146cf94b44d400b322f7448d1d124d9a0b3dd2c4fb0207f"
+        "sha256": "a510c88614d992eb3f54dd0b7330573a5539ebf76e03d022a85d6eb3d1d501f5"
       },
       {
         "file": "fxaeon-positions-mobile.png",
@@ -118,7 +121,7 @@
           "ETH:long:2004",
           "ETH:short:173"
         ],
-        "sha256": "c5ae954cfa666543ae089ba62355495e39c11d1ddd0e279fb3c6dfe4ff96a646"
+        "sha256": "03900a3fb441450f72149b23d906163ec097a931ceda69e46a2d5d889ea6fa2b"
       }
     ]
   },
