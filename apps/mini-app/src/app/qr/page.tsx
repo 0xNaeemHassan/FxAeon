@@ -4,9 +4,10 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import { AlertTriangle, Check, Copy, Wallet } from 'lucide-react';
-import { AppShell, Button, Card, copyText, EmptyState } from '@/components/ui';
+import { AppShell, Card, copyText, EmptyState } from '@/components/ui';
 import { haptic } from '@/lib/telegram';
 import { usePrivyWallet } from '@/lib/wallet';
+import styles from '@/components/UtilitySurfaces.module.css';
 
 /**
  * Receive screen. The address is read from the selected Privy wallet only;
@@ -57,24 +58,24 @@ function WalletQr() {
   };
 
   return (
-    <div className="flex flex-col gap-3.5">
-      <Card className="flex flex-col items-center gap-4 p-5">
-        <div className="rounded-lg bg-white p-3.5">
+    <div className={styles.utilityWorkspace}>
+      <Card className={`${styles.utilityCard} flex flex-col items-center gap-4 p-5`}>
+        <div className="rounded-2xl bg-white p-3.5 shadow-sm">
           <QRCodeSVG value={address} size={208} level="M" title="Your EVM wallet address" />
         </div>
-        <p className="text-center text-[12px] text-mut">Ethereum and Base</p>
-      </Card>
-
-      <Card>
-        <p className="text-[11px] font-medium text-mut">Wallet address</p>
-        <div className="mt-2 flex items-start justify-between gap-3">
-          <p className="break-all font-mono text-[12px] leading-relaxed">{address}</p>
-          <button type="button" onClick={copy} aria-label={copied ? 'Address copied' : 'Copy wallet address'} className="glass glass-press flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl p-2.5">
-            {copied ? <Check className="h-[18px] w-[18px] text-success" aria-hidden="true" /> : <Copy className="h-[18px] w-[18px] text-mut" aria-hidden="true" />}
-          </button>
+        <div className="w-full">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[12px] text-mut">Receive address</p>
+              <p className="mt-0.5 text-[13px] font-semibold">Ethereum · Base</p>
+            </div>
+            <button type="button" onClick={copy} aria-label={copied ? 'Address copied' : 'Copy wallet address'} className="glass glass-press flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl p-2.5">
+              {copied ? <Check className="h-[18px] w-[18px] text-success" aria-hidden="true" /> : <Copy className="h-[18px] w-[18px] text-mut" aria-hidden="true" />}
+            </button>
+          </div>
+          <p className="mt-3 break-all rounded-2xl border border-[var(--line)] bg-[var(--input)] p-3 font-mono text-[12px] leading-relaxed">{address}</p>
         </div>
-        <Button onClick={copy} variant="ghost" className="mt-3">{copied ? 'Copied' : 'Copy address'}</Button>
-        <p className={`mt-2 min-h-4 text-center text-[11px] ${copyFailed ? 'text-danger' : 'text-mut'}`} aria-live="polite">
+        <p className={`min-h-4 text-center text-[11px] ${copyFailed ? 'text-danger' : 'text-mut'}`} aria-live="polite">
           {copyFailed ? 'Copy was blocked. Press and hold the address to copy it manually.' : copied ? 'Address copied to clipboard.' : ''}
         </p>
       </Card>

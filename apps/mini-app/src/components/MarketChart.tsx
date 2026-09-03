@@ -12,6 +12,7 @@ import {
 } from '@/lib/marketData';
 import { formatUsdPrice } from '@/lib/prices';
 import { haptic } from '@/lib/telegram';
+import styles from '@/components/trade-surfaces.module.css';
 
 type HistoryState = {
   status: 'loading' | 'ready' | 'unavailable';
@@ -104,12 +105,11 @@ export function TradeMarketChart({ market }: { market: MarketSymbol }) {
   }, []);
 
   return (
-    <section className="market-chart-panel" data-mobile-expanded={mobileExpanded} aria-label={`${market} market chart`}>
+    <section className={`${styles.marketChart} market-chart-panel`} data-mobile-expanded={mobileExpanded} aria-label={`${market} market chart`}>
       <div className="market-chart-header">
         <div className="flex min-w-0 items-center gap-3">
           <span className="market-chart-token"><TokenIcon symbol={market === 'BTC' ? 'WBTC' : 'ETH'} size={34} /></span>
           <div className="min-w-0">
-            <p className="micro-label">f(x) market · Ethereum</p>
             <h2 className="mt-1 truncate text-[18px] font-semibold">{market} / USD</h2>
           </div>
         </div>
@@ -147,7 +147,7 @@ export function TradeMarketChart({ market }: { market: MarketSymbol }) {
         </div>
 
         <div className="market-chart-footer">
-          <span className="inline-flex items-center gap-1.5 text-[10px] text-mut"><Activity className="h-3.5 w-3.5 text-mint" aria-hidden="true" />CoinGecko history · display only</span>
+          <a href="https://www.coingecko.com/" target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-1.5 text-[11px] text-mut hover:text-mint"><Activity className="h-3.5 w-3.5 text-mint" aria-hidden="true" />CoinGecko</a>
           <div role="radiogroup" aria-label="Chart range" className="chart-range-tabs">
             {RANGE_OPTIONS.map((option) => (
               <button
@@ -175,7 +175,7 @@ export function MarketMiniCard({ market }: { market: MarketSymbol }) {
   const change = history.snapshot?.percentChange;
   const positive = change !== undefined && change >= 0;
   return (
-    <div className="portfolio-market-card" aria-label={`${market} market overview`}>
+    <div className={`${styles.marketMiniCard} portfolio-market-card`} aria-label={`${market} market overview`}>
       <div className="flex items-center justify-between gap-2">
         <span className="flex items-center gap-2"><TokenIcon symbol={market === 'BTC' ? 'WBTC' : 'ETH'} size={28} /><strong className="text-[13px]">{market}</strong></span>
         <span className={`text-[10.5px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}>{change === undefined ? '—' : `${positive ? '+' : ''}${change.toFixed(2)}%`}</span>

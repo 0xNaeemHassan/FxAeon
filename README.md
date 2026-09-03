@@ -1,7 +1,7 @@
 <div align="center">
   <img src="brand/fxaeon-wordmark.svg" alt="FxAeon" width="720" />
 
-  <h3>The high-integrity, self-custodial interface for f(x) Protocol.</h3>
+  <h3>A focused, self-custodial interface for f(x) Protocol.</h3>
 
   <p>
     Trade positions, mint fxUSD, manage fxSAVE, and bridge across Ethereum and Base<br />
@@ -34,7 +34,8 @@
     <a href="#architecture">Architecture</a> ·
     <a href="#quick-start">Quick start</a> ·
     <a href="#verification">Verification</a> ·
-    <a href="docs/README.md">Documentation</a>
+    <a href="docs/README.md">Documentation</a> ·
+    <a href="docs/README.md#user-guide">User guide</a>
   </p>
 </div>
 
@@ -42,7 +43,7 @@
 
 ## Product
 
-FxAeon turns the official f(x) SDK into a focused, reviewable product surface for both ordinary browsers and Telegram Mini Apps. The same static application, wallet boundary, SDK adapter, and transaction policy run in both environments.
+FxAeon turns the official f(x) SDK into a focused, reviewable product surface for both ordinary browsers and Telegram Mini Apps. The same static application, wallet boundary, SDK adapter, and transaction policy run in both environments, with a violet-black dark theme, lavender actions, and a read-only in-app `/docs` guide.
 
 <img src="docs/assets/fxaeon-web.png" alt="FxAeon web landing page" width="100%" />
 
@@ -102,7 +103,7 @@ Populated views show positions opened through FxAeon's review and confirmation f
 | Live USD context | Timestamp- and confidence-validated current asset prices across forms, pickers, Portfolio, Earn, positions, and the wallet profile, plus validated ETH/BTC market history for charts; display-only and never an execution input |
 | Wallet profile | Privy embedded wallets or browser-injected EVM wallets, supported-asset balances, live USD totals, and dedicated activity—without a custody server |
 | Recovery | Reload-safe pending transaction and bridge journals in a dedicated Activity view, always revalidated against chain data |
-| Interface | Compact mobile-first controls, polished token pickers, a real leverage slider, and one-tap official light/dark theming |
+| Interface | Mobile-first controls, searchable token pickers with available quantities and their USD worth, a real leverage slider, and one-tap official light/dark theming |
 
 The immutable public surface contains exactly 15 SDK methods. [`fx-scope.lock.json`](fx-scope.lock.json) and the scope verifier prevent protocol internals, unsupported routes, or backend authority from silently entering the product.
 
@@ -114,7 +115,7 @@ Token and network marks use maintained AladdinDAO/SmolDapp assets (with local SV
 - **Self-custodial execution.** Privy or the connected external wallet remains the only signing authority. FxAeon never accepts a private key.
 - **Official planning path.** Protocol reads and unsigned transaction plans come from the pinned <code>@aladdindao/fx-sdk</code> package.
 - **Chain-authoritative state.** Ethereum, Base, receipts, and matching LayerZero events establish financial truth—not a database or browser cache.
-- **Price context without price authority.** DefiLlama supplies the validated current-price snapshot, while CoinGecko supplies separately validated ETH/BTC history for the 1D/7D/30D charts. Both fail closed and remain isolated from SDK planning, validation, simulation, and signing.
+- **Price context without price authority.** DefiLlama supplies the primary validated current-price snapshot; a bounded CoinGecko contract-price fallback can fill independently validated missing token quotes. Quotes older than 15 minutes are rejected and no stablecoin peg is substituted. CoinGecko separately supplies validated ETH/BTC history for the 1D/7D/30D charts. Invalid data is rejected; a failed current-price refresh retains the last validated snapshot with a stale label. These display feeds remain isolated from SDK planning, validation, simulation, and signing.
 - **Inspectable transaction review.** Targets, selectors, values, approvals, chains, nonces, and route order are validated before wallet confirmation.
 - **Static delivery.** The production artifact is a deterministic Cloudflare Pages export with no application server, Worker, queue, or privileged runtime.
 

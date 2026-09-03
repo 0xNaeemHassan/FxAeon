@@ -1,11 +1,11 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ArrowLeftRight } from 'lucide-react';
 import { AppShell, Card } from '@/components/ui';
 import { ActionReview } from '@/components/ActionReview';
 import WalletConnectCTA from '@/components/WalletConnectCTA';
-import { AmountField, TokenSelect } from '@/components/ProtocolForm';
+import { AmountField, TokenSelect, type TokenBalanceMap } from '@/components/ProtocolForm';
 import {
   advancedBridgePolicy,
   assertAddress,
@@ -26,6 +26,8 @@ import {
 import { usePrivyWallet } from '@/lib/wallet';
 import { parseAmount } from '@/app/trade/fxUi';
 import { ChainIcon } from '@/components/TokenIcon';
+import styles from '@/components/FlowWorkspace.module.css';
+import { createMoveBalanceReadGuard, readCanonicalMoveBalances } from '@/lib/moveBalances';
 
 const ERC20_BALANCE_ABI = [{
   type: 'function',
@@ -38,6 +40,7 @@ const ERC20_BALANCE_ABI = [{
 type Direction = 'ethereum_to_base' | 'base_to_ethereum';
 type BridgeAsset = 'fxUSD' | 'fxSAVE';
 type BridgeMode = 'canonical' | 'advanced';
+type MoveBalanceStatus = 'idle' | 'loading' | 'ready' | 'unavailable';
 
 export default function MovePage() {
   const wallet = usePrivyWallet();
@@ -50,6 +53,10 @@ export default function MovePage() {
   const [approvalToken, setApprovalToken] = useState('');
   const [recipientInput, setRecipientInput] = useState('');
   const [customRecipient, setCustomRecipient] = useState(false);
+  const [canonicalBalances, setCanonicalBalances] = useState<TokenBalanceMap>({});
+  const [moveBalanceStatus, setMoveBalanceStatus] = useState<MoveBalanceStatus>('idle');
+  const balanceContextKeyRef = useRef('');
+  const balanceGuardRef = useRef(createMoveBalanceReadGuard());
   const reviewedBridgeRef = useRef<{
     sourceChainId: FxChainId;
     destinationChainId: FxChainId;
@@ -69,6 +76,66 @@ export default function MovePage() {
   const amountWei = parseAmount(amount, 'fxUSD');
   const advanced = mode === 'advanced';
   const recipientValue = customRecipient ? recipientInput.trim() : wallet.address || '';
+
+  const balanceContextKey = `${wallet.address?.toLowerCase() ?? ''}:${sourceChainId}:${advanced ? 'advanced' : 'canonical'}`;
+
+  const refreshCanonicalBalances = useCallback(async (force = false) => {
+    if (!wallet.address || advanced) {
+      setCanonicalBalances({});
+      setMoveBalanceStatus('idle');
+      return;
+    }
+    balanceGuardRef.current.activate();
+    const requestId = balanceGuardRef.current.begin(force);
+    if (requestId === null) return;
+    balanceContextKeyRef.current = balanceContextKey;
+    setCanonicalBalances({});
+    setMoveBalanceStatus('loading');
+    try {
+      const result = await readCanonicalMoveBalances({ walletAddress: wallet.address, sourceChainId });
+      if (!balanceGuardRef.current.isCurrent(requestId)) return;
+      setCanonicalBalances(result.balances);
+      setMoveBalanceStatus(result.status);
+    } catch {
+      if (!balanceGuardRef.current.isCurrent(requestId)) return;
+      setCanonicalBalances({
+        fxUSD: { status: 'unavailable', reason: 'Source balances are temporarily unavailable.' },
+        fxSAVE: { status: 'unavailable', reason: 'Source balances are temporarily unavailable.' },
+      });
+      setMoveBalanceStatus('unavailable');
+    } finally {
+      balanceGuardRef.current.finish(requestId);
+    }
+  }, [advanced, balanceContextKey, sourceChainId, wallet.address]);
+
+  useEffect(() => {
+    const guard = balanceGuardRef.current;
+    void refreshCanonicalBalances();
+    return () => { guard.invalidate(); };
+  }, [refreshCanonicalBalances]);
+
+  useEffect(() => {
+    if (!wallet.address || advanced) return;
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void refreshCanonicalBalances();
+    };
+    const timer = window.setInterval(refreshWhenVisible, 30_000);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    window.addEventListener('focus', refreshWhenVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+      window.removeEventListener('focus', refreshWhenVisible);
+    };
+  }, [advanced, refreshCanonicalBalances, wallet.address]);
+
+  const balancesAreCurrent = balanceContextKeyRef.current === balanceContextKey;
+  const moveBalances = !advanced && balancesAreCurrent && moveBalanceStatus !== 'idle' ? canonicalBalances : undefined;
+  const moveBalanceStatusForPicker = !advanced && wallet.address
+    ? (balancesAreCurrent && moveBalanceStatus !== 'idle' ? moveBalanceStatus : 'loading')
+    : undefined;
+  const moveBalanceState = moveBalances?.[token]
+    ?? (moveBalanceStatusForPicker ? { status: moveBalanceStatusForPicker } : undefined);
 
   const planBuilder = useMemo(() => {
     if (!wallet.address || !amountWei) return null;
@@ -210,7 +277,7 @@ export default function MovePage() {
 
   return (
     <AppShell title="Move" subtitle="Move assets between Ethereum and Base.">
-      <div className="flex flex-col gap-3.5">
+      <div className={styles.workspace}>
         {!wallet.address && (
           <WalletConnectCTA
             ready={wallet.ready}
@@ -219,24 +286,25 @@ export default function MovePage() {
           />
         )}
 
-        <Card className="p-4">
+        <Card className={`${styles.focusCard} p-5`}>
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-[16px] font-semibold">Bridge</h2>
-              <p className="mt-0.5 text-[12px] text-mut">{sourceName} to {destinationName}</p>
+              <p className={styles.eyebrow}>Cross-chain transfer</p>
+              <h2 className="mt-1 text-[22px] font-semibold tracking-[-.03em]">Bridge</h2>
+              <p className={`mt-0.5 ${styles.supportCopy}`}>{sourceName} to {destinationName}</p>
             </div>
             <span className="rounded-lg bg-[var(--mint-dim)] px-2.5 py-1 text-[11px] font-semibold text-mint">
               {advanced ? 'Advanced OFT' : token}
             </span>
           </div>
 
-          <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+          <div className={`mt-5 ${styles.networkFlow}`}>
             <NetworkField label="From" name={sourceName} chainId={sourceChainId} />
             <button
               type="button"
               aria-label={`Reverse route to ${sourceName}`}
               onClick={() => setDirection((current) => current === 'ethereum_to_base' ? 'base_to_ethereum' : 'ethereum_to_base')}
-              className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--bg)] text-mint"
+              className={`glass-press ${styles.networkArrow}`}
             >
               <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
             </button>
@@ -246,13 +314,13 @@ export default function MovePage() {
           <div className="my-4 hairline" />
           <div className="flex flex-col gap-4">
             {!advanced && (
-              <TokenSelect label="Asset" value={token} options={['fxUSD', 'fxSAVE'] as const} onChange={setToken} />
+              <TokenSelect label="Asset" value={token} options={['fxUSD', 'fxSAVE'] as const} onChange={setToken} balances={moveBalances} balanceStatus={wallet.address ? moveBalanceStatusForPicker : 'disconnected'} />
             )}
 
             <details
               open={advanced}
               onToggle={(event) => setMode(event.currentTarget.open ? 'advanced' : 'canonical')}
-              className="rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.025)]"
+              className={styles.advancedPanel}
             >
               <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-3 text-[12px] font-semibold text-mut">
                 <span>Advanced OFT</span>
@@ -274,14 +342,17 @@ export default function MovePage() {
               </div>
             </details>
 
-            <AmountField
-              label="Amount"
-              hint={`From ${sourceName}`}
-              symbol={advanced ? 'OFT' : token}
-              value={amount}
-              onChange={setAmount}
-              maxDecimals={18}
-            />
+            <div className={styles.amountHero}>
+              <AmountField
+                label="Amount"
+                hint={`From ${sourceName}`}
+                symbol={advanced ? 'OFT' : token}
+                value={amount}
+                onChange={setAmount}
+                maxDecimals={18}
+                balanceState={moveBalanceState}
+              />
+            </div>
 
             <div>
               <div className="mb-2 flex items-center justify-between gap-3">
@@ -306,7 +377,7 @@ export default function MovePage() {
                   placeholder="0x… destination wallet"
                 />
               ) : (
-                <div className="flex min-h-[52px] items-center justify-between gap-3 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.035)] px-3">
+                <div className="flex min-h-[56px] items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--input)] px-3">
                   <span className="text-[12px] text-mut">Connected wallet</span>
                   <span className="font-mono text-[12px] font-semibold">
                     {wallet.address ? `${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)}` : 'Connect wallet'}
@@ -321,7 +392,13 @@ export default function MovePage() {
           planBuilder={planBuilder}
           label={`Review move to ${destinationName}`}
           operationLabel={`Move ${advanced ? 'advanced OFT' : token} to ${destinationName}`}
-          onComplete={rereadBridgeState}
+          onComplete={async () => {
+            try {
+              await rereadBridgeState();
+            } finally {
+              await refreshCanonicalBalances(true);
+            }
+          }}
         />
       </div>
     </AppShell>
@@ -372,14 +449,14 @@ function AddressField({ label, hint, value, onChange, placeholder }: { label: st
         <span>{label}</span>
         {hint && <span className="text-[11px] text-[var(--mut-2)]">{hint}</span>}
       </span>
-      <input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} autoComplete="off" spellCheck={false} inputMode="text" className="min-h-[52px] w-full rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.035)] px-3 font-mono text-[16px] outline-none focus:border-mint" />
+      <input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} autoComplete="off" spellCheck={false} inputMode="text" className="min-h-[56px] w-full rounded-2xl border border-[var(--line)] bg-[var(--input)] px-3 font-mono text-[16px] outline-none focus:border-mint" />
     </label>
   );
 }
 
 function NetworkField({ label, name, chainId }: { label: 'From' | 'To'; name: string; chainId: FxChainId }) {
   return (
-    <div className="rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.035)] p-3">
+    <div className={styles.networkNode}>
       <span className="block text-[11px] text-mut">{label}</span>
       <span className="mt-1 flex items-center gap-1.5 text-[14px] font-semibold"><ChainIcon chainId={chainId} size={18} />{name}</span>
     </div>

@@ -1,11 +1,12 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { FxTokenKey } from '@/lib/fx/tokens';
 import {
   fetchUsdPrices,
   parseUsdPriceCache,
   USD_PRICE_CACHE_KEY,
+  USD_PRICE_ASSET_COUNT,
   type UsdPriceSnapshot,
 } from '@/lib/prices';
 
@@ -45,18 +46,25 @@ async function fetchWithRetry(signal?: AbortSignal) {
 
 export default function PriceProvider({ children }: { children: React.ReactNode }) {
   const [snapshot, setSnapshot] = useState<UsdPriceSnapshot>(EMPTY_SNAPSHOT);
+  const refreshing = useRef<{ signal?: AbortSignal } | null>(null);
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
+    if ((refreshing.current && !refreshing.current.signal?.aborted) || signal?.aborted) return;
+    const request = { signal };
+    refreshing.current = request;
     try {
       const next = await fetchWithRetry(signal);
+      if (signal?.aborted) return;
       writeCachedSnapshot(next);
-      setSnapshot({ ...next, status: 'ready' });
+      setSnapshot({ ...next, status: Object.keys(next.prices).length === USD_PRICE_ASSET_COUNT ? 'ready' : 'partial' });
     } catch (cause) {
-      if (cause instanceof DOMException && cause.name === 'AbortError') return;
+      if (signal?.aborted || (cause instanceof DOMException && cause.name === 'AbortError')) return;
       setSnapshot((current) => ({
         ...current,
         status: Object.keys(current.prices).length > 0 ? 'stale' : 'unavailable',
       }));
+    } finally {
+      if (refreshing.current === request) refreshing.current = null;
     }
   }, []);
 

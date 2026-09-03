@@ -1,0 +1,37 @@
+.welcome { min-height: 100dvh; background: radial-gradient(ellipse at 82% 34%, var(--mint-dim), transparent 48%), var(--bg); }
+.frame { max-width: 1280px; min-height: 100dvh; margin: auto; padding: 24px 40px; display: flex; flex-direction: column; }
+.nav, .brand, .navActions { display: flex; align-items: center; }
+.nav { justify-content: space-between; gap: 20px; }
+.brand { gap: 10px; }
+.navActions { gap: 10px; }
+.heroGrid { flex: 1; display: grid; grid-template-columns: 1.1fr 1fr; align-items: center; gap: 64px; padding: 72px 0; }
+.eyebrow { display: flex; align-items: center; gap: 12px; color: var(--mut); font-size: 14px; }
+.hero h1 { margin: 24px 0; font-size: clamp(44px, 5.6vw, 72px); line-height: 1.04; letter-spacing: -.065em; font-weight: 650; }
+.lede { max-width: 470px; font-size: 17px; line-height: 1.75; color: var(--mut); }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
+.assurance { display: flex; align-items: center; gap: 8px; margin-top: 26px; font-size: 13px; color: var(--mut); }
+.assurance svg { width: 16px; height: 16px; color: var(--mint); }
+.explore { padding: 28px; border: 1px solid color-mix(in srgb, var(--mint) 15%, transparent); border-radius: 32px; background: var(--surface); box-shadow: var(--elevation-2); }
+.exploreTop { display: flex; align-items: center; gap: 18px; padding: 4px 0 28px; font-size: 14px; color: var(--mut); line-height: 1.6; }
+.exploreTop strong { color: var(--text); font-weight: 600; }
+.assetStack { display: flex; }
+.assetStack > * { outline: 4px solid var(--surface); border-radius: 50%; }
+.assetStack > * + * { margin-left: -8px; }
+.productGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.product { display: flex; flex-direction: column; min-width: 0; gap: 6px; border-radius: 20px; background: var(--surface-2); padding: 20px; transition: background 140ms ease, transform 140ms ease; }
+.product:hover { background: var(--surface-3); transform: translateY(-2px); }
+.product:active { transform: translateY(0); }
+.product:first-child { background: var(--mint); color: var(--on-accent); }
+.productTop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.productTop svg:first-child { width: 26px; height: 26px; }
+.productTop svg:last-child { width: 18px; height: 18px; opacity: .6; }
+.product strong { font-size: 20px; letter-spacing: -.025em; font-weight: 650; }
+.product small { font-size: 12px; line-height: 1.5; color: var(--mut); }
+.product:first-child small { color: var(--on-accent); opacity: .8; }
+.networks { display: flex; align-items: center; justify-content: center; gap: 24px; padding-top: 24px; color: var(--mut); font-size: 13px; }
+.networks span { display: flex; align-items: center; gap: 8px; }
+.footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; padding: 16px 0; font-size: 13px; color: var(--mut-2); }
+.footer span:last-child { display: flex; align-items: center; gap: 8px; }
+@media (max-width: 960px) { .heroGrid { gap: 32px; } .frame { padding-inline: 24px; } .explore { padding: 20px; } .product { padding: 16px; } }
+@media (max-width: 760px) { .frame { padding: max(16px, env(safe-area-inset-top)) 20px 24px; } .heroGrid { display: flex; flex-direction: column; gap: 44px; padding: 52px 0 32px; align-items: stretch; } .hero h1 { font-size: clamp(40px, 10.5vw, 66px); } .lede { font-size: 16px; } .actions { flex-direction: column; } .actions a { width: 100% !important; } .footer { font-size: 12px; } .explore { padding: 20px; } }
+@media (max-width: 359px) { .frame { padding-inline: 14px; } .navActions a { padding-inline: 12px !important; font-size: 12px; } .productGrid { gap: 8px; } .product { padding: 14px; } .explore { padding: 16px; } .networks { gap: 16px; } }

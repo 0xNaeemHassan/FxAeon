@@ -19,7 +19,7 @@ This document describes the current implementation. FxAeon is one static applica
 | Web Worker | Not used | No measured main-thread blocker justifies moving wallet or protocol lifecycle across a Worker boundary. |
 | Service Worker caching | Removed from the active product | Financial state must remain online and chain-authoritative; a one-time legacy `/sw.js` unregister remains only as stale-client cleanup. |
 | Speculative transaction planning | Not used | Plans are rebuilt during review and must not survive input, wallet, chain, or state changes. |
-| USD display pricing | Read-only, fail-closed | DefiLlama supplies the reviewed current-price snapshot and CoinGecko supplies reviewed ETH/BTC chart history. Both are isolated from SDK planning, policy, calldata, simulation, signing, and chain-authoritative state. |
+| USD display pricing | Read-only, independently validated | DefiLlama supplies current token prices; a bounded, cached CoinGecko contract-price fallback fills missing quotes. CoinGecko also supplies ETH/BTC chart history. Missing quotes never become an assumed peg or erase other validated prices. All display feeds remain isolated from SDK planning, policy, calldata, simulation, signing, and chain-authoritative state. |
 | Lighthouse upload | Not used | Release evidence comes from browser tests, bundle budgets, dependency audits, and static build checks without a telemetry service. |
 
 Transitive `ioredis` and `workerd` entries may remain in the frozen dependency graph through third-party browser/development tooling. They are not imported by the app, have no configured endpoints, and do not create Redis or Worker production services.
@@ -28,12 +28,12 @@ Transitive `ioredis` and `workerd` entries may remain in the frozen dependency g
 
 These are measurements from the local release gate, not universal performance claims. Re-run them on the pinned Node 22 CI environment for each release baseline.
 
-- Static bundle: `223 assets`, `7.28 MiB` total.
-- JavaScript: `188 assets`, `6.56 MiB` raw, `2.01 MiB` gzip; largest asset `1.95 MiB`.
-- Release E2E: `30` tests covering browser entry, 12 scoped routes, cross-workspace USD context, validated price continuity across hard navigation/feed retries, wallet profile/Activity, Earn-to-fxMINT access, official light/dark theming, accessible skip navigation, responsive charts, and Telegram/mobile safety checks.
-- Unit/security suite: `147` total tests (`144` passed, `3` skipped when the protected fork environment is absent), including exact installed SDK debt-ratio packing across both module formats.
+- Static bundle: `230 assets`, `7.35 MiB` total.
+- JavaScript: `189 assets`, `6.60 MiB` raw, `2.03 MiB` gzip; largest asset `1.95 MiB`.
+- Release E2E: `40` tests covering browser entry, 13 scoped routes (including the read-only guide), cross-workspace USD context, independent token-price fallback, price continuity across hard navigation/feed retries, owned-balance picker states, leverage keyboard/touch controls, wallet profile/Activity, Earn-to-fxMINT access, dark/light theme persistence, accessible skip navigation, responsive charts and compact sparklines, guide search/deep links, and Telegram/mobile safety checks. The width sweep covers 320, 360, 375, 390, 412, and 430px.
+- Unit/security suite: `170` total tests (`167` passed, `3` skipped when the protected fork environment is absent), including exact installed SDK debt-ratio packing across both module formats, bigint-safe USD position and owned-token valuation, and wallet/source-chain balance refresh guards.
 - Chaos campaign: `2` campaigns passed, including 2,000 route mutations and 600 runner iterations.
-- Local Anvil gates: `64` snapshot/revert iterations, `64` ordered-route stress iterations, and the Node four-position protocol proof passed. The separate browser gate opened and verified coexisting ETH/BTC long/short positions, checked delayed discovery and cross-workspace views, and restored its snapshot. The protected workflow now requires all three gates; an older green badge is not evidence for the new browser gate.
+- Local Anvil gates (3 September 2026, block `25893155`): `100` snapshot/revert iterations, `100` ordered-route stress iterations, and the Node four-position protocol proof passed. The separate browser gate opened and verified coexisting ETH/BTC long/short positions, checked delayed discovery and cross-workspace views, and restored its snapshot. The protected workflow requires all three gates; local working-tree results and an older green badge do not replace CI on the release commit.
 - Bundle guardrails: 12 MiB total, 8 MiB JavaScript, 3 MiB gzip, and 2 MiB largest JavaScript asset; these are regression limits, not UX guarantees.
 
 ## Delivery order

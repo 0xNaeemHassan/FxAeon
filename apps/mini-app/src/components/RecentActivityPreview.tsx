@@ -12,6 +12,7 @@ import {
   type RecoveryViewModel,
 } from '@/lib/fx';
 import { haptic } from '@/lib/telegram';
+import styles from '@/app/AccountWorkspace.module.css';
 
 export default function RecentActivityPreview({ walletAddress }: { walletAddress: Address }) {
   const [items, setItems] = useState<RecoveryViewModel[]>([]);
@@ -45,7 +46,7 @@ export default function RecentActivityPreview({ walletAddress }: { walletAddress
   useEffect(() => { void load(); }, [load]);
 
   return (
-    <section aria-labelledby="recent-activity-title">
+    <section className={styles.section} aria-labelledby="recent-activity-title">
       <SectionTitle right={(
         <button type="button" aria-label="Refresh recent activity" onClick={() => { haptic('light'); void load(); }} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-lg text-mut hover:text-mint">
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
@@ -53,8 +54,8 @@ export default function RecentActivityPreview({ walletAddress }: { walletAddress
       )}>
         <span id="recent-activity-title">Recent activity</span>
       </SectionTitle>
-      <Card className="portfolio-activity-card p-0">
-        <p className="border-b border-[var(--line)] px-4 py-2 text-[10.5px] leading-relaxed text-mut">Local-device transaction journal · receipt status is verified from Ethereum or Base when RPC access is available.</p>
+      <Card className={`${styles.activityCard} portfolio-activity-card p-0`}>
+        <p className={`${styles.activityNote} border-b border-[var(--line)] px-4 py-2 text-[10.5px] leading-relaxed text-mut`}>Local-device transaction journal · receipt status is verified from Ethereum or Base when RPC access is available.</p>
         {loading ? (
           <div className="space-y-2 p-3" role="status" aria-label="Loading recent activity">
             <div className="skeleton h-[58px]" /><div className="skeleton h-[58px]" />
@@ -69,17 +70,17 @@ export default function RecentActivityPreview({ walletAddress }: { walletAddress
             {items.some((item) => item.verification === 'rpc-error') && (
               <p role="status" className="mx-3 mt-3 rounded-lg bg-[var(--warn-dim)] px-3 py-2 text-[10.5px] leading-relaxed text-warn">Some saved transactions could not be checked against chain receipts. Their local status is not treated as proof.</p>
             )}
-            <ul className="divide-y divide-[var(--line)] px-3">
+            <ul className={`${styles.activityList} divide-y divide-[var(--line)] px-3`}>
               {items.map((item) => <ActivityRow key={item.record.id} item={item} />)}
             </ul>
           </>
         ) : (
-          <div className="flex items-center gap-3 px-4 py-5">
+          <div className={`${styles.activityEmpty} flex items-center gap-3 px-4 py-5`}>
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] text-mut"><History className="h-5 w-5" aria-hidden="true" /></span>
             <span><strong className="block text-[12.5px]">No recent FxAeon activity</strong><span className="mt-1 block text-[11px] text-mut">Transactions submitted on this device will appear here.</span></span>
           </div>
         )}
-        <Link href="/activity" className="glass-press flex min-h-12 items-center justify-between border-t border-[var(--line)] px-4 text-[12px] font-semibold text-mint">
+        <Link href="/activity" className={`${styles.activityLink} glass-press flex min-h-12 items-center justify-between border-t border-[var(--line)] px-4 text-[12px] font-semibold text-mint`}>
           Open full activity <ChevronRight className="h-4 w-4" aria-hidden="true" />
         </Link>
       </Card>
@@ -91,7 +92,7 @@ function ActivityRow({ item }: { item: RecoveryViewModel }) {
   const status = activityStatus(item);
   const Icon = status.icon;
   return (
-    <li className="flex min-h-[68px] items-center gap-3 py-3">
+    <li className={`${styles.activityRow} flex items-center gap-3 py-3`}>
       <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] ${status.className}`}><Icon className="h-4 w-4" aria-hidden="true" /></span>
       <span className="min-w-0 flex-1">
         <strong className="block truncate text-[12.5px]">{operationLabel(item.record.operation)}</strong>

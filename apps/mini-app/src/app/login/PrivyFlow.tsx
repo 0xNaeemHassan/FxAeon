@@ -25,6 +25,7 @@ import FxLogo from '@/components/FxLogo';
 import { usePrivyWallet } from '@/lib/wallet';
 import { useT } from '@/lib/i18n';
 import { userSafeError } from '@/lib/errors';
+import styles from '@/components/UtilitySurfaces.module.css';
 
 type Phase = 'intro' | 'authenticating' | 'choose' | 'creating' | 'done' | 'error';
 
@@ -155,7 +156,7 @@ function PrivyLoginFlow() {
 
   if (phase === 'done') {
     return (
-      <main className="mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col justify-center gap-5 px-6">
+        <main className={`${styles.loginPanel} mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col justify-center gap-5 px-6`}>
         <div className="flex flex-col items-center gap-4 text-center">
           <span className="flex h-16 w-16 items-center justify-center rounded-lg bg-[var(--success-dim)]">
             <Check className="h-8 w-8 text-success" strokeWidth={1.8} />
@@ -164,7 +165,7 @@ function PrivyLoginFlow() {
             Wallet ready
           </h1>
           {walletAddress && <AddressChip address={walletAddress} />}
-          <Card className="w-full text-left">
+          <Card className={`${styles.loginCard} w-full text-left`}>
             <p className="text-[14px] leading-relaxed text-mut">
               <span className="font-medium text-[var(--text)]">You stay in control.</span>{' '}
               Every transaction still requires your wallet approval. FxAeon never receives your private key.
@@ -180,7 +181,7 @@ function PrivyLoginFlow() {
 
   if (phase === 'choose' || phase === 'creating') {
     return (
-      <main className="mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col justify-center gap-4 px-6">
+      <main className={`${styles.loginPanel} mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col justify-center gap-4 px-6`}>
         <div className="flex flex-col gap-4">
           <h1 ref={phaseHeadingRef} tabIndex={-1} className="text-display text-[26px] font-semibold leading-tight outline-none">
             Choose your wallet
@@ -188,7 +189,7 @@ function PrivyLoginFlow() {
           <p className="text-[14px] leading-relaxed text-mut">
             Create a wallet for this account or connect one you already use. Nothing is created or connected automatically.
           </p>
-          <Card className="flex items-start gap-3">
+          <Card className={`${styles.loginCard} flex items-start gap-3`}>
             <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)]">
               <Plus className="h-[18px] w-[18px] text-mint" strokeWidth={2} />
             </span>
@@ -202,7 +203,7 @@ function PrivyLoginFlow() {
               </Button>
             </span>
           </Card>
-          <Card className="flex items-start gap-3">
+          <Card className={`${styles.loginCard} flex items-start gap-3`}>
             <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)]">
               <Wallet className="h-[18px] w-[18px] text-mint" strokeWidth={2} />
             </span>
@@ -217,7 +218,7 @@ function PrivyLoginFlow() {
             </span>
           </Card>
           {error && (
-            <Card className="border-[rgba(255,194,75,0.35)]">
+            <Card className={`${styles.loginCard} border-[rgba(255,194,75,0.35)]`}>
               <p role="alert" className="text-[13px] leading-relaxed text-warn">{error}</p>
             </Card>
           )}
@@ -231,7 +232,7 @@ function PrivyLoginFlow() {
   return (
     <main className="mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col justify-center px-6 py-10">
       <div className="flex flex-col">
-        <div className="glass mx-auto w-full max-w-sm p-6">
+        <div className={`${styles.loginCard} glass mx-auto w-full max-w-sm p-6`}>
           <div className="flex flex-col items-center text-center">
             <span className="flex h-16 w-16 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface-2)]">
               <FxLogo size={48} />
@@ -243,10 +244,10 @@ function PrivyLoginFlow() {
           </h1>
           <p className="mt-2 text-center text-[14px] leading-relaxed text-mut">
             {telegramContext
-              ? 'Continue with Telegram, email, or a wallet you already use.'
-              : 'Continue with email, a wallet you already use, or Telegram.'}
+              ? 'Continue with Telegram, a wallet you already use, or email.'
+              : 'Continue with a wallet, email, or Telegram.'}
           </p>
-          <div className="mt-6 flex flex-col gap-2.5">
+          <div className={`${styles.loginActions} mt-6`}>
             {telegramContext && (
               <Button onClick={startTelegramLogin} loading={busy}>
                 {!busy && <Send className="h-[18px] w-[18px]" strokeWidth={2} />}
@@ -254,13 +255,13 @@ function PrivyLoginFlow() {
               </Button>
             )}
             {telegramContext && <p className="pt-1 text-center text-[13px] font-medium text-mut">Other ways to continue</p>}
-            <Button variant={telegramContext ? 'ghost' : 'primary'} onClick={startEmailLogin} disabled={busy}>
-              <Mail className="h-[18px] w-[18px] text-mint" strokeWidth={2} />
-              {t('loginCard.email')}
-            </Button>
-            <Button variant="ghost" onClick={startExternalWallet} disabled={busy}>
-              <Wallet className="h-[18px] w-[18px] text-mint" strokeWidth={2} />
+            <Button variant={telegramContext ? 'ghost' : 'primary'} onClick={startExternalWallet} disabled={busy}>
+              <Wallet className="h-[18px] w-[18px]" strokeWidth={2} />
               {t('loginCard.wallet')}
+            </Button>
+            <Button variant="ghost" onClick={startEmailLogin} disabled={busy}>
+              <Mail className="h-[18px] w-[18px]" strokeWidth={2} />
+              {t('loginCard.email')}
             </Button>
             {!telegramContext && (
               <>
@@ -273,7 +274,7 @@ function PrivyLoginFlow() {
             )}
           </div>
           {phase === 'error' && (
-            <Card className="mt-4 border-[rgba(255,194,75,0.35)]">
+            <Card className={`${styles.loginCard} mt-4 border-[rgba(255,194,75,0.35)]`}>
               <p role="alert" className="text-[13px] leading-relaxed text-warn">{error}</p>
               <Button variant="ghost" className="mt-2" onClick={() => { setError(''); setPhase('intro'); }}>
                 Try again

@@ -6,6 +6,7 @@ import { ChevronRight, Layers2, RefreshCw, ShieldCheck } from 'lucide-react';
 import { AppShell, Card } from '@/components/ui';
 import { ActionReview } from '@/components/ActionReview';
 import { TradeMarketChart } from '@/components/MarketChart';
+import TokenIcon from '@/components/TokenIcon';
 import {
   positionIsStale,
   ProtocolPositionCard,
@@ -14,9 +15,10 @@ import {
 } from '@/components/ProtocolPositionCard';
 import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
 import WalletConnectCTA from '@/components/WalletConnectCTA';
-import { AmountField, LeverageField, Segmented, SlippageField, TokenSelect } from '@/components/ProtocolForm';
+import { AmountField, LeverageField, Segmented, SlippageField, TokenSelect, tokenBalanceFor, useWalletTokenBalances, type TokenBalanceView } from '@/components/ProtocolForm';
 import { MAX_FX_SLIPPAGE_PERCENT, clampLeverage, leverageBoundsFor, planIncreasePosition, readLeverageBounds, type LeverageBounds, type TransactionExecutionResult } from '@/lib/fx';
 import { usePrivyWallet } from '@/lib/wallet';
+import styles from '@/components/trade-surfaces.module.css';
 import { positiveDecimal } from '@/lib/amount';
 import { DEFAULT_SLIPPAGE_PERCENT, readSlippagePercent } from '@/lib/settings';
 import {
@@ -41,6 +43,9 @@ type PendingPositionIndex = {
 
 export default function TradePage() {
   const wallet = usePrivyWallet();
+  // Trade inputs are settled against the Ethereum FX token registry. Read
+  // those funds before wallet network switching so review stays informative.
+  const walletBalances = useWalletTokenBalances(wallet.address, 1, wallet.chainId);
   const positionState = useProtocolPositions();
   const [market, setMarket] = useState<UiMarket>('ETH');
   const [side, setSide] = useState<UiSide>('long');
@@ -76,6 +81,11 @@ export default function TradePage() {
 
   const tokenOptions = positionInputTokenOptions(market);
   const validAmount = positiveDecimal(amount, tokenDecimals(token));
+  const selectedTokenBalance: TokenBalanceView | undefined = wallet.address
+    ? tokenBalanceFor(walletBalances.balances, token) ?? (walletBalances.status === 'loading'
+      ? { status: 'loading' }
+      : { status: 'unavailable', reason: walletBalances.reason })
+    : undefined;
 
   useEffect(() => {
     let active = true;
@@ -173,42 +183,41 @@ export default function TradePage() {
     if (execution.status !== 'confirmed' || execution.operation !== 'increasePosition' || execution.chainId !== 1
       || execution.walletAddress.toLowerCase() !== wallet.address?.toLowerCase()
       || !indexContextRef.current.active || indexContextRef.current.tradeKey !== tradeKey) return;
+    void walletBalances.refresh(true);
     const reviewed = reviewedIndexRef.current;
     if (reviewed?.tradeKey === tradeKey) void checkPositionIndex(reviewed);
   };
 
   return (
     <AppShell tabs>
-      <div className="trade-workspace">
-        <header className="trade-page-heading">
-          <div><p className="text-[12px] font-medium text-mut">f(x) leveraged markets</p><h1 className="text-display mt-1.5 text-[30px] font-semibold leading-tight">Trade</h1></div>
+      <div className={styles.tradeRoot}>
+      <div className={`${styles.tradeWorkspace} trade-workspace`}>
+        <header className={`${styles.tradePageHeading} trade-page-heading`}>
+          <div><p className={styles.pageEyebrow}>f(x) leveraged markets</p><h1 className="text-display mt-1.5 text-[30px] font-semibold leading-tight">Trade</h1></div>
           <Link href="/positions" className="glass-press inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 text-[12px] font-semibold text-mut hover:text-mint"><Layers2 className="h-4 w-4" aria-hidden="true" />Positions</Link>
         </header>
 
-        <Segmented value={market} onChange={(next) => { setMarket(next); setToken(next === 'ETH' ? 'ETH' : 'WBTC'); }} ariaLabel="Market" options={[{ value: 'ETH', label: 'ETH market', sub: 'Ethereum', ariaLabel: 'ETH' }, { value: 'BTC', label: 'BTC market', sub: 'Wrapped BTC', ariaLabel: 'BTC' }]} />
-        <TradeMarketChart market={market} />
-
-        <div className="trade-view-tabs" aria-label="Trade views">
-          <span aria-current="page">Open position</span>
-          <Link href="/positions">Manage positions <ChevronRight className="h-4 w-4" aria-hidden="true" /></Link>
+        <div className={styles.marketChooser}><Segmented value={market} onChange={(next) => { setMarket(next); setToken(next === 'ETH' ? 'ETH' : 'WBTC'); }} ariaLabel="Market" options={[{ value: 'ETH', label: 'ETH market', sub: 'Ethereum', ariaLabel: 'ETH', icon: <TokenIcon symbol="ETH" size={20} /> }, { value: 'BTC', label: 'BTC market', sub: 'Wrapped BTC', ariaLabel: 'BTC', icon: <TokenIcon symbol="WBTC" size={20} /> }]} /></div>
+        <div className={styles.tradeLayout}>
+        <div className={styles.marketColumn}>
+          <TradeMarketChart market={market} />
         </div>
-
-        <Card className="trade-ticket p-4">
-          <div className="mb-4 flex items-start justify-between gap-3">
+        <div className={styles.ticketColumn}>
+        <Card className={`${styles.tradeTicket} trade-ticket`}>
+          <div className={`${styles.ticketHeader} mb-4 flex items-start justify-between gap-3`}>
             <div>
-              <p className="text-[12px] font-medium text-mut">New position</p>
+              <p className={styles.ticketKicker}>New position</p>
               <h2 className="mt-1 text-[18px] font-semibold">{market} {side === 'long' ? 'Long' : 'Short'}</h2>
             </div>
             <span className={`rounded-lg px-2.5 py-1 text-[12px] font-semibold ${side === 'long' ? 'bg-[var(--success-dim)] text-success' : 'bg-[var(--danger-dim)] text-danger'}`}>{side === 'long' ? 'Long' : 'Short'}</span>
           </div>
 
-          <Segmented tone="sides" value={side} onChange={setSide} ariaLabel="Position side" options={[{ value: 'long', label: 'Buy / Long', sub: 'Price rises', ariaLabel: 'Long' }, { value: 'short', label: 'Sell / Short', sub: 'Price falls', ariaLabel: 'Short' }]} />
+          <div className={styles.sideControl}><Segmented tone="sides" value={side} onChange={setSide} ariaLabel="Position side" options={[{ value: 'long', label: 'Buy / Long', sub: 'Price rises', ariaLabel: 'Long' }, { value: 'short', label: 'Sell / Short', sub: 'Price falls', ariaLabel: 'Short' }]} /></div>
 
-          <div className="flex flex-col gap-4">
-            <TokenSelect label="Input asset" value={token} options={tokenOptions} onChange={setToken} />
-            <AmountField label="Amount" symbol={token} value={amount} onChange={setAmount} maxDecimals={tokenDecimals(token)} />
+          <div className={styles.fieldStack}>
+            <AmountField label="Amount" symbol={token} value={amount} onChange={setAmount} maxDecimals={tokenDecimals(token)} showMax={token !== 'ETH'} balanceState={selectedTokenBalance} tokenSelector={<TokenSelect compact label="Input asset" value={token} options={tokenOptions} onChange={setToken} balances={wallet.address ? walletBalances.balances : undefined} balanceStatus={wallet.address ? (walletBalances.status !== 'idle' ? walletBalances.status : undefined) : 'disconnected'} />} />
             <LeverageField label={side === 'short' ? 'Target LSD leverage' : 'Target leverage'} value={leverage} onChange={setLeverage} min={leverageBounds.min} max={leverageBounds.max} error={leverageError} />
-            <details className="group rounded-xl border border-[var(--line)] px-3">
+            <details className={`${styles.advancedDetails} group rounded-xl border border-[var(--line)] px-3`}>
               <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-[13px] font-semibold [&::-webkit-details-marker]:hidden">Advanced <span aria-hidden="true" className="text-mut transition-transform group-open:rotate-180">⌄</span></summary>
               <div className="border-t border-[var(--line)] py-3"><SlippageField value={slippage} onChange={setSlippage} max={MAX_FX_SLIPPAGE_PERCENT} /></div>
             </details>
@@ -216,7 +225,9 @@ export default function TradePage() {
         </Card>
 
         {!wallet.address && <WalletConnectCTA ready={wallet.ready} authenticated={wallet.authenticated} body="Connect a wallet to review this trade." />}
-        <ActionReview planBuilder={planBuilder} label={`Review ${market} ${side === 'long' ? 'Long' : 'Short'}`} operationLabel={`Open ${market} ${side}`} onComplete={handleOpenComplete} />
+        <div className={styles.reviewWrap}><ActionReview planBuilder={planBuilder} label={`Review ${market} ${side === 'long' ? 'Long' : 'Short'}`} operationLabel={`Open ${market} ${side}`} onComplete={handleOpenComplete} /></div>
+        </div>
+        </div>
 
         {wallet.address && (
           <section aria-labelledby="trade-open-positions-title" className="flex flex-col gap-2.5">
@@ -244,6 +255,7 @@ export default function TradePage() {
             ) : null}
           </section>
         )}
+      </div>
       </div>
     </AppShell>
   );

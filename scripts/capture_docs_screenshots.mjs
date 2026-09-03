@@ -9,7 +9,7 @@ const output = path.resolve(process.env.FX_SCREENSHOT_OUTPUT_DIR || path.join(ro
 const baseUrl = validateBaseUrl(process.env.FX_SCREENSHOT_BASE_URL ?? 'http://localhost:4321');
 const captureProfile = process.env.FX_SCREENSHOT_CAPTURE_PROFILE?.trim() || 'standard';
 const marketDataMode = process.env.FX_SCREENSHOT_MARKET_DATA?.trim() || 'live';
-if (!['standard', 'positions'].includes(captureProfile)) throw new Error('FX_SCREENSHOT_CAPTURE_PROFILE must be standard or positions');
+if (!['standard', 'positions', 'audit'].includes(captureProfile)) throw new Error('FX_SCREENSHOT_CAPTURE_PROFILE must be standard, positions, or audit');
 if (!['live', 'fixture'].includes(marketDataMode)) throw new Error('FX_SCREENSHOT_MARKET_DATA must be live or fixture');
 const captures = [];
 const discoveryErrors = [];
@@ -255,6 +255,13 @@ async function capture(page, file, route, prepare) {
   if (!response?.ok()) throw new Error(`capture route ${route} did not return a successful response`);
   await page.locator('main').last().waitFor({ state: 'visible' });
   await prepare?.(page);
+  // Lazy wallet/settings modules can still be hydrating after the page
+  // landmark appears. Do not publish an empty placeholder as a finished UI.
+  await playwright.expect(page.locator('.loading-line')).toHaveCount(0, { timeout: 30_000 });
+  if (route === '/settings') {
+    await playwright.expect(page.getByText('Wallet', { exact: true })).toBeVisible();
+    await playwright.expect(page.locator('.skeleton')).toHaveCount(0, { timeout: 30_000 });
+  }
   await page.waitForFunction(() => !document.querySelector('[aria-label="Loading market chart"]'), null, { timeout: 60_000 });
   await page.waitForFunction(() => [...document.images].every((image) => image.complete && image.naturalWidth > 0), null, { timeout: 15_000 });
   await page.evaluate(() => document.fonts.ready);
@@ -334,6 +341,23 @@ async function waitForPopulatedTrade(page) {
 }
 
 async function main() {
+  if (captureProfile === 'audit') {
+    // A local-only visual contact set. No fixture wallet or market values are
+    // necessary: disconnected and unavailable states must be designed too.
+    const routes = ['/', '/login', '/portfolio', '/trade', '/positions', '/earn', '/borrow', '/move', '/more', '/settings', '/activity', '/qr', '/docs'];
+    for (const theme of ['dark', 'light']) {
+      for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000 }]) {
+        const context = await createCaptureContext({ viewport, theme });
+        const page = await context.newPage();
+        for (const route of routes) {
+          const name = route === '/' ? 'welcome' : route.slice(1);
+          await capture(page, `audit-${name}-${theme}-${viewport.width}.png`, route, route === '/login' ? waitForStandardLogin : undefined);
+        }
+        await context.close();
+      }
+    }
+    return;
+  }
   if (captureProfile === 'positions') {
     const desktopContext = await createCaptureContext({ viewport: { width: 1180, height: 900 }, theme: 'dark' });
     const desktopPage = await desktopContext.newPage();
@@ -369,6 +393,7 @@ async function main() {
   await capture(desktopPage, 'fxaeon-bridge.png', '/move');
   await capture(desktopPage, 'fxaeon-login.png', '/login', waitForStandardLogin);
   await capture(desktopPage, 'fxaeon-portfolio.png', '/portfolio');
+  await capture(desktopPage, 'fxaeon-docs.png', '/docs');
   await desktopContext.close();
 
   const mobileTradeContext = await createCaptureContext({ viewport: { width: 390, height: 844 }, theme: 'dark' });

@@ -33,6 +33,7 @@ import { Button, Card } from '@/components/ui';
 import { userSafeError } from '@/lib/errors';
 import { BridgeTracker } from '@/components/BridgeTracker';
 import { rawQuoteReviewFacts, routeFinancialReviewFacts, type ReviewFact } from '@/lib/fx/reviewFormatting';
+import styles from './FlowWorkspace.module.css';
 
 export type ActionPlanBuilder = () => Promise<PlannedRoute | readonly PlannedRoute[]>;
 
@@ -554,7 +555,7 @@ export function ActionReview({
     return (
       <div className="flex flex-col gap-2.5">
         {error && <InlineError message={error} />}
-        <Button ref={triggerRef} disabled={!planBuilder || disabled || !wallet.ready} loading={loading} onClick={() => void review()}>
+        <Button ref={triggerRef} className={styles.primaryAction} disabled={!planBuilder || disabled || !wallet.ready} loading={loading} onClick={() => void review()}>
           <ShieldCheck aria-hidden="true" className="h-4 w-4" /> {label}
         </Button>
         {loading && <StatusNotice {...progress} />}
@@ -581,7 +582,7 @@ export function ActionReview({
         ? 'bg-[var(--warn-dim)] text-warn'
         : 'bg-[var(--danger-dim)] text-danger';
     return (
-      <Card glow className="anim-scale-in p-5">
+      <Card className={`${styles.reviewCard} anim-scale-in p-5`}>
         <div className="flex flex-col items-center text-center">
           <span className={`flex h-12 w-12 items-center justify-center rounded-xl ${tone}`}>
             <ResultIcon className="h-6 w-6" aria-hidden="true" />
@@ -617,7 +618,7 @@ export function ActionReview({
               destinationBaselineBlock={bridgeQuote.destinationBaselineBlock}
             />
           )}
-          <Button variant="ghost" className="mt-4" onClick={reset}>Done</Button>
+          <Button variant="ghost" className={`${styles.primaryAction} mt-4`} onClick={reset}>Done</Button>
         </div>
       </Card>
     );
@@ -629,7 +630,7 @@ export function ActionReview({
   const facts = primaryReviewFacts(route);
   const progress = statusPresentation({ stage, status, detail: statusDetail, stepResults, stepCount });
   return (
-    <Card glow className="anim-scale-in p-5">
+    <Card className={`${styles.reviewCard} anim-scale-in p-5`}>
       <button
         type="button"
         disabled={loading}
@@ -641,8 +642,8 @@ export function ActionReview({
 
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[12px] font-medium text-mint">Review</p>
-          <h3 ref={headingRef} tabIndex={-1} className="text-display mt-1.5 text-[22px] font-semibold leading-tight outline-none">
+          <p className={styles.eyebrow}>Security review</p>
+          <h3 ref={headingRef} tabIndex={-1} className="text-display mt-2 text-[24px] font-semibold leading-tight outline-none">
             {reviewTitle ?? route.operation}
           </h3>
           <p className="mt-1 text-[12px] text-mut">
@@ -677,8 +678,8 @@ export function ActionReview({
         </div>
       )}
 
-      <div className="my-4 hairline" />
-      <div className="flex flex-col gap-2.5">
+      <div className="my-5 hairline" />
+      <div className={styles.reviewFacts}>
         <ReviewRow label="Network" value={chainName(route.chainId)} />
         <ReviewRow label="Wallet" value={compactAddress(route.walletAddress)} title={route.walletAddress} />
         {facts.map((fact) => <ReviewRow key={`${fact.label}-${fact.value}`} label={fact.label} value={fact.value} title={fact.title} />)}
@@ -692,7 +693,7 @@ export function ActionReview({
           const approval = approvalFacts(transaction);
           const progress = stepProgress(stepResults[index]);
           return (
-          <div key={`${transaction.to}-${index}`} className="rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.025)] p-3">
+          <div key={`${transaction.to}-${index}`} className={`${styles.reviewStep} border border-[var(--line)] p-3`}>
             <div className="flex items-center justify-between gap-3">
               <span className="text-[12px] font-semibold">{index + 1}. {stepTitle(transaction)}</span>
               <span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${progress.className}`}>{progress.icon}{progress.label}</span>
@@ -726,7 +727,7 @@ export function ActionReview({
         />
         <span>I have reviewed the amounts and transaction steps above.</span>
       </label>
-      <Button disabled={loading || status === 'failed' || !reviewAcknowledged} loading={loading || stage === 'executing'} className="mt-3" onClick={() => void execute()}>
+      <Button disabled={loading || status === 'failed' || !reviewAcknowledged} loading={loading || stage === 'executing'} className={`${styles.primaryAction} mt-3`} onClick={() => void execute()}>
         <ShieldCheck aria-hidden="true" className="h-4 w-4" /> {stepCount === 1 ? 'Confirm in wallet' : `Confirm ${stepCount} transactions`}
       </Button>
     </Card>

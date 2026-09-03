@@ -11,7 +11,8 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, expect as playwrightExpect, type Page } from '@playwright/test';
-import { createPublicClient, encodeFunctionData, http, parseUnits, type Address, type Hex } from 'viem';
+import { createPublicClient, encodeFunctionData, formatUnits, http, parseUnits, type Address, type Hex } from 'viem';
+import { formatExactDecimal } from '../../src/lib/amount';
 import { mainnet } from 'viem/chains';
 
 const appRoot = fileURLToPath(new URL('../..', import.meta.url));
@@ -184,7 +185,10 @@ async function runProof(captureStage: string) {
       await page.getByRole('radiogroup', { name: 'Market', exact: true }).getByRole('radio', { name: scenario.market, exact: true }).click();
       await page.getByRole('radiogroup', { name: 'Position side' }).getByRole('radio', { name: scenario.side === 'long' ? 'Long' : 'Short', exact: true }).click();
       await page.getByRole('button', { name: 'Input asset', exact: true }).click();
-      await page.getByRole('option', { name: /^USDC(?: selected)?$/ }).click();
+      const usdcOption = page.getByRole('option', { name: /^USDC(?: selected)?$/ });
+      const availableUsdc = await client.readContract({ address: usdc, abi: tokenAbi, functionName: 'balanceOf', args: [wallet] });
+      await expect(usdcOption).toContainText(`Available: ${formatExactDecimal(formatUnits(availableUsdc, 6), 4)} USDC`);
+      await usdcOption.click();
       await page.getByLabel('Amount in USDC', { exact: true }).fill('1000');
       await page.getByRole('spinbutton', { name: scenario.side === 'short' ? 'Target LSD leverage' : 'Target leverage', exact: true }).fill(scenario.side === 'short' ? '0.5' : '2');
       await page.locator('summary').filter({ hasText: /^Advanced/ }).click();
@@ -198,6 +202,8 @@ async function runProof(captureStage: string) {
       await page.getByRole('button', { name: /^Confirm (?:in wallet|\d+ transactions)$/ }).click();
       await expect(page.getByRole('button', { name: 'Done', exact: true })).toBeVisible({ timeout: 180_000 });
       await expect(page.getByRole('heading', { name: 'Confirmed', exact: true })).toBeVisible();
+      const remainingUsdc = await client.readContract({ address: usdc, abi: tokenAbi, functionName: 'balanceOf', args: [wallet] });
+      await expect(page.locator('.trade-ticket')).toContainText(`Available: ${formatExactDecimal(formatUnits(remainingUsdc, 6), 4)} USDC`);
       const own = await client.readContract({ address: scenario.pool, abi: poolAbi, functionName: 'ownerOf', args: [BigInt(positionId)] });
       assert.equal(own.toLowerCase(), wallet.toLowerCase());
       const [collateral, debt] = await client.readContract({ address: scenario.pool, abi: poolAbi, functionName: 'getPosition', args: [BigInt(positionId)] });
@@ -219,6 +225,7 @@ async function runProof(captureStage: string) {
     await page.goto(`${baseUrl}/positions`);
     for (const position of positions) {
       await expect(page.locator(`[data-position-key="${position.market}:${position.side}:${position.positionId}"]`).first()).toBeVisible();
+      await expect(page.locator(`[data-position-key="${position.market}:${position.side}:${position.positionId}"]`).first()).toContainText('Est. net equity');
       assert.equal((await client.readContract({ address: position.pool, abi: poolAbi, functionName: 'ownerOf', args: [BigInt(position.positionId)] })).toLowerCase(), wallet.toLowerCase());
       const [collateral, debt] = await client.readContract({ address: position.pool, abi: poolAbi, functionName: 'getPosition', args: [BigInt(position.positionId)] });
       assert.ok(collateral > 0n && debt > 0n, 'all positions must coexist after the fourth trade');
@@ -300,6 +307,8 @@ async function runProof(captureStage: string) {
     forkBlock: forkBlock.toString(), assertions: { scenarioCount: 4, browserDriven: true,
       coexistingInSingleSnapshot: true, ownershipVerified: true, nonzeroCollateralAndDebtVerified: true,
       delayedIndexDiscoveryVerified: true, snapshotRevertedAfterProof: true,
+      availableTokenBalancesVerified: true, postConfirmationBalanceRefreshVerified: true,
+      positionUsdLabelsVerified: true,
       readSurfaces: ['trade', 'positions', 'portfolio', 'earn', 'move'] }, positions }, null, 2));
   console.log('Real browser four-position acceptance proof complete; fork snapshot reverted.');
 }

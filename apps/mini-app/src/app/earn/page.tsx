@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { AppShell, Button, Card, EmptyState, LoadingRegion, Skeleton } from '@/components/ui';
 import { ActionReview } from '@/components/ActionReview';
 import WalletConnectCTA from '@/components/WalletConnectCTA';
-import { AmountField, InfoNote, Segmented, SlippageField, ToggleRow, TokenSelect } from '@/components/ProtocolForm';
+import { AmountField, InfoNote, Segmented, SlippageField, ToggleRow, TokenSelect, useWalletTokenBalances, type TokenBalanceMap } from '@/components/ProtocolForm';
 import { useUsdPrice } from '@/components/PriceProvider';
 import { formatUsd, usdValueForUnits } from '@/lib/prices';
 import {
@@ -21,6 +21,7 @@ import { usePrivyWallet } from '@/lib/wallet';
 import { DEFAULT_SLIPPAGE_PERCENT, readSlippagePercent } from '@/lib/settings';
 import { userSafeError } from '@/lib/errors';
 import { formatAmount, parseAmount, type SaveToken } from '@/app/trade/fxUi';
+import styles from '@/components/FlowWorkspace.module.css';
 
 type EarnMode = 'deposit' | 'withdraw' | 'claim';
 
@@ -42,6 +43,23 @@ export default function EarnPage() {
   const [error, setError] = useState('');
   const [config, setConfig] = useState<SaveConfig | null>(null);
   const [data, setData] = useState<SaveData | null>(null);
+  // fxSAVE routes are Ethereum-only even when the connected wallet is
+  // currently displaying another supported chain. Read the selected address
+  // against Ethereum's reviewed public client, not wallet.chainId.
+  const balanceSnapshot = useWalletTokenBalances(wallet.address, 1);
+  const saveBalances = useMemo<TokenBalanceMap | undefined>(() => {
+    if (balanceSnapshot.status === 'idle') return undefined;
+    return {
+      ...balanceSnapshot.balances,
+      usdc: balanceSnapshot.balances.USDC,
+    };
+  }, [balanceSnapshot.balances, balanceSnapshot.status]);
+  const saveBalanceStatus = wallet.address
+    ? (balanceSnapshot.status === 'idle' ? 'loading' : balanceSnapshot.status)
+    : undefined;
+  const saveBalanceState = wallet.address
+    ? saveBalances?.[token] ?? { status: saveBalanceStatus ?? 'loading' as const }
+    : undefined;
 
   useEffect(() => {
     setSlippage(String(readSlippagePercent()));
@@ -113,8 +131,8 @@ export default function EarnPage() {
 
   return (
     <AppShell title="Earn" subtitle="Deposit, withdraw, and claim fxSAVE.">
-      <div className="flex flex-col gap-3.5">
-        <div className="grid grid-cols-2 rounded-xl border border-[var(--line)] bg-[var(--input)] p-1" aria-label="Earn products">
+      <div className={styles.workspace}>
+        <div className={`grid grid-cols-2 ${styles.productSwitch}`} aria-label="Earn products">
           <span aria-current="page" className="flex min-h-11 items-center justify-center rounded-lg bg-[var(--mint-dim)] px-3 text-[13px] font-semibold text-[var(--text)]">fxSAVE</span>
           <Link href="/borrow" className="glass-press flex min-h-11 items-center justify-center rounded-lg px-3 text-[13px] font-semibold text-mut">Borrow / fxMINT</Link>
         </div>
@@ -144,33 +162,36 @@ export default function EarnPage() {
           <>
             <SavingsSummary data={walletData} loading={loading} onRefresh={load} />
 
-            <Segmented
-              value={mode}
-              onChange={(next) => {
-                setMode(next);
-                setToken('fxUSD');
-                setAmount('');
-                setShares('');
-              }}
-              ariaLabel="fxSAVE action"
-              options={[
-                { value: 'deposit', label: 'Deposit' },
-                { value: 'withdraw', label: 'Withdraw' },
-                { value: 'claim', label: 'Claim' },
-              ]}
-            />
+            <div className="rounded-2xl bg-[var(--surface-2,var(--input))] p-1">
+              <Segmented
+                value={mode}
+                onChange={(next) => {
+                  setMode(next);
+                  setToken('fxUSD');
+                  setAmount('');
+                  setShares('');
+                }}
+                ariaLabel="fxSAVE action"
+                options={[
+                  { value: 'deposit', label: 'Deposit' },
+                  { value: 'withdraw', label: 'Withdraw' },
+                  { value: 'claim', label: 'Claim' },
+                ]}
+              />
+            </div>
 
-            <Card className="p-4">
+            <Card className={`${styles.focusCard} p-5`}>
               {mode === 'deposit' && (
                 <div className="flex flex-col gap-4">
                   <FormHeader title="Deposit" body="Choose an asset and amount." />
-                  <TokenPicker label="Asset" value={token} onChange={setToken} />
+                  <TokenPicker label="Asset" value={token} onChange={setToken} balances={saveBalances} balanceStatus={wallet.address ? saveBalanceStatus : 'disconnected'} />
                   <AmountField
                     label="Deposit amount"
                     symbol={labelToken(token)}
                     value={amount}
                     onChange={setAmount}
                     maxDecimals={token === 'usdc' ? 6 : 18}
+                    balanceState={saveBalanceState}
                   />
                   {token !== 'fxUSDBasePool' && (
                     <SlippageField value={slippage} onChange={setSlippage} max={MAX_FX_SLIPPAGE_PERCENT} />
@@ -181,7 +202,7 @@ export default function EarnPage() {
               {mode === 'withdraw' && (
                 <div className="flex flex-col gap-4">
                   <FormHeader title="Withdraw" body="Choose what to receive and how to redeem." />
-                  <TokenPicker label="Receive" value={token} onChange={setToken} />
+                  <TokenPicker label="Receive" value={token} onChange={setToken} balances={saveBalances} balanceStatus={wallet.address ? saveBalanceStatus : 'disconnected'} />
                   <AmountField
                     label="Shares to withdraw"
                     symbol="fxSAVE"
@@ -222,7 +243,9 @@ export default function EarnPage() {
               disabled={mode === 'claim' && !walletData.claimable.isCooldownComplete}
               label={mode === 'claim' ? 'Review claim' : mode === 'withdraw' ? 'Review withdrawal' : 'Review deposit'}
               operationLabel={mode === 'claim' ? 'Claim fxSAVE redemption' : mode === 'withdraw' ? 'Withdraw fxSAVE shares' : 'Deposit into fxSAVE'}
-              onComplete={load}
+              onComplete={async () => {
+                await Promise.all([load(), balanceSnapshot.refresh()]);
+              }}
             />
 
             {config && <VaultDetails config={config} />}
@@ -250,11 +273,11 @@ function SavingsSummary({ data, loading, onRefresh }: { data: SaveData; loading:
   const statusTone = ready ? 'bg-[var(--success-dim)] text-success' : hasPending ? 'bg-[var(--warn-dim)] text-warn' : 'bg-[var(--mint-dim)] text-mint';
 
   return (
-    <Card className="p-4">
+    <Card className={`${styles.summaryCard} p-5`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[12px] font-medium text-mut">Your fxSAVE</p>
-          <h2 className="text-display mt-1 break-words text-[26px] font-semibold tabular-nums">
+          <p className={styles.eyebrow}>Your fxSAVE</p>
+          <h2 className="text-display mt-2 break-words text-[30px] font-semibold tabular-nums tracking-[-.03em]">
             {hasAssets
               ? `${formatDisplayAmount(data.balance.assetsWei)} fxUSD`
               : `${formatDisplayAmount(data.balance.balanceWei)} fxSAVE`}
@@ -276,12 +299,12 @@ function SavingsSummary({ data, loading, onRefresh }: { data: SaveData; loading:
         </button>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-2">
+      <div className="mt-5 grid grid-cols-2 gap-2">
         <Metric label="Shares" value={`${formatDisplayAmount(data.balance.balanceWei)} fxSAVE`} />
         <Metric label="Assets" value={hasAssets ? `${formatDisplayAmount(data.balance.assetsWei)} fxUSD` : 'Unavailable'} />
       </div>
 
-      <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-[var(--line)] px-3 py-3">
+      <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[rgba(255,255,255,.025)] px-3 py-3">
         <div className="min-w-0">
           <p className="text-[12px] font-semibold">Pending redemption</p>
           <p className="mt-0.5 truncate text-[11px] text-mut tabular-nums">
@@ -327,7 +350,7 @@ function ClaimState({ data }: { data: SaveData }) {
 
 function VaultDetails({ config }: { config: SaveConfig }) {
   return (
-    <details className="group rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3">
+    <details className="group rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-4">
       <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 text-[13px] font-semibold [&::-webkit-details-marker]:hidden">
         Vault details
         <ChevronDown aria-hidden="true" className="h-4 w-4 text-mut transition-transform group-open:rotate-180" />
@@ -345,22 +368,22 @@ function VaultDetails({ config }: { config: SaveConfig }) {
   );
 }
 
-function TokenPicker({ label, value, onChange }: { label: string; value: SaveToken; onChange: (value: SaveToken) => void }) {
-  return <TokenSelect label={label} value={value} options={['fxUSD', 'usdc', 'fxUSDBasePool'] as const} onChange={onChange} />;
+function TokenPicker({ label, value, onChange, balances, balanceStatus }: { label: string; value: SaveToken; onChange: (value: SaveToken) => void; balances?: TokenBalanceMap; balanceStatus?: 'loading' | 'ready' | 'unavailable' | 'disconnected' }) {
+  return <TokenSelect label={label} value={value} options={['fxUSD', 'usdc', 'fxUSDBasePool'] as const} onChange={onChange} balances={balances} balanceStatus={balanceStatus} />;
 }
 
 function FormHeader({ title, body }: { title: string; body: string }) {
   return (
     <div>
-      <h2 className="text-[15px] font-semibold">{title}</h2>
-      <p className="mt-1 text-[12px] text-mut">{body}</p>
+      <h2 className={styles.sectionTitle}>{title}</h2>
+      <p className={`mt-1 ${styles.supportCopy}`}>{body}</p>
     </div>
   );
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl bg-[rgba(255,255,255,.035)] p-3">
+    <div className={`${styles.metric} p-3`}>
       <span className="block text-[11px] text-mut">{label}</span>
       <span className="mt-1 block truncate text-[13px] font-semibold tabular-nums" title={value}>{value}</span>
     </div>
