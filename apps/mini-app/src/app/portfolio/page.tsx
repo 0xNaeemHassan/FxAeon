@@ -62,7 +62,6 @@ export default function PortfolioPage() {
           <div>
             <p className={styles.eyebrow}>Overview / Ethereum</p>
             <h1 className="text-display mt-1.5 text-[30px] font-semibold leading-tight">Portfolio</h1>
-            <p className="mt-1 text-[12px] text-mut">Wallet assets and verified f(x) protocol state.</p>
           </div>
         </header>
 
