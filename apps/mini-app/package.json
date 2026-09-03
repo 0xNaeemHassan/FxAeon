@@ -31,7 +31,7 @@
     "@types/react-dom": "19.2.4",
     "typescript": "5.9.3",
     "tailwindcss": "3.4.17",
-    "postcss": "8.5.23",
+    "postcss": "8.5.26",
     "autoprefixer": "10.5.0",
     "@playwright/test": "1.61.0",
     "tsx": "4.22.4"
