@@ -7,6 +7,7 @@ import { AppShell, Button, Skeleton } from '@/components/ui';
 import { useLocale } from '@/lib/i18n';
 import { haptic } from '@/lib/telegram';
 import { SETTINGS_KEY } from '@/lib/settings';
+import { usePrivyWallet } from '@/lib/wallet';
 import styles from '@/components/UtilitySurfaces.module.css';
 
 const WalletSection = dynamic(() => import('@/components/WalletSection'), {
@@ -40,6 +41,7 @@ function readSettings(): SettingsV1 {
 
 export default function SettingsPage() {
   const { t } = useLocale();
+  const walletState = usePrivyWallet();
   const [mounted, setMounted] = useState(false);
   const [settings, setSettings] = useState<SettingsV1>(DEFAULT_SETTINGS);
   const [saved, setSaved] = useState(false);
@@ -103,9 +105,11 @@ export default function SettingsPage() {
           {saveError && <p role="alert" className="mt-2 text-center text-[11px] leading-relaxed text-danger">{saveError}</p>}
         </div>
 
-        <div className={styles.utilitySection}>
-          <LogoutSection />
-        </div>
+        {walletState.ready && walletState.authenticated && (
+          <div className={styles.utilitySection}>
+            <LogoutSection />
+          </div>
+        )}
       </div>
     </AppShell>
   );

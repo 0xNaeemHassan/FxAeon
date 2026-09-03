@@ -22,7 +22,6 @@ import {
   Layers3,
   PiggyBank,
   RefreshCw,
-  ShieldCheck,
 } from 'lucide-react';
 import { hasTelegramLaunchSignal, isTMA, waitForTelegramWebApp } from '@/lib/telegram';
 import { ButtonLink, FullScreenSpinner } from '@/components/ui';
@@ -116,7 +115,7 @@ export default function HomePage() {
               <h1>Your next move.<br /><span className="text-gradient">On your terms.</span></h1>
               <p className={styles.lede}>
                 Trade ETH and BTC. Put your assets to work.
-                Move between Ethereum and Base — all from your wallet.
+                Move between Ethereum and Base — all in one place.
               </p>
               <div className={styles.actions}>
                 <ButtonLink href="/portfolio" className="!w-auto !px-7">
@@ -125,9 +124,6 @@ export default function HomePage() {
                 <ButtonLink href={TELEGRAM_APP_URL} external variant="outline" className="!w-auto !px-6">
                   {t('common.openInTelegram')} <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
                 </ButtonLink>
-              </div>
-              <div className={styles.assurance}>
-                <ShieldCheck aria-hidden="true" /> Your assets. Your wallet. Your call.
               </div>
             </section>
 
@@ -149,7 +145,7 @@ export default function HomePage() {
           </div>
 
           <footer className={styles.footer}>
-            <span>Made for the way you move.</span>
+            <a href="https://x.com/0xWhizMiz" target="_blank" rel="noreferrer">Made by whiz ❤️</a>
             <span><Globe2 size={16} aria-hidden="true" /> Open on the web. At home in Telegram.</span>
           </footer>
         </div>

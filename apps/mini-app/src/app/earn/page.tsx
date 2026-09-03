@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Clock3, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell, Button, Card, EmptyState, LoadingRegion, Skeleton } from '@/components/ui';
@@ -20,6 +20,7 @@ import {
 import { usePrivyWallet } from '@/lib/wallet';
 import { DEFAULT_SLIPPAGE_PERCENT, readSlippagePercent } from '@/lib/settings';
 import { userSafeError } from '@/lib/errors';
+import { claimAvailability, cooldownRefreshDelayMs, createEarnReadGuard } from '@/lib/earnState';
 import { formatAmount, parseAmount, type SaveToken } from '@/app/trade/fxUi';
 import styles from '@/components/FlowWorkspace.module.css';
 
@@ -43,6 +44,12 @@ export default function EarnPage() {
   const [error, setError] = useState('');
   const [config, setConfig] = useState<SaveConfig | null>(null);
   const [data, setData] = useState<SaveData | null>(null);
+  const [readWarnings, setReadWarnings] = useState<string[]>([]);
+  const readGuard = useRef(createEarnReadGuard());
+  const dataRef = useRef<SaveData | null>(null);
+  const configRef = useRef<SaveConfig | null>(null);
+  useEffect(() => { dataRef.current = data; }, [data]);
+  useEffect(() => { configRef.current = config; }, [config]);
   // fxSAVE routes are Ethereum-only even when the connected wallet is
   // currently displaying another supported chain. Read the selected address
   // against Ethereum's reviewed public client, not wallet.chainId.
@@ -65,7 +72,9 @@ export default function EarnPage() {
     setSlippage(String(readSlippagePercent()));
   }, []);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
+    const request = readGuard.current.begin(force);
+    if (request === null) return;
     const address = wallet.address;
     setLoading(true);
     setError('');
@@ -73,33 +82,85 @@ export default function EarnPage() {
       await assertConfiguredPublicClientChain(1);
       const sdk = getFxSdk();
       if (!address) {
-        setConfig(await sdk.getFxSaveConfig({}));
+        const result = await Promise.allSettled([sdk.getFxSaveConfig({})]);
+        if (!readGuard.current.isCurrent(request)) return;
+        if (result[0].status === 'fulfilled') {
+          setConfig(result[0].value);
+          setError('');
+        } else {
+          setError(userSafeError(result[0].reason, 'fxSAVE vault details are temporarily unavailable.'));
+        }
         setData(null);
+        setReadWarnings([]);
         return;
       }
-      const [nextConfig, balance, redeemStatus, claimable] = await Promise.all([
+      const [nextConfig, balance, redeemStatus, claimable] = await Promise.allSettled([
         sdk.getFxSaveConfig({}),
         sdk.getFxSaveBalance({ userAddress: address }),
         sdk.getFxSaveRedeemStatus({ userAddress: address }),
         sdk.getFxSaveClaimable({ userAddress: address }),
       ]);
-      setConfig(nextConfig);
-      setData({ walletAddress: address, balance, redeemStatus, claimable });
+      if (!readGuard.current.isCurrent(request)) return;
+      const previous = dataRef.current?.walletAddress?.toLowerCase() === address.toLowerCase() ? dataRef.current : null;
+      const nextConfigValue = nextConfig.status === 'fulfilled' ? nextConfig.value : configRef.current;
+      const nextData: SaveData = {
+        walletAddress: address,
+        balance: balance.status === 'fulfilled' ? balance.value : previous?.balance ?? null,
+        redeemStatus: redeemStatus.status === 'fulfilled' ? redeemStatus.value : previous?.redeemStatus ?? null,
+        claimable: claimable.status === 'fulfilled' ? claimable.value : previous?.claimable ?? null,
+      };
+      setConfig(nextConfigValue);
+      setData(nextData);
+      const warnings = [
+        nextConfig.status === 'rejected' ? (configRef.current ? 'Vault details could not be refreshed; showing the last verified values.' : 'Vault details are temporarily unavailable.') : '',
+        balance.status === 'rejected' && !previous?.balance ? 'fxSAVE balance is unavailable.' : balance.status === 'rejected' ? 'fxSAVE balance refresh failed; showing the last verified value.' : '',
+        redeemStatus.status === 'rejected' && !previous?.redeemStatus ? 'Redemption status is unavailable.' : redeemStatus.status === 'rejected' ? 'Redemption status refresh failed; showing the last verified value.' : '',
+        claimable.status === 'rejected' && !previous?.claimable ? 'Claim availability is unavailable.' : claimable.status === 'rejected' ? 'Claim availability refresh failed; showing the last verified value.' : '',
+      ].filter(Boolean);
+      setReadWarnings(warnings);
+      if (nextData.balance || nextData.redeemStatus || nextData.claimable) setError('');
+      else setError('fxSAVE state is temporarily unavailable. Refresh to try again.');
     } catch (cause) {
+      if (!readGuard.current.isCurrent(request)) return;
       setError(userSafeError(cause, 'fxSAVE state is unavailable. Check the Ethereum connection and try again.'));
     } finally {
-      setLoading(false);
+      readGuard.current.finish(request);
+      if (readGuard.current.isCurrent(request)) setLoading(false);
     }
   }, [wallet.address]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const guard = readGuard.current;
+    guard.invalidate();
+    guard.activate();
+    void load(true);
+    return () => guard.invalidate();
+  }, [load]);
 
-  const walletData = data?.walletAddress === wallet.address ? data : null;
+  const walletData = data?.walletAddress.toLowerCase() === wallet.address?.toLowerCase() ? data : null;
+  const claimable = walletData?.claimable;
+  const cooldownState = claimable ?? walletData?.redeemStatus;
+  useEffect(() => {
+    if (!walletData || !cooldownState || cooldownState.isCooldownComplete || !cooldownState.hasPendingRedeem) return;
+    const delay = cooldownRefreshDelayMs(cooldownState.redeemableAt);
+    if (delay === null) return;
+    const refreshWhenForeground = () => {
+      if (document.visibilityState === 'visible') void load(false);
+    };
+    const timer = window.setTimeout(refreshWhenForeground, delay);
+    window.addEventListener('focus', refreshWhenForeground);
+    document.addEventListener('visibilitychange', refreshWhenForeground);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('focus', refreshWhenForeground);
+      document.removeEventListener('visibilitychange', refreshWhenForeground);
+    };
+  }, [cooldownState, load, walletData]);
 
   const planBuilder = useMemo(() => {
     if (!wallet.address) return null;
     if (mode === 'claim') {
-      if (!walletData?.claimable.isCooldownComplete) return null;
+      if (!claimAvailability(walletData?.claimable).canReview) return null;
       return () => planRedeem({ userAddress: wallet.address! });
     }
     if (mode === 'deposit') {
@@ -115,9 +176,9 @@ export default function EarnPage() {
       });
     }
     const sharesWei = shares.toLowerCase() === 'all'
-      ? walletData?.balance.balanceWei ?? null
+      ? walletData?.balance?.balanceWei ?? null
       : parseAmount(shares, 'fxSAVE');
-    if (!sharesWei) return null;
+    if (!sharesWei || !walletData?.balance || sharesWei > walletData.balance.balanceWei) return null;
     const slippageValue = Number(slippage);
     if (instant && token !== 'fxUSDBasePool' && (!Number.isFinite(slippageValue) || slippageValue <= 0 || slippageValue > MAX_FX_SLIPPAGE_PERCENT)) return null;
     return () => planWithdrawFxSave({
@@ -151,7 +212,7 @@ export default function EarnPage() {
             <Skeleton className="h-11" />
             <Skeleton className="h-64" />
           </LoadingRegion>
-        ) : error ? (
+        ) : error && !walletData ? (
           <EmptyState
             icon={RefreshCw}
             title="fxSAVE state unavailable"
@@ -160,7 +221,12 @@ export default function EarnPage() {
           />
         ) : walletData ? (
           <>
-            <SavingsSummary data={walletData} loading={loading} onRefresh={load} />
+            {(readWarnings.length > 0 || error) && (
+              <div role="status" aria-live="polite" className="rounded-xl border border-[var(--line)] bg-[var(--warn-dim)] px-3 py-2 text-[11px] leading-relaxed text-warn">
+                {readWarnings.length > 0 ? readWarnings.join(' ') : error}
+              </div>
+            )}
+            <SavingsSummary data={walletData} loading={loading} onRefresh={() => load(true)} stale={readWarnings.length > 0 || Boolean(error)} />
 
             <div className="rounded-2xl bg-[var(--surface-2,var(--input))] p-1">
               <Segmented
@@ -208,7 +274,7 @@ export default function EarnPage() {
                     symbol="fxSAVE"
                     value={shares}
                     onChange={setShares}
-                    balance={formatAmount(walletData.balance.balanceWei)}
+                    balance={walletData.balance ? formatAmount(walletData.balance.balanceWei) : undefined}
                     allowAll
                     maxDecimals={18}
                   />
@@ -240,11 +306,11 @@ export default function EarnPage() {
 
             <ActionReview
               planBuilder={planBuilder}
-              disabled={mode === 'claim' && !walletData.claimable.isCooldownComplete}
+              disabled={mode === 'claim' && !claimAvailability(walletData.claimable).canReview}
               label={mode === 'claim' ? 'Review claim' : mode === 'withdraw' ? 'Review withdrawal' : 'Review deposit'}
               operationLabel={mode === 'claim' ? 'Claim fxSAVE redemption' : mode === 'withdraw' ? 'Withdraw fxSAVE shares' : 'Deposit into fxSAVE'}
               onComplete={async () => {
-                await Promise.all([load(), balanceSnapshot.refresh()]);
+                await Promise.all([load(true), balanceSnapshot.refresh()]);
               }}
             />
 
@@ -259,32 +325,37 @@ export default function EarnPage() {
 type SaveConfig = Awaited<ReturnType<ReturnType<typeof getFxSdk>['getFxSaveConfig']>>;
 type SaveData = {
   walletAddress: string;
-  balance: Awaited<ReturnType<ReturnType<typeof getFxSdk>['getFxSaveBalance']>>;
-  redeemStatus: Awaited<ReturnType<ReturnType<typeof getFxSdk>['getFxSaveRedeemStatus']>>;
-  claimable: Awaited<ReturnType<ReturnType<typeof getFxSdk>['getFxSaveClaimable']>>;
+  balance: Awaited<ReturnType<ReturnType<typeof getFxSdk>['getFxSaveBalance']>> | null;
+  redeemStatus: Awaited<ReturnType<ReturnType<typeof getFxSdk>['getFxSaveRedeemStatus']>> | null;
+  claimable: Awaited<ReturnType<ReturnType<typeof getFxSdk>['getFxSaveClaimable']>> | null;
 };
 
-function SavingsSummary({ data, loading, onRefresh }: { data: SaveData; loading: boolean; onRefresh: () => Promise<void> }) {
+function SavingsSummary({ data, loading, onRefresh, stale }: { data: SaveData; loading: boolean; onRefresh: () => Promise<void>; stale: boolean }) {
   const fxUsdPrice = useUsdPrice('fxUSD');
-  const hasAssets = data.balance.assetsWei !== undefined;
-  const hasPending = data.redeemStatus.hasPendingRedeem || data.claimable.hasPendingRedeem;
-  const ready = hasPending && data.claimable.isCooldownComplete;
-  const status = ready ? 'Ready to claim' : hasPending ? 'Pending' : data.balance.balanceWei > 0n ? 'Active' : 'No balance';
+  const hasAssets = data.balance?.assetsWei !== undefined;
+  const claimState = claimAvailability(data.claimable);
+  const pendingShares = data.claimable?.pendingSharesWei ?? data.redeemStatus?.pendingSharesWei ?? 0n;
+  const hasPending = pendingShares > 0n && (data.claimable?.hasPendingRedeem || data.redeemStatus?.hasPendingRedeem || false);
+  const ready = hasPending && claimState.status === 'ready';
+  const status = claimState.status === 'unavailable' && !data.redeemStatus ? 'Unavailable' : ready ? 'Ready to claim' : hasPending ? 'Pending' : data.balance && data.balance.balanceWei > 0n ? 'Active' : data.balance ? 'No balance' : 'Unavailable';
   const statusTone = ready ? 'bg-[var(--success-dim)] text-success' : hasPending ? 'bg-[var(--warn-dim)] text-warn' : 'bg-[var(--mint-dim)] text-mint';
 
   return (
     <Card className={`${styles.summaryCard} p-5`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className={styles.eyebrow}>Your fxSAVE</p>
+          <div className="flex items-center gap-2">
+            <p className={styles.eyebrow}>Your fxSAVE</p>
+            {stale && <span className="rounded-full bg-[var(--warn-dim)] px-2 py-0.5 text-[10px] font-semibold text-warn">Last verified</span>}
+          </div>
           <h2 className="text-display mt-2 break-words text-[30px] font-semibold tabular-nums tracking-[-.03em]">
             {hasAssets
-              ? `${formatDisplayAmount(data.balance.assetsWei)} fxUSD`
-              : `${formatDisplayAmount(data.balance.balanceWei)} fxSAVE`}
+              ? `${formatDisplayAmount(data.balance?.assetsWei)} fxUSD`
+              : data.balance ? `${formatDisplayAmount(data.balance.balanceWei)} fxSAVE` : '—'}
           </h2>
           {hasAssets && (
             <p className="mt-1 text-[12px] text-mut tabular-nums">
-              {formatUsd(usdValueForUnits(data.balance.assetsWei ?? 0n, 18, fxUsdPrice))} · {formatDisplayAmount(data.balance.balanceWei)} fxSAVE shares
+              {formatUsd(usdValueForUnits(data.balance?.assetsWei ?? 0n, 18, fxUsdPrice))} · {formatDisplayAmount(data.balance?.balanceWei)} fxSAVE shares
             </p>
           )}
         </div>
@@ -300,8 +371,8 @@ function SavingsSummary({ data, loading, onRefresh }: { data: SaveData; loading:
       </div>
 
       <div className="mt-5 grid grid-cols-2 gap-2">
-        <Metric label="Shares" value={`${formatDisplayAmount(data.balance.balanceWei)} fxSAVE`} />
-        <Metric label="Assets" value={hasAssets ? `${formatDisplayAmount(data.balance.assetsWei)} fxUSD` : 'Unavailable'} />
+        <Metric label="Shares" value={data.balance ? `${formatDisplayAmount(data.balance.balanceWei)} fxSAVE` : 'Unavailable'} />
+        <Metric label="Assets" value={hasAssets ? `${formatDisplayAmount(data.balance?.assetsWei)} fxUSD` : 'Unavailable'} />
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[rgba(255,255,255,.025)] px-3 py-3">
@@ -309,8 +380,8 @@ function SavingsSummary({ data, loading, onRefresh }: { data: SaveData; loading:
           <p className="text-[12px] font-semibold">Pending redemption</p>
           <p className="mt-0.5 truncate text-[11px] text-mut tabular-nums">
             {hasPending
-              ? `${formatDisplayAmount(data.redeemStatus.pendingSharesWei)} fxSAVE${ready ? ' · available now' : formatRedeemableAt(data.claimable.redeemableAt)}`
-              : 'None'}
+              ? `${formatDisplayAmount(pendingShares)} fxSAVE${ready ? ' · available now' : formatRedeemableAt(data.claimable?.redeemableAt ?? data.redeemStatus?.redeemableAt ?? null)}`
+              : data.claimable || data.redeemStatus ? 'None' : 'Unavailable'}
           </p>
         </div>
         <span className={`shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold ${statusTone}`}>{status}</span>
@@ -320,16 +391,10 @@ function SavingsSummary({ data, loading, onRefresh }: { data: SaveData; loading:
 }
 
 function ClaimState({ data }: { data: SaveData }) {
-  const hasPending = data.claimable.hasPendingRedeem || data.redeemStatus.hasPendingRedeem;
-  const ready = hasPending && data.claimable.isCooldownComplete;
-  const title = ready ? 'Ready to claim' : hasPending ? 'Cooldown in progress' : 'No pending redemption';
-  const body = ready
-    ? 'Review the current claim preview, then confirm in your wallet.'
-    : hasPending
-      ? data.claimable.redeemableAt
-        ? `Claim after ${formatTimestamp(data.claimable.redeemableAt)}.`
-        : 'Claim becomes available after the cooldown completes.'
-      : 'Choose a queued withdrawal to start a redemption.';
+  const state = claimAvailability(data.claimable);
+  const ready = state.status === 'ready';
+  const title = ready ? 'Ready to claim' : state.status === 'cooldown' ? 'Cooldown in progress' : state.status === 'empty' ? 'No pending redemption' : 'Claim unavailable';
+  const body = ready ? 'Review the current claim preview, then confirm in your wallet.' : state.message;
 
   return (
     <div className="flex flex-col items-center px-2 py-3 text-center">
@@ -338,7 +403,7 @@ function ClaimState({ data }: { data: SaveData }) {
       </span>
       <h2 className="text-display mt-3 text-[19px] font-semibold">{title}</h2>
       <p className="mt-1.5 max-w-[300px] text-[12px] leading-relaxed text-mut">{body}</p>
-      {data.claimable.previewReceive && (
+      {data.claimable?.previewReceive && (
         <div className="mt-4 grid w-full grid-cols-2 gap-2 text-left">
           <Metric label="fxUSD preview" value={`${formatDisplayAmount(data.claimable.previewReceive.amountYieldOutWei)} fxUSD`} />
           <Metric label="USDC preview" value={`${formatDisplayAmount(data.claimable.previewReceive.amountStableOutWei, 6)} USDC`} />
