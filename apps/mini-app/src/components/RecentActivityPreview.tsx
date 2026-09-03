@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { CheckCircle2, ChevronRight, CircleAlert, Clock3, History, RefreshCw, XCircle, type LucideIcon } from 'lucide-react';
 import type { Address } from 'viem';
@@ -12,38 +12,52 @@ import {
   type RecoveryViewModel,
 } from '@/lib/fx';
 import { haptic } from '@/lib/telegram';
+import { useInvalidateWalletData } from '@/components/WalletDataProvider';
+import { createRecoveryWalletRefresh, createWalletReadScope } from '@/lib/walletDataRefresh';
 import styles from '@/app/AccountWorkspace.module.css';
 
 export default function RecentActivityPreview({ walletAddress }: { walletAddress: Address }) {
-  const [items, setItems] = useState<RecoveryViewModel[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
+  const identity = walletAddress.toLowerCase();
+  const readScope = useRef(createWalletReadScope(walletAddress));
+  readScope.current.select(walletAddress);
+  const invalidateWalletData = useInvalidateWalletData();
+  const refreshWallet = useMemo(() => createRecoveryWalletRefresh(invalidateWalletData), [invalidateWalletData]);
+  const [snapshot, setSnapshot] = useState({ identity: '', items: [] as RecoveryViewModel[], loading: true, error: '' });
+  const current = snapshot.identity === identity;
+  const items = current ? snapshot.items : [];
+  const loading = !current || snapshot.loading;
+  const loadError = current ? snapshot.error : '';
 
   const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError('');
+    const isCurrent = readScope.current.start(walletAddress);
+    if (!isCurrent) return;
+    setSnapshot({ identity, items: [], loading: true, error: '' });
     try {
       const local = readPendingHashJournal().filter((record) => record.walletAddress.toLowerCase() === walletAddress.toLowerCase());
       if (local.length === 0) {
-        setItems([]);
+        setSnapshot({ identity, items: [], loading: false, error: '' });
         return;
       }
       const reconciled = await reconcileWalletJournal({ walletAddress, getClient: getPublicClient });
+      if (!isCurrent()) return;
+      await refreshWallet(reconciled, walletAddress, isCurrent);
+      if (!isCurrent()) return;
       if (reconciled.length === 0) {
-        setItems([]);
-        setLoadError('Saved activity exists on this device, but its chain status could not be reconciled. Retry when RPC access is available.');
+        setSnapshot({ identity, items: [], loading: false, error: 'Saved activity exists on this device, but its chain status could not be reconciled. Retry when RPC access is available.' });
         return;
       }
-      setItems([...reconciled].reverse().slice(0, 3));
+      setSnapshot({ identity, items: [...reconciled].reverse().slice(0, 3), loading: false, error: '' });
     } catch {
-      setItems([]);
-      setLoadError('Saved activity could not be checked against chain receipts. Nothing was treated as complete or failed.');
-    } finally {
-      setLoading(false);
+      if (!isCurrent()) return;
+      setSnapshot({ identity, items: [], loading: false, error: 'Saved activity could not be checked against chain receipts. Nothing was treated as complete or failed.' });
     }
-  }, [walletAddress]);
+  }, [identity, refreshWallet, walletAddress]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const scope = readScope.current;
+    void load();
+    return () => scope.cancel();
+  }, [load]);
 
   return (
     <section className={styles.section} aria-labelledby="recent-activity-title">

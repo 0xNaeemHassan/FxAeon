@@ -298,6 +298,42 @@
 .positionsRoot :global([data-position-key]) { border-radius: 18px; border-color: var(--line); background: var(--surface); }
 .positionsRoot :global([data-position-key][aria-pressed='true']) { border-color: var(--mint); }
 
+.positionManagerGrid {
+  display: grid;
+  min-width: 0;
+  gap: 18px;
+}
+
+.positionsColumn,
+.positionManageColumn { min-width: 0; }
+
+.positionSectionHeader,
+.manageHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.positionSectionHeader { margin-bottom: 12px; }
+.positionSectionHeader h2,
+.manageHeading h2 { margin-top: 3px; font-size: 17px; font-weight: 700; letter-spacing: -.025em; }
+.positionSectionHeader > span { border-radius: 999px; background: var(--mint-dim); padding: 6px 10px; color: var(--mint); font-size: 11px; font-weight: 700; }
+.positionListItem { overflow: hidden; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); }
+.positionListItem :global([data-position-key]) { border: 0; border-radius: 0; background: transparent; }
+.positionListItem :global([data-position-key][aria-pressed='true']) { box-shadow: inset 3px 0 0 var(--mint); }
+.positionQuickActions { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; border-top: 1px solid var(--line); background: var(--line); }
+.positionQuickActions button { display: flex; min-height: 44px; align-items: center; justify-content: center; gap: 6px; background: var(--surface-2); color: var(--mut); font-size: 12px; font-weight: 700; }
+.positionQuickActions button:hover { color: var(--text); }
+.positionQuickActions button:last-child { color: var(--danger); }
+.positionQuickActions svg { width: 14px; height: 14px; }
+.positionManageColumn { display: flex; flex-direction: column; gap: 12px; scroll-margin-top: 16px; }
+.positionActions :global([data-value='close'].segmented-option-active) { background: var(--danger-dim); color: var(--danger); }
+.closeNotice { display: grid; grid-template-columns: 1fr auto; gap: 5px 12px; border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--line)); border-radius: 16px; background: var(--danger-dim); padding: 14px; }
+.closeNotice strong { color: var(--danger); font-size: 13px; }
+.closeNotice span { color: var(--text); font-size: 12px; font-weight: 650; text-align: right; }
+.closeNotice small { grid-column: 1 / -1; color: var(--mut); font-size: 11px; line-height: 1.5; }
+
 .tradeRoot :global(.field-control),
 .tradeRoot :global(.amount-control),
 .tradeRoot :global(.range-control),
@@ -335,7 +371,8 @@
 @media (min-width: 840px) {
   .tradeLayout { grid-template-columns: minmax(0, 1fr) minmax(340px, 0.86fr); align-items: start; }
   .marketColumn :global(.market-chart-panel) { position: sticky; top: 24px; }
-  .positionList { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .positionManagerGrid { grid-template-columns: minmax(0, .92fr) minmax(380px, 1.08fr); align-items: start; gap: 24px; }
+  .positionManageColumn { position: sticky; top: 24px; }
 }
 
 @media (max-width: 640px) {
@@ -366,4 +403,6 @@
   .reviewWrap :global(.astryx-card),
   .reviewWrap :global(.astryx-card-elevated),
   .marketColumn :global(.market-chart-panel) { border-radius: 20px; }
+  .positionActions :global(.segmented-option) { min-height: 44px; padding-inline: 4px; }
+  .positionActions :global(.segmented-option) span { font-size: 12px; }
 }

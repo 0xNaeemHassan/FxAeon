@@ -13,11 +13,25 @@ The release process is intentionally layered. Credential-free checks run on ever
 - `pnpm test:anvil:earn`: exercises real fxSAVE deposits, instant and queued withdrawals, cooldown/claim, and direct base-pool paths with disposable fork funds.
 - `pnpm test:anvil:stress`: runs only the fast randomized snapshot and dummy ordered-route transport campaign against a protected fork.
 - `pnpm test:anvil:all`: runs the real position proof, transport stress, and Earn proof serially against one fork process.
-- `pnpm test:anvil:browser`: builds the local-fork app, opens ETH/BTC long/short positions through the mobile browser's review/confirmation UI, checks the resulting contract state and position surfaces, and captures the populated UI before restoring its snapshot. This is a separate gate from the Node-runner proof.
+- `pnpm test:anvil:browser`: builds the local-fork app, opens ETH/BTC long/short positions through the mobile browser's review/confirmation UI, captures the populated UI, then fully closes all four positions through their direct Close controls and verifies zeroed pool accounting before restoring its snapshot. This is a separate gate from the Node-runner proof.
 - `pnpm test:stress`: runs the credential-free chaos campaign and then the protected dummy-route fork stress. It does not replace the real protocol proof.
 - `pnpm test:e2e`: browser entry without Telegram, official-route and mobile/Telegram viewport navigation, semantic landmarks, 44px controls, no horizontal overflow at 320/360/375/390/412/430px, honest disconnected state, deterministic current-price and market-history validation, and absence of backend traffic.
 - `pnpm build`: browser-only static export with no Node runtime.
 - `pnpm check:bundle`: checks total, JavaScript, gzip, and largest-asset budgets and scans the export for forbidden telemetry and server artifacts.
+
+### Wallet-data regression checks
+
+The public balance layer uses pinned Wagmi `3.7.7` and TanStack Query `5.102.8`; it does not replace wallet selection/signing, transaction simulation, the runner, or official SDK protocol reads. Run its targeted checks without a build, browser, provider credential, or fork:
+
+```powershell
+pnpm --dir apps/mini-app exec tsx --test test/wagmi-wallet-queries.test.ts test/wallet-data-refresh.test.ts test/transaction-progress.test.ts test/recovery.test.ts
+```
+
+`wagmi-wallet-queries.test.ts` exercises the actual read-only configuration, standard native/ERC-20 multicalls, exact large balances, partial token failures, RPC-chain mismatch rejection, canonical Move source addresses, query deduplication, account/session/target-chain isolation, and canceled-read protection. The configuration has no connectors, discovery, persistent Wagmi storage, or automatic reconnect; it reuses the existing RPC clients and needs no new service.
+
+`wallet-data-refresh.test.ts` checks receipt-only invalidation for success/reverts and partially completed routes, including the fallback when `postConfirmRead` did not run. It rejects signature-only and mismatched account/chain/hash/transaction evidence, joins duplicate completion/fallback refreshes, contains cache errors, and groups/deduplicates authoritative recovery receipts. `transaction-progress.test.ts` and `recovery.test.ts` separately protect immediate explorer links, unknown-versus-reverted states, and full recovery verification.
+
+These targeted tests do not prove the final release gates or browser lifecycle behavior. Built-artifact browser checks must still cover account/network switching with reads in flight, one foreground watcher per active chain, 60-second balance fallback, focus/online resume, and available-balance updates after receipt confirmation. Run the full credential-free and protected-fork gates for the final revision before reporting release verification complete.
 
 ## Installed dependency verification
 
@@ -64,13 +78,15 @@ pnpm test:anvil:browser
 
 `FX_FORK_BROWSER_PORT` selects its loopback web server (default `4325`). The gate uses a disposable Anvil account funded with fork-only USDC. A test-side EIP-1193 adapter forwards the application's wallet transaction requests to that local node; it is not shipped as a product signer and cannot connect to the upstream provider. Position-ID discovery is adapted because public indexers cannot observe fork-local blocks. Planning, review, simulation, transaction execution, receipts, ownership, collateral, and debt are not replaced with fixture values.
 
-The expected evidence is `artifacts/anvil/browser-proof.json`, review/confirmation screenshots, and populated documentation captures under `artifacts/anvil/browser/docs/`. A successful manifest must declare browser-driven execution and snapshot restoration. It also proves each approval/action explorer is visible before delivery of its real receipt, each confirmed position appears before index disclosure, and each receipt-verified placeholder survives reload before SDK hydration. Presence of screenshots, a built harness, or a passing Node-runner test alone is not a browser gate pass. Inspect a successful run for the current commit before reporting this gate complete. Wallet-drawer checks on Earn and Move verify access to protocol exposure, not fxSAVE deposits or cross-chain bridge execution; fxSAVE has its own `test:anvil:earn` gate and `artifacts/anvil/earn-proof.json` manifest.
+The expected evidence is `artifacts/anvil/browser-proof.json`, open/close review and confirmation screenshots, the final `positions-all-closed.png`, and populated documentation captures under `artifacts/anvil/browser/docs/`. A successful manifest must declare browser-driven execution and snapshot restoration. It also proves each approval/action explorer is visible before delivery of its real receipt, each confirmed position appears before index disclosure, each receipt-verified placeholder survives reload before SDK hydration, every direct Close route returns the selected output asset, and the closed position disappears only after on-chain accounting reaches zero. Presence of screenshots, a built harness, or a passing Node-runner test alone is not a browser gate pass. Inspect a successful run for the current commit before reporting this gate complete. Wallet-drawer checks on Earn and Move verify access to protocol exposure, not fxSAVE deposits or cross-chain bridge execution; fxSAVE has its own `test:anvil:earn` gate and `artifacts/anvil/earn-proof.json` manifest.
 
 See [post-transaction UX](post-transaction-ux.md) for the pinned Jumper, LI.FI, Uniswap, and Aave code study behind these acceptance checks.
 
-The browser gate also compares the USDC amount displayed in the token picker with the fork's `balanceOf` before each trade, then checks the available amount again after confirmation. Every resulting position card must expose its USD-equity label. External display-price availability is not fabricated to make the test pass; precise valuation math and partial-price failure cases have separate deterministic unit/browser tests.
+The browser gate also compares the USDC amount displayed in the token picker with the fork's `balanceOf` before each trade and close, then checks the available amount again after confirmation. Before trading, it switches between two disposable local accounts, disconnects, and reconnects without reloading to prove that the shared wallet-data cache cannot show another session's balances. The alternate account is read-only; only the funded local account can submit a trade. Every resulting position card must expose its USD-equity label. External display-price availability is not fabricated to make the test pass; precise valuation math and partial-price failure cases have separate deterministic unit/browser tests.
 
 ## Capability acceptance
+
+`wallet-recovery-trigger.test.ts` covers cross-tab journal-key routing, bounded terminal-history selection, same-tick and overlapping trigger coalescing, receipt-only refresh, and idempotent terminal storage writes. `wallet-session.spec.ts` exercises injected-wallet account changes and disconnects through the rendered drawer and Activity view.
 
 | Flow | Required cases |
 | --- | --- |

@@ -81,8 +81,9 @@ async function runProof(captureStage: string) {
   await mkdir(artifactRoot, { recursive: true });
   assert.equal(await rpc('eth_chainId'), '0x1');
   assert.match(await rpc<string>('web3_clientVersion'), /anvil/i, 'never use a real RPC for this test');
-  const wallet = (await rpc<Address[]>('eth_accounts'))[0];
-  assert.ok(wallet, 'Anvil must expose an unlocked disposable account');
+  const [wallet, alternateWallet] = await rpc<Address[]>('eth_accounts');
+  assert.ok(wallet && alternateWallet, 'Anvil must expose disposable accounts for session isolation checks');
+  let selectedWallet: Address | null = wallet;
   const forkBlock = await client.getBlockNumber();
   if (process.env.ANVIL_FORK_BLOCK) assert.equal(forkBlock, BigInt(process.env.ANVIL_FORK_BLOCK), 'fork must use the requested pinned block');
   const snapshot = await rpc<string>('evm_snapshot');
@@ -103,6 +104,10 @@ async function runProof(captureStage: string) {
   const positions: Array<(typeof scenarios)[number] & {
     positionId: number; rawCollateral: string; rawDebt: string;
     transactions: Array<{ kind: string; hash: Hex; blockNumber: string }>;
+  }> = [];
+  const closedPositions: Array<{
+    market: 'ETH' | 'BTC'; side: 'long' | 'short'; positionId: number;
+    transactions: Array<{ hash: Hex; blockNumber: string }>;
   }> = [];
   const browserErrors: string[] = [];
   const routeErrors: string[] = [];
@@ -159,17 +164,26 @@ async function runProof(captureStage: string) {
       locale: 'en-US', timezoneId: 'UTC', reducedMotion: 'reduce' });
     await context.tracing.start({ screenshots: true, snapshots: true });
     // A real EIP-1193 adapter installed only by the test. It cannot send to an
-    // upstream endpoint, cannot sign messages, and cannot choose another wallet.
+    // upstream endpoint or sign messages. A second local account is available
+    // for read-only session tests; only the funded account may send a trade.
+    await context.exposeBinding('__fxForkSelectWallet', async (source, address: Address | null) => {
+      assert.equal(source.frame, source.page.mainFrame());
+      assert.equal(new URL(source.frame.url()).origin, baseUrl);
+      assert.ok(address === null || address === wallet || address === alternateWallet);
+      selectedWallet = address;
+    });
     await context.exposeBinding('__fxForkWallet', async (source, request: { method: string; params?: unknown[] }) => {
       assert.equal(source.frame, source.page.mainFrame(), 'fork wallet is available only to the app main frame');
       assert.equal(new URL(source.frame.url()).origin, baseUrl, 'fork wallet rejects external origins');
-      if (request.method === 'eth_accounts' || request.method === 'eth_requestAccounts') return [wallet];
+      if (request.method === 'eth_accounts') return selectedWallet ? [selectedWallet] : [];
+      if (request.method === 'eth_requestAccounts') { selectedWallet ??= wallet; return [selectedWallet]; }
       if (request.method === 'eth_chainId') return '0x1';
       if (request.method === 'wallet_switchEthereumChain') {
         assert.equal((request.params?.[0] as { chainId: string })?.chainId, '0x1');
         return null;
       }
       assert.equal(request.method, 'eth_sendTransaction', 'unexpected wallet method');
+      assert.equal(selectedWallet, wallet, 'read-only alternate session must never send');
       const tx = request.params?.[0] as { from: string; to: string };
       assert.equal(tx.from.toLowerCase(), wallet.toLowerCase());
       const hash = await rpc<Hex>('eth_sendTransaction', [tx]);
@@ -185,10 +199,18 @@ async function runProof(captureStage: string) {
     // Raw browser JavaScript avoids TSX's function-name helpers leaking into
     // Playwright's serialized init script (the page does not load TSX).
     await context.addInitScript({ content: `
+      const walletListeners = new Map();
       window.ethereum = {
         request(request) { return window.__fxForkWallet(request); },
-        on() {},
-        removeListener() {}
+        on(event, listener) {
+          if (!walletListeners.has(event)) walletListeners.set(event, new Set());
+          walletListeners.get(event).add(listener);
+        },
+        removeListener(event, listener) { walletListeners.get(event)?.delete(listener); }
+      };
+      window.__fxForkChangeAccount = async (address) => {
+        await window.__fxForkSelectWallet(address);
+        walletListeners.get('accountsChanged')?.forEach(listener => listener(address ? [address] : []));
       };
     ` });
     await context.route('**/telegram-web-app.js', guardRoute(route => route.fulfill({ contentType: 'text/javascript', body: '/* browser entry */' })));
@@ -231,14 +253,17 @@ async function runProof(captureStage: string) {
       const url = new URL(route.request().url());
       const group = scenarios.find(s => url.pathname === `/api/public/project_cmgz5g9sl0065xhp2aqd9c6sv/subgraphs/${s.graphSubgraph}/gn`);
       const body = route.request().postDataJSON() as { query?: string };
-      const expectedQuery = `query MyQuery { positions(first: 1000 where: {owner: "${wallet.toLowerCase()}"} orderBy: blockNumber orderDirection: desc) { id } }`;
+      const queryWallet = [wallet, alternateWallet].find(account => {
+        const expectedQuery = `query MyQuery { positions(first: 1000 where: {owner: "${account.toLowerCase()}"} orderBy: blockNumber orderDirection: desc) { id } }`;
+        return body.query?.replace(/\s/g, '') === expectedQuery.replace(/\s/g, '');
+      });
       assert.ok(group && !url.search && !url.hash && route.request().method() === 'POST'
-        && Object.keys(body).length === 1 && body.query?.replace(/\s/g, '') === expectedQuery.replace(/\s/g, ''), 'unexpected indexer operation');
+        && Object.keys(body).length === 1 && queryWallet, 'unexpected indexer operation');
       const ids: Array<{ id: string }> = [];
       for (const candidate of candidates.filter(c => c.pool === group.pool)) {
         try {
           const owner = await client.readContract({ address: candidate.pool, abi: poolAbi, functionName: 'ownerOf', args: [BigInt(candidate.positionId)] });
-          if (owner.toLowerCase() === wallet.toLowerCase()) {
+          if (owner.toLowerCase() === queryWallet.toLowerCase()) {
             const key = `${candidate.market}:${candidate.side}:${candidate.positionId}`;
             const reads = delayedDiscoveries.get(key) ?? 0;
             delayedDiscoveries.set(key, reads + 1);
@@ -261,13 +286,46 @@ async function runProof(captureStage: string) {
     const activePage = page;
     const runBrowserProof = async () => {
       const page = activePage;
+    // A real connected session must never display another account's balance.
+    // Exercise this without reloading, so the shared query cache stays mounted.
+    await page.goto(`${baseUrl}/trade`);
+    await expect(page.getByRole('button', { name: 'Open wallet profile' })).toBeVisible();
+    await page.getByRole('button', { name: 'Input asset', exact: true }).click();
+    const sessionUsdcOption = page.getByRole('option', { name: /^USDC(?: selected)?$/ });
+    const fundedUsdc = await client.readContract({ address: usdc, abi: tokenAbi, functionName: 'balanceOf', args: [wallet] });
+    const alternateUsdc = await client.readContract({ address: usdc, abi: tokenAbi, functionName: 'balanceOf', args: [alternateWallet] });
+    assert.notEqual(fundedUsdc, alternateUsdc, 'session balances must be distinguishable');
+    const availableLabel = (value: bigint) => `Available: ${formatExactDecimal(formatUnits(value, 6), 4)} USDC`;
+    await expect(sessionUsdcOption).toContainText(availableLabel(fundedUsdc));
+    await page.evaluate(`window.__fxForkChangeAccount(${JSON.stringify(alternateWallet)})`);
+    await expect(page.getByRole('button', { name: 'Open wallet profile' }))
+      .toContainText(`${alternateWallet.slice(0, 5)}…${alternateWallet.slice(-4)}`);
+    // ProtocolPositionSession intentionally remounts account-owned UI. The
+    // outer Wagmi cache remains mounted; reopen the new session's picker.
+    await page.getByRole('button', { name: 'Input asset', exact: true }).click();
+    assert.ok(!(await sessionUsdcOption.innerText()).includes(availableLabel(fundedUsdc)),
+      'the previous balance must disappear as soon as the new wallet identity is shown');
+    await expect(sessionUsdcOption).toContainText(availableLabel(alternateUsdc));
+    await expect(sessionUsdcOption).not.toContainText(availableLabel(fundedUsdc));
+    await page.evaluate('window.__fxForkChangeAccount(null)');
+    await expect(page.getByRole('button', { name: 'Open wallet profile' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Input asset', exact: true }).click();
+    assert.ok(!/Available: [\d,]/.test(await sessionUsdcOption.innerText()), 'disconnected picker must clear owned quantities');
+    await expect(sessionUsdcOption).not.toContainText(/Available: [\d,]/);
+    await page.evaluate(`window.__fxForkChangeAccount(${JSON.stringify(wallet)})`);
+    await expect(page.getByRole('button', { name: 'Open wallet profile' }))
+      .toContainText(`${wallet.slice(0, 5)}…${wallet.slice(-4)}`);
+    await page.getByRole('button', { name: 'Input asset', exact: true }).click();
+    await expect(sessionUsdcOption).toContainText(availableLabel(fundedUsdc));
+    assert.equal(submitted.length, 0, 'session checks must never request a signature');
+    console.log('Live balance account-switch and disconnect isolation verified');
     for (const scenario of scenarios) {
       console.log(`Browser preparing ${scenario.market} ${scenario.side}`);
       const positionId = Number(await client.readContract({ address: scenario.pool, abi: poolAbi, functionName: 'getNextPositionId' }));
       const key = `${scenario.market}:${scenario.side}:${positionId}`;
       candidates.push({ ...scenario, positionId });
       blockedDiscoveries.add(key);
-      const signedBefore = submitted.length;
+      const signedBefore: number = submitted.length;
       await page.goto(`${baseUrl}/trade`);
       await expect(page.getByRole('button', { name: 'Open wallet profile' })).toBeVisible({ timeout: 30_000 });
       await page.getByRole('radiogroup', { name: 'Market', exact: true }).getByRole('radio', { name: scenario.market, exact: true }).click();
@@ -418,6 +476,85 @@ async function runProof(captureStage: string) {
         FX_SCREENSHOT_OUTPUT_DIR: captureStage, FX_SCREENSHOT_CAPTURE_REPORT: resolve(captureStage, 'capture-report.json'),
       },
     }), 'documentation capture');
+
+    // Exercise the complete close lifecycle through the same browser UI for
+    // every supported market and side. This is intentionally after the docs
+    // capture so the proof includes both the four-position portfolio and the
+    // honestly empty state produced by four real full closes.
+    for (const position of positions) {
+      const key = `${position.market}:${position.side}:${position.positionId}`;
+      const signedBefore: number = submitted.length;
+      const usdcBeforeClose = await client.readContract({ address: usdc, abi: tokenAbi, functionName: 'balanceOf', args: [wallet] });
+      await page.goto(`${baseUrl}/positions`);
+      await expect(page.locator(`[data-position-key="${key}"]`).first()).toBeVisible();
+      const quickActions = page.getByLabel(`Actions for ${position.market} ${position.side} position ${position.positionId}`, { exact: true });
+      await quickActions.getByRole('button', { name: 'Close', exact: true }).click();
+      await expect(page.getByRole('radiogroup', { name: 'Position action', exact: true }).getByRole('radio', { name: 'Close', exact: true })).toBeChecked();
+      await expect(page.getByRole('heading', { name: 'Close the full position', exact: true })).toBeVisible();
+      await expect(page.getByText('All remaining collateral and debt', { exact: true })).toBeVisible();
+      await page.getByRole('button', { name: 'Receive asset', exact: true }).click();
+      const closeUsdcOption = page.getByRole('option', { name: /^USDC(?: selected)?$/ });
+      await expect(closeUsdcOption).toContainText(availableLabel(usdcBeforeClose));
+      await closeUsdcOption.click();
+      await page.locator('summary').filter({ hasText: /^Advanced/ }).click();
+      await page.getByLabel('Slippage tolerance percentage').fill('1');
+      await page.getByRole('button', { name: 'Review close', exact: true }).click();
+      await expect(page.getByRole('heading', { name: `Close ${position.market} ${position.side} position`, exact: true })).toBeVisible({ timeout: 180_000 });
+      await expect(page.getByText('Close position', { exact: true })).toBeVisible();
+      assert.equal(submitted.length, signedBefore, 'close review must never request a signature');
+      await page.screenshot({ path: resolve(artifactRoot, `${position.market}-${position.side}-close-review.png`), fullPage: true });
+      await page.getByRole('checkbox').check();
+      const confirmClose: Locator = page.getByRole('button', { name: /^Confirm (?:in wallet|\d+ transactions)$/ });
+      const closeCountMatch = (await confirmClose.innerText()).match(/Confirm (\d+) transactions/);
+      const closeTransactionCount = closeCountMatch ? Number(closeCountMatch[1]) : 1;
+      assert.ok(closeTransactionCount >= 1 && closeTransactionCount <= 10, 'close review must expose the ordered transaction count');
+      await confirmClose.click();
+      for (let transactionIndex = 0; transactionIndex < closeTransactionCount; transactionIndex += 1) {
+        await expect.poll(() => proofValue(submitted.length), { timeout: 180_000 }).toBe(signedBefore + transactionIndex + 1);
+        const tx = submitted[signedBefore + transactionIndex];
+        const hold = heldReceipts.get(tx.hash.toLowerCase());
+        assert.ok(hold, 'each close broadcast must be held before browser receipt completion');
+        await expect.poll(() => proofValue(hold.intercepted)).toBeGreaterThan(0);
+        const explorer = page.locator('section[aria-label="Submitted transactions"]')
+          .locator(`a[href="https://etherscan.io/tx/${tx.hash}"]`);
+        await expect(explorer).toBeVisible();
+        await expect(explorer).toHaveAccessibleName(new RegExp(`^(?:Approval|Action) ${transactionIndex + 1}: Submitted\\.`));
+        submittedExplorerHashes.add(tx.hash.toLowerCase());
+        assert.equal(submitted.length, signedBefore + transactionIndex + 1, 'close steps must remain receipt-ordered');
+        hold.release();
+      }
+      const confirmedHeading = page.getByRole('heading', { name: 'Confirmed', exact: true });
+      const closedPositionRow = page.locator(`[data-position-key="${key}"]`);
+      // The final position can remove the manager (and therefore its success
+      // sheet) as soon as the authoritative empty-position read lands. Accept
+      // either presentation, while the receipt and zero-accounting assertions
+      // below remain mandatory in both cases.
+      await expect.poll(async () => (
+        (await confirmedHeading.isVisible().catch(() => false)) || await closedPositionRow.count() === 0
+      ), { timeout: 180_000 }).toBe(true);
+      if (await confirmedHeading.isVisible().catch(() => false)) {
+        await expect(page.getByRole('button', { name: 'Done', exact: true })).toBeVisible();
+      }
+      await expect(closedPositionRow).toHaveCount(0);
+      const [remainingCollateral, remainingDebt] = await client.readContract({ address: position.pool, abi: poolAbi, functionName: 'getPosition', args: [BigInt(position.positionId)] });
+      assert.equal(remainingCollateral, 0n, 'full close must clear collateral accounting');
+      assert.equal(remainingDebt, 0n, 'full close must clear debt accounting');
+      const usdcAfterClose = await client.readContract({ address: usdc, abi: tokenAbi, functionName: 'balanceOf', args: [wallet] });
+      assert.ok(usdcAfterClose > usdcBeforeClose, 'the selected close output must return USDC to the wallet');
+      const closeTransactions = [];
+      for (const tx of submitted.slice(signedBefore)) {
+        const receipt = await client.getTransactionReceipt({ hash: tx.hash });
+        assert.equal(receipt.status, 'success');
+        closeTransactions.push({ hash: tx.hash, blockNumber: receipt.blockNumber.toString() });
+      }
+      assert.equal(closeTransactions.length, closeTransactionCount, 'actual close signatures must match the reviewed route');
+      closedPositions.push({ market: position.market, side: position.side, positionId: position.positionId, transactions: closeTransactions });
+      await page.screenshot({ path: resolve(artifactRoot, `${position.market}-${position.side}-closed.png`), fullPage: true });
+      console.log(`Browser closed and removed ${position.market} ${position.side} #${position.positionId}`);
+    }
+    await expect(page.getByText('No open positions', { exact: true })).toBeVisible();
+    await page.screenshot({ path: resolve(artifactRoot, 'positions-all-closed.png'), fullPage: true });
+    assert.equal(closedPositions.length, scenarios.length, 'every supported position must close through the browser');
     completed = true;
     await context.tracing.stop({ path: resolve(artifactRoot, 'trace.zip') });
     };
@@ -462,10 +599,12 @@ async function runProof(captureStage: string) {
       coexistingInSingleSnapshot: true, ownershipVerified: true, nonzeroCollateralAndDebtVerified: true,
       delayedIndexDiscoveryVerified: true, snapshotRevertedAfterProof: true,
       availableTokenBalancesVerified: true, postConfirmationBalanceRefreshVerified: true,
+      walletAccountSwitchIsolationVerified: true, disconnectedBalanceClearVerified: true,
       submittedExplorerBeforeConfirmation: true, confirmedPositionBeforeIndexer: true, restoredConfirmedPosition: true,
-      positionUsdLabelsVerified: true,
-      readSurfaces: ['trade', 'positions', 'portfolio', 'earn', 'move'] }, positions }, null, 2));
-  console.log('Real browser four-position acceptance proof complete; fork snapshot reverted.');
+      positionUsdLabelsVerified: true, directCloseActionVerified: true,
+      everySupportedPositionClosed: true, closeOutputBalanceRefreshVerified: true,
+      readSurfaces: ['trade', 'positions', 'portfolio', 'earn', 'move'] }, positions, closedPositions }, null, 2));
+  console.log('Real browser four-position open-and-close acceptance proof complete; fork snapshot reverted.');
 }
 
 async function main() {

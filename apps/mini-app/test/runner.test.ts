@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { encodeFunctionData, parseAbi, type Address, type Hex } from "viem";
 import { clearPendingHashJournalForTests, readPendingHashJournal, readPendingHashes } from "../src/lib/fx/journal";
-import { runTransactionRoute, simulatePlannedRoute } from "../src/lib/fx/runner";
+import { runTransactionRoute, simulatePlannedRoute, waitForReceipt } from "../src/lib/fx/runner";
 import type { FxPublicClient, PlannedRoute, PlannedTransaction, TransactionPolicy } from "../src/lib/fx/types";
 
 const WALLET = "0x1111111111111111111111111111111111111111" as Address;
@@ -18,6 +18,24 @@ const TEST_POLICY: TransactionPolicy = {
   allowedDestinations: [DESTINATION],
   allowedSelectors: { [DESTINATION.toLowerCase()]: ["0x12345678"] },
 };
+
+test("receipt waiting always makes the immediate RPC probe at a zero deadline", async () => {
+  let calls = 0;
+  const receipt = await waitForReceipt({
+    client: {
+      getTransactionReceipt: async ({ hash }) => {
+        calls += 1;
+        return { transactionHash: hash, status: "success", blockNumber: 1n } as never;
+      },
+    },
+    hash: HASH_1,
+    timeoutMs: 0,
+    pollMs: 0,
+  });
+
+  assert.equal(calls, 1);
+  assert.equal(receipt.transactionHash, HASH_1);
+});
 
 function route(count = 2): PlannedRoute {
   return {

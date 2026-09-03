@@ -63,7 +63,7 @@ jobs:
           ANVIL_FORK_URL: ${{ secrets.NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL }}
       - name: Install browser acceptance runtime
         run: pnpm --dir apps/mini-app exec playwright install --with-deps chromium
-      - name: Open positions through the mobile browser UI
+      - name: Open and close all positions through the mobile browser UI
         run: pnpm test:anvil:browser
         env:
           ANVIL_FORK_URL: ${{ secrets.NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL }}

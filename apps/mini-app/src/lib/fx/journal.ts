@@ -24,6 +24,15 @@ let memoryRecords: PendingHashRecord[] = [];
 // previous write already retained in memory.
 let storageUnavailable = false;
 
+/** Limit cross-tab recovery work to this journal's own storage mutations. */
+export function isRecoveryJournalStorageKey(key: string | null): boolean {
+  return typeof key === "string" && (
+    (LEGACY_STORAGE_KEYS as readonly string[]).includes(key)
+    || key.startsWith(LEGACY_RECORD_KEY_PREFIX)
+    || key.startsWith(RECORD_EVENT_KEY_PREFIX)
+  );
+}
+
 function validBridgeContext(value: unknown, sourceChainId: FxChainId): value is PendingBridgeContext {
   if (!value || typeof value !== "object") return false;
   const bridge = value as Partial<PendingBridgeContext>;
@@ -249,6 +258,10 @@ export function updatePendingHash(hash: Hex, status: "confirmed" | "failed"): vo
   const changed: PendingHashRecord[] = [];
   for (const record of records) {
     if (record.hash.toLowerCase() !== hash.toLowerCase()) continue;
+    // Re-verifying the same terminal truth must not emit another cross-tab
+    // storage event. A changed terminal status (for example after a reorg)
+    // still appends a newer event below.
+    if (record.status === status) continue;
     changed.push({ ...record, status, updatedAt: Math.max(Date.now(), (record.updatedAt ?? record.submittedAt) + 1) });
   }
   if (changed.length) writeRecords(changed);
@@ -272,7 +285,9 @@ export function updatePendingHashRecord(
       && candidate.walletAddress.toLowerCase() === record.walletAddress.toLowerCase()
       && candidate.hash.toLowerCase() === record.hash.toLowerCase()
       && candidate.to.toLowerCase() === record.to.toLowerCase();
-    if (sameRecord) changed.push({ ...candidate, status, updatedAt: Math.max(Date.now(), (candidate.updatedAt ?? candidate.submittedAt) + 1) });
+    if (sameRecord && candidate.status !== status) {
+      changed.push({ ...candidate, status, updatedAt: Math.max(Date.now(), (candidate.updatedAt ?? candidate.submittedAt) + 1) });
+    }
   }
   if (changed.length) writeRecords(changed);
 }

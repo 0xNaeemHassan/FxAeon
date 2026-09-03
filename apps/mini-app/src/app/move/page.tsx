@@ -1,11 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ArrowLeftRight } from 'lucide-react';
 import { AppShell, Card } from '@/components/ui';
 import { ActionReview } from '@/components/ActionReview';
 import WalletConnectCTA from '@/components/WalletConnectCTA';
-import { AmountField, TokenSelect, type TokenBalanceMap } from '@/components/ProtocolForm';
+import { AmountField, TokenSelect } from '@/components/ProtocolForm';
+import { useMoveBalances } from '@/components/WalletDataProvider';
 import {
   advancedBridgePolicy,
   assertAddress,
@@ -27,7 +28,6 @@ import { usePrivyWallet } from '@/lib/wallet';
 import { parseAmount } from '@/app/trade/fxUi';
 import { ChainIcon } from '@/components/TokenIcon';
 import styles from '@/components/FlowWorkspace.module.css';
-import { createMoveBalanceReadGuard, readCanonicalMoveBalances } from '@/lib/moveBalances';
 
 const ERC20_BALANCE_ABI = [{
   type: 'function',
@@ -40,7 +40,6 @@ const ERC20_BALANCE_ABI = [{
 type Direction = 'ethereum_to_base' | 'base_to_ethereum';
 type BridgeAsset = 'fxUSD' | 'fxSAVE';
 type BridgeMode = 'canonical' | 'advanced';
-type MoveBalanceStatus = 'idle' | 'loading' | 'ready' | 'unavailable';
 
 export default function MovePage() {
   const wallet = usePrivyWallet();
@@ -53,10 +52,6 @@ export default function MovePage() {
   const [approvalToken, setApprovalToken] = useState('');
   const [recipientInput, setRecipientInput] = useState('');
   const [customRecipient, setCustomRecipient] = useState(false);
-  const [canonicalBalances, setCanonicalBalances] = useState<TokenBalanceMap>({});
-  const [moveBalanceStatus, setMoveBalanceStatus] = useState<MoveBalanceStatus>('idle');
-  const balanceContextKeyRef = useRef('');
-  const balanceGuardRef = useRef(createMoveBalanceReadGuard());
   const reviewedBridgeRef = useRef<{
     sourceChainId: FxChainId;
     destinationChainId: FxChainId;
@@ -77,62 +72,10 @@ export default function MovePage() {
   const advanced = mode === 'advanced';
   const recipientValue = customRecipient ? recipientInput.trim() : wallet.address || '';
 
-  const balanceContextKey = `${wallet.address?.toLowerCase() ?? ''}:${sourceChainId}:${advanced ? 'advanced' : 'canonical'}`;
-
-  const refreshCanonicalBalances = useCallback(async (force = false) => {
-    if (!wallet.address || advanced) {
-      setCanonicalBalances({});
-      setMoveBalanceStatus('idle');
-      return;
-    }
-    balanceGuardRef.current.activate();
-    const requestId = balanceGuardRef.current.begin(force);
-    if (requestId === null) return;
-    balanceContextKeyRef.current = balanceContextKey;
-    setCanonicalBalances({});
-    setMoveBalanceStatus('loading');
-    try {
-      const result = await readCanonicalMoveBalances({ walletAddress: wallet.address, sourceChainId });
-      if (!balanceGuardRef.current.isCurrent(requestId)) return;
-      setCanonicalBalances(result.balances);
-      setMoveBalanceStatus(result.status);
-    } catch {
-      if (!balanceGuardRef.current.isCurrent(requestId)) return;
-      setCanonicalBalances({
-        fxUSD: { status: 'unavailable', reason: 'Source balances are temporarily unavailable.' },
-        fxSAVE: { status: 'unavailable', reason: 'Source balances are temporarily unavailable.' },
-      });
-      setMoveBalanceStatus('unavailable');
-    } finally {
-      balanceGuardRef.current.finish(requestId);
-    }
-  }, [advanced, balanceContextKey, sourceChainId, wallet.address]);
-
-  useEffect(() => {
-    const guard = balanceGuardRef.current;
-    void refreshCanonicalBalances();
-    return () => { guard.invalidate(); };
-  }, [refreshCanonicalBalances]);
-
-  useEffect(() => {
-    if (!wallet.address || advanced) return;
-    const refreshWhenVisible = () => {
-      if (document.visibilityState === 'visible') void refreshCanonicalBalances();
-    };
-    const timer = window.setInterval(refreshWhenVisible, 30_000);
-    document.addEventListener('visibilitychange', refreshWhenVisible);
-    window.addEventListener('focus', refreshWhenVisible);
-    return () => {
-      window.clearInterval(timer);
-      document.removeEventListener('visibilitychange', refreshWhenVisible);
-      window.removeEventListener('focus', refreshWhenVisible);
-    };
-  }, [advanced, refreshCanonicalBalances, wallet.address]);
-
-  const balancesAreCurrent = balanceContextKeyRef.current === balanceContextKey;
-  const moveBalances = !advanced && balancesAreCurrent && moveBalanceStatus !== 'idle' ? canonicalBalances : undefined;
+  const balanceQuery = useMoveBalances({ address: wallet.address, chainId: sourceChainId, enabled: !advanced });
+  const moveBalances = !advanced ? balanceQuery.data?.balances : undefined;
   const moveBalanceStatusForPicker = !advanced && wallet.address
-    ? (balancesAreCurrent && moveBalanceStatus !== 'idle' ? moveBalanceStatus : 'loading')
+    ? (balanceQuery.status === 'idle' ? 'loading' : balanceQuery.status)
     : undefined;
   const moveBalanceState = moveBalances?.[token]
     ?? (moveBalanceStatusForPicker ? { status: moveBalanceStatusForPicker } : undefined);
@@ -396,7 +339,7 @@ export default function MovePage() {
             try {
               await rereadBridgeState();
             } finally {
-              await refreshCanonicalBalances(true);
+              await balanceQuery.refresh();
             }
           }}
         />

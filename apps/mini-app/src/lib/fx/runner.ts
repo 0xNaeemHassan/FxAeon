@@ -111,12 +111,18 @@ export async function waitForReceipt(params: {
   const timeoutMs = params.timeoutMs ?? 180_000;
   const pollMs = params.pollMs ?? 2_000;
   const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
+  // A tiny timeout can elapse between computing the deadline and entering the
+  // loop when the event loop is busy. Always make the immediate receipt probe;
+  // the timeout bounds retries, not whether the already-mined result is read.
+  let firstAttempt = true;
+  while (firstAttempt || Date.now() < deadline) {
+    firstAttempt = false;
     try {
       return await params.client.getTransactionReceipt({ hash: params.hash });
     } catch {
       // viem throws TransactionReceiptNotFoundError until the tx is mined.
     }
+    if (Date.now() >= deadline) break;
     await sleep(Math.min(pollMs, Math.max(1, deadline - Date.now())));
   }
   throw new Error(`transaction receipt timeout: ${params.hash}`);

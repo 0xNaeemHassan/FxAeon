@@ -9,11 +9,10 @@
  * depend on a FxAeon server being alive, and the portfolio page can show the
  * correct connect/read-only state from the client SDK.
  */
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  AlertTriangle,
   ArrowLeftRight,
   ArrowRight,
   ArrowUpRight,
@@ -21,10 +20,9 @@ import {
   Globe2,
   Layers3,
   PiggyBank,
-  RefreshCw,
 } from 'lucide-react';
-import { hasTelegramLaunchSignal, isTMA, waitForTelegramWebApp } from '@/lib/telegram';
-import { ButtonLink, FullScreenSpinner } from '@/components/ui';
+import { hasTelegramLaunchSignal, isTMA } from '@/lib/telegram';
+import { ButtonLink } from '@/components/ui';
 import { useT } from '@/lib/i18n';
 import FxLogo from '@/components/FxLogo';
 import TokenIcon, { ChainIcon } from '@/components/TokenIcon';
@@ -42,58 +40,22 @@ const CAPABILITIES = [
 export default function HomePage() {
   const t = useT();
   const router = useRouter();
-  const [browser, setBrowser] = useState(false);
-  const [telegramUnavailable, setTelegramUnavailable] = useState(false);
 
   useEffect(() => {
     document.title = 'FxAeon · f(x) Protocol';
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    if (isTMA()) {
+    // Launch parameters are enough to enter the app immediately. The bridge
+    // enhances theme, viewport, native navigation, and seamless auth when it
+    // is present, but a delayed/blocked optional script must never trap the
+    // user on a fatal screen or prevent web wallet/Telegram login fallback.
+    if (isTMA() || hasTelegramLaunchSignal()) {
       router.replace('/portfolio');
-      return () => { cancelled = true; };
     }
-    if (!hasTelegramLaunchSignal()) {
-      setBrowser(true);
-      return () => { cancelled = true; };
-    }
-
-    void waitForTelegramWebApp(8_000).then((webApp) => {
-      if (cancelled) return;
-      if (webApp && isTMA()) router.replace('/portfolio');
-      else setTelegramUnavailable(true);
-    });
-    return () => { cancelled = true; };
   }, [router]);
 
-  if (telegramUnavailable) {
-    return (
-      <main className="app-shell mx-auto flex min-h-[100dvh] w-full max-w-[430px] flex-col items-center justify-center px-6 py-10 text-center">
-        <span className="flex h-16 w-16 items-center justify-center rounded-lg bg-[rgba(255,194,102,.10)] text-warn">
-          <AlertTriangle className="h-7 w-7" aria-hidden="true" />
-        </span>
-        <h1 className="text-display mt-5 text-[24px] font-semibold">Telegram bridge unavailable</h1>
-        <p className="mt-2 max-w-[330px] text-[14px] leading-relaxed text-mut">
-          FxAeon could not connect to Telegram’s Mini App environment. Check your connection, update Telegram if needed, then reload.
-        </p>
-        <button type="button" onClick={() => window.location.reload()} className="button button-primary glass-press mt-5 flex min-h-12 w-full max-w-[280px] items-center justify-center gap-2 rounded-lg px-4 py-3 text-[14px] font-semibold">
-          <RefreshCw className="h-4 w-4" aria-hidden="true" /> Reload FxAeon
-        </button>
-        <button
-          type="button"
-          onClick={() => window.location.assign('/portfolio')}
-          className="button button-ghost glass-press mt-2 flex min-h-12 w-full max-w-[280px] items-center justify-center gap-2 rounded-lg px-4 py-3 text-[14px] font-semibold"
-        >
-          <Globe2 className="h-4 w-4" aria-hidden="true" /> Continue in browser
-        </button>
-      </main>
-    );
-  }
-
-  if (browser) {
-    return (
+  return (
       <main className={styles.welcome}>
         <div className={styles.frame}>
           <header className={styles.nav}>
@@ -150,8 +112,5 @@ export default function HomePage() {
           </footer>
         </div>
       </main>
-    );
-  }
-
-  return <FullScreenSpinner asMain />;
+  );
 }

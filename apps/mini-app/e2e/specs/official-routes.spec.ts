@@ -84,22 +84,26 @@ test.describe("Telegram bridge availability", () => {
     assertNoBackendRequests(requests);
   });
 
-  test("a Telegram launch fails visibly when its bridge never arrives", async ({ page, requests }) => {
+  test("a Telegram launch remains usable when its bridge never arrives", async ({ page, requests }) => {
     await page.route("**/telegram-web-app.js", (route) => route.abort("failed"));
     await page.goto("/#tgWebAppData=query_id%3Dtest&tgWebAppVersion=8.0&tgWebAppPlatform=tdesktop", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { name: /Telegram bridge unavailable/i })).toBeVisible({ timeout: 12_000 });
-    await expect(page.getByRole("button", { name: /Reload FxAeon/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Continue in browser/i })).toBeVisible();
+    await expect(page).toHaveURL(/\/portfolio\/?(?:#.*)?$/, { timeout: 5_000 });
+    await expect(page.getByRole("heading", { name: /portfolio/i })).toBeVisible();
+    await expect(page.getByText("Connect wallet", { exact: true })).toBeVisible();
+    await expect(page.locator("body")).not.toContainText(/Telegram bridge unavailable/i);
     assertNoBackendRequests(requests);
   });
 
-  test("a direct Telegram protocol route also fails visibly when its bridge never arrives", async ({ page, requests }) => {
+  test("a direct Telegram protocol route keeps its browser login fallback", async ({ page, requests }) => {
     await page.route("**/telegram-web-app.js", (route) => route.abort("failed"));
     await page.goto("/portfolio#tgWebAppData=query_id%3Dtest&tgWebAppVersion=8.0&tgWebAppPlatform=tdesktop", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { name: /Telegram bridge unavailable/i })).toBeVisible({ timeout: 12_000 });
+    await expect(page.getByRole("heading", { name: /portfolio/i })).toBeVisible();
     await expect(page.locator("body")).not.toContainText(/Wallet service unavailable/i);
-    await expect(page.getByRole("button", { name: /Reload FxAeon/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Continue in browser/i })).toBeVisible();
+    await expect(page.locator("body")).not.toContainText(/Telegram bridge unavailable/i);
+    await page.getByText("Connect wallet", { exact: true }).click();
+    await expect(page).toHaveURL(/\/login\/?$/);
+    await expect(page.getByRole("button", { name: /connect browser wallet/i })).toBeVisible();
+    await expect(page.locator("body")).not.toContainText(/Telegram bridge unavailable/i);
     assertNoBackendRequests(requests);
   });
 });
@@ -423,7 +427,7 @@ test.describe("official theme control", () => {
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     await expect(appearance.getByRole("radio", { name: /Official light/ })).toHaveAttribute("aria-checked", "true");
     await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("link", { name: "Connect wallet", exact: true })).toHaveCSS("color", "rgb(255, 255, 255)");
+    await expect(page.getByRole("main").getByRole("link", { name: "Connect wallet", exact: true })).toHaveCSS("color", "rgb(255, 255, 255)");
     await page.goto("/more", { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "Switch to dark theme" }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");

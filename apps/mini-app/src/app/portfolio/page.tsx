@@ -18,6 +18,7 @@ import Link from 'next/link';
 import { formatUnits, type Address } from 'viem';
 import { MarketMiniCard } from '@/components/MarketChart';
 import { useUsdPrices } from '@/components/PriceProvider';
+import { useWalletBalances } from '@/components/WalletDataProvider';
 import {
   positionIsStale,
   ProtocolPositionCard,
@@ -32,7 +33,6 @@ import { AddressChip, AppShell, Card, EmptyState, SectionTitle } from '@/compone
 import {
   assertConfiguredPublicClientChain,
   getFxSdk,
-  readWalletBalances,
   type WalletBalancesResult,
   type WalletTokenBalance,
 } from '@/lib/fx';
@@ -42,12 +42,11 @@ import { haptic } from '@/lib/telegram';
 import { usePrivyWallet, useWalletReadyTimeout } from '@/lib/wallet';
 import styles from '@/app/AccountWorkspace.module.css';
 
-const EMPTY_PROTOCOL: ProtocolSnapshot = {
+const EMPTY_FX_SAVE: FxSaveSnapshot = {
   status: 'idle',
   fxSaveShares: null,
   fxSaveAssets: null,
   redeemReady: null,
-  balances: null,
 };
 
 /**
@@ -86,43 +85,50 @@ function PortfolioWallet() {
   const wallet = walletState.selectedWallet;
   const walletTimedOut = useWalletReadyTimeout(ready && walletState.ready);
   const priceSnapshot = useUsdPrices();
-  const [protocol, setProtocol] = useState<ProtocolSnapshot>(EMPTY_PROTOCOL);
-  const [refreshing, setRefreshing] = useState(false);
+  const walletAddress = authenticated && ready && walletState.ready ? wallet?.address : undefined;
+  const identity = walletAddress?.toLowerCase() ?? '';
+  const walletBalances = useWalletBalances({ address: walletAddress, chainId: 1, enabled: Boolean(walletAddress) });
+  const [fxSaveState, setFxSaveState] = useState<{ identity: string; snapshot: FxSaveSnapshot }>({ identity: '', snapshot: EMPTY_FX_SAVE });
+  const fxSaveSnapshot = fxSaveState.identity === identity ? fxSaveState.snapshot : EMPTY_FX_SAVE;
   const requestId = useRef(0);
 
   const loadProtocol = useCallback(async () => {
-    if (!wallet?.address) return;
+    if (!walletAddress) return;
     const activeRequest = ++requestId.current;
-    setProtocol({ ...EMPTY_PROTOCOL, status: 'loading' });
+    setFxSaveState({ identity, snapshot: { ...EMPTY_FX_SAVE, status: 'loading' } });
     try {
       await assertConfiguredPublicClientChain(1);
+      if (requestId.current !== activeRequest) return;
       const sdk = getFxSdk();
-      const [fxSave, redeem, balances] = await Promise.allSettled([
-        sdk.getFxSaveBalance({ userAddress: wallet.address }),
-        sdk.getFxSaveClaimable({ userAddress: wallet.address }),
-        readWalletBalances(wallet.address),
+      const [fxSave, redeem] = await Promise.allSettled([
+        sdk.getFxSaveBalance({ userAddress: walletAddress }),
+        sdk.getFxSaveClaimable({ userAddress: walletAddress }),
       ]);
       if (requestId.current !== activeRequest) return;
 
-      const fulfilled = [fxSave, redeem, balances].filter((result) => result.status === 'fulfilled').length;
-      setProtocol({
-        status: fulfilled === 3 ? 'ready' : fulfilled > 0 ? 'partial' : 'unavailable',
-        fxSaveShares: fxSave.status === 'fulfilled' ? formatProtocolAmount(fxSave.value.balanceWei) : null,
-        fxSaveAssets: fxSave.status === 'fulfilled' && fxSave.value.assetsWei !== undefined
-          ? formatProtocolAmount(fxSave.value.assetsWei)
-          : null,
-        redeemReady: redeem.status === 'fulfilled' ? redeem.value.isCooldownComplete : null,
-        balances: balances.status === 'fulfilled' ? balances.value : null,
+      const fulfilled = [fxSave, redeem].filter((result) => result.status === 'fulfilled').length;
+      setFxSaveState({
+        identity,
+        snapshot: {
+          status: fulfilled === 2 ? 'ready' : fulfilled > 0 ? 'partial' : 'unavailable',
+          fxSaveShares: fxSave.status === 'fulfilled' ? formatProtocolAmount(fxSave.value.balanceWei) : null,
+          fxSaveAssets: fxSave.status === 'fulfilled' && fxSave.value.assetsWei !== undefined
+            ? formatProtocolAmount(fxSave.value.assetsWei)
+            : null,
+          redeemReady: redeem.status === 'fulfilled' ? redeem.value.isCooldownComplete : null,
+        },
       });
     } catch {
-      if (requestId.current === activeRequest) setProtocol({ ...EMPTY_PROTOCOL, status: 'unavailable' });
+      if (requestId.current === activeRequest) {
+        setFxSaveState({ identity, snapshot: { ...EMPTY_FX_SAVE, status: 'unavailable' } });
+      }
     }
-  }, [wallet?.address]);
+  }, [identity, walletAddress]);
 
   useEffect(() => {
-    if (authenticated && wallet?.address && walletState.ready) void loadProtocol();
+    if (walletAddress) void loadProtocol();
     return () => { requestId.current += 1; };
-  }, [authenticated, loadProtocol, wallet?.address, walletState.ready]);
+  }, [loadProtocol, walletAddress]);
 
   if (!ready || !walletState.ready) {
     if (walletTimedOut) {
@@ -142,7 +148,23 @@ function PortfolioWallet() {
     return <DisconnectedPortfolio authenticated={authenticated} />;
   }
 
-  const loading = protocol.status === 'idle' || protocol.status === 'loading';
+  const loading = walletBalances.status === 'idle' || walletBalances.status === 'loading';
+  const fxSaveLoading = fxSaveSnapshot.status === 'idle' || fxSaveSnapshot.status === 'loading';
+  const failedReads = walletBalances.status === 'unavailable'
+    || Boolean(walletBalances.data?.failedTokens.length)
+    || fxSaveSnapshot.status === 'partial'
+    || fxSaveSnapshot.status === 'unavailable';
+  const hasVerifiedReads = walletBalances.data !== null
+    || fxSaveSnapshot.status === 'ready'
+    || fxSaveSnapshot.status === 'partial';
+  const protocol: ProtocolSnapshot = {
+    ...fxSaveSnapshot,
+    balances: walletBalances.data,
+    status: failedReads
+      ? hasVerifiedReads ? 'partial' : 'unavailable'
+      : loading || fxSaveLoading ? 'loading' : 'ready',
+  };
+  const refreshing = walletBalances.isFetching || fxSaveLoading || positionState.refreshing;
   const valuation = walletValuation(protocol.balances, priceSnapshot.prices);
 
   return (
@@ -153,13 +175,13 @@ function PortfolioWallet() {
         protocol={protocol}
         valuation={valuation}
         loading={loading}
+        fxSaveLoading={fxSaveLoading}
         priceStatus={priceSnapshot.status}
         updatedAt={priceSnapshot.updatedAt}
         refreshing={refreshing}
         onRefresh={() => {
           haptic('light');
-          setRefreshing(true);
-          void Promise.all([loadProtocol(), positionState.refresh()]).finally(() => setRefreshing(false));
+          void Promise.allSettled([walletBalances.refresh(), loadProtocol(), positionState.refresh()]);
         }}
         positionValue={positionState.pendingPositions.length > 0
           ? `${positionState.positions.length + positionState.pendingPositions.length} updating`
@@ -195,7 +217,7 @@ function PortfolioWallet() {
           <ProtocolCard
             icon={PiggyBank}
             label="fxSAVE"
-            value={fxSaveLabel(protocol, priceSnapshot.prices, loading)}
+            value={fxSaveLabel(protocol, priceSnapshot.prices, fxSaveLoading)}
             hint={protocol.redeemReady ? 'Withdrawal ready to claim' : 'Save, request, and claim'}
             href="/earn"
             accent={protocol.redeemReady === true}
@@ -256,6 +278,7 @@ function SupportedValueCard({
   protocol,
   valuation,
   loading,
+  fxSaveLoading,
   priceStatus,
   updatedAt,
   refreshing,
@@ -266,6 +289,7 @@ function SupportedValueCard({
   protocol: ProtocolSnapshot;
   valuation: WalletValuation;
   loading: boolean;
+  fxSaveLoading: boolean;
   priceStatus: ReturnType<typeof useUsdPrices>['status'];
   updatedAt: number | null;
   refreshing: boolean;
@@ -312,7 +336,7 @@ function SupportedValueCard({
 
       <div className={`${styles.valueMetrics} portfolio-value-metrics`}>
         <ValueMetric label="Open positions" value={positionValue} />
-        <ValueMetric label="fxSAVE shares" value={protocol.fxSaveShares !== null ? `${protocol.fxSaveShares} fxSAVE` : loading ? '…' : '—'} />
+        <ValueMetric label="fxSAVE shares" value={protocol.fxSaveShares !== null ? `${protocol.fxSaveShares} fxSAVE` : fxSaveLoading ? '…' : '—'} />
         <ValueMetric label="Supported assets" value={supportedAssetValue} />
       </div>
     </Card>
@@ -456,13 +480,14 @@ function PortfolioLoading() {
   );
 }
 
-type ProtocolSnapshot = {
+type FxSaveSnapshot = {
   status: 'idle' | 'loading' | 'ready' | 'partial' | 'unavailable';
   fxSaveShares: string | null;
   fxSaveAssets: string | null;
   redeemReady: boolean | null;
-  balances: WalletBalancesResult | null;
 };
+
+type ProtocolSnapshot = FxSaveSnapshot & { balances: WalletBalancesResult | null };
 
 type WalletValuation = {
   complete: boolean;

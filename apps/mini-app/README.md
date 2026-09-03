@@ -26,12 +26,16 @@ Every `NEXT_PUBLIC_*` value is exposed in the browser bundle and fixed at build 
 
 The app supports exactly Ethereum (chain ID `1`) and Base (chain ID `8453`). Unavailable provider or wallet data is shown as unavailable rather than inferred.
 
+Wagmi and TanStack Query share standard wallet-balance reads across screens and refresh them after verified transaction receipts. They reuse the configured RPC clients and require no additional subscription or API key. Privy/the injected wallet remains the signing authority; official f(x) SDK planning, simulation, and receipt safeguards are unchanged. See [shared wallet data](../../docs/architecture.md#shared-wallet-data) for cache and session boundaries.
+
 ## Launch surfaces
 
 - **Web:** open the deployed origin or `http://localhost:3000`; connect through email, an external EVM wallet, or Telegram authentication.
-- **Telegram:** open the same static build as a Mini App for seamless Telegram authentication, native theme/viewport integration, haptics, and host navigation.
+- **Telegram:** open the same static build as a Mini App for seamless Telegram authentication, native theme/viewport integration, haptics, and host navigation. The official bridge script loads in the document head, but bridge failure is non-blocking: the protocol routes and browser/Telegram login fallbacks remain usable.
 
 Telegram enhances the host experience but is never required to access the protocol interface.
+
+The Positions route uses a compact portfolio list and persistent management ticket. Every verified ETH/BTC long/short row exposes Manage and Close directly; Close is a dedicated full-exit mode with receive-asset selection, a destructive review action, fresh SDK planning, simulation, ordered approvals, receipt tracking, and post-confirmation balance/position refresh.
 
 ## Output and deployment
 

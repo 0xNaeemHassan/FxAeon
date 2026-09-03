@@ -16,7 +16,14 @@ const nextConfig = {
   // server's routes-manifest mid-request (especially during parallel CI/QA).
   distDir: process.env.NODE_ENV === 'development' ? '.next' : 'dist',
   images: { unoptimized: true },
-  webpack: (config, { webpack }) => {
+  webpack: (config, { webpack, isServer }) => {
+    // Wallet/data libraries share a vendor graph. Keep that graph in bounded,
+    // cacheable chunks instead of growing one mobile-WebView download every
+    // time a shared hook is added. The independent release budgets still
+    // check both the largest chunk and the full raw/gzipped JavaScript total.
+    if (!isServer && config.optimization?.splitChunks) {
+      config.optimization.splitChunks.maxSize = 1_900_000;
+    }
     // Privy's optional CAPTCHA screen imports @hcaptcha/loader. The upstream
     // loader bundles a hCaptcha-owned Sentry client and DSN; FxAeon has no
     // telemetry authority, so keep the script/token API but remove that

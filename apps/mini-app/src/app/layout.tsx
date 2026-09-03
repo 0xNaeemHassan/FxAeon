@@ -42,13 +42,12 @@ export default function RootLayout({
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitializer }} />
-        {/* Hydrate the public web app before loading Telegram's optional host
-            bridge. Telegram launch routes already wait a bounded time for the
-            bridge, while ordinary browsers must never be held on the splash
-            screen by a slow or blocked telegram.org request. */}
+        {/* Telegram requires its host bridge in <head> before application
+            scripts. It remains a progressive enhancement: a failed request
+            never blocks FxAeon's browser-compatible routes or login. */}
         <Script
           src="https://telegram.org/js/telegram-web-app.js"
-          strategy="afterInteractive"
+          strategy="beforeInteractive"
         />
       </head>
       <body className={inter.className}>

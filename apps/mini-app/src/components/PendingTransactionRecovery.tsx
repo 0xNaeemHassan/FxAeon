@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckCircle2,
   CircleAlert,
@@ -14,6 +14,8 @@ import { Button, Card, SectionTitle } from '@/components/ui';
 import { BridgeTracker } from '@/components/BridgeTracker';
 import { getPublicClient, reconcileWalletJournal, type RecoveryViewModel } from '@/lib/fx';
 import { haptic } from '@/lib/telegram';
+import { useInvalidateWalletData } from '@/components/WalletDataProvider';
+import { createRecoveryWalletRefresh, createWalletReadScope } from '@/lib/walletDataRefresh';
 
 type Props = {
   walletAddress: Address;
@@ -147,26 +149,41 @@ function formatBridgeAmount(value: string): string {
  * open the original flow and plan it again from fresh chain state.
  */
 export default function PendingTransactionRecovery({ walletAddress, embedded = false }: Props) {
-  const [views, setViews] = useState<RecoveryViewModel[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const identity = walletAddress.toLowerCase();
+  const readScope = useRef(createWalletReadScope(walletAddress));
+  readScope.current.select(walletAddress);
+  const invalidateWalletData = useInvalidateWalletData();
+  const refreshWallet = useMemo(() => createRecoveryWalletRefresh(invalidateWalletData), [invalidateWalletData]);
+  const [snapshot, setSnapshot] = useState({ identity: '', views: [] as RecoveryViewModel[], loading: true, refreshing: false, error: '' });
+  const current = snapshot.identity === identity;
+  const views = useMemo(() => current ? snapshot.views : [], [current, snapshot.views]);
+  const loading = !current || snapshot.loading;
+  const refreshing = !current || snapshot.refreshing;
+  const error = current ? snapshot.error : '';
 
   const refresh = useCallback(async () => {
-    setRefreshing(true);
+    const isCurrent = readScope.current.start(walletAddress);
+    if (!isCurrent) return;
+    setSnapshot((previous) => ({ identity, views: previous.identity === identity ? previous.views : [], loading: previous.identity !== identity || previous.loading, refreshing: true, error: '' }));
     try {
       const next = await reconcileWalletJournal({
         walletAddress,
         getClient: getPublicClient,
       });
-      setViews([...next].reverse());
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (!isCurrent()) return;
+      await refreshWallet(next, walletAddress, isCurrent);
+      if (!isCurrent()) return;
+      setSnapshot({ identity, views: [...next].reverse(), loading: false, refreshing: false, error: '' });
+    } catch {
+      if (!isCurrent()) return;
+      setSnapshot((previous) => ({ ...previous, loading: false, refreshing: false, error: 'Saved transactions could not be checked. Nothing was marked complete or failed.' }));
     }
-  }, [walletAddress]);
+  }, [identity, refreshWallet, walletAddress]);
 
   useEffect(() => {
+    const scope = readScope.current;
     void refresh();
+    return () => scope.cancel();
   }, [refresh]);
   const autoBridgeIds = useMemo(() => new Set(
     views
@@ -196,6 +213,7 @@ export default function PendingTransactionRecovery({ walletAddress, embedded = f
       </SectionTitle>}
       {embedded && <h2 id="transaction-recovery-title" className="sr-only">Activity</h2>}
       <Card className="p-3.5">
+        {error && <p role="status" className="mb-3 text-[11px] text-warn">{error}</p>}
         {loading ? (
           <div role="status" className="flex items-center gap-2 px-1 py-3 text-[11px] text-mut">
             <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-mint border-t-transparent" aria-hidden="true" />

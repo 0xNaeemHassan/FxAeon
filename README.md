@@ -96,12 +96,13 @@ Populated views show positions opened through FxAeon's review and confirmation f
 
 | Capability | What FxAeon provides |
 | --- | --- |
-| Positions | Read ETH/BTC long and short positions; open, increase, reduce, close, and adjust leverage |
+| Positions | Read ETH/BTC long and short positions; open, increase, reduce, close, and adjust leverage from a responsive master-detail workspace with a direct Close action on every position |
 | Borrow | Deposit collateral and mint fxUSD; repay debt and withdraw collateral |
 | fxSAVE | Read balances/configuration, deposit assets, queue or execute redemptions, and claim completed withdrawals |
 | Bridge | Quote and build Ethereum ↔ Base LayerZero routes with source-receipt and destination-GUID verification |
 | Live USD context | Timestamp- and confidence-validated current asset prices across forms, pickers, Portfolio, Earn, positions, and the wallet profile, plus validated ETH/BTC market history for charts; display-only and never an execution input |
 | Wallet profile | Privy embedded wallets or browser-injected EVM wallets, supported-asset balances, live USD totals, and dedicated activity—without a custody server |
+| Shared wallet data | Wagmi and TanStack Query keep balances consistent across Portfolio, token pickers, and Move, with account-scoped caching and receipt-backed refreshes |
 | Recovery | Reload-safe pending transaction and bridge journals in a dedicated Activity view, always revalidated against chain data |
 | Interface | Mobile-first controls, searchable token pickers with available quantities and their USD worth, a real leverage slider, and one-tap official light/dark theming |
 
@@ -223,14 +224,14 @@ pnpm test:anvil   # real ETH/BTC long/short positions on a protected mainnet for
 pnpm test:anvil:earn # real fxSAVE deposits, withdrawal paths, cooldown and claim
 pnpm test:anvil:stress # fast dummy-route transport stress on the fork
 pnpm test:anvil:all    # position, stress and Earn proofs serially in one node
-pnpm test:anvil:browser # open all four positions through the mobile browser UI
+pnpm test:anvil:browser # open and fully close all four positions through the mobile browser UI
 pnpm test:stress  # credential-free chaos plus protected dummy-route fork stress
 pnpm test:e2e     # browser and Telegram-sized static-artifact coverage
 ```
 
 Anvil uses disposable local accounts and snapshots. The default proof funds an unlocked account with fork-only USDC impersonation, opens coexisting ETH/BTC long and short positions through the official SDK, verifies ownership and nonzero pool state, reverts the snapshot, and emits `artifacts/anvil/protocol-proof.json`. Its upstream provider URL is supplied only to the Anvil parent process and is never committed, printed, forwarded to the test child, or written to the proof artifact.
 
-The manual **Protected Anvil mainnet fork** workflow runs four gates: the Node four-position proof, the fxSAVE Earn lifecycle proof, 64 snapshot/revert plus 64 dummy ordered-route stress iterations, and real position opening through the mobile browser UI. The browser gate checks review-before-signing, immediate approval/action explorer links, receipt-verified positions before indexing, reload recovery, and shared position views across Trade, Positions, Portfolio, Earn, and Move. It also captures the populated interface before restoring the snapshot.
+The manual **Protected Anvil mainnet fork** workflow runs four gates: the Node four-position proof, the fxSAVE Earn lifecycle proof, 64 snapshot/revert plus 64 dummy ordered-route stress iterations, and real position opening plus full closing through the mobile browser UI. The browser gate checks review-before-signing, immediate approval/action explorer links, receipt-verified positions before indexing, reload recovery, direct close actions, receive-token balances, zeroed pool accounting after every close, and shared position views across Trade, Positions, Portfolio, Earn, and Move. It captures the populated interface, proves the honestly empty state after closing all four positions, then restores the snapshot.
 
 The protected workflow uses the Ethereum Alchemy URL stored in the GitHub environment. A dispatch input or protected `ANVIL_FORK_BLOCK` repository variable can pin the release block. The badge follows the latest completed manual run on `main`: all four gates must pass for this workflow revision to be green. An older green run without the Earn or enhanced browser checks does not prove those paths. See [testing and proof artifacts](docs/testing.md) and [screenshot provenance](docs/position-screenshot-fixture.md).
 

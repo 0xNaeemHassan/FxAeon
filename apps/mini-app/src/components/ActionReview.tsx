@@ -28,6 +28,8 @@ import {
   type TransactionStepResult,
 } from '@/lib/fx';
 import { usePrivyWallet } from '@/lib/wallet';
+import { useInvalidateWalletData } from '@/components/WalletDataProvider';
+import { createRouteWalletRefresh } from '@/lib/walletDataRefresh';
 import { getWebApp, haptic } from '@/lib/telegram';
 import { Button, Card } from '@/components/ui';
 import { userSafeError } from '@/lib/errors';
@@ -46,6 +48,8 @@ export interface ActionReviewProps {
   /** Runs after verified receipts and the required following-block boundary. */
   onComplete?: (result: TransactionExecutionResult, confirmedRoute: PlannedRoute) => void | Promise<void>;
   operationLabel?: string;
+  /** Uses an explicit destructive treatment for irreversible full exits. */
+  destructive?: boolean;
 }
 
 type Stage = 'input' | 'review' | 'executing' | 'result';
@@ -358,8 +362,10 @@ export function ActionReview({
   disabled = false,
   onComplete,
   operationLabel,
+  destructive = false,
 }: ActionReviewProps) {
   const wallet = usePrivyWallet();
+  const invalidateWalletData = useInvalidateWalletData();
   const [stage, setStage] = useState<Stage>('input');
   const [routes, setRoutes] = useState<PlannedRoute[]>([]);
   const [selectedRoute, setSelectedRoute] = useState(0);
@@ -534,6 +540,8 @@ export function ActionReview({
     executionStepsRef.current = [];
     setExecutionRoute(route);
     setRefreshing(false);
+    // Scope refreshes to the captured review, never the currently selected wallet.
+    const refreshWallet = createRouteWalletRefresh(invalidateWalletData);
     try {
       const execution = await runTransactionRoute({
         route,
@@ -569,16 +577,22 @@ export function ActionReview({
           // inside that boundary prevents stale reads from being presented as
           // the result of a completed financial action.
           postConfirmRead: async (confirmedRoute, execution) => {
-            if (!onComplete) return;
             setRefreshing(true);
             try {
-              await onComplete(execution, confirmedRoute);
+              await Promise.all([
+                refreshWallet(confirmedRoute, execution),
+                onComplete?.(execution, confirmedRoute),
+              ]);
             } finally {
               setRefreshing(false);
             }
           },
         },
       });
+      // A following-block timeout can skip postConfirmRead despite inclusion.
+      // Mark wallet data stale for gas/approvals/reverts without moving the
+      // protocol onComplete callback outside its authoritative read boundary.
+      await refreshWallet(route, execution);
       setResult(execution);
       setStage('result');
       const uncertain = execution.steps.some((step) => ['unknown', 'unverified'].includes(transactionStepProgress(step).state));
@@ -589,14 +603,16 @@ export function ActionReview({
       if (submittedSteps.some(hasTransactionHash)) {
         // A UI/observer exception cannot erase a broadcast hash or reopen a
         // signing action. The existing journal remains the recovery authority.
-        setResult({
+        const interrupted: TransactionExecutionResult = {
           status: submittedSteps.some((step) => step.status === 'confirmed') ? 'partial' : 'failed',
           operation: route.operation,
           chainId: route.chainId,
           walletAddress: route.walletAddress,
           steps: submittedSteps.map((step) => step.status === 'submitted' ? { ...step, status: 'failed', error: message } : step),
           error: message,
-        });
+        };
+        await refreshWallet(route, interrupted);
+        setResult(interrupted);
         setStage('result');
       } else {
         setError(message);
@@ -613,7 +629,7 @@ export function ActionReview({
       setRefreshing(false);
       setLoading(false);
     }
-  }, [loading, onComplete, reviewAcknowledged, reviewTitle, route, stage, status, stepResults, wallet]);
+  }, [invalidateWalletData, loading, onComplete, reviewAcknowledged, reviewTitle, route, stage, status, stepResults, wallet]);
 
   const routeSummaries = useMemo(() => routes.map((candidate) => {
     const routeType = candidate.details?.routeType ?? 'Route';
@@ -626,7 +642,7 @@ export function ActionReview({
     return (
       <div className="flex flex-col gap-2.5">
         {error && <InlineError message={error} />}
-        <Button ref={triggerRef} className={styles.primaryAction} disabled={!planBuilder || disabled || !wallet.ready} loading={loading} onClick={() => void review()}>
+        <Button ref={triggerRef} variant={destructive ? 'danger' : 'primary'} className={styles.primaryAction} disabled={!planBuilder || disabled || !wallet.ready} loading={loading} onClick={() => void review()}>
           <ShieldCheck aria-hidden="true" className="h-4 w-4" /> {label}
         </Button>
         {loading && <StatusNotice {...progress} />}
@@ -815,7 +831,7 @@ export function ActionReview({
             />
             <span>I have reviewed the amounts and transaction steps above.</span>
           </label>
-          <Button disabled={loading || status === 'failed' || !reviewAcknowledged} loading={loading} className={`${styles.primaryAction} mt-3`} onClick={() => void execute()}>
+          <Button variant={destructive ? 'danger' : 'primary'} disabled={loading || status === 'failed' || !reviewAcknowledged} loading={loading} className={`${styles.primaryAction} mt-3`} onClick={() => void execute()}>
             <ShieldCheck aria-hidden="true" className="h-4 w-4" /> {stepCount === 1 ? 'Confirm in wallet' : `Confirm ${stepCount} transactions`}
           </Button>
         </>
