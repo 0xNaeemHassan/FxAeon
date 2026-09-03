@@ -8,7 +8,7 @@ export interface BrowserWalletShimOptions {
 
 export function browserWalletInitScript(_opts: BrowserWalletShimOptions = {}): (o: BrowserWalletShimOptions) => void {
   return (o: BrowserWalletShimOptions) => {
-    const address = o.address ?? '0x930f0000000000000000000000000000000098b9';
+    let address = o.address ?? '0x930f0000000000000000000000000000000098b9';
     let connected = o.initiallyConnected ?? false;
     let chainId = o.chainId ?? '0x1';
     const listeners = new Map<string, Set<(...args: unknown[]) => void>>();
@@ -35,6 +35,19 @@ export function browserWalletInitScript(_opts: BrowserWalletShimOptions = {}): (
       removeListener(event: string, listener: (...args: unknown[]) => void) { listeners.get(event)?.delete(listener); },
     };
     (window as unknown as { ethereum: unknown }).ethereum = provider;
-    (window as unknown as { __wallet: unknown }).__wallet = { provider, requests };
+    (window as unknown as { __wallet: unknown }).__wallet = {
+      provider,
+      requests,
+      /** Test-only controls exercise real accountsChanged lifecycle handling. */
+      setAccounts(accounts: string[]) {
+        if (accounts.length > 0) {
+          address = accounts[0];
+          connected = true;
+        } else {
+          connected = false;
+        }
+        emit('accountsChanged', connected ? [address] : []);
+      },
+    };
   };
 }

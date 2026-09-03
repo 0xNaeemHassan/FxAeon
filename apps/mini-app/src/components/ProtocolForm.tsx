@@ -5,15 +5,14 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNod
 import { ChevronDown, Info, Search } from 'lucide-react';
 import TokenIcon from '@/components/TokenIcon';
 import { useUsdPrices } from '@/components/PriceProvider';
+import { useWalletBalances } from '@/components/WalletDataProvider';
 import { haptic } from '@/lib/telegram';
 import { calculateFractionDecimal, compareExactDecimals, decimalInputError, formatExactDecimal, positiveDecimal } from '@/lib/amount';
-import { readWalletBalances } from '@/lib/fx';
 import { formatUsdCents } from '@/lib/positionValuation';
 import { formatUsd, formatUsdPrice, priceKeyForSymbol, usdValueForDecimal, type UsdPriceMap } from '@/lib/prices';
 import styles from '@/components/trade-surfaces.module.css';
 import {
   balanceMapForResult,
-  createWalletBalanceReader,
   tokenBalanceFor,
   usdCentsForTokenBalance,
   type TokenBalanceMap,
@@ -31,89 +30,35 @@ export type WalletTokenBalanceSnapshot = {
 };
 
 const EMPTY_TOKEN_BALANCES: TokenBalanceMap = {};
-const WALLET_BALANCE_REFRESH_MS = 20_000;
-const walletBalanceReader = createWalletBalanceReader(readWalletBalances);
 
 /**
- * Shared, short-lived wallet balance read for protocol forms. Reads are
- * deduplicated by address and deliberately only use the Ethereum reader that
- * backs the existing FX token registry; other target chains stay honest as
- * unavailable rather than displaying a misleading zero. `identityChainId`
- * can invalidate the view on a wallet network change while retaining a
- * different target chain for read-only previews.
+ * Compatibility view over the shared, session-keyed wallet query. The
+ * provider owns account/network invalidation and refresh deduplication;
+ * forms still choose an explicit target chain for read-only previews.
+ * Unsupported target chains remain unavailable rather than showing zero.
  */
-export function useWalletTokenBalances(walletAddress?: string, chainId?: number, identityChainId = chainId): WalletTokenBalanceSnapshot {
-  const [snapshot, setSnapshot] = useState<WalletTokenBalanceSnapshot & { identity: string }>({ status: 'idle', balances: EMPTY_TOKEN_BALANCES, identity: 'none', refresh: async () => {} });
-  const requestRef = useRef(0);
+export function useWalletTokenBalances(walletAddress?: string, chainId?: number, _identityChainId = chainId): WalletTokenBalanceSnapshot {
   const address = walletAddress?.trim();
-  const identity = `${address?.toLowerCase() ?? 'none'}:${identityChainId ?? 'none'}`;
+  const query = useWalletBalances({ address, chainId: chainId ?? 0, enabled: Boolean(address) && chainId === 1 });
+  const refreshBalances = query.refresh;
+  const refresh = useCallback(async () => {
+    if (address && chainId === 1) await refreshBalances();
+  }, [address, chainId, refreshBalances]);
+  const balances = useMemo(() => query.data ? balanceMapForResult(query.data) : EMPTY_TOKEN_BALANCES, [query.data]);
 
-  const refresh = useCallback(async (force = true) => {
-    if (!address || chainId !== 1) return;
-    if (!force && walletBalanceReader.isPending(address)) return;
-    const requestId = ++requestRef.current;
-    setSnapshot({ status: 'loading', balances: EMPTY_TOKEN_BALANCES, identity, refresh });
-    try {
-      const result = await walletBalanceReader.read(address, force);
-      if (requestRef.current !== requestId) return;
-      setSnapshot({ status: 'ready', balances: balanceMapForResult(result), identity, refresh });
-    } catch {
-      if (requestRef.current !== requestId) return;
-      setSnapshot({ status: 'unavailable', balances: EMPTY_TOKEN_BALANCES, reason: 'Available balances are temporarily unavailable.', identity, refresh });
-    }
-  }, [address, chainId, identity]);
-
-  const initialSnapshot = useMemo<WalletTokenBalanceSnapshot & { identity: string }>(() => {
-    if (!address) return { status: 'idle', balances: EMPTY_TOKEN_BALANCES, identity, refresh };
-    if (chainId !== 1) return {
-      status: 'unavailable',
-      balances: EMPTY_TOKEN_BALANCES,
-      reason: 'Switch to Ethereum to view available balances.',
-      identity,
-      refresh,
-    };
-    return { status: 'loading', balances: EMPTY_TOKEN_BALANCES, identity, refresh };
-  }, [address, chainId, identity, refresh]);
-
-  useEffect(() => {
-    if (!address) {
-      requestRef.current += 1;
-      setSnapshot(initialSnapshot);
-      return;
-    }
-    if (chainId !== 1) {
-      requestRef.current += 1;
-      setSnapshot(initialSnapshot);
-      return;
-    }
-
-    let active = true;
-    const requestId = ++requestRef.current;
-    setSnapshot(initialSnapshot);
-    void walletBalanceReader.read(address).then((result) => {
-      if (!active || requestRef.current !== requestId) return;
-      setSnapshot({ status: 'ready', balances: balanceMapForResult(result), identity, refresh });
-    }).catch(() => {
-      if (!active || requestRef.current !== requestId) return;
-      setSnapshot({ status: 'unavailable', balances: EMPTY_TOKEN_BALANCES, reason: 'Available balances are temporarily unavailable.', identity, refresh });
-    });
-
-    const refreshIfVisible = () => {
-      if (document.visibilityState === 'visible') void refresh(false);
-    };
-    const interval = window.setInterval(refreshIfVisible, WALLET_BALANCE_REFRESH_MS);
-    window.addEventListener('focus', refreshIfVisible);
-    document.addEventListener('visibilitychange', refreshIfVisible);
-    return () => {
-      active = false;
-      requestRef.current += 1;
-      window.clearInterval(interval);
-      window.removeEventListener('focus', refreshIfVisible);
-      document.removeEventListener('visibilitychange', refreshIfVisible);
-    };
-  }, [address, chainId, identity, identityChainId, initialSnapshot, refresh]);
-
-  return snapshot.identity === identity ? snapshot : initialSnapshot;
+  if (!address) return { status: 'idle', balances: EMPTY_TOKEN_BALANCES, refresh };
+  if (chainId !== 1) return {
+    status: 'unavailable',
+    balances: EMPTY_TOKEN_BALANCES,
+    reason: 'Switch to Ethereum to view available balances.',
+    refresh,
+  };
+  return {
+    status: query.status,
+    balances,
+    reason: query.status === 'unavailable' ? 'Available balances are temporarily unavailable.' : undefined,
+    refresh,
+  };
 }
 
 export function Segmented<T extends string>({

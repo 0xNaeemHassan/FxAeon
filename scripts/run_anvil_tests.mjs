@@ -159,6 +159,7 @@ function validateProtocolManifest() {
     throw new Error("protocol proof manifest contains a forbidden credential field");
   }
   const positions = Array.isArray(manifest?.positions) ? manifest.positions : [];
+  const closedPositions = Array.isArray(manifest?.closedPositions) ? manifest.closedPositions : [];
   const scenarios = new Set(positions.map((position) => `${position?.market}:${position?.side}`));
   const expectedScenarios = ["ETH:long", "ETH:short", "BTC:long", "BTC:short"];
   const positionEvidenceValid = positions.length === 4 && positions.every((position) => (
@@ -174,6 +175,21 @@ function validateProtocolManifest() {
       && BigInt(transaction?.blockNumber ?? "0") > 0n
     ))
   ));
+  const closedEvidenceValid = suite !== "browser" || (
+    closedPositions.length === 4
+    && closedPositions.every((position) => (
+      ["ETH", "BTC"].includes(position?.market)
+      && ["long", "short"].includes(position?.side)
+      && Number.isSafeInteger(position?.positionId)
+      && position.positionId > 0
+      && Array.isArray(position?.transactions)
+      && position.transactions.length > 0
+      && position.transactions.every((transaction) => (
+        /^0x[0-9a-f]{64}$/i.test(transaction?.hash ?? "")
+        && BigInt(transaction?.blockNumber ?? "0") > 0n
+      ))
+    ))
+  );
   if (
     manifest?.proof !== "fxaeon-real-fx-position-fork"
     || manifest?.chainId !== 1
@@ -186,12 +202,16 @@ function validateProtocolManifest() {
     || (suite === "browser" && manifest?.assertions?.confirmedPositionBeforeIndexer !== true)
     || (suite === "browser" && manifest?.assertions?.restoredConfirmedPosition !== true)
     || (suite === "browser" && manifest?.assertions?.browserDriven !== true)
+    || (suite === "browser" && manifest?.assertions?.directCloseActionVerified !== true)
+    || (suite === "browser" && manifest?.assertions?.everySupportedPositionClosed !== true)
+    || (suite === "browser" && manifest?.assertions?.closeOutputBalanceRefreshVerified !== true)
     || expectedScenarios.some((scenario) => !scenarios.has(scenario))
     || !positionEvidenceValid
+    || !closedEvidenceValid
   ) {
     throw new Error("protocol proof manifest is incomplete or failed its release-evidence schema");
   }
-  process.stdout.write(`Verified redacted four-position protocol proof manifest at ${relative(root, manifestPath)}\n`);
+  process.stdout.write(`Verified redacted four-position ${suite === "browser" ? "open-and-close browser" : "protocol"} proof manifest at ${relative(root, manifestPath)}\n`);
 }
 
 function validateEarnManifest() {
