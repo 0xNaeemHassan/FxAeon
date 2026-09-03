@@ -31,6 +31,7 @@ import { usePrivyWallet } from '@/lib/wallet';
 import { getWebApp, haptic } from '@/lib/telegram';
 import { Button, Card } from '@/components/ui';
 import { userSafeError } from '@/lib/errors';
+import { confirmedUpdateCopy, hasTransactionHash, transactionExplorerUrl, transactionStepKind, transactionStepProgress } from '@/lib/transactionProgress';
 import { BridgeTracker } from '@/components/BridgeTracker';
 import { rawQuoteReviewFacts, routeFinancialReviewFacts, type ReviewFact } from '@/lib/fx/reviewFormatting';
 import styles from './FlowWorkspace.module.css';
@@ -42,7 +43,8 @@ export interface ActionReviewProps {
   planBuilder: ActionPlanBuilder | null;
   label?: string;
   disabled?: boolean;
-  onComplete?: (result: TransactionExecutionResult) => void | Promise<void>;
+  /** Runs after verified receipts and the required following-block boundary. */
+  onComplete?: (result: TransactionExecutionResult, confirmedRoute: PlannedRoute) => void | Promise<void>;
   operationLabel?: string;
 }
 
@@ -200,10 +202,12 @@ function stepProgress(step: TransactionStepResult | undefined): {
   className: string;
   icon: ReactNode;
 } {
-  if (step?.status === 'confirmed') return { label: 'Confirmed', className: 'text-success', icon: <CheckCircle2 className="h-3.5 w-3.5" /> };
-  if (step?.status === 'failed') return { label: 'Stopped', className: 'text-danger', icon: <XCircle className="h-3.5 w-3.5" /> };
-  if (step?.status === 'submitted') return { label: 'Submitted', className: 'text-mint', icon: <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> };
-  return { label: 'Ready', className: 'text-mut', icon: <Circle className="h-3.5 w-3.5" /> };
+  const { state, label } = transactionStepProgress(step);
+  if (state === 'confirmed') return { label, className: 'text-success', icon: <CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5" /> };
+  if (state === 'unknown' || state === 'unverified') return { label, className: 'text-warn', icon: <Clock3 aria-hidden="true" className="h-3.5 w-3.5" /> };
+  if (state === 'stopped' || state === 'reverted') return { label, className: 'text-danger', icon: <XCircle aria-hidden="true" className="h-3.5 w-3.5" /> };
+  if (state === 'submitted') return { label, className: 'text-mint', icon: <LoaderCircle aria-hidden="true" className="h-3.5 w-3.5 animate-spin" /> };
+  return { label, className: 'text-mut', icon: <Circle aria-hidden="true" className="h-3.5 w-3.5" /> };
 }
 
 function looksLikeWalletRejection(value: string | undefined): boolean {
@@ -216,8 +220,9 @@ function resultPresentation(result: TransactionExecutionResult, bridge: boolean)
   tone: 'success' | 'warning' | 'danger';
   icon: typeof CheckCircle2;
 } {
-  const submitted = result.steps.filter((step) => Boolean(step.hash));
+  const submitted = result.steps.filter(hasTransactionHash);
   const confirmationUnknown = submitted.some((step) => step.hash && !step.receipt);
+  const verificationIncomplete = submitted.some((step) => transactionStepProgress(step).state === 'unverified');
   const reverted = result.steps.some((step) => step.receipt?.status === 'reverted');
 
   if (result.status === 'confirmed') {
@@ -235,20 +240,28 @@ function resultPresentation(result: TransactionExecutionResult, bridge: boolean)
           icon: CheckCircle2,
         };
   }
+  if (confirmationUnknown) {
+    return {
+      title: 'Confirmation unknown',
+      body: 'A transaction was submitted, but its receipt could not be verified. Check the explorer or Activity from the wallet profile. Do not submit this action again.',
+      tone: 'warning',
+      icon: Clock3,
+    };
+  }
+  if (verificationIncomplete) {
+    return {
+      title: 'Verification incomplete',
+      body: 'A receipt exists, but the submitted transaction could not be fully verified. Check the explorer or Activity. Do not submit this action again.',
+      tone: 'warning',
+      icon: AlertTriangle,
+    };
+  }
   if (result.status === 'partial') {
     return {
       title: 'Partially completed',
       body: 'At least one earlier transaction confirmed before the route stopped. Do not repeat the full action; review each step below.',
       tone: 'warning',
       icon: AlertTriangle,
-    };
-  }
-  if (confirmationUnknown) {
-    return {
-      title: 'Confirmation unknown',
-      body: 'A transaction hash exists, but its receipt could not be verified. Do not submit this action again. Open Activity from the wallet profile.',
-      tone: 'warning',
-      icon: Clock3,
     };
   }
   if (reverted) {
@@ -281,8 +294,19 @@ function statusPresentation(params: {
   detail: string;
   stepResults: readonly TransactionStepResult[];
   stepCount: number;
+  operation?: PlannedRoute['operation'];
+  refreshing?: boolean;
 }): { label: string; body: string; className: string; icon: ReactNode } {
-  const confirmed = params.stepResults.filter((step) => step?.status === 'confirmed').length;
+  const confirmed = params.stepResults.filter((step) => transactionStepProgress(step).state === 'confirmed').length;
+  const uncertain = params.stepResults.find((step) => ['unknown', 'unverified'].includes(transactionStepProgress(step).state));
+  if (uncertain) {
+    return {
+      label: transactionStepProgress(uncertain).label,
+      body: 'Submission is recorded. Check the explorer or Activity; do not submit this action again.',
+      className: 'text-warn',
+      icon: <Clock3 className="h-4 w-4" />,
+    };
+  }
   if (params.status === 'planning') {
     return {
       label: params.stage === 'executing' ? 'Preparing wallet request' : 'Preparing review',
@@ -307,7 +331,7 @@ function statusPresentation(params: {
   if (params.status === 'submitted') {
     return {
       label: 'Submitted',
-      body: 'Waiting for on-chain confirmation. A saved hash can be checked again if this screen closes.',
+      body: 'Waiting for on-chain confirmation. Track it below or in Activity; do not submit again.',
       className: 'text-mint',
       icon: <LoaderCircle className="h-4 w-4 animate-spin" />,
     };
@@ -315,9 +339,9 @@ function statusPresentation(params: {
   if (params.status === 'confirmed') {
     return confirmed < params.stepCount
       ? { label: 'Step confirmed', body: `${confirmed} of ${params.stepCount} confirmed. Preparing the next transaction.`, className: 'text-success', icon: <CheckCircle2 className="h-4 w-4" /> }
-      : { label: 'Confirmed', body: 'All transaction steps are confirmed.', className: 'text-success', icon: <CheckCircle2 className="h-4 w-4" /> };
+      : { ...confirmedUpdateCopy(params.operation, params.refreshing ?? false), className: 'text-success', icon: <CheckCircle2 className="h-4 w-4" /> };
   }
-  if (params.status === 'partial') {
+  if (params.status === 'partial' || (params.status === 'failed' && confirmed > 0)) {
     return { label: 'Partially completed', body: 'An earlier step confirmed before the route stopped.', className: 'text-warn', icon: <AlertTriangle className="h-4 w-4" /> };
   }
   return {
@@ -345,14 +369,22 @@ export function ActionReview({
   const [statusDetail, setStatusDetail] = useState('');
   const [result, setResult] = useState<TransactionExecutionResult | null>(null);
   const [stepResults, setStepResults] = useState<TransactionStepResult[]>([]);
+  const [executionRoute, setExecutionRoute] = useState<PlannedRoute | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [reviewTitle, setReviewTitle] = useState<string | null>(null);
   const [reviewAcknowledged, setReviewAcknowledged] = useState(false);
   const [reviewContext, setReviewContext] = useState<{ walletAddress: string; chainId?: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const previousPlanBuilder = useRef<ActionPlanBuilder | null>(planBuilder);
+  // React state updates are asynchronous; latch before any wallet request so
+  // repeated clicks in the same frame cannot start a second execution.
+  const busyRef = useRef(false);
+  const executionStepsRef = useRef<TransactionStepResult[]>([]);
 
-  const route = routes[selectedRoute];
+  const route = (stage === 'executing' || stage === 'result') && executionRoute
+    ? executionRoute
+    : routes[selectedRoute];
 
   useEffect(() => {
     if (stage === 'review' || stage === 'result') {
@@ -361,12 +393,16 @@ export function ActionReview({
   }, [stage]);
 
   const reset = useCallback(() => {
+    if (busyRef.current) return;
     setStage('input');
     setRoutes([]);
     setSelectedRoute(0);
     setError(null);
     setResult(null);
     setStepResults([]);
+    setExecutionRoute(null);
+    executionStepsRef.current = [];
+    setRefreshing(false);
     setReviewTitle(null);
     setReviewContext(null);
     setReviewAcknowledged(false);
@@ -381,6 +417,7 @@ export function ActionReview({
     setSelectedRoute(0);
     setResult(null);
     setStepResults([]);
+    setExecutionRoute(null);
     setReviewTitle(null);
     setReviewAcknowledged(false);
     setReviewContext(null);
@@ -394,14 +431,16 @@ export function ActionReview({
   useEffect(() => {
     if (previousPlanBuilder.current !== planBuilder) {
       previousPlanBuilder.current = planBuilder;
-      if (stage === 'review' || stage === 'result') {
+      if (stage === 'review') {
         invalidatePreparedRoute('The inputs changed. Review the action again before signing.');
       }
     }
   }, [invalidatePreparedRoute, planBuilder, stage]);
 
   useEffect(() => {
-    if (!reviewContext || (stage !== 'review' && stage !== 'result')) return;
+    // Results are non-signable historical evidence. Retain their original
+    // wallet and chain when the active wallet or form changes.
+    if (!reviewContext || stage !== 'review') return;
     const currentWallet = wallet.address?.toLowerCase();
     const walletChanged = !wallet.authenticated || !currentWallet || currentWallet !== reviewContext.walletAddress;
     const chainChanged = reviewContext.chainId !== undefined
@@ -415,11 +454,12 @@ export function ActionReview({
   }, [invalidatePreparedRoute, reviewContext, stage, wallet.address, wallet.authenticated, wallet.chainId]);
 
   const review = useCallback(async () => {
-    if (!planBuilder || disabled || loading) return;
+    if (!planBuilder || disabled || loading || busyRef.current || stage !== 'input') return;
     if (!wallet.authenticated || !wallet.address) {
       setError('Connect a wallet before preparing a transaction.');
       return;
     }
+    busyRef.current = true;
     setLoading(true);
     setError(null);
     setStatus('planning');
@@ -456,6 +496,8 @@ export function ActionReview({
       setRoutes(viable);
       setSelectedRoute(0);
       setStepResults([]);
+      executionStepsRef.current = [];
+      setExecutionRoute(null);
       setReviewAcknowledged(false);
       // Snapshot the human-readable action with the calldata. Inputs remain
       // visible above the review card, but later form edits must never rename
@@ -471,22 +513,27 @@ export function ActionReview({
       setError(userSafeError(cause, 'The transaction could not be prepared. Check the inputs and network, then try again.'));
       haptic('error');
     } finally {
+      busyRef.current = false;
       setLoading(false);
     }
-  }, [disabled, loading, operationLabel, planBuilder, wallet.address, wallet.authenticated, wallet.chainId]);
+  }, [disabled, loading, operationLabel, planBuilder, stage, wallet.address, wallet.authenticated, wallet.chainId]);
 
   const execute = useCallback(async () => {
-    if (!route || loading) return;
+    if (!route || loading || busyRef.current || stage !== 'review' || status === 'failed' || stepResults.some(hasTransactionHash)) return;
     if (!reviewAcknowledged) {
       setError('Confirm that you checked the amounts, limits, recipient, and transaction steps before signing.');
       return;
     }
+    busyRef.current = true;
     setLoading(true);
     setError(null);
     setStage('executing');
     setStatus('awaiting-user');
     setStatusDetail('Each transaction opens in your wallet separately.');
     setStepResults([]);
+    executionStepsRef.current = [];
+    setExecutionRoute(route);
+    setRefreshing(false);
     try {
       const execution = await runTransactionRoute({
         route,
@@ -512,37 +559,61 @@ export function ActionReview({
             setStatusDetail(detail ? userSafeError(detail, 'The transaction could not continue. Check the network and try again.') : '');
           },
           onStep: (step) => {
-            setStepResults((current) => {
-              const next = [...current];
-              next[step.index] = step;
-              return next;
-            });
+            const next = [...executionStepsRef.current];
+            next[step.index] = step;
+            executionStepsRef.current = next;
+            setStepResults(next);
           },
           // The runner invokes this only after a receipt and the required
           // following block have both been observed. Keeping the page refresh
           // inside that boundary prevents stale reads from being presented as
           // the result of a completed financial action.
-          postConfirmRead: async (_confirmedRoute, execution) => {
-            await onComplete?.(execution);
+          postConfirmRead: async (confirmedRoute, execution) => {
+            if (!onComplete) return;
+            setRefreshing(true);
+            try {
+              await onComplete(execution, confirmedRoute);
+            } finally {
+              setRefreshing(false);
+            }
           },
         },
       });
       setResult(execution);
       setStage('result');
-      haptic(execution.status === 'confirmed' ? 'success' : execution.status === 'partial' ? 'warning' : 'error');
+      const uncertain = execution.steps.some((step) => ['unknown', 'unverified'].includes(transactionStepProgress(step).state));
+      haptic(execution.status === 'confirmed' ? 'success' : execution.status === 'partial' || uncertain ? 'warning' : 'error');
     } catch (cause) {
-      setError(userSafeError(cause, 'The transaction could not continue. No later step was submitted.'));
-      setStage('review');
+      const message = userSafeError(cause, 'The transaction could not continue. No later step was submitted.');
+      const submittedSteps = executionStepsRef.current;
+      if (submittedSteps.some(hasTransactionHash)) {
+        // A UI/observer exception cannot erase a broadcast hash or reopen a
+        // signing action. The existing journal remains the recovery authority.
+        setResult({
+          status: submittedSteps.some((step) => step.status === 'confirmed') ? 'partial' : 'failed',
+          operation: route.operation,
+          chainId: route.chainId,
+          walletAddress: route.walletAddress,
+          steps: submittedSteps.map((step) => step.status === 'submitted' ? { ...step, status: 'failed', error: message } : step),
+          error: message,
+        });
+        setStage('result');
+      } else {
+        setError(message);
+        setStage('review');
+      }
       setStatus('failed');
       // A failed or stale route must be explicitly reviewed again. This is
       // especially important when the runner rejects a changed minOut,
       // converter path, leverage, or transformed reduction amount.
       setReviewAcknowledged(false);
-      haptic('error');
+      haptic(submittedSteps.some(hasTransactionHash) ? 'warning' : 'error');
     } finally {
+      busyRef.current = false;
+      setRefreshing(false);
       setLoading(false);
     }
-  }, [loading, onComplete, reviewAcknowledged, reviewTitle, route, wallet]);
+  }, [loading, onComplete, reviewAcknowledged, reviewTitle, route, stage, status, stepResults, wallet]);
 
   const routeSummaries = useMemo(() => routes.map((candidate) => {
     const routeType = candidate.details?.routeType ?? 'Route';
@@ -593,10 +664,13 @@ export function ActionReview({
           <p className="mt-1.5 text-[12px] leading-relaxed text-mut">
             {presentation.body}
           </p>
-          {result.steps.some((step) => step.hash) && (
+          <p className="mt-2 text-[11px] text-mut" title={result.walletAddress}>
+            {chainName(result.chainId)} · Wallet {compactAddress(result.walletAddress)}
+          </p>
+          {result.steps.some(hasTransactionHash) && (
             <div className="mt-4 flex w-full flex-col gap-2 text-left">
-              {result.steps.map((step) => step.hash ? (
-                <HashButton key={step.hash} step={step} chainId={result.chainId} />
+              {result.steps.map((step) => hasTransactionHash(step) ? (
+                <TransactionHashLink key={`${step.index}-${step.hash}`} step={step} chainId={result.chainId} />
               ) : null)}
             </div>
           )}
@@ -628,7 +702,8 @@ export function ActionReview({
   const stepCount = route.transactions.length;
   const approvalCount = route.transactions.filter((transaction) => transaction.kind === 'approval').length;
   const facts = primaryReviewFacts(route);
-  const progress = statusPresentation({ stage, status, detail: statusDetail, stepResults, stepCount });
+  const progress = statusPresentation({ stage, status, detail: statusDetail, stepResults, stepCount, operation: route.operation, refreshing });
+  const showExecutionProgress = stage === 'executing' || stepResults.some(hasTransactionHash);
   return (
     <Card className={`${styles.reviewCard} anim-scale-in p-5`}>
       <button
@@ -654,6 +729,15 @@ export function ActionReview({
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)] text-mint"><ShieldCheck className="h-5 w-5" /></span>
       </div>
 
+      {showExecutionProgress && (
+        <section className="mt-4 flex flex-col gap-2" aria-label="Submitted transactions">
+          <StatusNotice {...progress} />
+          {stepResults.map((step) => hasTransactionHash(step) ? (
+            <TransactionHashLink key={`${step.index}-${step.hash}`} step={step} chainId={route.chainId} />
+          ) : null)}
+        </section>
+      )}
+
       {routes.length > 1 && (
         <div className="mt-4 flex flex-col gap-2" role="radiogroup" aria-label="Route options">
           <p className="text-[12px] font-medium text-mut">Choose route</p>
@@ -662,14 +746,16 @@ export function ActionReview({
               type="button"
               role="radio"
               aria-checked={selectedRoute === index}
+              disabled={loading || stage !== 'review'}
               key={`${candidate.operation}-${index}`}
               tabIndex={selectedRoute === index ? 0 : -1}
               onClick={() => {
+                if (busyRef.current || stage !== 'review') return;
                 setSelectedRoute(index);
                 setStepResults([]);
                 setReviewAcknowledged(false);
               }}
-              className={`flex min-h-12 items-center justify-between rounded-xl border px-3 text-left ${selectedRoute === index ? 'border-[rgba(139,109,255,.55)] bg-[var(--mint-dim)]' : 'border-[var(--line)] bg-[rgba(255,255,255,.025)]'}`}
+              className={`flex min-h-12 items-center justify-between rounded-xl border px-3 text-left disabled:cursor-default ${selectedRoute === index ? 'border-[rgba(139,109,255,.55)] bg-[var(--mint-dim)]' : 'border-[var(--line)] bg-[rgba(255,255,255,.025)]'}`}
             >
               <span className="text-[12px] font-semibold">{routeSummaries[index].routeType}</span>
               <span className="text-[11px] text-mut">{routeSummaries[index].count} tx · {routeSummaries[index].approvals} approval{routeSummaries[index].approvals === 1 ? '' : 's'}</span>
@@ -688,7 +774,7 @@ export function ActionReview({
       <AdvancedReviewDetails route={route} />
 
       <div className="mt-4 flex flex-col gap-2" aria-label="Transaction steps">
-        <p className="text-[12px] font-medium text-mut">What you will approve</p>
+        <p className="text-[12px] font-medium text-mut">{stage === 'executing' ? 'Transaction steps' : 'What you will approve'}</p>
         {route.transactions.map((transaction, index) => {
           const approval = approvalFacts(transaction);
           const progress = stepProgress(stepResults[index]);
@@ -715,21 +801,25 @@ export function ActionReview({
         })}
       </div>
 
-      <div className="mt-4"><StatusNotice {...progress} /></div>
+      {!showExecutionProgress && <div className="mt-4"><StatusNotice {...progress} /></div>}
       {error && <div className="mt-3"><InlineError message={error} /></div>}
-      <label className="mt-4 flex min-h-12 cursor-pointer items-start gap-3 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.025)] p-3 text-[11.5px] leading-relaxed text-mut">
-        <input
-          type="checkbox"
-          checked={reviewAcknowledged}
-          onChange={(event) => setReviewAcknowledged(event.target.checked)}
-          disabled={loading || status === 'failed'}
-          className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--mint)]"
-        />
-        <span>I have reviewed the amounts and transaction steps above.</span>
-      </label>
-      <Button disabled={loading || status === 'failed' || !reviewAcknowledged} loading={loading || stage === 'executing'} className={`${styles.primaryAction} mt-3`} onClick={() => void execute()}>
-        <ShieldCheck aria-hidden="true" className="h-4 w-4" /> {stepCount === 1 ? 'Confirm in wallet' : `Confirm ${stepCount} transactions`}
-      </Button>
+      {stage === 'review' && (
+        <>
+          <label className="mt-4 flex min-h-12 cursor-pointer items-start gap-3 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.025)] p-3 text-[11.5px] leading-relaxed text-mut">
+            <input
+              type="checkbox"
+              checked={reviewAcknowledged}
+              onChange={(event) => setReviewAcknowledged(event.target.checked)}
+              disabled={loading || status === 'failed'}
+              className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--mint)]"
+            />
+            <span>I have reviewed the amounts and transaction steps above.</span>
+          </label>
+          <Button disabled={loading || status === 'failed' || !reviewAcknowledged} loading={loading} className={`${styles.primaryAction} mt-3`} onClick={() => void execute()}>
+            <ShieldCheck aria-hidden="true" className="h-4 w-4" /> {stepCount === 1 ? 'Confirm in wallet' : `Confirm ${stepCount} transactions`}
+          </Button>
+        </>
+      )}
     </Card>
   );
 }
@@ -790,21 +880,38 @@ function AdvancedReviewDetails({ route }: { route: PlannedRoute }) {
   );
 }
 
-function HashButton({ step, chainId }: { step: TransactionStepResult; chainId: number }) {
-  if (!step.hash) return null;
-  const open = () => {
-    const base = chainId === 8453 ? 'https://basescan.org' : 'https://etherscan.io';
-    const url = `${base}/tx/${step.hash}`;
-    const telegram = getWebApp();
-    if (telegram?.openLink) telegram.openLink(url);
-    else window.open(url, '_blank', 'noopener,noreferrer');
-  };
-  const state = step.receipt?.status === 'reverted'
-    ? 'Reverted'
-    : step.status === 'confirmed'
-      ? 'Confirmed'
-      : 'Submitted';
-  return <button type="button" onClick={open} className="flex min-h-11 items-center justify-between gap-3 rounded-xl bg-[var(--mint-dim)] px-3 text-[11.5px] font-semibold text-mint"><span>Step {step.index + 1} · {state} · {shortHash(step.hash)}</span><span className="inline-flex items-center gap-1">Explorer <ExternalLink aria-hidden="true" className="h-3.5 w-3.5" /></span></button>;
+function TransactionHashLink({ step, chainId }: { step: TransactionStepResult; chainId: number }) {
+  const url = transactionExplorerUrl(chainId, step.hash);
+  if (!url || !step.hash) return null;
+  const progress = stepProgress(step);
+  const kind = transactionStepKind(step);
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`${kind} ${step.index + 1}: ${progress.label}. View transaction ${step.hash} on ${chainName(chainId)} explorer (opens in a new tab)`}
+      onClick={(event) => {
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        const telegram = getWebApp();
+        if (telegram?.openLink) {
+          try {
+            telegram.openLink(url);
+            event.preventDefault();
+          } catch {
+            // The native anchor remains a usable fallback outside Telegram.
+          }
+        }
+      }}
+      className="flex min-h-11 items-center justify-between gap-3 rounded-xl bg-[var(--mint-dim)] px-3 py-2 text-[11.5px] font-semibold text-mint focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mint)]"
+    >
+      <span className="min-w-0">
+        <span className="block">{kind} {step.index + 1} · {shortHash(step.hash)}</span>
+        <span className={`mt-1 inline-flex items-center gap-1 text-[10.5px] ${progress.className}`}>{progress.icon}{progress.label}</span>
+      </span>
+      <span className="inline-flex shrink-0 items-center gap-1">Explorer <ExternalLink aria-hidden="true" className="h-3.5 w-3.5" /></span>
+    </a>
+  );
 }
 
 function StatusNotice({ label, body, className, icon }: { label: string; body: string; className: string; icon: ReactNode }) {

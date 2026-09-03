@@ -220,8 +220,9 @@ For additional commands:
 ```bash
 pnpm test:chaos   # deterministic mutation and failure-injection campaigns
 pnpm test:anvil   # real ETH/BTC long/short positions on a protected mainnet fork
+pnpm test:anvil:earn # real fxSAVE deposits, withdrawal paths, cooldown and claim
 pnpm test:anvil:stress # fast dummy-route transport stress on the fork
-pnpm test:anvil:all    # real protocol proof followed by fork stress in one node
+pnpm test:anvil:all    # position, stress and Earn proofs serially in one node
 pnpm test:anvil:browser # open all four positions through the mobile browser UI
 pnpm test:stress  # credential-free chaos plus protected dummy-route fork stress
 pnpm test:e2e     # browser and Telegram-sized static-artifact coverage
@@ -229,9 +230,9 @@ pnpm test:e2e     # browser and Telegram-sized static-artifact coverage
 
 Anvil uses disposable local accounts and snapshots. The default proof funds an unlocked account with fork-only USDC impersonation, opens coexisting ETH/BTC long and short positions through the official SDK, verifies ownership and nonzero pool state, reverts the snapshot, and emits `artifacts/anvil/protocol-proof.json`. Its upstream provider URL is supplied only to the Anvil parent process and is never committed, printed, forwarded to the test child, or written to the proof artifact.
 
-The manual **Protected Anvil mainnet fork** workflow runs three gates: the Node four-position proof, 64 snapshot/revert plus 64 dummy ordered-route stress iterations, and real position opening through the mobile browser UI. The browser gate checks review-before-signing, successful receipts, delayed position discovery, and shared position views across Trade, Positions, Portfolio, Earn, and Move. It also captures the populated interface before restoring the snapshot.
+The manual **Protected Anvil mainnet fork** workflow runs four gates: the Node four-position proof, the fxSAVE Earn lifecycle proof, 64 snapshot/revert plus 64 dummy ordered-route stress iterations, and real position opening through the mobile browser UI. The browser gate checks review-before-signing, immediate approval/action explorer links, receipt-verified positions before indexing, reload recovery, and shared position views across Trade, Positions, Portfolio, Earn, and Move. It also captures the populated interface before restoring the snapshot.
 
-The protected workflow uses the Ethereum Alchemy URL stored in the GitHub environment. A dispatch input or protected `ANVIL_FORK_BLOCK` repository variable can pin the release block. The badge follows the latest completed manual run on `main`: all three gates must pass for this workflow revision to be green. An older green run without the browser step is not browser-execution evidence. See [testing and proof artifacts](docs/testing.md) and [screenshot provenance](docs/position-screenshot-fixture.md).
+The protected workflow uses the Ethereum Alchemy URL stored in the GitHub environment. A dispatch input or protected `ANVIL_FORK_BLOCK` repository variable can pin the release block. The badge follows the latest completed manual run on `main`: all four gates must pass for this workflow revision to be green. An older green run without the Earn or enhanced browser checks does not prove those paths. See [testing and proof artifacts](docs/testing.md) and [screenshot provenance](docs/position-screenshot-fixture.md).
 
 ## Repository structure
 
@@ -254,6 +255,7 @@ fx-scope.lock.json   Immutable public SDK capability contract
 | [`docs/sdk-scope.md`](docs/sdk-scope.md) | Exact official SDK capability contract |
 | [`docs/security.md`](docs/security.md) | Threats, controls, supply chain, and residual trust |
 | [`docs/testing.md`](docs/testing.md) | Release gates, fork testing, and acceptance matrix |
+| [`docs/post-transaction-ux.md`](docs/post-transaction-ux.md) | Jumper/LI.FI, Uniswap, and Aave code study; post-signing behavior and verification |
 | [`docs/roadmap.md`](docs/roadmap.md) | Release posture and deliberately deferred work |
 | [`SECURITY.md`](SECURITY.md) | Private vulnerability reporting |
 

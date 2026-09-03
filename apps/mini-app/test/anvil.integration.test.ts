@@ -24,8 +24,8 @@ import type { FxPublicClient, PlannedRoute, TransactionPolicy } from "../src/lib
 
 const configuredRpc = process.env.ANVIL_RPC_URL?.trim();
 const configuredSuite = process.env.FX_ANVIL_SUITE?.trim().toLowerCase() || "protocol";
-if (!(["protocol", "stress", "all"] as const).includes(configuredSuite as "protocol" | "stress" | "all")) {
-  throw new Error("FX_ANVIL_SUITE must be protocol, stress, or all");
+if (!(["protocol", "earn", "stress", "all"] as const).includes(configuredSuite as "protocol" | "earn" | "stress" | "all")) {
+  throw new Error("FX_ANVIL_SUITE must be protocol, earn, stress, or all");
 }
 const runProtocolProof = configuredSuite === "protocol" || configuredSuite === "all";
 const runStressCampaign = configuredSuite === "stress" || configuredSuite === "all";

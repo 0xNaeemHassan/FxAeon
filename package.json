@@ -12,6 +12,7 @@
     "test": "pnpm --dir apps/mini-app test",
     "test:chaos": "pnpm --dir apps/mini-app test:chaos",
     "test:anvil": "node scripts/run_anvil_tests.mjs --suite protocol",
+    "test:anvil:earn": "node scripts/run_anvil_tests.mjs --suite earn",
     "test:anvil:stress": "node scripts/run_anvil_tests.mjs --suite stress",
     "test:anvil:all": "node scripts/run_anvil_tests.mjs --suite all",
     "test:anvil:browser": "node scripts/run_anvil_tests.mjs --suite browser",

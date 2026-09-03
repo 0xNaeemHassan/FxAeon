@@ -12,6 +12,7 @@ import type {
   PlannedTransaction,
   ReviewedActionIntent,
 } from "./types";
+import { FX_TOKENS } from "./tokens";
 
 const CONVERTER = "0x12AF4529129303D7FbD2563E242C4a2890525912" as Address;
 const CLOSE_SENTINEL = 1n << 255n;
@@ -185,6 +186,7 @@ function validateConvertIn(
   expectedToken: Address,
   expectedAmount: bigint,
   label: string,
+  options: { allowZeroIdentity?: boolean } = {},
 ): ConversionReview {
   expectAddress(addressField(params, "tokenIn", 0, label), expectedToken, `${label} token`);
   const amount = bigintField(params, "amount", 1, label);
@@ -192,7 +194,16 @@ function validateConvertIn(
   expectAddress(addressField(params, "target", 2, label), CONVERTER, `${label} target`);
   const converter = validateConverterCall(hexField(params, "data", 3, label), expectedToken, expectedAmount);
   const minOut = bigintField(params, "minOut", 4, label);
-  if (minOut < 0n || (expectedAmount > 0n && minOut === 0n)) {
+  // The pinned SDK deliberately encodes USDC/fxUSD fxSAVE deposits as an
+  // identity converter route (encoding 0, no hops). Its on-chain
+  // `queryConvert` returns zero for that no-op route, while the vault's
+  // positive `minShares` remains the economic deposit guard. Do not generalize
+  // this exception to routed conversions or to position actions.
+  const isIdentityRoute = converter.encoding === 0n && converter.routes.length === 0;
+  const isFxSaveIdentityInput = sameAddress(expectedToken, FX_TOKENS.USDC.address)
+    || sameAddress(expectedToken, FX_TOKENS.fxUSD.address);
+  const allowsIdentityZero = options.allowZeroIdentity === true && isIdentityRoute && isFxSaveIdentityInput;
+  if (minOut < 0n || (expectedAmount > 0n && minOut === 0n && !allowsIdentityZero)) {
     throw new Error(`${label} minimum output must protect a positive conversion`);
   }
   const signature = hexField(params, "signature", 5, label);
@@ -403,7 +414,13 @@ function validateFxSaveDeposit(
   }
   if (decoded.functionName !== "depositToFxSave") throw new Error("routed fxSAVE deposit selector is invalid");
   const [conversion, tokenIn, minShares, receiver] = decoded.args;
-  const converted = validateConvertIn(conversion, intent.tokenInAddress, intent.amount, "fxSAVE deposit conversion");
+  const converted = validateConvertIn(
+    conversion,
+    intent.tokenInAddress,
+    intent.amount,
+    "fxSAVE deposit conversion",
+    { allowZeroIdentity: true },
+  );
   if (typeof tokenIn !== "string" || !isAddress(tokenIn) || typeof minShares !== "bigint"
     || typeof receiver !== "string" || !isAddress(receiver)) {
     throw new Error("routed fxSAVE deposit arguments are malformed");

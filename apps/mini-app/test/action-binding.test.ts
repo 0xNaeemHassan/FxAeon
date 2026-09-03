@@ -57,10 +57,14 @@ const CONVERTER_ABI = parseAbi([
 const APPROVE_ABI = parseAbi(["function approve(address spender,uint256 amount)"]);
 
 function converterData(token: Address, amount: bigint): Hex {
+  return converterDataWithEncoding(token, amount, 0n);
+}
+
+function converterDataWithEncoding(token: Address, amount: bigint, encoding: bigint): Hex {
   return encodeFunctionData({
     abi: CONVERTER_ABI,
     functionName: "convert",
-    args: [token, amount, 0n, []],
+    args: [token, amount, encoding, []],
   });
 }
 
@@ -525,13 +529,18 @@ test("routed and instant fxSAVE calldata cannot redirect tokens or receivers", (
     receiver: WALLET,
     directBasePool: false,
   };
-  const routedDeposit = (outerToken = FX_TOKENS.USDC.address) => transaction(
+  const routedDeposit = (
+    outerToken = FX_TOKENS.USDC.address,
+    minConversionOut = 50n,
+    minShares = 49n,
+    encoding = 0n,
+  ) => transaction(
     "depositFxSave",
     ROUTER,
     encodeFunctionData({
       abi: SAVE_ABI,
       functionName: "depositToFxSave",
-      args: [convertIn(FX_TOKENS.USDC.address, 50n), outerToken, 49n, WALLET],
+      args: [{ ...convertIn(FX_TOKENS.USDC.address, 50n), data: converterDataWithEncoding(FX_TOKENS.USDC.address, 50n, encoding), minOut: minConversionOut }, outerToken, minShares, WALLET],
     }),
   );
   const depositPolicy = policy("depositFxSave", depositIntent, {
@@ -539,6 +548,30 @@ test("routed and instant fxSAVE calldata cannot redirect tokens or receivers", (
     approvalDestinations: [FX_TOKENS.USDC.address],
   });
   assert.doesNotThrow(() => validateRoute(route("depositFxSave", [routedDeposit()]), depositPolicy));
+  // The pinned SDK emits minOut=0 for its USDC/fxUSD identity converter
+  // route. The positive vault share floor still protects the deposit; routed
+  // conversions and position actions continue to require positive minOut.
+  assert.doesNotThrow(() => validateRoute(route("depositFxSave", [routedDeposit(FX_TOKENS.USDC.address, 0n)]), depositPolicy));
+  const fxUsdDepositIntent: ReviewedActionIntent = {
+    ...depositIntent,
+    tokenInAddress: FX_TOKENS.fxUSD.address,
+  };
+  const fxUsdDepositPolicy = policy("depositFxSave", fxUsdDepositIntent, {
+    expectedTokenApprovalAmount: 50n,
+    approvalDestinations: [FX_TOKENS.fxUSD.address],
+  });
+  const fxUsdDeposit = transaction(
+    "depositFxSave",
+    ROUTER,
+    encodeFunctionData({
+      abi: SAVE_ABI,
+      functionName: "depositToFxSave",
+      args: [{ ...convertIn(FX_TOKENS.fxUSD.address, 50n), minOut: 0n }, FX_TOKENS.fxUSD.address, 49n, WALLET],
+    }),
+  );
+  assert.doesNotThrow(() => validateRoute(route("depositFxSave", [fxUsdDeposit]), fxUsdDepositPolicy));
+  assert.throws(() => validateRoute(route("depositFxSave", [routedDeposit(FX_TOKENS.USDC.address, 0n, 49n, 1n)]), depositPolicy), /minimum output/);
+  assert.throws(() => validateRoute(route("depositFxSave", [routedDeposit(FX_TOKENS.USDC.address, 0n, 0n)]), depositPolicy), /minimum shares/);
   assert.throws(() => validateRoute(route("depositFxSave", [routedDeposit(OTHER)]), depositPolicy), /deposit token/);
 
   const withdrawIntent: ReviewedActionIntent = {
@@ -565,4 +598,18 @@ test("routed and instant fxSAVE calldata cannot redirect tokens or receivers", (
   assert.doesNotThrow(() => validateRoute(route("withdrawFxSave", [instant(WALLET)]), withdrawPolicy));
   assert.throws(() => validateRoute(route("withdrawFxSave", [instant(OTHER)]), withdrawPolicy), /receiver/);
   assert.throws(() => validateRoute(route("withdrawFxSave", [instant(WALLET, OTHER)]), withdrawPolicy), /USDC instant output token/);
+});
+
+test("fxSAVE operation policies retain approve on the shared vault target", () => {
+  const policy = capabilityPolicy({ walletAddress: WALLET, chainId: 1, operation: "withdrawFxSave" });
+  const vaultSelectors = policy.allowedSelectors?.[FXSAVE.toLowerCase()] ?? [];
+  assert.ok(vaultSelectors.includes("0x095ea7b3"));
+  assert.ok(vaultSelectors.includes("0xba087652"));
+  const approval = transaction(
+    "withdrawFxSave",
+    FXSAVE,
+    encodeFunctionData({ abi: APPROVE_ABI, functionName: "approve", args: [ROUTER, 33n] }),
+    { kind: "approval", type: "approveToken" },
+  );
+  assert.doesNotThrow(() => validateRoute(route("withdrawFxSave", [approval]), policy));
 });

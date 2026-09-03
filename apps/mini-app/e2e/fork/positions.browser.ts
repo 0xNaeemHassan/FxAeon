@@ -2,7 +2,8 @@
  * Protected real-fork browser acceptance test. All protocol transactions are
  * planned, reviewed, simulated and sent by the actual browser application.
  * Only the injected wallet transport and fork-local index discovery are test
- * adapters. No planner, transaction runner, receipt or position value is mocked.
+ * adapters. Receipt delivery can be paused, but its real RPC payload is never
+ * changed. No planner, transaction runner, receipt or position value is mocked.
  */
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -10,7 +11,7 @@ import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promi
 import { tmpdir } from 'node:os';
 import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chromium, expect as playwrightExpect, type Page } from '@playwright/test';
+import { chromium, expect as playwrightExpect, type Locator, type Page, type Route } from '@playwright/test';
 import { createPublicClient, encodeFunctionData, formatUnits, http, parseUnits, type Address, type Hex } from 'viem';
 import { formatExactDecimal } from '../../src/lib/amount';
 import { mainnet } from 'viem/chains';
@@ -46,6 +47,20 @@ const tokenAbi = [
 const usdc = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48' as const;
 const donor = '0xc3d688b66703497daa19211eedff47f25384cdc3' as const;
 
+function receiptHold() {
+  let releasePromise: () => void = () => undefined;
+  const waiting = new Promise<void>(resolveHold => { releasePromise = resolveHold; });
+  return {
+    waiting,
+    intercepted: 0,
+    released: false,
+    release() {
+      this.released = true;
+      releasePromise();
+    },
+  };
+}
+
 async function rpc<T = unknown>(method: string, params: unknown[] = []): Promise<T> {
   const response = await fetch(rpcUrl, { method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }), redirect: 'error', signal: AbortSignal.timeout(120_000) });
@@ -77,13 +92,41 @@ async function runProof(captureStage: string) {
   const miningTasks: Promise<unknown>[] = [];
   const miningErrors: string[] = [];
   const submitted: Array<{ hash: Hex; to: string }> = [];
+  const heldReceipts = new Map<string, ReturnType<typeof receiptHold>>();
+  const submittedExplorerHashes = new Set<string>();
   const candidates: Array<(typeof scenarios)[number] & { positionId: number }> = [];
   const delayedDiscoveries = new Map<string, number>();
+  const blockedDiscoveries = new Set<string>();
+  const emittedDiscoveries = new Set<string>();
+  const confirmedBeforeIndexer = new Set<string>();
+  const restoredConfirmed = new Set<string>();
   const positions: Array<(typeof scenarios)[number] & {
     positionId: number; rawCollateral: string; rawDebt: string;
     transactions: Array<{ kind: string; hash: Hex; blockNumber: string }>;
   }> = [];
   const browserErrors: string[] = [];
+  const routeErrors: string[] = [];
+  let tearingDown = false;
+  let reportRouteFailure: (error: Error) => void = () => undefined;
+  // Resolve with the error rather than rejecting an unattached promise. The
+  // main browser-proof race rethrows it inside this function's catch/finally.
+  const routeFailure = new Promise<Error>(resolveFailure => { reportRouteFailure = resolveFailure; });
+  const proofValue = <T>(value: T): T => {
+    if (tearingDown || routeErrors.length) throw new Error(routeErrors[0] ?? 'Browser proof is stopping');
+    return value;
+  };
+  const guardRoute = (handler: (route: Route) => Promise<void>) => async (route: Route): Promise<void> => {
+    try {
+      await handler(route);
+    } catch (cause) {
+      if (!tearingDown) {
+        const error = cause instanceof Error ? cause : new Error(String(cause));
+        routeErrors.push(error.message);
+        reportRouteFailure(error);
+      }
+      await route.abort('failed').catch(() => undefined);
+    }
+  };
   let completed = false;
   try {
     const funding = parseUnits('4000', 6);
@@ -130,6 +173,7 @@ async function runProof(captureStage: string) {
       const tx = request.params?.[0] as { from: string; to: string };
       assert.equal(tx.from.toLowerCase(), wallet.toLowerCase());
       const hash = await rpc<Hex>('eth_sendTransaction', [tx]);
+      heldReceipts.set(hash.toLowerCase(), receiptHold());
       submitted.push({ hash, to: tx.to });
       // Mine the runner's post-receipt boundary without continuously advancing
       // fork time while slow route simulation/quoting is in progress.
@@ -147,8 +191,43 @@ async function runProof(captureStage: string) {
         removeListener() {}
       };
     ` });
-    await context.route('**/telegram-web-app.js', route => route.fulfill({ contentType: 'text/javascript', body: '/* browser entry */' }));
-    await context.route('https://api.goldsky.com/**', async route => {
+    await context.route('**/telegram-web-app.js', guardRoute(route => route.fulfill({ contentType: 'text/javascript', body: '/* browser entry */' })));
+    await context.route(rpcUrl, guardRoute(async route => {
+      if (route.request().method() !== 'POST') return route.continue();
+      const body = route.request().postDataJSON() as { id: number; method: string; params?: unknown[] }
+        | Array<{ id: number; method: string; params?: unknown[] }>;
+      const requests = Array.isArray(body) ? body : [body];
+      const held = requests.flatMap(request => {
+        const hash = request.method === 'eth_getTransactionReceipt' && typeof request.params?.[0] === 'string'
+          ? request.params[0].toLowerCase() : undefined;
+        const hold = hash ? heldReceipts.get(hash) : undefined;
+        return hash && hold && !hold.released ? [{ hash, hold, id: request.id }] : [];
+      });
+      if (!held.length) return route.continue();
+      // Fetch the actual fork receipt first, then withhold only its delivery
+      // to the browser. All receipt fields and the response body stay intact.
+      const response = await route.fetch({ maxRedirects: 0, timeout: 120_000 });
+      assert.ok(response.ok(), 'held receipt must come from a successful localhost RPC response');
+      const payload = await response.json() as { id: number; result?: { transactionHash?: string; status?: string } | null }
+        | Array<{ id: number; result?: { transactionHash?: string; status?: string } | null }>;
+      const responses = Array.isArray(payload) ? payload : [payload];
+      // Anvil can return null between broadcast and mining. Let the actual
+      // runner poll again; never turn pending into an assertion or fake a
+      // receipt. Forward the entire original response, including any batch.
+      if (held.some(({ id }) => responses.find(candidate => candidate.id === id)?.result === null)) {
+        await route.fulfill({ response });
+        return;
+      }
+      for (const { hash, hold, id } of held) {
+        const receipt = responses.find(candidate => candidate.id === id)?.result;
+        assert.equal(receipt?.transactionHash?.toLowerCase(), hash, 'only the real submitted receipt may be delayed');
+        assert.equal(receipt?.status, '0x1', 'fork transaction must have succeeded before delivery is withheld');
+        hold.intercepted += 1;
+      }
+      await Promise.all(held.map(({ hold }) => hold.waiting));
+      await route.fulfill({ response });
+    }));
+    await context.route('https://api.goldsky.com/**', guardRoute(async route => {
       const url = new URL(route.request().url());
       const group = scenarios.find(s => url.pathname === `/api/public/project_cmgz5g9sl0065xhp2aqd9c6sv/subgraphs/${s.graphSubgraph}/gn`);
       const body = route.request().postDataJSON() as { query?: string };
@@ -163,22 +242,31 @@ async function runProof(captureStage: string) {
             const key = `${candidate.market}:${candidate.side}:${candidate.positionId}`;
             const reads = delayedDiscoveries.get(key) ?? 0;
             delayedDiscoveries.set(key, reads + 1);
-            // Model a real index lag: omit an already-owned NFT twice. Never
-            // fabricate a position or substitute any contract accounting.
-            if (reads >= 2) ids.push({ id: String(candidate.positionId) });
+            // Keep a real, already-owned NFT undiscoverable until the UI has
+            // proved both its receipt-backed placeholder and reload recovery.
+            // Never substitute any contract accounting or fabricate an ID.
+            if (!blockedDiscoveries.has(key)) {
+              ids.push({ id: String(candidate.positionId) });
+              emittedDiscoveries.add(key);
+            }
           }
         } catch { /* Candidate has not yet minted. No fabricated position. */ }
       }
       await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: { positions: ids } }) });
-    });
+    }));
     page = await context.newPage();
     page.setDefaultTimeout(120_000);
     page.on('pageerror', error => browserErrors.push(error.message));
 
+    const activePage = page;
+    const runBrowserProof = async () => {
+      const page = activePage;
     for (const scenario of scenarios) {
       console.log(`Browser preparing ${scenario.market} ${scenario.side}`);
       const positionId = Number(await client.readContract({ address: scenario.pool, abi: poolAbi, functionName: 'getNextPositionId' }));
+      const key = `${scenario.market}:${scenario.side}:${positionId}`;
       candidates.push({ ...scenario, positionId });
+      blockedDiscoveries.add(key);
       const signedBefore = submitted.length;
       await page.goto(`${baseUrl}/trade`);
       await expect(page.getByRole('button', { name: 'Open wallet profile' })).toBeVisible({ timeout: 30_000 });
@@ -199,7 +287,39 @@ async function runProof(captureStage: string) {
       assert.equal(submitted.length, signedBefore, 'review must never request a signature');
       await page.screenshot({ path: resolve(artifactRoot, `${scenario.market}-${scenario.side}-review.png`), fullPage: true });
       await page.getByRole('checkbox').check();
-      await page.getByRole('button', { name: /^Confirm (?:in wallet|\d+ transactions)$/ }).click();
+      const confirmButton: Locator = page.getByRole('button', { name: /^Confirm (?:in wallet|\d+ transactions)$/ });
+      const countMatch: RegExpMatchArray | null = (await confirmButton.innerText()).match(/Confirm (\d+) transactions/);
+      const transactionCount: number = countMatch ? Number(countMatch[1]) : 1;
+      assert.ok(transactionCount >= 1 && transactionCount <= 10, 'review must expose the ordered transaction count');
+      await confirmButton.click();
+      for (let transactionIndex = 0; transactionIndex < transactionCount; transactionIndex += 1) {
+        await expect.poll(() => proofValue(submitted.length), { timeout: 180_000 }).toBe(signedBefore + transactionIndex + 1);
+        const tx = submitted[signedBefore + transactionIndex];
+        const hold = heldReceipts.get(tx.hash.toLowerCase());
+        assert.ok(hold, 'each actual broadcast must be held before browser receipt completion');
+        await expect.poll(() => proofValue(hold.intercepted)).toBeGreaterThan(0);
+        const explorer = page.locator('section[aria-label="Submitted transactions"]')
+          .locator(`a[href="https://etherscan.io/tx/${tx.hash}"]`);
+        await expect(explorer).toBeVisible();
+        const kind = tx.to.toLowerCase() === usdc ? 'Approval' : 'Action';
+        await expect(explorer).toHaveAccessibleName(new RegExp(`^${kind} ${transactionIndex + 1}: Submitted\\.`));
+        const bounds = await explorer.boundingBox();
+        assert.ok(bounds && bounds.height >= 44 && bounds.width >= 44, 'submitted explorer target must be at least 44px');
+        await expect(page.getByRole('button', { name: 'Done', exact: true })).toHaveCount(0);
+        await expect(confirmButton).toHaveCount(0);
+        assert.equal(submitted.length, signedBefore + transactionIndex + 1, 'no later step may sign before this receipt is delivered');
+        submittedExplorerHashes.add(tx.hash.toLowerCase());
+        await page.screenshot({ path: resolve(artifactRoot, `${scenario.market}-${scenario.side}-submitted-${transactionIndex + 1}.png`), fullPage: true });
+        hold.release();
+      }
+
+      const pendingCard = page.locator(`[data-confirmed-position-key="${key}"]`).first();
+      await expect(pendingCard).toBeVisible({ timeout: 180_000 });
+      await expect(pendingCard).toContainText('Details updating');
+      await expect(pendingCard).not.toContainText('Est. net equity');
+      await expect(page.locator(`[data-position-key="${key}"]`)).toHaveCount(0);
+      assert.equal(emittedDiscoveries.has(key), false, 'confirmed placeholder must precede index discovery');
+      confirmedBeforeIndexer.add(key);
       await expect(page.getByRole('button', { name: 'Done', exact: true })).toBeVisible({ timeout: 180_000 });
       await expect(page.getByRole('heading', { name: 'Confirmed', exact: true })).toBeVisible();
       const remainingUsdc = await client.readContract({ address: usdc, abi: tokenAbi, functionName: 'balanceOf', args: [wallet] });
@@ -216,8 +336,32 @@ async function runProof(captureStage: string) {
         transactions.push({ kind: tx.to.toLowerCase() === usdc ? 'approval' : 'action', hash: tx.hash, blockNumber: receipt.blockNumber.toString() });
       }
       assert.ok(transactions.some(tx => tx.kind === 'action'));
+      assert.equal(transactions.length, transactionCount, 'actual signatures must match the reviewed route');
+      const actionHash = transactions.findLast(tx => tx.kind === 'action')?.hash;
+      assert.ok(actionHash);
+      await expect(pendingCard.getByRole('link', { name: 'View confirmed position transaction', exact: true }))
+        .toHaveAttribute('href', `https://etherscan.io/tx/${actionHash}`);
       positions.push({ ...scenario, positionId, rawCollateral: collateral.toString(), rawDebt: debt.toString(), transactions });
-      await expect(page.locator(`[data-position-key="${scenario.market}:${scenario.side}:${positionId}"]`).first()).toBeVisible();
+      await page.screenshot({ path: resolve(artifactRoot, `${scenario.market}-${scenario.side}-confirmed-pending.png`), fullPage: true });
+
+      await page.reload();
+      await expect(page.getByRole('button', { name: 'Open wallet profile' })).toBeVisible({ timeout: 30_000 });
+      await page.getByRole('radiogroup', { name: 'Market', exact: true }).getByRole('radio', { name: scenario.market, exact: true }).click();
+      await page.getByRole('radiogroup', { name: 'Position side' }).getByRole('radio', { name: scenario.side === 'long' ? 'Long' : 'Short', exact: true }).click();
+      await expect(pendingCard).toBeVisible();
+      await expect(pendingCard).toContainText('Details updating');
+      await expect(pendingCard.getByRole('link', { name: 'View confirmed position transaction', exact: true }))
+        .toHaveAttribute('href', `https://etherscan.io/tx/${actionHash}`);
+      await expect(page.locator(`[data-position-key="${key}"]`)).toHaveCount(0);
+      assert.equal(emittedDiscoveries.has(key), false, 'reloaded placeholder must still precede index discovery');
+      await expect.poll(() => proofValue(delayedDiscoveries.get(key) ?? 0)).toBeGreaterThanOrEqual(2);
+      restoredConfirmed.add(key);
+      await page.screenshot({ path: resolve(artifactRoot, `${scenario.market}-${scenario.side}-restored-pending.png`), fullPage: true });
+
+      blockedDiscoveries.delete(key);
+      await expect(page.locator(`[data-position-key="${key}"]`).first()).toBeVisible();
+      await expect(pendingCard).toHaveCount(0);
+      assert.equal(emittedDiscoveries.has(key), true, 'full position details require actual SDK index discovery');
       await page.screenshot({ path: resolve(artifactRoot, `${scenario.market}-${scenario.side}-confirmed.png`), fullPage: true });
       console.log(`Browser opened and rendered ${scenario.market} ${scenario.side} #${positionId}`);
     }
@@ -257,6 +401,9 @@ async function runProof(captureStage: string) {
     }
     assert.deepEqual(browserErrors, [], 'browser must not emit runtime errors');
     assert.ok(positions.every(p => (delayedDiscoveries.get(`${p.market}:${p.side}:${p.positionId}`) ?? 0) >= 3), 'every minted position must render after delayed discovery');
+    assert.equal(submittedExplorerHashes.size, submitted.length, 'every approval and action hash must be visible before receipt delivery');
+    assert.equal(confirmedBeforeIndexer.size, scenarios.length, 'all four confirmed positions need pre-index feedback');
+    assert.equal(restoredConfirmed.size, scenarios.length, 'all four confirmed placeholders must recover after reload');
     await Promise.all(miningTasks);
     assert.deepEqual(miningErrors, [], 'fork post-receipt block mining must succeed');
     // Reuse the positions this browser actually opened. The capture process
@@ -273,13 +420,20 @@ async function runProof(captureStage: string) {
     }), 'documentation capture');
     completed = true;
     await context.tracing.stop({ path: resolve(artifactRoot, 'trace.zip') });
+    };
+    await Promise.race([
+      runBrowserProof(),
+      routeFailure.then(error => { throw error; }),
+    ]);
   } catch (error) {
     if (page) {
       await page.screenshot({ path: resolve(artifactRoot, 'failure.png'), fullPage: true }).catch(() => undefined);
-      await writeFile(resolve(artifactRoot, 'failure.txt'), `${String(error)}\nBrowser errors: ${JSON.stringify(browserErrors)}\n${await page.locator('body').innerText().catch(() => '')}`);
+      await writeFile(resolve(artifactRoot, 'failure.txt'), `${String(error)}\nBrowser errors: ${JSON.stringify(browserErrors)}\nRoute errors: ${JSON.stringify(routeErrors)}\n${await page.locator('body').innerText().catch(() => '')}`);
     }
     throw error;
   } finally {
+    tearingDown = true;
+    for (const hold of heldReceipts.values()) hold.release();
     await Promise.allSettled(miningTasks);
     try {
       await browser?.close();
@@ -308,6 +462,7 @@ async function runProof(captureStage: string) {
       coexistingInSingleSnapshot: true, ownershipVerified: true, nonzeroCollateralAndDebtVerified: true,
       delayedIndexDiscoveryVerified: true, snapshotRevertedAfterProof: true,
       availableTokenBalancesVerified: true, postConfirmationBalanceRefreshVerified: true,
+      submittedExplorerBeforeConfirmation: true, confirmedPositionBeforeIndexer: true, restoredConfirmedPosition: true,
       positionUsdLabelsVerified: true,
       readSurfaces: ['trade', 'positions', 'portfolio', 'earn', 'move'] }, positions }, null, 2));
   console.log('Real browser four-position acceptance proof complete; fork snapshot reverted.');

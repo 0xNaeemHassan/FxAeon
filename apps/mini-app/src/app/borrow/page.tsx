@@ -5,10 +5,12 @@ import { Coins, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell, Button, Card, EmptyState, LoadingRegion, Skeleton } from '@/components/ui';
 import { ActionReview } from '@/components/ActionReview';
+import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
+import { ConfirmedPositionCards } from '@/components/ConfirmedPositionCards';
 import WalletConnectCTA from '@/components/WalletConnectCTA';
 import { AmountField, InfoNote, Segmented, TokenSelect, useWalletTokenBalances } from '@/components/ProtocolForm';
 import { useUsdPrices } from '@/components/PriceProvider';
-import { planDepositAndMint, planRepayAndWithdraw } from '@/lib/fx';
+import { planDepositAndMint, planRepayAndWithdraw, type PlannedRoute, type TransactionExecutionResult } from '@/lib/fx';
 import { usePrivyWallet } from '@/lib/wallet';
 import { userSafeError } from '@/lib/errors';
 import {
@@ -43,6 +45,8 @@ function collateralTokensForMarket(market: UiMarket): readonly UiToken[] {
 
 export default function BorrowPage() {
   const wallet = usePrivyWallet();
+  const sharedPositions = useProtocolPositions();
+  const trackConfirmedPosition = sharedPositions.trackConfirmedPosition;
   const [mode, setMode] = useState<BorrowMode>('mint');
   const [market, setMarket] = useState<UiMarket>('ETH');
   const [positionState, setPositionState] = useState<PositionState | null>(null);
@@ -83,9 +87,10 @@ export default function BorrowPage() {
     }
   }, [wallet.address]);
 
-  const refreshAfterAction = useCallback(async () => {
+  const refreshAfterAction = useCallback(async (execution: TransactionExecutionResult, route: PlannedRoute) => {
+    await trackConfirmedPosition(execution, route);
     await Promise.all([load(), refreshBalances()]);
-  }, [refreshBalances, load]);
+  }, [refreshBalances, load, trackConfirmedPosition]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -154,6 +159,7 @@ export default function BorrowPage() {
   return (
     <AppShell title="Borrow" subtitle="Borrow fxUSD without selling your collateral.">
       <div className={styles.workspace}>
+        <ConfirmedPositionCards />
         <div className={`grid grid-cols-2 ${styles.productSwitch}`} aria-label="Earn products">
           <Link href="/earn" className="glass-press flex min-h-11 items-center justify-center rounded-lg px-3 text-[13px] font-semibold text-mut">fxSAVE</Link>
           <span aria-current="page" className="flex min-h-11 items-center justify-center rounded-lg bg-[var(--mint-dim)] px-3 text-[13px] font-semibold text-[var(--text)]">Borrow / fxMINT</span>

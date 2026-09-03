@@ -13,6 +13,7 @@ import {
   ProtocolPositionSkeleton,
 } from '@/components/ProtocolPositionCard';
 import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
+import { ConfirmedPositionCards } from '@/components/ConfirmedPositionCards';
 import { AmountField, LeverageField, RangeField, Segmented, SlippageField, TokenSelect, tokenBalanceFor, useWalletTokenBalances, type TokenBalanceView } from '@/components/ProtocolForm';
 import { MAX_FX_SLIPPAGE_PERCENT, clampLeverage, leverageBoundsFor, planAdjustPositionLeverage, planIncreasePosition, planReducePosition, readLeverageBounds, type LeverageBounds } from '@/lib/fx';
 import { usePrivyWallet } from '@/lib/wallet';
@@ -148,18 +149,19 @@ export default function PositionsPage() {
           <ProtocolPositionNotice
             status={positionState.status}
             failedGroups={positionState.failedGroups}
-            hasPositions={positions.length > 0}
+            hasPositions={positions.length + positionState.pendingPositions.length > 0}
             refreshing={positionState.refreshing}
             onRefresh={() => void positionState.refresh()}
           />
         )}
-        {wallet.address && positionState.status === 'loading' && !positions.length ? (
+        <ConfirmedPositionCards />
+        {wallet.address && positionState.status === 'loading' && !positions.length && !positionState.pendingPositions.length ? (
           <div className="flex flex-col gap-3"><ProtocolPositionSkeleton /><ProtocolPositionSkeleton /></div>
-        ) : wallet.address && positionState.status === 'unavailable' && !positions.length ? (
+        ) : wallet.address && positionState.status === 'unavailable' && !positions.length && !positionState.pendingPositions.length ? (
           <EmptyState icon={Layers2} title="Position state unavailable" body="FxAeon could not verify any position pool. Your wallet remains connected; retry when Ethereum responds." />
-        ) : wallet.address && positionState.status === 'partial' && !positions.length ? (
+        ) : wallet.address && positionState.status === 'partial' && !positions.length && !positionState.pendingPositions.length ? (
           <EmptyState icon={Layers2} title="No positions in verified pools" body="At least one position pool is unavailable, so FxAeon cannot confirm that this wallet has no open positions." />
-        ) : wallet.address && positionState.status === 'ready' && !positions.length ? (
+        ) : wallet.address && positionState.status === 'ready' && !positions.length && !positionState.pendingPositions.length ? (
           <EmptyState icon={Layers2} title="No open positions" body="Open an ETH or BTC position to get started." action={<Link href="/trade" className="button button-primary flex min-h-12 items-center justify-center rounded-xl px-4 font-semibold">Open a position</Link>} />
         ) : wallet.address && positions.length > 0 ? (
           <>

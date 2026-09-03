@@ -176,6 +176,17 @@ function mapSelectors(entries: readonly Address[], selectors: readonly string[])
   return Object.freeze(Object.fromEntries(entries.map((entry) => [entry.toLowerCase(), selectors])));
 }
 
+function mergeSelectorManifests(
+  approvalSelectors: Readonly<Record<string, readonly string[]>>,
+  actionSelectors: Readonly<Record<string, readonly string[]>>,
+): Readonly<Record<string, readonly string[]>> {
+  const keys = new Set([...Object.keys(approvalSelectors), ...Object.keys(actionSelectors)]);
+  return Object.freeze(Object.fromEntries([...keys].map((key) => [
+    key,
+    [...new Set([...(approvalSelectors[key] ?? []), ...(actionSelectors[key] ?? [])])],
+  ])));
+}
+
 const APPROVAL_TARGETS = [
   ...TOKEN_TARGETS,
   ...LONG_POOLS,
@@ -228,16 +239,14 @@ export function capabilityPolicy(params: {
   const approvalDestinations = params.approvalDestinations
     ?? (operationManifest ? approvalDestinationsFor(params.operation!) : APPROVAL_TARGETS);
   const approvalSpenders = operationManifest?.approvalSpenders ?? (params.chainId === 1 ? APPROVAL_SPENDERS : []);
+  const approvalSelectorManifest = mapSelectors(approvalDestinations, [APPROVE]);
   const allowedDestinations = [...new Set([...approvalDestinations, ...actionDestinations])];
   return params.chainId === 1
     ? {
         walletAddress: params.walletAddress,
         chainId: 1,
         allowedDestinations,
-        allowedSelectors: {
-          ...mapSelectors(approvalDestinations, [APPROVE]),
-          ...actionSelectors,
-        },
+        allowedSelectors: mergeSelectorManifests(approvalSelectorManifest, actionSelectors),
         allowedActionDestinations: actionDestinations,
         allowedActionSelectors: actionSelectors,
         allowedApprovalDestinations: approvalDestinations,
