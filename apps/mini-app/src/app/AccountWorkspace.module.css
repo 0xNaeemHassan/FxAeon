@@ -20,7 +20,7 @@
 .primaryColumn, .secondaryColumn { display: flex; min-width: 0; flex-direction: column; gap: 18px; }
 .section { min-width: 0; }
 
-.valueCard, .connectCard, .balanceCard, .activityCard, .positionCard, .protocolCard {
+.valueCard, .connectCard, .balanceCard, .activityCard, .protocolCard {
   border: 1px solid var(--line);
   border-radius: 24px;
   background: var(--surface);
@@ -32,7 +32,6 @@
 .valueMain { align-items: flex-end; margin-top: 26px; }
 .valueAmount { margin: 0; color: var(--text); font-size: clamp(38px, 6vw, 58px); font-weight: 650; letter-spacing: -.055em; line-height: .95; }
 .valueHint { max-width: 480px; margin: 10px 0 0; color: var(--mut); font-size: 13px; line-height: 1.45; }
-.assurance { display: inline-flex; align-items: center; gap: 7px; flex: 0 0 auto; border: 1px solid color-mix(in srgb, var(--success) 30%, var(--line)); border-radius: 999px; background: color-mix(in srgb, var(--success) 10%, transparent); padding: 8px 11px; color: var(--success); font-size: 12px; font-weight: 650; }
 .valueMetrics { align-items: stretch; margin-top: 24px; border-top: 1px solid var(--line); padding-top: 18px; }
 .valueMetrics > span { display: grid; min-width: 0; gap: 5px; }
 .valueMetrics small { color: var(--mut); font-size: 12px; letter-spacing: normal; text-transform: none; }
@@ -72,7 +71,6 @@
 .balanceRow p:first-child { font-size: 14px !important; }
 .balanceRow p:last-child { color: var(--mut) !important; font-size: 12px !important; }
 
-.activityNote { border-bottom-color: var(--line) !important; padding: 14px 20px !important; color: var(--mut); font-size: 12px !important; }
 .activityList { padding-inline: 16px !important; }
 .activityRow { min-height: 72px !important; border-bottom-color: var(--line) !important; padding-block: 14px !important; }
 .activityLink { min-height: 52px !important; border-top-color: var(--line) !important; padding-inline: 20px !important; color: var(--mint) !important; }
@@ -81,19 +79,12 @@
 .activityIcon { display: grid; width: 42px; height: 42px; flex: 0 0 auto; place-items: center; border-radius: 14px; background: color-mix(in srgb, var(--mint) 14%, transparent); color: var(--mint); }
 .activityEmpty { color: var(--mut); }
 
-.positionCard { padding: 18px !important; }
-.positionCardSelected { border-color: var(--mint) !important; background: color-mix(in srgb, var(--mint) 10%, var(--surface)) !important; }
-.positionCardMetrics { border-top-color: var(--line) !important; }
-.positionCardMetric { border-color: var(--line) !important; background: var(--surface-2) !important; border-radius: 16px !important; }
-.positionSkeleton { border: 1px solid var(--line); border-radius: 24px; background: var(--surface); box-shadow: var(--elevation-1); }
-
 .walletBackdrop { position: fixed; z-index: 60; inset: 0; display: flex; align-items: center; justify-content: flex-end; background: rgba(8, 5, 18, .64); backdrop-filter: blur(8px); padding: 16px; }
 .walletSheet { width: min(100%, 456px); max-height: min(860px, calc(100dvh - 32px)); overflow-y: auto; border: 1px solid var(--line); border-radius: 24px; background: var(--surface); box-shadow: var(--elevation-2); padding: 20px; }
 .walletHeader { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .walletHeader h2 { margin: 4px 0 0; font-size: 24px; letter-spacing: -.03em; }
 .walletHeader p { margin: 0; }
 .walletSummary { margin-top: 18px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface-2); padding: 18px; }
-.walletAmount { margin: 4px 0 0; font-size: 42px; font-weight: 650; letter-spacing: -.055em; line-height: 1; }
 .walletSection { margin-top: 22px; }
 .walletSection h3 { margin: 4px 0 0; font-size: 16px; }
 .walletAssets, .walletLinks { border-top: 1px solid var(--line); }
@@ -118,7 +109,6 @@
   .valueMain { align-items: flex-start; flex-direction: column; margin-top: 22px; }
   .valueMetrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
   .valueMetrics > span { padding-right: 8px; }
-  .assurance { font-size: 11px; }
   .actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
   .action { min-width: 0; flex: none; }
   .market { flex-direction: row; gap: 8px; }

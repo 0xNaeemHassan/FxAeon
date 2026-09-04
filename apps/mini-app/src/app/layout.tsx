@@ -9,7 +9,7 @@ import PriceProvider from '@/components/PriceProvider';
 import { LocaleProvider } from '@/lib/i18n';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
-const themeInitializer = `(()=>{try{const t=localStorage.getItem('fxaeon_theme_id')==='light'?'light':'dark';const r=document.documentElement;r.dataset.theme=t;r.style.colorScheme=t;}catch{}})();`;
+const themeInitializer = `(()=>{try{const v=localStorage.getItem('fxaeon_theme_id_v2');const t=v==='official'||v==='dark'||v==='light'?v:localStorage.getItem('fxaeon_theme_id')==='light'?'light':'official';const r=document.documentElement;r.dataset.theme=t;r.style.colorScheme=t==='light'?'light':'dark';}catch{}})();`;
 
 export const metadata: Metadata = {
   title: {

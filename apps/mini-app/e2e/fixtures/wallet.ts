@@ -19,6 +19,11 @@ export function browserWalletInitScript(_opts: BrowserWalletShimOptions = {}): (
         requests.push({ method, params });
         if (method === 'eth_accounts') return connected ? [address] : [];
         if (method === 'eth_requestAccounts') { connected = true; return [address]; }
+        if (method === 'wallet_revokePermissions') {
+          connected = false;
+          emit('accountsChanged', []);
+          return null;
+        }
         if (method === 'eth_chainId') return chainId;
         if (method === 'wallet_switchEthereumChain') {
           const next = (params?.[0] as { chainId?: unknown } | undefined)?.chainId;

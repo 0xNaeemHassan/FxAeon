@@ -4,23 +4,22 @@ test.describe('cohesive responsive design', () => {
   test.use({ telegram: false });
 
   test('More theme choices persist and all route surfaces inherit the selected palette', async ({ page, requests }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(120_000);
     await page.goto('/more', { waitUntil: 'domcontentloaded' });
-    for (const theme of ['light', 'dark'] as const) {
-      await page.getByRole('radio', { name: new RegExp(`Official ${theme}`) }).click();
+    for (const theme of ['official', 'dark', 'light'] as const) {
+      await page.getByRole('radio', { name: new RegExp(`^${theme}`, 'i') }).click();
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
       for (const route of ['/trade', '/positions', '/portfolio', '/earn', '/borrow', '/move', '/activity', '/settings', '/qr', '/docs']) {
         await page.goto(route, { waitUntil: 'domcontentloaded' });
         await expect(page.locator('main:visible')).toBeVisible();
         await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
-        const mismatches = await page.locator('main:visible').evaluate((main) => {
+        await expect.poll(async () => page.locator('main:visible').evaluate((main) => {
           const root = getComputedStyle(document.documentElement);
           return [main, ...main.querySelectorAll('.ui-card, .amount-control, .market-chart-panel')].flatMap((element) => {
             const style = getComputedStyle(element);
             return ['--mint', '--text', '--bg'].filter((token) => style.getPropertyValue(token).trim() !== root.getPropertyValue(token).trim());
           });
-        });
-        expect(mismatches, `${route} must not replace the selected theme with a private palette`).toEqual([]);
+        }), { message: `${route} must not replace the selected theme with a private palette` }).toEqual([]);
       }
       await page.goto('/more', { waitUntil: 'domcontentloaded' });
     }
@@ -97,13 +96,26 @@ test.describe('cohesive responsive design', () => {
     for (const width of [320, 1280]) {
       await page.setViewportSize({ width, height: 900 });
       await expect(slider).toBeVisible();
-      expect((await slider.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      await expect.poll(async () => (await slider.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
       await amount.fill('2');
       await slider.focus();
       await slider.press('ArrowRight');
       await expect(slider).toHaveValue('2.1');
       await expect(amount).toHaveValue('2.1');
     }
+    assertNoBackendRequests(requests);
+  });
+
+  test('slippage presets support standard radio-key navigation', async ({ page, requests }) => {
+    await page.goto('/settings', { waitUntil: 'domcontentloaded' });
+    const group = page.getByRole('radiogroup', { name: 'Slippage tolerance' });
+    const selected = group.getByRole('radio', { name: '0.5%', exact: true });
+    await expect(selected).toHaveAttribute('aria-checked', 'true');
+    await selected.focus();
+    await selected.press('ArrowRight');
+    const next = group.getByRole('radio', { name: '1%', exact: true });
+    await expect(next).toBeFocused();
+    await expect(next).toHaveAttribute('aria-checked', 'true');
     assertNoBackendRequests(requests);
   });
 });
@@ -114,6 +126,7 @@ test.describe('light theme overlays', () => {
   test('wallet and token portals use the light palette and restore focus', async ({ page, requests }) => {
     await page.goto('/trade', { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('button', { name: 'Open wallet profile' })).toBeVisible();
+    await page.getByRole('button', { name: 'Switch to dark theme' }).click();
     await page.getByRole('button', { name: 'Switch to light theme' }).click();
     await page.getByRole('button', { name: 'Open wallet profile' }).click();
     const wallet = page.getByRole('dialog', { name: 'Wallet profile' });

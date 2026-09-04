@@ -70,6 +70,18 @@ test.describe("browser entry", () => {
     await expect(page.locator("body")).not.toContainText(/runs inside Telegram|open the .*Mini App from Telegram to continue/i);
     assertNoBackendRequests(requests);
   });
+
+  test("wallet entry stays on every app route", async ({ page, requests }) => {
+    for (const route of OFFICIAL_ROUTES) {
+      await page.goto(route, { waitUntil: "domcontentloaded" });
+      const connect = page.locator(".app-topbar").getByRole("button", { name: "Connect wallet", exact: true });
+      await expect(connect).toBeEnabled();
+      await connect.click();
+      await expect(page).toHaveURL(new RegExp(`${route.replace("/", "\\/")}(?:\\/)?$`));
+      await expect(page.locator(".wallet-connect-toast")).toContainText(/No browser wallet detected/i);
+    }
+    assertNoBackendRequests(requests);
+  });
 });
 
 test.describe("Telegram bridge availability", () => {
@@ -94,15 +106,15 @@ test.describe("Telegram bridge availability", () => {
     assertNoBackendRequests(requests);
   });
 
-  test("a direct Telegram protocol route keeps its browser login fallback", async ({ page, requests }) => {
+  test("a direct Telegram protocol route keeps an in-place wallet fallback", async ({ page, requests }) => {
     await page.route("**/telegram-web-app.js", (route) => route.abort("failed"));
     await page.goto("/portfolio#tgWebAppData=query_id%3Dtest&tgWebAppVersion=8.0&tgWebAppPlatform=tdesktop", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: /portfolio/i })).toBeVisible();
     await expect(page.locator("body")).not.toContainText(/Wallet service unavailable/i);
     await expect(page.locator("body")).not.toContainText(/Telegram bridge unavailable/i);
     await page.getByText("Connect wallet", { exact: true }).click();
-    await expect(page).toHaveURL(/\/login\/?$/);
-    await expect(page.getByRole("button", { name: /connect browser wallet/i })).toBeVisible();
+    await expect(page).toHaveURL(/\/portfolio(?:#.*)?$/);
+    await expect(page.locator(".wallet-connect-toast")).toContainText(/No browser wallet detected/i);
     await expect(page.locator("body")).not.toContainText(/Telegram bridge unavailable/i);
     assertNoBackendRequests(requests);
   });
@@ -112,6 +124,7 @@ test("missing Privy configuration still offers a browser wallet entry", async ({
   await page.goto("/login", { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: /connect your wallet/i })).toBeVisible();
   await expect(page.getByRole("button", { name: /connect browser wallet/i })).toBeVisible();
+  await expect(page.getByText(/02\s*Wallet access|Connect once|A focused home for your Ethereum markets/i)).toHaveCount(0);
   await expect(page.locator("body")).not.toContainText(/wallet setup unavailable|wallet service unavailable|wallet controls are unavailable/i);
   await expect(page.locator("body")).not.toContainText(/private key|session signer|delegat(?:ed|ion)/i);
   assertNoBackendRequests(requests);
@@ -130,7 +143,7 @@ test.describe("connected browser wallet flows", () => {
     await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: /portfolio/i })).toBeVisible();
     await expect(page.getByText(/0x930f/i).first()).toBeVisible();
-    await expect(page.getByText("Wallet balances", { exact: true })).toBeVisible();
+    await expect(page.getByText("Wallet balances", { exact: true })).toHaveCount(0);
     await expect(page.getByText('Ethereum reads are unavailable right now.', { exact: false })).toBeVisible();
     await expect(page.locator('.portfolio-value-metrics').getByText('—', { exact: true })).toHaveCount(3);
     await expect(page.getByText('Verified units', { exact: true })).toHaveCount(0);
@@ -155,7 +168,7 @@ test.describe("connected browser wallet flows", () => {
     assertNoBackendRequests(requests);
   });
 
-  test("trade exposes the full official input set and clamps an over-limit target", async ({ page, requests }) => {
+  test("trade exposes the full official input set and bounds leverage in all four position flows", async ({ page, requests }) => {
     await page.goto("/trade", { waitUntil: "domcontentloaded" });
     // Restoring the fixture's account starts a new wallet-scoped form session.
     // Establish this connected-flow precondition before interacting with it.
@@ -185,9 +198,23 @@ test.describe("connected browser wallet flows", () => {
     await asset.click();
     await expect(page.getByRole("listbox", { name: "Input asset options" }).getByRole("option", { name: /^stETH/i })).toBeVisible();
     await page.getByRole("listbox", { name: "Input asset options" }).getByRole("option", { name: /^ETH selected/i }).click();
-    const leverage = page.getByRole("spinbutton", { name: "Target LSD leverage", exact: true });
-    await leverage.fill("20");
-    await expect(leverage).toHaveValue("6.9");
+    for (const flow of [
+      { market: "ETH", side: "Long", label: "Target leverage", min: "1.1", max: "6.8" },
+      { market: "ETH", side: "Short", label: "Target LSD leverage", min: "0.1", max: "6.9" },
+      { market: "BTC", side: "Long", label: "Target leverage", min: "1.1", max: "6.8" },
+      { market: "BTC", side: "Short", label: "Target LSD leverage", min: "0.1", max: "6.9" },
+    ] as const) {
+      await page.getByRole("radio", { name: flow.market, exact: true }).click();
+      await page.getByRole("radio", { name: flow.side, exact: true }).click();
+      const leverage = page.getByRole("spinbutton", { name: flow.label, exact: true });
+      await expect(leverage).toHaveAttribute("min", flow.min);
+      await expect(leverage).toHaveAttribute("max", flow.max);
+      await leverage.fill("20");
+      await expect(leverage).toHaveValue(flow.max);
+      await leverage.fill("0.01");
+      await leverage.blur();
+      await expect(leverage).toHaveValue(flow.min);
+    }
     assertNoBackendRequests(requests);
   });
 
@@ -245,7 +272,7 @@ test.describe("connected browser wallet flows", () => {
 
 });
 
-test.describe("live USD context", () => {
+test.describe("market price context", () => {
   test.use({
     telegram: false,
     marketPrices: true,
@@ -268,7 +295,10 @@ test.describe("live USD context", () => {
     await expect(page.getByRole("button", { name: "Hide chart", exact: true })).toHaveAttribute("aria-expanded", "true");
     await expect(page.getByRole("img", { name: /^ETH 1D USD price chart/ })).toBeVisible();
     await expect.poll(async () => page.locator(".market-chart-frame").evaluate((element) => element.getBoundingClientRect().height)).toBeLessThanOrEqual(170);
-    await page.getByRole("radio", { name: "7D" }).click();
+    const oneDay = page.getByRole("radio", { name: "1D" });
+    await oneDay.focus();
+    await oneDay.press("ArrowRight");
+    await expect(page.getByRole("radio", { name: "7D" })).toBeFocused();
     await expect(page.getByRole("img", { name: /^ETH 7D USD price chart/ })).toBeVisible();
     await page.getByRole("radio", { name: "BTC" }).click();
     await expect(page.getByRole("img", { name: /^BTC 7D USD price chart/ })).toBeVisible();
@@ -284,7 +314,7 @@ test.describe("live USD context", () => {
     // This build has no RPC configured: a known token price is not evidence
     // of an owned balance, and must not appear as the wallet's USD worth.
     await expect(ethOption).toContainText("Balance unavailable");
-    await expect(ethOption).toContainText("USD unavailable");
+    await expect(ethOption).not.toContainText("USD unavailable");
     await expect(ethOption.getByText("$2,400.00", { exact: true })).toHaveCount(0);
     await page.keyboard.press("Escape");
     const slider = page.getByRole("slider", { name: "Target leverage slider" });
@@ -329,10 +359,25 @@ test.describe("live USD context", () => {
     assertNoBackendRequests(requests);
   });
 
-  test("keeps live USD context available across every asset workspace", async ({ page, requests }) => {
+  test("keeps compact market context available across every asset workspace", async ({ page, requests }) => {
     for (const route of ["/portfolio", "/positions", "/borrow", "/earn", "/move", "/more", "/settings", "/activity", "/qr"]) {
       await page.goto(route, { waitUntil: "domcontentloaded" });
-      await expect(page.getByRole("region", { name: "Live USD prices" }).getByText("$2,400.00", { exact: true })).toBeVisible();
+      const strip = page.getByRole("region", { name: "Market prices" });
+      await expect(strip.getByText("$2,400.00", { exact: true })).toBeVisible();
+      await expect(strip.locator(".market-strip-item").filter({ hasText: "FXN" })).toContainText("$26.00");
+      const geometry = await strip.evaluate((element) => {
+        const frame = element.getBoundingClientRect();
+        const items = [...element.querySelectorAll<HTMLElement>(".market-strip-item")]
+          .map((item) => item.getBoundingClientRect());
+        return {
+          frameCenter: frame.left + frame.width / 2,
+          contentCenter: (items[0].left + items[items.length - 1].right) / 2,
+          overflows: items[0].left < frame.left || items[items.length - 1].right > frame.right,
+        };
+      });
+      expect(geometry.overflows).toBe(false);
+      expect(Math.abs(geometry.contentCenter - geometry.frameCenter)).toBeLessThanOrEqual(2);
+      await expect(strip).not.toContainText("Live USD");
     }
     assertNoBackendRequests(requests);
   });
@@ -376,21 +421,22 @@ test.describe("live USD context", () => {
     });
 
     await page.goto("/trade", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("region", { name: "Live USD prices" }).getByText("$2,400.00", { exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Market prices" }).getByText("$2,400.00", { exact: true })).toBeVisible();
     await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("region", { name: "Live USD prices" }).getByText("$2,400.00", { exact: true })).toBeVisible();
+    const strip = page.getByRole("region", { name: "Market prices" });
+    await expect(strip.getByText("$2,400.00", { exact: true })).toBeVisible();
     await expect.poll(() => calls).toBeGreaterThan(1);
-    await expect(page.getByRole("region", { name: "Live USD prices" })).toContainText("Last USD");
+    await expect(strip).not.toContainText("Last USD");
     assertNoBackendRequests(requests);
   });
 });
 
-test("Earn exposes Borrow and fxMINT as a first-class product", async ({ page, requests }) => {
+test("Earn links to borrowing without presenting positions as savings", async ({ page, requests }) => {
   await page.goto("/earn", { waitUntil: "domcontentloaded" });
-  await page.getByRole("link", { name: "Borrow / fxMINT" }).click();
+  await page.getByRole("link", { name: "Borrow fxUSD" }).click();
   await expect(page).toHaveURL(/\/borrow\/?$/);
   await expect(page.getByRole("heading", { name: "Borrow" })).toBeVisible();
-  await expect(page.getByText("Borrow / fxMINT", { exact: true })).toBeVisible();
+  await expect(page.getByText("Borrow fxUSD", { exact: true })).toBeVisible();
   assertNoBackendRequests(requests);
 });
 
@@ -404,33 +450,55 @@ test.describe("browser wallet connection", () => {
   });
 
   test("browser users can connect an injected wallet without Telegram", async ({ page, requests }) => {
-    await page.goto("/login", { waitUntil: "domcontentloaded" });
-    await page.getByRole("button", { name: /connect browser wallet/i }).click();
-    await expect(page.getByText("0x930f0000000000000000000000000000000098b9", { exact: true })).toBeVisible();
-    await expect(page.getByRole("link", { name: /continue to fxaeon/i })).toBeVisible();
+    await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
+    await page.getByRole("main").getByRole("button", { name: "Connect wallet", exact: true }).click();
+    await expect(page).toHaveURL(/\/portfolio\/?$/);
+    await expect(page.getByRole("button", { name: "Open wallet profile", exact: true })).toBeVisible();
+    await expect(page.getByText("0x930f0000000000000000000000000000000098b9", { exact: true })).toHaveCount(0);
+    await assertNoTopOverlay(page);
+    assertNoBackendRequests(requests);
+  });
+
+  test("Move recipient connects the wallet without leaving the route", async ({ page, requests }) => {
+    await page.goto("/move", { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "Connect wallet for recipient", exact: true }).click();
+    await expect(page).toHaveURL(/\/move\/?$/);
+    await expect(page.getByText("Connected wallet", { exact: true })).toBeVisible();
+    await expect(page.getByText("0x930f…98b9", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Connect wallet for recipient", exact: true })).toHaveCount(0);
     await assertNoTopOverlay(page);
     assertNoBackendRequests(requests);
   });
 });
 
-test.describe("official theme control", () => {
+test.describe("theme control", () => {
   test.use({ telegram: false });
 
-  test("switches between the official light and dark themes and persists the choice", async ({ page, requests }) => {
+  test("switches among official, dark, and light themes, supports radio-key navigation, and persists the choice", async ({ page, requests }) => {
     await page.goto("/more", { waitUntil: "domcontentloaded" });
     const appearance = page.getByRole("radiogroup", { name: "Appearance theme", exact: true });
-    await expect(appearance.getByRole("radio")).toHaveCount(2);
-    await expect(appearance.getByRole("radio", { name: /Official dark/ })).toHaveAttribute("aria-checked", "true");
+    await expect(appearance.getByRole("radio")).toHaveCount(3);
+    const officialTheme = appearance.getByRole("radio", { name: /^Official/ });
+    await expect(officialTheme).toHaveAttribute("aria-checked", "true");
+    await officialTheme.focus();
+    await officialTheme.press("ArrowRight");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expect(appearance.getByRole("radio", { name: /^Dark/ })).toHaveAttribute("aria-checked", "true");
+    await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "Switch to light theme" }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-    await page.reload({ waitUntil: "domcontentloaded" });
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-    await expect(appearance.getByRole("radio", { name: /Official light/ })).toHaveAttribute("aria-checked", "true");
-    await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("main").getByRole("link", { name: "Connect wallet", exact: true })).toHaveCSS("color", "rgb(255, 255, 255)");
+    await expect(page.getByRole("main").getByRole("button", { name: "Connect wallet", exact: true })).toHaveCSS("color", "rgb(255, 255, 255)");
     await page.goto("/more", { waitUntil: "domcontentloaded" });
-    await page.getByRole("button", { name: "Switch to dark theme" }).click();
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await page.getByRole("button", { name: "Switch to official theme" }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "official");
+    await page.evaluate(() => {
+      window.localStorage.removeItem("fxaeon_theme_id_v2");
+      window.localStorage.setItem("fxaeon_theme_id", "dark");
+    });
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "official");
     assertNoBackendRequests(requests);
   });
 });

@@ -41,6 +41,7 @@ import { FX_SAVE_UNITS, fxSaveUsdValue } from '@/lib/fxSaveUnits';
 import { haptic } from '@/lib/telegram';
 import { usePrivyWallet, useWalletReadyTimeout } from '@/lib/wallet';
 import styles from '@/app/AccountWorkspace.module.css';
+import ConnectWalletButton from '@/components/ConnectWalletButton';
 
 const EMPTY_FX_SAVE: FxSaveSnapshot = {
   status: 'idle',
@@ -176,8 +177,6 @@ function PortfolioWallet() {
         valuation={valuation}
         loading={loading}
         fxSaveLoading={fxSaveLoading}
-        priceStatus={priceSnapshot.status}
-        updatedAt={priceSnapshot.updatedAt}
         refreshing={refreshing}
         onRefresh={() => {
           haptic('light');
@@ -224,7 +223,7 @@ function PortfolioWallet() {
           />
           <ProtocolCard
             icon={CircleDollarSign}
-            label="Borrow / fxMINT"
+            label="Borrow fxUSD"
             value="Mint fxUSD"
             hint="Collateral-backed borrowing"
             href="/borrow"
@@ -259,9 +258,9 @@ function DisconnectedPortfolio({ authenticated }: { authenticated: boolean }) {
           <p className="mt-2 max-w-[390px] text-[12.5px] leading-relaxed text-mut">
             Connect to see supported wallet value, exact asset balances, positions, fxSAVE, and activity.
           </p>
-          <Link href="/login" className="button button-primary glass-press mt-5 flex min-h-12 w-full max-w-[280px] items-center justify-center rounded-xl px-4 py-3 text-[14px] font-semibold">
+          <ConnectWalletButton className="button button-primary glass-press mt-5 flex min-h-12 w-full max-w-[280px] items-center justify-center gap-2 rounded-xl px-4 py-3 text-[14px] font-semibold">
             {authenticated ? 'Choose wallet' : 'Connect wallet'}
-          </Link>
+          </ConnectWalletButton>
         </div>
       </Card>
       </div>
@@ -279,8 +278,6 @@ function SupportedValueCard({
   valuation,
   loading,
   fxSaveLoading,
-  priceStatus,
-  updatedAt,
   refreshing,
   onRefresh,
   positionValue,
@@ -290,21 +287,13 @@ function SupportedValueCard({
   valuation: WalletValuation;
   loading: boolean;
   fxSaveLoading: boolean;
-  priceStatus: ReturnType<typeof useUsdPrices>['status'];
-  updatedAt: number | null;
   refreshing: boolean;
   onRefresh: () => void;
   positionValue: string;
 }) {
-  const priceContext = updatedAt
-    ? `${priceStatus === 'stale' ? 'Cached prices' : 'Live prices'} · ${new Date(updatedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
-    : 'Waiting for validated market prices';
-  const balanceReadsComplete = protocol.balances !== null && protocol.balances.failedTokens.length === 0;
   const supportedAssetValue = loading || protocol.balances === null
     ? '—'
-    : protocol.balances.failedTokens.length > 0
-      ? `${valuation.assetCount} verified`
-      : String(valuation.assetCount);
+    : String(valuation.assetCount);
 
   return (
     <Card glow elevation={2} className={`${styles.valueCard} relative overflow-hidden p-5`}>
@@ -327,16 +316,15 @@ function SupportedValueCard({
             {loading
               ? 'Reading supported Ethereum balances…'
               : valuation.complete
-                ? `${valuation.assetCount} supported ${valuation.assetCount === 1 ? 'asset' : 'assets'} · ${priceContext}`
+                ? `${valuation.assetCount} supported ${valuation.assetCount === 1 ? 'asset' : 'assets'}`
                 : valuation.reason}
           </p>
         </div>
-        {balanceReadsComplete && <span className={styles.assurance}><ShieldCheck className="h-4 w-4" aria-hidden="true" />Verified units</span>}
       </div>
 
       <div className={`${styles.valueMetrics} portfolio-value-metrics`}>
         <ValueMetric label="Open positions" value={positionValue} />
-        <ValueMetric label="fxSAVE shares" value={protocol.fxSaveShares !== null ? `${protocol.fxSaveShares} fxSAVE` : fxSaveLoading ? '…' : '—'} />
+        <ValueMetric label="fxSAVE" value={protocol.fxSaveShares !== null ? `${protocol.fxSaveShares} fxSAVE` : fxSaveLoading ? '…' : '—'} />
         <ValueMetric label="Supported assets" value={supportedAssetValue} />
       </div>
     </Card>
@@ -409,19 +397,13 @@ function WalletBalancesCard({ balances, loading, prices }: { balances: WalletBal
   const valuation = walletValuation(balances, prices);
   const assetCountLabel = loading || balances === null
     ? '—'
-    : balances.failedTokens.length > 0
-      ? `${nonZero.length} verified`
-      : `${nonZero.length} ${nonZero.length === 1 ? 'asset' : 'assets'}`;
+    : `${nonZero.length} ${nonZero.length === 1 ? 'asset' : 'assets'}`;
 
   return (
     <section aria-labelledby="wallet-balances-title">
       <SectionTitle><span id="wallet-balances-title">Assets</span></SectionTitle>
       <Card className={`${styles.balanceCard} relative overflow-hidden p-0`}>
-        <div className={`${styles.balanceHeader} flex min-h-[68px] items-center justify-between gap-3 border-b border-[var(--line)] px-4 py-3`}>
-          <div>
-            <p className="text-[13px] font-semibold">Wallet balances</p>
-            <p className="mt-0.5 text-[10.5px] text-mut">Ethereum · exact on-chain units</p>
-          </div>
+        <div className={`${styles.balanceHeader} flex min-h-[60px] items-center justify-end gap-3 border-b border-[var(--line)] px-4 py-3`}>
           <span className="text-right">
             <strong className="block text-[14px] tabular-nums">{loading ? '—' : valuation.complete ? formatUsd(valuation.totalUsd) : '—'}</strong>
             <span className="text-[9px] text-mut">{assetCountLabel}</span>
@@ -453,7 +435,7 @@ function WalletBalancesCard({ balances, loading, prices }: { balances: WalletBal
 }
 
 function WalletBalanceRow({ balance, price }: { balance: WalletTokenBalance; price: number | undefined }) {
-  const label = balance.key === 'fxUSDBasePool' ? 'fxUSD base pool' : balance.key;
+  const label = balance.key === 'fxUSDBasePool' ? 'fxUSD pool token' : balance.key;
   return (
     <div className={`${styles.balanceRow} flex min-h-[68px] items-center justify-between gap-3 py-3`}>
       <div className="flex min-w-0 items-center gap-3">

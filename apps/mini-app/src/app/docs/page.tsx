@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { AppShell } from '@/components/ui';
 import styles from './Docs.module.css';
@@ -23,6 +23,7 @@ const sections = [
 
 export default function DocsPage() {
   const [search, setSearch] = useState('');
+  const [hydrated, setHydrated] = useState(false);
   const normalizedSearch = search.trim().toLowerCase();
   const visibleSections = useMemo(
     () => normalizedSearch
@@ -31,11 +32,28 @@ export default function DocsPage() {
     [normalizedSearch],
   );
 
+  useEffect(() => {
+    setHydrated(true);
+    const scrollToCurrentSection = () => {
+      const id = decodeURIComponent(window.location.hash.slice(1));
+      if (!id) return;
+      document.getElementById(id)?.scrollIntoView({ block: 'start' });
+    };
+    const restoreHashPosition = () => {
+      requestAnimationFrame(() => requestAnimationFrame(scrollToCurrentSection));
+      void document.fonts.ready.then(scrollToCurrentSection);
+    };
+
+    restoreHashPosition();
+    window.addEventListener('hashchange', restoreHashPosition);
+    return () => window.removeEventListener('hashchange', restoreHashPosition);
+  }, []);
+
   return (
     <AppShell title="Docs" subtitle="A practical guide to using FxAeon.">
       <div className={styles.docsPage}>
         <div className={styles.docsLayout}>
-          <nav className={styles.docsNav} aria-label="Documentation sections">
+          <nav className={styles.docsNav} aria-label="Documentation sections" aria-busy={!hydrated}>
             <label className={styles.searchLabel} htmlFor="docs-search">Search docs</label>
             <div className={styles.searchRow}>
               <input
@@ -43,6 +61,7 @@ export default function DocsPage() {
                 type="search"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
+                disabled={!hydrated}
                 placeholder="Search sections"
                 className={styles.searchInput}
                 autoComplete="off"
@@ -68,17 +87,17 @@ export default function DocsPage() {
                 <div className={styles.fact}><strong>Two networks</strong><span>Ethereum and Base</span></div>
                 <div className={styles.fact}><strong>Wallet-first</strong><span>Every write is explicitly approved</span></div>
                 <div className={styles.fact}><strong>Read before write</strong><span>Routes are rebuilt and checked before signing</span></div>
-                <div className={styles.fact}><strong>Focused scope</strong><span>Positions, earn, borrow, and bridge</span></div>
+                <div className={styles.fact}><strong>Focused scope</strong><span>Trade, save, borrow, and move</span></div>
               </div>
             </header>
 
             <section id="overview" className={styles.section}>
               <h2>Overview</h2>
-              <p>FxAeon prepares unsigned routes from the official f(x) SDK, shows a human-readable review, and asks the selected wallet to approve each transaction. Ethereum is the source of truth for positions and fxSAVE state. Base is supported for the bridge surface.</p>
-              <p>The interface deliberately does not provide spot swaps, an order book, limit orders, automated execution, or a server account. Prices and charts help you read the screen; they are not execution inputs.</p>
+              <p>FxAeon prepares each action, shows what your wallet will approve, and asks the selected wallet to approve every transaction. Ethereum is the source of truth for positions and fxSAVE state. Base is supported for moving assets between chains.</p>
+              <p>Portfolio reads supported Ethereum assets, including FXN, and adds a USD estimate only when that asset has a validated current price. The interface deliberately does not provide spot swaps, an order book, limit orders, automated execution, or a server account. Prices and charts help you read the screen; they are not execution inputs.</p>
               <details className={styles.callout}>
-                <summary className="cursor-pointer text-[14px] font-semibold text-[var(--text)]">Active SDK capability surface</summary>
-                <p>The product exposes these reviewed methods and no broader trading API:</p>
+                <summary className="cursor-pointer text-[14px] font-semibold text-[var(--text)]">Supported protocol actions</summary>
+                <p>For technical reference, FxAeon uses these reviewed f(x) methods:</p>
                 <ul>
                   <li><code>getPositions</code>, <code>increasePosition</code>, <code>reducePosition</code>, <code>adjustPositionLeverage</code></li>
                   <li><code>depositAndMint</code>, <code>repayAndWithdraw</code></li>
@@ -101,34 +120,34 @@ export default function DocsPage() {
 
             <section id="access" className={styles.section}>
               <h2>Browser & Telegram</h2>
-              <p>The web app and Telegram Mini App are equal launch surfaces over the same static client. Telegram adds host integration such as viewport sizing, haptics, and navigation; it does not become a wallet authority.</p>
-              <p>When the optional Privy service is configured, Privy consumes Telegram’s signed launch data for authentication inside the Mini App. Outside Telegram, an injected EIP-1193 wallet can be connected after an explicit action. Privy supplies identity and user-owned wallet controls when configured.</p>
+              <p>The web app and Telegram Mini App offer the same FxAeon actions. Telegram adds native sizing, haptics, and navigation, while your selected wallet still approves transactions.</p>
+              <p>When Privy is available, it supports login and wallet controls inside Telegram. On the web, you can explicitly connect a supported browser wallet.</p>
             </section>
 
             <section id="wallets" className={styles.section}>
               <h2>Wallets & signing</h2>
-              <p>FxAeon accepts the selected Privy or browser wallet address as the sender. The selected wallet is never taken from a query string, Telegram user record, or local storage. FxAeon does not receive or store private keys.</p>
+              <p>The address shown by your selected Privy or browser wallet is always used as the sender. FxAeon does not receive or store private keys.</p>
               <div className={styles.callout}><p><strong>Before you approve:</strong> confirm the wallet address, network, recipient, amount, contract, and approval spender. Technical calldata, selector, value, and nonce are available in the review disclosure.</p></div>
             </section>
 
             <section id="trade" className={styles.section}>
               <h2>Trade & leverage</h2>
-              <p>Trade supports Ethereum ETH and BTC markets with long and short position routes. You can choose an input asset, amount, side, and target leverage. The app reads the available leverage bounds and passes the reviewed value to the official SDK.</p>
-              <p>Trade is not a general exchange: there is no spot swap, limit order, order book, or background strategy. Use the review to see the route, minimum-output information, approvals, and any slippage setting before signing.</p>
+              <p>Trade supports Ethereum ETH and BTC markets with long and short positions. You can choose an input asset, amount, side, and target leverage. The app reads each pool’s available leverage range and refreshes those limits while the SDK prices the route. If a pool limit changed, the target is moved inside the new range and review stops so you can check it again.</p>
+              <p>Trade is not a general exchange: there is no spot swap, limit order, order book, or background strategy. Use the review to see the route, minimum-output information, approvals, and any slippage setting before signing. Confirm rebuilds the selected SDK route against current state; if its calldata, minimum output, quote, or other reviewed fact changed, FxAeon shows the refreshed route and requires a new acknowledgement before opening the wallet.</p>
             </section>
 
             <section id="positions" className={styles.section}>
               <h2>Position management</h2>
-              <p>Positions are read from Ethereum through the official SDK and shown with their market, side, collateral, debt, and leverage context. A position can be increased, reduced, closed, or adjusted to a new leverage target when the selected route supports it.</p>
+              <p>Positions are read from Ethereum and shown with their market, side, collateral, debt, and leverage context. A position can be increased, reduced, closed, or adjusted to a new leverage target when the selected route supports it.</p>
               <p>When validated display prices are available, <strong>estimated net equity</strong> is calculated as collateral value in USD minus debt value in USD. It is a display estimate, not a liquidation value, P&amp;L, close quote, oracle value, or guarantee of what a transaction will return. A missing price is shown as unavailable; retained stale position data remains visible with an explicit Last verified label, and stale prices are labelled Last prices.</p>
-              <p>Refreshing is important after a write. A stale or partially unavailable position is not treated as a safe live quote, and the app can block review until state is read again.</p>
+              <p>Refreshing is important after a write. A stale or partially unavailable position is not treated as a safe live quote, and the app can block review until state is read again. Increasing or adjusting a position applies the same live leverage-limit and fresh-route checks used when opening one.</p>
             </section>
 
             <section id="earn" className={styles.section}>
               <h2>Earn with fxSAVE</h2>
-              <p>Earn reads the fxSAVE balance, underlying asset view when available, vault configuration, redemption status, and claimable preview from Ethereum. Deposit supports USDC, fxUSD, and the configured base-pool share input.</p>
-              <p>Deposit forms show the selected wallet’s verified available balance for each supported input. Token pickers pair the available quantity with its estimated USD worth, not the price of one token. A balance can be loading or unavailable when Ethereum does not respond; that state is never treated as zero. fxSAVE shares remain the authoritative withdrawal limit.</p>
-              <p>Withdrawals can be instant or queued where the selected asset supports that path. A queued redemption remains pending through its cooldown; Claim appears only when the canonical state says it is ready. Final review shows the selected route and slippage when applicable. Earn displays the configured instant-redemption fee before review.</p>
+              <p>Earn reads your fxSAVE balance, its current underlying pool-token amount when available, vault configuration, redemption status, and claimable preview from Ethereum. Deposits support USDC, fxUSD, and the fxUSD pool token.</p>
+              <p>Deposit forms show the selected wallet’s verified available balance for each supported input. Token pickers pair the available quantity with its estimated USD worth, not the price of one token. A balance can be loading or unavailable when Ethereum does not respond; that state is never treated as zero. Your fxSAVE balance remains the authoritative withdrawal limit.</p>
+              <p>Withdrawals can be instant or queued where the selected asset supports that path. A queued redemption remains pending through its cooldown; claim review becomes available when the current redemption state says it is ready. Final review shows the selected route and slippage when applicable. Earn displays the configured instant-redemption fee before review.</p>
             </section>
 
             <section id="borrow" className={styles.section}>
@@ -140,22 +159,22 @@ export default function DocsPage() {
 
             <section id="move" className={styles.section}>
               <h2>Move between chains</h2>
-              <p>Move bridges the supported fxUSD and fxSAVE assets between Ethereum and Base through the official SDK bridge surface. Choose the direction, asset, amount, and recipient. The connected wallet remains the source signer and fee-refund address. The destination recipient defaults to that wallet, but you can explicitly choose another recipient.</p>
-              <p>Canonical Move forms read available balances on the selected source chain: Ethereum uses the underlying approval token, while Base uses the canonical source OFT. Advanced custom contracts do not receive an available-balance claim; review their metadata, quote, and route checks before signing.</p>
-              <p>Canonical routes use configured addresses. Advanced OFT mode is for explicitly entered checksummed contracts and requires live validation and quote checks in both directions. Ethereum may require one exact approval before the OFT send.</p>
+              <p>Move bridges supported fxUSD and fxSAVE assets between Ethereum and Base through the f(x) bridge. Choose the direction, asset, amount, and recipient. If you are disconnected, the recipient control opens the wallet selector without leaving Move. The connected wallet remains the source signer and fee-refund address. The destination recipient defaults to that wallet, but you can explicitly choose another recipient.</p>
+              <p>Standard Move forms read available balances on the selected source chain: Ethereum uses the underlying approval token, while Base uses the configured source OFT. Advanced custom contracts do not show an available balance; review their metadata, quote, and route checks before signing.</p>
+              <p>Standard routes use configured addresses. Advanced OFT mode is for explicitly entered checksummed contracts and requires current validation and quote checks in both directions. Ethereum may require one exact approval before the OFT send.</p>
               <div className={styles.callout}><p><strong>Bridge risk:</strong> check the source network, destination network, recipient, and token identity. A confirmed source transaction is not the same as delivered destination funds. FxAeon verifies matching LayerZero events from the captured destination baseline block; custom OFTs add contract and peer risk.</p></div>
             </section>
 
             <section id="fees" className={styles.section}>
               <h2>Fees & slippage</h2>
               <p>Move bridge reviews include the current native LayerZero fee quote. Other routes can show a native transaction value when the SDK returns one, but FxAeon does not present a universal gas forecast. Protocol, redemption, or route-specific charges are surfaced when the SDK returns them; FxAeon does not invent a fee estimate.</p>
-              <p>Slippage is a device-local preference used by Trade, Positions, and routed or instant fxSAVE forms. Presets are 0.1%, 0.5%, 1%, and 2%. Borrow uses its guarded route default; Move uses the bridge route’s quoted minimum delivery. Direct base-pool and queued fxSAVE paths omit a user slippage value. Lower tolerance can make a route fail; higher tolerance permits a worse minimum output. Slippage protection is not a promise about price.</p>
+              <p>Slippage is a device-local preference used by Trade, Positions, and routed or instant fxSAVE forms. Presets are 0.1%, 0.5%, 1%, and 2%. Borrow uses its guarded route default; Move uses the bridge route’s quoted minimum delivery. Direct pool-token and queued fxSAVE paths omit a user slippage value. Lower tolerance can make a route fail; higher tolerance permits a worse minimum output. Slippage protection is not a promise about price.</p>
               <p>USD values and charts are display-only. Current display prices are primarily validated from DefiLlama; a bounded CoinGecko contract-price fallback can fill independently validated missing token quotes. Quotes older than 15 minutes are rejected, and FxAeon never substitutes a stablecoin peg. ETH/BTC history is separately validated from CoinGecko. Execution uses on-chain route data, oracle behavior, and contract checks, not these display feeds.</p>
             </section>
 
             <section id="recovery" className={styles.section}>
               <h2>Recovery</h2>
-              <p>After a wallet returns a transaction hash, FxAeon keeps a small device-local journal so Activity can recheck the receipt. This journal is a recovery hint, not a complete blockchain history and not proof of balance, position, delivery, or authorization.</p>
+              <p>After your wallet returns a transaction hash, FxAeon saves it on this device so Activity can check the receipt again. This saved record is not a complete blockchain history or proof of balance, position, delivery, or authorization.</p>
               <p>Activity reconciles hashes against the selected wallet and chain. It never resends automatically. If a route partially completes, do not repeat the full action; inspect each step and the current on-chain state. For a bridge, wait for separate destination delivery verification.</p>
             </section>
 

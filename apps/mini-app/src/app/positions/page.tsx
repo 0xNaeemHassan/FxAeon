@@ -15,7 +15,7 @@ import {
 import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
 import { ConfirmedPositionCards } from '@/components/ConfirmedPositionCards';
 import { AmountField, LeverageField, RangeField, Segmented, SlippageField, TokenSelect, tokenBalanceFor, useWalletTokenBalances, type TokenBalanceView } from '@/components/ProtocolForm';
-import { MAX_FX_SLIPPAGE_PERCENT, clampLeverage, leverageBoundsFor, planAdjustPositionLeverage, planIncreasePosition, planReducePosition, readLeverageBounds, type LeverageBounds } from '@/lib/fx';
+import { MAX_FX_SLIPPAGE_PERCENT, clampLeverage, leverageBoundsFor, planAdjustPositionLeverage, planIncreasePosition, planReducePosition, prepareLeverageReview, readLeverageBounds, type LeverageBounds } from '@/lib/fx';
 import { usePrivyWallet } from '@/lib/wallet';
 import styles from '@/components/trade-surfaces.module.css';
 import { positiveDecimal } from '@/lib/amount';
@@ -118,7 +118,20 @@ export default function PositionsPage() {
       // while long pools use the regular leverage field. Both are exposed as
       // an editable target so an existing position can actually exercise the
       // complete official increasePosition input surface.
-      return () => planIncreasePosition({ ...common, leverage, inputTokenAddress: tokenAddress(token), amount: amountWei });
+      return async () => {
+        const prepared = await prepareLeverageReview({
+          leverage,
+          currentBounds: leverageBounds,
+          readBounds: () => readLeverageBounds(selected.market, selected.side),
+          buildPlan: () => planIncreasePosition({ ...common, leverage, inputTokenAddress: tokenAddress(token), amount: amountWei }),
+        });
+        setLeverageBounds(prepared.bounds);
+        if (prepared.adjusted) {
+          setLeverage(prepared.leverage);
+          throw new RangeError(`Pool leverage limits changed to ${prepared.bounds.min.toFixed(1)}x-${prepared.bounds.max.toFixed(1)}x. The target was updated; review it again.`);
+        }
+        return prepared.plan;
+      };
     }
     if (action === 'reduce' || action === 'close') {
       return async () => {
@@ -134,7 +147,20 @@ export default function PositionsPage() {
       };
     }
     if (!Number.isFinite(leverage) || leverage < leverageBounds.min || leverage > leverageBounds.max) return null;
-    return () => planAdjustPositionLeverage({ ...common, leverage });
+    return async () => {
+      const prepared = await prepareLeverageReview({
+        leverage,
+        currentBounds: leverageBounds,
+        readBounds: () => readLeverageBounds(selected.market, selected.side),
+        buildPlan: () => planAdjustPositionLeverage({ ...common, leverage }),
+      });
+      setLeverageBounds(prepared.bounds);
+      if (prepared.adjusted) {
+        setLeverage(prepared.leverage);
+        throw new RangeError(`Pool leverage limits changed to ${prepared.bounds.min.toFixed(1)}x-${prepared.bounds.max.toFixed(1)}x. The target was updated; review it again.`);
+      }
+      return prepared.plan;
+    };
   }, [action, fraction, leverage, leverageBounds, selected, selectedStale, slippage, token, validAmount, wallet.address]);
 
   const openManager = (key: string, nextAction: PositionAction) => {
@@ -149,16 +175,20 @@ export default function PositionsPage() {
   const reviewLabel = action === 'close' ? 'Review close' : `Review ${action}`;
   const operationLabel = action === 'close'
     ? `Close ${selected?.market} ${selected?.side} position`
-    : `${action[0].toUpperCase()}${action.slice(1)} ${selected?.market} position`;
+    : action === 'increase'
+      ? `Add to ${selected?.market} position`
+      : action === 'reduce'
+        ? `Reduce ${selected?.market} position`
+        : `Adjust ${selected?.market} position leverage`;
 
   return (
     <AppShell title="Positions">
       <div className={styles.positionsRoot}>
       <div className={styles.positionsWorkspace}>
-        <div className="grid grid-cols-2 rounded-xl border border-[var(--line)] bg-[var(--input)] p-1" aria-label="Trade views">
+        <nav className="grid grid-cols-2 rounded-xl border border-[var(--line)] bg-[var(--input)] p-1" aria-label="Trade views">
           <Link href="/trade" className="glass-press flex min-h-11 items-center justify-center rounded-lg px-3 text-[13px] font-semibold text-mut">New position</Link>
           <span aria-current="page" className="flex min-h-11 items-center justify-center rounded-lg bg-[var(--mint-dim)] px-3 text-[13px] font-semibold text-[var(--text)]">Positions</span>
-        </div>
+        </nav>
         {!wallet.address ? (
           <WalletConnectCTA ready={wallet.ready} authenticated={wallet.authenticated} body="Choose or connect a wallet to see and manage your open positions." />
         ) : (
@@ -184,7 +214,7 @@ export default function PositionsPage() {
             <section className={styles.positionsColumn} aria-labelledby="open-positions-heading">
               <div className={styles.positionSectionHeader}>
                 <div><p className={styles.ticketKicker}>Your portfolio</p><h2 id="open-positions-heading">Open positions</h2></div>
-                <span>{positions.length} live</span>
+                <span>{positions.length} shown</span>
               </div>
               <div className={styles.positionList} aria-label="Open positions">
                 {positions.map((position) => {
@@ -210,14 +240,14 @@ export default function PositionsPage() {
             </section>
 
             <section ref={managerRef} className={styles.positionManageColumn} aria-labelledby="manage-position-heading">
-              {selected && <div className={styles.manageHeading}><div><p className={styles.ticketKicker}>Selected position</p><h2 id="manage-position-heading">{selected.market} {selected.side} · #{selected.info.positionId}</h2></div>{selected.side === 'long' && <Link href="/borrow" className="glass-press inline-flex min-h-11 items-center gap-2 rounded-xl px-2 text-[12px] font-semibold text-mint">Manage debt <span aria-hidden="true">→</span></Link>}</div>}
+              {selected && <div className={styles.manageHeading}><div><p className={styles.ticketKicker}>Selected position</p><h2 id="manage-position-heading">{selected.market} {selected.side} · #{selected.info.positionId}</h2></div>{selected.side === 'long' && <Link href={`/borrow?market=${selected.market}&position=${selected.info.positionId}`} className="glass-press inline-flex min-h-11 items-center gap-2 rounded-xl px-2 text-[12px] font-semibold text-mint">Borrow against <span aria-hidden="true">→</span></Link>}</div>}
               {selectedStale && <p role="status" className="rounded-xl border border-[rgba(255,194,102,.2)] bg-[rgba(255,194,102,.08)] p-3 text-[12px] text-warn">Refresh this position before reviewing an action. Its retained balances are not a live quote.</p>}
 
               <div className={styles.positionActions}><Segmented value={action} onChange={setAction} ariaLabel="Position action" options={[{ value: 'increase', label: 'Add' }, { value: 'reduce', label: 'Reduce' }, { value: 'close', label: 'Close' }, { value: 'leverage', label: 'Leverage' }]} /></div>
               <Card className={styles.actionPanel}>
                 {action === 'increase' && <div className={styles.fieldStack}><Header icon={ArrowUpRight} title="Increase exposure" body="Add collateral and choose the target leverage for this position." /><TokenSelect label="Input asset" value={token} options={marketTokens} onChange={setToken} {...tokenBalanceProps} /><AmountField label="Amount to add" symbol={token} value={amount} onChange={setAmount} maxDecimals={tokenDecimals(token)} balanceState={selectedTokenBalance} /><LeverageField label={selected?.side === 'short' ? 'Target LSD leverage' : 'Target leverage'} value={leverage} onChange={setLeverage} min={leverageBounds.min} max={leverageBounds.max} error={leverageError} /></div>}
                 {action === 'reduce' && <div className={styles.fieldStack}><Header icon={ArrowDownRight} title="Reduce exposure" body="Choose how much of this position to reduce and what asset to receive." /><RangeField label="Position reduction" value={fraction} onChange={setFraction} min={1} max={99} step={1} suffix="%" /><div className="grid grid-cols-3 gap-2">{[25, 50, 75].map((value) => <button key={value} type="button" aria-pressed={fraction === value} onClick={() => setFraction(value)} className={`min-h-11 rounded-xl text-[11px] font-semibold ${fraction === value ? 'bg-[var(--mint-dim)] text-mint' : 'bg-[rgba(255,255,255,.035)] text-mut'}`}>{value}%</button>)}</div><TokenSelect label="Receive asset" value={token} options={marketTokens} onChange={setToken} {...tokenBalanceProps} /></div>}
-                {action === 'close' && <div className={styles.fieldStack}><Header icon={X} title="Close the full position" body="Unwind 100% of this position through the official f(x) route and choose the asset returned to your wallet." /><div className={styles.closeNotice}><strong>Full close</strong><span>All remaining collateral and debt</span><small>The review will show the route, limits, approvals, and exact transaction count before your wallet opens.</small></div><TokenSelect label="Receive asset" value={token} options={marketTokens} onChange={setToken} {...tokenBalanceProps} /></div>}
+                {action === 'close' && <div className={styles.fieldStack}><Header icon={X} title="Close the full position" body="Close 100% of this position and choose the asset returned to your wallet." /><div className={styles.closeNotice}><strong>Full close</strong><span>All remaining collateral and debt</span><small>The review will show the route, limits, approvals, and exact transaction count before your wallet opens.</small></div><TokenSelect label="Receive asset" value={token} options={marketTokens} onChange={setToken} {...tokenBalanceProps} /></div>}
                 {action === 'leverage' && <div className={styles.fieldStack}><Header icon={Gauge} title="Adjust leverage" body="Set the target leverage for this position." /><LeverageField label={selected?.side === 'short' ? 'Target LSD leverage' : 'Target leverage'} value={leverage} onChange={setLeverage} min={leverageBounds.min} max={leverageBounds.max} error={leverageError} /></div>}
                 <details className={`${styles.advancedDetails} group mt-4 rounded-xl border border-[var(--line)] px-3`}><summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-[13px] font-semibold [&::-webkit-details-marker]:hidden">Advanced <span aria-hidden="true" className="text-mut transition-transform group-open:rotate-180">⌄</span></summary><div className="border-t border-[var(--line)] py-3"><SlippageField value={slippage} onChange={setSlippage} max={MAX_FX_SLIPPAGE_PERCENT} /></div></details>
               </Card>

@@ -45,13 +45,13 @@ test.describe('independent USD price availability', () => {
         await route.fulfill({ contentType: 'application/json', body: JSON.stringify(payload) });
       });
       await page.goto('/trade', { waitUntil: 'domcontentloaded' });
-      const prices = page.getByRole('region', { name: 'Live USD prices' });
+      const prices = page.getByRole('region', { name: 'Market prices' });
       await expect(prices.getByText('$2,400.00', { exact: true })).toBeVisible();
       await expect(prices.getByText('$104,000.00', { exact: true })).toBeVisible();
       if (available) await expect(prices.getByText('$0.998', { exact: true })).toBeVisible();
       else {
-        await expect(prices).toContainText('Partial USD');
-        await expect(prices.locator('.market-strip-item').filter({ hasText: 'fxUSD' })).toContainText('—');
+        await expect(prices).not.toContainText('Partial USD');
+        await expect(prices.locator('.market-strip-item').filter({ hasText: 'fxUSD' })).toHaveCount(0);
       }
       expect(fallbackCalls).toBe(1);
       assertNoBackendRequests(requests);

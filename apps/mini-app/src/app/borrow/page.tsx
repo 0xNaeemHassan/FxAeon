@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Coins, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell, Button, Card, EmptyState, LoadingRegion, Skeleton } from '@/components/ui';
@@ -58,6 +58,7 @@ export default function BorrowPage() {
   const [withdraw, setWithdraw] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const deepLinkApplied = useRef(false);
   // Borrowing is Ethereum-only in the official SDK. Keep the read tied to the
   // selected address while using Ethereum's reviewed client regardless of the
   // wallet's currently displayed chain.
@@ -94,6 +95,10 @@ export default function BorrowPage() {
 
   useEffect(() => { void load(); }, [load]);
 
+  useEffect(() => {
+    deepLinkApplied.current = false;
+  }, [wallet.address]);
+
   const positions = useMemo(() => {
     const current = positionState;
     return current && current.walletAddress === wallet.address ? current.items : EMPTY_POSITIONS;
@@ -103,6 +108,28 @@ export default function BorrowPage() {
   const collateralTokens = collateralTokensForMarket(market);
   const withdrawalTokens = collateralTokensForMarket(selected?.market ?? market);
   const activeTokenOptions = mode === 'manage' ? withdrawalTokens : collateralTokens;
+
+  useEffect(() => {
+    if (
+      deepLinkApplied.current
+      || !wallet.address
+      || positionState?.walletAddress.toLowerCase() !== wallet.address.toLowerCase()
+    ) return;
+    deepLinkApplied.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const requestedMarket = params.get('market');
+    const requestedId = Number(params.get('position'));
+    if ((requestedMarket !== 'ETH' && requestedMarket !== 'BTC') || !Number.isSafeInteger(requestedId) || requestedId <= 0) return;
+    const requested = positions.find((position) => (
+      position.side === 'long'
+      && position.market === requestedMarket
+      && position.info.positionId === requestedId
+    ));
+    if (!requested) return;
+    setMode('mint');
+    setMarket(requested.market);
+    setSelectedKey(positionKey(requested));
+  }, [positionState, positions, wallet.address]);
 
   useEffect(() => {
     setSelectedKey((current) => {
@@ -155,15 +182,24 @@ export default function BorrowPage() {
   }, [deposit, market, mint, mode, repay, selected, selectedKey, token, wallet.address, withdraw]);
 
   const initialRead = Boolean(wallet.address) && loading && positionState?.walletAddress !== wallet.address;
+  const repayRequested = repay.trim().toLowerCase() === 'all' || (parseZeroAmount(repay, 'fxUSD') ?? 0n) > 0n;
+  const withdrawalRequested = (parseZeroAmount(withdraw, token) ?? 0n) > 0n;
+  const manageOperationLabel = repayRequested && withdrawalRequested
+    ? 'Repay fxUSD and withdraw collateral'
+    : repayRequested
+      ? 'Repay fxUSD'
+      : withdrawalRequested
+        ? 'Withdraw collateral'
+        : 'Manage debt';
 
   return (
-    <AppShell title="Borrow" subtitle="Borrow fxUSD without selling your collateral.">
+    <AppShell title="Borrow" subtitle="Create or manage a long collateral position and borrow fxUSD.">
       <div className={styles.workspace}>
         <ConfirmedPositionCards />
-        <div className={`grid grid-cols-2 ${styles.productSwitch}`} aria-label="Earn products">
+        <nav className={`grid grid-cols-2 ${styles.productSwitch}`} aria-label="Savings and borrowing">
           <Link href="/earn" className="glass-press flex min-h-11 items-center justify-center rounded-lg px-3 text-[13px] font-semibold text-mut">fxSAVE</Link>
-          <span aria-current="page" className="flex min-h-11 items-center justify-center rounded-lg bg-[var(--mint-dim)] px-3 text-[13px] font-semibold text-[var(--text)]">Borrow / fxMINT</span>
-        </div>
+          <span aria-current="page" className="flex min-h-11 items-center justify-center rounded-lg bg-[var(--mint-dim)] px-3 text-[13px] font-semibold text-[var(--text)]">Borrow fxUSD</span>
+        </nav>
         {!wallet.address ? (
           <WalletConnectCTA
             ready={wallet.ready}
@@ -195,8 +231,8 @@ export default function BorrowPage() {
                 }}
                 ariaLabel="Borrow action"
                 options={[
-                  { value: 'mint', label: 'Deposit & mint' },
-                  { value: 'manage', label: 'Manage debt' },
+                  { value: 'mint', label: 'Borrow or add' },
+                  { value: 'manage', label: 'Repay or withdraw' },
                 ]}
               />
             </div>
@@ -235,35 +271,42 @@ export default function BorrowPage() {
 
                 <Card className={`${styles.focusCard} p-5`}>
                   <div className="flex flex-col gap-4">
-                    <FormHeader title="Deposit & mint" body="Add collateral, mint fxUSD, or do both." />
+                    <FormHeader
+                      title={selected ? `Borrow against position #${selected.info.positionId}` : 'Open a collateral position'}
+                      body={selected
+                        ? 'Choose what to add to this existing Trade position.'
+                        : 'Choose your starting collateral and how much fxUSD to receive.'}
+                    />
                     <TokenSelect label="Collateral asset" value={token} options={collateralTokens} onChange={setToken} balances={balanceSnapshot.status === 'idle' ? undefined : balanceSnapshot.balances} balanceStatus={wallet.address ? balanceStatus : 'disconnected'} />
                     <AmountField
-                      label="Collateral amount"
+                      label={selected ? 'Collateral to add' : 'Starting collateral'}
                       symbol={token}
                       value={deposit}
                       onChange={setDeposit}
                       allowZero
                       maxDecimals={tokenDecimals(token)}
-                      placeholder="0 for mint only"
+                      placeholder="Enter collateral"
                       balanceState={balanceStateFor(token)}
                     />
                     <AmountField
-                      label="fxUSD to mint"
+                      label={selected ? 'Additional fxUSD to borrow' : 'fxUSD to receive'}
                       symbol="fxUSD"
                       value={mint}
                       onChange={setMint}
                       allowZero
                       maxDecimals={18}
-                      placeholder="0 for deposit only"
+                      placeholder="Enter fxUSD amount"
                     />
-                    <InfoNote>Minting increases position debt. Leave enough collateral for market moves.</InfoNote>
+                    <InfoNote>{selected
+                      ? 'Enter collateral to make the position safer, fxUSD to borrow more, or both. Borrowed fxUSD is sent to your wallet and added to this position’s debt.'
+                      : 'FxAeon opens one collateralized long position and sends the borrowed fxUSD to your wallet. The review shows the resulting collateral and debt before you sign.'}</InfoNote>
                   </div>
                 </Card>
 
                 <ActionReview
                   planBuilder={planBuilder}
-                  label="Review deposit & mint"
-                  operationLabel="Deposit collateral and mint fxUSD"
+                  label={selected ? 'Review position update' : 'Review new position'}
+                  operationLabel={selected ? 'Update collateral position' : 'Open collateral position'}
                   onComplete={refreshAfterAction}
                 />
               </>
@@ -290,7 +333,7 @@ export default function BorrowPage() {
                       allowAll
                       allowZero
                       maxDecimals={18}
-                      placeholder="0 for withdraw only"
+                      placeholder="Enter repayment"
                       balanceState={balanceStateFor('fxUSD')}
                     />
                     <TokenSelect label="Receive collateral as" value={token} options={withdrawalTokens} onChange={setToken} balances={balanceSnapshot.status === 'idle' ? undefined : balanceSnapshot.balances} balanceStatus={wallet.address ? balanceStatus : 'disconnected'} />
@@ -301,16 +344,16 @@ export default function BorrowPage() {
                       onChange={setWithdraw}
                       allowZero
                       maxDecimals={tokenDecimals(token)}
-                      placeholder="0 for repay only"
+                      placeholder="Enter withdrawal"
                     />
-                    <InfoNote>Withdrawing collateral can reduce your safety margin. Review the final amounts before confirming.</InfoNote>
+                    <InfoNote>Enter the fxUSD to repay, the collateral to receive, or both. The review shows the resulting position before you sign; withdrawing collateral can reduce its safety margin.</InfoNote>
                   </div>
                 </Card>
 
                 <ActionReview
                   planBuilder={planBuilder}
                   label="Review changes"
-                  operationLabel="Repay fxUSD and withdraw collateral"
+                  operationLabel={manageOperationLabel}
                   onComplete={refreshAfterAction}
                 />
               </>
@@ -337,7 +380,7 @@ function PositionSelect({
 }) {
   return (
     <label className="block">
-      <span className={`mb-2 block ${styles.eyebrow}`}>Position</span>
+      <span className={`mb-2 block ${styles.eyebrow}`}>Collateral position</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -346,7 +389,7 @@ function PositionSelect({
         {allowNew && <option value="new">{newLabel}</option>}
         {positions.map((position) => (
           <option key={positionKey(position)} value={positionKey(position)}>
-            #{position.info.positionId} · {position.market} · {formatPositionCollateral(position)} collateral · {formatPositionDebt(position)} debt
+            Trade position #{position.info.positionId} · {position.market} · {formatPositionCollateral(position)} collateral · {formatPositionDebt(position)} debt
           </option>
         ))}
       </select>
@@ -355,7 +398,7 @@ function PositionSelect({
 }
 
 function PositionSummary({ position }: { position: UiPosition }) {
-  const { prices, status: priceStatus } = useUsdPrices();
+  const { prices, status: priceStatus, refreshing: pricesRefreshing } = useUsdPrices();
   const collateralKey = priceKeyForSymbol(position.info.rawCollsToken);
   const debtKey = priceKeyForSymbol(position.info.rawDebtsToken);
   const valuation = calculatePositionUsdValuation({
@@ -366,9 +409,10 @@ function PositionSummary({ position }: { position: UiPosition }) {
     debtDecimals: positionDebtDecimals(position),
     debtPrice: debtKey ? prices[debtKey] : undefined,
   });
-  const collateralUsd = formatUsdCents(valuation.collateralUsdCents);
-  const debtUsd = formatUsdCents(valuation.debtUsdCents);
-  const netEquity = formatUsdCents(valuation.netEquityUsdCents);
+  const missingPrice = priceStatus === 'loading' || pricesRefreshing ? 'Loading…' : 'Price delayed · retrying';
+  const collateralUsd = valuation.collateralUsdCents === null ? missingPrice : formatUsdCents(valuation.collateralUsdCents);
+  const debtUsd = valuation.debtUsdCents === null ? missingPrice : formatUsdCents(valuation.debtUsdCents);
+  const netEquity = valuation.netEquityUsdCents === null ? missingPrice : formatUsdCents(valuation.netEquityUsdCents);
   return (
     <Card className={`${styles.summaryCard} p-5`}>
       <div className="flex items-start justify-between gap-3">

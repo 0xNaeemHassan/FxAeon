@@ -329,6 +329,48 @@ test("nonce drift prevents signing before the wallet prompt", async () => {
   assert.match(result.error ?? "", /nonce drift/);
 });
 
+test("live chain and pending nonce probes run concurrently before signing", async () => {
+  let chainCalls = 0;
+  let stepChainStarted = false;
+  let nonceStarted = false;
+  let release: (() => void) | undefined;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const base = client({
+    pendingNonces: [4],
+    receipts: [{ status: "success", blockNumber: 10n }],
+    blocks: [],
+  });
+  const concurrentClient = {
+    ...base,
+    getChainId: async () => {
+      chainCalls += 1;
+      if (chainCalls > 1) {
+        stepChainStarted = true;
+        await gate;
+      }
+      return 1;
+    },
+    getTransactionCount: async () => {
+      nonceStarted = true;
+      await gate;
+      return 4;
+    },
+  } as unknown as FxPublicClient;
+
+  const pending = runTransactionRoute({
+    route: route(1),
+    policy: TEST_POLICY,
+    publicClient: concurrentClient,
+    callbacks: { requestSignature: async () => HASH_1 },
+    options: { simulate: false, waitForNextBlock: false },
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(stepChainStarted, true);
+  assert.equal(nonceStarted, true, "nonce read should not wait for the chain probe response");
+  release?.();
+  assert.equal((await pending).status, "confirmed");
+});
+
 test("a live RPC chain mismatch fails before opening a wallet prompt", async () => {
   let signatures = 0;
   await assert.rejects(

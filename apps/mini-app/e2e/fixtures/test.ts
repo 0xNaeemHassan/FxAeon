@@ -45,6 +45,8 @@ async function installMarketPrices(page: Page, enabled: boolean): Promise<void> 
             ? 2_400
           : normalised.includes("7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0")
               ? 2_850
+              : normalised.includes("365accfca291e7d3914637abf1f7635db165bb09")
+                ? 26
               : 1;
       return [id, { price, timestamp, confidence: 0.99 }];
     }));

@@ -19,7 +19,7 @@ import { deriveConfirmedPositionHint } from '@/lib/confirmedPositions';
 import { confirmedPositionHintKey } from '@/lib/confirmedPositionStorage';
 import WalletConnectCTA from '@/components/WalletConnectCTA';
 import { AmountField, LeverageField, Segmented, SlippageField, TokenSelect, tokenBalanceFor, useWalletTokenBalances, type TokenBalanceView } from '@/components/ProtocolForm';
-import { MAX_FX_SLIPPAGE_PERCENT, clampLeverage, leverageBoundsFor, planIncreasePosition, readLeverageBounds, type LeverageBounds, type PlannedRoute, type TransactionExecutionResult } from '@/lib/fx';
+import { MAX_FX_SLIPPAGE_PERCENT, clampLeverage, leverageBoundsFor, planIncreasePosition, prepareLeverageReview, readLeverageBounds, type LeverageBounds, type PlannedRoute, type TransactionExecutionResult } from '@/lib/fx';
 import { usePrivyWallet } from '@/lib/wallet';
 import styles from '@/components/trade-surfaces.module.css';
 import { positiveDecimal } from '@/lib/amount';
@@ -98,8 +98,12 @@ export default function TradePage() {
     const amountWei = parseAmount(validAmount, token);
     const slippageValue = Number(slippage);
     if (!amountWei || !Number.isFinite(leverage) || leverage < leverageBounds.min || leverage > leverageBounds.max || !Number.isFinite(slippageValue) || slippageValue <= 0 || slippageValue > MAX_FX_SLIPPAGE_PERCENT) return null;
-    return () => {
-      return planIncreasePosition({
+    return async () => {
+      const prepared = await prepareLeverageReview({
+        leverage,
+        currentBounds: leverageBounds,
+        readBounds: () => readLeverageBounds(market, side),
+        buildPlan: () => planIncreasePosition({
         market,
         type: side,
         positionId: 0,
@@ -108,7 +112,14 @@ export default function TradePage() {
         inputTokenAddress: tokenAddress(token),
         amount: amountWei,
         slippage: slippageValue,
+        }),
       });
+      setLeverageBounds(prepared.bounds);
+      if (prepared.adjusted) {
+        setLeverage(prepared.leverage);
+        throw new RangeError(`Pool leverage limits changed to ${prepared.bounds.min.toFixed(1)}x-${prepared.bounds.max.toFixed(1)}x. The target was updated; review it again.`);
+      }
+      return prepared.plan;
     };
   }, [leverage, leverageBounds, market, side, slippage, token, validAmount, wallet.address]);
 
@@ -152,7 +163,7 @@ export default function TradePage() {
             <span className={`rounded-lg px-2.5 py-1 text-[12px] font-semibold ${side === 'long' ? 'bg-[var(--success-dim)] text-success' : 'bg-[var(--danger-dim)] text-danger'}`}>{side === 'long' ? 'Long' : 'Short'}</span>
           </div>
 
-          <div className={styles.sideControl}><Segmented tone="sides" value={side} onChange={setSide} ariaLabel="Position side" options={[{ value: 'long', label: 'Buy / Long', sub: 'Price rises', ariaLabel: 'Long' }, { value: 'short', label: 'Sell / Short', sub: 'Price falls', ariaLabel: 'Short' }]} /></div>
+          <div className={styles.sideControl}><Segmented tone="sides" value={side} onChange={setSide} ariaLabel="Position side" options={[{ value: 'long', label: 'Long', sub: 'Price rises' }, { value: 'short', label: 'Short', sub: 'Price falls' }]} /></div>
 
           <div className={styles.fieldStack}>
             <AmountField label="Amount" symbol={token} value={amount} onChange={setAmount} maxDecimals={tokenDecimals(token)} showMax={token !== 'ETH'} balanceState={selectedTokenBalance} tokenSelector={<TokenSelect compact label="Input asset" value={token} options={tokenOptions} onChange={setToken} balances={wallet.address ? walletBalances.balances : undefined} balanceStatus={wallet.address ? (walletBalances.status !== 'idle' ? walletBalances.status : undefined) : 'disconnected'} />} />

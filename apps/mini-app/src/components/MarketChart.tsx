@@ -139,8 +139,8 @@ export function TradeMarketChart({ market }: { market: MarketSymbol }) {
           {history.status === 'unavailable' && (
             <div className="market-chart-empty" role="status">
               <BarChart3 className="h-6 w-6 text-mut" aria-hidden="true" />
-              <span><strong>Chart temporarily unavailable</strong><small>Live trading controls remain available.</small></span>
-              <button type="button" aria-label="Retry market chart" onClick={history.retry} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-lg text-mut hover:text-mint"><RefreshCw className="h-4 w-4" /></button>
+              <span><strong>Chart temporarily unavailable</strong><small>You can still enter trade details.</small></span>
+              <button type="button" aria-label="Retry market chart" onClick={history.retry} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-lg text-mut hover:text-mint"><RefreshCw className="h-4 w-4" aria-hidden="true" /></button>
             </div>
           )}
           {history.status === 'ready' && history.snapshot && <MarketChartGraphic snapshot={history.snapshot} />}
@@ -155,7 +155,23 @@ export function TradeMarketChart({ market }: { market: MarketSymbol }) {
                 type="button"
                 role="radio"
                 aria-checked={range === option}
+                tabIndex={range === option ? 0 : -1}
                 onClick={() => { setRange(option); haptic('selection'); }}
+                onKeyDown={(event) => {
+                  const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
+                  if (!keys.includes(event.key)) return;
+                  event.preventDefault();
+                  const current = RANGE_OPTIONS.indexOf(option);
+                  const backwards = event.key === 'ArrowLeft' || event.key === 'ArrowUp';
+                  const next = event.key === 'Home'
+                    ? 0
+                    : event.key === 'End'
+                      ? RANGE_OPTIONS.length - 1
+                      : (current + (backwards ? -1 : 1) + RANGE_OPTIONS.length) % RANGE_OPTIONS.length;
+                  setRange(RANGE_OPTIONS[next]);
+                  event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
+                  haptic('selection');
+                }}
                 className={range === option ? 'chart-range-active' : ''}
               >
                 {option}

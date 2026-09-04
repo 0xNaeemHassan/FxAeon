@@ -1,6 +1,5 @@
 'use client';
 
-import { Activity } from 'lucide-react';
 import TokenIcon from '@/components/TokenIcon';
 import { useUsdPrices } from '@/components/PriceProvider';
 import { formatUsdPrice } from '@/lib/prices';
@@ -9,18 +8,20 @@ const MARKETS = [
   { key: 'ETH', label: 'ETH' },
   { key: 'WBTC', label: 'BTC' },
   { key: 'fxUSD', label: 'fxUSD' },
+  { key: 'FXN', label: 'FXN' },
 ] as const;
 
 export default function LiveMarketStrip({ className = '' }: { className?: string }) {
-  const { prices, status, updatedAt } = useUsdPrices();
+  const { prices, updatedAt } = useUsdPrices();
+  const visibleMarkets = MARKETS.filter(({ key }) => {
+    const price = prices[key];
+    return typeof price === 'number' && Number.isFinite(price) && price > 0;
+  });
+  if (!visibleMarkets.length) return null;
   return (
-    <section className={`market-strip ${className}`} aria-label="Live USD prices">
-      <span className="market-strip-source" title={updatedAt ? `Updated ${new Date(updatedAt).toISOString()}` : 'Waiting for current prices'}>
-        <Activity className="h-3.5 w-3.5" aria-hidden="true" />
-        {status === 'ready' ? 'Live USD' : status === 'partial' ? 'Partial USD' : status === 'stale' ? 'Last USD' : status === 'loading' ? 'Prices' : 'USD unavailable'}
-      </span>
+    <section className={`market-strip ${className}`} aria-label="Market prices" title={updatedAt ? `Updated ${new Date(updatedAt).toISOString()}` : undefined}>
       <div className="market-strip-items">
-        {MARKETS.map(({ key, label }) => (
+        {visibleMarkets.map(({ key, label }) => (
           <span key={key} className="market-strip-item">
             <TokenIcon symbol={key} size={16} />
             <span>{label}</span>

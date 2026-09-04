@@ -376,12 +376,12 @@ function TimelineRow({
   action?: { label: string; onClick: () => void };
 }) {
   const icon = state === 'done'
-    ? <CheckCircle2 className="h-4 w-4" />
+    ? <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
     : state === 'failed'
-      ? <XCircle className="h-4 w-4" />
+      ? <XCircle className="h-4 w-4" aria-hidden="true" />
       : state === 'active'
-        ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-        : <Clock3 className="h-3.5 w-3.5" />;
+        ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+        : <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />;
   const tone = state === 'done' ? 'bg-[var(--success-dim)] text-success' : state === 'failed' ? 'bg-[var(--danger-dim)] text-danger' : state === 'active' ? 'bg-[var(--mint-dim)] text-mint' : 'bg-[rgba(255,255,255,.05)] text-mut';
   return (
     <div className="flex items-start gap-3">

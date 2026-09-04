@@ -71,10 +71,11 @@ mkdirSync(output, { recursive: true });
 const browser = await playwright.chromium.launch({ args: ['--no-sandbox', '--disable-dev-shm-usage'] });
 
 async function createCaptureContext({ viewport, theme }) {
+  const colorScheme = theme === 'light' ? 'light' : 'dark';
   const context = await browser.newContext({
     viewport,
     deviceScaleFactor: 1,
-    colorScheme: theme,
+    colorScheme,
     locale: 'en-US',
     timezoneId: 'UTC',
     reducedMotion: 'reduce',
@@ -109,7 +110,7 @@ async function createCaptureContext({ viewport, theme }) {
     // Playwright also installs this on initial about:blank and child frames.
     // Only this application's origin has storage relevant to its theme.
     if (window.location.origin !== origin) return;
-    window.localStorage.setItem('fxaeon_theme_id', themeId);
+    window.localStorage.setItem('fxaeon_theme_id_v2', themeId);
     window.localStorage.setItem('fxaeon.settings.v1', JSON.stringify({ theme: themeId }));
   }, { themeId: theme, origin: baseUrl });
 
@@ -263,7 +264,20 @@ async function capture(page, file, route, prepare) {
     await playwright.expect(page.locator('.skeleton')).toHaveCount(0, { timeout: 30_000 });
   }
   await page.waitForFunction(() => !document.querySelector('[aria-label="Loading market chart"]'), null, { timeout: 60_000 });
-  await page.waitForFunction(() => [...document.images].every((image) => image.complete && image.naturalWidth > 0), null, { timeout: 15_000 });
+  await page.waitForFunction(() => [...document.images]
+    .filter((image) => {
+      const rect = image.getBoundingClientRect();
+      const style = window.getComputedStyle(image);
+      return style.display !== 'none'
+        && style.visibility !== 'hidden'
+        && rect.width > 0
+        && rect.height > 0
+        && rect.bottom > 0
+        && rect.right > 0
+        && rect.top < window.innerHeight
+        && rect.left < window.innerWidth;
+    })
+    .every((image) => image.complete && image.naturalWidth > 0), null, { timeout: 15_000 });
   await page.evaluate(() => document.fonts.ready);
   if (discoveryErrors.length || pageErrors.length) throw new Error(`capture rejected: ${[...discoveryErrors, ...pageErrors].join('; ')}`);
   if (positionManifest && interceptedGroups.size !== 4) throw new Error('all four exact SDK discovery requests must be observed before capture');
@@ -345,7 +359,7 @@ async function main() {
     // A local-only visual contact set. No fixture wallet or market values are
     // necessary: disconnected and unavailable states must be designed too.
     const routes = ['/', '/login', '/portfolio', '/trade', '/positions', '/earn', '/borrow', '/move', '/more', '/settings', '/activity', '/qr', '/docs'];
-    for (const theme of ['dark', 'light']) {
+    for (const theme of ['official', 'dark', 'light']) {
       for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000 }]) {
         const context = await createCaptureContext({ viewport, theme });
         const page = await context.newPage();
@@ -359,7 +373,7 @@ async function main() {
     return;
   }
   if (captureProfile === 'positions') {
-    const desktopContext = await createCaptureContext({ viewport: { width: 1180, height: 900 }, theme: 'dark' });
+    const desktopContext = await createCaptureContext({ viewport: { width: 1180, height: 900 }, theme: 'official' });
     const desktopPage = await desktopContext.newPage();
     await capture(desktopPage, 'fxaeon-portfolio-positions.png', '/portfolio', waitForPopulatedPortfolio);
     await capture(desktopPage, 'fxaeon-positions.png', '/positions', waitForPopulatedPositions);
@@ -369,14 +383,14 @@ async function main() {
     });
     await desktopContext.close();
 
-    const mobileContext = await createCaptureContext({ viewport: { width: 390, height: 844 }, theme: 'dark' });
+    const mobileContext = await createCaptureContext({ viewport: { width: 390, height: 844 }, theme: 'official' });
     const mobilePage = await mobileContext.newPage();
     await capture(mobilePage, 'fxaeon-positions-mobile.png', '/positions', waitForPopulatedPositions);
     await mobileContext.close();
     return;
   }
 
-  const desktopContext = await createCaptureContext({ viewport: { width: 1440, height: 900 }, theme: 'dark' });
+  const desktopContext = await createCaptureContext({ viewport: { width: 1440, height: 900 }, theme: 'official' });
   const desktopPage = await desktopContext.newPage();
 
   await capture(desktopPage, 'fxaeon-web.png', '/');
@@ -396,7 +410,7 @@ async function main() {
   await capture(desktopPage, 'fxaeon-docs.png', '/docs');
   await desktopContext.close();
 
-  const mobileTradeContext = await createCaptureContext({ viewport: { width: 390, height: 844 }, theme: 'dark' });
+  const mobileTradeContext = await createCaptureContext({ viewport: { width: 390, height: 844 }, theme: 'official' });
   const mobileTradePage = await mobileTradeContext.newPage();
   await capture(mobileTradePage, 'fxaeon-trade-mobile.png', '/trade', async (current) => {
     await current.getByLabel('Amount in ETH').fill('1.25');

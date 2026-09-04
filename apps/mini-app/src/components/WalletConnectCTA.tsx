@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import { WalletCards } from 'lucide-react';
+import ConnectWalletButton from '@/components/ConnectWalletButton';
 import { Card } from '@/components/ui';
 import { useWalletReadyTimeout } from '@/lib/wallet';
 
@@ -34,9 +34,11 @@ export default function WalletConnectCTA({
       );
     }
     return (
-      <Card className="h-24 animate-pulse" aria-label="Loading wallet state">
-        <span className="sr-only">Loading wallet state</span>
-      </Card>
+      <div role="status" aria-live="polite">
+        <Card className="h-24 animate-pulse">
+          <span className="sr-only">Loading wallet state</span>
+        </Card>
+      </div>
     );
   }
 
@@ -52,12 +54,11 @@ export default function WalletConnectCTA({
         <div className="min-w-0 flex-1">
           <p className="text-[14px] font-semibold">{title}</p>
           <p className="mt-1 text-[11.5px] leading-relaxed text-mut">{body}</p>
-          <Link
-            href="/login"
-            className="button button-primary glass-press mt-3 flex min-h-11 w-full items-center justify-center rounded-xl px-4 py-2.5 text-[13px] font-semibold"
+          <ConnectWalletButton
+            className="button button-primary glass-press mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold"
           >
             {action}
-          </Link>
+          </ConnectWalletButton>
         </div>
       </div>
     </Card>

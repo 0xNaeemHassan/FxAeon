@@ -2,6 +2,9 @@
 
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
+  useConnectWallet,
+  useLogin,
+  useLogout,
   usePrivy,
   useSendTransaction,
   useWallets,
@@ -60,6 +63,8 @@ export type FxPrivyWallet = {
   isEmbedded: boolean;
   /** Request an account from the user's browser wallet. No private key leaves the wallet. */
   connect: () => Promise<void>;
+  /** End the app wallet session. This never transfers assets or exposes keys. */
+  disconnect: () => Promise<void>;
   selectWallet: (address: string) => void;
   switchChain: (chainId: FxChainId) => Promise<void>;
   sendTransaction: (
@@ -176,6 +181,9 @@ async function switchBrowserChain(provider: Eip1193Provider, chainId: FxChainId)
  */
 function usePrivyWalletAdapter(): FxPrivyWallet {
   const { ready, authenticated } = usePrivy();
+  const { login } = useLogin();
+  const { logout } = useLogout();
+  const { connectWallet } = useConnectWallet();
   const { wallets, ready: walletsReady } = useWallets();
   const { sendTransaction: sendEmbeddedTransaction } = useSendTransaction();
   const [selectedAddress, setSelectedAddress] = useState<string>();
@@ -212,6 +220,19 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
     const wallet = wallets.find((candidate) => candidate.address.toLowerCase() === address.toLowerCase());
     if (wallet) setSelectedAddress(wallet.address);
   }, [wallets]);
+
+  const connect = useCallback(async () => {
+    if (authenticated) {
+      connectWallet();
+      return;
+    }
+    login({ loginMethods: ['wallet'] });
+  }, [authenticated, connectWallet, login]);
+
+  const disconnect = useCallback(async () => {
+    await logout();
+    setSelectedAddress(undefined);
+  }, [logout]);
 
   const switchChain = useCallback(async (chainId: FxChainId) => {
     if (!selectedWallet) throw new Error('Connect a wallet before switching networks.');
@@ -322,9 +343,8 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
     chainId: selectedChainId,
     address: selectedWallet?.address,
     isEmbedded: isEmbedded(selectedWallet),
-    connect: async () => {
-      throw new Error('Use the wallet sign-in flow to connect an account.');
-    },
+    connect,
+    disconnect,
     selectWallet,
     switchChain,
     sendTransaction,
@@ -332,6 +352,8 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
 }
 
 const FxWalletContext = createContext<FxPrivyWallet | null>(null);
+
+const BROWSER_DISCONNECTED_KEY = 'fxaeon:browser-wallet-disconnected';
 
 /** Bridge Privy's hooks into a small app-owned context mounted once. */
 export function PrivyWalletBridge({ children }: { children: ReactNode }) {
@@ -349,6 +371,11 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
   const sync = useCallback(async (requestAccounts = false) => {
     const currentProvider = browserProvider();
     if (!currentProvider) throw new Error('No browser wallet detected. Install MetaMask, Coinbase Wallet, or another EVM wallet to continue.');
+    if (!requestAccounts && window.localStorage.getItem(BROWSER_DISCONNECTED_KEY) === '1') {
+      setAddress(undefined);
+      setChainId(undefined);
+      return;
+    }
     const accounts = await currentProvider.request({ method: requestAccounts ? 'eth_requestAccounts' : 'eth_accounts' });
     const nextAddress = Array.isArray(accounts) && typeof accounts[0] === 'string' ? accounts[0] : undefined;
     setAddress(nextAddress);
@@ -362,6 +389,11 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
     void sync().catch(() => undefined).finally(() => { if (!cancelled) setReady(true); });
     if (!provider?.on) return () => { cancelled = true; };
     const onAccounts = (...args: unknown[]) => {
+      if (window.localStorage.getItem(BROWSER_DISCONNECTED_KEY) === '1') {
+        setAddress(undefined);
+        setChainId(undefined);
+        return;
+      }
       const accounts = Array.isArray(args[0]) ? args[0] : [];
       setAddress(typeof accounts[0] === 'string' ? accounts[0] : undefined);
     };
@@ -381,7 +413,31 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
     };
   }, [provider, sync]);
 
-  const connect = useCallback(async () => { await sync(true); }, [sync]);
+  const connect = useCallback(async () => {
+    window.localStorage.removeItem(BROWSER_DISCONNECTED_KEY);
+    try {
+      await sync(true);
+    } catch (cause) {
+      window.localStorage.setItem(BROWSER_DISCONNECTED_KEY, '1');
+      throw cause;
+    }
+  }, [sync]);
+  const disconnect = useCallback(async () => {
+    window.localStorage.setItem(BROWSER_DISCONNECTED_KEY, '1');
+    setAddress(undefined);
+    setChainId(undefined);
+    const currentProvider = browserProvider();
+    if (!currentProvider) return;
+    try {
+      await currentProvider.request({
+        method: 'wallet_revokePermissions',
+        params: [{ eth_accounts: {} }],
+      });
+    } catch {
+      // EIP-1193 has no universal disconnect method. The app-level marker
+      // still ends this session when a wallet does not implement revocation.
+    }
+  }, []);
   const selectedWallet = useMemo(
     () => address && provider ? walletDescriptor(provider, address, chainId) : undefined,
     [address, chainId, provider],
@@ -421,10 +477,11 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
     address,
     isEmbedded: false,
     connect,
+    disconnect,
     selectWallet: () => undefined,
     switchChain,
     sendTransaction,
-  }), [address, chainId, connect, ready, selectedWallet, sendTransaction, switchChain]);
+  }), [address, chainId, connect, disconnect, ready, selectedWallet, sendTransaction, switchChain]);
   return createElement(FxWalletContext.Provider, { value: wallet }, children);
 }
 

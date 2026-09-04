@@ -11,8 +11,14 @@ import {
 } from '@/lib/prices';
 
 const REFRESH_INTERVAL_MS = 30_000;
+const PARTIAL_RETRY_MS = 12_000;
+const UNAVAILABLE_RETRY_MS = 6_000;
+type PriceContextValue = UsdPriceSnapshot & {
+  refreshing: boolean;
+  refresh: () => Promise<void>;
+};
 const EMPTY_SNAPSHOT: UsdPriceSnapshot = { prices: {}, status: 'loading', updatedAt: null };
-const PriceContext = createContext<UsdPriceSnapshot>(EMPTY_SNAPSHOT);
+const PriceContext = createContext<PriceContextValue>({ ...EMPTY_SNAPSHOT, refreshing: false, refresh: async () => undefined });
 
 function readCachedSnapshot(): UsdPriceSnapshot | null {
   try {
@@ -46,12 +52,14 @@ async function fetchWithRetry(signal?: AbortSignal) {
 
 export default function PriceProvider({ children }: { children: React.ReactNode }) {
   const [snapshot, setSnapshot] = useState<UsdPriceSnapshot>(EMPTY_SNAPSHOT);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const refreshing = useRef<{ signal?: AbortSignal } | null>(null);
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
     if ((refreshing.current && !refreshing.current.signal?.aborted) || signal?.aborted) return;
     const request = { signal };
     refreshing.current = request;
+    setIsRefreshing(true);
     try {
       const next = await fetchWithRetry(signal);
       if (signal?.aborted) return;
@@ -64,7 +72,10 @@ export default function PriceProvider({ children }: { children: React.ReactNode 
         status: Object.keys(current.prices).length > 0 ? 'stale' : 'unavailable',
       }));
     } finally {
-      if (refreshing.current === request) refreshing.current = null;
+      if (refreshing.current === request) {
+        refreshing.current = null;
+        setIsRefreshing(false);
+      }
     }
   }, []);
 
@@ -73,25 +84,37 @@ export default function PriceProvider({ children }: { children: React.ReactNode 
     const cached = readCachedSnapshot();
     if (cached) setSnapshot(cached);
     void refresh(controller.signal);
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void refresh(controller.signal);
-    }, REFRESH_INTERVAL_MS);
     const onVisibility = () => {
       if (document.visibilityState === 'visible') void refresh(controller.signal);
     };
+    const onOnline = () => void refresh(controller.signal);
     document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('online', onOnline);
     return () => {
       controller.abort();
-      window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('online', onOnline);
     };
   }, [refresh]);
 
-  const value = useMemo(() => snapshot, [snapshot]);
+  useEffect(() => {
+    const delay = snapshot.status === 'unavailable'
+      ? UNAVAILABLE_RETRY_MS
+      : snapshot.status === 'partial' || snapshot.status === 'stale'
+        ? PARTIAL_RETRY_MS
+        : REFRESH_INTERVAL_MS;
+    const timer = window.setTimeout(() => {
+      if (document.visibilityState === 'visible' && navigator.onLine) void refresh();
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [refresh, snapshot.status, snapshot.updatedAt]);
+
+  const retry = useCallback(async () => { await refresh(); }, [refresh]);
+  const value = useMemo(() => ({ ...snapshot, refreshing: isRefreshing, refresh: retry }), [isRefreshing, retry, snapshot]);
   return <PriceContext.Provider value={value}>{children}</PriceContext.Provider>;
 }
 
-export function useUsdPrices(): UsdPriceSnapshot {
+export function useUsdPrices(): PriceContextValue {
   return useContext(PriceContext);
 }
 

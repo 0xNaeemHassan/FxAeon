@@ -32,9 +32,9 @@ import styles from '@/components/Welcome.module.css';
 const TELEGRAM_APP_URL = process.env.NEXT_PUBLIC_TELEGRAM_APP_URL || 'https://t.me/FxAeonBot';
 const CAPABILITIES = [
   { icon: CandlestickChart, title: 'Trade', copy: 'ETH & BTC. Long or short.', href: '/trade' },
-  { icon: PiggyBank, title: 'Earn', copy: 'Put fxSAVE to work.', href: '/earn' },
+  { icon: PiggyBank, title: 'Earn', copy: 'Save assets with fxSAVE.', href: '/earn' },
   { icon: Layers3, title: 'Borrow', copy: 'Unlock fxUSD from collateral.', href: '/borrow' },
-  { icon: ArrowLeftRight, title: 'Move', copy: 'Ethereum. Base. Connected.', href: '/move' },
+  { icon: ArrowLeftRight, title: 'Move', copy: 'Bridge fxUSD and fxSAVE.', href: '/move' },
 ] as const;
 
 export default function HomePage() {

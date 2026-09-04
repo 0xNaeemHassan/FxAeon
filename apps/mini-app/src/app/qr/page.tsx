@@ -1,13 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import { AlertTriangle, Check, Copy, Wallet } from 'lucide-react';
 import { AppShell, Card, copyText, EmptyState } from '@/components/ui';
 import { haptic } from '@/lib/telegram';
 import { usePrivyWallet } from '@/lib/wallet';
 import styles from '@/components/UtilitySurfaces.module.css';
+import ConnectWalletButton from '@/components/ConnectWalletButton';
 
 /**
  * Receive screen. The address is read from the selected Privy wallet only;
@@ -30,7 +30,7 @@ function WalletQr() {
   const wallet = walletState.selectedWallet;
 
   if (!ready || !walletState.ready) {
-    return <Card className="h-72 animate-pulse"><span className="sr-only">Loading wallet</span></Card>;
+    return <div role="status" aria-live="polite"><Card className="h-72 animate-pulse"><span className="sr-only">Loading wallet</span></Card></div>;
   }
 
   if (!authenticated || !wallet) {
@@ -39,7 +39,7 @@ function WalletQr() {
         icon={Wallet}
         title={authenticated ? 'Choose a wallet first' : 'Connect a wallet first'}
         body="Connect or choose a wallet to show its receive address."
-        action={<Link href="/login" className="button button-primary glass-press flex min-h-12 w-full items-center justify-center rounded-lg px-4 py-3 text-[15px] font-semibold">{authenticated ? 'Choose wallet' : 'Connect wallet'}</Link>}
+        action={<ConnectWalletButton className="button button-primary glass-press flex min-h-12 w-full items-center justify-center gap-2 rounded-lg px-4 py-3 text-[15px] font-semibold">{authenticated ? 'Choose wallet' : 'Connect wallet'}</ConnectWalletButton>}
       />
     );
   }
@@ -82,7 +82,7 @@ function WalletQr() {
 
       <Card className="flex items-start gap-2.5 border-[rgba(255,194,75,0.3)] p-4">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warn" aria-hidden="true" />
-        <p className="text-[12px] leading-relaxed text-mut"><span className="font-medium text-warn">Check the network before sending.</span> Only send supported assets on Ethereum or Base.</p>
+        <p className="text-[12px] leading-relaxed text-mut"><span className="font-medium text-warn">Check the network before sending.</span> Use Ethereum or Base and confirm the asset is supported.</p>
       </Card>
     </div>
   );

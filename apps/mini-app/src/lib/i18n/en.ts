@@ -10,13 +10,6 @@ const en: Messages = {
   'common.save': 'Save changes',
   'common.saved': 'Saved',
   'common.loading': 'Loading live protocol state…',
-  'splash.tagline':
-    'Trade, borrow, save, bridge, and manage f(x) Protocol positions from one self-custodial web and Telegram app.',
-  'loginGate.tgTitle': 'Use FxAeon anywhere',
-  'loginGate.tgBody': 'Continue in your browser or open the Telegram Mini App.',
-  'loginGate.notConfTitle': 'Connect a browser wallet',
-  'loginGate.notConfBody':
-    'Privy is optional on the web. Use an injected EVM wallet and approve each transaction yourself.',
   'loginCard.signIn': 'Sign in to FxAeon',
   'loginCard.telegram': 'Continue with Telegram',
   'loginCard.email': 'Continue with email',

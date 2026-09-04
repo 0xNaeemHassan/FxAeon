@@ -41,7 +41,7 @@ function PrivyLogoutControls() {
       <Card className="border-[rgba(255,90,95,0.25)]">
         <div className="flex items-start gap-3">
           <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[rgba(255,90,95,0.12)]">
-            <LogOut className="h-[18px] w-[18px] text-danger" strokeWidth={2} />
+            <LogOut className="h-[18px] w-[18px] text-danger" strokeWidth={2} aria-hidden="true" />
           </span>
           <span className="flex-1">
             <p className="text-[14px] font-medium">{t('settings.logoutTitle')}</p>
@@ -52,7 +52,7 @@ function PrivyLogoutControls() {
               loading={loggingOut}
               className="mt-3"
             >
-              <LogOut className="h-4 w-4" />
+              <LogOut className="h-4 w-4" aria-hidden="true" />
               {t('settings.logout')}
             </Button>
           </span>

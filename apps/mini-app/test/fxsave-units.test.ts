@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { FX_SAVE_UNITS, fxSaveUsdValue } from '../src/lib/fxSaveUnits';
+import { FX_SAVE_UNITS, fxSaveUsdValue, normalizedFxSaveAssetsWei } from '../src/lib/fxSaveUnits';
 
 const prices = { fxUSD: 1, fxUSDBasePool: 1.25, fxSAVE: 1.75 };
 const fourTokens = 4_000_000_000_000_000_000n;
@@ -8,7 +8,7 @@ const fourTokens = 4_000_000_000_000_000_000n;
 test('SDK assets and queued redemption fields are base-pool shares, not fxUSD or fxSAVE', () => {
   for (const field of ['assetsWei', 'totalAssetsWei', 'pendingSharesWei'] as const) {
     assert.equal(FX_SAVE_UNITS[field].priceKey, 'fxUSDBasePool');
-    assert.equal(FX_SAVE_UNITS[field].label, 'fxUSD base-pool shares');
+    assert.equal(FX_SAVE_UNITS[field].label, 'fxUSD pool token');
     assert.equal(fxSaveUsdValue(field, fourTokens, prices), 5);
   }
 });
@@ -16,7 +16,7 @@ test('SDK assets and queued redemption fields are base-pool shares, not fxUSD or
 test('wallet balance and vault supply remain denominated in fxSAVE shares', () => {
   for (const field of ['balanceWei', 'totalSupplyWei'] as const) {
     assert.equal(FX_SAVE_UNITS[field].priceKey, 'fxSAVE');
-    assert.equal(FX_SAVE_UNITS[field].label, 'fxSAVE shares');
+    assert.equal(FX_SAVE_UNITS[field].label, 'fxSAVE');
     assert.equal(fxSaveUsdValue(field, fourTokens, prices), 7);
   }
 });
@@ -42,4 +42,10 @@ test('unavailable amounts and invalid matching prices cannot produce a USD estim
   for (const price of [0, -1, Infinity, NaN]) {
     assert.equal(fxSaveUsdValue('assetsWei', fourTokens, { ...prices, fxUSDBasePool: price }), null);
   }
+});
+
+test('a successful zero-share SDK balance exposes zero base-pool assets', () => {
+  assert.equal(normalizedFxSaveAssetsWei(0n, undefined), 0n);
+  assert.equal(normalizedFxSaveAssetsWei(10n, 12n), 12n);
+  assert.equal(normalizedFxSaveAssetsWei(10n, undefined), undefined);
 });

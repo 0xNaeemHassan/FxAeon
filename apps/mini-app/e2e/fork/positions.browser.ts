@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium, expect as playwrightExpect, type Locator, type Page, type Route } from '@playwright/test';
 import { createPublicClient, encodeFunctionData, formatUnits, http, parseUnits, type Address, type Hex } from 'viem';
 import { formatExactDecimal } from '../../src/lib/amount';
+import { tokenAddress } from '../../src/app/trade/fxUi';
 import { mainnet } from 'viem/chains';
 
 const appRoot = fileURLToPath(new URL('../..', import.meta.url));
@@ -45,6 +46,7 @@ const tokenAbi = [
   { type: 'function', name: 'transfer', stateMutability: 'nonpayable', inputs: [{ type: 'address' }, { type: 'uint256' }], outputs: [{ type: 'bool' }] },
 ] as const;
 const usdc = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48' as const;
+const fxUsd = tokenAddress('fxUSD');
 const donor = '0xc3d688b66703497daa19211eedff47f25384cdc3' as const;
 
 function receiptHold() {
@@ -109,6 +111,12 @@ async function runProof(captureStage: string) {
     market: 'ETH' | 'BTC'; side: 'long' | 'short'; positionId: number;
     transactions: Array<{ hash: Hex; blockNumber: string }>;
   }> = [];
+  let existingBorrowProof: {
+    market: 'ETH'; positionId: number; requestedFxUsdWei: string;
+    collateralBefore: string; collateralAfter: string; debtBefore: string; debtAfter: string;
+    walletFxUsdBefore: string; walletFxUsdAfter: string;
+    transactions: Array<{ hash: Hex; blockNumber: string }>;
+  } | undefined;
   const browserErrors: string[] = [];
   const routeErrors: string[] = [];
   let tearingDown = false;
@@ -432,6 +440,81 @@ async function runProof(captureStage: string) {
       const [collateral, debt] = await client.readContract({ address: position.pool, abi: poolAbi, functionName: 'getPosition', args: [BigInt(position.positionId)] });
       assert.ok(collateral > 0n && debt > 0n, 'all positions must coexist after the fourth trade');
     }
+    const borrowTarget = positions.find((position) => position.market === 'ETH' && position.side === 'long');
+    assert.ok(borrowTarget, 'browser proof requires an ETH long borrow target');
+    const borrowTargetKey = `${borrowTarget.market}:${borrowTarget.side}:${borrowTarget.positionId}`;
+    await page.locator(`[data-position-key="${borrowTargetKey}"]`).first().click();
+    const borrowCta = page.getByRole('link', { name: 'Borrow against', exact: true });
+    await expect(borrowCta).toHaveAttribute('href', `/borrow?market=ETH&position=${borrowTarget.positionId}`);
+    await borrowCta.click();
+    await expect(page).toHaveURL(new RegExp(`/borrow\\?market=ETH&position=${borrowTarget.positionId}$`));
+    const linkedPosition = page.getByRole('combobox', { name: 'Collateral position', exact: true });
+    await expect(linkedPosition).toHaveValue(borrowTargetKey);
+    await expect(linkedPosition.locator('option:checked')).toContainText(`Trade position #${borrowTarget.positionId}`);
+    await expect(page.getByRole('heading', { name: `Borrow against position #${borrowTarget.positionId}`, exact: true })).toBeVisible();
+
+    // Exercise the CTA's real borrowing path, not just its navigation and
+    // selection state. A native collateral top-up avoids an ERC-20 approval,
+    // while the positive fxUSD amount proves debt and wallet issuance.
+    const borrowSignedBefore = submitted.length;
+    const borrowNextIdBefore = Number(await client.readContract({ address: borrowTarget.pool, abi: poolAbi, functionName: 'getNextPositionId' }));
+    const [borrowCollateralBefore, borrowDebtBefore] = await client.readContract({ address: borrowTarget.pool, abi: poolAbi, functionName: 'getPosition', args: [BigInt(borrowTarget.positionId)] });
+    const walletFxUsdBefore = await client.readContract({ address: fxUsd, abi: tokenAbi, functionName: 'balanceOf', args: [wallet] });
+    const requestedFxUsd = parseUnits('1', 18);
+    await page.getByLabel('Collateral to add in ETH', { exact: true }).fill('0.001');
+    await page.getByLabel('Additional fxUSD to borrow in fxUSD', { exact: true }).fill('1');
+    await page.getByRole('button', { name: 'Review position update', exact: true }).click();
+    const borrowDialog = page.getByRole('dialog', { name: 'Update collateral position', exact: true });
+    await expect(borrowDialog).toBeVisible({ timeout: 180_000 });
+    assert.equal(await page.evaluate(() => document.body.style.overflow), 'hidden', 'borrow review must lock background scrolling');
+    assert.equal(submitted.length, borrowSignedBefore, 'borrow review must not request a signature');
+    await borrowDialog.getByRole('checkbox').check();
+    const confirmBorrow = borrowDialog.getByRole('button', { name: /^Confirm (?:in wallet|\d+ transactions)$/ });
+    const borrowCountMatch = (await confirmBorrow.innerText()).match(/Confirm (\d+) transactions/);
+    const borrowTransactionCount = borrowCountMatch ? Number(borrowCountMatch[1]) : 1;
+    assert.ok(borrowTransactionCount >= 1 && borrowTransactionCount <= 10, 'borrow review must expose the ordered transaction count');
+    await confirmBorrow.click();
+    for (let transactionIndex = 0; transactionIndex < borrowTransactionCount; transactionIndex += 1) {
+      await expect.poll(() => proofValue(submitted.length), { timeout: 180_000 }).toBe(borrowSignedBefore + transactionIndex + 1);
+      const tx = submitted[borrowSignedBefore + transactionIndex];
+      const hold = heldReceipts.get(tx.hash.toLowerCase());
+      assert.ok(hold, 'each borrow broadcast must be held before browser receipt completion');
+      await expect.poll(() => proofValue(hold.intercepted)).toBeGreaterThan(0);
+      const explorer = page.locator('section[aria-label="Submitted transactions"]')
+        .locator(`a[href="https://etherscan.io/tx/${tx.hash}"]`);
+      await expect(explorer).toBeVisible();
+      await expect(explorer).toHaveAccessibleName(new RegExp(`^(?:Approval|Action) ${transactionIndex + 1}: Submitted\\.`));
+      submittedExplorerHashes.add(tx.hash.toLowerCase());
+      assert.equal(submitted.length, borrowSignedBefore + transactionIndex + 1, 'borrow steps must remain receipt-ordered');
+      hold.release();
+    }
+    const confirmedBorrowDialog = page.getByRole('dialog', { name: 'Confirmed', exact: true });
+    await expect(confirmedBorrowDialog.getByRole('heading', { name: 'Confirmed', exact: true })).toBeVisible({ timeout: 180_000 });
+    const [borrowCollateralAfter, borrowDebtAfter] = await client.readContract({ address: borrowTarget.pool, abi: poolAbi, functionName: 'getPosition', args: [BigInt(borrowTarget.positionId)] });
+    const walletFxUsdAfter = await client.readContract({ address: fxUsd, abi: tokenAbi, functionName: 'balanceOf', args: [wallet] });
+    assert.ok(borrowCollateralAfter > borrowCollateralBefore, 'browser borrow did not add collateral to the existing position');
+    assert.ok(borrowDebtAfter > borrowDebtBefore, 'browser borrow did not increase the existing position debt');
+    assert.ok(walletFxUsdAfter > walletFxUsdBefore, 'browser borrow did not deliver fxUSD to the wallet');
+    assert.equal(Number(await client.readContract({ address: borrowTarget.pool, abi: poolAbi, functionName: 'getNextPositionId' })), borrowNextIdBefore, 'browser borrow created a new position instead of reusing the selected ID');
+    const borrowTransactions = [];
+    for (const tx of submitted.slice(borrowSignedBefore)) {
+      const receipt = await client.getTransactionReceipt({ hash: tx.hash });
+      assert.equal(receipt.status, 'success');
+      borrowTransactions.push({ hash: tx.hash, blockNumber: receipt.blockNumber.toString() });
+    }
+    assert.equal(borrowTransactions.length, borrowTransactionCount, 'actual borrow signatures must match the reviewed route');
+    existingBorrowProof = {
+      market: 'ETH', positionId: borrowTarget.positionId, requestedFxUsdWei: requestedFxUsd.toString(),
+      collateralBefore: borrowCollateralBefore.toString(), collateralAfter: borrowCollateralAfter.toString(),
+      debtBefore: borrowDebtBefore.toString(), debtAfter: borrowDebtAfter.toString(),
+      walletFxUsdBefore: walletFxUsdBefore.toString(), walletFxUsdAfter: walletFxUsdAfter.toString(),
+      transactions: borrowTransactions,
+    };
+    borrowTarget.rawCollateral = borrowCollateralAfter.toString();
+    borrowTarget.rawDebt = borrowDebtAfter.toString();
+    await page.screenshot({ path: resolve(artifactRoot, 'ETH-long-borrow-confirmed.png'), fullPage: true });
+    await confirmedBorrowDialog.getByRole('button', { name: 'Done', exact: true }).click();
+    await page.goto(`${baseUrl}/positions`);
     await page.screenshot({ path: resolve(artifactRoot, 'positions-mobile.png'), fullPage: true });
     for (const route of ['portfolio', 'earn', 'move']) {
       await page.goto(`${baseUrl}/${route}`);
@@ -499,7 +582,10 @@ async function runProof(captureStage: string) {
       await page.locator('summary').filter({ hasText: /^Advanced/ }).click();
       await page.getByLabel('Slippage tolerance percentage').fill('1');
       await page.getByRole('button', { name: 'Review close', exact: true }).click();
-      await expect(page.getByRole('heading', { name: `Close ${position.market} ${position.side} position`, exact: true })).toBeVisible({ timeout: 180_000 });
+      const closeDialog = page.getByRole('dialog', { name: `Close ${position.market} ${position.side} position`, exact: true });
+      await expect(closeDialog).toBeVisible({ timeout: 180_000 });
+      await expect(closeDialog.getByRole('heading', { name: `Close ${position.market} ${position.side} position`, exact: true })).toBeVisible();
+      assert.equal(await page.evaluate(() => document.body.style.overflow), 'hidden', 'review overlay must lock background scrolling');
       await expect(page.getByText('Close position', { exact: true })).toBeVisible();
       assert.equal(submitted.length, signedBefore, 'close review must never request a signature');
       await page.screenshot({ path: resolve(artifactRoot, `${position.market}-${position.side}-close-review.png`), fullPage: true });
@@ -555,6 +641,7 @@ async function runProof(captureStage: string) {
     await expect(page.getByText('No open positions', { exact: true })).toBeVisible();
     await page.screenshot({ path: resolve(artifactRoot, 'positions-all-closed.png'), fullPage: true });
     assert.equal(closedPositions.length, scenarios.length, 'every supported position must close through the browser');
+    assert.ok(existingBorrowProof, 'existing-position borrow must complete through the browser');
     completed = true;
     await context.tracing.stop({ path: resolve(artifactRoot, 'trace.zip') });
     };
@@ -602,8 +689,11 @@ async function runProof(captureStage: string) {
       walletAccountSwitchIsolationVerified: true, disconnectedBalanceClearVerified: true,
       submittedExplorerBeforeConfirmation: true, confirmedPositionBeforeIndexer: true, restoredConfirmedPosition: true,
       positionUsdLabelsVerified: true, directCloseActionVerified: true,
+      existingLongBorrowDeepLinkVerified: true, existingLongBorrowExecuted: true,
+      borrowedFxUsdReceived: true, existingLongPositionIdPreserved: true,
+      instantReviewOverlayVerified: true,
       everySupportedPositionClosed: true, closeOutputBalanceRefreshVerified: true,
-      readSurfaces: ['trade', 'positions', 'portfolio', 'earn', 'move'] }, positions, closedPositions }, null, 2));
+      readSurfaces: ['trade', 'positions', 'portfolio', 'earn', 'move'] }, positions, existingBorrow: existingBorrowProof, closedPositions }, null, 2));
   console.log('Real browser four-position open-and-close acceptance proof complete; fork snapshot reverted.');
 }
 

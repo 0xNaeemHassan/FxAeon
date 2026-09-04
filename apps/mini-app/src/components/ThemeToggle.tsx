@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Moon, Sun } from 'lucide-react';
+import { Moon, Sparkles, Sun } from 'lucide-react';
 import { applyTheme, getSavedTheme, type ThemeId } from '@/lib/theme';
 import { haptic } from '@/lib/telegram';
 
 export default function ThemeToggle({ className = '' }: { className?: string }) {
-  const [theme, setTheme] = useState<ThemeId>('dark');
+  const [theme, setTheme] = useState<ThemeId>('official');
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -17,8 +17,8 @@ export default function ThemeToggle({ className = '' }: { className?: string }) 
     return () => window.removeEventListener('fxaeon:theme', sync);
   }, []);
 
-  const next = theme === 'light' ? 'dark' : 'light';
-  const Icon = theme === 'light' ? Moon : Sun;
+  const next: ThemeId = theme === 'official' ? 'dark' : theme === 'dark' ? 'light' : 'official';
+  const Icon = next === 'official' ? Sparkles : next === 'dark' ? Moon : Sun;
   return (
     <button
       type="button"
@@ -28,8 +28,8 @@ export default function ThemeToggle({ className = '' }: { className?: string }) 
         setTheme(next);
         haptic('selection');
       }}
-      aria-label={`Switch to ${next === 'light' ? 'light' : 'dark'} theme`}
-      title={`Switch to ${next === 'light' ? 'light' : 'dark'} theme`}
+      aria-label={`Switch to ${next} theme`}
+      title={`Switch to ${next} theme`}
       className={`glass-press flex min-h-11 min-w-11 items-center justify-center rounded-full bg-[var(--surface)] text-mut hover:text-mint ${className}`}
     >
       <Icon className="h-[18px] w-[18px]" aria-hidden="true" />

@@ -27,7 +27,7 @@ test.describe('product copy and session visibility', () => {
   test('disconnected settings do not expose a session disconnect card', async ({ page, requests }) => {
     await page.goto('/settings', { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: /settings/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Connect wallet', exact: true })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('button', { name: 'Connect wallet', exact: true })).toBeVisible();
     await expect(page.getByText('Session', { exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /sign out|log out/i })).toHaveCount(0);
     assertNoBackendRequests(requests);

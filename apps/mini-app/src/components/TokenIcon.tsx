@@ -186,6 +186,7 @@ const OFFICIAL_TOKEN_LOGOS: Record<string, string> = {
   USDT: 'https://assets.smold.app/api/token/1/0xdac17f958d2ee523a2206206994597c13d831ec7/logo-32.png',
   FXUSD: 'https://raw.githubusercontent.com/AladdinDAO/aladdin-assets/main/images/branding/fxusd.svg',
   FXSAVE: 'https://raw.githubusercontent.com/AladdinDAO/aladdin-assets/main/images/branding/fxSave.svg',
+  FXN: 'https://assets.smold.app/api/token/1/0x365accfca291e7d3914637abf1f7635db165bb09/logo-32.png',
 };
 
 export function ChainIcon({ chainId, size = 28, className = '' }: { chainId: 1 | 8453; size?: number; className?: string }) {

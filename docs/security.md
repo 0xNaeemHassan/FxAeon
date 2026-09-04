@@ -13,7 +13,7 @@ FxAeon prepares financial transactions in an untrusted browser environment. The 
 - Exact approvals are used; unlimited approvals and blanket position approvals are rejected.
 - Bridge source confirmation is not labeled destination delivery.
 - A bridge recipient may differ from the signer. The source event must match the selected signer, the fee refund returns to that signer, and destination delivery must match the separately reviewed recipient.
-- The reviewed USD price feeds are display-only: DefiLlama current prices use freshness/confidence validation, and CoinGecko ETH/BTC history uses shape, density, range, freshness, and future-skew validation. Both are structurally isolated from planning, policy, calldata, simulation, signing, and receipts.
+- The reviewed USD price feeds are display-only: DefiLlama current prices use freshness/confidence validation, while missing current token quotes use one bounded, batched CoinGecko contract-price fallback with adaptive rate-limit retry/backoff; CoinGecko ETH/BTC history separately uses shape, density, range, freshness, and future-skew validation. Current-price context has no source badge. Both feeds are structurally isolated from planning, policy, calldata, simulation, signing, and receipts.
 - Production has no Sentry, Datadog, LogRocket, paid telemetry, source-map upload, or automatic error-reporting wrapper. Diagnostics are local/CI-only and sanitized.
 - Privy's optional hCaptcha screen is retained for authentication, but its transitive loader is aliased to a local no-telemetry loader so the hCaptcha-owned Sentry client and DSN are not shipped.
 
@@ -27,7 +27,7 @@ FxAeon prepares financial transactions in an untrusted browser environment. The 
 | Local storage is manipulated | Treat recovery records as hints only; re-read receipts, events, and SDK state |
 | Bridge source is mistaken for delivery | Verify matching LayerZero GUID events on the destination chain |
 | Public RPC credentials are abused | Restrict provider origins, networks, quotas, and alerts; reject non-reviewed hosts at build/runtime |
-| Stale or malformed USD prices mislead the interface | Require positive values, current timestamps, confidence thresholds, required markets, and bounded/fresh chart history; retain exact on-chain units and never use USD displays as execution inputs |
+| Stale or malformed USD prices mislead the interface | Require positive values, current timestamps, confidence thresholds, required markets, bounded/fresh chart history, and bounded adaptive fallback retries; retain exact on-chain units and never use USD displays as execution inputs |
 | Stale browser code serves old state | Ship a static build without active caching and unregister the legacy service worker once |
 | Dependency or deployment compromise | Pin and audit dependencies, verify scope and bundle contents, protect production deployment access |
 
