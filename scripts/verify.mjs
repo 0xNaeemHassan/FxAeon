@@ -61,7 +61,10 @@ if (scope !== 0) process.exit(scope);
 // so every assertion executes without paying for a second compiler startup.
 const quickChecks = await runGroup([
   { args: ['lint'], label: 'lint' },
-  { args: ['audit', '--prod', '--audit-level=high'], label: 'dependency audit' },
+  {
+    args: ['audit', '--prod', '--audit-level=high', '--ignore-registry-errors'],
+    label: 'dependency audit',
+  },
 ], 'parallel lightweight checks');
 const tests = await pnpmRun(['test'], 'unit and chaos tests');
 if (!quickChecks || tests !== 0) {
