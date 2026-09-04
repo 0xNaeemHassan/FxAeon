@@ -4,6 +4,7 @@ import { FX_TOKENS, type FxTokenKey } from "../src/lib/fx/tokens";
 import {
   formatUsd,
   coinGeckoTokenPriceEndpoint,
+  coinGeckoTokenPricesEndpoint,
   createUsdPriceFetcher,
   parseCoinGeckoTokenPriceResponse,
   parseUsdPriceCache,
@@ -33,6 +34,7 @@ test("accepts recent, confident prices and maps ETH to WETH", () => {
   assert.equal(snapshot.prices.WETH, 2_400);
   assert.equal(snapshot.prices.WBTC, 104_000);
   assert.equal(snapshot.prices.fxUSD, 1);
+  assert.equal(snapshot.prices.FXN, 1);
   assert.equal(snapshot.updatedAt, (now - 12) * 1_000);
 });
 
@@ -58,6 +60,7 @@ test("rejects stale and low-confidence prices without discarding independently v
 test("calculates display-only USD values without changing token units", () => {
   assert.equal(priceKeyForSymbol("BTC"), "WBTC");
   assert.equal(priceKeyForSymbol("fxSP"), "fxUSDBasePool");
+  assert.equal(priceKeyForSymbol("$FXN"), "FXN");
   assert.equal(usdValueForDecimal("2.5", 2_400), 6_000);
   assert.equal(usdValueForUnits(2_500_000n, 6, 1), 2.5);
   assert.equal(usdValueForDecimal("all", 1), null);
@@ -90,6 +93,8 @@ test("CoinGecko fallback validates the exact contract, numeric price, and timest
   assert.equal(parseCoinGeckoTokenPriceResponse({ unrelated: { usd: 1, last_updated_at: now } }, 'fxUSD', now), null);
   assert.equal(new URL(coinGeckoTokenPriceEndpoint('fxUSD')).searchParams.get('contract_addresses'), address);
   assert.equal(new URL(coinGeckoTokenPriceEndpoint('ETH')).searchParams.get('contract_addresses'), FX_TOKENS.WETH.address.toLowerCase());
+  const batched = new URL(coinGeckoTokenPricesEndpoint(['ETH', 'WETH', 'fxUSD'])).searchParams.get('contract_addresses')?.split(',');
+  assert.deepEqual(batched, [FX_TOKENS.WETH.address.toLowerCase(), address], 'shared WETH/ETH identity is deduplicated in one request');
 });
 
 test("a delayed protocol price uses a fresh CoinGecko quote without replacing fresh primary tokens", async () => {
@@ -139,7 +144,7 @@ test("fallback traffic is bounded and respects rate-limit backoff", async () => 
     return Response.json({}, { status: 503 });
   }) as typeof fetch;
   await assert.rejects(createUsdPriceFetcher()(failing), /no validated prices/);
-  assert.equal(boundedRequests, 3);
+  assert.equal(boundedRequests, 1, 'all missing contract prices share one fallback request');
 });
 
 test("aborting a price refresh does not request fallback data", async () => {

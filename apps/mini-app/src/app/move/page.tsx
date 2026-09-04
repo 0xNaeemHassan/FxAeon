@@ -4,6 +4,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ArrowLeftRight } from 'lucide-react';
 import { AppShell, Card } from '@/components/ui';
 import { ActionReview } from '@/components/ActionReview';
+import ConnectWalletButton from '@/components/ConnectWalletButton';
 import WalletConnectCTA from '@/components/WalletConnectCTA';
 import { AmountField, TokenSelect } from '@/components/ProtocolForm';
 import { useMoveBalances } from '@/components/WalletDataProvider';
@@ -321,10 +322,19 @@ export default function MovePage() {
                 />
               ) : (
                 <div className="flex min-h-[56px] items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--input)] px-3">
-                  <span className="text-[12px] text-mut">Connected wallet</span>
-                  <span className="font-mono text-[12px] font-semibold">
-                    {wallet.address ? `${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)}` : 'Connect wallet'}
-                  </span>
+                  <span className="text-[12px] text-mut">{wallet.address ? 'Connected wallet' : 'Recipient wallet'}</span>
+                  {wallet.address ? (
+                    <span className="font-mono text-[12px] font-semibold">
+                      {`${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)}`}
+                    </span>
+                  ) : (
+                    <ConnectWalletButton
+                      aria-label="Connect wallet for recipient"
+                      className="glass-press min-h-11 rounded-xl px-3 text-[12px] font-semibold text-mint"
+                    >
+                      Connect wallet
+                    </ConnectWalletButton>
+                  )}
                 </div>
               )}
             </div>

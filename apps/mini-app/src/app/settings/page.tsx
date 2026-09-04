@@ -88,7 +88,7 @@ export default function SettingsPage() {
             <span className="flex items-center gap-1.5"><Sliders className="h-3.5 w-3.5" aria-hidden="true" /> {t('settings.maxSlippage')}</span>
           </h2>
           <div className={`${styles.utilityCard} p-4`}>
-            <p className="text-[13px] leading-relaxed text-mut">Set the maximum price movement accepted when a route needs slippage protection.</p>
+            <p className="text-[13px] leading-relaxed text-mut">Choose the largest change in output you will accept when a route uses slippage protection.</p>
             <ChoiceGrid
               ariaLabel={t('settings.maxSlippage')}
               value={settings.slippageBps}
@@ -138,7 +138,22 @@ function ChoiceGrid<T extends string | number>({
             type="button"
             role="radio"
             aria-checked={active}
+            tabIndex={active ? 0 : -1}
             onClick={() => onChange(option.value)}
+            onKeyDown={(event) => {
+              const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
+              if (!keys.includes(event.key)) return;
+              event.preventDefault();
+              const current = options.findIndex((item) => item.value === option.value);
+              const backwards = event.key === 'ArrowLeft' || event.key === 'ArrowUp';
+              const next = event.key === 'Home'
+                ? 0
+                : event.key === 'End'
+                  ? options.length - 1
+                  : (current + (backwards ? -1 : 1) + options.length) % options.length;
+              onChange(options[next].value);
+              event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
+            }}
             className={styles.preferenceChoice}
           >
             {option.label}

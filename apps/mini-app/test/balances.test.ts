@@ -22,6 +22,9 @@ test("reads native ETH and every supported ERC-20 without USD assumptions", asyn
   assert.equal(result.balances.length, Object.keys(FX_TOKENS).length);
   assert.equal(result.balances.find((balance) => balance.key === "ETH")?.amountWei, 1_250_000_000_000_000_000n);
   assert.equal(result.balances.find((balance) => balance.key === "USDC")?.amountWei, 42_500_000n);
+  assert.equal(FX_TOKENS.FXN.address.toLowerCase(), "0x365accfca291e7d3914637abf1f7635db165bb09");
+  assert.equal(FX_TOKENS.FXN.decimals, 18);
+  assert.equal(result.balances.find((balance) => balance.key === "FXN")?.amountWei, 0n);
 });
 
 test("keeps successful token balances visible when one contract read fails", async () => {

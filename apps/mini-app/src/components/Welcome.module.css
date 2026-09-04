@@ -9,8 +9,6 @@
 .hero h1 { margin: 24px 0; font-size: clamp(44px, 5.6vw, 72px); line-height: 1.04; letter-spacing: -.065em; font-weight: 650; }
 .lede { max-width: 470px; font-size: 17px; line-height: 1.75; color: var(--mut); }
 .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
-.assurance { display: flex; align-items: center; gap: 8px; margin-top: 26px; font-size: 13px; color: var(--mut); }
-.assurance svg { width: 16px; height: 16px; color: var(--mint); }
 .explore { padding: 28px; border: 1px solid color-mix(in srgb, var(--mint) 15%, transparent); border-radius: 32px; background: var(--surface); box-shadow: var(--elevation-2); }
 .exploreTop { display: flex; align-items: center; gap: 18px; padding: 4px 0 28px; font-size: 14px; color: var(--mut); line-height: 1.6; }
 .exploreTop strong { color: var(--text); font-weight: 600; }

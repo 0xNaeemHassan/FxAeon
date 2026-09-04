@@ -14,7 +14,7 @@ import {
   type Hex,
 } from "viem";
 import { mainnet } from "viem/chains";
-import { planIncreasePosition } from "../src/lib/fx/service";
+import { planDepositAndMint, planIncreasePosition } from "../src/lib/fx/service";
 import { clampLeverage, readLeverageBounds } from "../src/lib/fx/leverage";
 import { positionPoolAddress } from "../src/lib/fx/policy";
 import { tokenAddress, type UiMarket, type UiSide } from "../src/app/trade/fxUi";
@@ -365,6 +365,22 @@ test("protocol proof: official SDK opens coexisting ETH/BTC long and short posit
 
       const leverageBounds = await readLeverageBounds(scenario.market, scenario.side, publicClient);
       assert.equal(leverageBounds.source, "live", `${scenario.market} ${scenario.side} leverage bounds were not read from the fork`);
+
+      // Prove both UI endpoints came from the live pool and remain stable
+      // under the same clamping rule used immediately before SDK planning.
+      // The real position route below then exercises the official planner,
+      // ordered simulation, signing, receipts, and position accounting.
+      for (const [boundary, boundaryLeverage] of [
+        ["minimum", leverageBounds.min],
+        ["maximum", leverageBounds.max],
+      ] as const) {
+        assert.equal(
+          clampLeverage(boundaryLeverage, leverageBounds),
+          boundaryLeverage,
+          `${scenario.market} ${scenario.side} ${boundary} leverage was not accepted by its live range`,
+        );
+      }
+
       const leverage = clampLeverage(scenario.side === "short" ? 0.5 : 2, leverageBounds);
       const routes = await planIncreasePosition({
         market: scenario.market,
@@ -477,6 +493,78 @@ test("protocol proof: official SDK opens coexisting ETH/BTC long and short posit
     assert.equal(new Set(positions.map((position) => `${position.market}:${position.side}`)).size, 4, "protocol proof contains duplicate scenarios");
     assert.equal(new Set(positions.map((position) => position.pool.toLowerCase())).size, 4, "protocol proof must use four distinct pools");
 
+    // A long position created from Trade is also the protocol's canonical
+    // collateral/debt NFT used by borrowing. Prove the exact existing-position
+    // route with a real fxUSD mint before allowing Borrow to expose it.
+    const existingLong = positions.find((position) => position.market === "ETH" && position.side === "long");
+    assert.ok(existingLong, "ETH long fixture is required for existing-position borrow proof");
+    const beforeExistingNextId = Number(await publicClient.readContract({
+      address: existingLong.pool,
+      abi: POSITION_POOL_ABI,
+      functionName: "getNextPositionId",
+    }));
+    const beforeExistingCollateral = BigInt(existingLong.rawCollateral);
+    const beforeExistingDebt = BigInt(existingLong.rawDebt);
+    const fxUsd = tokenAddress("fxUSD");
+    const beforeFxUsdBalance = await publicClient.readContract({
+      address: fxUsd,
+      abi: ERC20_ABI,
+      functionName: "balanceOf",
+      args: [wallet],
+    });
+    const addedNativeCollateral = 10n ** 15n;
+    const borrowedFxUsd = parseUnits("1", 18);
+    const existingRoute = await planDepositAndMint({
+      market: "ETH",
+      positionId: existingLong.positionId,
+      userAddress: wallet,
+      depositTokenAddress: tokenAddress("ETH"),
+      depositAmount: addedNativeCollateral,
+      mintAmount: borrowedFxUsd,
+    });
+    assert.equal(existingRoute.policy?.reviewedAction?.kind, "deposit-and-mint");
+    assert.equal(existingRoute.policy?.reviewedAction?.positionId, existingLong.positionId);
+    assert.equal(existingRoute.policy?.reviewedAction?.mintAmount, borrowedFxUsd);
+    const existingResult = await runTransactionRoute({
+      route: existingRoute,
+      publicClient,
+      callbacks: {
+        requestSignature: (request) => rpc<Hex>("eth_sendTransaction", [{
+          from: request.from,
+          to: request.to,
+          data: request.data,
+          value: hexQuantity(request.value),
+          nonce: hexQuantity(BigInt(request.nonce)),
+        }]),
+      },
+      options: { receiptTimeoutMs: 120_000, pollMs: 100, waitForNextBlock: false },
+    });
+    assert.equal(existingResult.status, "confirmed", `existing long borrow route did not confirm: ${existingResult.error ?? "unknown error"}`);
+    assert.equal(existingResult.steps.every((step) => step.status === "confirmed" && step.receipt?.status === "success"), true);
+    await rpc("anvil_mine", ["0x1"]);
+    const [afterExistingCollateral, afterExistingDebt] = await publicClient.readContract({
+      address: existingLong.pool,
+      abi: POSITION_POOL_ABI,
+      functionName: "getPosition",
+      args: [BigInt(existingLong.positionId)],
+    });
+    const afterFxUsdBalance = await publicClient.readContract({
+      address: fxUsd,
+      abi: ERC20_ABI,
+      functionName: "balanceOf",
+      args: [wallet],
+    });
+    assert.ok(afterExistingCollateral > beforeExistingCollateral, "existing long position did not receive added collateral");
+    assert.ok(afterExistingDebt > beforeExistingDebt, "existing long position debt did not increase after borrowing fxUSD");
+    assert.ok(afterFxUsdBalance > beforeFxUsdBalance, "borrowed fxUSD did not reach the disposable wallet");
+    assert.equal(Number(await publicClient.readContract({
+      address: existingLong.pool,
+      abi: POSITION_POOL_ABI,
+      functionName: "getNextPositionId",
+    })), beforeExistingNextId, "existing-position borrow minted a new position ID");
+    existingLong.rawCollateral = afterExistingCollateral.toString();
+    existingLong.rawDebt = afterExistingDebt.toString();
+
     // Re-read every position only after all four actions have completed. This
     // proves they coexist in one fork snapshot rather than passing as four
     // isolated fixtures that are reverted between scenarios.
@@ -524,7 +612,20 @@ test("protocol proof: official SDK opens coexisting ETH/BTC long and short posit
         coexistingInSingleSnapshot: true,
         ownershipVerified: true,
         nonzeroCollateralAndDebtVerified: true,
+        existingLongBorrowVerified: true,
+        existingLongDebtIncreased: true,
+        borrowedFxUsdReceived: true,
+        existingLongPositionIdPreserved: true,
         snapshotRevertedAfterProof: true,
+      },
+      existingLongBorrow: {
+        market: "ETH",
+        positionId: existingLong.positionId,
+        requestedFxUsdWei: borrowedFxUsd.toString(),
+        debtBeforeWei: beforeExistingDebt.toString(),
+        debtAfterWei: afterExistingDebt.toString(),
+        walletFxUsdBeforeWei: beforeFxUsdBalance.toString(),
+        walletFxUsdAfterWei: afterFxUsdBalance.toString(),
       },
       positions,
       redactions: ["upstream RPC URL", "upstream provider credential", "impersonated donor address", "Anvil private keys"],

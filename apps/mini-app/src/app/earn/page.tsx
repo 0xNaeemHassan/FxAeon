@@ -9,7 +9,7 @@ import WalletConnectCTA from '@/components/WalletConnectCTA';
 import { AmountField, InfoNote, Segmented, SlippageField, ToggleRow, TokenSelect, useWalletTokenBalances, type TokenBalanceMap } from '@/components/ProtocolForm';
 import { useUsdPrices } from '@/components/PriceProvider';
 import { formatUsd } from '@/lib/prices';
-import { FX_SAVE_UNITS, fxSaveUsdValue } from '@/lib/fxSaveUnits';
+import { FX_SAVE_UNITS, fxSaveUsdValue, normalizedFxSaveAssetsWei } from '@/lib/fxSaveUnits';
 import {
   assertConfiguredPublicClientChain,
   getFxSdk,
@@ -29,7 +29,7 @@ type EarnMode = 'deposit' | 'withdraw' | 'claim';
 
 function labelToken(token: SaveToken): string {
   if (token === 'usdc') return 'USDC';
-  if (token === 'fxUSDBasePool') return 'fxUSD base pool';
+  if (token === 'fxUSDBasePool') return 'fxUSD pool token';
   return token;
 }
 
@@ -194,10 +194,10 @@ export default function EarnPage() {
   return (
     <AppShell title="Earn" subtitle="Deposit, withdraw, and claim fxSAVE.">
       <div className={styles.workspace}>
-        <div className={`grid grid-cols-2 ${styles.productSwitch}`} aria-label="Earn products">
+        <nav className={`grid grid-cols-2 ${styles.productSwitch}`} aria-label="Savings and borrowing">
           <span aria-current="page" className="flex min-h-11 items-center justify-center rounded-lg bg-[var(--mint-dim)] px-3 text-[13px] font-semibold text-[var(--text)]">fxSAVE</span>
-          <Link href="/borrow" className="glass-press flex min-h-11 items-center justify-center rounded-lg px-3 text-[13px] font-semibold text-mut">Borrow / fxMINT</Link>
-        </div>
+          <Link href="/borrow" className="glass-press flex min-h-11 items-center justify-center rounded-lg px-3 text-[13px] font-semibold text-mut">Borrow fxUSD</Link>
+        </nav>
         {!wallet.address ? (
           <>
             <WalletConnectCTA
@@ -271,7 +271,7 @@ export default function EarnPage() {
                   <FormHeader title="Withdraw" body="Choose what to receive and how to redeem." />
                   <TokenPicker label="Receive" value={token} onChange={setToken} balances={saveBalances} balanceStatus={wallet.address ? saveBalanceStatus : 'disconnected'} />
                   <AmountField
-                    label="Shares to withdraw"
+                    label="fxSAVE to withdraw"
                     symbol="fxSAVE"
                     value={shares}
                     onChange={setShares}
@@ -297,7 +297,7 @@ export default function EarnPage() {
                     <SlippageField value={slippage} onChange={setSlippage} max={MAX_FX_SLIPPAGE_PERCENT} />
                   )}
                   {token === 'fxUSDBasePool' && (
-                    <InfoNote>Base-pool withdrawals are direct and do not use the instant route.</InfoNote>
+                    <InfoNote>The fxUSD pool token uses a queued withdrawal, so it is not instant.</InfoNote>
                   )}
                 </div>
               )}
@@ -309,7 +309,7 @@ export default function EarnPage() {
               planBuilder={planBuilder}
               disabled={mode === 'claim' && !claimAvailability(walletData.claimable).canReview}
               label={mode === 'claim' ? 'Review claim' : mode === 'withdraw' ? 'Review withdrawal' : 'Review deposit'}
-              operationLabel={mode === 'claim' ? 'Claim fxSAVE redemption' : mode === 'withdraw' ? 'Withdraw fxSAVE shares' : 'Deposit into fxSAVE'}
+              operationLabel={mode === 'claim' ? 'Claim fxSAVE redemption' : mode === 'withdraw' ? 'Withdraw fxSAVE' : 'Deposit into fxSAVE'}
               onComplete={async () => {
                 await Promise.all([load(true), balanceSnapshot.refresh()]);
               }}
@@ -332,9 +332,12 @@ type SaveData = {
 };
 
 function SavingsSummary({ data, loading, onRefresh, stale }: { data: SaveData; loading: boolean; onRefresh: () => Promise<void>; stale: boolean }) {
-  const { prices } = useUsdPrices();
-  const hasAssets = data.balance?.assetsWei !== undefined;
-  const assetsUsd = fxSaveUsdValue('assetsWei', data.balance?.assetsWei, prices);
+  const { prices, status: priceStatus, refreshing: pricesRefreshing } = useUsdPrices();
+  const assetsWei = data.balance
+    ? normalizedFxSaveAssetsWei(data.balance.balanceWei, data.balance.assetsWei)
+    : undefined;
+  const hasAssets = assetsWei !== undefined;
+  const assetsUsd = fxSaveUsdValue('assetsWei', assetsWei, prices);
   const claimState = claimAvailability(data.claimable);
   const pendingShares = data.claimable?.pendingSharesWei ?? data.redeemStatus?.pendingSharesWei ?? 0n;
   const hasPending = pendingShares > 0n && (data.claimable?.hasPendingRedeem || data.redeemStatus?.hasPendingRedeem || false);
@@ -355,7 +358,9 @@ function SavingsSummary({ data, loading, onRefresh, stale }: { data: SaveData; l
           </h2>
           {hasAssets && (
             <p className="mt-1 text-[12px] text-mut tabular-nums">
-              {assetsUsd === null ? 'USD value unavailable' : `${formatUsd(assetsUsd)} estimated value`}
+              {assetsUsd === null
+                ? priceStatus === 'loading' || pricesRefreshing ? 'Value loading…' : 'Price delayed · retrying'
+                : `${formatUsd(assetsUsd)} estimated value`}
             </p>
           )}
         </div>
@@ -372,9 +377,8 @@ function SavingsSummary({ data, loading, onRefresh, stale }: { data: SaveData; l
 
       <div className="mt-5 grid grid-cols-2 gap-2">
         <Metric label={FX_SAVE_UNITS.balanceWei.label} value={data.balance ? formatDisplayAmount(data.balance.balanceWei) : 'Unavailable'} />
-        <Metric label={FX_SAVE_UNITS.assetsWei.label} value={hasAssets ? formatDisplayAmount(data.balance?.assetsWei) : 'Unavailable'} />
+        <Metric label={FX_SAVE_UNITS.assetsWei.label} value={hasAssets ? formatDisplayAmount(assetsWei) : 'Unavailable'} />
       </div>
-      <p className="mt-2 text-[11px] leading-relaxed text-mut">fxSAVE holds base-pool shares, not fxUSD one-for-one.</p>
 
       <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[rgba(255,255,255,.025)] px-3 py-3">
         <div className="min-w-0">
@@ -422,8 +426,8 @@ function VaultDetails({ config }: { config: SaveConfig }) {
         <ChevronDown aria-hidden="true" className="h-4 w-4 text-mut transition-transform group-open:rotate-180" />
       </summary>
       <div className="divide-y divide-[var(--line)] border-t border-[var(--line)] pb-1">
-        <DetailRow label="Total assets" value={`${formatDisplayAmount(config.totalAssetsWei)} ${FX_SAVE_UNITS.totalAssetsWei.label}`} />
-        <DetailRow label="Total shares" value={`${formatDisplayAmount(config.totalSupplyWei)} ${FX_SAVE_UNITS.totalSupplyWei.label}`} />
+        <DetailRow label="Vault holdings" value={`${formatDisplayAmount(config.totalAssetsWei)} ${FX_SAVE_UNITS.totalAssetsWei.label}`} />
+        <DetailRow label="fxSAVE supply" value={`${formatDisplayAmount(config.totalSupplyWei)} ${FX_SAVE_UNITS.totalSupplyWei.label}`} />
         <DetailRow label="Cooldown" value={formatCooldown(config.cooldownPeriodSeconds)} />
         <DetailRow label="Instant fee" value={formatRatio(config.instantRedeemFeeRatio)} />
         <DetailRow label="Expense ratio" value={formatRatio(config.expenseRatio)} />

@@ -69,7 +69,6 @@ export default function RecentActivityPreview({ walletAddress }: { walletAddress
         <span id="recent-activity-title">Recent activity</span>
       </SectionTitle>
       <Card className={`${styles.activityCard} portfolio-activity-card p-0`}>
-        <p className={`${styles.activityNote} border-b border-[var(--line)] px-4 py-2 text-[10.5px] leading-relaxed text-mut`}>Local-device transaction journal · receipt status is verified from Ethereum or Base when RPC access is available.</p>
         {loading ? (
           <div className="space-y-2 p-3" role="status" aria-label="Loading recent activity">
             <div className="skeleton h-[58px]" /><div className="skeleton h-[58px]" />

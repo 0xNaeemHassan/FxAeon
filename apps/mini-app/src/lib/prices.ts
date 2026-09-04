@@ -28,8 +28,7 @@ const MIN_CONFIDENCE = 0.5;
 export const USD_PRICE_CACHE_KEY = 'fxaeon:usd-prices:v1';
 export const USD_PRICE_CACHE_MAX_AGE_MS = 2 * 60 * 1000;
 const FALLBACK_CACHE_MS = 60_000;
-const FALLBACK_REQUEST_LIMIT = 3;
-const FALLBACK_PRIORITY: FxTokenKey[] = ['fxUSD', 'wstETH', 'ETH', 'WBTC', 'USDC', 'USDT', 'stETH', 'WETH', 'fxUSDBasePool', 'fxSAVE'];
+const FALLBACK_PRIORITY: FxTokenKey[] = ['fxUSD', 'wstETH', 'ETH', 'WBTC', 'FXN', 'USDC', 'USDT', 'stETH', 'WETH', 'fxUSDBasePool', 'fxSAVE'];
 
 function validTimestamp(value: unknown, nowSeconds: number): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
@@ -74,16 +73,30 @@ export function parseUsdPriceResponse(payload: unknown, nowSeconds = Math.floor(
   return { prices, updatedAt: oldestTimestamp * 1000 };
 }
 
+function priceAddress(key: FxTokenKey): string {
+  return (key === 'ETH' ? ETH_PRICE_ADDRESS : FX_TOKENS[key].address).toLowerCase();
+}
+
+export function coinGeckoTokenPricesEndpoint(keys: readonly FxTokenKey[]): string {
+  // CoinGecko accepts comma-separated contract addresses. One batched request
+  // is materially more reliable than making every browser spend a rate-limit
+  // slot per missing asset, especially inside a shared mobile carrier NAT.
+  const addresses = [...new Set(keys.map(priceAddress))];
+  const query = new URLSearchParams({
+    contract_addresses: addresses.join(','),
+    vs_currencies: 'usd',
+    include_last_updated_at: 'true',
+  });
+  return `https://api.coingecko.com/api/v3/simple/token_price/ethereum?${query}`;
+}
+
 export function coinGeckoTokenPriceEndpoint(key: FxTokenKey): string {
-  const address = (key === 'ETH' ? ETH_PRICE_ADDRESS : FX_TOKENS[key].address).toLowerCase();
-  // The public API currently accepts one contract per request. Requests stay
-  // on a fixed host and never contain a wallet address or provider credential.
-  return `https://api.coingecko.com/api/v3/simple/token_price/ethereum?contract_addresses=${address}&vs_currencies=usd&include_last_updated_at=true`;
+  return coinGeckoTokenPricesEndpoint([key]);
 }
 
 export function parseCoinGeckoTokenPriceResponse(payload: unknown, key: FxTokenKey, nowSeconds = Math.floor(Date.now() / 1000)): { price: number; timestamp: number } | null {
   if (!payload || typeof payload !== 'object') return null;
-  const address = (key === 'ETH' ? ETH_PRICE_ADDRESS : FX_TOKENS[key].address).toLowerCase();
+  const address = priceAddress(key);
   const coin = (payload as Record<string, { usd?: unknown; last_updated_at?: unknown }>)[address];
   if (typeof coin?.usd !== 'number' || !Number.isFinite(coin.usd) || coin.usd <= 0 || !validTimestamp(coin.last_updated_at, nowSeconds)) return null;
   return { price: coin.usd, timestamp: coin.last_updated_at };
@@ -113,29 +126,34 @@ export function createUsdPriceFetcher() {
       // independently validated fallback price an execution authority.
     }
     signal?.throwIfAborted();
-    let requests = 0;
-    for (const key of FALLBACK_PRIORITY) {
-      if (prices[key]) continue;
-      const id = coinId(key);
-      const now = Date.now();
-      let cached = fallbackCache.get(id);
-      if ((!cached || now - cached.checkedAt >= FALLBACK_CACHE_MS) && requests < FALLBACK_REQUEST_LIMIT && now >= providerBackoffUntil) {
-        requests += 1;
-        let value: { price: number; timestamp: number } | null = null;
-        try {
-          const response = await requestJson(coinGeckoTokenPriceEndpoint(key));
-          if (response.status === 429) {
-            const retryAfter = response.headers.get('retry-after');
-            const seconds = retryAfter ? Number(retryAfter) : NaN;
-            const retryMs = Number.isFinite(seconds) ? seconds * 1000 : retryAfter ? Date.parse(retryAfter) - now : 0;
-            providerBackoffUntil = now + Math.max(120_000, Number.isFinite(retryMs) ? retryMs : 0);
-          }
-          if (response.ok) value = parseCoinGeckoTokenPriceResponse(await response.json(), key);
-        } catch { /* Preserve the partial snapshot when this optional feed fails. */ }
-        signal?.throwIfAborted();
-        cached = { checkedAt: now, value };
-        fallbackCache.set(id, cached);
+    const missing = FALLBACK_PRIORITY.filter((key) => !prices[key]);
+    const now = Date.now();
+    const due = missing.filter((key) => {
+      const cached = fallbackCache.get(coinId(key));
+      return !cached || now - cached.checkedAt >= FALLBACK_CACHE_MS;
+    });
+    if (due.length && now >= providerBackoffUntil) {
+      let payload: unknown = null;
+      try {
+        const response = await requestJson(coinGeckoTokenPricesEndpoint(due));
+        if (response.status === 429) {
+          const retryAfter = response.headers.get('retry-after');
+          const seconds = retryAfter ? Number(retryAfter) : NaN;
+          const retryMs = Number.isFinite(seconds) ? seconds * 1000 : retryAfter ? Date.parse(retryAfter) - now : 0;
+          providerBackoffUntil = now + Math.max(120_000, Number.isFinite(retryMs) ? retryMs : 0);
+        }
+        if (response.ok) payload = await response.json();
+      } catch { /* Preserve the partial snapshot when this optional feed fails. */ }
+      signal?.throwIfAborted();
+      for (const key of due) {
+        fallbackCache.set(coinId(key), {
+          checkedAt: now,
+          value: parseCoinGeckoTokenPriceResponse(payload, key),
+        });
       }
+    }
+    for (const key of missing) {
+      const cached = fallbackCache.get(coinId(key));
       if (cached?.value && validTimestamp(cached.value.timestamp, Math.floor(Date.now() / 1000))) {
         prices[key] = cached.value.price;
         oldestTimestamp = Math.min(oldestTimestamp, cached.value.timestamp);
@@ -185,6 +203,7 @@ export function priceKeyForSymbol(symbol: string): FxTokenKey | null {
   if (normalised === 'usdt') return 'USDT';
   if (normalised === 'fxusd') return 'fxUSD';
   if (normalised === 'fxsave') return 'fxSAVE';
+  if (normalised === 'fxn' || normalised === '$fxn') return 'FXN';
   if (normalised === 'fxusdbasepool' || normalised === 'basepool' || normalised === 'fxsp') return 'fxUSDBasePool';
   return null;
 }

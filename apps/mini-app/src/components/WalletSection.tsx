@@ -10,9 +10,7 @@
  */
 import { useCallback, useMemo, useState } from 'react';
 import { KeyRound, Plus, Wallet } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import {
-  useConnectWallet,
   useCreateWallet,
   useExportWallet,
   usePrivy,
@@ -25,11 +23,9 @@ import { userSafeError } from '@/lib/errors';
 import { AddressChip, Button, Card, SectionTitle } from '@/components/ui';
 
 function PrivyWalletControls() {
-  const router = useRouter();
   const { ready, authenticated } = usePrivy();
   const { wallets } = useWallets();
-  const { address, selectedWallet, selectWallet } = usePrivyWallet();
-  const { connectWallet } = useConnectWallet();
+  const { address, selectedWallet, selectWallet, connect } = usePrivyWallet();
   const { createWallet } = useCreateWallet();
   const { exportWallet } = useExportWallet();
   const [busy, setBusy] = useState<'none' | 'create' | 'connect' | 'export'>('none');
@@ -47,7 +43,7 @@ function PrivyWalletControls() {
 
   const handleCreate = useCallback(async () => {
     if (!authenticated) {
-      router.push('/login');
+      await connect();
       return;
     }
     setBusy('create');
@@ -61,20 +57,20 @@ function PrivyWalletControls() {
     } finally {
       setBusy('none');
     }
-  }, [authenticated, createWallet, router]);
+  }, [authenticated, connect, createWallet]);
 
-  const handleConnect = useCallback(() => {
-    if (!authenticated) {
-      router.push('/login');
-      return;
-    }
+  const handleConnect = useCallback(async () => {
     setBusy('connect');
     setError('');
-    connectWallet();
-    // Privy owns the modal lifecycle; callbacks update the wallet list. Keep
-    // this button from remaining visually busy if the user closes the modal.
-    window.setTimeout(() => setBusy('none'), 500);
-  }, [authenticated, connectWallet, router]);
+    try {
+      await connect();
+    } catch (cause) {
+      setError(userSafeError(cause, 'Wallet connection was cancelled or unavailable.'));
+      haptic('error');
+    } finally {
+      setBusy('none');
+    }
+  }, [connect]);
 
   const handleExport = useCallback(async () => {
     if (!embedded?.address) return;
@@ -96,7 +92,7 @@ function PrivyWalletControls() {
 
   if (!ready) {
     if (readyTimedOut) return <div role="alert"><Card><p className="text-[13px] font-semibold">Wallet did not load</p><p className="mt-1 text-[12px] leading-relaxed text-mut">Check your connection or reopen FxAeon.</p><Button onClick={() => window.location.reload()} className="mt-3">Reload wallet</Button></Card></div>;
-    return <Card className="h-24 animate-pulse"><span className="sr-only">Loading wallet provider</span></Card>;
+    return <div role="status" aria-live="polite"><Card className="h-24 animate-pulse"><span className="sr-only">Loading wallet provider</span></Card></div>;
   }
 
   if (!authenticated) {
@@ -105,7 +101,7 @@ function PrivyWalletControls() {
         <p className="text-[13px] leading-relaxed text-mut">
           Connect a wallet to view your account and use FxAeon.
         </p>
-        <Button onClick={() => router.push('/login')}>Connect wallet</Button>
+        <Button onClick={() => void handleConnect()} loading={busy === 'connect'}>Connect wallet</Button>
       </Card>
     );
   }
@@ -143,11 +139,11 @@ function PrivyWalletControls() {
       {!embedded && (
         <Card className="flex items-start gap-3">
           <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)]">
-            <Plus className="h-[18px] w-[18px] text-mint" strokeWidth={2} />
+            <Plus className="h-[18px] w-[18px] text-mint" strokeWidth={2} aria-hidden="true" />
           </span>
           <span className="flex-1">
             <p className="text-[14px] font-medium">Create wallet</p>
-            <p className="mt-0.5 text-[12.5px] leading-relaxed text-mut">Add a wallet secured by Privy to this account.</p>
+            <p className="mt-0.5 text-[12.5px] leading-relaxed text-mut">Create a Privy wallet for this account.</p>
             <Button onClick={handleCreate} loading={busy === 'create'} className="mt-3">Create wallet</Button>
           </span>
         </Card>
@@ -155,14 +151,14 @@ function PrivyWalletControls() {
 
       <Card className="flex items-start gap-3">
         <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)]">
-          <Wallet className="h-[18px] w-[18px] text-mint" strokeWidth={2} />
+          <Wallet className="h-[18px] w-[18px] text-mint" strokeWidth={2} aria-hidden="true" />
         </span>
         <span className="flex-1">
           <p className="text-[14px] font-medium">Connect another wallet</p>
           <p className="mt-0.5 text-[12.5px] leading-relaxed text-mut">
             Use another EVM wallet with FxAeon.
           </p>
-          <Button variant="ghost" onClick={handleConnect} loading={busy === 'connect'} className="mt-3">
+          <Button variant="ghost" onClick={() => void handleConnect()} loading={busy === 'connect'} className="mt-3">
             Connect external wallet
           </Button>
         </span>
@@ -171,11 +167,11 @@ function PrivyWalletControls() {
       {embedded && (
         <Card className="flex items-start gap-3">
           <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)]">
-            <KeyRound className="h-[18px] w-[18px] text-mint" strokeWidth={2} />
+            <KeyRound className="h-[18px] w-[18px] text-mint" strokeWidth={2} aria-hidden="true" />
           </span>
           <span className="flex-1">
             <p className="text-[14px] font-medium">Export wallet</p>
-            <p className="mt-0.5 text-[12.5px] leading-relaxed text-mut">Open Privy&apos;s secure export flow.</p>
+            <p className="mt-0.5 text-[12.5px] leading-relaxed text-mut">Open Privy&apos;s wallet export flow.</p>
             <Button variant="ghost" onClick={handleExport} loading={busy === 'export'} className="mt-3">
               Export wallet
             </Button>
@@ -216,15 +212,15 @@ function BrowserWalletControls() {
     }
   };
 
-  if (!wallet.ready) return <Card className="h-24 animate-pulse"><span className="sr-only">Loading wallet provider</span></Card>;
+  if (!wallet.ready) return <div role="status" aria-live="polite"><Card className="h-24 animate-pulse"><span className="sr-only">Loading wallet provider</span></Card></div>;
   if (!wallet.authenticated || !wallet.selectedWallet) {
     return (
       <Card className="flex flex-col gap-3">
         <div className="flex items-start gap-3">
-          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)]"><Wallet className="h-[18px] w-[18px] text-mint" strokeWidth={2} /></span>
+          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)]"><Wallet className="h-[18px] w-[18px] text-mint" strokeWidth={2} aria-hidden="true" /></span>
           <div className="min-w-0 flex-1">
             <p className="text-[14px] font-medium">Connect a browser wallet</p>
-            <p className="mt-0.5 text-[12.5px] leading-relaxed text-mut">Use any EVM wallet extension. FxAeon never sees your private key.</p>
+            <p className="mt-0.5 text-[12.5px] leading-relaxed text-mut">Use any EVM wallet extension. Your wallet keeps control of your private key.</p>
           </div>
         </div>
         <Button onClick={connect} loading={busy}>Connect wallet</Button>

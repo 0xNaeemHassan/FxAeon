@@ -22,7 +22,7 @@ test.describe('wallet session isolation', () => {
 
     await setAccounts(page, []);
     await expect(page.getByRole('dialog', { name: 'Wallet profile' })).toHaveCount(0);
-    await expect(page.locator('.app-topbar').getByRole('link', { name: 'Connect wallet', exact: true })).toBeVisible();
+    await expect(page.locator('.app-topbar').getByRole('button', { name: 'Connect wallet', exact: true })).toBeVisible();
     await expect.poll(() => page.locator('body').evaluate((body) => body.style.overflow)).toBe('');
 
     await setAccounts(page, [ACCOUNT_A]);
@@ -35,6 +35,26 @@ test.describe('wallet session isolation', () => {
     await expect(page.getByRole('dialog', { name: 'Wallet profile' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Open wallet profile' })).toContainText('0x440');
     await expect.poll(() => page.locator('body').evaluate((body) => body.style.overflow)).toBe('');
+    assertNoBackendRequests(requests);
+  });
+
+  test('wallet profile disconnects in place and can reconnect deliberately', async ({ page, requests }) => {
+    await page.goto('/portfolio', { waitUntil: 'domcontentloaded' });
+    await page.getByRole('button', { name: 'Open wallet profile' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Wallet profile' });
+    await expect(dialog.getByRole('button', { name: 'Disconnect wallet', exact: true })).toBeVisible();
+    await expect(dialog).not.toContainText(/\$[\d,.]+ each\b/);
+
+    await dialog.getByRole('button', { name: 'Disconnect wallet', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page).toHaveURL(/\/portfolio\/?$/);
+    await expect(page.locator('.app-topbar').getByRole('button', { name: 'Connect wallet', exact: true })).toBeVisible();
+    await expect.poll(() => page.locator('body').evaluate((body) => body.style.overflow)).toBe('');
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.app-topbar').getByRole('button', { name: 'Connect wallet', exact: true })).toBeVisible();
+    await page.locator('.app-topbar').getByRole('button', { name: 'Connect wallet', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Open wallet profile' })).toBeVisible();
     assertNoBackendRequests(requests);
   });
 

@@ -1,16 +1,15 @@
 'use client';
 
-/** Client-only Privy login and explicit wallet setup. */
+/** Compatibility entry for old links; normal wallet flows open in place. */
 import { Suspense, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { ArrowRight, Globe2, Wallet } from 'lucide-react';
+import { ArrowRight, Wallet } from 'lucide-react';
 import { privyConfigured } from '@/lib/privyConfig';
 import { Button, Card, FullScreenSpinner } from '@/components/ui';
 import { usePrivyWallet } from '@/lib/wallet';
 import { userSafeError } from '@/lib/errors';
 import { haptic } from '@/lib/telegram';
-import FxLogo from '@/components/FxLogo';
 import styles from '@/components/UtilitySurfaces.module.css';
 
 // The Privy SDK is heavy. Loading the flow dynamically keeps it
@@ -58,21 +57,11 @@ function BrowserWalletFlow() {
   };
 
   return (
-    <main className={`${styles.loginShell} auth-shell`}>
-      <section className={`${styles.loginContext} auth-context`} aria-label="FxAeon wallet access">
-        <Link href="/" className={`${styles.loginBrand} auth-brand`}><FxLogo size={32} /><span><strong>FxAeon</strong><small>Ethereum interface</small></span></Link>
-        <div className="auth-context-copy">
-          <p className="landing-kicker"><span>02</span> Wallet access</p>
-          <h2>Connect once.<br /><span className="text-gradient">Stay in control.</span></h2>
-          <p>A focused home for your Ethereum markets and positions.</p>
-        </div>
-      </section>
-      <section className={`${styles.loginPanel} auth-panel`}>
-        <div className="auth-mode"><Globe2 className="h-4 w-4 text-mint" aria-hidden="true" /> Browser wallet</div>
+    <main className={`${styles.loginPanel} auth-panel mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col justify-center px-6`}>
         <Card className={`${styles.loginCard} w-full p-6`}>
           <span className="auth-wallet-icon"><Wallet className="h-6 w-6 text-mint" strokeWidth={1.8} aria-hidden="true" /></span>
           <h1 className="text-display mt-5 text-[28px] font-semibold">Connect your wallet</h1>
-          <p className="mt-2 text-[14px] leading-relaxed text-mut">Use MetaMask, Coinbase Wallet, or another EVM wallet. Every transaction is confirmed in your wallet.</p>
+          <p className="mt-2 text-[14px] leading-relaxed text-mut">Use MetaMask, Coinbase Wallet, or another EVM wallet. Every transaction requires approval in your wallet.</p>
 
           {wallet.authenticated && wallet.address ? (
             <div className="mt-5">
@@ -87,7 +76,6 @@ function BrowserWalletFlow() {
           )}
         </Card>
         <Link href="/" className="mt-4 inline-flex min-h-11 items-center text-[12px] font-semibold text-mint">← Back to home</Link>
-      </section>
     </main>
   );
 }

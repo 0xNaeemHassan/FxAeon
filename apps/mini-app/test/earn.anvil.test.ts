@@ -99,8 +99,12 @@ async function rpc<T = unknown>(method: string, params: readonly unknown[] = [])
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
   });
   if (!response.ok) throw new Error(`Anvil RPC HTTP ${response.status}`);
-  const payload = await response.json() as { result?: T; error?: { message?: string } };
-  if (payload.error) throw new Error(`Anvil RPC error: ${payload.error.message ?? "unknown error"}`);
+  const payload = await response.json() as { result?: T; error?: { message?: string; data?: unknown } };
+  if (payload.error) {
+    const data = payload.error.data;
+    const suffix = typeof data === "string" && data.length <= 256 ? ` data=${data}` : "";
+    throw new Error(`Anvil RPC error: ${payload.error.message ?? "unknown error"}${suffix}`);
+  }
   return payload.result as T;
 }
 
@@ -143,18 +147,36 @@ async function fundUsdc(recipient: Address, amount: bigint): Promise<{ donor: "r
 
 async function runRoute(route: PlannedRoute): Promise<Array<{ kind: string; hash: Hex; blockNumber: string }>> {
   assert.ok(client);
+  let lastGasEvidence: { estimate: bigint; limit: bigint } | undefined;
   assert.equal(route.chainId, 1);
   const result = await runTransactionRoute({
     route,
     publicClient: client,
     callbacks: {
       requestSignature: async (request) => {
+        // Anvil's automatic limit can equal the estimate exactly.  The fork's
+        // direct fxSAVE ERC-4626 redeem performs nested base-pool accounting
+        // whose execution path can consume a few more units than that exact
+        // estimate.  Keep the production simulation gate above, then obtain a
+        // fresh estimate for the exact reviewed calldata and add deterministic
+        // transport-only headroom.  A failed estimate still fails closed.
+        const estimate = BigInt(await rpc<string>("eth_estimateGas", [{
+          from: request.from,
+          to: request.to,
+          data: request.data,
+          value: quantity(request.value),
+          nonce: quantity(BigInt(request.nonce)),
+        }]));
+        assert.ok(estimate > 0n, "fork gas estimate must be positive");
+        const limit = estimate + (estimate / 5n) + 50_000n;
+        lastGasEvidence = { estimate, limit };
         const hash = await rpc<Hex>("eth_sendTransaction", [{
           from: request.from,
           to: request.to,
           data: request.data,
           value: quantity(request.value),
           nonce: quantity(BigInt(request.nonce)),
+          gas: quantity(limit),
         }]);
         await waitForReceipt({ client, hash, timeoutMs: 120_000, pollMs: 100 });
         // runTransactionRoute's post-confirm read gate requires a distinct
@@ -170,10 +192,24 @@ async function runRoute(route: PlannedRoute): Promise<Array<{ kind: string; hash
     const failedStep = [...result.steps].reverse().find((step) => step.status === "failed");
     if (failedStep?.hash) {
       let trace: unknown;
+      let callProbe: unknown;
       try {
         trace = summarizeTrace(await rpc("debug_traceTransaction", [failedStep.hash, { tracer: "callTracer" }]));
       } catch (error) {
         trace = { unavailable: error instanceof Error ? error.message : String(error) };
+      }
+      try {
+        const blockNumber = failedStep.receipt?.blockNumber;
+        assert.ok(blockNumber !== undefined && blockNumber > 0n);
+        await rpc("eth_call", [{
+          from: failedStep.transaction.from,
+          to: failedStep.transaction.to,
+          data: failedStep.transaction.data,
+          value: quantity(failedStep.transaction.value),
+        }, quantity(blockNumber - 1n)]);
+        callProbe = { success: true };
+      } catch (error) {
+        callProbe = { error: error instanceof Error ? error.message : String(error) };
       }
       const receipt = failedStep.receipt;
       console.error(JSON.stringify({
@@ -183,7 +219,10 @@ async function runRoute(route: PlannedRoute): Promise<Array<{ kind: string; hash
           status: receipt.status,
           gasUsed: receipt.gasUsed.toString(),
           blockNumber: receipt.blockNumber.toString(),
+          gasEstimate: lastGasEvidence?.estimate.toString(),
+          gasLimit: lastGasEvidence?.limit.toString(),
         } : null,
+        callProbe,
         trace,
       }));
     }

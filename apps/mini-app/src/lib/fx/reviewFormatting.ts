@@ -91,7 +91,7 @@ function limitUnit(label: string, intent: ReviewedActionIntent, pool: Pool | und
       if (pool && intent.kind === 'repay-and-withdraw') return { label: 'Minimum received', unit: unitForAddress(intent.withdrawTokenAddress) };
       break;
     case 'fxSAVE minimum shares':
-      if (intent.kind === 'fxsave-deposit' && !intent.directBasePool) return { label: 'Minimum shares', unit: tokenUnit(FX_TOKENS.fxSAVE) };
+      if (intent.kind === 'fxsave-deposit' && !intent.directBasePool) return { label: 'Minimum fxSAVE received', unit: tokenUnit(FX_TOKENS.fxSAVE) };
       break;
     case 'fxSAVE deposit conversion minimum output':
       if (intent.kind === 'fxsave-deposit' && !intent.directBasePool) {

@@ -13,7 +13,8 @@ export type FxTokenKey =
   | "USDT"
   | "fxUSD"
   | "fxUSDBasePool"
-  | "fxSAVE";
+  | "fxSAVE"
+  | "FXN";
 
 export interface FxTokenDefinition {
   key: FxTokenKey;
@@ -30,9 +31,9 @@ const BOTH = ["ETH", "BTC"] as const satisfies readonly FxSdkMarket[];
 const BTC = ["BTC"] as const satisfies readonly FxSdkMarket[];
 
 /**
- * UI token metadata only. Contract addresses and protocol behavior remain
- * sourced from the official SDK; this registry avoids importing the retired
- * legacy shared-protocol package into the client.
+ * UI token metadata only. Transaction assets remain sourced from the official
+ * SDK. FXN is a read-only Portfolio/price asset whose Ethereum identity is
+ * fixed to the canonical token contract.
  */
 export const FX_TOKENS: Readonly<Record<FxTokenKey, FxTokenDefinition>> = {
   ETH: { key: "ETH", address: assertAddress(sdkTokens.eth, "ETH") as `0x${string}`, decimals: 18, native: true, markets: ETHEREUM },
@@ -45,6 +46,7 @@ export const FX_TOKENS: Readonly<Record<FxTokenKey, FxTokenDefinition>> = {
   fxUSD: { key: "fxUSD", address: assertAddress(sdkTokens.fxUSD, "fxUSD") as `0x${string}`, decimals: 18, native: false, markets: BOTH, bridgeable: true },
   fxUSDBasePool: { key: "fxUSDBasePool", address: assertAddress(sdkTokens.fxUSDBasePool, "fxUSDBasePool") as `0x${string}`, decimals: 18, native: false, markets: BOTH },
   fxSAVE: { key: "fxSAVE", address: assertAddress("0x7743e50F534a7f9F1791DdE7dCD89F7783Eefc39", "fxSAVE") as `0x${string}`, decimals: 18, native: false, markets: BOTH, bridgeable: true },
+  FXN: { key: "FXN", address: assertAddress("0x365accfca291e7d3914637abf1f7635db165bb09", "FXN") as `0x${string}`, decimals: 18, native: false, markets: BOTH },
 };
 
 export function tokenDefinition(key: FxTokenKey): FxTokenDefinition {

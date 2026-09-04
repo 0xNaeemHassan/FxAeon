@@ -9,11 +9,11 @@ The release process is intentionally layered. Credential-free checks run on ever
 - `pnpm typecheck` and `pnpm lint`: strict client compilation and static checks.
 - `pnpm test`: transaction normalization, validation, approval, nonce, lock, journal, receipt ordering, and failure-stop tests.
 - `pnpm test:chaos`: seeded property-style route and runner campaigns. It mutates sender, chain, target, selector, value, operation, nonce, and route shape, then injects wallet rejection, on-chain reverts, and receipt-RPC outages. Set `FX_CHAOS_SEED`, `FX_CHAOS_ITERATIONS`, or `FX_CHAOS_RUNNER_ITERATIONS` to reproduce or expand a campaign.
-- `pnpm test:anvil`: opens and verifies one real ETH long, ETH short, BTC long, and BTC short through the official SDK in a single protected mainnet-fork snapshot.
+- `pnpm test:anvil`: opens and verifies one real ETH long, ETH short, BTC long, and BTC short through the official SDK, then deposits collateral and borrows real fxUSD against the existing ETH long while proving its ID is preserved and both debt and wallet balance increase, all in a single protected mainnet-fork snapshot.
 - `pnpm test:anvil:earn`: exercises real fxSAVE deposits, instant and queued withdrawals, cooldown/claim, and direct base-pool paths with disposable fork funds.
 - `pnpm test:anvil:stress`: runs only the fast randomized snapshot and dummy ordered-route transport campaign against a protected fork.
 - `pnpm test:anvil:all`: runs the real position proof, transport stress, and Earn proof serially against one fork process.
-- `pnpm test:anvil:browser`: builds the local-fork app, opens ETH/BTC long/short positions through the mobile browser's review/confirmation UI, captures the populated UI, then fully closes all four positions through their direct Close controls and verifies zeroed pool accounting before restoring its snapshot. This is a separate gate from the Node-runner proof.
+- `pnpm test:anvil:browser`: builds the local-fork app, opens ETH/BTC long/short positions through the mobile browser's review-sheet/confirmation UI, exercises in-place wallet account switching/disconnect and real fxUSD borrowing against the existing ETH long, captures the populated UI, then fully closes all four positions through their direct Close controls and verifies zeroed pool accounting before restoring its snapshot. This is a separate gate from the Node-runner proof.
 - `pnpm test:stress`: runs the credential-free chaos campaign and then the protected dummy-route fork stress. It does not replace the real protocol proof.
 - `pnpm test:e2e`: browser entry without Telegram, official-route and mobile/Telegram viewport navigation, semantic landmarks, 44px controls, no horizontal overflow at 320/360/375/390/412/430px, honest disconnected state, deterministic current-price and market-history validation, and absence of backend traffic.
 - `pnpm build`: browser-only static export with no Node runtime.
@@ -58,7 +58,7 @@ $env:ANVIL_FORK_URL = (Get-Secret FXAEON_ANVIL_FORK_URL -AsPlainText)
 pnpm test:anvil
 ```
 
-The upstream endpoint is consumed only by the Anvil parent process: the harness redacts it from output and removes provider, Telegram, wallet, Privy, and deployment credentials from the test child environment. `ANVIL_FORK_BLOCK` pins a reproducible block, `ANVIL_PORT` selects the local port (default `8547`), `FX_ANVIL_POSITION_USDC` adjusts the Node protocol fixture amount, and `FX_ANVIL_ITERATIONS` applies only to the separate stress suite. The protocol proof re-reads all four positions after creation to prove simultaneous ownership and nonzero collateral/debt, reverts its root snapshot, and atomically writes a validated manifest under `artifacts/anvil/protocol-proof.json`. The manifest includes public pool addresses, local transaction hashes, position IDs, block numbers, and raw state; it excludes the upstream endpoint, provider credential, donor address, and Anvil signer material.
+The upstream endpoint is consumed only by the Anvil parent process: the harness redacts it from output and removes provider, Telegram, wallet, Privy, and deployment credentials from the test child environment. `ANVIL_FORK_BLOCK` pins a reproducible block, `ANVIL_PORT` selects the local port (default `8547`), `FX_ANVIL_POSITION_USDC` adjusts the Node protocol fixture amount, and `FX_ANVIL_ITERATIONS` applies only to the separate stress suite. The protocol proof re-reads all four positions after creation to prove simultaneous ownership and nonzero collateral/debt, then adds collateral and borrows real fxUSD against the existing ETH long while proving its position ID is preserved and both debt and wallet balance increase. It reverts its root snapshot and atomically writes a validated manifest under `artifacts/anvil/protocol-proof.json`. The manifest includes public pool addresses, local transaction hashes, position IDs, block numbers, and raw state; it excludes the upstream endpoint, provider credential, donor address, and Anvil signer material.
 
 The parent rejects occupied loopback ports before starting Anvil or removing an old proof manifest. Port values must be decimal integers from `1024` through `65535`; browser and Anvil ports must differ. Local readiness requests are bounded, reject redirects, and verify both Ethereum chain ID and the Anvil client identity. Handled interruptions stop this run's owned process trees and do not start subsequent children.
 
@@ -94,9 +94,9 @@ The browser gate also compares the USDC amount displayed in the token picker wit
 | open/increase | supported inputs; new/existing ID; approval/no approval; route alternatives |
 | reduce/close | partial/full; NFT approval/no approval; stale position |
 | leverage | increase/decrease; bounds; nonce drift |
-| deposit/mint | deposit-only, mint-only, combined, existing/new long position |
+| deposit/mint | deposit-only, mint-only, combined, new long position, and real fxUSD borrowing against an existing long with debt/balance increases and position-ID preservation |
 | repay/withdraw | repay-only, withdraw-only, combined, exact debt |
-| fxSAVE reads | config, zero/nonzero balance, no pending/queued/claimable redemption |
+| fxSAVE reads | config, zero/nonzero balance, no pending/queued/claimable redemption; zero-share reads normalize omitted SDK underlying conversion to exact zero while nonzero missing conversions stay unavailable |
 | fxSAVE deposit | USDC, fxUSD, fxUSD base-pool input |
 | fxSAVE withdrawal | direct base-pool, queued, instant USDC/fxUSD |
 | fxSAVE claim | cooldown incomplete and complete |
@@ -110,7 +110,7 @@ The browser suite deliberately keeps accessibility checks dependency-light: rout
 
 ## Documentation captures
 
-The standard capture command covers the landing page, Trade workspace, token picker, Move, login, disconnected Portfolio, and 390 × 844 mobile Trade/Portfolio views. Mobile Portfolio uses the official light theme; the other standard views use official dark. Start the static export locally, then run `pnpm docs:screenshots` in another terminal. `FX_SCREENSHOT_BASE_URL` can select a different loopback HTTP origin; it defaults to `http://localhost:4321`.
+The standard capture command covers the landing page, Trade workspace, token picker, Move, the standalone login setup screen, disconnected Portfolio, and 390 × 844 mobile Trade/Portfolio views. Normal wallet connection, account switching, and disconnect remain in-place app-shell flows; the login capture is a dedicated setup-state reference. Mobile Portfolio uses the light theme; the other standard views use the Official violet theme. Start the static export locally, then run `pnpm docs:screenshots` in another terminal. `FX_SCREENSHOT_BASE_URL` can select a different loopback HTTP origin; it defaults to `http://localhost:4321`.
 
 ```powershell
 pnpm build

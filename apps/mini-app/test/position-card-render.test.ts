@@ -10,7 +10,7 @@ const globalReact = globalThis as typeof globalThis & { React?: typeof React };
 const previousReact = globalReact.React;
 globalReact.React = React;
 
-test('server-rendered shared position cards disclose unavailable USD pricing', async () => {
+test('server-rendered shared position cards keep missing prices in a retrying state', async () => {
   try {
     const { ProtocolPositionCard } = await import('../src/components/ProtocolPositionCard');
     const html = renderToStaticMarkup(React.createElement(ProtocolPositionCard, {
@@ -32,7 +32,8 @@ test('server-rendered shared position cards disclose unavailable USD pricing', a
     }));
 
     assert.match(html, /Est\. net equity/);
-    assert.match(html, /USD unavailable/);
+    assert.match(html, /Value loading/);
+    assert.doesNotMatch(html, /USD unavailable/);
     assert.match(html, /Collateral value/);
     assert.match(html, /Debt value/);
   } finally {

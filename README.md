@@ -64,8 +64,8 @@ FxAeon turns the official f(x) SDK into a focused, reviewable product surface fo
       <br /><strong>Mobile Trade workspace</strong>
     </td>
     <td width="50%" align="center">
-      <img src="docs/assets/fxaeon-portfolio-mobile.png" alt="FxAeon Portfolio in the official light theme at a 390 by 844 mobile viewport" width="390" />
-      <br /><strong>Mobile Portfolio · official light</strong>
+      <img src="docs/assets/fxaeon-portfolio-mobile.png" alt="FxAeon Portfolio in the light theme at a 390 by 844 mobile viewport" width="390" />
+      <br /><strong>Mobile Portfolio · light</strong>
     </td>
   </tr>
   <tr>
@@ -75,7 +75,7 @@ FxAeon turns the official f(x) SDK into a focused, reviewable product surface fo
     </td>
     <td width="50%" align="center">
       <img src="docs/assets/fxaeon-login.png" alt="FxAeon browser wallet connection screen" width="100%" />
-      <br /><strong>Browser wallet entry</strong>
+      <br /><strong>Standalone browser wallet setup</strong>
     </td>
   </tr>
   <tr>
@@ -98,13 +98,13 @@ Populated views show positions opened through FxAeon's review and confirmation f
 | --- | --- |
 | Positions | Read ETH/BTC long and short positions; open, increase, reduce, close, and adjust leverage from a responsive master-detail workspace with a direct Close action on every position |
 | Borrow | Deposit collateral and mint fxUSD; repay debt and withdraw collateral |
-| fxSAVE | Read balances/configuration, deposit assets, queue or execute redemptions, and claim completed withdrawals |
+| fxSAVE | Read balances/configuration, deposit assets, queue or execute redemptions, and claim completed withdrawals; verified zero-share balances remain exact zero |
 | Bridge | Quote and build Ethereum ↔ Base LayerZero routes with source-receipt and destination-GUID verification |
-| Live USD context | Timestamp- and confidence-validated current asset prices across forms, pickers, Portfolio, Earn, positions, and the wallet profile, plus validated ETH/BTC market history for charts; display-only and never an execution input |
-| Wallet profile | Privy embedded wallets or browser-injected EVM wallets, supported-asset balances, live USD totals, and dedicated activity—without a custody server |
+| Market price context | Timestamp- and confidence-validated current asset prices across forms, pickers, Portfolio, Earn, positions, and the wallet profile, plus validated ETH/BTC market history for charts; display-only and never an execution input |
+| Wallet profile | Privy embedded wallets or browser-injected EVM wallets, supported-asset balances, live USD totals, dedicated activity, and in-place connect/disconnect/account switching—without a custody server |
 | Shared wallet data | Wagmi and TanStack Query keep balances consistent across Portfolio, token pickers, and Move, with account-scoped caching and receipt-backed refreshes |
 | Recovery | Reload-safe pending transaction and bridge journals in a dedicated Activity view, always revalidated against chain data |
-| Interface | Mobile-first controls, searchable token pickers with available quantities and their USD worth, a real leverage slider, and one-tap official light/dark theming |
+| Interface | Mobile-first controls, searchable token pickers with available quantities and their USD worth, a real leverage slider, and official, neutral-dark, and light themes |
 
 The immutable public surface contains exactly 15 SDK methods. [`fx-scope.lock.json`](fx-scope.lock.json) and the scope verifier prevent protocol internals, unsupported routes, or backend authority from silently entering the product.
 
@@ -116,8 +116,8 @@ Token and network marks use maintained AladdinDAO/SmolDapp assets (with local SV
 - **Self-custodial execution.** Privy or the connected external wallet remains the only signing authority. FxAeon never accepts a private key.
 - **Official planning path.** Protocol reads and unsigned transaction plans come from the pinned <code>@aladdindao/fx-sdk</code> package.
 - **Chain-authoritative state.** Ethereum, Base, receipts, and matching LayerZero events establish financial truth—not a database or browser cache.
-- **Price context without price authority.** DefiLlama supplies the primary validated current-price snapshot; a bounded CoinGecko contract-price fallback can fill independently validated missing token quotes. Quotes older than 15 minutes are rejected and no stablecoin peg is substituted. CoinGecko separately supplies validated ETH/BTC history for the 1D/7D/30D charts. Invalid data is rejected; a failed current-price refresh retains the last validated snapshot with a stale label. These display feeds remain isolated from SDK planning, validation, simulation, and signing.
-- **Inspectable transaction review.** Targets, selectors, values, approvals, chains, nonces, and route order are validated before wallet confirmation.
+- **Price context without price authority.** DefiLlama supplies the primary validated current-price snapshot; missing token quotes are requested through one bounded, batched CoinGecko contract-price fallback with adaptive rate-limit retry/backoff. Each token is validated independently, quotes older than 15 minutes are rejected, no stablecoin peg is substituted, and the current-price strip has no source badge. CoinGecko separately supplies validated ETH/BTC history for the 1D/7D/30D charts. Invalid data is rejected; a failed refresh retains the last validated snapshot with an explicit retrying/stale state. These display feeds remain isolated from SDK planning, validation, simulation, and signing.
+- **Inspectable transaction review sheet.** Targets, selectors, values, approvals, chains, nonces, route order, amounts, limits, and applicable fees are shown and validated before wallet confirmation.
 - **Static delivery.** The production artifact is a deterministic Cloudflare Pages export with no application server, Worker, queue, or privileged runtime.
 
 ## Security by construction
@@ -128,7 +128,7 @@ Every write follows the same guarded lifecycle:
 2. bind it to the selected sender and supported network;
 3. validate destinations, selectors, calldata shape, value, approvals, nonce, and order;
 4. simulate the ordered calls when supported;
-5. show a human-readable and raw transaction review;
+5. show a human-readable and raw transaction review sheet;
 6. request a visible wallet confirmation for each step;
 7. wait for a successful, fingerprint-matching receipt before continuing;
 8. wait one additional block and reread authoritative protocol state.
@@ -157,7 +157,7 @@ flowchart LR
 
 | Layer | Responsibility |
 | --- | --- |
-| Interface | Responsive web/Telegram navigation, forms, transaction review, recovery, and accessible states |
+| Interface | Responsive web/Telegram navigation, forms, review sheets, in-place wallet controls, recovery, and accessible states |
 | Wallet boundary | Authentication, wallet selection, chain switching, and explicit transaction prompts |
 | SDK façade | The exact 15-method official capability contract |
 | Policy and runner | Plan binding, validation, simulation, serialization, receipts, and authoritative refresh |
@@ -184,7 +184,7 @@ cp apps/mini-app/.env.example apps/mini-app/.env.local
 pnpm dev
 ```
 
-Open <http://localhost:3000> in a browser. Telegram is optional for local development; use a Telegram test launch only when validating host-specific viewport, theme, haptic, or seamless-login behavior.
+Open <http://localhost:3000> in a browser. The normal web flow opens Portfolio, where wallet connection, account switching, and disconnect are handled in place from the app shell and wallet panel; `/login` remains an explicit standalone setup screen. Telegram is optional for local development; use a Telegram test launch only when validating host-specific viewport, theme, haptic, or seamless-login behavior.
 
 ### Public build configuration
 
@@ -229,7 +229,7 @@ pnpm test:stress  # credential-free chaos plus protected dummy-route fork stress
 pnpm test:e2e     # browser and Telegram-sized static-artifact coverage
 ```
 
-Anvil uses disposable local accounts and snapshots. The default proof funds an unlocked account with fork-only USDC impersonation, opens coexisting ETH/BTC long and short positions through the official SDK, verifies ownership and nonzero pool state, reverts the snapshot, and emits `artifacts/anvil/protocol-proof.json`. Its upstream provider URL is supplied only to the Anvil parent process and is never committed, printed, forwarded to the test child, or written to the proof artifact.
+Anvil uses disposable local accounts and snapshots. The default proof funds an unlocked account with fork-only USDC impersonation, opens coexisting ETH/BTC long and short positions through the official SDK, then deposits additional collateral and borrows real fxUSD against the existing ETH long. It verifies that the same position ID is preserved, debt increases, and the borrowed fxUSD reaches the wallet. It then reverts the snapshot and emits `artifacts/anvil/protocol-proof.json`. Its upstream provider URL is supplied only to the Anvil parent process and is never committed, printed, forwarded to the test child, or written to the proof artifact.
 
 The manual **Protected Anvil mainnet fork** workflow runs four gates: the Node four-position proof, the fxSAVE Earn lifecycle proof, 64 snapshot/revert plus 64 dummy ordered-route stress iterations, and real position opening plus full closing through the mobile browser UI. The browser gate checks review-before-signing, immediate approval/action explorer links, receipt-verified positions before indexing, reload recovery, direct close actions, receive-token balances, zeroed pool accounting after every close, and shared position views across Trade, Positions, Portfolio, Earn, and Move. It captures the populated interface, proves the honestly empty state after closing all four positions, then restores the snapshot.
 

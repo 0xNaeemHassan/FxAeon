@@ -62,7 +62,7 @@ export default function PrivyClientProvider({ children }: { children: React.Reac
         supportedChains: [mainnet, base],
         defaultChain: mainnet,
         embeddedWallets: {
-          // Wallet creation is an explicit user action on the login screen.
+          // Wallet creation is an explicit user action in the wallet flow.
           ethereum: { createOnLogin: 'off' },
           // Always display Privy's signing UI. Transaction components may
           // repeat this per request; the provider-level setting is fail-safe.

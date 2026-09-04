@@ -118,9 +118,9 @@ export function getInitData(): string {
  * WHY (P0 login fix): Privy's seamless Mini-App login is AUTOMATIC — at
  * provider mount the SDK looks for `#tgWebAppData=…` in `location.hash`,
  * verifies the signed launch params server-side and logs the user in with no
- * popup. Telegram puts that hash on the INITIAL document URL only; our entry
- * router (`app/page.tsx`) client-navigates to /login, which drops it, so by
- * the time the Privy provider mounts the hash is gone and the SDK silently
+ * popup. Telegram puts that hash on the INITIAL document URL only; client-side
+ * routing can otherwise drop it before the Privy provider consumes it, so
+ * the SDK silently
  * skips seamless auth. Every other path then falls back to the Telegram
  * login WIDGET (`window.Telegram.Login.auth`) — a popup that cannot post its
  * result back inside Telegram's own webview. That is the exact

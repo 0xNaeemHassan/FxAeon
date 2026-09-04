@@ -1,16 +1,9 @@
 import type { FxSdkMarket } from "./tokens";
-import { assertConfiguredPublicClientChain, getEthereumClient } from "./clients";
+import { assertConfiguredPublicClientChain, assertPublicClientChain, getEthereumClient } from "./clients";
+import { positionPoolAddress } from "./policy";
 import type { FxPublicClient } from "./types";
 
 export type FxPositionSide = "long" | "short";
-
-/** Pool addresses are the Ethereum deployments used by the pinned SDK. */
-const POOL_ADDRESS: Record<`${FxSdkMarket}:${FxPositionSide}`, `0x${string}`> = {
-  "ETH:long": "0x6Ecfa38FeE8a5277B91eFdA204c235814F0122E8",
-  "BTC:long": "0xAB709e26Fa6B0A30c119D8c55B887DeD24952473",
-  "ETH:short": "0x25707b9e6690B52C60aE6744d711cf9C1dFC1876",
-  "BTC:short": "0xA0cC8162c523998856D59065fAa254F87D20A5b0",
-};
 
 const DEBT_RATIO_ABI = [{
   type: "function",
@@ -41,6 +34,22 @@ export interface LeverageBounds {
   source: "live" | "fallback";
 }
 
+type LeverageBoundsClient = Pick<FxPublicClient, "getChainId" | "readContract"> & {
+  chain?: { id?: number };
+};
+
+export type PreparedLeverageReview<T> = {
+  adjusted: false;
+  bounds: LeverageBounds;
+  leverage: number;
+  plan: T;
+} | {
+  adjusted: true;
+  bounds: LeverageBounds;
+  leverage: number;
+  plan: null;
+};
+
 function ratioToLeverage(ratio: bigint): number {
   const denominator = ratio >= WAD ? 1n : WAD - ratio;
   return Number(WAD) / Number(denominator);
@@ -55,25 +64,32 @@ function safeStepDown(value: number): number {
 }
 
 export function leverageBoundsFromRatios(minRatio: bigint, maxRatio: bigint, side: FxPositionSide): LeverageBounds {
+  if (minRatio < 0n || maxRatio <= minRatio || maxRatio >= WAD) {
+    throw new RangeError("Pool leverage limits returned an invalid debt-ratio range.");
+  }
   const sdkOffset = side === "short" ? 1 : 0;
   const minRaw = ratioToLeverage(minRatio) - sdkOffset;
   const maxRaw = ratioToLeverage(maxRatio) - sdkOffset;
   // The SDK rejects zero, while 0.1× is the smallest editable step for an
   // LSD-short request. Long pools retain their live minimum boundary.
   const min = side === "short" ? 0.1 : safeStepUp(minRaw);
-  const max = Math.max(min, safeStepDown(maxRaw));
+  const max = safeStepDown(maxRaw);
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max < min) {
+    throw new RangeError("Pool leverage limits do not contain a safe 0.1x target.");
+  }
   return { min, max, source: "live" };
 }
 
 export async function readLeverageBounds(
   market: FxSdkMarket,
   side: FxPositionSide,
-  client?: Pick<FxPublicClient, "readContract">,
+  client?: LeverageBoundsClient,
 ): Promise<LeverageBounds> {
-  await assertConfiguredPublicClientChain(1);
+  if (client) await assertPublicClientChain(client, 1);
+  else await assertConfiguredPublicClientChain(1);
   const reader = client ?? getEthereumClient();
   const result = await reader.readContract({
-    address: POOL_ADDRESS[`${market}:${side}`],
+    address: positionPoolAddress(market, side),
     abi: DEBT_RATIO_ABI,
     functionName: "getDebtRatioRange",
   });
@@ -90,4 +106,34 @@ export function leverageBoundsFor(market: FxSdkMarket, side: FxPositionSide): Le
 export function clampLeverage(value: number, bounds: Pick<LeverageBounds, "min" | "max">): number {
   if (!Number.isFinite(value)) return bounds.min;
   return Math.min(bounds.max, Math.max(bounds.min, value));
+}
+
+/**
+ * Start route pricing and the small live bounds read together. This keeps the
+ * quote path fast while ensuring a limit changed since form entry can never
+ * reach the review/signing stage unnoticed.
+ */
+export async function prepareLeverageReview<T>({
+  leverage,
+  currentBounds,
+  readBounds,
+  buildPlan,
+}: {
+  leverage: number;
+  currentBounds: LeverageBounds;
+  readBounds: () => Promise<LeverageBounds>;
+  buildPlan: () => Promise<T>;
+}): Promise<PreparedLeverageReview<T>> {
+  const planPromise = buildPlan();
+  // A newly tightened pool range can make the SDK planner reject before the
+  // bounds read settles. Attach a handler immediately, then surface the same
+  // rejection below if the requested target is still valid.
+  void planPromise.catch(() => undefined);
+  const bounds = await readBounds().catch(() => currentBounds);
+  const adjustedLeverage = clampLeverage(leverage, bounds);
+  if (adjustedLeverage !== leverage) {
+    await planPromise.catch(() => undefined);
+    return { adjusted: true, bounds, leverage: adjustedLeverage, plan: null };
+  }
+  return { adjusted: false, bounds, leverage, plan: await planPromise };
 }

@@ -16,7 +16,6 @@ import {
   Copy,
   Check,
   LucideIcon,
-  ChevronRight,
 } from 'lucide-react';
 import { haptic } from '@/lib/telegram';
 import { useT } from '@/lib/i18n';
@@ -42,7 +41,7 @@ export function AppShell({
   const headingRef = useRef<HTMLHeadingElement>(null);
   const contentRef = useRef<HTMLElement>(null);
   const documentTitle = title ?? (pathname === '/portfolio' ? 'Portfolio' : undefined);
-  const networkLabel = pathname === '/move' ? 'Ethereum + Base' : 'Ethereum';
+  const networkLabel = ['/move', '/qr', '/activity'].includes(pathname) ? 'Ethereum + Base' : 'Ethereum';
 
   useEffect(() => {
     const target = headingRef.current ?? contentRef.current;
@@ -98,15 +97,15 @@ const TABS: { href: string; labelKey: string; icon: LucideIcon; also?: string[] 
 export function TabBar() {
   const pathname = usePathname();
   const t = useT();
-  const links = (compact: boolean) => TABS.map(({ href, labelKey, icon: Icon, also }) => {
+  const links = TABS.map(({ href, labelKey, icon: Icon, also }) => {
     const active = pathname === href || Boolean(also?.some((prefix) => pathname.startsWith(prefix)));
     return (
       <Link
-        key={`${compact ? 'mobile' : 'desktop'}-${href}`}
+        key={href}
         href={href}
         onClick={() => haptic('selection')}
         aria-current={active ? 'page' : undefined}
-        className={`nav-item ${compact ? 'nav-item-mobile' : 'nav-item-desktop'} ${
+        className={`nav-item nav-item-mobile ${
           active ? 'nav-item-active text-mint' : 'text-mut'
         }`}
       >
@@ -114,7 +113,6 @@ export function TabBar() {
           <Icon aria-hidden="true" className="h-[18px] w-[18px]" strokeWidth={active ? 2.25 : 1.8} />
         </span>
         <span>{t(labelKey)}</span>
-        {!compact && <ChevronRight className="nav-chevron h-3.5 w-3.5" aria-hidden="true" />}
       </Link>
     );
   });
@@ -123,7 +121,7 @@ export function TabBar() {
     <>
       <nav className="mobile-tabbar pointer-events-none fixed inset-x-0 bottom-0 z-40" aria-label="Primary navigation">
         <div className="tabbar-safe mx-auto w-full max-w-[520px]">
-          <div className="tabbar pointer-events-auto">{links(true)}</div>
+          <div className="tabbar pointer-events-auto">{links}</div>
         </div>
       </nav>
     </>
@@ -226,11 +224,22 @@ export function ButtonLink({
   external?: boolean;
   className?: string;
 }) {
-  const props = external ? { target: '_blank', rel: 'noopener noreferrer' } : {};
+  if (!external) {
+    return (
+      <Link
+        href={href}
+        onClick={() => haptic('medium')}
+        className={buttonClasses(variant, className)}
+      >
+        {children}
+      </Link>
+    );
+  }
   return (
     <a
       href={href}
-      {...props}
+      target="_blank"
+      rel="noopener noreferrer"
       onClick={() => haptic('medium')}
       className={buttonClasses(variant, className)}
     >
@@ -260,52 +269,6 @@ export function Stat({
       </span>
       {sub && <span className="text-[11px] text-mut">{sub}</span>}
     </div>
-  );
-}
-
-export function ActionTile({
-  icon: Icon,
-  label,
-  hint,
-  href,
-  onClick,
-}: {
-  icon: LucideIcon;
-  label: string;
-  hint?: string;
-  href?: string;
-  onClick?: () => void;
-}) {
-  const inner = (
-    <>
-      <span className="action-icon">
-        <Icon aria-hidden="true" className="h-5 w-5 text-mint" strokeWidth={2} />
-      </span>
-      <span className="flex flex-col text-left">
-        <span className="text-[14px] font-medium">{label}</span>
-        {hint && <span className="text-[13px] text-mut">{hint}</span>}
-      </span>
-      <ChevronRight className="ml-auto h-4 w-4 text-[var(--mut-2)]" aria-hidden="true" />
-    </>
-  );
-  const cls = 'action-tile glass glass-press flex min-h-[68px] w-full items-center gap-3 p-3.5';
-  if (href)
-    return (
-      <Link href={href} className={cls} onClick={() => haptic('light')}>
-        {inner}
-      </Link>
-    );
-  return (
-    <button
-      type="button"
-      className={cls}
-      onClick={() => {
-        haptic('light');
-        onClick?.();
-      }}
-    >
-      {inner}
-    </button>
   );
 }
 

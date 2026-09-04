@@ -27,7 +27,9 @@ jobs:
       - run: pnpm verify:scope
       # The release artifact contains runtime dependencies only. Build and test
       # tooling is audited separately and is never shipped to Pages.
-      - run: pnpm audit --prod --audit-level=high
+      # Keep real high/critical findings blocking while avoiding false-red CI
+      # when npm's advisory endpoint is temporarily unavailable.
+      - run: pnpm audit --prod --audit-level=high --ignore-registry-errors
   sbom:
     runs-on: ubuntu-latest
     steps:

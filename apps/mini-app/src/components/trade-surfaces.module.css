@@ -181,14 +181,12 @@
   gap: 24px;
 }
 
-.tradePageHeading,
-.positionsPageHeading {
+.tradePageHeading {
   align-items: center;
   margin-bottom: 0;
 }
 
-.tradePageHeading h1,
-.positionsPageHeading h1 {
+.tradePageHeading h1 {
   font-size: clamp(28px, 4vw, 40px);
   letter-spacing: -0.055em;
 }
@@ -257,9 +255,7 @@
 
 .fieldStack { display: flex; flex-direction: column; gap: 18px; }
 .advancedDetails,
-.positionSummary,
-.positionList,
-.syncNotice { border-radius: 16px; }
+.positionList { border-radius: 16px; }
 .advancedDetails { border-color: var(--line); background: var(--input); }
 .advancedDetails summary { min-height: 48px; padding-inline: 4px; color: var(--mut); }
 
@@ -289,11 +285,6 @@
 .marketColumn :global(.chart-range-tabs button) { border-radius: 9px; }
 .marketColumn :global(.chart-range-tabs .chart-range-active) { background: var(--surface-3); box-shadow: none; color: var(--text); }
 
-.positionSummary {
-  border: 1px solid var(--line);
-  background: linear-gradient(145deg, var(--surface-2), var(--surface));
-  padding: 20px;
-}
 .positionList { display: grid; gap: 10px; }
 .positionsRoot :global([data-position-key]) { border-radius: 18px; border-color: var(--line); background: var(--surface); }
 .positionsRoot :global([data-position-key][aria-pressed='true']) { border-color: var(--mint); }

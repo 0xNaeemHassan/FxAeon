@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
-import { Activity, ChevronRight, ExternalLink, RefreshCw, Settings, Wallet, X, type LucideIcon } from 'lucide-react';
+import { Activity, ChevronRight, ExternalLink, LogOut, RefreshCw, Settings, Wallet, X, type LucideIcon } from 'lucide-react';
 import { formatUnits } from 'viem';
 import TokenIcon from '@/components/TokenIcon';
 import { AddressChip } from '@/components/ui';
@@ -19,9 +19,11 @@ import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
 import { ConfirmedPositionCards } from '@/components/ConfirmedPositionCards';
 import type { WalletBalancesResult, WalletTokenBalance } from '@/lib/fx';
 import { formatUsd, priceKeyForSymbol, usdValueForUnits } from '@/lib/prices';
+import { userSafeError } from '@/lib/errors';
 import { haptic } from '@/lib/telegram';
 import { usePrivyWallet } from '@/lib/wallet';
 import styles from '@/app/AccountWorkspace.module.css';
+import ConnectWalletButton from '@/components/ConnectWalletButton';
 
 export default function WalletProfile() {
   const wallet = usePrivyWallet();
@@ -29,6 +31,8 @@ export default function WalletProfile() {
   const refreshPositions = positionState.refresh;
   const walletIdentity = wallet.ready && wallet.authenticated ? wallet.address?.toLowerCase() ?? '' : '';
   const [openWallet, setOpenWallet] = useState<string | null>(null);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [disconnectError, setDisconnectError] = useState('');
   // Hide immediately on account loss/change, then discard the old open state
   // so reconnecting that account cannot silently reopen a prior drawer.
   const open = Boolean(walletIdentity && openWallet === walletIdentity);
@@ -41,7 +45,7 @@ export default function WalletProfile() {
   const openerRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
-  const { prices } = useUsdPrices();
+  const { prices, status: priceStatus, refreshing: pricesRefreshing } = useUsdPrices();
 
   useEffect(() => {
     if (open && wallet.ready && wallet.address) {
@@ -92,12 +96,27 @@ export default function WalletProfile() {
   const nonZero = useMemo(() => balances?.balances.filter((balance) => balance.amountWei > 0n) ?? [], [balances]);
   const valuation = useMemo(() => walletValuation(balances, prices), [balances, prices]);
 
-  if (!wallet.ready) return <span className="h-11 w-11 animate-pulse rounded-xl bg-[var(--surface)]" aria-label="Loading wallet" />;
+  const disconnect = async () => {
+    setDisconnectError('');
+    setDisconnecting(true);
+    try {
+      await wallet.disconnect();
+      setOpenWallet(null);
+      haptic('success');
+    } catch (cause) {
+      setDisconnectError(userSafeError(cause, 'Wallet disconnect is temporarily unavailable.'));
+      haptic('error');
+    } finally {
+      setDisconnecting(false);
+    }
+  };
+
+  if (!wallet.ready) return <span role="status" className="h-11 w-11 animate-pulse rounded-xl bg-[var(--surface)]"><span className="sr-only">Loading wallet</span></span>;
   if (!wallet.address) {
     return (
-      <Link href="/login" aria-label="Connect wallet" className={`${styles.walletConnect} glass-press`}>
+      <ConnectWalletButton aria-label="Connect wallet" className={`${styles.walletConnect} glass-press`}>
         <Wallet className="h-[18px] w-[18px]" aria-hidden="true" /> <span className="wallet-control-label">Connect</span>
-      </Link>
+      </ConnectWalletButton>
     );
   }
 
@@ -121,15 +140,15 @@ export default function WalletProfile() {
                 <p className={styles.eyebrow}>FxAeon account</p>
                 <h2 id="wallet-profile-title" className="text-display mt-1 text-[22px] font-semibold">Wallet profile</h2>
               </div>
-              <button ref={closeRef} type="button" aria-label="Close wallet profile" onClick={() => setOpenWallet(null)} className={`${styles.walletIconAction} glass-press`}><X className="h-5 w-5" /></button>
+              <button ref={closeRef} type="button" aria-label="Close wallet profile" onClick={() => setOpenWallet(null)} className={`${styles.walletIconAction} glass-press`}><X className="h-5 w-5" aria-hidden="true" /></button>
             </header>
 
             <div className={`${styles.walletSummary} wallet-profile-summary`}>
               <div className="flex items-center justify-between gap-3">
                 <AddressChip address={wallet.address} />
                 <div className="flex items-center gap-1">
-                  <a href={`https://etherscan.io/address/${wallet.address}`} target="_blank" rel="noopener noreferrer" aria-label="View wallet on Etherscan" className={`${styles.walletIconAction} glass-press`}><ExternalLink className="h-4 w-4" /></a>
-                  <button type="button" onClick={() => void Promise.allSettled([walletBalances.refresh(), refreshPositions()])} disabled={refreshingBalances || positionState.refreshing} aria-label="Refresh wallet profile" className={`${styles.walletIconAction} glass-press`}><RefreshCw className={`h-4 w-4 ${refreshingBalances || positionState.refreshing ? 'animate-spin' : ''}`} /></button>
+                  <a href={`https://etherscan.io/address/${wallet.address}`} target="_blank" rel="noopener noreferrer" aria-label="View wallet on Etherscan" className={`${styles.walletIconAction} glass-press`}><ExternalLink className="h-4 w-4" aria-hidden="true" /></a>
+                  <button type="button" onClick={() => void Promise.allSettled([walletBalances.refresh(), refreshPositions()])} disabled={refreshingBalances || positionState.refreshing} aria-label="Refresh wallet profile" className={`${styles.walletIconAction} glass-press`}><RefreshCw className={`h-4 w-4 ${refreshingBalances || positionState.refreshing ? 'animate-spin' : ''}`} aria-hidden="true" /></button>
                 </div>
               </div>
               <p className="mt-5 text-[12px] font-medium text-mut">Tracked wallet value</p>
@@ -137,6 +156,11 @@ export default function WalletProfile() {
               <p className={`mt-1 text-[11px] ${!loading && !valuation.complete ? 'text-warn' : 'text-mut'}`} aria-live="polite">
                 {loading ? 'Reading supported balances…' : valuation.reason || 'Complete supported-asset total · USD prices update every 30 seconds'}
               </p>
+              <button type="button" onClick={() => void disconnect()} disabled={disconnecting} className="button glass-press mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-[rgba(255,90,95,0.28)] bg-[rgba(255,90,95,0.1)] px-4 text-[13px] font-semibold text-danger disabled:opacity-60">
+                <LogOut className="h-4 w-4" aria-hidden="true" />
+                {disconnecting ? 'Disconnecting…' : 'Disconnect wallet'}
+              </button>
+              {disconnectError && <p role="alert" className="mt-2 rounded-xl bg-[var(--danger-dim)] p-3 text-[12px] text-danger">{disconnectError}</p>}
             </div>
 
             <section className={`${styles.walletSection} wallet-profile-assets`} aria-labelledby="wallet-profile-positions-title">
@@ -160,7 +184,7 @@ export default function WalletProfile() {
               {!loading && balances && nonZero.length === 0 && <p className="p-3 text-[12px] text-mut">{balances.failedTokens.length > 0 ? 'No positive balances in the assets verified so far.' : 'No supported balances found.'}</p>}
               {nonZero.map((balance) => {
                 const priceKey = priceKeyForSymbol(balance.key);
-                return <WalletAssetRow key={balance.key} balance={balance} price={priceKey ? prices[priceKey] : undefined} />;
+                return <WalletAssetRow key={balance.key} balance={balance} price={priceKey ? prices[priceKey] : undefined} pricePending={priceStatus === 'loading' || pricesRefreshing} />;
               })}
               {!loading && balances && balances.failedTokens.length > 0 && (
                 <p role="status" className="rounded-xl bg-[var(--warn-dim)] p-3 text-[12px] text-warn">Some supported balance reads failed. Asset rows may be incomplete, so no wallet total is shown.</p>
@@ -179,15 +203,15 @@ export default function WalletProfile() {
   );
 }
 
-function WalletAssetRow({ balance, price }: { balance: WalletTokenBalance; price: number | undefined }) {
+function WalletAssetRow({ balance, price, pricePending }: { balance: WalletTokenBalance; price: number | undefined; pricePending: boolean }) {
   const amount = formatUnits(balance.amountWei, balance.decimals);
   const usd = usdValueForUnits(balance.amountWei, balance.decimals, price);
-  const label = balance.key === 'fxUSDBasePool' ? 'fxUSD base pool' : balance.key;
+  const label = balance.key === 'fxUSDBasePool' ? 'fxUSD pool token' : balance.key;
   return (
     <div className={`${styles.walletAssetRow} flex items-center gap-3 border-b border-[var(--line)] py-3 last:border-b-0`}>
       <TokenIcon symbol={balance.key} size={34} />
       <div className="min-w-0 flex-1"><p className="text-[14px] font-semibold">{label}</p><p className="mt-0.5 truncate text-[11px] text-mut">{formatTokenAmount(amount)} {balance.key}</p></div>
-      <div className="text-right"><p className="text-[14px] font-semibold tabular-nums">{formatUsd(usd)}</p><p className="mt-0.5 text-[10.5px] text-mut">{price ? `${formatUsd(price)} each` : 'Price unavailable'}</p></div>
+      <div className="text-right"><p className="text-[14px] font-semibold tabular-nums">{formatUsd(usd)}</p><p className="mt-0.5 text-[10.5px] text-mut">{price ? formatUsd(price) : pricePending ? 'Value loading…' : 'Price delayed · retrying'}</p></div>
     </div>
   );
 }

@@ -385,12 +385,18 @@ export async function runTransactionRoute(params: {
           await params.callbacks.ensureChain?.(route.chainId);
           // Re-probe the read endpoint immediately before nonce authority is
           // accepted. Static viem chain metadata is not an eth_chainId proof.
-          await assertPublicClientChain(client, route.chainId);
           notifyStatus("awaiting-user", label);
-          const pendingNonce = Number(await client.getTransactionCount({
-            address: route.walletAddress,
-            blockTag: "pending",
-          }));
+          // These reads are independent and both must pass before signing.
+          // Starting them together removes a full RPC round trip without
+          // relaxing either the live endpoint-chain proof or nonce authority.
+          const [, pendingNonceValue] = await Promise.all([
+            assertPublicClientChain(client, route.chainId),
+            client.getTransactionCount({
+              address: route.walletAddress,
+              blockTag: "pending",
+            }),
+          ]);
+          const pendingNonce = Number(pendingNonceValue);
           const nonce = assertNonceMatches(transaction, pendingNonce);
           assertLockOwned();
           const request: WalletTransactionRequest = {

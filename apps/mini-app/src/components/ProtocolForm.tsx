@@ -2,7 +2,7 @@
 
 import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, Info, Search } from 'lucide-react';
+import { ChevronDown, Info, LoaderCircle, Search } from 'lucide-react';
 import TokenIcon from '@/components/TokenIcon';
 import { useUsdPrices } from '@/components/PriceProvider';
 import { useWalletBalances } from '@/components/WalletDataProvider';
@@ -376,7 +376,7 @@ export function TokenSelect<T extends string>({
   const labelId = `${selectId}-label`;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const { prices } = useUsdPrices();
+  const { prices, status: priceStatus, refresh: refreshPrices } = useUsdPrices();
   const pickerBalances = balances;
   const pickerStatus = balanceStatus;
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -475,7 +475,14 @@ export function TokenSelect<T extends string>({
         aria-controls={`${selectId}-menu`}
         aria-labelledby={labelId}
         onClick={() => setOpen((current) => {
-          if (!current) setQuery('');
+          if (!current) {
+            setQuery('');
+            const hasMissingPrice = options.some((option) => {
+              const priceKey = priceKeyForSymbol(option);
+              return priceKey && prices[priceKey] === undefined;
+            });
+            if (priceStatus !== 'ready' || hasMissingPrice) void refreshPrices();
+          }
           return !current;
         })}
         className={`${compact ? '' : 'field-control'} glass-press flex min-h-[52px] w-full items-center justify-between gap-3 px-4 text-left text-[15px] font-semibold text-[var(--text)] outline-none`}
@@ -559,7 +566,7 @@ export function TokenSelect<T extends string>({
                         <span id={balanceId} className={styles.tokenPickerBalance} title={balance?.amount ? `${balance.amount} ${displayTokenSymbol(option)}` : balance?.reason}>
                           {balance?.status === 'ready' && <span className="sr-only">Available: </span>}{optionBalanceLabel(balance, option)}
                         </span>
-                        <span id={balanceUsdId} className={styles.tokenPickerBalanceUsd}>{optionBalanceUsdLabel(balance, option, prices)}</span>
+                        <span id={balanceUsdId} className={styles.tokenPickerBalanceUsd}>{optionBalanceUsdContent(balance, option, prices)}</span>
                       </span>
                     )}
                     <span className={styles.tokenPickerCheckWrap}>
@@ -718,7 +725,7 @@ export function LeverageField({
 
 function displayTokenSymbol(symbol: string): string {
   if (symbol.toLowerCase() === 'usdc') return 'USDC';
-  if (symbol === 'fxUSDBasePool' || symbol.toLowerCase() === 'fxusd base pool') return 'fxUSD base pool';
+  if (symbol === 'fxUSDBasePool' || symbol.toLowerCase() === 'fxusd base pool') return 'fxUSD pool token';
   return symbol;
 }
 
@@ -734,7 +741,7 @@ function displayTokenName(symbol: string): string {
     USDT: 'Tether USD',
     FXUSD: 'f(x) USD',
     FXSAVE: 'f(x) Savings',
-    FXUSDBASEPOOL: 'fxUSD base pool',
+    FXUSDBASEPOOL: 'fxUSD pool token',
     FXN: 'f(x) Network',
     FRAX: 'Frax',
   };
@@ -750,11 +757,14 @@ function optionBalanceLabel(balance: TokenBalanceView | undefined, symbol: strin
   return `${formatExactDecimal(balance.amount, 4)} ${display}`;
 }
 
-function optionBalanceUsdLabel(balance: TokenBalanceView | undefined, symbol: string, prices: UsdPriceMap): string {
+function optionBalanceUsdContent(balance: TokenBalanceView | undefined, symbol: string, prices: UsdPriceMap): ReactNode {
   if (balance?.status === 'disconnected') return 'To see balances';
-  if (balance?.status === 'loading') return 'Loading value…';
+  if (balance?.status === 'loading') return <span className="inline-flex items-center gap-1"><LoaderCircle className="h-3 w-3 animate-spin" aria-hidden="true" />Loading value</span>;
   const cents = usdCentsForTokenBalance(balance, symbol, prices);
-  if (cents === null) return 'USD unavailable';
+  if (balance?.status === 'ready' && cents === null) {
+    return <span className="inline-flex items-center gap-1"><LoaderCircle className="h-3 w-3 animate-spin" aria-hidden="true" />Updating value</span>;
+  }
+  if (cents === null) return null;
   if (cents === 0n && /[1-9]/.test(balance?.amount ?? '')) return '≈ <$0.01';
   return `≈ ${formatUsdCents(cents)}`;
 }

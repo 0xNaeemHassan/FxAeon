@@ -9,6 +9,7 @@ import { haptic } from '@/lib/telegram';
 import { usePrivyWallet, useWalletReadyTimeout } from '@/lib/wallet';
 import AppearancePreference from '@/components/AppearancePreference';
 import styles from '@/components/UtilitySurfaces.module.css';
+import ConnectWalletButton from '@/components/ConnectWalletButton';
 
 /** Secondary destinations only. Primary trading flows stay in the tab bar. */
 export default function MorePage() {
@@ -28,7 +29,7 @@ export default function MorePage() {
         <Section label="Resources">
           <MoreRow href="/docs" icon={BookOpen} title="FxAeon docs" body="Guides, limits, and safety" />
           <MoreRow external href="https://fx.aladdin.club/" icon={BookOpen} title="f(x) Protocol" body="Open the protocol app" />
-          <MoreRow external href="https://fxprotocol.gitbook.io/fx-docs" icon={CircleHelp} title="Documentation" body="Markets, mechanics, and risks" />
+          <MoreRow external href="https://fxprotocol.gitbook.io/fx-docs" icon={CircleHelp} title="f(x) docs" body="Protocol mechanics and risks" />
         </Section>
       </div>
     </AppShell>
@@ -53,7 +54,7 @@ function WalletSummary() {
         </Card>
       );
     }
-    return <Card className="h-20 animate-pulse"><span className="sr-only">Loading wallet</span></Card>;
+    return <div role="status" aria-live="polite"><Card className="h-20 animate-pulse"><span className="sr-only">Loading wallet</span></Card></div>;
   }
 
   if (!authenticated || !wallet) {
@@ -64,9 +65,9 @@ function WalletSummary() {
           <p className="text-[13.5px] font-medium">Connect a wallet</p>
           <p className="mt-0.5 text-[12px] leading-relaxed text-mut">Your wallet and address appear here after connection.</p>
         </div>
-        <Link href="/login" aria-label={authenticated ? 'Choose wallet' : 'Connect wallet'} className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)] text-mint">
+        <ConnectWalletButton aria-label={authenticated ? 'Choose wallet' : 'Connect wallet'} className="flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1 rounded-xl bg-[var(--mint-dim)] text-mint">
           <ChevronRight className="h-5 w-5" aria-hidden="true" />
-        </Link>
+        </ConnectWalletButton>
       </Card>
     );
   }
