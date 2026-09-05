@@ -20,6 +20,7 @@ export type RecoveryStatus = "pending" | "confirmed" | "failed";
 
 export type RecoveryVerification =
   | "receipt"
+  | "confirming"
   | "not-found"
   | "rpc-error"
   | "mismatch";
@@ -36,7 +37,7 @@ export type RecoveryViewModel = {
 
 const MAX_TERMINAL_HISTORY_READS = 8;
 
-type ReceiptClient = Pick<FxPublicClient, "getTransactionReceipt" | "getTransaction" | "getChainId"> & {
+type ReceiptClient = Pick<FxPublicClient, "getTransactionReceipt" | "getTransaction" | "getChainId" | "getBlockNumber"> & {
   chain?: { id?: number };
 };
 
@@ -228,6 +229,25 @@ export async function reconcileWalletJournal(params: {
       const receipt = await client.getTransactionReceipt({ hash: record.hash });
       const view = viewModelFromReceipt(record, receipt);
       if (view.verification !== "receipt") return view;
+      if (typeof client.getBlockNumber === "function") {
+        const head = await client.getBlockNumber({ cacheTime: 0 });
+        const confirmations = head >= receipt.blockNumber ? head - receipt.blockNumber + 1n : 0n;
+        if (confirmations < 3n) {
+          return pendingView(
+            record,
+            "confirming",
+            `Receipt included at block ${receipt.blockNumber.toString()}; waiting for ${confirmations.toString()}/3 confirmations.`,
+          );
+        }
+        // Re-check at the finality boundary. A receipt can be replaced while
+        // a browser is suspended or while an RPC provider catches up to a reorg.
+        const finalReceipt = await client.getTransactionReceipt({ hash: record.hash });
+        if (
+          finalReceipt.transactionHash.toLowerCase() !== receipt.transactionHash.toLowerCase()
+          || finalReceipt.blockNumber !== receipt.blockNumber
+          || (receipt.blockHash && finalReceipt.blockHash?.toLowerCase() !== receipt.blockHash.toLowerCase())
+        ) return pendingView(record, "mismatch", "The transaction changed block identity during finality verification. FxAeon left it pending for recovery.");
+      }
       let transaction: MinedTransaction;
       try {
         transaction = await client.getTransaction({ hash: record.hash });

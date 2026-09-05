@@ -306,7 +306,7 @@ function stepProgress(step: TransactionStepResult | undefined): {
   if (state === 'confirmed') return { label, className: 'text-success', icon: <CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5" /> };
   if (state === 'unknown' || state === 'unverified') return { label, className: 'text-warn', icon: <Clock3 aria-hidden="true" className="h-3.5 w-3.5" /> };
   if (state === 'stopped' || state === 'reverted') return { label, className: 'text-danger', icon: <XCircle aria-hidden="true" className="h-3.5 w-3.5" /> };
-  if (state === 'submitted') return { label, className: 'text-mint', icon: <LoaderCircle aria-hidden="true" className="h-3.5 w-3.5 animate-spin" /> };
+  if (state === 'submitted' || state === 'included' || state === 'confirming') return { label, className: 'text-mint', icon: <LoaderCircle aria-hidden="true" className="h-3.5 w-3.5 animate-spin" /> };
   return { label, className: 'text-mut', icon: <Circle aria-hidden="true" className="h-3.5 w-3.5" /> };
 }
 
@@ -432,6 +432,16 @@ function statusPresentation(params: {
     return {
       label: 'Submitted',
       body: 'Waiting for on-chain confirmation. Track it below or in Activity; do not submit again.',
+      className: 'text-mint',
+      icon: <LoaderCircle className="h-4 w-4 animate-spin" />,
+    };
+  }
+  if (params.status === 'included' || params.status === 'confirming') {
+    const active = params.stepResults.find((step) => step.status === 'included' || step.status === 'confirming');
+    const count = active?.confirmations ?? 0;
+    return {
+      label: params.status === 'included' ? 'Included' : `Confirming · ${count}/3`,
+      body: 'The transaction is in a canonical block. FxAeon is rechecking its block identity until three confirmations; later route steps remain paused.',
       className: 'text-mint',
       icon: <LoaderCircle className="h-4 w-4 animate-spin" />,
     };

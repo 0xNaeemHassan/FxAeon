@@ -12,7 +12,8 @@ import { formatUsd } from '@/lib/prices';
 import { fxSaveUsdValue, normalizedFxSaveAssetsWei } from '@/lib/fxSaveUnits';
 import {
   assertConfiguredPublicClientChain,
-  getFxSdk,
+  getFxReadFacade,
+  withReadDeadline,
   MAX_FX_SLIPPAGE_PERCENT,
   planDepositFxSave,
   planRedeem,
@@ -108,8 +109,8 @@ export default function EarnPage() {
     setLoading(true);
     setError('');
     try {
-      await assertConfiguredPublicClientChain(1);
-      const sdk = getFxSdk();
+      await withReadDeadline(assertConfiguredPublicClientChain(1));
+      const sdk = getFxReadFacade();
       if (!address) {
         const result = await Promise.allSettled([sdk.getFxSaveConfig({})]);
         if (!readGuard.current.isCurrent(request)) return;
@@ -347,12 +348,12 @@ export default function EarnPage() {
   );
 }
 
-type SaveConfig = Awaited<ReturnType<ReturnType<typeof getFxSdk>['getFxSaveConfig']>>;
+type SaveConfig = Awaited<ReturnType<ReturnType<typeof getFxReadFacade>['getFxSaveConfig']>>;
 type SaveData = {
   walletAddress: string;
-  balance: Awaited<ReturnType<ReturnType<typeof getFxSdk>['getFxSaveBalance']>> | null;
-  redeemStatus: Awaited<ReturnType<ReturnType<typeof getFxSdk>['getFxSaveRedeemStatus']>> | null;
-  claimable: Awaited<ReturnType<ReturnType<typeof getFxSdk>['getFxSaveClaimable']>> | null;
+  balance: Awaited<ReturnType<ReturnType<typeof getFxReadFacade>['getFxSaveBalance']>> | null;
+  redeemStatus: Awaited<ReturnType<ReturnType<typeof getFxReadFacade>['getFxSaveRedeemStatus']>> | null;
+  claimable: Awaited<ReturnType<ReturnType<typeof getFxReadFacade>['getFxSaveClaimable']>> | null;
 };
 
 function SavingsSummary({ data, loading, onRefresh, stale }: { data: SaveData; loading: boolean; onRefresh: () => Promise<void>; stale: boolean }) {

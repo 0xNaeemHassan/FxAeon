@@ -1,7 +1,9 @@
 import { formatUnits, parseUnits, type Address } from 'viem';
 import { tokens as sdkTokens } from '@aladdindao/fx-sdk';
 import type { PositionInfo, TokenSymbol } from '@aladdindao/fx-sdk';
-import { assertConfiguredPublicClientChain, assertPublicClientChain, getEthereumClient, getFxSdk, type FxPublicClient } from '@/lib/fx';
+import { assertConfiguredPublicClientChain, assertPublicClientChain, getEthereumClient, getFxReadFacade, type FxPublicClient } from '@/lib/fx';
+import { withReadDeadline } from '@/lib/fx/readFacade';
+import { positionPoolAddress } from '@/lib/fx/policy';
 
 export type UiMarket = 'ETH' | 'BTC';
 export type UiSide = 'long' | 'short';
@@ -164,11 +166,12 @@ export function positionTokenDecimals(
  */
 export async function settlePositionGroups(
   readGroup: (group: PositionGroup) => Promise<PositionInfo[]>,
+  verifyGroup?: (group: PositionGroup, positions: PositionInfo[]) => Promise<PositionInfo[]>,
 ): Promise<PositionReadResult> {
   const settled = await Promise.allSettled(POSITION_GROUPS.map(async (group) => {
     const positions = await readGroup(group);
     if (!Array.isArray(positions)) throw new TypeError('Position group response must be an array');
-    return { group, positions };
+    return { group, positions: verifyGroup ? await verifyGroup(group, positions) : positions };
   }));
 
   const positions: UiPosition[] = [];
@@ -202,14 +205,46 @@ export async function settlePositionGroups(
   };
 }
 
+/** Verify every discovered ID against the canonical ERC-721 ownerOf read. */
+export async function verifyPositionGroupOwnership(params: {
+  client: Pick<FxPublicClient, 'readContract'>;
+  walletAddress: string;
+  group: PositionGroup;
+  positions: PositionInfo[];
+}): Promise<PositionInfo[]> {
+  const pool = positionPoolAddress(params.group.market, params.group.side);
+  const valid = params.positions.map((info) => {
+    if (!Number.isSafeInteger(info.positionId) || info.positionId < 0) throw new TypeError('indexer returned a malformed position ID');
+    if (typeof info.rawColls !== 'bigint' || typeof info.rawDebts !== 'bigint' || info.rawColls < 0n || info.rawDebts < 0n) {
+      throw new TypeError(`indexer returned malformed fields for position ${String(info.positionId)}`);
+    }
+    return info;
+  });
+  const checks = await Promise.allSettled(valid.map((info) => withReadDeadline(params.client.readContract({
+    address: pool,
+    abi: [{ type: 'function', name: 'ownerOf', stateMutability: 'view', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ type: 'address' }] }] as const,
+    functionName: 'ownerOf',
+    args: [BigInt(info.positionId)],
+  }))));
+  const verified: PositionInfo[] = [];
+  checks.forEach((check, index) => {
+    if (check.status !== 'fulfilled' || typeof check.value !== 'string' || check.value.toLowerCase() !== params.walletAddress.toLowerCase()) {
+      throw new Error(`${params.group.market} ${params.group.side} position ownership verification was incomplete`);
+    }
+    verified.push(valid[index]);
+  });
+  return verified;
+}
+
 export async function readAllPositionsDetailed(walletAddress: string): Promise<PositionReadResult> {
-  await assertConfiguredPublicClientChain(1);
-  const sdk = getFxSdk();
+  await withReadDeadline(assertConfiguredPublicClientChain(1));
+  const sdk = getFxReadFacade();
+  const client = getEthereumClient();
   return settlePositionGroups((group) => sdk.getPositions({
     userAddress: walletAddress,
     market: group.market,
     type: group.side,
-  }));
+  }), (group, positions) => verifyPositionGroupOwnership({ client, walletAddress, group, positions }));
 }
 
 /**

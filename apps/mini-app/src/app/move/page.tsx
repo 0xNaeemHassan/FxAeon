@@ -16,7 +16,8 @@ import {
   assertPublicClientChain,
   bridgeDeliveryLowerBound,
   getBridgeApprovalAllowance,
-  getFxSdk,
+  getFxReadFacade,
+  withReadDeadline,
   getPublicClient,
   planBridgeRoute,
   resolveBridgeApprovalTokenAddress,
@@ -133,11 +134,11 @@ export default function MovePage() {
       const signer = assertAddress(wallet.address!, 'selected wallet');
       const recipient = assertAddress(recipientValue, 'bridge recipient');
       const lowerBound = bridgeDeliveryLowerBound(amountWei);
-      await Promise.all([
+      await withReadDeadline(Promise.all([
         assertPublicClientChain(getPublicClient(sourceChainId), sourceChainId),
         assertPublicClientChain(getPublicClient(destinationChainId), destinationChainId),
-      ]);
-      const sdk = getFxSdk();
+      ]));
+      const sdk = getFxReadFacade();
       let sourceToken: string = token;
       let sourceOftAddress: `0x${string}`;
       let sourceTokenAddress: `0x${string}`;

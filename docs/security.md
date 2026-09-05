@@ -10,6 +10,8 @@ FxAeon prepares financial transactions in an untrusted browser environment. The 
 - Supported chains are exactly Ethereum `1` and Base `8453`.
 - Every SDK step gets a separate visible wallet confirmation.
 - A later step is never submitted before the previous receipt succeeds.
+- A receipt is first reported as included, then rechecked while waiting for three canonical confirmations. Block-number or block-hash changes downgrade the step to recoverable submitted/pending state; no dependent route step is signed during that interval.
+- Every indexed position ID is checked with the canonical pool `ownerOf` read for the selected wallet. Malformed IDs/fields or incomplete ownership verification produce a partial/unavailable read, never a displayed position.
 - Exact approvals are used; unlimited approvals and blanket position approvals are rejected.
 - Bridge source confirmation is not labeled destination delivery.
 - A bridge recipient may differ from the signer. The source event must match the selected signer, the fee refund returns to that signer, and destination delivery must match the separately reviewed recipient.
@@ -23,7 +25,7 @@ FxAeon prepares financial transactions in an untrusted browser environment. The 
 | --- | --- |
 | A stale or tampered plan targets the wrong account or chain | Bind every plan to the selected wallet address and supported chain; revalidate immediately before signing |
 | Malicious or malformed calldata | Validate destination, selector, value, approval spender/amount, route order, and nonce; display the reviewed request |
-| A multi-step route continues after failure | Wait for each receipt and stop on rejection, revert, timeout, or nonce drift |
+| A multi-step route continues after failure | Require included → confirming → confirmed (three confirmations) for each receipt; stop on rejection, revert, timeout, reorg, or nonce drift |
 | Local storage is manipulated | Treat recovery records as hints only; re-read receipts, events, and SDK state |
 | Bridge source is mistaken for delivery | Verify matching LayerZero GUID events on the destination chain |
 | Public RPC credentials are abused | Restrict provider origins, networks, quotas, and alerts; reject non-reviewed hosts at build/runtime |

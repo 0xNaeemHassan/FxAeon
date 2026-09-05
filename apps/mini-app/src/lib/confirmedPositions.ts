@@ -11,7 +11,7 @@ import {
 import type { UiPosition } from '../app/trade/fxUi';
 import { assertPublicClientChain, getEthereumClient } from './fx/clients';
 import { capabilityPolicy, positionPoolAddress } from './fx/policy';
-import { getFxSdk } from './fx/sdk';
+import { getFxReadFacade } from './fx/readFacade';
 import type { FxPublicClient, FxSdkFacade, PlannedRoute, PlannedTransaction, TransactionExecutionResult } from './fx/types';
 import { validateRoute } from './fx/validation';
 
@@ -289,7 +289,7 @@ export async function readConfirmedPosition(
 ): Promise<UiPosition | null> {
   const parsed = parseConfirmedPositionHint(hint, walletAddress);
   if (!parsed || !await verifyConfirmedPositionHint(parsed, walletAddress, dependencies)) return null;
-  const sdk = dependencies.sdk ?? getFxSdk();
+  const sdk = dependencies.sdk ?? getFxReadFacade();
   const positions = await sdk.getPositions({ userAddress: parsed.walletAddress, market: parsed.market, type: parsed.side });
   if (!Array.isArray(positions)) return null;
   const matches = positions.filter((info) => info && info.positionId === parsed.positionId);

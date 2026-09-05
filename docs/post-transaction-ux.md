@@ -54,7 +54,7 @@ The pinned SDK's `assetsWei`, `totalAssetsWei`, and `pendingSharesWei` are **fxU
 - No automatic resubmission, replacement-signing behavior, new signer, relaxed simulation, or bypass of the following-block boundary.
 - No unsupported explicit-ID SDK call, private SDK internals, or production indexer override. The fork test's delayed index adapter is test-only.
 
-The extra current-owner verification in this change applies to receipt-derived hints and their targeted hydration. Ordinary all-market discovery still follows the pinned SDK's index; NFTs transferred outside FxAeon can remain in that index briefly. Independent ownership reconciliation for every indexed row is a separate follow-up, not a guarantee made by this change. Transaction planners retain their existing execution checks.
+Normal all-market discovery now follows the pinned SDK's index only as a discovery hint: every returned ID is independently checked with the canonical pool `ownerOf` read before display. NFTs transferred outside FxAeon therefore become a partial/unavailable group rather than an unverified actionable row. Transaction planners retain their existing execution checks.
 
 ## Verification and evidence
 

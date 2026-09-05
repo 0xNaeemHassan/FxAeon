@@ -33,7 +33,8 @@ import TokenIcon from '@/components/TokenIcon';
 import { AddressChip, AppShell, Card, EmptyState, SectionTitle } from '@/components/ui';
 import {
   assertConfiguredPublicClientChain,
-  getFxSdk,
+  getFxReadFacade,
+  withReadDeadline,
   type WalletBalancesResult,
   type WalletTokenBalance,
 } from '@/lib/fx';
@@ -107,9 +108,9 @@ function PortfolioWallet() {
     const activeRequest = ++requestId.current;
     setFxSaveState({ identity, snapshot: { ...EMPTY_FX_SAVE, status: 'loading' } });
     try {
-      await assertConfiguredPublicClientChain(1);
+      await withReadDeadline(assertConfiguredPublicClientChain(1));
       if (requestId.current !== activeRequest) return;
-      const sdk = getFxSdk();
+      const sdk = getFxReadFacade();
       const [fxSave, redeem] = await Promise.allSettled([
         sdk.getFxSaveBalance({ userAddress: walletAddress }),
         sdk.getFxSaveClaimable({ userAddress: walletAddress }),

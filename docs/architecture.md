@@ -38,7 +38,8 @@ There is no FxAeon server process. The ordinary web app and Telegram Mini App ar
 - `src/lib/fx/sdk.ts` owns the single Ethereum `FxSdk` instance. This is intentional because the upstream SDK caches its first RPC client globally.
 - `src/lib/fx/service.ts` normalizes only official SDK results into reviewable ordered plans. Plans are rebuilt on demand and invalidated when wallet, network, or inputs change.
 - `src/lib/fx/validation.ts` and the transaction policy reject malformed senders, chains, destinations, selectors, values, approvals, and nonces.
-- `src/lib/fx/runner.ts` simulates, requests one signature per step, awaits each receipt, stops on failure, waits one additional block, and triggers an authoritative reread.
+- `src/lib/fx/runner.ts` simulates, requests one signature per step, records submitted → included → confirming → confirmed, rechecks receipt block identity through three confirmations, stops on failure/reorg, and triggers an authoritative reread only after finality.
+- `src/lib/fx/readFacade.ts` is the application-owned read boundary for the approved SDK subset. Each SDK/indexer read has a 12-second deadline; position records are shape-checked, and normal discovery verifies every ID with canonical pool `ownerOf` before display.
 - `src/lib/wallet/` is a narrow Privy/EIP-1193 adapter. It has no server credential or delegated authority.
 - `WalletDataProvider.tsx` and `src/lib/web3/` share standard native/ERC-20 balance reads through pinned Wagmi `3.7.7` and TanStack Query `5.102.8`. They reuse the existing Viem public clients, not another wallet or RPC service. Alchemy Data discovery broadens the asset list but never overrides an exact canonical read.
 - `src/lib/prices.ts` validates token quotes independently, rejects stale/low-confidence values, and uses one bounded, batched, cached CoinGecko fallback with adaptive rate-limit retry/backoff for missing current prices. Current-price UI has no source badge; chart history retains its separate attribution. `src/lib/positionValuation.ts` retains exact accounting units for estimated USD equity and owned-token value. These helpers are not imported by the SDK façade, validation policy, or transaction runner.
@@ -96,7 +97,7 @@ The launch UI is English-only. A locale may return only when the complete retain
 3. Validation checks target, selector, native value, approvals, nonce, and ordered route shape.
 4. The route is simulated when the provider supports the ordered call set.
 5. The user reviews the plan and approves each wallet step visibly.
-6. The runner waits for a successful receipt before continuing, then waits one additional block.
+6. The runner records inclusion, rechecks the receipt and block head until three confirmations, and only then permits the next route step.
 7. The page rereads chain/SDK state and reconciles or clears its recovery journal.
 
 Broadcast hashes become explorer links during step execution, before receipt completion. Each link retains its original chain/account context; approval and action states are separate. A confirmed position can appear by its verified mint ID before index discovery finishes, without claiming collateral/debt/valuation before the SDK supplies them. See the [post-transaction code study](post-transaction-ux.md).

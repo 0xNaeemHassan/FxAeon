@@ -5,6 +5,7 @@ export * from "./leverage";
 export * from "./clients";
 export * from "./types";
 export * from "./sdk";
+export * from "./readFacade";
 export * from "./normalize";
 export * from "./validation";
 export * from "./policy";
