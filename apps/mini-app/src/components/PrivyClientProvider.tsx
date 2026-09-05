@@ -22,14 +22,14 @@ import { PrivyWalletBridge, UnavailableWalletProvider } from '@/lib/wallet';
 import WalletRecoveryCoordinator from '@/components/WalletRecoveryCoordinator';
 import ProtocolPositionProvider from '@/components/ProtocolPositionProvider';
 import WalletDataProvider from '@/components/WalletDataProvider';
+import { walletDemandForPathname } from '@/lib/walletDemand';
 
 export default function PrivyClientProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? '/';
   // Data-heavy providers are deliberately route-scoped. Shell, docs, QR and
   // settings screens must not open wallet RPC/indexer feeds just because the
   // global provider tree is mounted.
-  const walletDataEnabled = ['/portfolio', '/trade', '/positions', '/borrow', '/earn', '/move'].some((route) => pathname === route || pathname.startsWith(`${route}/`));
-  const positionsEnabled = ['/portfolio', '/trade', '/positions', '/borrow'].some((route) => pathname === route || pathname.startsWith(`${route}/`));
+  const demand = walletDemandForPathname(pathname);
   // P0 login fix: Privy's seamless Telegram Mini-App login triggers at SDK
   // mount IF `#tgWebAppData=…` is still on the URL. Our entry router drops
   // it, so restore it from WebApp.initData BEFORE the provider mounts. A
@@ -45,8 +45,8 @@ export default function PrivyClientProvider({ children }: { children: React.Reac
   });
   if (!PRIVY_APP_ID) return (
     <UnavailableWalletProvider>
-      <WalletDataProvider enabled={walletDataEnabled}>
-        <ProtocolPositionProvider enabled={positionsEnabled}>
+      <WalletDataProvider enabled={demand.enabled} expandedAssets={demand.expandedAssets} chainPulse={demand.chainPulse}>
+        <ProtocolPositionProvider enabled={demand.positions}>
           <WalletRecoveryCoordinator />
           {children}
         </ProtocolPositionProvider>
@@ -78,8 +78,8 @@ export default function PrivyClientProvider({ children }: { children: React.Reac
       }}
     >
       <PrivyWalletBridge>
-        <WalletDataProvider enabled={walletDataEnabled}>
-          <ProtocolPositionProvider enabled={positionsEnabled}>
+        <WalletDataProvider enabled={demand.enabled} expandedAssets={demand.expandedAssets} chainPulse={demand.chainPulse}>
+          <ProtocolPositionProvider enabled={demand.positions}>
             <WalletRecoveryCoordinator />
             {children}
           </ProtocolPositionProvider>

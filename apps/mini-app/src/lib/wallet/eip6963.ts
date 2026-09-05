@@ -17,4 +17,5 @@ export function recordEip6963Announcement(announcement: Eip6963Announcement): Di
 export function getDiscoveredEip6963Providers(): readonly DiscoveredEip6963Provider[] { return discovered; }
 export function selectEip6963Provider(rdns: string | null | undefined): DiscoveredEip6963Provider | undefined { return rdns ? discovered.find((candidate) => candidate.rdns === rdns) : undefined; }
 export function shouldPromptEip6963Provider(preferredRdns?: string | null): boolean { return discovered.length > 1 && !selectEip6963Provider(preferredRdns); }
+export function shouldBindEip6963ProviderEvents(preferredRdns?: string | null): boolean { return !shouldPromptEip6963Provider(preferredRdns); }
 export function clearEip6963AnnouncementsForTest(): void { discovered.splice(0, discovered.length); }

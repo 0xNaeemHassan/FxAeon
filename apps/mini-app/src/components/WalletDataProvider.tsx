@@ -43,7 +43,7 @@ export type WalletPulse = {
   chains: Record<FxChainId, RealtimeChainState>;
 };
 
-export default function WalletDataProvider({ children, enabled = true }: { children: React.ReactNode; enabled?: boolean }) {
+export default function WalletDataProvider({ children, enabled = true, expandedAssets = true, chainPulse = true }: { children: React.ReactNode; enabled?: boolean; expandedAssets?: boolean; chainPulse?: boolean }) {
   const wallet = usePrivyWallet();
   const [config] = useState(createWalletDataConfig);
   const [queryClient] = useState(createWalletQueryClient);
@@ -69,7 +69,7 @@ export default function WalletDataProvider({ children, enabled = true }: { child
   return <WagmiProvider config={config} reconnectOnMount={false}>
     <QueryClientProvider client={queryClient}>
       <WalletDataSession.Provider value={session}>
-        <WalletAssetLayer address={wallet.address} enabled={enabled && wallet.ready && wallet.authenticated}>{children}</WalletAssetLayer>
+        <WalletAssetLayer address={wallet.address} enabled={enabled && wallet.ready && wallet.authenticated} expandedAssets={expandedAssets} chainPulse={chainPulse}>{children}</WalletAssetLayer>
       </WalletDataSession.Provider>
     </QueryClientProvider>
   </WagmiProvider>;
@@ -145,14 +145,15 @@ export function useWalletPulse({ address, enabled = true }: { address?: string; 
   return { assets: useWalletAssets({ address, enabled }), chains: useContext(RealtimeChainContext) };
 }
 
-function WalletAssetLayer({ address, enabled, children }: { address?: string; enabled: boolean; children: React.ReactNode }) {
+function WalletAssetLayer({ address, enabled, expandedAssets, chainPulse, children }: { address?: string; enabled: boolean; expandedAssets: boolean; chainPulse: boolean; children: React.ReactNode }) {
   const config = useConfig<WalletDataConfig>();
   const client = useQueryClient();
   const session = useContext(WalletDataSession);
   const { prices, status: priceStatus, updatedAt: priceUpdatedAt } = useUsdPrices();
   const priceRef = useRef({ prices, status: priceStatus, updatedAt: priceUpdatedAt });
   priceRef.current = { prices, status: priceStatus, updatedAt: priceUpdatedAt };
-  const active = enabled && Boolean(address) && session !== 'disconnected' && session.split(':')[0] === address?.toLowerCase();
+  const active = enabled && expandedAssets && Boolean(address) && session !== 'disconnected' && session.split(':')[0] === address?.toLowerCase();
+  const pulseActive = enabled && chainPulse && Boolean(address) && session !== 'disconnected' && session.split(':')[0] === address?.toLowerCase();
   const [chainStates, setChainStates] = useState<Record<FxChainId, RealtimeChainState>>(EMPTY_CHAIN_STATE);
   const requestRef = useRef<{ controller: AbortController; promise: Promise<WalletAssetSnapshot | undefined> } | null>(null);
   const latestSession = useRef(session);
@@ -217,7 +218,7 @@ function WalletAssetLayer({ address, enabled, children }: { address?: string; en
 
   const triggerRefresh = useCallback((_event?: RealtimeChainEvent) => { void refresh(); }, [refresh]);
   useEffect(() => {
-    if (!active || !address) {
+    if (!pulseActive || !address) {
       setChainStates(EMPTY_CHAIN_STATE);
       return;
     }
@@ -254,7 +255,7 @@ function WalletAssetLayer({ address, enabled, children }: { address?: string; en
       window.removeEventListener('offline', update);
       Object.values(controllers).forEach((controller) => controller?.stop());
     };
-  }, [active, address, client, refresh, triggerRefresh]);
+  }, [active, address, client, pulseActive, refresh, triggerRefresh]);
   useEffect(() => () => requestRef.current?.controller.abort(), []);
 
   const status: WalletAssetsHookResult['status'] = !active ? 'idle'

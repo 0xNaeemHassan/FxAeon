@@ -5,6 +5,7 @@ import {
   getDiscoveredEip6963Providers,
   recordEip6963Announcement,
   selectEip6963Provider,
+  shouldBindEip6963ProviderEvents,
   shouldPromptEip6963Provider,
   type Eip6963Announcement,
 } from '../src/lib/wallet/eip6963';
@@ -29,7 +30,9 @@ test('a valid preferred rdns selects directly while multiple unchosen providers 
   recordEip6963Announcement({ provider: first, info: { name: 'First', rdns: 'com.first' } });
   recordEip6963Announcement({ provider: second, info: { name: 'Second', rdns: 'com.second' } });
   assert.equal(shouldPromptEip6963Provider('com.unknown'), true);
+  assert.equal(shouldBindEip6963ProviderEvents('com.unknown'), false);
   assert.equal(shouldPromptEip6963Provider('com.second'), false);
+  assert.equal(shouldBindEip6963ProviderEvents('com.second'), true);
   assert.equal(selectEip6963Provider('com.second')?.provider, second);
   assert.equal(selectEip6963Provider('com.unknown'), undefined);
 });

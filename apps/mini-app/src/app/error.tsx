@@ -3,7 +3,9 @@
 import { useEffect } from 'react';
 
 export default function RouteError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
-  useEffect(() => { console.error('FxAeon route error', error); }, [error]);
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'production') console.error('FxAeon route error', error);
+  }, [error]);
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 px-6 text-center">
       <h1 className="text-display text-xl font-semibold">This screen could not load</h1>

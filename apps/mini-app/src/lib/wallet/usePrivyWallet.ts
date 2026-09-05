@@ -13,7 +13,7 @@ import {
 } from '@privy-io/react-auth';
 import { assertLocalForkRpcUrl } from '@/lib/fx/config';
 import { switchBrowserChain as switchBrowserChainWithConfig } from './switchBrowserChain';
-import { getDiscoveredEip6963Providers, recordEip6963Announcement, selectEip6963Provider, shouldPromptEip6963Provider, type DiscoveredEip6963Provider, type Eip6963Announcement } from './eip6963';
+import { getDiscoveredEip6963Providers, recordEip6963Announcement, selectEip6963Provider, shouldBindEip6963ProviderEvents, shouldPromptEip6963Provider, type DiscoveredEip6963Provider, type Eip6963Announcement } from './eip6963';
 
 export const FX_CHAIN_IDS = {
   ethereum: 1,
@@ -408,7 +408,16 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const stopDiscovery = discoverEip6963(() => setProviderVersion((version) => version + 1));
+    const stopDiscovery = discoverEip6963(() => {
+      const preferred = window.localStorage.getItem('fxaeon:wallet-provider-rdns');
+      if (shouldPromptEip6963Provider(preferred)) {
+        // A late second announcement invalidates any legacy auto-bind that may
+        // have occurred during the single-provider discovery window.
+        setAddress(undefined);
+        setChainId(undefined);
+      }
+      setProviderVersion((version) => version + 1);
+    });
     let cancelled = false;
     // Give EIP-6963 announcements a short discovery window before restoring
     // an existing account. This prevents a legacy window.ethereum account
@@ -416,13 +425,13 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
     // to choose from.
     const autoSyncTimer = window.setTimeout(() => {
       const preferred = window.localStorage.getItem('fxaeon:wallet-provider-rdns');
-      if (shouldPromptEip6963Provider(preferred)) {
+      if (!shouldBindEip6963ProviderEvents(preferred)) {
         setReady(true);
         return;
       }
       void sync().catch(() => undefined).finally(() => { if (!cancelled) setReady(true); });
     }, 200);
-    if (!provider?.on) return () => { cancelled = true; window.clearTimeout(autoSyncTimer); stopDiscovery(); };
+    let listenersAttached = false;
     const onAccounts = (...args: unknown[]) => {
       if (window.localStorage.getItem(BROWSER_DISCONNECTED_KEY) === '1') {
         setAddress(undefined);
@@ -437,15 +446,26 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
       setChainId(parsed === FX_CHAIN_IDS.ethereum || parsed === FX_CHAIN_IDS.base ? parsed : undefined);
     };
     const onDisconnect = () => { setAddress(undefined); setChainId(undefined); };
-    provider.on('accountsChanged', onAccounts);
-    provider.on('chainChanged', onChain);
-    provider.on('disconnect', onDisconnect);
+    const attachListeners = () => {
+      if (!provider?.on || listenersAttached) return;
+      provider.on('accountsChanged', onAccounts);
+      provider.on('chainChanged', onChain);
+      provider.on('disconnect', onDisconnect);
+      listenersAttached = true;
+    };
+    const attachTimer = window.setTimeout(() => {
+      const preferred = window.localStorage.getItem('fxaeon:wallet-provider-rdns');
+      if (shouldBindEip6963ProviderEvents(preferred)) attachListeners();
+    }, 200);
     return () => {
       cancelled = true;
       window.clearTimeout(autoSyncTimer);
-      provider.removeListener?.('accountsChanged', onAccounts);
-      provider.removeListener?.('chainChanged', onChain);
-      provider.removeListener?.('disconnect', onDisconnect);
+      window.clearTimeout(attachTimer);
+      if (listenersAttached) {
+        provider?.removeListener?.('accountsChanged', onAccounts);
+        provider?.removeListener?.('chainChanged', onChain);
+        provider?.removeListener?.('disconnect', onDisconnect);
+      }
       stopDiscovery();
     };
   }, [provider, sync]);

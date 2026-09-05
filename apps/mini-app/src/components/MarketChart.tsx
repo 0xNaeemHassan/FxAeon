@@ -79,10 +79,12 @@ function useLiveCandles(market: MarketSymbol, range: LiveMarketRange, enabled: b
 
 export function TradeMarketChart({ market }: { market: MarketSymbol }) {
   const [range, setRange] = useState<LiveMarketRange>('1D');
-  const [isMobile, setIsMobile] = useState(false);
+  // Unknown is intentionally distinct from desktop: on a mobile first paint,
+  // matchMedia has not resolved yet and the collapsed chart must stay cold.
+  const [isMobile, setIsMobile] = useState<boolean | null>(null);
   const [mobileExpanded, setMobileExpanded] = useState(false);
   const chartId = useId();
-  const expanded = !isMobile || mobileExpanded;
+  const expanded = isMobile === false || (isMobile === true && mobileExpanded);
   const history = useLiveCandles(market, range, expanded);
   const { prices } = useUsdPrices();
   const live = useLiveMarketQuote(market);
