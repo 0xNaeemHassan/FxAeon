@@ -33,17 +33,18 @@ The client accepts only public configuration:
 | `NEXT_PUBLIC_PRIVY_APP_ID` | Optional public Privy application identifier; omit it for direct browser-wallet access |
 | `NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL` | Domain-restricted Ethereum RPC endpoint |
 | `NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL` | Domain-restricted Base RPC endpoint |
+| `NEXT_PUBLIC_ALCHEMY_DATA_API_KEY` | Domain-restricted Alchemy Data API key for foreground token discovery on Ethereum/Base |
 | `NEXT_PUBLIC_TELEGRAM_APP_URL` | Secondary Telegram Main Mini App or menu URL; browser entry does not depend on it |
 
 `NEXT_PUBLIC_*` values are embedded in the browser bundle. Never place a bot token, Privy secret, authorization key, private key, unrestricted RPC key, or other signing authority in this file. Inject production values through the protected deployment environment, not through committed files.
 
-When configured, Privy should allow the exact local, preview, and production origins and expose only Ethereum (chain ID `1`) and Base (chain ID `8453`). Provider applications should use separate preview and production credentials with origin allowlists, network restrictions, usage caps, and alerts. If Privy is omitted, FxAeon uses the browser wallet's EIP-1193 provider directly; no account is requested until the user presses Connect.
+When configured, Privy should allow the exact local, preview, and production origins and expose only Ethereum (chain ID `1`) and Base (chain ID `8453`). Provider applications should use separate preview and production credentials with origin allowlists, network restrictions, usage caps, and alerts. The Alchemy Data key is browser-visible by design, but should still be restricted to the deployed app origins and capped conservatively. If Privy is omitted, FxAeon uses the browser wallet's EIP-1193 provider directly; no account is requested until the user presses Connect.
 
 ### Where production values go
 
 The checked-in deployment workflow reads build-time values before it creates the static `dist/` artifact. Add them in **GitHub → repository Settings → Secrets and variables → Actions**:
 
-- **Secrets:** `NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL`, `NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL`, and (when used) `NEXT_PUBLIC_PRIVY_APP_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`.
+- **Secrets:** `NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL`, `NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL`, `NEXT_PUBLIC_ALCHEMY_DATA_API_KEY`, and (when used) `NEXT_PUBLIC_PRIVY_APP_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`.
 - **Variables:** `NEXT_PUBLIC_TELEGRAM_APP_URL` — for this deployment use `https://t.me/FxAeonBot` (or a Telegram direct Mini App link if BotFather assigns one).
 
 For a local build, copy `apps/mini-app/.env.example` to `apps/mini-app/.env.local` and replace the two Alchemy placeholders with the matching `/v2/<key>` endpoints. Cloudflare Pages dashboard builds must define the same values under **Workers & Pages → project → Settings → Environment variables** for the selected Preview/Production environment; they are consumed at build time, not dynamically at runtime.

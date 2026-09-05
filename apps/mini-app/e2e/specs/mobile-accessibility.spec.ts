@@ -5,7 +5,10 @@ const MOBILE_WIDTHS = [320, 360, 375, 390, 412, 430];
 
 test.describe("mobile web and Telegram accessibility contract", () => {
   test("every official screen fits a narrow viewport, exposes a main landmark, and keeps controls reachable", async ({ page, requests }) => {
-    test.setTimeout(90_000);
+    // The matrix deliberately covers 78 route/viewport combinations. Keep a
+    // generous ceiling for slower CI workers while each assertion retains its
+    // normal locator timeout.
+    test.setTimeout(180_000);
     for (const width of MOBILE_WIDTHS) {
       await page.setViewportSize({ width, height: 844 });
       for (const route of ROUTES) {

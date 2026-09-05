@@ -45,6 +45,13 @@ function assertTelegramMiniAppUrl() {
   }
 }
 
+function assertAlchemyDataKey() {
+  const value = requireValue('NEXT_PUBLIC_ALCHEMY_DATA_API_KEY');
+  if (!/^[A-Za-z0-9_-]{8,128}$/.test(value)) {
+    throw new Error('NEXT_PUBLIC_ALCHEMY_DATA_API_KEY must be a valid browser Data API key');
+  }
+}
+
 function assertCloudflareAccountId() {
   const value = requireValue('CLOUDFLARE_ACCOUNT_ID');
   if (!/^[0-9a-f]{32}$/i.test(value)) {
@@ -58,6 +65,7 @@ try {
 
   assertAlchemyRpc('NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL', 'eth-mainnet.g.alchemy.com');
   assertAlchemyRpc('NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL', 'base-mainnet.g.alchemy.com');
+  assertAlchemyDataKey();
   assertTelegramMiniAppUrl();
   requireValue('CLOUDFLARE_API_TOKEN');
   assertCloudflareAccountId();

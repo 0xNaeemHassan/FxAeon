@@ -6,12 +6,41 @@ import { WagmiProvider, useConfig, useWatchBlockNumber } from 'wagmi';
 import { usePrivyWallet } from '@/lib/wallet';
 import { createWalletDataConfig, type WalletDataConfig } from '@/lib/web3/config';
 import {
-  createWalletQueryClient, invalidateWalletQueries, moveBalanceQueryOptions, walletBalanceQueryOptions, WALLET_QUERY_ROOT,
+  canonicalWalletAssetQueryOptions, createWalletQueryClient, invalidateWalletQueries, moveBalanceQueryOptions, walletBalanceQueryOptions, WALLET_QUERY_ROOT,
 } from '@/lib/web3/walletQueries';
 import type { WalletBalancesResult } from '@/lib/fx/balances';
 import type { CanonicalMoveBalanceMap } from '@/lib/moveBalances';
+import {
+  alchemyDataApiKey, fetchAlchemyWalletAssets, mergeCanonicalWalletAssets,
+  type CanonicalAssetRead, type WalletAssetSnapshot,
+} from '@/lib/walletAssets';
+import { useUsdPrices } from '@/components/PriceProvider';
+import { createAlchemyChainPulse, initialRealtimeChainState, type RealtimeChainEvent, type RealtimeChainState } from '@/lib/realtimeChain';
+import type { FxChainId } from '@/lib/fx/types';
 
 const WalletDataSession = createContext('disconnected');
+
+type WalletAssetsHookResult = {
+  data: WalletAssetSnapshot | null;
+  status: 'idle' | 'loading' | 'ready' | 'partial' | 'unavailable';
+  isFetching: boolean;
+  error: string;
+  refresh: () => Promise<WalletAssetSnapshot | undefined>;
+};
+
+const EMPTY_CHAIN_STATE: Record<FxChainId, RealtimeChainState> = {
+  1: initialRealtimeChainState(1),
+  8453: initialRealtimeChainState(8453),
+};
+const WalletAssetsContext = createContext<WalletAssetsHookResult>({
+  data: null, status: 'idle', isFetching: false, error: '', refresh: async () => undefined,
+});
+const RealtimeChainContext = createContext<Record<FxChainId, RealtimeChainState>>(EMPTY_CHAIN_STATE);
+
+export type WalletPulse = {
+  assets: WalletAssetsHookResult;
+  chains: Record<FxChainId, RealtimeChainState>;
+};
 
 export default function WalletDataProvider({ children }: { children: React.ReactNode }) {
   const wallet = usePrivyWallet();
@@ -24,7 +53,9 @@ export default function WalletDataProvider({ children }: { children: React.React
     // Cancel old-session queries, including their late RPC results, without
     // remounting the page or resetting a user's form inputs.
     const filters = { predicate: ({ queryKey }: { queryKey: readonly unknown[] }) =>
-      queryKey[0] === WALLET_QUERY_ROOT && queryKey[1] !== session };
+      queryKey[0] === WALLET_QUERY_ROOT && (queryKey[1] === 'assets'
+        ? session === 'disconnected' || queryKey[2] !== session.split(':')[0]
+        : queryKey[1] !== session) };
     void queryClient.cancelQueries(filters);
     queryClient.removeQueries(filters);
   }, [queryClient, session]);
@@ -41,9 +72,7 @@ export default function WalletDataProvider({ children }: { children: React.React
   return <WagmiProvider config={config} reconnectOnMount={false}>
     <QueryClientProvider client={queryClient}>
       <WalletDataSession.Provider value={session}>
-        <BalanceBlockWatcher chainId={1} />
-        <BalanceBlockWatcher chainId={8453} />
-        {children}
+        <WalletAssetLayer address={wallet.address} enabled={wallet.ready && wallet.authenticated}>{children}</WalletAssetLayer>
       </WalletDataSession.Provider>
     </QueryClientProvider>
   </WagmiProvider>;
@@ -91,7 +120,150 @@ export function useWalletBalances({ address, chainId = 1, enabled = true }: {
 
 export function useInvalidateWalletData() {
   const client = useQueryClient();
-  return useCallback((address: string, chainId: number) => invalidateWalletQueries(client, address, chainId), [client]);
+  return useCallback(async (address: string, chainId: number) => {
+    await invalidateWalletQueries(client, address, chainId);
+    await client.invalidateQueries({ queryKey: walletAssetsQueryKey(address), refetchType: 'active' });
+  }, [client]);
+}
+
+export function walletAssetsQueryKey(address: string) {
+  return [WALLET_QUERY_ROOT, 'assets', address.toLowerCase()] as const;
+}
+
+export function useWalletAssets({ address, enabled = true }: { address?: string; enabled?: boolean } = {}): WalletAssetsHookResult {
+  const session = useContext(WalletDataSession);
+  const result = useContext(WalletAssetsContext);
+  if (!enabled || !address || session === 'disconnected' || session.split(':')[0] !== address.toLowerCase()) {
+    return { data: null, status: 'idle', isFetching: false, error: '', refresh: async () => undefined };
+  }
+  return result;
+}
+
+export function useRealtimeChainState(chainId?: FxChainId): Record<FxChainId, RealtimeChainState> | RealtimeChainState {
+  const state = useContext(RealtimeChainContext);
+  return chainId ? state[chainId] : state;
+}
+
+export function useWalletPulse({ address, enabled = true }: { address?: string; enabled?: boolean } = {}): WalletPulse {
+  return { assets: useWalletAssets({ address, enabled }), chains: useContext(RealtimeChainContext) };
+}
+
+function WalletAssetLayer({ address, enabled, children }: { address?: string; enabled: boolean; children: React.ReactNode }) {
+  const config = useConfig<WalletDataConfig>();
+  const client = useQueryClient();
+  const session = useContext(WalletDataSession);
+  const { prices, status: priceStatus, updatedAt: priceUpdatedAt } = useUsdPrices();
+  const priceRef = useRef({ prices, status: priceStatus, updatedAt: priceUpdatedAt });
+  priceRef.current = { prices, status: priceStatus, updatedAt: priceUpdatedAt };
+  const active = enabled && Boolean(address) && session !== 'disconnected' && session.split(':')[0] === address?.toLowerCase();
+  const [chainStates, setChainStates] = useState<Record<FxChainId, RealtimeChainState>>(EMPTY_CHAIN_STATE);
+  const requestRef = useRef<AbortController | null>(null);
+  const latestSession = useRef(session);
+  latestSession.current = session;
+
+  const networkLive = chainStates[1].status === 'live' && chainStates[8453].status === 'live';
+  const fallbackInterval = networkLive ? false : 30_000;
+  const indexed = useQuery({
+    queryKey: address ? [WALLET_QUERY_ROOT, 'assets', address.toLowerCase()] as const : [WALLET_QUERY_ROOT, 'assets', 'disconnected'] as const,
+    queryFn: ({ signal }) => fetchAlchemyWalletAssets(address ?? '', signal),
+    enabled: active && Boolean(alchemyDataApiKey()),
+    // Discovery is event-driven; bounded polling is reserved for exact reads.
+    refetchInterval: false,
+  });
+  const ethereum = useQuery({ ...canonicalWalletAssetQueryOptions(config, session, address ?? '', 1), enabled: active, refetchInterval: fallbackInterval });
+  const base = useQuery({ ...canonicalWalletAssetQueryOptions(config, session, address ?? '', 8453), enabled: active, refetchInterval: fallbackInterval });
+
+  const failedRead = useCallback((chainId: FxChainId, query: { data?: CanonicalAssetRead; isError: boolean; isPending: boolean }): CanonicalAssetRead | null => {
+    if (query.data) return query.data;
+    if (query.isPending || !query.isError) return null;
+    const failedTokens = chainId === 1
+      ? ['ETH', 'WETH', 'wstETH', 'stETH', 'WBTC', 'USDC', 'USDT', 'fxUSD', 'fxUSDBasePool', 'fxSAVE', 'FXN'] as const
+      : ['ETH', 'fxUSD', 'fxSAVE'] as const;
+    return { chainId, balances: [], failedTokens: [...failedTokens], updatedAt: Date.now() };
+  }, []);
+  const canonicalReads = useMemo(() => [
+    failedRead(1, ethereum), failedRead(8453, base),
+  ].filter((read): read is CanonicalAssetRead => Boolean(read)), [base, ethereum, failedRead]);
+  const merged = useMemo(() => {
+    if (!active || !address) return null;
+    // Keep the asset surface in its loading state until the first indexed or
+    // canonical response arrives. A pending read is not a failed balance.
+    if (!indexed.data && canonicalReads.length === 0 && (ethereum.isPending || base.isPending)) return null;
+    const source = indexed.data ?? null;
+    return mergeCanonicalWalletAssets(source, address, canonicalReads, { prices, status: priceStatus, updatedAt: priceUpdatedAt });
+  }, [active, address, base.isPending, ethereum.isPending, canonicalReads, indexed.data, priceStatus, priceUpdatedAt, prices]);
+
+  const refresh = useCallback(async (): Promise<WalletAssetSnapshot | undefined> => {
+    if (!active || !address || latestSession.current !== session) return undefined;
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
+    try {
+      const tasks: Promise<unknown>[] = [
+        client.invalidateQueries({ queryKey: walletAssetsQueryKey(address), refetchType: 'active' }, { cancelRefetch: false }),
+        invalidateWalletQueries(client, address, 1), invalidateWalletQueries(client, address, 8453),
+      ];
+      await Promise.all(tasks);
+      if (controller.signal.aborted || latestSession.current !== session) return undefined;
+      const nextIndexed = client.getQueryData<WalletAssetSnapshot>(walletAssetsQueryKey(address)) ?? null;
+      const nextCanonical = [
+        client.getQueryData<CanonicalAssetRead>(canonicalWalletAssetQueryOptions(config, session, address, 1).queryKey),
+        client.getQueryData<CanonicalAssetRead>(canonicalWalletAssetQueryOptions(config, session, address, 8453).queryKey),
+      ].filter((read): read is CanonicalAssetRead => Boolean(read));
+      return mergeCanonicalWalletAssets(nextIndexed, address, nextCanonical, priceRef.current);
+    } finally {
+      if (requestRef.current === controller) requestRef.current = null;
+    }
+  }, [active, address, client, config, session]);
+
+  const triggerRefresh = useCallback((_event?: RealtimeChainEvent) => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    if (!active || !address) {
+      setChainStates(EMPTY_CHAIN_STATE);
+      return;
+    }
+    const controllers: Partial<Record<FxChainId, ReturnType<typeof createAlchemyChainPulse>>> = {};
+    let disposed = false;
+    const update = () => {
+      const foreground = document.visibilityState === 'visible' && navigator.onLine;
+      for (const chainId of [1, 8453] as const) controllers[chainId]?.setActive(foreground);
+    };
+    for (const chainId of [1, 8453] as const) {
+      try {
+        const controller = createAlchemyChainPulse({
+          chainId, walletAddress: address,
+          onState: (next) => { if (!disposed) setChainStates((current) => ({ ...current, [chainId]: next })); },
+          onEvent: (event) => {
+            if (disposed) return;
+            if (event.kind === 'block') void invalidateWalletQueries(client, address, chainId);
+            else triggerRefresh(event);
+          },
+        });
+        controllers[chainId] = controller;
+      } catch {
+        setChainStates((current) => ({ ...current, [chainId]: { ...current[chainId], status: 'unavailable' } }));
+      }
+    }
+    update();
+    document.addEventListener('visibilitychange', update);
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    return () => {
+      disposed = true;
+      document.removeEventListener('visibilitychange', update);
+      window.removeEventListener('online', update);
+      window.removeEventListener('offline', update);
+      Object.values(controllers).forEach((controller) => controller?.stop());
+    };
+  }, [active, address, client, refresh, triggerRefresh]);
+  useEffect(() => () => requestRef.current?.abort(), []);
+
+  const status: WalletAssetsHookResult['status'] = !active ? 'idle'
+    : merged ? Object.values(merged.networks).some((network) => network.status === 'partial') ? 'partial' : 'ready'
+      : indexed.isError && ethereum.isError && base.isError ? 'unavailable' : 'loading';
+  const error = status === 'unavailable' ? 'Wallet assets are temporarily unavailable.' : status === 'partial' ? 'Some wallet assets are temporarily unavailable.' : '';
+  const value = useMemo<WalletAssetsHookResult>(() => ({ data: merged, status, isFetching: indexed.isFetching || ethereum.isFetching || base.isFetching, error, refresh }), [base.isFetching, error, ethereum.isFetching, indexed.isFetching, merged, refresh, status]);
+  return <WalletAssetsContext.Provider value={value}><RealtimeChainContext.Provider value={chainStates}><BalanceBlockWatcher chainId={1} /><BalanceBlockWatcher chainId={8453} />{children}</RealtimeChainContext.Provider></WalletAssetsContext.Provider>;
 }
 
 /** One block watcher per actively displayed chain, never one per token/card. */
@@ -99,10 +271,11 @@ function BalanceBlockWatcher({ chainId }: { chainId: 1 | 8453 }) {
   const config = useConfig<WalletDataConfig>();
   const client = useQueryClient();
   const session = useContext(WalletDataSession);
+  const realtime = useContext(RealtimeChainContext)[chainId];
   const [watching, setWatching] = useState(false);
   useEffect(() => {
     const update = () => {
-      const active = session !== 'disconnected' && document.visibilityState === 'visible'
+      const active = realtime.status !== 'live' && session !== 'disconnected' && document.visibilityState === 'visible' && navigator.onLine
         && client.getQueryCache().findAll({ predicate: ({ queryKey }) =>
           queryKey[0] === WALLET_QUERY_ROOT && queryKey[1] === session && queryKey[2] === chainId,
         }).some((query) => query.isActive());
@@ -113,9 +286,11 @@ function BalanceBlockWatcher({ chainId }: { chainId: 1 | 8453 }) {
     };
     const unsubscribe = client.getQueryCache().subscribe(update);
     document.addEventListener('visibilitychange', update);
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
     update();
-    return () => { unsubscribe(); document.removeEventListener('visibilitychange', update); };
-  }, [chainId, client, config, session]);
+    return () => { unsubscribe(); document.removeEventListener('visibilitychange', update); window.removeEventListener('online', update); window.removeEventListener('offline', update); };
+  }, [chainId, client, config, realtime.status, session]);
   useWatchBlockNumber({
     config, chainId, enabled: watching, poll: true, pollingInterval: 12_000, emitOnBegin: false,
     onBlockNumber: (_block, previous) => {

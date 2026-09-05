@@ -1,0 +1,50 @@
+.networkTabs { display: flex; gap: 4px; padding: 4px; border-radius: 14px; background: var(--surface-2); }
+.networkTabs button { min-height: 44px; flex: 1; border-radius: 10px; padding: 8px 12px; font-size: 13px; font-weight: 600; color: var(--mut); }
+.networkTabs button[aria-pressed='true'] { color: var(--text); background: var(--surface-3); box-shadow: var(--elevation-1); }
+.assets { min-width: 0; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); overflow: hidden; }
+.sectionHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 20px 20px 12px; }
+.sectionHeading h2 { font-size: 17px; font-weight: 650; }
+.sectionHeading > span { color: var(--mut); font-size: 12px; }
+.search { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--input); margin: 0 16px 8px; padding: 0 12px; color: var(--mut); }
+.search input { width: 100%; min-width: 0; min-height: 44px; background: transparent; color: var(--text); font-size: 16px; outline: none; }
+.search:focus-within { border-color: var(--mint); outline: 2px solid var(--mint-dim); }
+.assetList { list-style: none; margin: 0; padding: 0 16px; }
+.assetList li + li { border-top: 1px solid var(--line); }
+.assetRow { display: flex; width: 100%; align-items: center; gap: 12px; min-height: 80px; padding: 14px 0; text-align: left; border-radius: 8px; }
+.assetRow:hover { background: var(--surface-2); }
+.assetIcon, .assetFallback { flex-shrink: 0; border-radius: 50%; object-fit: contain; }
+.assetFallback { display: grid; place-items: center; background: var(--surface-3); color: var(--mut); font-size: 12px; font-weight: 650; }
+.assetName { min-width: 0; flex: 1; display: grid; gap: 4px; }
+.assetName strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.assetName small { color: var(--mut); font-size: 12px; }
+.assetWorth { min-width: 0; max-width: 58%; display: grid; gap: 4px; text-align: right; font-variant-numeric: tabular-nums; }
+.assetWorth strong { font-size: 15px; overflow-wrap: anywhere; }
+.quantity { color: var(--mut); font-size: 12px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.networkNote { margin: 0; padding: 12px 16px; color: var(--warn); background: var(--warn-dim); font-size: 12px; line-height: 1.5; }
+.empty { display: grid; justify-items: center; gap: 10px; padding: 28px 20px; text-align: center; color: var(--mut); font-size: 13px; }
+.empty a { display: inline-flex; align-items: center; min-height: 44px; color: var(--mint); font-weight: 600; }
+.loading { display: grid; gap: 12px; padding: 16px; }
+.loading span { height: 60px; border-radius: 12px; background: var(--surface-2); }
+.changedValue { animation: value-change 500ms ease-out; }
+@keyframes value-change { from { color: var(--mint); } to { color: var(--text); } }
+.dialog { position: fixed; inset: 0; margin: auto; width: min(480px, calc(100% - 32px)); max-height: calc(100dvh - 32px); overflow: auto; border: 1px solid var(--line); border-radius: 24px; background: var(--surface); padding: 0; color: var(--text); box-shadow: var(--elevation-2); }
+.dialog::backdrop { background: rgb(0 0 0 / 60%); }
+.sheet { padding: 24px; }
+.sheet header { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+.sheet header button { display: grid; place-items: center; flex-shrink: 0; min-width: 44px; min-height: 44px; border-radius: 12px; background: var(--surface-2); }
+.sheetIdentity { display: flex; align-items: center; min-width: 0; gap: 12px; }
+.sheetIdentity h2 { font-size: 22px; font-weight: 650; overflow-wrap: anywhere; }
+.sheetIdentity p { color: var(--mut); margin-top: 4px; font-size: 12px; overflow-wrap: anywhere; }
+.sheetBalance { display: grid; gap: 10px; padding: 32px 0; }
+.sheetBalance > span:first-child { color: var(--mut); font-size: 13px; }
+.sheetBalance strong { font-size: clamp(30px, 8vw, 44px); font-weight: 650; line-height: 1.1; letter-spacing: -.04em; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.sheetBalance .quantity { font-size: 14px; }
+.details { display: grid; gap: 16px; border-top: 1px solid var(--line); padding-top: 20px; }
+.details > div { display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 13px; }
+.details dt { color: var(--mut); }
+.details dd { min-width: 0; text-align: right; overflow-wrap: anywhere; }
+.sheetActions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+.sheetActions a { display: flex; flex: 1 0 40%; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 10px; border-radius: 12px; color: var(--mint); background: var(--mint-dim); font-size: 13px; font-weight: 600; }
+.explorer { display: flex; min-height: 44px; align-items: center; justify-content: center; gap: 8px; color: var(--mut); font-size: 12px; margin-top: 12px; }
+@media (max-width: 600px) { .dialog { margin: auto 0 0; width: 100%; max-width: 100%; max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 24px); border-radius: 24px 24px 0 0; } .sheet { padding: 20px 16px calc(20px + env(safe-area-inset-bottom, 0px)); } }
+@media (prefers-reduced-motion: reduce) { .changedValue { animation: none; } }

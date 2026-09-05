@@ -206,7 +206,7 @@ export default function WalletProfile() {
 function WalletAssetRow({ balance, price, pricePending }: { balance: WalletTokenBalance; price: number | undefined; pricePending: boolean }) {
   const amount = formatUnits(balance.amountWei, balance.decimals);
   const usd = usdValueForUnits(balance.amountWei, balance.decimals, price);
-  const label = balance.key === 'fxUSDBasePool' ? 'fxUSD pool token' : balance.key;
+  const label = balance.key === 'fxUSDBasePool' ? 'Base pool' : balance.key;
   return (
     <div className={`${styles.walletAssetRow} flex items-center gap-3 border-b border-[var(--line)] py-3 last:border-b-0`}>
       <TokenIcon symbol={balance.key} size={34} />

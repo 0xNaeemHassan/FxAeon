@@ -9,7 +9,7 @@ import WalletConnectCTA from '@/components/WalletConnectCTA';
 import { AmountField, InfoNote, Segmented, SlippageField, ToggleRow, TokenSelect, useWalletTokenBalances, type TokenBalanceMap } from '@/components/ProtocolForm';
 import { useUsdPrices } from '@/components/PriceProvider';
 import { formatUsd } from '@/lib/prices';
-import { FX_SAVE_UNITS, fxSaveUsdValue, normalizedFxSaveAssetsWei } from '@/lib/fxSaveUnits';
+import { fxSaveUsdValue, normalizedFxSaveAssetsWei } from '@/lib/fxSaveUnits';
 import {
   assertConfiguredPublicClientChain,
   getFxSdk,
@@ -29,7 +29,7 @@ type EarnMode = 'deposit' | 'withdraw' | 'claim';
 
 function labelToken(token: SaveToken): string {
   if (token === 'usdc') return 'USDC';
-  if (token === 'fxUSDBasePool') return 'fxUSD pool token';
+  if (token === 'fxUSDBasePool') return 'Base pool';
   return token;
 }
 
@@ -297,7 +297,7 @@ export default function EarnPage() {
                     <SlippageField value={slippage} onChange={setSlippage} max={MAX_FX_SLIPPAGE_PERCENT} />
                   )}
                   {token === 'fxUSDBasePool' && (
-                    <InfoNote>The fxUSD pool token uses a queued withdrawal, so it is not instant.</InfoNote>
+                    <InfoNote>Base pool withdrawals use a queue and are not instant.</InfoNote>
                   )}
                 </div>
               )}
@@ -376,8 +376,8 @@ function SavingsSummary({ data, loading, onRefresh, stale }: { data: SaveData; l
       </div>
 
       <div className="mt-5 grid grid-cols-2 gap-2">
-        <Metric label={FX_SAVE_UNITS.balanceWei.label} value={data.balance ? formatDisplayAmount(data.balance.balanceWei) : 'Unavailable'} />
-        <Metric label={FX_SAVE_UNITS.assetsWei.label} value={hasAssets ? formatDisplayAmount(assetsWei) : 'Unavailable'} />
+        <Metric label="fxSAVE" value={data.balance ? formatDisplayAmount(data.balance.balanceWei) : 'Unavailable'} />
+        <Metric label="Base pool" value={hasAssets ? formatDisplayAmount(assetsWei) : 'Unavailable'} />
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[rgba(255,255,255,.025)] px-3 py-3">
@@ -385,7 +385,7 @@ function SavingsSummary({ data, loading, onRefresh, stale }: { data: SaveData; l
           <p className="text-[12px] font-semibold">Pending redemption</p>
           <p className="mt-0.5 break-words text-[11px] leading-relaxed text-mut tabular-nums">
             {hasPending
-              ? `${formatDisplayAmount(pendingShares)} ${FX_SAVE_UNITS.pendingSharesWei.label}${ready ? ' · available now' : formatRedeemableAt(data.claimable?.redeemableAt ?? data.redeemStatus?.redeemableAt ?? null)}`
+              ? `${formatDisplayAmount(pendingShares)} fxSAVE${ready ? ' · available now' : formatRedeemableAt(data.claimable?.redeemableAt ?? data.redeemStatus?.redeemableAt ?? null)}`
               : data.claimable || data.redeemStatus ? 'None' : 'Unavailable'}
           </p>
         </div>
@@ -426,8 +426,8 @@ function VaultDetails({ config }: { config: SaveConfig }) {
         <ChevronDown aria-hidden="true" className="h-4 w-4 text-mut transition-transform group-open:rotate-180" />
       </summary>
       <div className="divide-y divide-[var(--line)] border-t border-[var(--line)] pb-1">
-        <DetailRow label="Vault holdings" value={`${formatDisplayAmount(config.totalAssetsWei)} ${FX_SAVE_UNITS.totalAssetsWei.label}`} />
-        <DetailRow label="fxSAVE supply" value={`${formatDisplayAmount(config.totalSupplyWei)} ${FX_SAVE_UNITS.totalSupplyWei.label}`} />
+        <DetailRow label="Vault holdings" value={`${formatDisplayAmount(config.totalAssetsWei)} Base pool`} />
+        <DetailRow label="fxSAVE supply" value={`${formatDisplayAmount(config.totalSupplyWei)} fxSAVE`} />
         <DetailRow label="Cooldown" value={formatCooldown(config.cooldownPeriodSeconds)} />
         <DetailRow label="Instant fee" value={formatRatio(config.instantRedeemFeeRatio)} />
         <DetailRow label="Expense ratio" value={formatRatio(config.expenseRatio)} />

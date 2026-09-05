@@ -193,6 +193,7 @@ Open <http://localhost:3000> in a browser. The normal web flow opens Portfolio, 
 | `NEXT_PUBLIC_PRIVY_APP_ID` | Optional public Privy application identifier; omit it to use an injected browser wallet |
 | `NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL` | Origin-restricted Ethereum browser endpoint |
 | `NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL` | Origin-restricted Base browser endpoint |
+| `NEXT_PUBLIC_ALCHEMY_DATA_API_KEY` | Origin-restricted Alchemy Data API key for foreground Ethereum/Base asset discovery |
 | `NEXT_PUBLIC_TELEGRAM_APP_URL` | Secondary Telegram launch link; browser entry does not depend on it |
 
 Every `NEXT_PUBLIC_*` value is embedded in the browser bundle. Never place a private key, Telegram bot token, Privy secret, authorization key, or unrestricted provider credential in client configuration. Without Privy, FxAeon connects directly to the wallet extension through EIP-1193; signing still happens in that wallet and no fallback server is involved.

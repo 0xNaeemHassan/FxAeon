@@ -53,7 +53,7 @@ export function AppShell({
   }, [documentTitle]);
 
   return (
-    <div className={`app-shell mx-auto min-h-[var(--tg-viewport-stable-height)] w-full ${tabs ? 'app-shell-tabs pb-safe' : 'pb-[calc(env(safe-area-inset-bottom,0px)+1rem)]'}`}>
+    <div className={`app-shell mx-auto min-h-[var(--tg-viewport-stable-height)] w-full ${tabs ? 'app-shell-tabs' : 'pb-[calc(env(safe-area-inset-bottom,0px)+1rem)]'}`}>
       <a href="#main-content" className="skip-link">Skip to main content</a>
       <div className="app-workspace">
         {tabs && (
@@ -79,7 +79,7 @@ export function AppShell({
             </div>
           </header>
         )}
-        <main ref={contentRef} id="main-content" tabIndex={-1} className={`app-content flex-1 outline-none ${['/more', '/settings', '/qr'].includes(pathname) ? 'utility-content' : ''}`}>{children}</main>
+        <main ref={contentRef} id="main-content" tabIndex={-1} className={`app-content ${tabs ? 'app-content-tabs' : ''} flex-1 outline-none ${['/more', '/settings', '/qr'].includes(pathname) ? 'utility-content' : ''}`}>{children}</main>
       </div>
       {tabs && <TabBar />}
     </div>

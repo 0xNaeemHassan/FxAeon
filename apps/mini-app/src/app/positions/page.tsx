@@ -47,6 +47,7 @@ export default function PositionsPage() {
   const [slippage, setSlippage] = useState(String(DEFAULT_SLIPPAGE_PERCENT));
   const [leverageBounds, setLeverageBounds] = useState<LeverageBounds>(() => leverageBoundsFor('ETH', 'long'));
   const managerRef = useRef<HTMLElement>(null);
+  const handledDeepLinkRef = useRef('');
   const walletBalances = useWalletTokenBalances(wallet.address, 1);
   const balanceStatus = walletBalances.status === 'idle' ? 'loading' as const : walletBalances.status;
   const tokenBalanceProps = wallet.address ? { balances: walletBalances.balances, balanceStatus } : {};
@@ -61,6 +62,28 @@ export default function PositionsPage() {
     setSelectedKey((current) => current && positions.some((position) => positionKey(position) === current)
       ? current
       : positions[0] ? positionKey(positions[0]) : '');
+  }, [positions]);
+
+  // Trade and portfolio action links land directly on the matching position
+  // manager. Keep this query-driven so browser refreshes and shared links have
+  // the same behavior as an in-app selection.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !positions.length) return;
+    const params = new URLSearchParams(window.location.search);
+    const key = params.get('position');
+    if (!key || !positions.some((position) => positionKey(position) === key)) return;
+    const requestedAction = params.get('action');
+    const nextAction: PositionAction = requestedAction === 'close' || requestedAction === 'reduce' || requestedAction === 'leverage'
+      ? requestedAction
+      : 'increase';
+    const deepLinkKey = `${key}:${nextAction}`;
+    if (handledDeepLinkRef.current === deepLinkKey) return;
+    handledDeepLinkRef.current = deepLinkKey;
+    setSelectedKey(key);
+    setAction(nextAction);
+    setAmount('');
+    if (nextAction === 'close') setFraction(100);
+    window.requestAnimationFrame(() => managerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   }, [positions]);
 
   const selected = positions.find((position) => positionKey(position) === selectedKey);
