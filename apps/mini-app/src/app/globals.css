@@ -85,6 +85,8 @@
   --tabbar-panel-height: 68px;
   --tabbar-edge-gap: max(env(safe-area-inset-bottom, 0px), 8px);
   --tabbar-reserve: calc(var(--tabbar-panel-height) + var(--tabbar-edge-gap) + 24px);
+  /* Scroll content must clear the fixed tab bar and its safe-area inset. */
+  --content-bottom-clearance: calc(var(--tabbar-reserve) + 12px);
 }
 
 /* Saved preferences are applied by a tiny pre-hydration initializer in the
@@ -270,6 +272,8 @@ summary:focus-visible {
   width: 100%;
   margin-inline: auto;
 }
+
+.app-content-tabs { padding-bottom: var(--content-bottom-clearance); }
 
 .app-topbar {
   display: flex;
@@ -1311,7 +1315,7 @@ input[type='range'].lever::-moz-range-thumb {
   .page-header { max-width: 1120px; margin: 0 auto 28px; }
   .page-header h1 { font-size: 34px; }
   .mobile-tabbar { display: none; }
-  .pb-safe { padding-bottom: 0; }
+  .app-content-tabs { padding-bottom: 40px; }
 
   .wallet-profile-backdrop { align-items: center; }
   .wallet-profile-sheet { border-radius: 22px; }

@@ -1,276 +1,188 @@
 'use client';
 
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Activity, BarChart3, ChevronDown, RefreshCw, TrendingDown, TrendingUp } from 'lucide-react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { Activity, BarChart3, ChevronDown, RefreshCw } from 'lucide-react';
 import TokenIcon from '@/components/TokenIcon';
-import { useUsdPrices } from '@/components/PriceProvider';
-import {
-  fetchMarketHistory,
-  type MarketHistorySnapshot,
-  type MarketRange,
-  type MarketSymbol,
-} from '@/lib/marketData';
+import { useLiveMarketQuote, useUsdPrices } from '@/components/PriceProvider';
+import { fetchMarketHistory, type MarketHistorySnapshot, type MarketRange, type MarketSymbol } from '@/lib/marketData';
+import { fetchMarketCandles, liveQuoteCandle, type LiveMarketRange, type MarketCandleSnapshot } from '@/lib/liveMarket';
 import { formatUsdPrice } from '@/lib/prices';
 import { haptic } from '@/lib/telegram';
 import styles from '@/components/trade-surfaces.module.css';
 
-type HistoryState = {
-  status: 'loading' | 'ready' | 'unavailable';
-  snapshot: MarketHistorySnapshot | null;
-};
-
+type HistoryState = { status: 'loading' | 'ready' | 'unavailable'; snapshot: MarketHistorySnapshot | null };
 const historyCache = new Map<string, { snapshot: MarketHistorySnapshot; storedAt: number }>();
-const historyRequests = new Map<string, Promise<MarketHistorySnapshot>>();
-const HISTORY_CACHE_AGE_MS = 90 * 1000;
-const RANGE_OPTIONS: MarketRange[] = ['1D', '7D', '30D'];
-
-function cacheKey(market: MarketSymbol, range: MarketRange): string {
-  return `${market}:${range}`;
-}
-
-function requestMarketHistory(market: MarketSymbol, range: MarketRange): Promise<MarketHistorySnapshot> {
-  const key = cacheKey(market, range);
-  const inFlight = historyRequests.get(key);
-  if (inFlight) return inFlight;
-  const pending = (async () => {
-    try {
-      return await fetchMarketHistory(market, range);
-    } catch {
-      await new Promise((resolve) => window.setTimeout(resolve, 700));
-      return fetchMarketHistory(market, range);
-    }
-  })().finally(() => historyRequests.delete(key));
-  historyRequests.set(key, pending);
-  return pending;
-}
+const candleCache = new Map<string, { snapshot: MarketCandleSnapshot; storedAt: number }>();
+const RANGE_OPTIONS: LiveMarketRange[] = ['1H', '1D', '7D', '30D'];
 
 export function useMarketHistory(market: MarketSymbol, range: MarketRange): HistoryState & { retry: () => void } {
   const [attempt, setAttempt] = useState(0);
-  const [state, setState] = useState<HistoryState>(() => {
-    const cached = historyCache.get(cacheKey(market, range));
-    return cached && Date.now() - cached.storedAt <= HISTORY_CACHE_AGE_MS
-      ? { status: 'ready', snapshot: cached.snapshot }
-      : { status: 'loading', snapshot: null };
-  });
-
+  const [state, setState] = useState<HistoryState>({ status: 'loading', snapshot: null });
   useEffect(() => {
     let active = true;
-    const key = cacheKey(market, range);
+    const key = `${market}:${range}`;
     const cached = historyCache.get(key);
-    if (cached && Date.now() - cached.storedAt <= HISTORY_CACHE_AGE_MS) {
-      setState({ status: 'ready', snapshot: cached.snapshot });
-    } else {
-      setState({ status: 'loading', snapshot: null });
-    }
-
-    const load = async () => {
-      try {
-        const snapshot = await requestMarketHistory(market, range);
-        if (!active) return;
-        historyCache.set(key, { snapshot, storedAt: Date.now() });
-        setState({ status: 'ready', snapshot });
-      } catch {
-        if (active) {
-          const fallback = historyCache.get(key);
-          setState(fallback ? { status: 'ready', snapshot: fallback.snapshot } : { status: 'unavailable', snapshot: null });
-        }
-      }
-    };
-    void load();
-    return () => { active = false; };
+    if (cached && Date.now() - cached.storedAt < 90_000) setState({ status: 'ready', snapshot: cached.snapshot });
+    else setState({ status: 'loading', snapshot: null });
+    const controller = new AbortController();
+    void fetchMarketHistory(market, range, fetch, controller.signal).then((snapshot) => {
+      if (!active) return;
+      historyCache.set(key, { snapshot, storedAt: Date.now() });
+      setState({ status: 'ready', snapshot });
+    }).catch(() => { if (active) setState((current) => current.snapshot ? current : { status: 'unavailable', snapshot: null }); });
+    return () => { active = false; controller.abort(); };
   }, [attempt, market, range]);
+  return { ...state, retry: () => setAttempt((value) => value + 1) };
+}
 
-  return { ...state, retry: () => setAttempt((current) => current + 1) };
+function useLiveCandles(market: MarketSymbol, range: LiveMarketRange) {
+  const [attempt, setAttempt] = useState(0);
+  const [state, setState] = useState<{ status: 'loading' | 'ready' | 'unavailable'; snapshot: MarketCandleSnapshot | null }>({ status: 'loading', snapshot: null });
+  const baseSnapshotRef = useRef<MarketCandleSnapshot | null>(null);
+  const live = useLiveMarketQuote(market);
+  useEffect(() => {
+    let active = true;
+    const key = `${market}:${range}`;
+    const cached = candleCache.get(key);
+    if (cached && Date.now() - cached.storedAt < 90_000) setState({ status: 'ready', snapshot: cached.snapshot });
+    else setState({ status: 'loading', snapshot: null });
+    const controller = new AbortController();
+    void fetchMarketCandles(market, range, fetch, controller.signal).then((snapshot) => {
+      if (!active) return;
+      baseSnapshotRef.current = snapshot;
+      candleCache.set(key, { snapshot, storedAt: Date.now() });
+      setState({ status: 'ready', snapshot });
+    }).catch(() => { if (active) setState((current) => current.snapshot ? current : { status: 'unavailable', snapshot: null }); });
+    return () => { active = false; controller.abort(); };
+  }, [attempt, market, range]);
+  useEffect(() => {
+    const quote = live.quote;
+    const baseSnapshot = baseSnapshotRef.current;
+    if (!live.isFresh) {
+      if (baseSnapshot && state.snapshot && state.snapshot !== baseSnapshot) setState({ status: 'ready', snapshot: baseSnapshot });
+      return;
+    }
+    if (!quote || !state.snapshot) return;
+    const next = liveQuoteCandle(state.snapshot, quote);
+    const last = state.snapshot.candles.at(-1);
+    if (!next || (last && next.time === last.time && next.close === last.close && next.high === last.high && next.low === last.low)) return;
+    setState((current) => {
+      if (!current.snapshot) return current;
+      const candles = current.snapshot.candles.slice();
+      if (candles.at(-1)?.time === next.time) candles[candles.length - 1] = next;
+      else candles.push(next);
+      const first = candles[0];
+      if (!first) return current;
+      return { status: 'ready', snapshot: { ...current.snapshot, candles, points: candles.map((candle) => ({ timestamp: candle.time * 1_000, price: candle.close })), currentPrice: next.close, high: Math.max(current.snapshot.high, next.high), low: Math.min(current.snapshot.low, next.low), percentChange: ((next.close - first.open) / first.open) * 100, updatedAt: quote.sourceAt } };
+    });
+  }, [live.isFresh, live.quote, state.snapshot]);
+  return { ...state, retry: () => setAttempt((value) => value + 1), live };
 }
 
 export function TradeMarketChart({ market }: { market: MarketSymbol }) {
-  const [range, setRange] = useState<MarketRange>('1D');
+  const [range, setRange] = useState<LiveMarketRange>('1D');
   const [isMobile, setIsMobile] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState(false);
   const chartId = useId();
   const expanded = !isMobile || mobileExpanded;
-  const history = useMarketHistory(market, range);
+  const history = useLiveCandles(market, range);
   const { prices } = useUsdPrices();
-  const livePrice = prices[market === 'ETH' ? 'ETH' : 'WBTC'] ?? history.snapshot?.currentPrice;
-  const change = history.snapshot?.percentChange;
+  const live = useLiveMarketQuote(market);
+  const fallbackPrice = prices[market === 'ETH' ? 'ETH' : 'WBTC'];
+  const price = live.isFresh ? live.quote?.price : fallbackPrice ?? history.snapshot?.currentPrice;
+  const change = live.isFresh ? live.quote?.percentChange24h : history.snapshot?.percentChange;
   const positive = change !== undefined && change >= 0;
-  const ChangeIcon = positive ? TrendingUp : TrendingDown;
-
   useEffect(() => {
     const media = window.matchMedia('(max-width: 640px)');
-    const updateViewport = () => setIsMobile(media.matches);
-    updateViewport();
-    media.addEventListener('change', updateViewport);
-    return () => media.removeEventListener('change', updateViewport);
+    const update = () => setIsMobile(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
   }, []);
-
-  return (
-    <section className={`${styles.marketChart} market-chart-panel`} data-mobile-expanded={mobileExpanded} aria-label={`${market} market chart`}>
-      <div className="market-chart-header">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="market-chart-token"><TokenIcon symbol={market === 'BTC' ? 'WBTC' : 'ETH'} size={34} /></span>
-          <div className="min-w-0">
-            <h2 className="mt-1 truncate text-[18px] font-semibold">{market} / USD</h2>
-          </div>
-        </div>
-        <div className="shrink-0 text-right">
-          <p className="text-display text-[24px] font-semibold tabular-nums">{formatUsdPrice(livePrice)}</p>
-          <p className={`mt-1 inline-flex items-center justify-end gap-1 text-[11px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}>
-            {change === undefined ? `${range} unavailable` : <><ChangeIcon className="h-3.5 w-3.5" aria-hidden="true" />{positive ? '+' : ''}{change.toFixed(2)}% {range}</>}
-          </p>
-        </div>
-      </div>
-
-      <button
-        type="button"
-        className="market-chart-toggle"
-        aria-expanded={expanded}
-        aria-controls={chartId}
-        onClick={() => { setMobileExpanded((current) => !current); haptic('selection'); }}
-      >
-        <BarChart3 className="h-4 w-4" aria-hidden="true" />
-        <span>{expanded ? 'Hide chart' : 'Show chart'}</span>
-        <ChevronDown className="market-chart-toggle-chevron h-4 w-4" aria-hidden="true" />
-      </button>
-
-      <div id={chartId} className="market-chart-content" hidden={!expanded}>
-        <div className="market-chart-frame">
-          {history.status === 'loading' && <ChartSkeleton />}
-          {history.status === 'unavailable' && (
-            <div className="market-chart-empty" role="status">
-              <BarChart3 className="h-6 w-6 text-mut" aria-hidden="true" />
-              <span><strong>Chart temporarily unavailable</strong><small>You can still enter trade details.</small></span>
-              <button type="button" aria-label="Retry market chart" onClick={history.retry} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-lg text-mut hover:text-mint"><RefreshCw className="h-4 w-4" aria-hidden="true" /></button>
-            </div>
-          )}
-          {history.status === 'ready' && history.snapshot && <MarketChartGraphic snapshot={history.snapshot} />}
-        </div>
-
-        <div className="market-chart-footer">
-          <a href="https://www.coingecko.com/" target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-1.5 text-[11px] text-mut hover:text-mint"><Activity className="h-3.5 w-3.5 text-mint" aria-hidden="true" />CoinGecko</a>
-          <div role="radiogroup" aria-label="Chart range" className="chart-range-tabs">
-            {RANGE_OPTIONS.map((option) => (
-              <button
-                key={option}
-                type="button"
-                role="radio"
-                aria-checked={range === option}
-                tabIndex={range === option ? 0 : -1}
-                onClick={() => { setRange(option); haptic('selection'); }}
-                onKeyDown={(event) => {
-                  const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
-                  if (!keys.includes(event.key)) return;
-                  event.preventDefault();
-                  const current = RANGE_OPTIONS.indexOf(option);
-                  const backwards = event.key === 'ArrowLeft' || event.key === 'ArrowUp';
-                  const next = event.key === 'Home'
-                    ? 0
-                    : event.key === 'End'
-                      ? RANGE_OPTIONS.length - 1
-                      : (current + (backwards ? -1 : 1) + RANGE_OPTIONS.length) % RANGE_OPTIONS.length;
-                  setRange(RANGE_OPTIONS[next]);
-                  event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
-                  haptic('selection');
-                }}
-                className={range === option ? 'chart-range-active' : ''}
-              >
-                {option}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
+  return <section className={`${styles.marketChart} market-chart-panel`} aria-label={`${market} market chart`}>
+    <header className="market-chart-header">
+      <div className="flex min-w-0 items-center gap-3"><span className="market-chart-token"><TokenIcon symbol={market === 'BTC' ? 'WBTC' : 'ETH'} size={34} /></span><div className="min-w-0"><span className="micro-label text-[11px] text-mut">Market</span><h2 className="truncate text-[18px] font-semibold">{market} / USD</h2></div></div>
+      <div className="shrink-0 text-right"><p className="text-display text-[24px] font-semibold tabular-nums">{formatUsdPrice(price)}</p><p className={`mt-1 inline-flex items-center gap-1 text-[11px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}>{change === undefined ? 'Change unavailable' : <><span aria-hidden="true">{positive ? '↗' : '↘'}</span>{positive ? '+' : ''}{change.toFixed(2)}% 24h</>}</p></div>
+    </header>
+    <button type="button" className="market-chart-toggle" aria-expanded={expanded} aria-controls={chartId} onClick={() => { setMobileExpanded((value) => !value); haptic('selection'); }}><BarChart3 className="h-4 w-4" aria-hidden="true" /><span>{expanded ? 'Hide chart' : 'Show chart'}</span><ChevronDown className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`} aria-hidden="true" /></button>
+    <div id={chartId} className="market-chart-content" hidden={!expanded}><div className="market-chart-frame">
+      {history.status === 'loading' && <ChartSkeleton />}
+      {history.status === 'unavailable' && <div className="market-chart-empty" role="status"><BarChart3 className="h-6 w-6 text-mut" aria-hidden="true" /><span><strong>Chart temporarily unavailable</strong><small>Trade details are still available.</small></span><button type="button" aria-label="Retry market chart" onClick={history.retry} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-lg text-mut"><RefreshCw className="h-4 w-4" aria-hidden="true" /></button></div>}
+      {history.status === 'ready' && history.snapshot && <LazyCandlestickChart snapshot={history.snapshot} />}
+    </div><footer className="market-chart-footer"><a href={`https://www.coingecko.com/en/coins/${market === 'ETH' ? 'ethereum' : 'bitcoin'}`} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-1.5 text-[11px] text-mut hover:text-mint"><Activity className="h-3.5 w-3.5 text-mint" aria-hidden="true" />CoinGecko</a><span className="inline-flex min-h-11 items-center gap-1.5 text-[11px] text-mut"><span className="status-dot" aria-hidden="true" />{live.status === 'live' && live.isFresh ? 'Live market' : 'Price updates paused'}</span><div role="radiogroup" aria-label="Chart range" className="chart-range-tabs">{RANGE_OPTIONS.map((option) => <button key={option} type="button" role="radio" aria-checked={range === option} tabIndex={range === option ? 0 : -1} onClick={() => { setRange(option); haptic('selection'); }} onKeyDown={(event) => { const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End']; if (!keys.includes(event.key)) return; event.preventDefault(); const current = RANGE_OPTIONS.indexOf(option); const backwards = event.key === 'ArrowLeft' || event.key === 'ArrowUp'; const next = event.key === 'Home' ? 0 : event.key === 'End' ? RANGE_OPTIONS.length - 1 : (current + (backwards ? -1 : 1) + RANGE_OPTIONS.length) % RANGE_OPTIONS.length; setRange(RANGE_OPTIONS[next]); event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus(); haptic('selection'); }} className={range === option ? 'chart-range-active' : ''}>{option}</button>)}</div></footer></div>
+  </section>;
 }
 
 export function MarketMiniCard({ market }: { market: MarketSymbol }) {
   const history = useMarketHistory(market, '1D');
   const { prices } = useUsdPrices();
-  const price = prices[market === 'ETH' ? 'ETH' : 'WBTC'] ?? history.snapshot?.currentPrice;
-  const change = history.snapshot?.percentChange;
+  const live = useLiveMarketQuote(market);
+  const price = live.isFresh ? live.quote?.price : prices[market === 'ETH' ? 'ETH' : 'WBTC'] ?? history.snapshot?.currentPrice;
+  const change = live.isFresh ? live.quote?.percentChange24h : history.snapshot?.percentChange;
   const positive = change !== undefined && change >= 0;
-  return (
-    <div className={`${styles.marketMiniCard} portfolio-market-card`} aria-label={`${market} market overview`}>
-      <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-2"><TokenIcon symbol={market === 'BTC' ? 'WBTC' : 'ETH'} size={28} /><strong className="text-[13px]">{market}</strong></span>
-        <span className={`text-[10.5px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}>{change === undefined ? '—' : `${positive ? '+' : ''}${change.toFixed(2)}%`}</span>
-      </div>
-      <p className="mt-3 text-display text-[20px] font-semibold tabular-nums">{formatUsdPrice(price)}</p>
-      <div className="mt-2 h-[54px]">
-        {history.status === 'ready' && history.snapshot
-          ? <MarketChartGraphic snapshot={history.snapshot} compact />
-          : history.status === 'loading'
-            ? <ChartSkeleton compact />
-            : <div className="market-chart-mini-empty" role="status"><BarChart3 className="h-4 w-4" aria-hidden="true" /><span>History unavailable</span></div>}
-      </div>
-    </div>
-  );
+  return <div className={`${styles.marketMiniCard} portfolio-market-card`} aria-label={`${market} market overview`}><div className="flex items-center justify-between gap-2"><span className="flex items-center gap-2"><TokenIcon symbol={market === 'BTC' ? 'WBTC' : 'ETH'} size={28} /><strong className="text-[13px]">{market}</strong></span><span className={`text-[10.5px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}>{change === undefined ? '—' : `${positive ? '+' : ''}${change.toFixed(2)}%`}</span></div><p className="mt-3 text-display text-[20px] font-semibold tabular-nums">{formatUsdPrice(price)}</p><div className="market-chart-compact mt-2 h-[54px]">{history.status === 'ready' && history.snapshot ? <Sparkline snapshot={history.snapshot} /> : <span className="text-[11px] text-mut">Chart unavailable</span>}</div></div>;
 }
 
-function MarketChartGraphic({ snapshot, compact = false }: { snapshot: MarketHistorySnapshot; compact?: boolean }) {
-  const localId = useId().replace(/:/g, '');
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
-  const svgRef = useRef<SVGSVGElement>(null);
-  const geometry = useMemo(() => chartGeometry(snapshot.points.map((point) => point.price), compact ? 260 : 640, compact ? 80 : 220), [compact, snapshot.points]);
-  const active = activeIndex === null ? null : snapshot.points[activeIndex];
-  const activeCoordinate = activeIndex === null ? null : geometry.coordinates[activeIndex];
-  const positive = snapshot.percentChange >= 0;
-  const stroke = positive ? 'var(--success)' : 'var(--danger)';
-  const gradientId = `market-gradient-${localId}-${snapshot.market}-${snapshot.range}-${compact ? 'mini' : 'full'}`;
-
-  return (
-    <div className={`market-chart-graphic ${compact ? 'market-chart-compact' : ''}`}>
-      <svg
-        ref={svgRef}
-        role="img"
-        aria-label={`${snapshot.market} ${snapshot.range} USD price chart, ${snapshot.percentChange >= 0 ? 'up' : 'down'} ${Math.abs(snapshot.percentChange).toFixed(2)} percent`}
-        viewBox={`0 0 ${geometry.width} ${geometry.height}`}
-        preserveAspectRatio="none"
-        onPointerMove={compact ? undefined : (event) => {
-          const rect = svgRef.current?.getBoundingClientRect();
-          if (!rect) return;
-          const fraction = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
-          setActiveIndex(Math.round(fraction * (snapshot.points.length - 1)));
-        }}
-        onPointerLeave={compact ? undefined : () => setActiveIndex(null)}
-      >
-        <defs>
-          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={stroke} stopOpacity="0.25" />
-            <stop offset="100%" stopColor={stroke} stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        {!compact && [0.25, 0.5, 0.75].map((fraction) => <line key={fraction} x1="0" x2={geometry.width} y1={geometry.height * fraction} y2={geometry.height * fraction} className="market-chart-gridline" />)}
-        <path d={geometry.areaPath} fill={`url(#${gradientId})`} />
-        <path d={geometry.linePath} fill="none" stroke={stroke} strokeWidth={compact ? 3 : 2.5} vectorEffect="non-scaling-stroke" />
-        {activeCoordinate && <><line x1={activeCoordinate.x} x2={activeCoordinate.x} y1="0" y2={geometry.height} className="market-chart-crosshair" /><circle cx={activeCoordinate.x} cy={activeCoordinate.y} r="5" fill={stroke} stroke="var(--bg-raised)" strokeWidth="3" vectorEffect="non-scaling-stroke" /></>}
-      </svg>
-      {active && activeCoordinate && (
-        <span className="market-chart-tooltip" style={{ left: `${(activeCoordinate.x / geometry.width) * 100}%`, top: `${Math.max(5, (activeCoordinate.y / geometry.height) * 100 - 16)}%` }}>
-          <strong>{formatUsdPrice(active.price)}</strong>
-          <small>{new Date(active.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</small>
-        </span>
-      )}
-    </div>
-  );
+function LazyCandlestickChart({ snapshot }: { snapshot: MarketCandleSnapshot }) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const initialCandlesRef = useRef(snapshot.candles);
+  initialCandlesRef.current = snapshot.candles;
+  const renderedCandlesRef = useRef<MarketCandleSnapshot['candles']>([]);
+  const chartRef = useRef<{ remove: () => void; timeScale: () => { fitContent: () => void } } | null>(null);
+  const seriesRef = useRef<{ setData: (data: readonly unknown[]) => void; update: (data: unknown) => void } | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void import('lightweight-charts').then(({ createChart, CandlestickSeries }) => {
+      if (!active || !hostRef.current) return;
+      const css = (name: string, fallback: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+      const chart = createChart(hostRef.current, {
+        autoSize: true,
+        layout: { background: { color: 'transparent' }, textColor: css('--mut', '#87909d') },
+        grid: { vertLines: { color: css('--line', 'rgba(255,255,255,.08)') }, horzLines: { color: css('--line', 'rgba(255,255,255,.08)') } },
+        rightPriceScale: { borderColor: css('--line', 'rgba(255,255,255,.1)') },
+        timeScale: { borderColor: css('--line', 'rgba(255,255,255,.1)'), timeVisible: true, secondsVisible: false, rightOffset: 2 },
+        crosshair: { vertLine: { color: css('--mint', '#24d399'), width: 1 }, horzLine: { color: css('--mint', '#24d399'), width: 1 } },
+      });
+      const series = chart.addSeries(CandlestickSeries, { upColor: css('--success', '#24d399'), downColor: css('--danger', '#ff5c73'), borderVisible: false, wickUpColor: css('--success', '#24d399'), wickDownColor: css('--danger', '#ff5c73') });
+      chartRef.current = chart;
+      seriesRef.current = series as unknown as { setData: (data: readonly unknown[]) => void; update: (data: unknown) => void };
+      seriesRef.current.setData(toChartData(initialCandlesRef.current));
+      renderedCandlesRef.current = initialCandlesRef.current;
+      chart.timeScale().fitContent();
+    }).catch(() => { if (active) setFailed(true); });
+    return () => { active = false; chartRef.current?.remove(); chartRef.current = null; seriesRef.current = null; };
+  }, []);
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    const previous = renderedCandlesRef.current;
+    const next = snapshot.candles;
+    const tailOnly = previous.length > 0 && next.length >= previous.length && next.length <= previous.length + 1
+      && previous.slice(0, -1).every((candle, index) => candle === next[index]);
+    if (tailOnly && next.length) seriesRef.current.update(toChartData(next.slice(-1))[0]);
+    else seriesRef.current.setData(toChartData(next));
+    renderedCandlesRef.current = next;
+  }, [snapshot.candles]);
+  if (failed) return <div className="market-chart-empty" role="img" aria-label={`${snapshot.market} ${snapshot.range} USD price chart unavailable`}><BarChart3 className="h-6 w-6 text-mut" aria-hidden="true" /><span><strong>{snapshot.market} price chart</strong><small>Current {formatUsdPrice(snapshot.currentPrice)} · high {formatUsdPrice(snapshot.high)} · low {formatUsdPrice(snapshot.low)}</small></span></div>;
+  return <div ref={hostRef} className="market-chart-graphic" role="img" aria-label={`${snapshot.market} ${snapshot.range} USD price chart, current price ${formatUsdPrice(snapshot.currentPrice)}`}><span className="sr-only">High {formatUsdPrice(snapshot.high)}. Low {formatUsdPrice(snapshot.low)}.</span></div>;
 }
 
-function chartGeometry(values: number[], width: number, height: number) {
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = Math.max(max - min, max * 0.002, 1e-8);
-  const verticalPadding = height * 0.1;
-  const usableHeight = height - verticalPadding * 2;
-  const coordinates = values.map((value, index) => ({
-    x: values.length === 1 ? width / 2 : (index / (values.length - 1)) * width,
-    y: verticalPadding + ((max - value) / span) * usableHeight,
+function toChartData(candles: MarketCandleSnapshot['candles']) {
+  return candles.map((candle) => ({
+    time: candle.time as import('lightweight-charts').UTCTimestamp,
+    open: candle.open,
+    high: candle.high,
+    low: candle.low,
+    close: candle.close,
   }));
-  const linePath = coordinates.map((point, index) => `${index === 0 ? 'M' : 'L'}${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(' ');
-  const areaPath = coordinates.length ? `${linePath} L${width},${height} L0,${height} Z` : '';
-  return { width, height, coordinates, linePath, areaPath };
 }
 
-function ChartSkeleton({ compact = false }: { compact?: boolean }) {
-  return <div role="status" aria-label="Loading market chart" className={`market-chart-skeleton ${compact ? 'h-full' : 'h-[220px]'}`}><span /></div>;
+function Sparkline({ snapshot }: { snapshot: MarketHistorySnapshot }) {
+  const values = snapshot.points.map((point) => point.price);
+  const min = Math.min(...values); const max = Math.max(...values); const span = Math.max(max - min, max * 0.002, 1e-8);
+  const coordinates = values.map((value, index) => `${((index / Math.max(1, values.length - 1)) * 100).toFixed(2)},${(8 + ((max - value) / span) * 84).toFixed(2)}`).join(' ');
+  const id = `spark-${snapshot.market}`;
+  return <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full" role="img" aria-label={`${snapshot.market} 24 hour trend`}><polyline points={coordinates} fill="none" stroke={snapshot.percentChange >= 0 ? 'var(--success)' : 'var(--danger)'} strokeWidth="3" vectorEffect="non-scaling-stroke" /><title id={id}>{snapshot.market} trend</title></svg>;
 }
+
+function ChartSkeleton() { return <div role="status" aria-label="Loading market chart" className="market-chart-skeleton h-[220px]"><span /></div>; }

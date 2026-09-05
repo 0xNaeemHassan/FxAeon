@@ -44,6 +44,14 @@ export type ActionPlanBuilder = () => Promise<PlannedRoute | readonly PlannedRou
 export interface ActionReviewProps {
   /** Build a fresh SDK route for initial review and confirm-time refresh. */
   planBuilder: ActionPlanBuilder | null;
+  /**
+   * Read an exact, short-lived in-memory route prepared for these inputs.
+   * Returning null falls back to planBuilder. Prefetched routes still pass
+   * the normal review simulation. The initial route is rebuilt before signing;
+   * a newly reviewed route may be reused briefly, but the runner always
+   * performs its final simulation immediately before opening the wallet.
+   */
+  prefetchedPlan?: () => Promise<PlannedRoute | readonly PlannedRoute[] | null>;
   label?: string;
   disabled?: boolean;
   /** Runs after verified receipts and the required following-block boundary. */
@@ -446,6 +454,7 @@ function statusPresentation(params: {
 
 export function ActionReview({
   planBuilder,
+  prefetchedPlan,
   label = 'Review action',
   disabled = false,
   onComplete,
@@ -574,7 +583,8 @@ export function ActionReview({
     setStatus('planning');
     setStatusDetail('Preparing a fresh route.');
     try {
-      const planned = asRoutes(await planBuilder());
+      const prefetched = await prefetchedPlan?.();
+      const planned = asRoutes(prefetched ?? await planBuilder());
       setStatus('reviewing');
       setStatusDetail('Checking the ordered transactions against current chain state.');
       const walletAddress = wallet.address.toLowerCase();
@@ -610,7 +620,7 @@ export function ActionReview({
       busyRef.current = false;
       setLoading(false);
     }
-  }, [disabled, loading, operationLabel, planBuilder, stage, wallet.address, wallet.authenticated, wallet.chainId]);
+  }, [disabled, loading, operationLabel, planBuilder, prefetchedPlan, stage, wallet.address, wallet.authenticated, wallet.chainId]);
 
   const execute = useCallback(async () => {
     if (!route || loading || busyRef.current || stage !== 'review' || status === 'failed' || stepResults.some(hasTransactionHash)) return;
@@ -997,7 +1007,7 @@ export function ActionReview({
       {reviewNotice && <p role="status" className="mt-3 rounded-xl border border-[rgba(255,194,102,.24)] bg-[var(--warn-dim)] px-3 py-2 text-[12px] font-semibold text-warn">{reviewNotice}</p>}
       {error && <div className="mt-3"><InlineError message={error} /></div>}
       {stage === 'review' && (
-        <>
+        <div className={styles.reviewSheetActions}>
           <label className="mt-4 flex min-h-12 cursor-pointer items-start gap-3 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.025)] p-3 text-[11.5px] leading-relaxed text-mut">
             <input
               type="checkbox"
@@ -1011,7 +1021,7 @@ export function ActionReview({
           <Button variant={destructive ? 'danger' : 'primary'} disabled={loading || status === 'failed' || !reviewAcknowledged} loading={loading} className={`${styles.primaryAction} mt-3`} onClick={() => void execute()}>
             <ShieldCheck aria-hidden="true" className="h-4 w-4" /> {stepCount === 1 ? 'Confirm in wallet' : `Confirm ${stepCount} transactions`}
           </Button>
-        </>
+        </div>
       )}
     </Card>
     </ReviewOverlay>

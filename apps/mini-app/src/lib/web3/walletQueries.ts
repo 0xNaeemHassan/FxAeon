@@ -8,6 +8,7 @@ import { assertWalletAddress } from '../fx/validation';
 import type { WalletBalancesResult } from '../fx/balances';
 import type { WalletDataConfig } from './config';
 import { CANONICAL_MOVE_ASSETS, canonicalMoveSourceTokenAddress, type CanonicalMoveBalanceMap } from '../moveBalances';
+import type { CanonicalAssetRead } from '../walletAssets';
 
 export const WALLET_QUERY_ROOT = 'fxaeon-wallet';
 export const WALLET_BALANCE_STALE_MS = 15_000;
@@ -78,6 +79,73 @@ export function walletBalanceQueryOptions(config: WalletDataConfig, session: str
   return queryOptions({
     queryKey: walletBalanceQueryKey(session, address, chainId),
     queryFn: ({ signal }) => readWagmiWalletBalances(config, address, chainId, signal),
+  });
+}
+
+/**
+ * Exact, protocol-facing wallet reads for both supported chains. The legacy
+ * Ethereum-only query above remains available to existing consumers; this
+ * wider read is used by the live portfolio merger so indexed Alchemy data can
+ * never replace a canonical amount.
+ */
+export async function readCanonicalWalletAssets(
+  config: WalletDataConfig, walletAddress: string, chainId: 1 | 8453, signal?: AbortSignal,
+): Promise<CanonicalAssetRead> {
+  const address: Address = assertWalletAddress(walletAddress);
+  signal?.throwIfAborted();
+  const remoteChain = await getChainId(config.getClient({ chainId }));
+  if (remoteChain !== chainId) throw new Error(`RPC endpoint returned chain ${remoteChain}; expected ${chainId}`);
+  signal?.throwIfAborted();
+
+  if (chainId === 1) {
+    const result = await readWagmiWalletBalances(config, walletAddress, chainId, signal);
+    return {
+      chainId,
+      balances: result.balances.map((balance) => ({
+        key: balance.key,
+        address: balance.key === 'ETH' ? null : balance.address,
+        decimals: balance.decimals,
+        amountWei: balance.amountWei,
+      })),
+      failedTokens: result.failedTokens,
+      updatedAt: Date.now(),
+    };
+  }
+
+  const settled = await Promise.allSettled([
+    getBalance(config, { address, chainId }),
+    readContracts(config, {
+      allowFailure: true,
+      contracts: CANONICAL_MOVE_ASSETS.map((key) => ({
+        chainId,
+        address: canonicalMoveSourceTokenAddress(key, chainId),
+        abi: erc20Abi,
+        functionName: 'balanceOf' as const,
+        args: [address] as const,
+      })),
+    }),
+  ]);
+  signal?.throwIfAborted();
+  const balances: CanonicalAssetRead['balances'] = [];
+  const failedTokens: FxTokenKey[] = [];
+  const native = settled[0];
+  if (native.status === 'fulfilled') balances.push({ key: 'ETH', address: null, decimals: 18, amountWei: native.value.value });
+  else failedTokens.push('ETH');
+  const erc20 = settled[1];
+  CANONICAL_MOVE_ASSETS.forEach((key, index) => {
+    const result = erc20.status === 'fulfilled' ? erc20.value[index] : undefined;
+    if (result?.status === 'success' && typeof result.result === 'bigint' && result.result >= 0n) {
+      balances.push({ key, address: canonicalMoveSourceTokenAddress(key, chainId), decimals: 18, amountWei: result.result });
+    } else failedTokens.push(key);
+  });
+  if (!balances.length) throw new Error('Wallet balances are temporarily unavailable.');
+  return { chainId, balances, failedTokens, updatedAt: Date.now() };
+}
+
+export function canonicalWalletAssetQueryOptions(config: WalletDataConfig, session: string, address: string, chainId: 1 | 8453) {
+  return queryOptions({
+    queryKey: [WALLET_QUERY_ROOT, session, chainId, address.toLowerCase(), 'canonical-assets'] as const,
+    queryFn: ({ signal }) => readCanonicalWalletAssets(config, address, chainId, signal),
   });
 }
 

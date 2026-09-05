@@ -16,6 +16,13 @@ Telegram Mini ──┘                 │
                                   ├── validated USD display feeds
                                   │     ├── DefiLlama current prices; stale/confidence guards
                                   │     └── CoinGecko ETH/BTC history; range/freshness guards
+                                  ├── Alchemy Data API (display-only wallet discovery)
+                                  │     └── Ethereum/Base token metadata, prices, and logos
+                                  ├── Alchemy foreground WebSockets
+                                  │     └── newHeads + wallet-filtered ERC-20 transfers
+                                  └── Coinbase public market feeds
+                                        ├── ETH/BTC ticks
+                                        └── candle history with CoinGecko fallback
                                   └── Viem public clients
                                         ├── Alchemy Ethereum (chain 1)
                                         └── Alchemy Base (chain 8453)
@@ -33,10 +40,10 @@ There is no FxAeon server process. The ordinary web app and Telegram Mini App ar
 - `src/lib/fx/validation.ts` and the transaction policy reject malformed senders, chains, destinations, selectors, values, approvals, and nonces.
 - `src/lib/fx/runner.ts` simulates, requests one signature per step, awaits each receipt, stops on failure, waits one additional block, and triggers an authoritative reread.
 - `src/lib/wallet/` is a narrow Privy/EIP-1193 adapter. It has no server credential or delegated authority.
-- `WalletDataProvider.tsx` and `src/lib/web3/` share standard native/ERC-20 balance reads through pinned Wagmi `3.7.7` and TanStack Query `5.102.8`. They reuse the existing Viem public clients, not another wallet or RPC service.
+- `WalletDataProvider.tsx` and `src/lib/web3/` share standard native/ERC-20 balance reads through pinned Wagmi `3.7.7` and TanStack Query `5.102.8`. They reuse the existing Viem public clients, not another wallet or RPC service. Alchemy Data discovery broadens the asset list but never overrides an exact canonical read.
 - `src/lib/prices.ts` validates token quotes independently, rejects stale/low-confidence values, and uses one bounded, batched, cached CoinGecko fallback with adaptive rate-limit retry/backoff for missing current prices. Current-price UI has no source badge; chart history retains its separate attribution. `src/lib/positionValuation.ts` retains exact accounting units for estimated USD equity and owned-token value. These helpers are not imported by the SDK façade, validation policy, or transaction runner.
 - `src/lib/fxSaveUnits.ts` keeps the SDK's fxSAVE share/base-pool-share units explicit and normalizes the SDK's omitted underlying conversion for a verified zero-share balance to exact `0n`; a missing conversion for nonzero shares remains unavailable.
-- `src/lib/marketData.ts` validates keyless CoinGecko ETH/BTC history, rejects malformed, sparse, stale, or future-skewed series, and bounds chart density. It is display-only and remains separate from transaction planning.
+- `src/lib/marketData.ts` validates keyless CoinGecko history, rejects malformed, sparse, stale, or future-skewed series, and bounds chart density. `src/lib/liveMarket.ts` adds anchored Coinbase ticks and candles with strict freshness checks and fallback. These feeds are display-only and remain separate from transaction planning.
 - `ActionReview.tsx` is the common user-visible review-sheet state machine from plan review through receipt confirmation. It exposes the route's human-readable facts and raw transaction disclosure before each wallet step.
 - `src/lib/telegram.ts` treats Telegram as an optional host adapter and passes signed launch data only to Privy's authentication flow. The official bridge loads before application scripts as Telegram specifies, while bridge absence never gates public routes or wallet login; late bridge availability is bound progressively by `TelegramProvider`.
 
@@ -48,7 +55,8 @@ There is no FxAeon server process. The ordinary web app and Telegram Mini App ar
 | fxSAVE configuration, balance, cooldown, and claimability | Ethereum through the official SDK |
 | Bridge source confirmation and LayerZero delivery | Matching `OFTSent`/`OFTReceived` GUIDs on Ethereum/Base |
 | Selected address and signing permission | Privy wallet or explicitly connected browser wallet |
-| Native/ERC-20 wallet balances | Chain-probed public RPC reads through Wagmi; TanStack Query is an in-memory cache, not authority |
+| Native/ERC-20 wallet balances | Exact chain-probed public RPC reads through Wagmi; TanStack Query is an in-memory cache, not authority |
+| Expanded wallet asset discovery | Alchemy Data API metadata/prices are display-only and partial; canonical reads win for supported tokens |
 | Display-only USD prices | Validated DefiLlama current snapshot, batched CoinGecko fallback for missing current token quotes, plus validated ETH/BTC history; never execution authority |
 | Official, neutral-dark, and light themes and slippage preset | Versioned local storage |
 | Pending hashes and bridge recheck context | Local recovery hint, revalidated from receipts and matching bridge events |
@@ -64,7 +72,7 @@ Wagmi is a public-data integration only: no connectors, injected-provider discov
 
 Before each balance batch, the reader probes the existing endpoint with `eth_chainId`. Native balance uses the standard public balance read; ERC-20 `balanceOf` calls use a shared multicall with per-token failure results. Raw balances remain exact `bigint` values. Missing reads stay unavailable instead of becoming zero. Move uses the canonical token addresses for the explicitly selected Ethereum/Base source.
 
-Cache keys include the selected account, its wallet-network session, and the target read chain. Account/network changes cancel and remove old-session queries; cancellation checks prevent late responses from repopulating that session. Consumers share queries rather than creating a balance request per card. One foreground block watcher per actively observed chain polls every 12 seconds; active balance queries also have a 60-second fallback and stale-data refresh on focus/online resume. Background interval polling is disabled.
+Cache keys include the selected account, its wallet-network session, and the target read chain. Account/network changes cancel and remove old-session queries; cancellation checks prevent late responses from repopulating that session. Consumers share queries rather than creating a balance request per card. Each active chain gets one foreground Alchemy WebSocket for `newHeads` and wallet-filtered ERC-20 transfers. When the socket is unavailable, bounded foreground polling keeps the surface current; background interval polling and hidden/offline sockets are disabled. Focus/online resume performs a stale refresh.
 
 `ActionReview` invalidates the affected original wallet/chain alongside the existing post-confirm callback. Only a matching, included success/revert receipt permits invalidation; signatures and hashes alone do not. Partial routes refresh too because approvals and gas can change balances. If the following-block wait prevents the callback, receipt evidence can still invalidate the wallet cache without calling the page's protocol completion callback early. Refresh failures never rewrite transaction outcomes. The recovery coordinator accepts only receipt-verified reconciler results, groups by original chain, and deduplicates receipt events; local journal status cannot trigger a financial-state update.
 
@@ -72,7 +80,7 @@ Activity and recent-activity reads use the same receipt-backed refresh gate. A j
 
 ## Deliberate exclusions
 
-The product has no active service worker, Web Worker, runtime feature-flag service, telemetry pipeline, or speculative-plan cache. The Telegram provider unregisters a legacy `/sw.js` from older builds so a stale offline financial client cannot continue serving navigation; it never caches current protocol state.
+The product has no active service worker, Web Worker, runtime feature-flag service, or telemetry pipeline. Trade may keep one short-lived, session-local in-memory route prefetch to make Review feel immediate; it is keyed to the exact wallet, inputs, bounds, slippage, and block, is never persisted, and is always rebuilt and simulated before signing. The Telegram provider unregisters a legacy `/sw.js` from older builds so a stale offline financial client cannot continue serving navigation; it never caches current protocol state.
 
 The dependency graph may contain `ioredis` through third-party browser adapters and `workerd` through development-only Wrangler tooling. FxAeon does not import either, opens no Redis connection, and deploys no Worker runtime.
 

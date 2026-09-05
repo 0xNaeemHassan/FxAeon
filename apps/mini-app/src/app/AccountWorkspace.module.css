@@ -79,6 +79,13 @@
 .activityIcon { display: grid; width: 42px; height: 42px; flex: 0 0 auto; place-items: center; border-radius: 14px; background: color-mix(in srgb, var(--mint) 14%, transparent); color: var(--mint); }
 .activityEmpty { color: var(--mut); }
 
+.portfolioPositionItem { display: flex; min-width: 0; flex-direction: column; gap: 6px; }
+.portfolioPositionItem :global([data-position-key]) { border-radius: 16px 16px 10px 10px; }
+.portfolioPositionActions { display: flex; align-items: center; gap: 6px; padding: 0 8px 2px; }
+.portfolioPositionActions a { display: inline-flex; min-height: 40px; flex: 1; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 10px; color: var(--mut); font-size: 11px; font-weight: 650; }
+.portfolioPositionActions a:hover { color: var(--text); border-color: color-mix(in srgb, var(--mint) 44%, var(--line)); }
+.portfolioPositionActions a:last-child { color: var(--danger); }
+
 .walletBackdrop { position: fixed; z-index: 60; inset: 0; display: flex; align-items: center; justify-content: flex-end; background: rgba(8, 5, 18, .64); backdrop-filter: blur(8px); padding: 16px; }
 .walletSheet { width: min(100%, 456px); max-height: min(860px, calc(100dvh - 32px)); overflow-y: auto; border: 1px solid var(--line); border-radius: 24px; background: var(--surface); box-shadow: var(--elevation-2); padding: 20px; }
 .walletHeader { display: flex; align-items: center; justify-content: space-between; gap: 14px; }

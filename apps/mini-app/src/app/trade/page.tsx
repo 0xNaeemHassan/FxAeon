@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ChevronRight, Layers2 } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, ChevronRight, Layers2, TrendingDown, TrendingUp } from 'lucide-react';
 import { AppShell, Card } from '@/components/ui';
 import { ActionReview } from '@/components/ActionReview';
-import { TradeMarketChart } from '@/components/MarketChart';
+import { TradeMarketChart, useMarketHistory } from '@/components/MarketChart';
 import TokenIcon from '@/components/TokenIcon';
+import { useLiveMarketQuote, useUsdPrices } from '@/components/PriceProvider';
 import {
   positionIsStale,
   ProtocolPositionCard,
@@ -19,11 +20,13 @@ import { deriveConfirmedPositionHint } from '@/lib/confirmedPositions';
 import { confirmedPositionHintKey } from '@/lib/confirmedPositionStorage';
 import WalletConnectCTA from '@/components/WalletConnectCTA';
 import { AmountField, LeverageField, Segmented, SlippageField, TokenSelect, tokenBalanceFor, useWalletTokenBalances, type TokenBalanceView } from '@/components/ProtocolForm';
-import { MAX_FX_SLIPPAGE_PERCENT, clampLeverage, leverageBoundsFor, planIncreasePosition, prepareLeverageReview, readLeverageBounds, type LeverageBounds, type PlannedRoute, type TransactionExecutionResult } from '@/lib/fx';
+import { MAX_FX_SLIPPAGE_PERCENT, clampLeverage, getEthereumClient, leverageBoundsFor, planIncreasePosition, prepareLeverageReview, readLeverageBounds, type LeverageBounds, type PlannedRoute, type TransactionExecutionResult } from '@/lib/fx';
+import { RoutePrefetchStore, type RoutePrefetchDescriptor } from '@/lib/fx/routePrefetch';
 import { usePrivyWallet } from '@/lib/wallet';
 import styles from '@/components/trade-surfaces.module.css';
 import { positiveDecimal } from '@/lib/amount';
 import { DEFAULT_SLIPPAGE_PERCENT, readSlippagePercent } from '@/lib/settings';
+import { formatUsdPrice } from '@/lib/prices';
 import {
   parseAmount,
   positionInputTokenOptions,
@@ -34,6 +37,71 @@ import {
   type UiSide,
   type UiToken,
 } from '@/app/trade/fxUi';
+
+function createPrefetchSessionId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `trade-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function positionHref(market: UiMarket, side: UiSide, positionId: string | number, action?: 'close'): string {
+  const key = encodeURIComponent(`${market}:${side}:${positionId}`);
+  return `/positions?position=${key}${action ? `&action=${action}` : ''}`;
+}
+
+function TradeInstrumentHeader({
+  market,
+  onMarketChange,
+}: {
+  market: UiMarket;
+  onMarketChange: (market: UiMarket) => void;
+}) {
+  const history = useMarketHistory(market, '1D');
+  const { prices, status } = useUsdPrices();
+  const live = useLiveMarketQuote(market);
+  const snapshot = history.snapshot;
+  const price = live.isFresh ? live.quote?.price : prices[market === 'ETH' ? 'ETH' : 'WBTC'] ?? snapshot?.currentPrice;
+  const change = live.isFresh ? live.quote?.percentChange24h : snapshot?.percentChange;
+  const high = live.isFresh ? live.quote?.high24h : snapshot ? Math.max(...snapshot.points.map((point) => point.price)) : undefined;
+  const low = live.isFresh ? live.quote?.low24h : snapshot ? Math.min(...snapshot.points.map((point) => point.price)) : undefined;
+  const positive = change !== undefined && change >= 0;
+  const ChangeIcon = positive ? TrendingUp : TrendingDown;
+  const freshness = live.isFresh
+    ? 'Live market feed'
+    : live.status === 'connecting' || live.status === 'reconnecting'
+      ? 'Reconnecting · validated price shown'
+      : status === 'unavailable'
+        ? 'Market feed unavailable'
+        : 'Using last validated price';
+
+  return (
+    <section className={styles.instrumentHeader} aria-label={`${market} trading instrument`}>
+      <div className={styles.instrumentTopline}>
+        <div className="flex min-w-0 items-center gap-3">
+          <span className={styles.instrumentIcon}><TokenIcon symbol={market === 'ETH' ? 'ETH' : 'WBTC'} size={28} /></span>
+          <div className="min-w-0">
+            <p className={styles.instrumentEyebrow}>Spot reference</p>
+            <h2 className="truncate text-[18px] font-semibold">{market} / USD</h2>
+          </div>
+        </div>
+        <div className={styles.instrumentPrice}>
+          <span className="text-display text-[23px] font-semibold tabular-nums">{formatUsdPrice(price)}</span>
+          <span className={`inline-flex items-center justify-end gap-1 text-[11px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}>
+            {change === undefined ? '24h change unavailable' : <><ChangeIcon className="h-3.5 w-3.5" aria-hidden="true" />{positive ? '+' : ''}{change.toFixed(2)}% 24h</>}
+          </span>
+        </div>
+      </div>
+      <div className={styles.instrumentMeta}>
+        <span className={styles.instrumentFreshness} role="status"><span className={`status-dot ${live.isFresh ? '' : 'status-dot-warn'}`} aria-hidden="true" />{freshness}</span>
+        <dl className={styles.instrumentStats}>
+          <div><dt>24h high</dt><dd>{formatUsdPrice(high)}</dd></div>
+          <div><dt>24h low</dt><dd>{formatUsdPrice(low)}</dd></div>
+        </dl>
+      </div>
+      <div className={styles.marketChooser}>
+        <Segmented value={market} onChange={onMarketChange} ariaLabel="Market" options={[{ value: 'ETH', label: 'ETH market', sub: 'Ethereum', ariaLabel: 'ETH', icon: <TokenIcon symbol="ETH" size={20} /> }, { value: 'BTC', label: 'BTC market', sub: 'Wrapped BTC', ariaLabel: 'BTC', icon: <TokenIcon symbol="WBTC" size={20} /> }]} />
+      </div>
+    </section>
+  );
+}
 
 export default function TradePage() {
   const wallet = usePrivyWallet();
@@ -49,6 +117,40 @@ export default function TradePage() {
   const [slippage, setSlippage] = useState(String(DEFAULT_SLIPPAGE_PERCENT));
   const [leverageBounds, setLeverageBounds] = useState<LeverageBounds>(() => leverageBoundsFor('ETH', 'long'));
   const [highlightedPositionKey, setHighlightedPositionKey] = useState('');
+  const prefetchStoreRef = useRef<RoutePrefetchStore | null>(null);
+  const prefetchSessionRef = useRef(createPrefetchSessionId());
+  const prefetchDescriptorRef = useRef<RoutePrefetchDescriptor | null>(null);
+  const [foreground, setForeground] = useState(false);
+  const currentTicketRef = useRef('');
+  const prefetchedTicketRef = useRef('');
+  currentTicketRef.current = JSON.stringify([wallet.address, wallet.chainId, market, side, token, amount, leverage, slippage, leverageBounds.min, leverageBounds.max]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const selectedMarket = params.get('market') === 'BTC' ? 'BTC' : 'ETH';
+    const selectedAsset = params.get('asset');
+    if (params.has('market') || selectedAsset) {
+      setMarket(selectedMarket);
+      setToken(positionInputTokenOptions(selectedMarket).find((option) => option === selectedAsset) ?? positionInputTokenOptions(selectedMarket)[0]);
+    }
+    const update = () => {
+      const active = document.visibilityState === 'visible' && navigator.onLine;
+      if (!active) {
+        prefetchStoreRef.current?.invalidate();
+        prefetchDescriptorRef.current = null;
+      }
+      setForeground(active);
+    };
+    update();
+    document.addEventListener('visibilitychange', update);
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    return () => {
+      document.removeEventListener('visibilitychange', update);
+      window.removeEventListener('online', update);
+      window.removeEventListener('offline', update);
+    };
+  }, []);
 
   useEffect(() => {
     setSlippage(String(readSlippagePercent()));
@@ -93,10 +195,89 @@ export default function TradePage() {
     return () => window.clearTimeout(timer);
   }, [highlightedPositionKey]);
 
+  const slippageValue = Number(slippage);
+
+  // Keep one short-lived route warm while the ticket is valid. This is a
+  // display/review optimization only: ActionReview still rebuilds, simulates,
+  // and validates the route immediately before opening the wallet prompt.
+  useEffect(() => {
+    const store = prefetchStoreRef.current ?? (prefetchStoreRef.current = new RoutePrefetchStore());
+    store.invalidate();
+    prefetchDescriptorRef.current = null;
+    const amountWei = validAmount ? parseAmount(validAmount, token) : null;
+    if (!foreground || !wallet.address || !amountWei || !Number.isFinite(leverage)
+      || leverage < leverageBounds.min || leverage > leverageBounds.max
+      || !Number.isFinite(slippageValue) || slippageValue <= 0 || slippageValue > MAX_FX_SLIPPAGE_PERCENT) {
+      return;
+    }
+
+    let active = true;
+    const ticket = currentTicketRef.current;
+    const timer = window.setTimeout(() => {
+      if (document.visibilityState !== 'visible' || !navigator.onLine) return;
+      void (async () => {
+        try {
+          const blockNumber = await getEthereumClient().getBlockNumber();
+          if (!active || currentTicketRef.current !== ticket || document.visibilityState !== 'visible' || !navigator.onLine) return;
+          const descriptor: RoutePrefetchDescriptor = {
+            sessionId: prefetchSessionRef.current,
+            walletAddress: wallet.address!,
+            walletChainId: wallet.chainId ?? null,
+            routeChainId: 1,
+            market,
+            side,
+            inputTokenAddress: tokenAddress(token),
+            amountWei,
+            leverage,
+            slippagePercent: slippageValue,
+            leverageMin: leverageBounds.min,
+            leverageMax: leverageBounds.max,
+            blockNumber,
+          };
+          prefetchDescriptorRef.current = descriptor;
+          prefetchedTicketRef.current = ticket;
+          void store.prime(descriptor, () => planIncreasePosition({
+            market,
+            type: side,
+            positionId: 0,
+            userAddress: wallet.address!,
+            leverage,
+            inputTokenAddress: tokenAddress(token),
+            amount: amountWei,
+            slippage: slippageValue,
+          })).catch(() => undefined);
+        } catch {
+          // Prefetch is best-effort. The normal plan builder remains available
+          // whenever the RPC or SDK is unavailable during the warm-up.
+        }
+      })();
+    }, 220);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+      store.invalidate();
+      prefetchDescriptorRef.current = null;
+    };
+  }, [foreground, leverage, leverageBounds.max, leverageBounds.min, market, side, slippageValue, token, validAmount, wallet.address, wallet.chainId]);
+
+  const prefetchedPlan = useCallback(async (): Promise<PlannedRoute | readonly PlannedRoute[] | null> => {
+    const descriptor = prefetchDescriptorRef.current;
+    if (!descriptor || !prefetchStoreRef.current) return null;
+    const ticket = currentTicketRef.current;
+    if (prefetchedTicketRef.current !== ticket) return null;
+    return prefetchStoreRef.current.readValidated(descriptor, async () => {
+      if (document.visibilityState !== 'visible' || !navigator.onLine
+        || currentTicketRef.current !== ticket || prefetchDescriptorRef.current !== descriptor) return null;
+      const blockNumber = await getEthereumClient().getBlockNumber({ cacheTime: 0 });
+      if (document.visibilityState !== 'visible' || !navigator.onLine
+        || currentTicketRef.current !== ticket || prefetchDescriptorRef.current !== descriptor) return null;
+      return { ...descriptor, blockNumber };
+    });
+  }, []);
+
   const planBuilder = useMemo(() => {
     if (!wallet.address || !validAmount) return null;
     const amountWei = parseAmount(validAmount, token);
-    const slippageValue = Number(slippage);
     if (!amountWei || !Number.isFinite(leverage) || leverage < leverageBounds.min || leverage > leverageBounds.max || !Number.isFinite(slippageValue) || slippageValue <= 0 || slippageValue > MAX_FX_SLIPPAGE_PERCENT) return null;
     return async () => {
       const prepared = await prepareLeverageReview({
@@ -121,7 +302,7 @@ export default function TradePage() {
       }
       return prepared.plan;
     };
-  }, [leverage, leverageBounds, market, side, slippage, token, validAmount, wallet.address]);
+  }, [leverage, leverageBounds, market, side, slippageValue, token, validAmount, wallet.address]);
 
   const marketPositions = positionState.positions.filter((position) => position.market === market);
   const highlightedPosition = marketPositions.find((position) => positionKey(position) === highlightedPositionKey);
@@ -148,7 +329,10 @@ export default function TradePage() {
           <Link href="/positions" className="glass-press inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 text-[12px] font-semibold text-mut hover:text-mint"><Layers2 className="h-4 w-4" aria-hidden="true" />Positions</Link>
         </header>
 
-        <div className={styles.marketChooser}><Segmented value={market} onChange={(next) => { setMarket(next); setToken(next === 'ETH' ? 'ETH' : 'WBTC'); }} ariaLabel="Market" options={[{ value: 'ETH', label: 'ETH market', sub: 'Ethereum', ariaLabel: 'ETH', icon: <TokenIcon symbol="ETH" size={20} /> }, { value: 'BTC', label: 'BTC market', sub: 'Wrapped BTC', ariaLabel: 'BTC', icon: <TokenIcon symbol="WBTC" size={20} /> }]} /></div>
+        <TradeInstrumentHeader
+          market={market}
+          onMarketChange={(next) => { setMarket(next); setToken(next === 'ETH' ? 'ETH' : 'WBTC'); }}
+        />
         <div className={styles.tradeLayout}>
         <div className={styles.marketColumn}>
           <TradeMarketChart market={market} />
@@ -176,7 +360,7 @@ export default function TradePage() {
         </Card>
 
         {!wallet.address && <WalletConnectCTA ready={wallet.ready} authenticated={wallet.authenticated} body="Connect a wallet to review this trade." />}
-        <div className={styles.reviewWrap}><ActionReview planBuilder={planBuilder} label={`Review ${market} ${side === 'long' ? 'Long' : 'Short'}`} operationLabel={`Open ${market} ${side}`} onComplete={handleOpenComplete} /></div>
+        <div className={styles.reviewWrap}><ActionReview planBuilder={planBuilder} prefetchedPlan={prefetchedPlan} label={`Review ${market} ${side === 'long' ? 'Long' : 'Short'}`} operationLabel={`Open ${market} ${side}`} onComplete={handleOpenComplete} /></div>
         </div>
         </div>
 
@@ -191,7 +375,20 @@ export default function TradePage() {
             {highlightedPosition && <p role="status" aria-live="polite" className="rounded-lg bg-[rgba(36,211,153,.1)] px-3 py-2 text-[12px] font-medium text-success">New position detected and highlighted.</p>}
             {positionState.status === 'loading' && !positionState.positions.length && !positionState.pendingPositions.length ? <ProtocolPositionSkeleton compact /> : marketPositions.length > 0 ? (
               <div className="flex flex-col gap-2">
-                {previewPositions.map((position) => <ProtocolPositionCard key={positionKey(position)} position={position} compact href="/positions" highlighted={positionKey(position) === highlightedPositionKey} stale={positionIsStale(position, positionState.failedGroups)} />)}
+                {previewPositions.map((position) => {
+                  const key = positionKey(position);
+                  const encodedPosition = positionHref(position.market, position.side, position.info.positionId);
+                  return (
+                    <div key={key} className={styles.tradePositionItem}>
+                      <ProtocolPositionCard position={position} compact href={encodedPosition} highlighted={key === highlightedPositionKey} stale={positionIsStale(position, positionState.failedGroups)} />
+                      <div className={styles.tradePositionActions} aria-label={`Actions for ${position.market} ${position.side} position ${position.info.positionId}`}>
+                        <Link href={encodedPosition} className="glass-press"><ArrowUpRight aria-hidden="true" />Manage</Link>
+                        {position.side === 'long' && <Link href={`/borrow?market=${position.market}&position=${position.info.positionId}`} className="glass-press"><Layers2 aria-hidden="true" />Borrow</Link>}
+                        <Link href={positionHref(position.market, position.side, position.info.positionId, 'close')} className="glass-press"><ArrowDownRight aria-hidden="true" />Close</Link>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ) : positionState.status === 'ready' && !positionState.pendingPositions.some((hint) => hint.market === market) ? (
               <Link href="/positions" className="trade-positions-link glass-press">

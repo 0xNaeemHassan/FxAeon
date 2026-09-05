@@ -6,7 +6,7 @@ import { AppShell } from '@/components/ui';
 import styles from './Docs.module.css';
 
 const sections = [
-  { id: 'overview', label: 'Overview', keywords: 'sdk scope networks capabilities' },
+  { id: 'overview', label: 'Overview', keywords: 'sdk scope networks capabilities pulse realtime portfolio' },
   { id: 'getting-started', label: 'Getting started', keywords: 'connect wallet review approve onboarding' },
   { id: 'access', label: 'Browser & Telegram', keywords: 'browser telegram mini app launch authentication' },
   { id: 'wallets', label: 'Wallets & signing', keywords: 'privy signer private key security' },
@@ -87,14 +87,15 @@ export default function DocsPage() {
                 <div className={styles.fact}><strong>Two networks</strong><span>Ethereum and Base</span></div>
                 <div className={styles.fact}><strong>Wallet-first</strong><span>Every write is explicitly approved</span></div>
                 <div className={styles.fact}><strong>Read before write</strong><span>Routes are rebuilt and checked before signing</span></div>
-                <div className={styles.fact}><strong>Focused scope</strong><span>Trade, save, borrow, and move</span></div>
+                <div className={styles.fact}><strong>Live context</strong><span>Portfolio balances and market prices refresh in the foreground</span></div>
               </div>
             </header>
 
             <section id="overview" className={styles.section}>
               <h2>Overview</h2>
               <p>FxAeon prepares each action, shows what your wallet will approve, and asks the selected wallet to approve every transaction. Ethereum is the source of truth for positions and fxSAVE state. Base is supported for moving assets between chains.</p>
-              <p>Portfolio reads supported Ethereum assets, including FXN, and adds a USD estimate only when that asset has a validated current price. The interface deliberately does not provide spot swaps, an order book, limit orders, automated execution, or a server account. Prices and charts help you read the screen; they are not execution inputs.</p>
+              <p>Portfolio is the Pulse surface: it combines exact Ethereum and Base wallet reads with indexed discovery, verified protocol equity, fxSAVE, FXN, and live USD context. Assets remain visible when one network or price feed is delayed, with a concise partial-value note instead of a guessed zero. The interface deliberately does not provide spot swaps, an order book, limit orders, automated execution, or a server account. Prices and charts help you read the screen; they are not execution inputs.</p>
+              <p>When the page is visible and online, a reviewed Alchemy WebSocket can announce new blocks and wallet-filtered token transfers. Those events trigger bounded refreshes; the app stops sockets in hidden or offline tabs and falls back to polling when a feed is unavailable.</p>
               <details className={styles.callout}>
                 <summary className="cursor-pointer text-[14px] font-semibold text-[var(--text)]">Supported protocol actions</summary>
                 <p>For technical reference, FxAeon uses these reviewed f(x) methods:</p>
@@ -132,7 +133,7 @@ export default function DocsPage() {
 
             <section id="trade" className={styles.section}>
               <h2>Trade & leverage</h2>
-              <p>Trade supports Ethereum ETH and BTC markets with long and short positions. You can choose an input asset, amount, side, and target leverage. The app reads each pool’s available leverage range and refreshes those limits while the SDK prices the route. If a pool limit changed, the target is moved inside the new range and review stops so you can check it again.</p>
+              <p>Trade supports Ethereum ETH and BTC markets with long and short positions. The Pro ticket adds a live instrument header and lazy candlestick ranges for 1H, 1D, 7D, and 30D. You can choose an input asset, amount, side, and target leverage. The app reads each pool’s available leverage range and refreshes those limits while the SDK prices the route. If a pool limit changed, the target is moved inside the new range and review stops so you can check it again.</p>
               <p>Trade is not a general exchange: there is no spot swap, limit order, order book, or background strategy. Use the review to see the route, minimum-output information, approvals, and any slippage setting before signing. Confirm rebuilds the selected SDK route against current state; if its calldata, minimum output, quote, or other reviewed fact changed, FxAeon shows the refreshed route and requires a new acknowledgement before opening the wallet.</p>
             </section>
 
@@ -145,7 +146,7 @@ export default function DocsPage() {
 
             <section id="earn" className={styles.section}>
               <h2>Earn with fxSAVE</h2>
-              <p>Earn reads your fxSAVE balance, its current underlying pool-token amount when available, vault configuration, redemption status, and claimable preview from Ethereum. Deposits support USDC, fxUSD, and the fxUSD pool token.</p>
+              <p>Earn reads your fxSAVE balance, its current Base pool amount when available, vault configuration, redemption status, and claimable preview from Ethereum. The page stays focused on three actions: deposit, withdraw, and claim fxSAVE. Deposits support USDC, fxUSD, and Base pool.</p>
               <p>Deposit forms show the selected wallet’s verified available balance for each supported input. Token pickers pair the available quantity with its estimated USD worth, not the price of one token. A balance can be loading or unavailable when Ethereum does not respond; that state is never treated as zero. Your fxSAVE balance remains the authoritative withdrawal limit.</p>
               <p>Withdrawals can be instant or queued where the selected asset supports that path. A queued redemption remains pending through its cooldown; claim review becomes available when the current redemption state says it is ready. Final review shows the selected route and slippage when applicable. Earn displays the configured instant-redemption fee before review.</p>
             </section>
@@ -169,7 +170,7 @@ export default function DocsPage() {
               <h2>Fees & slippage</h2>
               <p>Move bridge reviews include the current native LayerZero fee quote. Other routes can show a native transaction value when the SDK returns one, but FxAeon does not present a universal gas forecast. Protocol, redemption, or route-specific charges are surfaced when the SDK returns them; FxAeon does not invent a fee estimate.</p>
               <p>Slippage is a device-local preference used by Trade, Positions, and routed or instant fxSAVE forms. Presets are 0.1%, 0.5%, 1%, and 2%. Borrow uses its guarded route default; Move uses the bridge route’s quoted minimum delivery. Direct pool-token and queued fxSAVE paths omit a user slippage value. Lower tolerance can make a route fail; higher tolerance permits a worse minimum output. Slippage protection is not a promise about price.</p>
-              <p>USD values and charts are display-only. Current display prices are primarily validated from DefiLlama; a bounded CoinGecko contract-price fallback can fill independently validated missing token quotes. Quotes older than 15 minutes are rejected, and FxAeon never substitutes a stablecoin peg. ETH/BTC history is separately validated from CoinGecko. Execution uses on-chain route data, oracle behavior, and contract checks, not these display feeds.</p>
+              <p>USD values and charts are display-only. Current display prices are primarily validated from DefiLlama; a bounded CoinGecko contract-price fallback can fill independently validated missing token quotes. ETH/BTC ticks use the public Coinbase feed only when they are current, monotonic, and close to the validated anchor; an interruption immediately falls back to the last validated snapshot. ETH/BTC history uses Coinbase candles with CoinGecko fallback for 1H, 1D, 7D, and 30D. Execution uses on-chain route data, oracle behavior, and contract checks, not these display feeds.</p>
             </section>
 
             <section id="recovery" className={styles.section}>

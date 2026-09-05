@@ -725,7 +725,7 @@ export function LeverageField({
 
 function displayTokenSymbol(symbol: string): string {
   if (symbol.toLowerCase() === 'usdc') return 'USDC';
-  if (symbol === 'fxUSDBasePool' || symbol.toLowerCase() === 'fxusd base pool') return 'fxUSD pool token';
+  if (symbol === 'fxUSDBasePool' || symbol.toLowerCase() === 'fxusd base pool') return 'Base pool';
   return symbol;
 }
 
@@ -741,7 +741,7 @@ function displayTokenName(symbol: string): string {
     USDT: 'Tether USD',
     FXUSD: 'f(x) USD',
     FXSAVE: 'f(x) Savings',
-    FXUSDBASEPOOL: 'fxUSD pool token',
+    FXUSDBASEPOOL: 'Base pool',
     FXN: 'f(x) Network',
     FRAX: 'Frax',
   };

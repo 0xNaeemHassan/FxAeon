@@ -52,8 +52,11 @@
 .reviewSheet {
   position: relative;
   width: min(100%, 520px);
+  height: min(88dvh, 820px);
   max-height: min(88dvh, 820px);
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   overscroll-behavior: contain;
   border: 1px solid color-mix(in srgb, var(--mint) 24%, var(--line));
   border-radius: 28px;
@@ -66,6 +69,11 @@
   border: 0 !important;
   border-radius: inherit !important;
   box-shadow: none !important;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding-bottom: 132px !important;
+  scroll-padding-block: 12px 144px;
 }
 
 .reviewSheetClose {
@@ -83,6 +91,20 @@
   border-radius: 999px;
   color: var(--mut);
   background: color-mix(in srgb, var(--surface-2) 92%, transparent);
+}
+
+.reviewSheetActions {
+  position: absolute;
+  z-index: 3;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  margin: 0;
+  padding: 12px 20px calc(12px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: 0 -14px 30px color-mix(in srgb, var(--bg) 36%, transparent);
+  backdrop-filter: blur(16px);
 }
 
 .eyebrow {
@@ -185,11 +207,15 @@
   }
   .reviewSheet {
     width: 100%;
+    height: calc(100dvh - max(16px, env(safe-area-inset-top)));
     max-height: calc(100dvh - max(16px, env(safe-area-inset-top)));
     border-right: 0;
     border-bottom: 0;
     border-left: 0;
     border-radius: 28px 28px 0 0;
     padding-bottom: env(safe-area-inset-bottom);
+  }
+  .reviewSheetActions {
+    padding: 12px 20px calc(20px + env(safe-area-inset-bottom, 0px));
   }
 }

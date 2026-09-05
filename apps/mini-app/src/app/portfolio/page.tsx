@@ -19,6 +19,7 @@ import { formatUnits, type Address } from 'viem';
 import { MarketMiniCard } from '@/components/MarketChart';
 import { useUsdPrices } from '@/components/PriceProvider';
 import { useWalletBalances } from '@/components/WalletDataProvider';
+import { useWalletAssets, useRealtimeChainState } from '@/components/WalletDataProvider';
 import {
   positionIsStale,
   ProtocolPositionCard,
@@ -36,12 +37,16 @@ import {
   type WalletBalancesResult,
   type WalletTokenBalance,
 } from '@/lib/fx';
+import { positionTokenDecimals, type UiPosition } from '@/app/trade/fxUi';
 import { formatUsd, priceKeyForSymbol, usdValueForUnits, type UsdPriceMap } from '@/lib/prices';
-import { FX_SAVE_UNITS, fxSaveUsdValue } from '@/lib/fxSaveUnits';
+import type { WalletAssetSnapshot } from '@/lib/walletAssets';
+import { calculatePositionUsdValuation } from '@/lib/positionValuation';
+import { fxSaveUsdValue } from '@/lib/fxSaveUnits';
 import { haptic } from '@/lib/telegram';
 import { usePrivyWallet, useWalletReadyTimeout } from '@/lib/wallet';
 import styles from '@/app/AccountWorkspace.module.css';
 import ConnectWalletButton from '@/components/ConnectWalletButton';
+import { PortfolioAssets, PortfolioNetworkTabs, type PortfolioNetwork } from '@/components/PortfolioAssets';
 
 const EMPTY_FX_SAVE: FxSaveSnapshot = {
   status: 'idle',
@@ -52,9 +57,9 @@ const EMPTY_FX_SAVE: FxSaveSnapshot = {
 
 /**
  * Portfolio deliberately reports only state that FxAeon can verify. Wallet
- * value is the sum of supported Ethereum balances and is hidden whenever a
- * token read or a required USD price is missing. Positions and fxSAVE remain
- * separate protocol state so they cannot be accidentally double-counted.
+ * value is the sum of fresh wallet balances plus verified protocol equity. A
+ * partial total remains useful when one asset is unpriced, and the card calls
+ * that out without presenting an estimate as a verified complete total.
  */
 export default function PortfolioPage() {
   return (
@@ -89,9 +94,13 @@ function PortfolioWallet() {
   const walletAddress = authenticated && ready && walletState.ready ? wallet?.address : undefined;
   const identity = walletAddress?.toLowerCase() ?? '';
   const walletBalances = useWalletBalances({ address: walletAddress, chainId: 1, enabled: Boolean(walletAddress) });
+  const liveAssets = useWalletAssets({ address: walletAddress, enabled: Boolean(walletAddress) });
+  const [network, setNetwork] = useState<PortfolioNetwork>('all');
   const [fxSaveState, setFxSaveState] = useState<{ identity: string; snapshot: FxSaveSnapshot }>({ identity: '', snapshot: EMPTY_FX_SAVE });
   const fxSaveSnapshot = fxSaveState.identity === identity ? fxSaveState.snapshot : EMPTY_FX_SAVE;
   const requestId = useRef(0);
+  const realtime = useRealtimeChainState(1) as import('@/lib/realtimeChain').RealtimeChainState;
+  const protocolBlockRef = useRef('');
 
   const loadProtocol = useCallback(async () => {
     if (!walletAddress) return;
@@ -131,6 +140,14 @@ function PortfolioWallet() {
     return () => { requestId.current += 1; };
   }, [loadProtocol, walletAddress]);
 
+  useEffect(() => {
+    if (!walletAddress || realtime.status !== 'live' || realtime.latestBlockNumber === null) return;
+    const key = `${identity}:${realtime.latestBlockNumber}`;
+    if (protocolBlockRef.current === key) return;
+    protocolBlockRef.current = key;
+    void loadProtocol();
+  }, [identity, loadProtocol, realtime.latestBlockNumber, realtime.status, walletAddress]);
+
   if (!ready || !walletState.ready) {
     if (walletTimedOut) {
       return (
@@ -150,6 +167,7 @@ function PortfolioWallet() {
   }
 
   const loading = walletBalances.status === 'idle' || walletBalances.status === 'loading';
+  const liveLoading = liveAssets.status === 'idle' || liveAssets.status === 'loading';
   const fxSaveLoading = fxSaveSnapshot.status === 'idle' || fxSaveSnapshot.status === 'loading';
   const failedReads = walletBalances.status === 'unavailable'
     || Boolean(walletBalances.data?.failedTokens.length)
@@ -166,7 +184,19 @@ function PortfolioWallet() {
       : loading || fxSaveLoading ? 'loading' : 'ready',
   };
   const refreshing = walletBalances.isFetching || fxSaveLoading || positionState.refreshing;
-  const valuation = walletValuation(protocol.balances, priceSnapshot.prices);
+  const valuation = liveAssets.data
+    ? walletAssetValuation(liveAssets.data)
+    : walletValuation(protocol.balances, priceSnapshot.prices);
+  const positionValues = positionState.positions.map((position) =>
+    positionIsStale(position, positionState.failedGroups) || priceSnapshot.status === 'stale'
+      ? null : positionNetEquityUsd(position, priceSnapshot.prices));
+  const missingPositions = positionValues.filter((value) => value === null).length;
+  const protocolEquityUsd = positionValues.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+  const portfolioValuation = valuation.totalUsd === null
+    ? valuation
+    : { ...valuation, totalUsd: valuation.totalUsd + protocolEquityUsd,
+      complete: valuation.complete && missingPositions === 0,
+      reason: missingPositions ? `${missingPositions} position ${missingPositions === 1 ? 'value is' : 'values are'} updating${valuation.complete ? '.' : ` · ${valuation.reason}`}` : valuation.reason };
 
   return (
     <div id="overview" className={styles.overview}>
@@ -174,13 +204,13 @@ function PortfolioWallet() {
         <SupportedValueCard
         walletAddress={wallet.address}
         protocol={protocol}
-        valuation={valuation}
-        loading={loading}
+        valuation={portfolioValuation}
+        loading={loading && liveLoading}
         fxSaveLoading={fxSaveLoading}
         refreshing={refreshing}
         onRefresh={() => {
           haptic('light');
-          void Promise.allSettled([walletBalances.refresh(), loadProtocol(), positionState.refresh()]);
+          void Promise.allSettled([liveAssets.refresh(), walletBalances.refresh(), loadProtocol(), positionState.refresh()]);
         }}
         positionValue={positionState.pendingPositions.length > 0
           ? `${positionState.positions.length + positionState.pendingPositions.length} updating`
@@ -203,7 +233,20 @@ function PortfolioWallet() {
           <ProtocolPositionNotice status={positionState.status} failedGroups={positionState.failedGroups} hasPositions={positionState.positions.length + positionState.pendingPositions.length > 0} refreshing={positionState.refreshing} onRefresh={() => void positionState.refresh()} compact />
           <ConfirmedPositionCards />
           {positionState.status === 'loading' && !positionState.positions.length && !positionState.pendingPositions.length ? <ProtocolPositionSkeleton compact /> : positionState.positions.length > 0 ? (
-            positionState.positions.slice(0, 2).map((position) => <ProtocolPositionCard key={`${position.market}:${position.side}:${position.info.positionId}`} position={position} compact href="/positions" stale={positionIsStale(position, positionState.failedGroups)} />)
+            positionState.positions.slice(0, 2).map((position) => {
+              const key = encodeURIComponent(`${position.market}:${position.side}:${position.info.positionId}`);
+              const manageHref = `/positions?position=${key}`;
+              return (
+                <div key={`${position.market}:${position.side}:${position.info.positionId}`} className={styles.portfolioPositionItem}>
+                  <ProtocolPositionCard position={position} compact href={manageHref} stale={positionIsStale(position, positionState.failedGroups)} />
+                  <div className={styles.portfolioPositionActions} aria-label={`Actions for ${position.market} ${position.side} position ${position.info.positionId}`}>
+                    <Link href={manageHref} className="glass-press">Manage</Link>
+                    {position.side === 'long' && <Link href={`/borrow?market=${position.market}&position=${position.info.positionId}`} className="glass-press">Borrow</Link>}
+                    <Link href={`/positions?position=${key}&action=close`} className="glass-press">Close</Link>
+                  </div>
+                </div>
+              );
+            })
           ) : positionState.status === 'ready' && !positionState.pendingPositions.length ? (
             <ProtocolCard icon={Layers2} label="Positions" value="0 open" hint="Open an ETH or BTC position" href="/trade" />
           ) : null}
@@ -238,7 +281,9 @@ function PortfolioWallet() {
         </p>
       )}
 
-        <WalletBalancesCard balances={protocol.balances} loading={loading} prices={priceSnapshot.prices} />
+        <PortfolioNetworkTabs value={network} onChange={setNetwork} />
+        <PortfolioAssets snapshot={liveAssets.data} loading={liveLoading} network={network} />
+        {!liveAssets.data && <WalletBalancesCard balances={protocol.balances} loading={loading} prices={priceSnapshot.prices} />}
         <RecentActivityPreview walletAddress={wallet.address as Address} />
       </aside>
     </div>
@@ -291,15 +336,13 @@ function SupportedValueCard({
   onRefresh: () => void;
   positionValue: string;
 }) {
-  const supportedAssetValue = loading || protocol.balances === null
-    ? '—'
-    : String(valuation.assetCount);
+  const supportedAssetValue = loading && valuation.assetCount === 0 ? '—' : String(valuation.assetCount);
 
   return (
     <Card glow elevation={2} className={`${styles.valueCard} relative overflow-hidden p-5`}>
       <div className={styles.valueTopline}>
         <div>
-          <p className={styles.eyebrow}>Supported wallet value</p>
+          <p className={styles.eyebrow}>Portfolio value</p>
           <div className="mt-2"><AddressChip address={walletAddress} /></div>
         </div>
         <button type="button" aria-label="Refresh portfolio" onClick={onRefresh} disabled={refreshing} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-xl text-mut hover:text-mint disabled:opacity-50">
@@ -310,13 +353,15 @@ function SupportedValueCard({
       <div className={styles.valueMain}>
         <div>
           <p className={`${styles.valueAmount} text-display text-[38px] font-semibold leading-none tabular-nums`}>
-            {loading ? '—' : valuation.complete ? formatUsd(valuation.totalUsd) : '—'}
+            {loading ? '—' : valuation.totalUsd === null ? '—' : formatUsd(valuation.totalUsd)}
           </p>
           <p className={`${styles.valueHint} mt-2 text-[11px] text-mut`}>
             {loading
               ? 'Reading supported Ethereum balances…'
-              : valuation.complete
-                ? `${valuation.assetCount} supported ${valuation.assetCount === 1 ? 'asset' : 'assets'}`
+              : valuation.totalUsd !== null
+                ? valuation.complete
+                  ? `${valuation.assetCount} ${valuation.assetCount === 1 ? 'asset' : 'assets'}`
+                  : `${formatAssetCount(valuation.assetCount)} · ${valuation.reason}`
                 : valuation.reason}
           </p>
         </div>
@@ -325,7 +370,7 @@ function SupportedValueCard({
       <div className={`${styles.valueMetrics} portfolio-value-metrics`}>
         <ValueMetric label="Open positions" value={positionValue} />
         <ValueMetric label="fxSAVE" value={protocol.fxSaveShares !== null ? `${protocol.fxSaveShares} fxSAVE` : fxSaveLoading ? '…' : '—'} />
-        <ValueMetric label="Supported assets" value={supportedAssetValue} />
+        <ValueMetric label="Assets" value={supportedAssetValue} />
       </div>
     </Card>
   );
@@ -427,7 +472,7 @@ function WalletBalancesCard({ balances, loading, prices }: { balances: WalletBal
           </div>
         )}
         {!loading && balances && balances.failedTokens.length > 0 && (
-          <p role="status" className="m-3 rounded-xl bg-[var(--warn-dim)] px-3 py-2 text-[11px] leading-relaxed text-warn">Some supported token reads failed, so the wallet total is hidden.</p>
+          <p role="status" className="m-3 rounded-xl bg-[var(--warn-dim)] px-3 py-2 text-[11px] leading-relaxed text-warn">Some balances could not refresh. The total includes available values.</p>
         )}
       </Card>
     </section>
@@ -435,7 +480,7 @@ function WalletBalancesCard({ balances, loading, prices }: { balances: WalletBal
 }
 
 function WalletBalanceRow({ balance, price }: { balance: WalletTokenBalance; price: number | undefined }) {
-  const label = balance.key === 'fxUSDBasePool' ? 'fxUSD pool token' : balance.key;
+  const label = balance.key === 'fxUSDBasePool' ? 'Base pool' : balance.key;
   return (
     <div className={`${styles.balanceRow} flex min-h-[68px] items-center justify-between gap-3 py-3`}>
       <div className="flex min-w-0 items-center gap-3">
@@ -481,15 +526,21 @@ type WalletValuation = {
 function walletValuation(balances: WalletBalancesResult | null, prices: UsdPriceMap): WalletValuation {
   if (!balances) return { complete: false, totalUsd: null, assetCount: 0, reason: 'Wallet balances are not available yet.' };
   const nonZero = balances.balances.filter((balance) => balance.amountWei > 0n);
-  if (balances.failedTokens.length > 0) {
-    return { complete: false, totalUsd: null, assetCount: nonZero.length, reason: 'Some supported balances could not be verified.' };
-  }
   const values = nonZero.map((balance) => {
     const key = priceKeyForSymbol(balance.key);
     return usdValueForUnits(balance.amountWei, balance.decimals, key ? prices[key] : undefined);
   });
-  if (values.some((value) => value === null)) {
-    return { complete: false, totalUsd: null, assetCount: nonZero.length, reason: 'A validated USD price is missing for a held asset.' };
+  const pricedValues = values.filter((value): value is number => value !== null);
+  const unpricedCount = values.length - pricedValues.length;
+  const failedCount = balances.failedTokens.length;
+  const missingCount = unpricedCount + failedCount;
+  if (missingCount > 0) {
+    return {
+      complete: false,
+      totalUsd: pricedValues.length > 0 ? pricedValues.reduce((total, value) => total + value, 0) : null,
+      assetCount: nonZero.length,
+      reason: `${missingCount} ${missingCount === 1 ? 'asset is' : 'assets are'} missing a verified value.`,
+    };
   }
   return {
     complete: true,
@@ -499,15 +550,47 @@ function walletValuation(balances: WalletBalancesResult | null, prices: UsdPrice
   };
 }
 
+function walletAssetValuation(snapshot: WalletAssetSnapshot): WalletValuation {
+  const held = snapshot.assets.filter((asset) => asset.balanceWei > 0n);
+  return {
+    complete: snapshot.unpricedAssetCount === 0,
+    totalUsd: snapshot.totalUsdValue,
+    assetCount: held.length,
+    reason: snapshot.unpricedAssetCount > 0
+      ? `${snapshot.unpricedAssetCount} ${snapshot.unpricedAssetCount === 1 ? 'asset is' : 'assets are'} waiting for a price.`
+      : '',
+  };
+}
+
+function positionNetEquityUsd(position: UiPosition, prices: UsdPriceMap): number | null {
+  const collateralKey = priceKeyForSymbol(position.info.rawCollsToken);
+  const debtKey = priceKeyForSymbol(position.info.rawDebtsToken);
+  const valuation = calculatePositionUsdValuation({
+    collateralRaw: position.info.rawColls,
+    collateralDecimals: positionTokenDecimals(position, 'collateral'),
+    collateralPrice: collateralKey ? prices[collateralKey] : undefined,
+    debtRaw: position.info.rawDebts,
+    debtDecimals: positionTokenDecimals(position, 'debt'),
+    debtPrice: debtKey ? prices[debtKey] : undefined,
+  });
+  if (valuation.netEquityUsdCents === null) return null;
+  const value = Number(valuation.netEquityUsdCents) / 100;
+  return Number.isFinite(value) ? value : null;
+}
+
 function fxSaveLabel(protocol: ProtocolSnapshot, prices: UsdPriceMap, loading: boolean): string {
   const units = protocol.fxSaveShares !== null
-    ? `${protocol.fxSaveShares} ${FX_SAVE_UNITS.balanceWei.label}`
+    ? `${protocol.fxSaveShares} fxSAVE`
     : protocol.fxSaveAssets !== null
-      ? `${protocol.fxSaveAssets} ${FX_SAVE_UNITS.assetsWei.label}`
+      ? `${protocol.fxSaveAssets} fxSAVE`
       : null;
   if (units === null) return loading ? 'Loading…' : 'Unavailable';
   const usdValue = fxSaveUsdValue('assetsWei', protocol.fxSaveAssets, prices);
   return `${units}${usdValue === null ? '' : ` · ${formatUsd(usdValue)} est.`}`;
+}
+
+function formatAssetCount(count: number): string {
+  return `${count} ${count === 1 ? 'asset' : 'assets'}`;
 }
 
 function formatWalletAmount(balance: WalletTokenBalance): string {

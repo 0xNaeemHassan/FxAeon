@@ -18,7 +18,7 @@ This document describes the current implementation. FxAeon is one static applica
 | Runtime feature flags | Not used | Static build-time configuration is sufficient and flags are not security controls. |
 | Web Worker | Not used | No measured main-thread blocker justifies moving wallet or protocol lifecycle across a Worker boundary. |
 | Service Worker caching | Removed from the active product | Financial state must remain online and chain-authoritative; a one-time legacy `/sw.js` unregister remains only as stale-client cleanup. |
-| Speculative transaction planning | Not used | Plans are rebuilt during review and must not survive input, wallet, chain, or state changes. |
+| Route prefetch | Narrow, in-memory only | Trade may warm one exact route for a faster Review surface; it expires quickly, is never persisted, and the final route is rebuilt, simulated, and validated before signing. |
 | USD display pricing | Read-only, independently validated | DefiLlama supplies current token prices; one bounded, batched CoinGecko contract-price fallback with adaptive rate-limit retry/backoff fills missing quotes. Current-price context has no source badge; CoinGecko also supplies separately validated ETH/BTC chart history. Missing quotes never become an assumed peg or erase other validated prices. All display feeds remain isolated from SDK planning, policy, calldata, simulation, signing, and chain-authoritative state. |
 | Lighthouse upload | Not used | Release evidence comes from browser tests, bundle budgets, dependency audits, and static build checks without a telemetry service. |
 
@@ -28,10 +28,10 @@ Transitive `ioredis` and `workerd` entries may remain in the frozen dependency g
 
 These are measurements from the local release gate, not universal performance claims. Re-run them on the pinned Node 22 CI environment for each release baseline.
 
-- Static bundle: `230 assets`, `7.35 MiB` total.
-- JavaScript: `189 assets`, `6.60 MiB` raw, `2.03 MiB` gzip; largest asset `1.95 MiB`.
-- Release E2E: `47` tests covering browser entry, 13 scoped routes (including the read-only guide), cross-workspace USD context, independent token-price fallback, price continuity across hard navigation/feed retries, owned-balance picker states, leverage keyboard/touch controls, wallet profile/Activity, Earn-to-borrow access, three-theme persistence, accessible skip navigation, responsive charts and compact sparklines, guide search/deep links, and Telegram/mobile safety checks. The width sweep covers 320, 360, 375, 390, 412, and 430px.
-- Unit/security suite: `170` total tests (`167` passed, `3` skipped when the protected fork environment is absent), including exact installed SDK debt-ratio packing across both module formats, bigint-safe USD position and owned-token valuation, and wallet/source-chain balance refresh guards.
+- Static bundle: `245 assets`, `7.82 MiB` total.
+- JavaScript: `203 assets`, `6.94 MiB` raw, `2.12 MiB` gzip; largest asset `0.54 MiB`.
+- Release E2E: `51` tests passed, covering browser entry, scoped routes, cross-workspace USD context, independent token-price fallback, price continuity across hard navigation/feed retries, owned-balance picker states, leverage keyboard/touch controls, wallet profile/Activity, Earn-to-borrow access, three-theme persistence, accessible skip navigation, responsive charts and compact sparklines, guide search/deep links, and Telegram/mobile safety checks. The width sweep covers 320, 360, 375, 390, 412, and 430px.
+- Unit/security suite: `270` total tests (`266` passed, `4` skipped when the protected fork environment is absent), including exact installed SDK debt-ratio packing across both module formats, bigint-safe USD position and owned-token valuation, and wallet/source-chain balance refresh guards.
 - Chaos campaign: `2` campaigns passed, including 2,000 route mutations and 600 runner iterations.
 - Local Anvil gates (3 September 2026, block `25893155`): `100` snapshot/revert iterations, `100` ordered-route stress iterations, and the Node four-position protocol proof—including a real fxUSD borrow against an existing ETH long with position-ID preservation—passed. The separate browser gate opened and verified coexisting ETH/BTC long/short positions, exercised in-place wallet account switching/disconnect and the existing-long borrow flow, checked delayed discovery and cross-workspace views, and restored its snapshot. The protected workflow requires all three gates; local working-tree results and an older green badge do not replace CI on the release commit.
 - Bundle guardrails: 12 MiB total, 8 MiB JavaScript, 3 MiB gzip, and 2 MiB largest JavaScript asset; these are regression limits, not UX guarantees.

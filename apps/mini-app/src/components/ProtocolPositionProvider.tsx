@@ -26,6 +26,7 @@ import { usePrivyWallet } from '@/lib/wallet';
 import { deriveConfirmedPositionHint, readConfirmedPosition, verifyConfirmedPositionHint, type ConfirmedPositionHint } from '@/lib/confirmedPositions';
 import { confirmedPositionHintKey, confirmedPositionStorageKey, parseStoredPositionHints, savePositionHints, type StoredPositionHint } from '@/lib/confirmedPositionStorage';
 import type { PlannedRoute, TransactionExecutionResult } from '@/lib/fx';
+import { useRealtimeChainState } from '@/components/WalletDataProvider';
 
 export type ProtocolPositionStatus = 'idle' | 'loading' | 'ready' | 'partial' | 'unavailable';
 
@@ -95,6 +96,7 @@ function ProtocolPositionSession({ address, children }: { address: string | null
   const hintRead = useRef<number | null>(null);
   const hintSequence = useRef(0);
   const fullRefreshRef = useRef<((wallet: string) => Promise<ProtocolPositionRefreshResult>) | null>(null);
+  const realtimeEthereum = useRealtimeChainState(1) as import('@/lib/realtimeChain').RealtimeChainState;
 
   const commit = useCallback((next: ProtocolPositionSnapshot) => {
     snapshotRef.current = next;
@@ -224,6 +226,14 @@ function ProtocolPositionSession({ address, children }: { address: string | null
       return EMPTY_RESULT;
     }
   }, [commit]);
+
+  const lastRealtimeBlock = useRef<bigint | null>(null);
+  useEffect(() => {
+    if (!address || !realtimeEthereum.latestBlockNumber || (realtimeEthereum.status !== 'live' && realtimeEthereum.status !== 'polling')) return;
+    if (lastRealtimeBlock.current === realtimeEthereum.latestBlockNumber) return;
+    lastRealtimeBlock.current = realtimeEthereum.latestBlockNumber;
+    void loadAddress(address);
+  }, [address, loadAddress, realtimeEthereum.latestBlockNumber, realtimeEthereum.status]);
 
   fullRefreshRef.current = loadAddress;
 
