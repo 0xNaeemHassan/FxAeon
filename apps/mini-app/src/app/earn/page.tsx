@@ -21,6 +21,7 @@ import {
 import { usePrivyWallet } from '@/lib/wallet';
 import { DEFAULT_SLIPPAGE_PERCENT, readSlippagePercent } from '@/lib/settings';
 import { userSafeError } from '@/lib/errors';
+import { resetTransactionAmounts } from '@/lib/transactionState';
 import { claimAvailability, cooldownRefreshDelayMs, createEarnReadGuard } from '@/lib/earnState';
 import { formatAmount, parseAmount, type SaveToken } from '@/app/trade/fxUi';
 import styles from '@/components/FlowWorkspace.module.css';
@@ -46,6 +47,8 @@ export default function EarnPage() {
   const [config, setConfig] = useState<SaveConfig | null>(null);
   const [data, setData] = useState<SaveData | null>(null);
   const [readWarnings, setReadWarnings] = useState<string[]>([]);
+  const [reviewRevision, setReviewRevision] = useState(0);
+  const previousWalletContextRef = useRef<string | null>(null);
   const readGuard = useRef(createEarnReadGuard());
   const dataRef = useRef<SaveData | null>(null);
   const configRef = useRef<SaveConfig | null>(null);
@@ -68,6 +71,31 @@ export default function EarnPage() {
   const saveBalanceState = wallet.address
     ? saveBalances?.[token] ?? { status: saveBalanceStatus ?? 'loading' as const }
     : undefined;
+
+  const resetEarnContext = useCallback((nextMode: EarnMode = 'deposit', nextToken: SaveToken = 'fxUSD') => {
+    const defaults = resetTransactionAmounts();
+    setMode(nextMode);
+    setToken(nextToken);
+    setAmount(defaults.amount);
+    setShares(defaults.shares);
+    setInstant(true);
+    setReviewRevision((revision) => revision + 1);
+  }, []);
+
+  const changeMode = useCallback((nextMode: EarnMode) => {
+    resetEarnContext(nextMode);
+  }, [resetEarnContext]);
+
+  const changeToken = useCallback((nextToken: SaveToken) => {
+    resetEarnContext(mode, nextToken);
+  }, [mode, resetEarnContext]);
+
+  useEffect(() => {
+    const context = `${wallet.address?.toLowerCase() ?? ''}:${wallet.chainId ?? ''}`;
+    const previous = previousWalletContextRef.current;
+    if (previous !== null && previous !== context) resetEarnContext();
+    previousWalletContextRef.current = context;
+  }, [resetEarnContext, wallet.address, wallet.chainId]);
 
   useEffect(() => {
     setSlippage(String(readSlippagePercent()));
@@ -232,12 +260,7 @@ export default function EarnPage() {
             <div className="rounded-2xl bg-[var(--surface-2,var(--input))] p-1">
               <Segmented
                 value={mode}
-                onChange={(next) => {
-                  setMode(next);
-                  setToken('fxUSD');
-                  setAmount('');
-                  setShares('');
-                }}
+                onChange={changeMode}
                 ariaLabel="fxSAVE action"
                 options={[
                   { value: 'deposit', label: 'Deposit' },
@@ -251,7 +274,7 @@ export default function EarnPage() {
               {mode === 'deposit' && (
                 <div className="flex flex-col gap-4">
                   <FormHeader title="Deposit" body="Choose an asset and amount." />
-                  <TokenPicker label="Asset" value={token} onChange={setToken} balances={saveBalances} balanceStatus={wallet.address ? saveBalanceStatus : 'disconnected'} />
+                  <TokenPicker label="Asset" value={token} onChange={changeToken} balances={saveBalances} balanceStatus={wallet.address ? saveBalanceStatus : 'disconnected'} />
                   <AmountField
                     label="Deposit amount"
                     symbol={labelToken(token)}
@@ -269,7 +292,7 @@ export default function EarnPage() {
               {mode === 'withdraw' && (
                 <div className="flex flex-col gap-4">
                   <FormHeader title="Withdraw" body="Choose what to receive and how to redeem." />
-                  <TokenPicker label="Receive" value={token} onChange={setToken} balances={saveBalances} balanceStatus={wallet.address ? saveBalanceStatus : 'disconnected'} />
+                  <TokenPicker label="Receive" value={token} onChange={changeToken} balances={saveBalances} balanceStatus={wallet.address ? saveBalanceStatus : 'disconnected'} />
                   <AmountField
                     label="fxSAVE to withdraw"
                     symbol="fxSAVE"
@@ -306,6 +329,7 @@ export default function EarnPage() {
             </Card>
 
             <ActionReview
+              key={reviewRevision}
               planBuilder={planBuilder}
               disabled={mode === 'claim' && !claimAvailability(walletData.claimable).canReview}
               label={mode === 'claim' ? 'Review claim' : mode === 'withdraw' ? 'Review withdrawal' : 'Review deposit'}

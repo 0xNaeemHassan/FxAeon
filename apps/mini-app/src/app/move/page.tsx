@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ArrowLeftRight } from 'lucide-react';
 import { AppShell, Card } from '@/components/ui';
 import { ActionReview } from '@/components/ActionReview';
@@ -27,6 +27,7 @@ import {
 } from '@/lib/fx';
 import { usePrivyWallet } from '@/lib/wallet';
 import { parseAmount } from '@/app/trade/fxUi';
+import { resetTransactionAmounts } from '@/lib/transactionState';
 import { ChainIcon } from '@/components/TokenIcon';
 import styles from '@/components/FlowWorkspace.module.css';
 
@@ -53,6 +54,8 @@ export default function MovePage() {
   const [approvalToken, setApprovalToken] = useState('');
   const [recipientInput, setRecipientInput] = useState('');
   const [customRecipient, setCustomRecipient] = useState(false);
+  const [reviewRevision, setReviewRevision] = useState(0);
+  const previousWalletContextRef = useRef<string | null>(null);
   const reviewedBridgeRef = useRef<{
     sourceChainId: FxChainId;
     destinationChainId: FxChainId;
@@ -72,6 +75,49 @@ export default function MovePage() {
   const amountWei = parseAmount(amount, 'fxUSD');
   const advanced = mode === 'advanced';
   const recipientValue = customRecipient ? recipientInput.trim() : wallet.address || '';
+
+  const resetBridgeContext = useCallback((nextToken: BridgeAsset = token) => {
+    const defaults = resetTransactionAmounts();
+    setToken(nextToken);
+    setAmount(defaults.amount);
+    setSourceOft('');
+    setDestinationOft('');
+    setApprovalToken('');
+    setRecipientInput('');
+    setCustomRecipient(false);
+    reviewedBridgeRef.current = null;
+    setReviewRevision((revision) => revision + 1);
+  }, [token]);
+
+  const changeDirection = useCallback(() => {
+    setDirection((current) => current === 'ethereum_to_base' ? 'base_to_ethereum' : 'ethereum_to_base');
+    resetBridgeContext();
+  }, [resetBridgeContext]);
+
+  const changeMode = useCallback((nextMode: BridgeMode) => {
+    setMode(nextMode);
+    resetBridgeContext();
+  }, [resetBridgeContext]);
+
+  const changeToken = useCallback((nextToken: BridgeAsset) => {
+    resetBridgeContext(nextToken);
+  }, [resetBridgeContext]);
+
+  const changeRecipientMode = useCallback(() => {
+    const next = !customRecipient;
+    setCustomRecipient(next);
+    setRecipientInput(next && wallet.address ? wallet.address : '');
+    setAmount('');
+    reviewedBridgeRef.current = null;
+    setReviewRevision((revision) => revision + 1);
+  }, [customRecipient, wallet.address]);
+
+  useEffect(() => {
+    const context = `${wallet.address?.toLowerCase() ?? ''}:${wallet.chainId ?? ''}`;
+    const previous = previousWalletContextRef.current;
+    if (previous !== null && previous !== context) resetBridgeContext();
+    previousWalletContextRef.current = context;
+  }, [resetBridgeContext, wallet.address, wallet.chainId]);
 
   const balanceQuery = useMoveBalances({ address: wallet.address, chainId: sourceChainId, enabled: !advanced });
   const moveBalances = !advanced ? balanceQuery.data?.balances : undefined;
@@ -247,7 +293,7 @@ export default function MovePage() {
             <button
               type="button"
               aria-label={`Reverse route to ${sourceName}`}
-              onClick={() => setDirection((current) => current === 'ethereum_to_base' ? 'base_to_ethereum' : 'ethereum_to_base')}
+              onClick={changeDirection}
               className={`glass-press ${styles.networkArrow}`}
             >
               <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
@@ -258,12 +304,12 @@ export default function MovePage() {
           <div className="my-4 hairline" />
           <div className="flex flex-col gap-4">
             {!advanced && (
-              <TokenSelect label="Asset" value={token} options={['fxUSD', 'fxSAVE'] as const} onChange={setToken} balances={moveBalances} balanceStatus={wallet.address ? moveBalanceStatusForPicker : 'disconnected'} />
+              <TokenSelect label="Asset" value={token} options={['fxUSD', 'fxSAVE'] as const} onChange={changeToken} balances={moveBalances} balanceStatus={wallet.address ? moveBalanceStatusForPicker : 'disconnected'} />
             )}
 
             <details
               open={advanced}
-              onToggle={(event) => setMode(event.currentTarget.open ? 'advanced' : 'canonical')}
+              onToggle={(event) => changeMode(event.currentTarget.open ? 'advanced' : 'canonical')}
               className={styles.advancedPanel}
             >
               <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-3 text-[12px] font-semibold text-mut">
@@ -303,11 +349,7 @@ export default function MovePage() {
                 <span className="text-[12px] font-medium text-mut">Recipient</span>
                 <button
                   type="button"
-                  onClick={() => {
-                    const next = !customRecipient;
-                    setCustomRecipient(next);
-                    if (next && !recipientInput && wallet.address) setRecipientInput(wallet.address);
-                  }}
+                  onClick={changeRecipientMode}
                   className="min-h-11 rounded-lg px-2 text-[11px] font-semibold text-mint"
                 >
                   {customRecipient ? 'Use connected wallet' : 'Change'}
@@ -342,6 +384,7 @@ export default function MovePage() {
         </Card>
 
         <ActionReview
+          key={reviewRevision}
           planBuilder={planBuilder}
           label={`Review move to ${destinationName}`}
           operationLabel={`Move ${advanced ? 'advanced OFT' : token} to ${destinationName}`}

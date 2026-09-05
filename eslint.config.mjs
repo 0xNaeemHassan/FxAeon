@@ -78,11 +78,15 @@ export default tseslint.config(
     },
   },
 
-  // Tests and scripts: relax a little further.
+  // Tests and scripts: keep test code honest. Underscore-prefixed fixtures
+  // remain explicitly opt-out, but accidental unused test symbols fail CI.
   {
     files: ["**/tests/**", "**/test/**", "**/*.test.*", "scripts/**", "**/scripts/**"],
     rules: {
-      "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrors: "none" },
+      ],
     },
   },
 );

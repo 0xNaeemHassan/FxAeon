@@ -55,6 +55,8 @@ async function runGroup(checks, group) {
 
 const scope = await pnpmRun(['verify:scope'], 'scope verification');
 if (scope !== 0) process.exit(scope);
+const architecture = await pnpmRun(['verify:architecture'], 'architecture verification');
+if (architecture !== 0) process.exit(architecture);
 
 // Lightweight checks can overlap. Run the complete test glob once in a single
 // tsx process: it includes the Anvil-contract skips and seeded chaos campaign,

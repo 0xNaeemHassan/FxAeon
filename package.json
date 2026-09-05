@@ -7,7 +7,7 @@
   "scripts": {
     "build": "pnpm --dir apps/mini-app build",
     "dev": "pnpm --dir apps/mini-app dev",
-    "lint": "eslint apps/mini-app/src",
+    "lint": "eslint apps/mini-app/src apps/mini-app/test",
     "lint:fix": "eslint apps/mini-app/src --fix",
     "test": "pnpm --dir apps/mini-app test",
     "test:chaos": "pnpm --dir apps/mini-app test:chaos",
@@ -21,6 +21,7 @@
     "typecheck": "pnpm --dir apps/mini-app typecheck && tsc -p apps/mini-app/e2e/fork/tsconfig.json",
     "verify:production-env": "node scripts/validate_production_env.mjs",
     "verify:scope": "node scripts/verify_fx_scope.mjs",
+    "verify:architecture": "node scripts/verify_architecture.mjs",
     "check:bundle": "node scripts/check_bundle_size.mjs",
     "docs:screenshots": "node scripts/capture_docs_screenshots.mjs",
     "docs:screenshots:positions": "node scripts/capture_position_screenshots.mjs",

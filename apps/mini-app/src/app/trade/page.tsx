@@ -26,6 +26,7 @@ import { usePrivyWallet } from '@/lib/wallet';
 import styles from '@/components/trade-surfaces.module.css';
 import { positiveDecimal } from '@/lib/amount';
 import { DEFAULT_SLIPPAGE_PERCENT, readSlippagePercent } from '@/lib/settings';
+import { resetTransactionAmounts } from '@/lib/transactionState';
 import { formatUsdPrice } from '@/lib/prices';
 import {
   parseAmount,
@@ -117,13 +118,47 @@ export default function TradePage() {
   const [slippage, setSlippage] = useState(String(DEFAULT_SLIPPAGE_PERCENT));
   const [leverageBounds, setLeverageBounds] = useState<LeverageBounds>(() => leverageBoundsFor('ETH', 'long'));
   const [highlightedPositionKey, setHighlightedPositionKey] = useState('');
+  const [reviewRevision, setReviewRevision] = useState(0);
   const prefetchStoreRef = useRef<RoutePrefetchStore | null>(null);
   const prefetchSessionRef = useRef(createPrefetchSessionId());
   const prefetchDescriptorRef = useRef<RoutePrefetchDescriptor | null>(null);
   const [foreground, setForeground] = useState(false);
+  const previousWalletContextRef = useRef<string | null>(null);
   const currentTicketRef = useRef('');
   const prefetchedTicketRef = useRef('');
+
+  const resetTradeContext = useCallback((nextMarket: UiMarket = 'ETH', nextSide: UiSide = 'long', nextToken: UiToken = 'ETH') => {
+    const defaults = resetTransactionAmounts();
+    setMarket(nextMarket);
+    setSide(nextSide);
+    setToken(nextToken);
+    setAmount(defaults.amount);
+    setLeverage(defaults.leverage);
+    prefetchStoreRef.current?.invalidate();
+    prefetchDescriptorRef.current = null;
+    prefetchedTicketRef.current = '';
+    setReviewRevision((revision) => revision + 1);
+  }, []);
+
+  const changeMarket = useCallback((nextMarket: UiMarket) => {
+    resetTradeContext(nextMarket, side, nextMarket === 'ETH' ? 'ETH' : 'WBTC');
+  }, [resetTradeContext, side]);
+
+  const changeSide = useCallback((nextSide: UiSide) => {
+    resetTradeContext(market, nextSide, token);
+  }, [market, resetTradeContext, token]);
+
+  const changeToken = useCallback((nextToken: UiToken) => {
+    resetTradeContext(market, side, nextToken);
+  }, [market, resetTradeContext, side]);
   currentTicketRef.current = JSON.stringify([wallet.address, wallet.chainId, market, side, token, amount, leverage, slippage, leverageBounds.min, leverageBounds.max]);
+
+  useEffect(() => {
+    const context = `${wallet.address?.toLowerCase() ?? ''}:${wallet.chainId ?? ''}`;
+    const previous = previousWalletContextRef.current;
+    if (previous !== null && previous !== context) resetTradeContext();
+    previousWalletContextRef.current = context;
+  }, [resetTradeContext, wallet.address, wallet.chainId]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -331,7 +366,7 @@ export default function TradePage() {
 
         <TradeInstrumentHeader
           market={market}
-          onMarketChange={(next) => { setMarket(next); setToken(next === 'ETH' ? 'ETH' : 'WBTC'); }}
+          onMarketChange={changeMarket}
         />
         <div className={styles.tradeLayout}>
         <div className={styles.marketColumn}>
@@ -347,10 +382,10 @@ export default function TradePage() {
             <span className={`rounded-lg px-2.5 py-1 text-[12px] font-semibold ${side === 'long' ? 'bg-[var(--success-dim)] text-success' : 'bg-[var(--danger-dim)] text-danger'}`}>{side === 'long' ? 'Long' : 'Short'}</span>
           </div>
 
-          <div className={styles.sideControl}><Segmented tone="sides" value={side} onChange={setSide} ariaLabel="Position side" options={[{ value: 'long', label: 'Long', sub: 'Price rises' }, { value: 'short', label: 'Short', sub: 'Price falls' }]} /></div>
+          <div className={styles.sideControl}><Segmented tone="sides" value={side} onChange={changeSide} ariaLabel="Position side" options={[{ value: 'long', label: 'Long', sub: 'Price rises' }, { value: 'short', label: 'Short', sub: 'Price falls' }]} /></div>
 
           <div className={styles.fieldStack}>
-            <AmountField label="Amount" symbol={token} value={amount} onChange={setAmount} maxDecimals={tokenDecimals(token)} showMax={token !== 'ETH'} balanceState={selectedTokenBalance} tokenSelector={<TokenSelect compact label="Input asset" value={token} options={tokenOptions} onChange={setToken} balances={wallet.address ? walletBalances.balances : undefined} balanceStatus={wallet.address ? (walletBalances.status !== 'idle' ? walletBalances.status : undefined) : 'disconnected'} />} />
+            <AmountField label="Amount" symbol={token} value={amount} onChange={setAmount} maxDecimals={tokenDecimals(token)} showMax={token !== 'ETH'} balanceState={selectedTokenBalance} tokenSelector={<TokenSelect compact label="Input asset" value={token} options={tokenOptions} onChange={changeToken} balances={wallet.address ? walletBalances.balances : undefined} balanceStatus={wallet.address ? (walletBalances.status !== 'idle' ? walletBalances.status : undefined) : 'disconnected'} />} />
             <LeverageField label={side === 'short' ? 'Target LSD leverage' : 'Target leverage'} value={leverage} onChange={setLeverage} min={leverageBounds.min} max={leverageBounds.max} error={leverageError} />
             <details className={`${styles.advancedDetails} group rounded-xl border border-[var(--line)] px-3`}>
               <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-[13px] font-semibold [&::-webkit-details-marker]:hidden">Advanced <span aria-hidden="true" className="text-mut transition-transform group-open:rotate-180">⌄</span></summary>
@@ -360,7 +395,7 @@ export default function TradePage() {
         </Card>
 
         {!wallet.address && <WalletConnectCTA ready={wallet.ready} authenticated={wallet.authenticated} body="Connect a wallet to review this trade." />}
-        <div className={styles.reviewWrap}><ActionReview planBuilder={planBuilder} prefetchedPlan={prefetchedPlan} label={`Review ${market} ${side === 'long' ? 'Long' : 'Short'}`} operationLabel={`Open ${market} ${side}`} onComplete={handleOpenComplete} /></div>
+        <div className={styles.reviewWrap}><ActionReview key={reviewRevision} planBuilder={planBuilder} prefetchedPlan={prefetchedPlan} label={`Review ${market} ${side === 'long' ? 'Long' : 'Short'}`} operationLabel={`Open ${market} ${side}`} onComplete={handleOpenComplete} /></div>
         </div>
         </div>
 

@@ -6,6 +6,7 @@ The release process is intentionally layered. Credential-free checks run on ever
 
 - `pnpm verify`: aggregate release gate covering scope, lint, types, unit tests, the seeded chaos campaign, high-severity production dependency audit, static build, bundle budget, and built-artifact Playwright tests.
 - `pnpm verify:scope`: exact 15-method SDK contract, installed SDK patch and wallet dependency compatibility, allowed routes, and no active backend/delegated-signing imports.
+- `pnpm verify:architecture`: credential-free source boundary check. Direct SDK imports are limited to the audited façade/display adapters, and app-layer worker authority (`new Worker`, `SharedWorker`, service-worker registration, or `importScripts`) is rejected.
 - `pnpm typecheck` and `pnpm lint`: strict client compilation and static checks.
 - `pnpm test`: transaction normalization, validation, approval, nonce, lock, journal, receipt ordering, and failure-stop tests.
 - `pnpm --dir apps/mini-app exec tsx --test test/live-market.test.ts test/wallet-assets.test.ts test/realtime-chain.test.ts`: deterministic market-feed and wallet-pulse checks, including malformed/stale Coinbase ticks, candle fallback, monotonic updates, reconnect backoff, exact indexed balances, duplicate assets, partial networks, and reviewed WebSocket URL handling.
@@ -33,6 +34,8 @@ pnpm --dir apps/mini-app exec tsx --test test/wagmi-wallet-queries.test.ts test/
 `wallet-data-refresh.test.ts` checks receipt-only invalidation for success/reverts and partially completed routes, including the fallback when `postConfirmRead` did not run. It rejects signature-only and mismatched account/chain/hash/transaction evidence, joins duplicate completion/fallback refreshes, contains cache errors, and groups/deduplicates authoritative recovery receipts. `transaction-progress.test.ts` and `recovery.test.ts` separately protect immediate explorer links, unknown-versus-reverted states, and full recovery verification.
 
 These targeted tests do not prove the final release gates or browser lifecycle behavior. Built-artifact browser checks must still cover account/network switching with reads in flight, one foreground watcher per active chain, WebSocket-to-polling fallback, hidden/offline shutdown, 60-second balance fallback, focus/online resume, and available-balance updates after receipt confirmation. Run the full credential-free and protected-fork gates for the final revision before reporting release verification complete.
+
+`pnpm lint` includes `apps/mini-app/test` and treats unused test variables as errors (underscore-prefixed fixtures are the explicit escape hatch). `test/transaction-state.test.ts` protects the shared conservative reset defaults used by every transaction flow; the page-level handlers also remount the review state on context changes.
 
 ## Installed dependency verification
 

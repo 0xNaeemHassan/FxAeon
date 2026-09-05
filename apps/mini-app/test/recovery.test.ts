@@ -154,7 +154,7 @@ test("a missing receipt remains pending even when local storage says confirmed",
 });
 
 test("an RPC failure is pending and retryable, never a false failure", async () => {
-  const record = addRecord();
+  const _record = addRecord();
   const [view] = await reconcileWalletJournal({
     walletAddress: WALLET,
     getClient: () => client(async () => {
