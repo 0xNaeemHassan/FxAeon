@@ -52,3 +52,15 @@ test('canonical successes do not claim complete discovery after an indexed netwo
   const merged = mergeCanonicalWalletAssets(indexed, wallet, [{ chainId: 8453, balances: [], failedTokens: [], updatedAt: now }], { prices: {}, status: 'ready', updatedAt: now }, now);
   assert.equal(merged.networks[8453].status, 'partial');
 });
+
+test('pending canonical reads keep the aggregate incomplete', () => {
+  const indexed = parseAlchemyWalletAssets({ data: { tokens: [
+    { address: wallet, network: 'eth-mainnet', tokenAddress: null, tokenBalance: '0x1', tokenMetadata: { symbol: 'ETH', decimals: 18 }, tokenPrices: [] },
+  ] } }, wallet, now);
+  const merged = mergeCanonicalWalletAssets(indexed, wallet, [
+    { chainId: 1, balances: [], failedTokens: [], updatedAt: now, status: 'pending' },
+    { chainId: 8453, balances: [], failedTokens: [], updatedAt: now, status: 'pending' },
+  ], { prices: { ETH: 2400 }, status: 'ready', updatedAt: now }, now);
+  assert.equal(merged.networks[1].status, 'pending');
+  assert.equal(merged.networks[8453].status, 'pending');
+});

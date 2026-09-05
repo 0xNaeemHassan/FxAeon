@@ -51,15 +51,15 @@ export default function RootLayout({
         />
       </head>
       <body className={inter.className}>
-        <LocaleProvider>
-          <PriceProvider>
-            <WalletProviderBoundary>
-              <TelegramProvider>
-                <ErrorBoundary>{children}</ErrorBoundary>
-              </TelegramProvider>
-            </WalletProviderBoundary>
-          </PriceProvider>
-        </LocaleProvider>
+        <ErrorBoundary>
+          <LocaleProvider>
+            <PriceProvider>
+              <WalletProviderBoundary>
+                <TelegramProvider>{children}</TelegramProvider>
+              </WalletProviderBoundary>
+            </PriceProvider>
+          </LocaleProvider>
+        </ErrorBoundary>
       </body>
     </html>
   );

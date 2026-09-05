@@ -108,6 +108,26 @@ type Eip1193Provider = {
   removeListener?: (event: string, listener: (...args: unknown[]) => void) => void;
 };
 
+type Eip6963Announcement = { info?: { rdns?: string; name?: string }; provider?: Eip1193Provider };
+const discoveredEip6963: Eip6963Announcement[] = [];
+let eip6963Requested = false;
+
+function discoverEip6963(onChange?: () => void): () => void {
+  if (typeof window === 'undefined') return () => undefined;
+  const onAnnounce = (event: Event) => {
+    const detail = (event as CustomEvent<Eip6963Announcement>).detail;
+    if (!detail?.provider || discoveredEip6963.some((item) => item.provider === detail.provider)) return;
+    discoveredEip6963.push(detail);
+    onChange?.();
+  };
+  window.addEventListener('eip6963:announceProvider', onAnnounce);
+  if (!eip6963Requested) {
+    eip6963Requested = true;
+    window.dispatchEvent(new Event('eip6963:requestProvider'));
+  }
+  return () => window.removeEventListener('eip6963:announceProvider', onAnnounce);
+}
+
 function browserProvider(): Eip1193Provider | undefined {
   if (typeof window === 'undefined') return undefined;
   if (process.env.NEXT_PUBLIC_FX_SCREENSHOT_MODE === '1') {
@@ -115,7 +135,10 @@ function browserProvider(): Eip1193Provider | undefined {
     const rpcUrl = process.env.NEXT_PUBLIC_FX_ANVIL_RPC_URL;
     if (address && rpcUrl) return screenshotProvider(address, rpcUrl);
   }
-  return window.ethereum;
+  const preferred = window.localStorage.getItem('fxaeon:wallet-provider-rdns');
+  return (preferred && discoveredEip6963.find((item) => item.info?.rdns === preferred)?.provider)
+    ?? window.ethereum
+    ?? discoveredEip6963[0]?.provider;
 }
 
 let screenshotProviderInstance: Eip1193Provider | undefined;
@@ -364,6 +387,7 @@ export function PrivyWalletBridge({ children }: { children: ReactNode }) {
 /** Browser-only wallet provider used when the optional Privy service is not configured. */
 export function BrowserWalletProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
+  const [, setProviderVersion] = useState(0);
   const [address, setAddress] = useState<string>();
   const [chainId, setChainId] = useState<FxChainId>();
   const provider = browserProvider();
@@ -385,9 +409,10 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    const stopDiscovery = discoverEip6963(() => setProviderVersion((version) => version + 1));
     let cancelled = false;
     void sync().catch(() => undefined).finally(() => { if (!cancelled) setReady(true); });
-    if (!provider?.on) return () => { cancelled = true; };
+    if (!provider?.on) return () => { cancelled = true; stopDiscovery(); };
     const onAccounts = (...args: unknown[]) => {
       if (window.localStorage.getItem(BROWSER_DISCONNECTED_KEY) === '1') {
         setAddress(undefined);
@@ -410,6 +435,7 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
       provider.removeListener?.('accountsChanged', onAccounts);
       provider.removeListener?.('chainChanged', onChain);
       provider.removeListener?.('disconnect', onDisconnect);
+      stopDiscovery();
     };
   }, [provider, sync]);
 

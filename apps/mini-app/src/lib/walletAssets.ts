@@ -11,7 +11,7 @@ export type WalletAsset = {
   priceUsd: number | null; priceUpdatedAt: number | null; priceStatus: 'fresh' | 'stale' | 'unavailable';
   usdValue: number | null; logoUrl: string | null; source: 'alchemy' | 'canonical';
 };
-export type WalletAssetNetwork = { chainId: WalletAssetChain; status: 'ready' | 'partial' | 'unavailable'; error: string };
+export type WalletAssetNetwork = { chainId: WalletAssetChain; status: 'pending' | 'ready' | 'partial' | 'unavailable'; error: string };
 export type WalletAssetSnapshot = {
   walletAddress: string; assets: WalletAsset[]; networks: Record<WalletAssetChain, WalletAssetNetwork>;
   totalUsdValue: number; unpricedAssetCount: number; updatedAt: number; source: 'alchemy' | 'canonical' | 'mixed';
@@ -174,7 +174,7 @@ export async function fetchAlchemyWalletAssets(walletAddress: string, signal?: A
   return summarizeWalletAssets(merged);
 }
 
-export type CanonicalAssetRead = { chainId: WalletAssetChain; balances: { key: FxTokenKey; address: Address | null; decimals: number; amountWei: bigint }[]; failedTokens: FxTokenKey[]; updatedAt: number };
+export type CanonicalAssetRead = { chainId: WalletAssetChain; balances: { key: FxTokenKey; address: Address | null; decimals: number; amountWei: bigint }[]; failedTokens: FxTokenKey[]; updatedAt: number; status?: 'pending' | 'ready' | 'partial' | 'unavailable' };
 
 export function mergeCanonicalWalletAssets(indexed: WalletAssetSnapshot | null, walletAddress: string, canonical: readonly CanonicalAssetRead[], prices: UsdPriceSnapshot, now = Date.now()): WalletAssetSnapshot {
   const snapshot = indexed?.walletAddress === walletAddress.toLowerCase() ? { ...indexed, networks: { ...indexed.networks } } : emptyWalletSnapshot(walletAddress, now);
@@ -183,7 +183,11 @@ export function mergeCanonicalWalletAssets(indexed: WalletAssetSnapshot | null, 
   const assets = new Map(snapshot.assets.filter((asset) => asset.canonicalKey === null).map((asset) => [asset.id, asset]));
   for (const read of canonical) {
     const indexedStatus = snapshot.networks[read.chainId].status;
-    snapshot.networks[read.chainId] = read.failedTokens.length
+    snapshot.networks[read.chainId] = read.status === 'pending'
+      ? { chainId: read.chainId, status: 'pending', error: 'Canonical balances are still being verified.' }
+      : read.status === 'unavailable'
+        ? { chainId: read.chainId, status: 'unavailable', error: 'Canonical balances could not be refreshed.' }
+        : read.failedTokens.length
       ? { chainId: read.chainId, status: 'partial', error: 'Some balances could not be refreshed.' }
       : indexedStatus !== 'ready'
         ? { chainId: read.chainId, status: 'partial', error: 'Some assets could not be refreshed.' }

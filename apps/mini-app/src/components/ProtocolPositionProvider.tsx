@@ -27,6 +27,7 @@ import { deriveConfirmedPositionHint, readConfirmedPosition, verifyConfirmedPosi
 import { confirmedPositionHintKey, confirmedPositionStorageKey, parseStoredPositionHints, savePositionHints, type StoredPositionHint } from '@/lib/confirmedPositionStorage';
 import type { PlannedRoute, TransactionExecutionResult } from '@/lib/fx';
 import { useRealtimeChainState } from '@/components/WalletDataProvider';
+import { subscribeToForegroundResume } from '@/lib/foreground';
 
 export type ProtocolPositionStatus = 'idle' | 'loading' | 'ready' | 'partial' | 'unavailable';
 
@@ -74,18 +75,18 @@ function emptySnapshot(walletAddress: string | null = null): ProtocolPositionSna
 
 const ProtocolPositionContext = createContext<ProtocolPositionContextValue | null>(null);
 
-export default function ProtocolPositionProvider({ children }: { children: ReactNode }) {
+export default function ProtocolPositionProvider({ children, enabled = true }: { children: ReactNode; enabled?: boolean }) {
   const wallet = usePrivyWallet();
   const address = wallet.ready && wallet.authenticated ? wallet.address?.toLowerCase() ?? null : null;
 
   // A keyed session removes the prior account's snapshot and in-flight forms
   // synchronously, before effects run for the next wallet. No frame may pair
   // one wallet's address with another wallet's positions or balances.
-  return <ProtocolPositionSession key={address ?? 'disconnected'} address={address}>{children}</ProtocolPositionSession>;
+  return <ProtocolPositionSession key={`${address ?? 'disconnected'}:${enabled ? 'on' : 'off'}`} address={address} enabled={enabled}>{children}</ProtocolPositionSession>;
 }
 
-function ProtocolPositionSession({ address, children }: { address: string | null; children: ReactNode }) {
-  const [snapshot, setSnapshot] = useState<ProtocolPositionSnapshot>(() => emptySnapshot(address));
+function ProtocolPositionSession({ address, enabled, children }: { address: string | null; enabled: boolean; children: ReactNode }) {
+  const [snapshot, setSnapshot] = useState<ProtocolPositionSnapshot>(() => emptySnapshot(enabled ? address : null));
   const snapshotRef = useRef(snapshot);
   const readGuardRef = useRef(createPositionReadGuard());
   const [pendingPositions, setPendingPositions] = useState<ConfirmedPositionHint[]>([]);
@@ -176,7 +177,7 @@ function ProtocolPositionSession({ address, children }: { address: string | null
     return true;
   }, [address, persistHints, refreshConfirmedPositions]);
 
-  const loadAddress = useCallback(async (walletAddress: string): Promise<ProtocolPositionRefreshResult> => {
+  const loadAddressImpl = useCallback(async (walletAddress: string): Promise<ProtocolPositionRefreshResult> => {
     const requestId = readGuardRef.current.begin();
     if (requestId === null) return EMPTY_RESULT;
     const current = snapshotRef.current.walletAddress?.toLowerCase() === walletAddress.toLowerCase()
@@ -226,19 +227,30 @@ function ProtocolPositionSession({ address, children }: { address: string | null
       return EMPTY_RESULT;
     }
   }, [commit]);
+  const pendingLoadRef = useRef<{ address: string; promise: Promise<ProtocolPositionRefreshResult> } | null>(null);
+  const loadAddress = useCallback((walletAddress: string) => {
+    const normalized = walletAddress.toLowerCase();
+    if (pendingLoadRef.current?.address === normalized) return pendingLoadRef.current.promise;
+    const promise = loadAddressImpl(walletAddress).finally(() => {
+      if (pendingLoadRef.current?.promise === promise) pendingLoadRef.current = null;
+    });
+    pendingLoadRef.current = { address: normalized, promise };
+    return promise;
+  }, [loadAddressImpl]);
 
   const lastRealtimeBlock = useRef<bigint | null>(null);
   useEffect(() => {
-    if (!address || !realtimeEthereum.latestBlockNumber || (realtimeEthereum.status !== 'live' && realtimeEthereum.status !== 'polling')) return;
+    if (!enabled || !address || !realtimeEthereum.latestBlockNumber || (realtimeEthereum.status !== 'live' && realtimeEthereum.status !== 'polling')) return;
     if (lastRealtimeBlock.current === realtimeEthereum.latestBlockNumber) return;
     lastRealtimeBlock.current = realtimeEthereum.latestBlockNumber;
     void loadAddress(address);
-  }, [address, loadAddress, realtimeEthereum.latestBlockNumber, realtimeEthereum.status]);
+  }, [address, enabled, loadAddress, realtimeEthereum.latestBlockNumber, realtimeEthereum.status]);
 
   fullRefreshRef.current = loadAddress;
 
   useEffect(() => {
     const guard = readGuardRef.current;
+    if (!enabled) return undefined;
     guard.activate();
     sessionActive.current = true;
     sessionGeneration.current += 1;
@@ -253,24 +265,21 @@ function ProtocolPositionSession({ address, children }: { address: string | null
     const timer = window.setInterval(() => {
       if (document.visibilityState === 'visible' && hintRecords.current.some((record) => Date.now() - record.addedAt < 90_000)) void refreshConfirmedPositions();
     }, 5_000);
-    const onVisible = () => { if (document.visibilityState === 'visible') void refreshConfirmedPositions(); };
-    window.addEventListener('focus', onVisible);
-    document.addEventListener('visibilitychange', onVisible);
+    const unsubscribeResume = subscribeToForegroundResume(() => { void refreshConfirmedPositions(); });
     return () => {
       guard.invalidate();
       sessionActive.current = false;
       sessionGeneration.current += 1;
       window.clearInterval(timer);
-      window.removeEventListener('focus', onVisible);
-      document.removeEventListener('visibilitychange', onVisible);
+      unsubscribeResume();
     };
-  }, [address, loadAddress, refreshConfirmedPositions]);
+  }, [address, enabled, loadAddress, refreshConfirmedPositions]);
 
   const refresh = useCallback(async () => {
-    if (!address) return EMPTY_RESULT;
+    if (!enabled || !address) return EMPTY_RESULT;
     void refreshConfirmedPositions();
     return loadAddress(address);
-  }, [address, loadAddress, refreshConfirmedPositions]);
+  }, [address, enabled, loadAddress, refreshConfirmedPositions]);
 
   const value = useMemo<ProtocolPositionContextValue>(() => ({ ...snapshot, refresh,
     pendingPositions: pendingPositions.filter((hint) => !snapshot.positions.some((position) => positionKey(position) === confirmedPositionHintKey(hint))),
