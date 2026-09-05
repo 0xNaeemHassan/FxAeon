@@ -26,7 +26,7 @@ import { usePrivyWallet } from '@/lib/wallet';
 import styles from '@/components/trade-surfaces.module.css';
 import { positiveDecimal } from '@/lib/amount';
 import { DEFAULT_SLIPPAGE_PERCENT, readSlippagePercent } from '@/lib/settings';
-import { resetTransactionAmounts } from '@/lib/transactionState';
+import { readTradeDeepLinkContext, resetTransactionAmounts, type TradeDeepLinkContext } from '@/lib/transactionState';
 import { formatUsdPrice } from '@/lib/prices';
 import {
   parseAmount,
@@ -124,6 +124,8 @@ export default function TradePage() {
   const prefetchDescriptorRef = useRef<RoutePrefetchDescriptor | null>(null);
   const [foreground, setForeground] = useState(false);
   const previousWalletContextRef = useRef<string | null>(null);
+  const explicitDeepLinkRef = useRef<TradeDeepLinkContext | null>(null);
+  const initiallyHydratedRef = useRef(Boolean(wallet.address && wallet.chainId));
   const currentTicketRef = useRef('');
   const prefetchedTicketRef = useRef('');
 
@@ -156,17 +158,28 @@ export default function TradePage() {
   useEffect(() => {
     const context = `${wallet.address?.toLowerCase() ?? ''}:${wallet.chainId ?? ''}`;
     const previous = previousWalletContextRef.current;
-    if (previous !== null && previous !== context) resetTradeContext();
+    if (previous !== null && previous !== context) {
+      const explicit = explicitDeepLinkRef.current;
+      const market = explicit?.market ?? 'ETH';
+      const side = explicit?.side ?? 'long';
+      const defaultToken = explicit?.asset && positionInputTokenOptions(market).includes(explicit.asset as UiToken)
+        ? explicit.asset as UiToken
+        : market === 'ETH' ? 'ETH' : 'WBTC';
+      resetTradeContext(market, side, defaultToken);
+      // Keep the URL context through a two-step browser-wallet hydration
+      // (address first, chain second), then let normal user selections win.
+      if (wallet.address && wallet.chainId) explicitDeepLinkRef.current = null;
+    }
     previousWalletContextRef.current = context;
   }, [resetTradeContext, wallet.address, wallet.chainId]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const selectedMarket = params.get('market') === 'BTC' ? 'BTC' : 'ETH';
-    const selectedAsset = params.get('asset');
-    if (params.has('market') || selectedAsset) {
-      setMarket(selectedMarket);
-      setToken(positionInputTokenOptions(selectedMarket).find((option) => option === selectedAsset) ?? positionInputTokenOptions(selectedMarket)[0]);
+    const deepLink = readTradeDeepLinkContext(window.location.search);
+    explicitDeepLinkRef.current = initiallyHydratedRef.current ? null : deepLink;
+    if (deepLink) {
+      setMarket(deepLink.market);
+      setSide(deepLink.side);
+      setToken(positionInputTokenOptions(deepLink.market).find((option) => option === deepLink.asset) ?? positionInputTokenOptions(deepLink.market)[0]);
     }
     const update = () => {
       const active = document.visibilityState === 'visible' && navigator.onLine;

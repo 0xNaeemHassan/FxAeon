@@ -227,10 +227,14 @@ export default function PositionsPage() {
   }, [action, fraction, leverage, leverageBounds, selected, selectedStale, slippage, token, validAmount, wallet.address]);
 
   const openManager = (key: string, nextAction: PositionAction) => {
+    const position = positions.find((item) => positionKey(item) === key);
+    const nextToken = position
+      ? (nextAction === 'reduce' || nextAction === 'close'
+        ? positionOutputTokenOptions(position.market, position.side)[0]
+        : positionInputTokenOptions(position.market)[0])
+      : 'ETH';
     setSelectedKey(key);
-    setAction(nextAction);
-    setAmount('');
-    if (nextAction === 'close') setFraction(100);
+    resetTransactionContext(nextAction, nextToken);
     haptic(nextAction === 'close' ? 'warning' : 'selection');
     window.requestAnimationFrame(() => managerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   };

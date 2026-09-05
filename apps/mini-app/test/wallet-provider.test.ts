@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   clearEip6963AnnouncementsForTest,
+  eip6963FocusTrapDestination,
   getDiscoveredEip6963Providers,
   recordEip6963Announcement,
   selectEip6963Provider,
@@ -42,4 +43,11 @@ test('missing provider metadata gets a safe local fallback and never requests an
   const item = recordEip6963Announcement({ provider: provider() });
   assert.equal(item?.name, 'Browser wallet');
   assert.match(item?.rdns ?? '', /^unknown-wallet-\d+$/);
+});
+
+test('chooser focus trap redirects Tab and Shift+Tab when focus starts outside the dialog', () => {
+  assert.equal(eip6963FocusTrapDestination({ activeInside: false, atFirst: false, atLast: false, shiftKey: false }), 'first');
+  assert.equal(eip6963FocusTrapDestination({ activeInside: false, atFirst: false, atLast: false, shiftKey: true }), 'last');
+  assert.equal(eip6963FocusTrapDestination({ activeInside: true, atFirst: true, atLast: false, shiftKey: true }), 'last');
+  assert.equal(eip6963FocusTrapDestination({ activeInside: true, atFirst: false, atLast: true, shiftKey: false }), 'first');
 });

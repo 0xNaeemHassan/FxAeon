@@ -27,3 +27,20 @@ export function resetTransactionAmounts(): {
     leverage: SAFE_DEFAULT_LEVERAGE,
   };
 }
+
+export type TradeDeepLinkContext = {
+  market: 'ETH' | 'BTC';
+  side: 'long' | 'short';
+  asset?: string;
+};
+
+/** Read only explicit Trade context so wallet hydration cannot erase a link. */
+export function readTradeDeepLinkContext(search: string): TradeDeepLinkContext | null {
+  const params = new URLSearchParams(search);
+  if (!params.has('market') && !params.has('side') && !params.has('asset')) return null;
+  return {
+    market: params.get('market') === 'BTC' ? 'BTC' : 'ETH',
+    side: params.get('side') === 'short' ? 'short' : 'long',
+    asset: params.get('asset') ?? undefined,
+  };
+}

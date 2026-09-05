@@ -332,6 +332,7 @@ export default function MovePage() {
                 <AdvancedRiskSummary sourceName={sourceName} destinationName={destinationName} />
               </div>
             </details>
+            <p className="text-[11px] leading-relaxed text-warn" role="status">Switching bridge mode clears entered Advanced OFT route inputs.</p>
 
             <div className={styles.amountHero}>
               <AmountField

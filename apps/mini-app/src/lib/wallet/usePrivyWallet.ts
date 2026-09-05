@@ -13,7 +13,7 @@ import {
 } from '@privy-io/react-auth';
 import { assertLocalForkRpcUrl } from '@/lib/fx/config';
 import { switchBrowserChain as switchBrowserChainWithConfig } from './switchBrowserChain';
-import { getDiscoveredEip6963Providers, recordEip6963Announcement, selectEip6963Provider, shouldBindEip6963ProviderEvents, shouldPromptEip6963Provider, type DiscoveredEip6963Provider, type Eip6963Announcement } from './eip6963';
+import { eip6963FocusTrapDestination, getDiscoveredEip6963Providers, recordEip6963Announcement, selectEip6963Provider, shouldBindEip6963ProviderEvents, shouldPromptEip6963Provider, type DiscoveredEip6963Provider, type Eip6963Announcement } from './eip6963';
 
 export const FX_CHAIN_IDS = {
   ethereum: 1,
@@ -602,8 +602,14 @@ function Eip6963ProviderChooser({
       if (!focusable.length) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      const destination = eip6963FocusTrapDestination({
+        activeInside: Boolean(dialogRef.current?.contains(document.activeElement)),
+        atFirst: document.activeElement === first,
+        atLast: document.activeElement === last,
+        shiftKey: event.shiftKey,
+      });
+      if (destination === 'last') { event.preventDefault(); last.focus(); }
+      else if (destination === 'first') { event.preventDefault(); first.focus(); }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => { document.removeEventListener('keydown', onKeyDown); previousFocus?.focus(); };
