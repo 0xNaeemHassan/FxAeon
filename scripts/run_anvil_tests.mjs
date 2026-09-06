@@ -6,6 +6,10 @@ import { createServer } from "node:net";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const port = parsePort(process.env.ANVIL_PORT ?? "8547", "ANVIL_PORT");
+// The product runner requires three confirmations. Interval mining keeps
+// receipt finality deterministic for every fork suite, including browser
+// flows that cannot issue a second manual mine after each wallet request.
+const blockTime = parseBlockTime(process.env.ANVIL_BLOCK_TIME ?? "1");
 const rpcUrl = `http://127.0.0.1:${port}`;
 const suite = parseSuite(process.argv.slice(2));
 const browserPort = suite === "browser" ? parsePort(process.env.FX_FORK_BROWSER_PORT ?? "4325", "FX_FORK_BROWSER_PORT") : undefined;
@@ -53,6 +57,14 @@ function parsePort(value, label) {
   const parsed = Number(value);
   if (!/^\d+$/.test(value) || !Number.isInteger(parsed) || parsed < 1024 || parsed > 65_535) {
     throw new Error(`${label} must be a decimal integer between 1024 and 65535`);
+  }
+  return parsed;
+}
+
+function parseBlockTime(value) {
+  const parsed = Number(value);
+  if (!/^(?:\d+)(?:\.\d+)?$/.test(value) || !Number.isFinite(parsed) || parsed <= 0 || parsed > 60) {
+    throw new Error("ANVIL_BLOCK_TIME must be a positive number of seconds no greater than 60");
   }
   return parsed;
 }
@@ -474,6 +486,7 @@ try {
     "--accounts", "20",
     "--balance", "10000",
     "--no-rate-limit",
+    "--block-time", String(blockTime),
     "--quiet",
   ];
   if (process.env.ANVIL_FORK_BLOCK?.trim()) {

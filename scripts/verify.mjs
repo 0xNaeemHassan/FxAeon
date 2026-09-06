@@ -63,6 +63,7 @@ if (architecture !== 0) process.exit(architecture);
 // so every assertion executes without paying for a second compiler startup.
 const quickChecks = await runGroup([
   { args: ['lint'], label: 'lint' },
+  { args: ['test:anvil:contract'], label: 'Anvil harness contract' },
   {
     args: ['audit', '--prod', '--audit-level=high', '--ignore-registry-errors'],
     label: 'dependency audit',
