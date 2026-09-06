@@ -16,6 +16,7 @@ import {
   newlyVerifiedPositions,
   positionKey,
   readAllPositionsDetailed,
+  readCanonicalPositionState,
   unavailablePositionResult,
   type PositionGroupFailure,
   type PositionGroup,
@@ -25,7 +26,7 @@ import {
 import { usePrivyWallet } from '@/lib/wallet';
 import { deriveConfirmedPositionHint, readConfirmedPosition, verifyConfirmedPositionHint, type ConfirmedPositionHint } from '@/lib/confirmedPositions';
 import { confirmedPositionHintKey, confirmedPositionStorageKey, parseStoredPositionHints, savePositionHints, type StoredPositionHint } from '@/lib/confirmedPositionStorage';
-import type { PlannedRoute, TransactionExecutionResult } from '@/lib/fx';
+import { getEthereumClient, type PlannedRoute, type TransactionExecutionResult } from '@/lib/fx';
 import { useRealtimeChainState } from '@/components/WalletDataProvider';
 import { subscribeToForegroundResume } from '@/lib/foreground';
 
@@ -51,6 +52,7 @@ export interface ProtocolPositionContextValue extends ProtocolPositionSnapshot {
   checkingConfirmedPositions: boolean;
   refreshConfirmedPositions: () => Promise<void>;
   trackConfirmedPosition: (execution: TransactionExecutionResult, route: PlannedRoute) => Promise<boolean>;
+  reconcileClosedPosition: (position: Pick<UiPosition, 'market' | 'side'> & { info: Pick<UiPosition['info'], 'positionId'> }) => Promise<boolean>;
 }
 
 const EMPTY_RESULT: ProtocolPositionRefreshResult = {
@@ -96,6 +98,7 @@ function ProtocolPositionSession({ address, enabled, children }: { address: stri
   const sessionActive = useRef(false);
   const hintRead = useRef<number | null>(null);
   const hintSequence = useRef(0);
+  const closedPositionKeysRef = useRef(new Set<string>());
   const fullRefreshRef = useRef<((wallet: string) => Promise<ProtocolPositionRefreshResult>) | null>(null);
   const realtimeEthereum = useRealtimeChainState(1) as import('@/lib/realtimeChain').RealtimeChainState;
 
@@ -195,7 +198,8 @@ function ProtocolPositionSession({ address, enabled, children }: { address: stri
       const result = await readAllPositionsDetailed(walletAddress);
       if (!readGuardRef.current.isCurrent(requestId)) return EMPTY_RESULT;
 
-      const merged = mergeVerifiedPositions(current.positions, result);
+      const merged = mergeVerifiedPositions(current.positions, result)
+        .filter((position) => !closedPositionKeysRef.current.has(positionKey(position)));
       // Only call an ID newly minted when its group had a verified baseline
       // immediately before this refresh. A recovered pool may reveal older
       // positions and must not be presented as a just-confirmed transaction.
@@ -248,6 +252,31 @@ function ProtocolPositionSession({ address, enabled, children }: { address: stri
 
   fullRefreshRef.current = loadAddress;
 
+  const reconcileClosedPosition = useCallback(async (position: Pick<UiPosition, 'market' | 'side'> & { info: Pick<UiPosition['info'], 'positionId'> }) => {
+    if (!address || !sessionActive.current) return false;
+    const generation = sessionGeneration.current;
+    const key = `${position.market}:${position.side}:${position.info.positionId}`;
+    try {
+      const [collateral, debt] = await readCanonicalPositionState({
+        client: getEthereumClient(),
+        group: { market: position.market, side: position.side },
+        positionId: position.info.positionId,
+      });
+      if (!sessionActive.current || sessionGeneration.current !== generation) return false;
+      if (collateral !== 0n || debt !== 0n) return false;
+      // Invalidate any all-group read that was already in flight, then keep
+      // suppressing the indexer's historical row until its next refresh omits
+      // it. The canonical zero read is receipt-bound by the caller's
+      // post-confirm lifecycle; no optimistic deletion is allowed.
+      readGuardRef.current.begin();
+      closedPositionKeysRef.current.add(key);
+      commit({ ...snapshotRef.current, positions: snapshotRef.current.positions.filter((item) => positionKey(item) !== key) });
+      return true;
+    } catch {
+      return false;
+    }
+  }, [address, commit]);
+
   useEffect(() => {
     const guard = readGuardRef.current;
     if (!enabled) return undefined;
@@ -283,8 +312,8 @@ function ProtocolPositionSession({ address, enabled, children }: { address: stri
 
   const value = useMemo<ProtocolPositionContextValue>(() => ({ ...snapshot, refresh,
     pendingPositions: pendingPositions.filter((hint) => !snapshot.positions.some((position) => positionKey(position) === confirmedPositionHintKey(hint))),
-    checkingConfirmedPositions, refreshConfirmedPositions, trackConfirmedPosition,
-  }), [refresh, snapshot, pendingPositions, checkingConfirmedPositions, refreshConfirmedPositions, trackConfirmedPosition]);
+    checkingConfirmedPositions, refreshConfirmedPositions, trackConfirmedPosition, reconcileClosedPosition,
+  }), [refresh, snapshot, pendingPositions, checkingConfirmedPositions, refreshConfirmedPositions, trackConfirmedPosition, reconcileClosedPosition]);
   return <ProtocolPositionContext.Provider value={value}>{children}</ProtocolPositionContext.Provider>;
 }
 

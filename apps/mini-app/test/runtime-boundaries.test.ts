@@ -119,15 +119,21 @@ test('position discovery requires canonical ownerOf for every indexed ID', async
 
 test('position discovery drops an indexer-retained NFT after canonical accounting reaches zero', async () => {
   const info = { positionId: 8, rawColls: 10n, rawDebts: 20n } as PositionInfo;
+  let calls = 0;
   const result = await verifyPositionGroupOwnership({
     client: {
-      readContract: async (args: { functionName?: string }) => args.functionName === 'ownerOf' ? WALLET : [0n, 0n],
+      readContract: async (args: { functionName?: string }) => {
+        calls += 1;
+        if (args.functionName === 'getPosition') return [0n, 0n];
+        throw new Error('closed position NFT no longer has an owner');
+      },
     } as Pick<FxPublicClient, 'readContract'>,
     walletAddress: WALLET,
     group: { market: 'ETH', side: 'long' },
     positions: [info],
   });
   assert.deepEqual(result, []);
+  assert.equal(calls, 1, 'closed positions must not require ownerOf after canonical zero state');
 });
 
 test('application read facade bounds a stalled SDK/indexer promise', async () => {

@@ -48,6 +48,24 @@ const WAD = 10n ** 18n;
 const WSTETH_RATE_ABI = [{ type: 'function', name: 'stEthPerToken', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] }] as const;
 const POSITION_STATE_ABI = [{ type: 'function', name: 'getPosition', stateMutability: 'view', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ name: 'collateral', type: 'uint256' }, { name: 'debt', type: 'uint256' }] }] as const;
 
+export async function readCanonicalPositionState(params: {
+  client: Pick<FxPublicClient, 'readContract'>;
+  group: PositionGroup;
+  positionId: number;
+}): Promise<readonly [bigint, bigint]> {
+  if (!Number.isSafeInteger(params.positionId) || params.positionId < 0) throw new TypeError('position ID must be a non-negative safe integer');
+  const state = await withReadDeadline(params.client.readContract({
+    address: positionPoolAddress(params.group.market, params.group.side),
+    abi: POSITION_STATE_ABI,
+    functionName: 'getPosition',
+    args: [BigInt(params.positionId)],
+  }));
+  if (!Array.isArray(state) || state.length !== 2 || typeof state[0] !== 'bigint' || typeof state[1] !== 'bigint' || state[0] < 0n || state[1] < 0n) {
+    throw new TypeError(`canonical position state for ${String(params.positionId)} was malformed`);
+  }
+  return [state[0], state[1]];
+}
+
 export function tokenAddress(token: UiToken | 'fxSAVE' | 'fxUSDBasePool'): Address {
   return TOKEN_META[token].address;
 }
@@ -223,30 +241,21 @@ export async function verifyPositionGroupOwnership(params: {
   });
   const checks = await Promise.allSettled(valid.map(async (info) => {
     const tokenId = BigInt(info.positionId);
-    const [owner, state] = await Promise.all([
-      withReadDeadline(params.client.readContract({
-        address: pool,
-        abi: [{ type: 'function', name: 'ownerOf', stateMutability: 'view', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ type: 'address' }] }] as const,
-        functionName: 'ownerOf',
-        args: [tokenId],
-      })),
-      withReadDeadline(params.client.readContract({
-        address: pool,
-        abi: POSITION_STATE_ABI,
-        functionName: 'getPosition',
-        args: [tokenId],
-      })),
-    ]);
+    const state = await readCanonicalPositionState({ client: params.client, group: params.group, positionId: info.positionId });
+    // A fully closed position may burn its ERC-721 before the indexer drops
+    // the historical record. Canonical zero accounting is sufficient to
+    // remove that non-actionable row; active positions still require ownerOf.
+    if (state[0] === 0n && state[1] === 0n) return null;
+    const owner = await withReadDeadline(params.client.readContract({
+      address: pool,
+      abi: [{ type: 'function', name: 'ownerOf', stateMutability: 'view', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ type: 'address' }] }] as const,
+      functionName: 'ownerOf',
+      args: [tokenId],
+    }));
     if (typeof owner !== 'string' || owner.toLowerCase() !== params.walletAddress.toLowerCase()) {
       throw new Error(`${params.group.market} ${params.group.side} position ownership verification was incomplete`);
     }
-    if (!Array.isArray(state) || state.length !== 2 || typeof state[0] !== 'bigint' || typeof state[1] !== 'bigint' || state[0] < 0n || state[1] < 0n) {
-      throw new TypeError(`canonical position state for ${String(info.positionId)} was malformed`);
-    }
-    // The indexer intentionally retains closed NFTs for history. A canonical
-    // zero accounting state is therefore a successful read of a closed
-    // position, not an unavailable group; omit it from the open workspace.
-    return state[0] === 0n && state[1] === 0n ? null : info;
+    return info;
   }));
   const verified: PositionInfo[] = [];
   checks.forEach((check) => {

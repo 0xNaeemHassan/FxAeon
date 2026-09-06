@@ -318,7 +318,12 @@ export default function PositionsPage() {
                 {action === 'leverage' && <div className={styles.fieldStack}><Header icon={Gauge} title="Adjust leverage" body="Set the target leverage for this position." /><LeverageField label={selected?.side === 'short' ? 'Target LSD leverage' : 'Target leverage'} value={leverage} onChange={setLeverage} min={leverageBounds.min} max={leverageBounds.max} error={leverageError} /></div>}
                 <details className={`${styles.advancedDetails} group mt-4 rounded-xl border border-[var(--line)] px-3`}><summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-[13px] font-semibold [&::-webkit-details-marker]:hidden">Advanced <span aria-hidden="true" className="text-mut transition-transform group-open:rotate-180">⌄</span></summary><div className="border-t border-[var(--line)] py-3"><SlippageField value={slippage} onChange={setSlippage} max={MAX_FX_SLIPPAGE_PERCENT} /></div></details>
               </Card>
-              <div className={styles.reviewWrap}><ActionReview key={reviewRevision} planBuilder={planBuilder} label={reviewLabel} operationLabel={operationLabel} destructive={action === 'close'} onComplete={async () => { await Promise.all([positionState.refresh(), walletBalances.refresh()]); }} /></div>
+              <div className={styles.reviewWrap}><ActionReview key={reviewRevision} planBuilder={planBuilder} label={reviewLabel} operationLabel={operationLabel} destructive={action === 'close'} onComplete={async (_execution, confirmedRoute) => {
+                await Promise.all([positionState.refresh(), walletBalances.refresh()]);
+                if (action === 'close' && selected && confirmedRoute.details?.positionId === selected.info.positionId) {
+                  await positionState.reconcileClosedPosition(selected);
+                }
+              }} /></div>
             </section>
           </div>
         ) : null}
