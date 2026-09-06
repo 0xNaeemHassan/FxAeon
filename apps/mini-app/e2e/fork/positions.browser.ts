@@ -369,13 +369,22 @@ async function runProof(captureStage: string) {
         assert.ok(transactionCount >= 1 && transactionCount <= 10, 'review must expose the ordered transaction count');
         await confirmButton.click();
 
-        const firstSignature = expect.poll(() => proofValue(submitted.length), { timeout: 180_000 })
-          .toBe(signedBefore + 1)
-          .then(() => 'submitted' as const);
-        const refreshedReview = expect(page.getByRole('status', { name: 'Quote updated—review again.', exact: true }))
-          .toBeVisible({ timeout: 180_000 })
-          .then(() => 'refresh' as const);
-        const outcome = await Promise.race([firstSignature, refreshedReview]);
+        // Poll one non-rejecting state machine. Promise.race with Playwright
+        // expect waiters is unsafe here: the non-winning 180s assertion can
+        // reject before the other state becomes visible.
+        const refreshNotice = page.locator('[role="status"]')
+          .filter({ hasText: 'Quote updated—review again.' }).first();
+        const deadline = Date.now() + 180_000;
+        let outcome: 'submitted' | 'refresh' | undefined;
+        while (!outcome && Date.now() < deadline) {
+          if (routeErrors.length) throw new Error(routeErrors[0]);
+          if (submitted.length >= signedBefore + 1) outcome = 'submitted';
+          else if (await refreshNotice.isVisible().catch(() => false)) outcome = 'refresh';
+          else await page.waitForTimeout(250);
+        }
+        if (!outcome) {
+          throw new Error(`timed out waiting for first signature or quote refresh (submitted ${submitted.length - signedBefore})`);
+        }
         if (outcome === 'submitted') {
           firstSignatureObserved = true;
           break;

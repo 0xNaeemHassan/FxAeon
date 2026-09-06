@@ -15,4 +15,6 @@ test("browser proof re-reviews interval-mined quote refreshes with a bounded ret
   assert.match(browserProof, /reviewAttempt < 3/);
   assert.match(browserProof, /Quote updated—review again\./);
   assert.match(browserProof, /firstSignatureObserved/);
+  assert.match(browserProof, /Poll one non-rejecting state machine/);
+  assert.doesNotMatch(browserProof, /const firstSignature = expect\.poll[\s\S]{0,500}Promise\.race/);
 });
