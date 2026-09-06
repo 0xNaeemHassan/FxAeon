@@ -117,6 +117,29 @@ export function isTelegramLaunchContext(): boolean {
   return isTMA() || hasTelegramLaunchSignal();
 }
 
+/** Open a reviewed external URL through Telegram when available. */
+export function openExternalLink(url: string): boolean {
+  if (typeof window === 'undefined') return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'https:') return false;
+  haptic('light');
+  const telegram = getWebApp();
+  if (telegram?.openLink) {
+    try {
+      telegram.openLink(parsed.toString());
+      return true;
+    } catch {
+      // Fall through to the normal browser target.
+    }
+  }
+  return Boolean(window.open(parsed.toString(), '_blank', 'noopener,noreferrer'));
+}
+
 /** Signed init data consumed only by Privy's Telegram authentication flow. */
 export function getInitData(): string {
   return getWebApp()?.initData ?? '';

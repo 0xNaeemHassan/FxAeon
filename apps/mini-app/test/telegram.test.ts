@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { waitForTelegramWebApp, type TgWebApp } from '../src/lib/telegram';
+import { openExternalLink, waitForTelegramWebApp, type TgWebApp } from '../src/lib/telegram';
 
 type FakeWindow = {
   Telegram?: { WebApp?: TgWebApp };
+  open?: (url: string, target?: string, features?: string) => unknown;
   setInterval: typeof setInterval;
   clearInterval: typeof clearInterval;
 };
@@ -50,6 +51,30 @@ test('Telegram bridge availability fails closed after a bounded timeout', async 
   const { restore } = installWindow();
   try {
     assert.equal(await waitForTelegramWebApp(20), null);
+  } finally {
+    restore();
+  }
+});
+
+test('external links use Telegram openLink when the host provides it', () => {
+  const linkCalls: string[] = [];
+  const webApp = { ...bridge(), openLink: (url: string) => linkCalls.push(url) } as TgWebApp;
+  const { restore } = installWindow(webApp);
+  try {
+    assert.equal(openExternalLink('https://etherscan.io/tx/0xabc'), true);
+    assert.deepEqual(linkCalls, ['https://etherscan.io/tx/0xabc']);
+  } finally {
+    restore();
+  }
+});
+
+test('external links reject non-HTTPS URLs without opening a browser target', () => {
+  let opened = false;
+  const { fake, restore } = installWindow();
+  fake.open = () => { opened = true; return {}; };
+  try {
+    assert.equal(openExternalLink('javascript:alert(1)'), false);
+    assert.equal(opened, false);
   } finally {
     restore();
   }

@@ -55,6 +55,7 @@
   height: min(88dvh, 820px);
   max-height: min(88dvh, 820px);
   display: flex;
+  min-height: 0;
   flex-direction: column;
   overflow: hidden;
   overscroll-behavior: contain;
@@ -72,8 +73,19 @@
   min-height: 0;
   flex: 1 1 auto;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding-bottom: 132px !important;
   scroll-padding-block: 12px 144px;
+}
+
+/* Keep the route's first review action reachable above the fixed app nav. */
+.reviewTrigger {
+  position: sticky;
+  z-index: 10;
+  bottom: max(64px, env(safe-area-inset-bottom, 0px));
+  margin-inline: -2px;
+  padding: 6px 2px;
+  background: linear-gradient(to top, var(--bg) 68%, transparent);
 }
 
 .reviewSheetClose {
