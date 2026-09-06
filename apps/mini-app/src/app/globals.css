@@ -315,6 +315,8 @@ summary:focus-visible {
 
 .app-topbar {
   display: flex;
+  min-width: 0;
+  width: 100%;
   min-height: 56px;
   align-items: center;
   justify-content: space-between;

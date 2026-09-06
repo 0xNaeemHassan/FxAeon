@@ -55,7 +55,7 @@ test.describe('cohesive responsive design', () => {
   });
 
   test('working routes keep page chrome fixed and scroll supporting content internally', async ({ page, requests }) => {
-    for (const width of [320, 359, 390, 430, 768, 1280]) {
+    for (const width of [320, 359, 390, 430, 768, 1180, 1280]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto('/trade', { waitUntil: 'domcontentloaded' });
       const shell = page.locator('.app-shell-tabs');
@@ -79,6 +79,18 @@ test.describe('cohesive responsive design', () => {
       expect(geometry.contentOverflow).toBeGreaterThanOrEqual(0);
       expect(geometry.bottomPadding).toBeGreaterThan(width <= 640 ? 68 : 39);
     }
+    assertNoBackendRequests(requests);
+  });
+
+  test('desktop top bar stays within the viewport at the compact desktop breakpoint', async ({ page, requests }) => {
+    await page.setViewportSize({ width: 1180, height: 900 });
+    await page.goto('/trade', { waitUntil: 'domcontentloaded' });
+    const bounds = await page.locator('.app-topbar').evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return { left: rect.left, right: rect.right, viewport: window.innerWidth };
+    });
+    expect(bounds.left).toBeGreaterThanOrEqual(0);
+    expect(bounds.right).toBeLessThanOrEqual(bounds.viewport + 1);
     assertNoBackendRequests(requests);
   });
 
