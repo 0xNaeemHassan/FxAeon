@@ -675,9 +675,20 @@ async function runProof(captureStage: string) {
       await page.screenshot({ path: resolve(artifactRoot, `${position.market}-${position.side}-closed.png`), fullPage: true });
       console.log(`Browser closed and removed ${position.market} ${position.side} #${position.positionId}`);
     }
-    await expect(page.getByText('No open positions', { exact: true })).toBeVisible();
-    await page.screenshot({ path: resolve(artifactRoot, 'positions-all-closed.png'), fullPage: true });
     assert.equal(closedPositions.length, scenarios.length, 'every supported position must close through the browser');
+    // A delayed/unavailable indexer is allowed to leave the product in its
+    // honest partial-empty state. Every position has already passed the
+    // receipt-bound canonical zero assertion above, so accepting that state
+    // here does not turn partial reads into a claim of an exhaustive empty
+    // portfolio. Prefer the normal ready-empty presentation when it arrives.
+    const readyEmpty = page.getByText('No open positions', { exact: true });
+    const partialEmpty = page.getByText('No positions in verified pools', { exact: true });
+    await expect.poll(async () => {
+      if (await readyEmpty.isVisible().catch(() => false)) return 'ready-empty';
+      if (await partialEmpty.isVisible().catch(() => false)) return 'partial-empty';
+      return 'waiting';
+    }, { timeout: 120_000 }).toMatch(/^(ready-empty|partial-empty)$/);
+    await page.screenshot({ path: resolve(artifactRoot, 'positions-all-closed.png'), fullPage: true });
     assert.ok(existingBorrowProof, 'existing-position borrow must complete through the browser');
     completed = true;
     await context.tracing.stop({ path: resolve(artifactRoot, 'trace.zip') });

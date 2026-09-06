@@ -18,3 +18,10 @@ test("browser proof re-reviews interval-mined quote refreshes with a bounded ret
   assert.match(browserProof, /Poll one non-rejecting state machine/);
   assert.doesNotMatch(browserProof, /const firstSignature = expect\.poll[\s\S]{0,500}Promise\.race/);
 });
+
+test("browser proof accepts honest partial-empty state only after exhaustive close proof", () => {
+  const allClosed = browserProof.indexOf("assert.equal(closedPositions.length, scenarios.length");
+  const partialState = browserProof.indexOf("No positions in verified pools");
+  assert.ok(allClosed >= 0 && partialState > allClosed, "partial-empty acceptance must follow every canonical close assertion");
+  assert.match(browserProof, /normal ready-empty presentation/);
+});
