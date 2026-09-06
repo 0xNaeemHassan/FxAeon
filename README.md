@@ -131,7 +131,7 @@ Every write follows the same guarded lifecycle:
 5. show a human-readable and raw transaction review sheet;
 6. request a visible wallet confirmation for each step;
 7. wait for a successful, fingerprint-matching receipt before continuing;
-8. wait one additional block and reread authoritative protocol state.
+8. wait for three confirmations, then reread the receipt and authoritative protocol state.
 
 A rejection, revert, timeout, provider inconsistency, or nonce drift stops the route. Bridge source confirmation is never presented as destination delivery.
 

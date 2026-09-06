@@ -115,14 +115,15 @@ export default function DocsPage() {
                 <li>Connect or choose the wallet you want to use. Check the address shown in the wallet profile.</li>
                 <li>Start with Portfolio to inspect verified positions, or choose Trade, Earn, Borrow, or Move.</li>
                 <li>Enter an amount, open the review, and read the network, wallet, amounts, approvals, and transaction steps.</li>
-                <li>Acknowledge the review, then approve each wallet request. The next step waits for the prior receipt.</li>
+                <li>Acknowledge the review, then approve each wallet request. A submitted transaction is shown immediately, while each route step waits for three confirmations before the next step or final state is accepted.</li>
               </ol>
             </section>
 
             <section id="access" className={styles.section}>
               <h2>Browser & Telegram</h2>
               <p>The web app and Telegram Mini App offer the same FxAeon actions. Telegram adds native sizing, haptics, and navigation, while your selected wallet still approves transactions.</p>
-              <p>When Privy is available, it supports login and wallet controls inside Telegram. On the web, you can explicitly connect a supported browser wallet.</p>
+              <p>When Privy is available, it supports login and wallet controls inside Telegram. On the web, you can explicitly connect a supported browser wallet. The Mini App bridge is an optional host integration; FxAeon waits briefly for delayed launch data and never falls through to a browser-wallet error inside Telegram.</p>
+              <p>Production deploys validate the public build configuration, publish the static app, and then synchronize the @FxAeonBot profile and default Mini App menu from CI. The bot token remains a protected GitHub secret: it is used only by the post-deploy sync, never by the browser build or a <code>NEXT_PUBLIC_*</code> variable.</p>
             </section>
 
             <section id="wallets" className={styles.section}>
@@ -175,7 +176,7 @@ export default function DocsPage() {
 
             <section id="recovery" className={styles.section}>
               <h2>Recovery</h2>
-              <p>After your wallet returns a transaction hash, FxAeon saves it on this device so Activity can check the receipt again. This saved record is not a complete blockchain history or proof of balance, position, delivery, or authorization.</p>
+              <p>After your wallet returns a transaction hash, FxAeon saves it on this device so Activity can check the receipt again. A hash can be linked before inclusion, but FxAeon does not mark a step terminal until the matching receipt remains canonical through three confirmations. This saved record is not a complete blockchain history or proof of balance, position, delivery, or authorization.</p>
               <p>Activity reconciles hashes against the selected wallet and chain. It never resends automatically. If a route partially completes, do not repeat the full action; inspect each step and the current on-chain state. For a bridge, wait for separate destination delivery verification.</p>
             </section>
 

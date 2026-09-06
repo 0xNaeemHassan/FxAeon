@@ -17,7 +17,7 @@ import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
 import { useWalletDemand, useWalletProfileSession } from '@/components/WalletDemandProvider';
 import { ConfirmedPositionCards } from '@/components/ConfirmedPositionCards';
 import { formatUsd } from '@/lib/prices';
-import type { WalletAssetSnapshot } from '@/lib/walletAssets';
+import { walletAssetValuation } from '@/lib/walletAssets';
 import { userSafeError } from '@/lib/errors';
 import { haptic } from '@/lib/telegram';
 import { usePrivyWallet } from '@/lib/wallet';
@@ -97,7 +97,7 @@ export default function WalletProfile() {
   }, [open, setOpenWallet]);
 
   const nonZero = useMemo(() => assets?.assets.filter((asset) => asset.balanceWei > 0n) ?? [], [assets]);
-  const valuation = useMemo(() => walletValuation(assets), [assets]);
+  const valuation = useMemo(() => walletAssetValuation(assets), [assets]);
 
   const disconnect = async () => {
     setDisconnectError('');
@@ -222,16 +222,3 @@ function ProfileLink({ href, icon: Icon, label, body, onNavigate }: { href: stri
   );
 }
 
-type WalletValuation = {
-  complete: boolean;
-  totalUsd: number | null;
-  reason: string;
-};
-
-function walletValuation(snapshot: WalletAssetSnapshot | null): WalletValuation {
-  if (!snapshot) return { complete: false, totalUsd: null, reason: 'Supported balances are unavailable.' };
-  if (Object.values(snapshot.networks).some((network) => network.status !== 'ready') || snapshot.unpricedAssetCount > 0) {
-    return { complete: false, totalUsd: null, reason: 'Some balances or validated USD prices are unavailable, so the total is hidden.' };
-  }
-  return { complete: true, totalUsd: snapshot.totalUsdValue, reason: '' };
-}

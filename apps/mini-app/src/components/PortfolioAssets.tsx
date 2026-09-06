@@ -79,8 +79,16 @@ function AssetSheet({ asset, onClose }: { asset: WalletAsset; onClose: () => voi
     const previousFocus = document.activeElement as HTMLElement | null;
     const overflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    node?.showModal();
-    return () => { node?.close(); document.body.style.overflow = overflow; previousFocus?.focus(); };
+    // A few embedded Telegram/WebView shells expose HTMLDialogElement without
+    // implementing showModal(). Keep the same portal surface usable there.
+    try { node?.showModal(); } catch { node?.setAttribute('open', ''); }
+    return () => {
+      if (node?.open) {
+        try { node.close(); } catch { node.removeAttribute('open'); }
+      }
+      document.body.style.overflow = overflow;
+      previousFocus?.focus();
+    };
   }, []);
   const explorer = asset.chainId === 8453 ? 'https://basescan.org' : 'https://etherscan.io';
   const key = asset.canonicalKey;
