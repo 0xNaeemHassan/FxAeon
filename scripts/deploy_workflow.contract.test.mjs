@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-const workflow = readFileSync(new URL('../.github/workflows/deploy-mini-app.yml', import.meta.url), 'utf8');
+// Git may materialize checked-in YAML with CRLF on Windows. Keep the
+// contract's structural substring checks independent of checkout settings.
+const workflow = readFileSync(new URL('../.github/workflows/deploy-mini-app.yml', import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
 
 function step(name) {
   const start = workflow.indexOf(`      - name: ${name}`);
