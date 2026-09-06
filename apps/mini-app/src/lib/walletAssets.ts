@@ -16,12 +16,20 @@ export type WalletAssetSnapshot = {
   walletAddress: string; assets: WalletAsset[]; networks: Record<WalletAssetChain, WalletAssetNetwork>;
   totalUsdValue: number; unpricedAssetCount: number; updatedAt: number; source: 'alchemy' | 'canonical' | 'mixed';
 };
+export type WalletAssetCountState = 'loading' | 'unavailable' | 'partial' | 'ready';
 export const ASSET_PRICE_MAX_AGE_MS = 2 * 60_000;
 export const ASSET_BALANCE_MAX_AGE_MS = 2 * 60_000;
 export const ASSET_DISCOVERY_STALE_MS = 60_000;
 const ADDRESS = /^0x[0-9a-f]{40}$/i;
 const record = (value: unknown): Record<string, unknown> | null => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 const label = (value: unknown, fallback: string, max: number) => typeof value === 'string' && value.trim() ? value.replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, '').trim().slice(0, max) || fallback : fallback;
+
+export function walletAssetCountLabel(count: number, state: WalletAssetCountState): string {
+  if (state === 'loading') return 'Loading';
+  if (state === 'unavailable') return 'Unavailable';
+  if (state === 'partial') return 'Updating';
+  return `${count} ${count === 1 ? 'asset' : 'assets'}`;
+}
 
 export function canonicalAsset(chainId: WalletAssetChain, address: Address | null): { key: FxTokenKey; decimals: number } | null {
   if (address === null) return { key: 'ETH', decimals: 18 };

@@ -11,7 +11,7 @@ import { ArrowDownToLine, ArrowLeftRight, CandlestickChart, Coins, ExternalLink,
 import TokenIcon from '@/components/TokenIcon';
 import { AddressChip } from '@/components/ui';
 import { formatUsd } from '@/lib/prices';
-import type { WalletAsset, WalletAssetSnapshot } from '@/lib/walletAssets';
+import { walletAssetCountLabel, type WalletAsset, type WalletAssetSnapshot } from '@/lib/walletAssets';
 import styles from './PortfolioAssets.module.css';
 
 export type PortfolioNetwork = 'all' | 1 | 8453;
@@ -50,10 +50,15 @@ export function PortfolioAssets({ snapshot, loading, network = 'all' }: { snapsh
       .sort((a, b) => (b.usdValue ?? -1) - (a.usdValue ?? -1) || a.symbol.localeCompare(b.symbol) || a.chainId - b.chainId);
   }, [snapshot, search, network]);
   const networks = network === 'all' ? [1, 8453] as const : [network];
-  const incomplete = snapshot && networks.some((chain) => snapshot.networks[chain].status !== 'ready');
+  const incomplete = Boolean(snapshot && networks.some((chain) => snapshot.networks[chain].status !== 'ready'));
+  const countState = !snapshot
+    ? loading ? 'loading' : 'unavailable'
+    : !incomplete ? 'ready'
+      : networks.some((chain) => snapshot.networks[chain].status === 'pending') ? 'loading'
+        : networks.some((chain) => snapshot.networks[chain].status === 'unavailable') ? 'unavailable' : 'partial';
 
   return <section className={styles.assets} aria-labelledby="portfolio-assets-heading">
-    <div className={styles.sectionHeading}><h2 id="portfolio-assets-heading">Assets</h2><span>{loading && !snapshot ? 'Loading' : `${assets.length} ${assets.length === 1 ? 'asset' : 'assets'}`}</span></div>
+    <div className={styles.sectionHeading}><h2 id="portfolio-assets-heading">Assets</h2><span>{walletAssetCountLabel(assets.length, countState)}</span></div>
     <label className={styles.search}><Search size={18} aria-hidden="true" /><span className="sr-only">Search assets</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search assets" autoComplete="off" /></label>
     {loading && !snapshot ? <div className={styles.loading} role="status" aria-label="Loading assets"><span /><span /><span /></div>
       : !snapshot ? <p className={styles.empty} role="status">Assets could not load. Refresh to try again.</p>
@@ -62,7 +67,7 @@ export function PortfolioAssets({ snapshot, loading, network = 'all' }: { snapsh
         <AssetIcon asset={asset} /><span className={styles.assetName}><strong>{asset.symbol}</strong><small>{networkLabel(asset.chainId)}</small></span>
         <span className={styles.assetWorth}><strong key={asset.usdValue} className={styles.changedValue}>{formatUsd(asset.usdValue)}</strong><AssetQuantity asset={asset} /></span>
       </button></li>)}</ul>}
-    {incomplete && <p className={styles.networkNote} role="status">{networks.filter((chain) => snapshot.networks[chain].status !== 'ready').map(networkLabel).join(' and ')} balances may be incomplete.</p>}
+    {incomplete && snapshot && <p className={styles.networkNote} role="status">{networks.filter((chain) => snapshot.networks[chain].status !== 'ready').map(networkLabel).join(' and ')} balances may be incomplete.</p>}
     {selected && <AssetSheet asset={selected} onClose={() => setSelection(null)} />}
   </section>;
 }
