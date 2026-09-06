@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createWalletDemandRegistry, walletDemandForPathname } from '../src/lib/walletDemand';
+import { createWalletDemandRegistry, isWalletProfileOpenForRoute, walletDemandForPathname } from '../src/lib/walletDemand';
 
 test('portfolio is the only route that starts expanded cross-chain asset discovery', () => {
   assert.deepEqual(walletDemandForPathname('/portfolio'), {
@@ -45,6 +45,27 @@ test('an open wallet profile registers expanded assets and positions on an infor
   assert.deepEqual(registry.getDemand(), {
     enabled: false, expandedAssets: false, chainPulse: false, positions: false,
   });
+});
+
+test('wallet profile state survives demand enablement on portfolio, earn, and move', () => {
+  const wallet = '0xAbC0000000000000000000000000000000000123';
+  for (const pathname of ['/portfolio', '/earn', '/move']) {
+    const routeDemand = walletDemandForPathname(pathname);
+    const profile = { address: wallet.toLowerCase(), routeKey: pathname };
+    assert.equal(isWalletProfileOpenForRoute(profile, wallet, pathname), true);
+
+    const registry = createWalletDemandRegistry(routeDemand);
+    const unregister = registry.register({ expandedAssets: true, chainPulse: true, positions: true });
+    assert.deepEqual(registry.getDemand(), {
+      enabled: true, expandedAssets: true, chainPulse: true, positions: true,
+    });
+    unregister();
+  }
+  assert.equal(isWalletProfileOpenForRoute(
+    { address: wallet.toLowerCase(), routeKey: '/earn' },
+    wallet,
+    '/move',
+  ), false, 'an old route must not reopen the drawer after navigation');
 });
 
 test('multiple profile consumers deduplicate effective demand and clean up independently', () => {

@@ -46,7 +46,7 @@ export default function PrivyClientProvider({ children }: { children: React.Reac
   });
   if (!PRIVY_APP_ID) return (
     <UnavailableWalletProvider>
-      <WalletDemandProvider routeDemand={demand}><RouteDataProviders>{children}</RouteDataProviders></WalletDemandProvider>
+      <WalletDemandProvider routeDemand={demand} routeKey={pathname}><RouteDataProviders>{children}</RouteDataProviders></WalletDemandProvider>
     </UnavailableWalletProvider>
   );
   return (
@@ -74,7 +74,7 @@ export default function PrivyClientProvider({ children }: { children: React.Reac
       }}
     >
       <PrivyWalletBridge>
-        <WalletDemandProvider routeDemand={demand}><RouteDataProviders>{children}</RouteDataProviders></WalletDemandProvider>
+        <WalletDemandProvider routeDemand={demand} routeKey={pathname}><RouteDataProviders>{children}</RouteDataProviders></WalletDemandProvider>
       </PrivyWalletBridge>
     </PrivyProvider>
   );

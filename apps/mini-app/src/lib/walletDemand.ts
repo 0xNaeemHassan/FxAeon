@@ -23,6 +23,18 @@ export function walletDemandForPathname(pathname: string): WalletDemand {
   return OFF;
 }
 
+/** Keep the profile drawer open when its own demand enablement rerenders the
+ * route providers, but never carry it across a different demand surface. */
+export function isWalletProfileOpenForRoute(
+  profile: { address: string; routeKey: string } | null,
+  walletAddress: string | undefined,
+  routeKey: string,
+): boolean {
+  return Boolean(profile && walletAddress
+    && profile.routeKey === routeKey
+    && profile.address === walletAddress.toLowerCase());
+}
+
 export type WalletDemandRegistry = {
   setRouteDemand: (demand: WalletDemand) => void;
   register: (demand: WalletDemandRegistration) => () => void;

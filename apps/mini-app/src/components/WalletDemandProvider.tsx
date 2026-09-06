@@ -6,20 +6,24 @@ import {
   type WalletDemand,
   type WalletDemandRegistration,
   type WalletDemandRegistry,
+  isWalletProfileOpenForRoute,
 } from '@/lib/walletDemand';
 
 type WalletDemandContextValue = {
   demand: WalletDemand;
   register: (demand: WalletDemandRegistration) => () => void;
+  walletProfileAddress: string | null;
+  setWalletProfileAddress: (address: string | null) => void;
 };
 
 const WalletDemandContext = createContext<WalletDemandContextValue | null>(null);
 
-export default function WalletDemandProvider({ routeDemand, children }: { routeDemand: WalletDemand; children: ReactNode }) {
+export default function WalletDemandProvider({ routeDemand, routeKey, children }: { routeDemand: WalletDemand; routeKey: string; children: ReactNode }) {
   const registryRef = useRef<WalletDemandRegistry | null>(null);
   if (!registryRef.current) registryRef.current = createWalletDemandRegistry(routeDemand);
   registryRef.current.setRouteDemand(routeDemand);
   const [, setRevision] = useState(0);
+  const [profile, setProfile] = useState<{ address: string; routeKey: string } | null>(null);
   const register = useCallback((demand: WalletDemandRegistration) => {
     const unregister = registryRef.current!.register(demand);
     setRevision((value) => value + 1);
@@ -28,7 +32,15 @@ export default function WalletDemandProvider({ routeDemand, children }: { routeD
       setRevision((value) => value + 1);
     };
   }, []);
-  const value: WalletDemandContextValue = { demand: registryRef.current!.getDemand(), register };
+  const setWalletProfileAddress = useCallback((address: string | null) => {
+    setProfile(address ? { address: address.toLowerCase(), routeKey } : null);
+  }, [routeKey]);
+  // Route changes must synchronously hide an old drawer, while a demand
+  // change caused by opening the drawer must retain it across the position
+  // provider's enable transition. Associate the open state with its pathname
+  // to distinguish those two cases without global UI state.
+  const walletProfileAddress = isWalletProfileOpenForRoute(profile, profile?.address, routeKey) ? profile!.address : null;
+  const value: WalletDemandContextValue = { demand: registryRef.current!.getDemand(), register, walletProfileAddress, setWalletProfileAddress };
   return <WalletDemandContext.Provider value={value}>{children}</WalletDemandContext.Provider>;
 }
 
@@ -46,4 +58,10 @@ export function useEffectiveWalletDemand(): WalletDemand {
   const context = useContext(WalletDemandContext);
   if (!context) throw new Error('useEffectiveWalletDemand must be used inside WalletDemandProvider');
   return context.demand;
+}
+
+export function useWalletProfileSession(): Pick<WalletDemandContextValue, 'walletProfileAddress' | 'setWalletProfileAddress'> {
+  const context = useContext(WalletDemandContext);
+  if (!context) throw new Error('useWalletProfileSession must be used inside WalletDemandProvider');
+  return context;
 }

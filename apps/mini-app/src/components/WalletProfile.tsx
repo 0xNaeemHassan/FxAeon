@@ -14,7 +14,7 @@ import {
   ProtocolPositionSkeleton,
 } from '@/components/ProtocolPositionCard';
 import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
-import { useWalletDemand } from '@/components/WalletDemandProvider';
+import { useWalletDemand, useWalletProfileSession } from '@/components/WalletDemandProvider';
 import { ConfirmedPositionCards } from '@/components/ConfirmedPositionCards';
 import { formatUsd } from '@/lib/prices';
 import type { WalletAssetSnapshot } from '@/lib/walletAssets';
@@ -31,14 +31,16 @@ export default function WalletProfile() {
   const positionState = useProtocolPositions();
   const refreshPositions = positionState.refresh;
   const walletIdentity = wallet.ready && wallet.authenticated ? wallet.address?.toLowerCase() ?? '' : '';
-  const [openWallet, setOpenWallet] = useState<string | null>(null);
+  const { walletProfileAddress: openWallet, setWalletProfileAddress: setOpenWallet } = useWalletProfileSession();
   const [disconnecting, setDisconnecting] = useState(false);
   const [disconnectError, setDisconnectError] = useState('');
   // Hide immediately on account loss/change, then discard the old open state
   // so reconnecting that account cannot silently reopen a prior drawer.
   const open = Boolean(walletIdentity && openWallet === walletIdentity);
   useWalletDemand(WALLET_PROFILE_DEMAND, open);
-  useEffect(() => { setOpenWallet(null); }, [walletIdentity]);
+  useEffect(() => {
+    if (openWallet && openWallet !== walletIdentity) setOpenWallet(null);
+  }, [openWallet, setOpenWallet, walletIdentity]);
   const walletAssets = useWalletAssets({ address: wallet.address, enabled: open && wallet.ready && Boolean(wallet.address) });
   const assets = walletAssets.data;
   const loading = walletAssets.status === 'loading';
@@ -92,7 +94,7 @@ export default function WalletProfile() {
       document.removeEventListener('keydown', handleKeyDown);
       window.requestAnimationFrame(() => restoreFocusTo?.focus());
     };
-  }, [open]);
+  }, [open, setOpenWallet]);
 
   const nonZero = useMemo(() => assets?.assets.filter((asset) => asset.balanceWei > 0n) ?? [], [assets]);
   const valuation = useMemo(() => walletValuation(assets), [assets]);
