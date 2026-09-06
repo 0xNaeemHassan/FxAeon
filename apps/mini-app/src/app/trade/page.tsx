@@ -2,12 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowDownRight, ArrowUpRight, ChevronRight, Layers2, TrendingDown, TrendingUp } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, ChevronRight, Layers2 } from 'lucide-react';
 import { AppShell, Card } from '@/components/ui';
 import { ActionReview } from '@/components/ActionReview';
-import { TradeMarketChart, useMarketHistory } from '@/components/MarketChart';
-import TokenIcon from '@/components/TokenIcon';
-import { useLiveMarketQuote, useUsdPrices } from '@/components/PriceProvider';
+import { TradeMarketChart } from '@/components/MarketChart';
 import {
   positionIsStale,
   ProtocolPositionCard,
@@ -27,7 +25,6 @@ import styles from '@/components/trade-surfaces.module.css';
 import { positiveDecimal } from '@/lib/amount';
 import { DEFAULT_SLIPPAGE_PERCENT, readSlippagePercent } from '@/lib/settings';
 import { readTradeDeepLinkContext, resetTransactionAmounts, type TradeDeepLinkContext } from '@/lib/transactionState';
-import { formatUsdPrice } from '@/lib/prices';
 import {
   parseAmount,
   positionInputTokenOptions,
@@ -46,62 +43,6 @@ function createPrefetchSessionId(): string {
 function positionHref(market: UiMarket, side: UiSide, positionId: string | number, action?: 'close'): string {
   const key = encodeURIComponent(`${market}:${side}:${positionId}`);
   return `/positions?position=${key}${action ? `&action=${action}` : ''}`;
-}
-
-function TradeInstrumentHeader({
-  market,
-  onMarketChange,
-}: {
-  market: UiMarket;
-  onMarketChange: (market: UiMarket) => void;
-}) {
-  const history = useMarketHistory(market, '1D');
-  const { prices, status } = useUsdPrices();
-  const live = useLiveMarketQuote(market);
-  const snapshot = history.snapshot;
-  const price = live.isFresh ? live.quote?.price : prices[market === 'ETH' ? 'ETH' : 'WBTC'] ?? snapshot?.currentPrice;
-  const change = live.isFresh ? live.quote?.percentChange24h : snapshot?.percentChange;
-  const high = live.isFresh ? live.quote?.high24h : snapshot ? Math.max(...snapshot.points.map((point) => point.price)) : undefined;
-  const low = live.isFresh ? live.quote?.low24h : snapshot ? Math.min(...snapshot.points.map((point) => point.price)) : undefined;
-  const positive = change !== undefined && change >= 0;
-  const ChangeIcon = positive ? TrendingUp : TrendingDown;
-  const freshness = live.isFresh
-    ? 'Live market feed'
-    : live.status === 'connecting' || live.status === 'reconnecting'
-      ? 'Reconnecting · validated price shown'
-      : status === 'unavailable'
-        ? 'Market feed unavailable'
-        : 'Using last validated price';
-
-  return (
-    <section className={styles.instrumentHeader} aria-label={`${market} trading instrument`}>
-      <div className={styles.instrumentTopline}>
-        <div className="flex min-w-0 items-center gap-3">
-          <span className={styles.instrumentIcon}><TokenIcon symbol={market === 'ETH' ? 'ETH' : 'WBTC'} size={28} /></span>
-          <div className="min-w-0">
-            <p className={styles.instrumentEyebrow}>Spot reference</p>
-            <h2 className="truncate text-[18px] font-semibold">{market} / USD</h2>
-          </div>
-        </div>
-        <div className={styles.instrumentPrice}>
-          <span className="text-display text-[23px] font-semibold tabular-nums">{formatUsdPrice(price)}</span>
-          <span className={`inline-flex items-center justify-end gap-1 text-[11px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}>
-            {change === undefined ? '24h change unavailable' : <><ChangeIcon className="h-3.5 w-3.5" aria-hidden="true" />{positive ? '+' : ''}{change.toFixed(2)}% 24h</>}
-          </span>
-        </div>
-      </div>
-      <div className={styles.instrumentMeta}>
-        <span className={styles.instrumentFreshness} role="status"><span className={`status-dot ${live.isFresh ? '' : 'status-dot-warn'}`} aria-hidden="true" />{freshness}</span>
-        <dl className={styles.instrumentStats}>
-          <div><dt>24h high</dt><dd>{formatUsdPrice(high)}</dd></div>
-          <div><dt>24h low</dt><dd>{formatUsdPrice(low)}</dd></div>
-        </dl>
-      </div>
-      <div className={styles.marketChooser}>
-        <Segmented value={market} onChange={onMarketChange} ariaLabel="Market" options={[{ value: 'ETH', label: 'ETH market', sub: 'Ethereum', ariaLabel: 'ETH', icon: <TokenIcon symbol="ETH" size={20} /> }, { value: 'BTC', label: 'BTC market', sub: 'Wrapped BTC', ariaLabel: 'BTC', icon: <TokenIcon symbol="WBTC" size={20} /> }]} />
-      </div>
-    </section>
-  );
 }
 
 export default function TradePage() {
@@ -377,13 +318,9 @@ export default function TradePage() {
           <Link href="/positions" className="glass-press inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 text-[12px] font-semibold text-mut hover:text-mint"><Layers2 className="h-4 w-4" aria-hidden="true" />Positions</Link>
         </header>
 
-        <TradeInstrumentHeader
-          market={market}
-          onMarketChange={changeMarket}
-        />
         <div className={styles.tradeLayout}>
         <div className={styles.marketColumn}>
-          <TradeMarketChart market={market} />
+          <TradeMarketChart market={market} onMarketChange={changeMarket} />
         </div>
         <div className={styles.ticketColumn}>
         <Card className={`${styles.tradeTicket} trade-ticket`}>

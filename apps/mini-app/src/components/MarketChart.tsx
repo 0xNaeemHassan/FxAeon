@@ -10,6 +10,7 @@ import { formatUsdPrice } from '@/lib/prices';
 import { haptic } from '@/lib/telegram';
 import { subscribeToForegroundResume } from '@/lib/foreground';
 import { createCoalescedReadCache } from '@/lib/coalescedRead';
+import { Segmented } from '@/components/ProtocolForm';
 import styles from '@/components/trade-surfaces.module.css';
 
 type HistoryState = { status: 'loading' | 'ready' | 'unavailable'; snapshot: MarketHistorySnapshot | null };
@@ -102,7 +103,7 @@ function useLiveCandles(market: MarketSymbol, range: LiveMarketRange, enabled: b
   return { ...state, snapshot: enabled ? displayedSnapshot : null, retry: () => setAttempt((value) => value + 1), live };
 }
 
-export function TradeMarketChart({ market }: { market: MarketSymbol }) {
+export function TradeMarketChart({ market, onMarketChange }: { market: MarketSymbol; onMarketChange?: (market: MarketSymbol) => void }) {
   const [range, setRange] = useState<LiveMarketRange>('1D');
   // Unknown is intentionally distinct from desktop: on a mobile first paint,
   // matchMedia has not resolved yet and the collapsed chart must stay cold.
@@ -111,12 +112,21 @@ export function TradeMarketChart({ market }: { market: MarketSymbol }) {
   const chartId = useId();
   const expanded = isMobile === false || (isMobile === true && mobileExpanded);
   const history = useLiveCandles(market, range, expanded);
-  const { prices } = useUsdPrices();
+  const { prices, status } = useUsdPrices();
   const live = useLiveMarketQuote(market);
   const fallbackPrice = prices[market === 'ETH' ? 'ETH' : 'WBTC'];
   const price = live.isFresh ? live.quote?.price : fallbackPrice ?? history.snapshot?.currentPrice;
   const change = live.isFresh ? live.quote?.percentChange24h : history.snapshot?.percentChange;
+  const high = live.isFresh ? live.quote?.high24h : history.snapshot?.high;
+  const low = live.isFresh ? live.quote?.low24h : history.snapshot?.low;
   const positive = change !== undefined && change >= 0;
+  const freshness = live.isFresh
+    ? 'Live market feed'
+    : live.status === 'connecting' || live.status === 'reconnecting'
+      ? 'Reconnecting · validated price shown'
+      : status === 'unavailable'
+        ? 'Market feed unavailable'
+        : 'Using last validated price';
   useEffect(() => {
     const media = window.matchMedia('(max-width: 640px)');
     const update = () => setIsMobile(media.matches);
@@ -124,11 +134,16 @@ export function TradeMarketChart({ market }: { market: MarketSymbol }) {
     media.addEventListener('change', update);
     return () => media.removeEventListener('change', update);
   }, []);
-  return <section className={`${styles.marketChart} market-chart-panel`} aria-label={`${market} market chart`}>
+  return <section className={`${styles.marketChart} market-chart-panel`} data-mobile-expanded={expanded} aria-label={`${market} market chart`}>
     <header className="market-chart-header">
       <div className="flex min-w-0 items-center gap-3"><span className="market-chart-token"><TokenIcon symbol={market === 'BTC' ? 'WBTC' : 'ETH'} size={34} /></span><div className="min-w-0"><span className="micro-label text-[11px] text-mut">Market</span><h2 className="truncate text-[18px] font-semibold">{market} / USD</h2></div></div>
       <div className="shrink-0 text-right"><p className="text-display text-[24px] font-semibold tabular-nums">{formatUsdPrice(price)}</p><p className={`mt-1 inline-flex items-center gap-1 text-[11px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}>{change === undefined ? 'Change unavailable' : <><span aria-hidden="true">{positive ? '↗' : '↘'}</span>{positive ? '+' : ''}{change.toFixed(2)}% 24h</>}</p></div>
     </header>
+    <div className="market-chart-instrument-meta">
+      <span className="market-chart-freshness" role="status"><span className={`status-dot ${live.isFresh ? '' : 'status-dot-warn'}`} aria-hidden="true" />{freshness}</span>
+      <dl className="market-chart-stats"><div><dt>24h high</dt><dd>{formatUsdPrice(high)}</dd></div><div><dt>24h low</dt><dd>{formatUsdPrice(low)}</dd></div></dl>
+    </div>
+    {onMarketChange && <div className="market-chart-market-switch"><Segmented value={market} onChange={onMarketChange} ariaLabel="Market" options={[{ value: 'ETH', label: 'ETH market', sub: 'Ethereum', ariaLabel: 'ETH', icon: <TokenIcon symbol="ETH" size={20} /> }, { value: 'BTC', label: 'BTC market', sub: 'Wrapped BTC', ariaLabel: 'BTC', icon: <TokenIcon symbol="WBTC" size={20} /> }]} /></div>}
     <button type="button" className="market-chart-toggle" aria-expanded={expanded} aria-controls={chartId} aria-disabled={isMobile === null || undefined} disabled={isMobile === null} onClick={() => { setMobileExpanded((value) => !value); haptic('selection'); }}><BarChart3 className="h-4 w-4" aria-hidden="true" /><span>{expanded ? 'Hide chart' : 'Show chart'}</span><ChevronDown className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`} aria-hidden="true" /></button>
     <div id={chartId} className="market-chart-content" hidden={!expanded}><div className="market-chart-frame">
       {history.status === 'loading' && <ChartSkeleton />}

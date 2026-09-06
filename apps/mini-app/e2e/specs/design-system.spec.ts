@@ -54,6 +54,48 @@ test.describe('cohesive responsive design', () => {
     assertNoBackendRequests(requests);
   });
 
+  test('working routes keep page chrome fixed and scroll supporting content internally', async ({ page, requests }) => {
+    for (const width of [320, 359, 390, 430, 768, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/trade', { waitUntil: 'domcontentloaded' });
+      const shell = page.locator('.app-shell-tabs');
+      const content = page.locator('.app-content-tabs');
+      await expect(shell).toBeVisible();
+      await expect(content).toBeVisible();
+      const geometry = await page.evaluate(() => {
+        const root = document.documentElement;
+        const main = document.querySelector<HTMLElement>('.app-content-tabs');
+        if (!main) throw new Error('working route content is missing');
+        const style = getComputedStyle(main);
+        return {
+          pageOverflow: root.scrollHeight - root.clientHeight,
+          contentOverflow: main.scrollHeight - main.clientHeight,
+          overflowY: style.overflowY,
+          bottomPadding: Number.parseFloat(style.paddingBottom),
+        };
+      });
+      expect(geometry.pageOverflow, `page must not scroll at ${width}px`).toBeLessThanOrEqual(1);
+      expect(geometry.overflowY).toBe('auto');
+      expect(geometry.contentOverflow).toBeGreaterThanOrEqual(0);
+      expect(geometry.bottomPadding).toBeGreaterThan(width <= 640 ? 68 : 39);
+    }
+    assertNoBackendRequests(requests);
+  });
+
+  test('collapsed mobile charts stay cold until explicitly expanded', async ({ page, requests }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/trade', { waitUntil: 'domcontentloaded' });
+    const toggle = page.getByRole('button', { name: 'Show chart', exact: true });
+    await expect(toggle).toBeEnabled();
+    await page.waitForTimeout(250);
+    expect(requests.all.some((url) => url.includes('/candles'))).toBe(false);
+    expect(await page.evaluate(() => performance.getEntriesByType('resource').some((entry) => entry.name.includes('lightweight-charts')))).toBe(false);
+    await toggle.click();
+    await expect(page.getByRole('button', { name: 'Hide chart', exact: true })).toBeVisible();
+    await expect.poll(() => requests.all.filter((url) => url.includes('/candles')).length).toBeGreaterThan(0);
+    assertNoBackendRequests(requests);
+  });
+
   test('the guide is discoverable, searchable, and supports mobile section deep links', async ({ page, requests }) => {
     await page.goto('/more', { waitUntil: 'domcontentloaded' });
     await page.locator('main').getByRole('link', { name: /FxAeon docs/i }).click();
