@@ -43,6 +43,8 @@ jobs:
         run: pnpm verify:production-env
       - name: Run complete repository verification
         run: pnpm verify
+      - name: Build production deployment artifact
+        run: pnpm build
         env:
           NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID }}
           NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL: ${{ secrets.NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL }}
