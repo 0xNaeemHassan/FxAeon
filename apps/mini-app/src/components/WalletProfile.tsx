@@ -221,4 +221,3 @@ function ProfileLink({ href, icon: Icon, label, body, onNavigate }: { href: stri
     </Link>
   );
 }
-

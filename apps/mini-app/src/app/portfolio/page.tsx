@@ -40,7 +40,7 @@ import {
 } from '@/lib/fx';
 import { positionTokenDecimals, type UiPosition } from '@/app/trade/fxUi';
 import { formatUsd, priceKeyForSymbol, usdValueForUnits, type UsdPriceMap } from '@/lib/prices';
-import { walletAssetValuation, type WalletAssetSnapshot } from '@/lib/walletAssets';
+import { walletAssetValuation } from '@/lib/walletAssets';
 import { calculatePositionUsdValuation } from '@/lib/positionValuation';
 import { fxSaveUsdValue } from '@/lib/fxSaveUnits';
 import { haptic } from '@/lib/telegram';
