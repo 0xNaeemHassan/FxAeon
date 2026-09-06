@@ -301,10 +301,15 @@ test.describe("market price context", () => {
 
   test("shows market prices and input USD without confusing token prices with owned balances", async ({ page, requests }) => {
     await page.goto("/trade", { waitUntil: "domcontentloaded" });
+    // Connected-wallet hydration keys the protocol session and remounts the
+    // Trade subtree once the fixture account is restored. Wait for that
+    // session boundary before interacting with the chart controls.
+    await expect(page.getByRole("button", { name: "Open wallet profile" })).toBeVisible();
     await expect(page.getByText("$2,400.00", { exact: true }).first()).toBeVisible();
     const chartContent = page.locator(".market-chart-content");
     const showChart = page.getByRole("button", { name: "Show chart", exact: true });
     await expect(showChart).toHaveAttribute("aria-expanded", "false");
+    await expect(showChart).toBeEnabled();
     await expect(chartContent).toBeHidden();
     await expect(showChart).toHaveAttribute("aria-controls", (await chartContent.getAttribute("id"))!);
     expect((await showChart.boundingBox())!.height).toBeGreaterThanOrEqual(44);
