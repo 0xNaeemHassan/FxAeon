@@ -5,6 +5,7 @@ import { test } from 'node:test';
 // Git may materialize checked-in YAML with CRLF on Windows. Keep the
 // contract's structural substring checks independent of checkout settings.
 const workflow = readFileSync(new URL('../.github/workflows/deploy-mini-app.yml', import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
+const productionEnvValidator = readFileSync(new URL('./validate_production_env.mjs', import.meta.url), 'utf8');
 
 function step(name) {
   const start = workflow.indexOf(`      - name: ${name}`);
@@ -51,5 +52,6 @@ test('native Cloudflare deployment is gated without Wrangler credentials', () =>
   assert.match(wait, /GITHUB_TOKEN:\s*\$\{\{\s*github\.token\s*\}\}/);
   assert.match(wait, /GITHUB_REPOSITORY:\s*\$\{\{\s*github\.repository\s*\}\}/);
   assert.match(wait, /GITHUB_SHA:\s*\$\{\{\s*github\.sha\s*\}\}/);
-  assert.doesNotMatch(workflow.slice(workflow.indexOf('Wait for Cloudflare Pages deployment')), /CLOUDFLARE_(?:API_TOKEN|ACCOUNT_ID)/);
+  assert.doesNotMatch(workflow, /CLOUDFLARE_(?:API_TOKEN|ACCOUNT_ID)/);
+  assert.doesNotMatch(productionEnvValidator, /CLOUDFLARE_(?:API_TOKEN|ACCOUNT_ID)/);
 });

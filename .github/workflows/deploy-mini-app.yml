@@ -38,8 +38,6 @@ jobs:
           NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL: ${{ secrets.NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL }}
           NEXT_PUBLIC_ALCHEMY_DATA_API_KEY: ${{ secrets.NEXT_PUBLIC_ALCHEMY_DATA_API_KEY }}
           NEXT_PUBLIC_TELEGRAM_APP_URL: ${{ vars.NEXT_PUBLIC_TELEGRAM_APP_URL }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         run: pnpm verify:production-env
       - name: Run complete repository verification

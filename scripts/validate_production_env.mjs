@@ -52,13 +52,6 @@ function assertAlchemyDataKey() {
   }
 }
 
-function assertCloudflareAccountId() {
-  const value = requireValue('CLOUDFLARE_ACCOUNT_ID');
-  if (!/^[0-9a-f]{32}$/i.test(value)) {
-    throw new Error('CLOUDFLARE_ACCOUNT_ID must be a 32-character hexadecimal account ID');
-  }
-}
-
 function assertTelegramBotToken() {
   const value = requireValue('TELEGRAM_BOT_TOKEN');
   if (!/^\d+:[A-Za-z0-9_-]{20,}$/.test(value)) {
@@ -74,11 +67,9 @@ try {
   assertAlchemyRpc('NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL', 'base-mainnet.g.alchemy.com');
   assertAlchemyDataKey();
   assertTelegramMiniAppUrl();
-  requireValue('CLOUDFLARE_API_TOKEN');
-  assertCloudflareAccountId();
   assertTelegramBotToken();
 
-  console.log('FxAeon production environment verified: Privy, Alchemy, Telegram, and Cloudflare configuration are structurally valid.');
+  console.log('FxAeon production environment verified: Privy, Alchemy, and Telegram configuration are structurally valid.');
 } catch (error) {
   console.error(`FxAeon production environment invalid: ${error instanceof Error ? error.message : String(error)}`);
   process.exitCode = 1;
