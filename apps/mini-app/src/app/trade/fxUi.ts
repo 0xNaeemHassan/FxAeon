@@ -46,6 +46,7 @@ export function positionOutputTokenOptions(market: UiMarket, side: UiSide): read
 
 const WAD = 10n ** 18n;
 const WSTETH_RATE_ABI = [{ type: 'function', name: 'stEthPerToken', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] }] as const;
+const POSITION_STATE_ABI = [{ type: 'function', name: 'getPosition', stateMutability: 'view', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ name: 'collateral', type: 'uint256' }, { name: 'debt', type: 'uint256' }] }] as const;
 
 export function tokenAddress(token: UiToken | 'fxSAVE' | 'fxUSDBasePool'): Address {
   return TOKEN_META[token].address;
@@ -220,18 +221,37 @@ export async function verifyPositionGroupOwnership(params: {
     }
     return info;
   });
-  const checks = await Promise.allSettled(valid.map((info) => withReadDeadline(params.client.readContract({
-    address: pool,
-    abi: [{ type: 'function', name: 'ownerOf', stateMutability: 'view', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ type: 'address' }] }] as const,
-    functionName: 'ownerOf',
-    args: [BigInt(info.positionId)],
-  }))));
-  const verified: PositionInfo[] = [];
-  checks.forEach((check, index) => {
-    if (check.status !== 'fulfilled' || typeof check.value !== 'string' || check.value.toLowerCase() !== params.walletAddress.toLowerCase()) {
+  const checks = await Promise.allSettled(valid.map(async (info) => {
+    const tokenId = BigInt(info.positionId);
+    const [owner, state] = await Promise.all([
+      withReadDeadline(params.client.readContract({
+        address: pool,
+        abi: [{ type: 'function', name: 'ownerOf', stateMutability: 'view', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ type: 'address' }] }] as const,
+        functionName: 'ownerOf',
+        args: [tokenId],
+      })),
+      withReadDeadline(params.client.readContract({
+        address: pool,
+        abi: POSITION_STATE_ABI,
+        functionName: 'getPosition',
+        args: [tokenId],
+      })),
+    ]);
+    if (typeof owner !== 'string' || owner.toLowerCase() !== params.walletAddress.toLowerCase()) {
       throw new Error(`${params.group.market} ${params.group.side} position ownership verification was incomplete`);
     }
-    verified.push(valid[index]);
+    if (!Array.isArray(state) || state.length !== 2 || typeof state[0] !== 'bigint' || typeof state[1] !== 'bigint' || state[0] < 0n || state[1] < 0n) {
+      throw new TypeError(`canonical position state for ${String(info.positionId)} was malformed`);
+    }
+    // The indexer intentionally retains closed NFTs for history. A canonical
+    // zero accounting state is therefore a successful read of a closed
+    // position, not an unavailable group; omit it from the open workspace.
+    return state[0] === 0n && state[1] === 0n ? null : info;
+  }));
+  const verified: PositionInfo[] = [];
+  checks.forEach((check) => {
+    if (check.status !== 'fulfilled') throw check.reason;
+    if (check.value) verified.push(check.value);
   });
   return verified;
 }

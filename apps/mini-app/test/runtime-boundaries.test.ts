@@ -104,14 +104,30 @@ test('position discovery requires canonical ownerOf for every indexed ID', async
   let reads = 0;
   const result = await verifyPositionGroupOwnership({
     client: {
-      readContract: async () => { reads += 1; return WALLET; },
+      readContract: async (args: { functionName?: string }) => {
+        reads += 1;
+        return args.functionName === 'ownerOf' ? WALLET : [1n, 2n];
+      },
     } as Pick<FxPublicClient, 'readContract'>,
     walletAddress: WALLET,
     group: { market: 'ETH', side: 'long' },
     positions: [info],
   });
   assert.equal(result[0], info);
-  assert.equal(reads, 1);
+  assert.equal(reads, 2);
+});
+
+test('position discovery drops an indexer-retained NFT after canonical accounting reaches zero', async () => {
+  const info = { positionId: 8, rawColls: 10n, rawDebts: 20n } as PositionInfo;
+  const result = await verifyPositionGroupOwnership({
+    client: {
+      readContract: async (args: { functionName?: string }) => args.functionName === 'ownerOf' ? WALLET : [0n, 0n],
+    } as Pick<FxPublicClient, 'readContract'>,
+    walletAddress: WALLET,
+    group: { market: 'ETH', side: 'long' },
+    positions: [info],
+  });
+  assert.deepEqual(result, []);
 });
 
 test('application read facade bounds a stalled SDK/indexer promise', async () => {
