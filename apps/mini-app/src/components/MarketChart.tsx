@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Activity, BarChart3, ChevronDown, RefreshCw } from 'lucide-react';
 import TokenIcon from '@/components/TokenIcon';
 import { useLiveMarketQuote, useUsdPrices } from '@/components/PriceProvider';
@@ -8,11 +8,14 @@ import { fetchMarketHistory, type MarketHistorySnapshot, type MarketRange, type 
 import { fetchMarketCandles, liveQuoteCandle, type LiveMarketRange, type MarketCandleSnapshot } from '@/lib/liveMarket';
 import { formatUsdPrice } from '@/lib/prices';
 import { haptic } from '@/lib/telegram';
+import { subscribeToForegroundResume } from '@/lib/foreground';
+import { createCoalescedReadCache } from '@/lib/coalescedRead';
 import styles from '@/components/trade-surfaces.module.css';
 
 type HistoryState = { status: 'loading' | 'ready' | 'unavailable'; snapshot: MarketHistorySnapshot | null };
-const historyCache = new Map<string, { snapshot: MarketHistorySnapshot; storedAt: number }>();
-const candleCache = new Map<string, { snapshot: MarketCandleSnapshot; storedAt: number }>();
+const MARKET_CACHE_MAX_AGE_MS = 90_000;
+const historyCache = createCoalescedReadCache<MarketHistorySnapshot>();
+const candleCache = createCoalescedReadCache<MarketCandleSnapshot>();
 const RANGE_OPTIONS: LiveMarketRange[] = ['1H', '1D', '7D', '30D'];
 
 function boundedSignal(signal: AbortSignal, timeoutMs = 15_000): AbortSignal {
@@ -22,46 +25,68 @@ function boundedSignal(signal: AbortSignal, timeoutMs = 15_000): AbortSignal {
 export function useMarketHistory(market: MarketSymbol, range: MarketRange): HistoryState & { retry: () => void } {
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<HistoryState>({ status: 'loading', snapshot: null });
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const retry = useCallback(() => setAttempt((value) => value + 1), []);
   useEffect(() => {
     let active = true;
     const key = `${market}:${range}`;
-    const cached = historyCache.get(key);
-    if (cached && Date.now() - cached.storedAt < 90_000) setState({ status: 'ready', snapshot: cached.snapshot });
+    const cached = historyCache.getFresh(key, Date.now(), MARKET_CACHE_MAX_AGE_MS);
+    if (cached) setState({ status: 'ready', snapshot: cached });
     else setState({ status: 'loading', snapshot: null });
-    const controller = new AbortController();
-    void fetchMarketHistory(market, range, fetch, boundedSignal(controller.signal)).then((snapshot) => {
+    if (cached) return () => { active = false; };
+    void historyCache.read(key, () => {
+      const controller = new AbortController();
+      return fetchMarketHistory(market, range, fetch, boundedSignal(controller.signal));
+    }).then((snapshot) => {
       if (!active) return;
-      historyCache.set(key, { snapshot, storedAt: Date.now() });
       setState({ status: 'ready', snapshot });
     }).catch(() => { if (active) setState((current) => current.snapshot ? current : { status: 'unavailable', snapshot: null }); });
-    return () => { active = false; controller.abort(); };
+    return () => { active = false; };
   }, [attempt, market, range]);
-  return { ...state, retry: () => setAttempt((value) => value + 1) };
+  useEffect(() => subscribeToForegroundResume(() => {
+    if (stateRef.current.status === 'loading') return;
+    const key = `${market}:${range}`;
+    if (stateRef.current.status === 'unavailable' || !historyCache.getFresh(key, Date.now(), MARKET_CACHE_MAX_AGE_MS)) retry();
+  }), [market, range, retry]);
+  return { ...state, retry };
 }
 
 function useLiveCandles(market: MarketSymbol, range: LiveMarketRange, enabled: boolean) {
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<{ status: 'loading' | 'ready' | 'unavailable'; snapshot: MarketCandleSnapshot | null }>({ status: 'loading', snapshot: null });
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const baseSnapshotRef = useRef<MarketCandleSnapshot | null>(null);
   const live = useLiveMarketQuote(market);
   useEffect(() => {
     let active = true;
     const key = `${market}:${range}`;
-    const cached = candleCache.get(key);
     if (!enabled) return () => undefined;
-    if (cached && Date.now() - cached.storedAt < 90_000) {
-      baseSnapshotRef.current = cached.snapshot;
-      setState({ status: 'ready', snapshot: cached.snapshot });
+    const cached = candleCache.getFresh(key, Date.now(), MARKET_CACHE_MAX_AGE_MS);
+    if (cached) {
+      baseSnapshotRef.current = cached;
+      setState({ status: 'ready', snapshot: cached });
     } else { baseSnapshotRef.current = null; setState({ status: 'loading', snapshot: null }); }
-    const controller = new AbortController();
-    void fetchMarketCandles(market, range, fetch, controller.signal).then((snapshot) => {
+    if (cached) return () => { active = false; };
+    void candleCache.read(key, () => {
+      const controller = new AbortController();
+      return fetchMarketCandles(market, range, fetch, controller.signal);
+    }).then((snapshot) => {
       if (!active) return;
       baseSnapshotRef.current = snapshot;
-      candleCache.set(key, { snapshot, storedAt: Date.now() });
       setState({ status: 'ready', snapshot });
     }).catch(() => { if (active) setState((current) => current.snapshot ? current : { status: 'unavailable', snapshot: null }); });
-    return () => { active = false; controller.abort(); };
+    return () => { active = false; };
   }, [attempt, enabled, market, range]);
+  useEffect(() => {
+    if (!enabled) return undefined;
+    return subscribeToForegroundResume(() => {
+      if (stateRef.current.status === 'loading') return;
+      const key = `${market}:${range}`;
+      if (stateRef.current.status === 'unavailable' || !candleCache.getFresh(key, Date.now(), MARKET_CACHE_MAX_AGE_MS)) setAttempt((value) => value + 1);
+    });
+  }, [enabled, market, range]);
   const baseSnapshot = baseSnapshotRef.current;
   let displayedSnapshot = baseSnapshot;
   if (baseSnapshot && live.isFresh && live.quote) {

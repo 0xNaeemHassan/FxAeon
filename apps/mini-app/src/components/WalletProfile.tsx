@@ -14,6 +14,7 @@ import {
   ProtocolPositionSkeleton,
 } from '@/components/ProtocolPositionCard';
 import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
+import { useWalletDemand } from '@/components/WalletDemandProvider';
 import { ConfirmedPositionCards } from '@/components/ConfirmedPositionCards';
 import { formatUsd } from '@/lib/prices';
 import type { WalletAssetSnapshot } from '@/lib/walletAssets';
@@ -22,6 +23,8 @@ import { haptic } from '@/lib/telegram';
 import { usePrivyWallet } from '@/lib/wallet';
 import styles from '@/app/AccountWorkspace.module.css';
 import ConnectWalletButton from '@/components/ConnectWalletButton';
+
+const WALLET_PROFILE_DEMAND = { expandedAssets: true, chainPulse: true, positions: true } as const;
 
 export default function WalletProfile() {
   const wallet = usePrivyWallet();
@@ -34,6 +37,7 @@ export default function WalletProfile() {
   // Hide immediately on account loss/change, then discard the old open state
   // so reconnecting that account cannot silently reopen a prior drawer.
   const open = Boolean(walletIdentity && openWallet === walletIdentity);
+  useWalletDemand(WALLET_PROFILE_DEMAND, open);
   useEffect(() => { setOpenWallet(null); }, [walletIdentity]);
   const walletAssets = useWalletAssets({ address: wallet.address, enabled: open && wallet.ready && Boolean(wallet.address) });
   const assets = walletAssets.data;

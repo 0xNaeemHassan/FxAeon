@@ -23,6 +23,7 @@ import WalletRecoveryCoordinator from '@/components/WalletRecoveryCoordinator';
 import ProtocolPositionProvider from '@/components/ProtocolPositionProvider';
 import WalletDataProvider from '@/components/WalletDataProvider';
 import { walletDemandForPathname } from '@/lib/walletDemand';
+import WalletDemandProvider, { useEffectiveWalletDemand } from '@/components/WalletDemandProvider';
 
 export default function PrivyClientProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? '/';
@@ -45,12 +46,7 @@ export default function PrivyClientProvider({ children }: { children: React.Reac
   });
   if (!PRIVY_APP_ID) return (
     <UnavailableWalletProvider>
-      <WalletDataProvider enabled={demand.enabled} expandedAssets={demand.expandedAssets} chainPulse={demand.chainPulse}>
-        <ProtocolPositionProvider enabled={demand.positions}>
-          <WalletRecoveryCoordinator />
-          {children}
-        </ProtocolPositionProvider>
-      </WalletDataProvider>
+      <WalletDemandProvider routeDemand={demand}><RouteDataProviders>{children}</RouteDataProviders></WalletDemandProvider>
     </UnavailableWalletProvider>
   );
   return (
@@ -78,13 +74,18 @@ export default function PrivyClientProvider({ children }: { children: React.Reac
       }}
     >
       <PrivyWalletBridge>
-        <WalletDataProvider enabled={demand.enabled} expandedAssets={demand.expandedAssets} chainPulse={demand.chainPulse}>
-          <ProtocolPositionProvider enabled={demand.positions}>
-            <WalletRecoveryCoordinator />
-            {children}
-          </ProtocolPositionProvider>
-        </WalletDataProvider>
+        <WalletDemandProvider routeDemand={demand}><RouteDataProviders>{children}</RouteDataProviders></WalletDemandProvider>
       </PrivyWalletBridge>
     </PrivyProvider>
   );
+}
+
+function RouteDataProviders({ children }: { children: React.ReactNode }) {
+  const demand = useEffectiveWalletDemand();
+  return <WalletDataProvider enabled={demand.enabled} expandedAssets={demand.expandedAssets} chainPulse={demand.chainPulse}>
+    <ProtocolPositionProvider enabled={demand.positions}>
+      <WalletRecoveryCoordinator />
+      {children}
+    </ProtocolPositionProvider>
+  </WalletDataProvider>;
 }
