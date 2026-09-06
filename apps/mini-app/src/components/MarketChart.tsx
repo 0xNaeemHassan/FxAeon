@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Activity, BarChart3, ChevronDown, RefreshCw } from 'lucide-react';
 import TokenIcon from '@/components/TokenIcon';
 import { useLiveMarketQuote, useUsdPrices } from '@/components/PriceProvider';
@@ -8,84 +8,109 @@ import { fetchMarketHistory, type MarketHistorySnapshot, type MarketRange, type 
 import { fetchMarketCandles, liveQuoteCandle, type LiveMarketRange, type MarketCandleSnapshot } from '@/lib/liveMarket';
 import { formatUsdPrice } from '@/lib/prices';
 import { haptic } from '@/lib/telegram';
+import { subscribeToForegroundResume } from '@/lib/foreground';
+import { createCoalescedReadCache } from '@/lib/coalescedRead';
 import styles from '@/components/trade-surfaces.module.css';
 
 type HistoryState = { status: 'loading' | 'ready' | 'unavailable'; snapshot: MarketHistorySnapshot | null };
-const historyCache = new Map<string, { snapshot: MarketHistorySnapshot; storedAt: number }>();
-const candleCache = new Map<string, { snapshot: MarketCandleSnapshot; storedAt: number }>();
+const MARKET_CACHE_MAX_AGE_MS = 90_000;
+const historyCache = createCoalescedReadCache<MarketHistorySnapshot>();
+const candleCache = createCoalescedReadCache<MarketCandleSnapshot>();
 const RANGE_OPTIONS: LiveMarketRange[] = ['1H', '1D', '7D', '30D'];
+
+function boundedSignal(signal: AbortSignal, timeoutMs = 15_000): AbortSignal {
+  return AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
+}
 
 export function useMarketHistory(market: MarketSymbol, range: MarketRange): HistoryState & { retry: () => void } {
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<HistoryState>({ status: 'loading', snapshot: null });
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const retry = useCallback(() => setAttempt((value) => value + 1), []);
   useEffect(() => {
     let active = true;
     const key = `${market}:${range}`;
-    const cached = historyCache.get(key);
-    if (cached && Date.now() - cached.storedAt < 90_000) setState({ status: 'ready', snapshot: cached.snapshot });
+    const cached = historyCache.getFresh(key, Date.now(), MARKET_CACHE_MAX_AGE_MS);
+    if (cached) setState({ status: 'ready', snapshot: cached });
     else setState({ status: 'loading', snapshot: null });
-    const controller = new AbortController();
-    void fetchMarketHistory(market, range, fetch, controller.signal).then((snapshot) => {
+    if (cached) return () => { active = false; };
+    void historyCache.read(key, () => {
+      const controller = new AbortController();
+      return fetchMarketHistory(market, range, fetch, boundedSignal(controller.signal));
+    }).then((snapshot) => {
       if (!active) return;
-      historyCache.set(key, { snapshot, storedAt: Date.now() });
       setState({ status: 'ready', snapshot });
     }).catch(() => { if (active) setState((current) => current.snapshot ? current : { status: 'unavailable', snapshot: null }); });
-    return () => { active = false; controller.abort(); };
+    return () => { active = false; };
   }, [attempt, market, range]);
-  return { ...state, retry: () => setAttempt((value) => value + 1) };
+  useEffect(() => subscribeToForegroundResume(() => {
+    if (stateRef.current.status === 'loading') return;
+    const key = `${market}:${range}`;
+    if (stateRef.current.status === 'unavailable' || !historyCache.getFresh(key, Date.now(), MARKET_CACHE_MAX_AGE_MS)) retry();
+  }), [market, range, retry]);
+  return { ...state, retry };
 }
 
-function useLiveCandles(market: MarketSymbol, range: LiveMarketRange) {
+function useLiveCandles(market: MarketSymbol, range: LiveMarketRange, enabled: boolean) {
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<{ status: 'loading' | 'ready' | 'unavailable'; snapshot: MarketCandleSnapshot | null }>({ status: 'loading', snapshot: null });
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const baseSnapshotRef = useRef<MarketCandleSnapshot | null>(null);
   const live = useLiveMarketQuote(market);
   useEffect(() => {
     let active = true;
     const key = `${market}:${range}`;
-    const cached = candleCache.get(key);
-    if (cached && Date.now() - cached.storedAt < 90_000) setState({ status: 'ready', snapshot: cached.snapshot });
-    else setState({ status: 'loading', snapshot: null });
-    const controller = new AbortController();
-    void fetchMarketCandles(market, range, fetch, controller.signal).then((snapshot) => {
+    if (!enabled) return () => undefined;
+    const cached = candleCache.getFresh(key, Date.now(), MARKET_CACHE_MAX_AGE_MS);
+    if (cached) {
+      baseSnapshotRef.current = cached;
+      setState({ status: 'ready', snapshot: cached });
+    } else { baseSnapshotRef.current = null; setState({ status: 'loading', snapshot: null }); }
+    if (cached) return () => { active = false; };
+    void candleCache.read(key, () => {
+      const controller = new AbortController();
+      return fetchMarketCandles(market, range, fetch, controller.signal);
+    }).then((snapshot) => {
       if (!active) return;
       baseSnapshotRef.current = snapshot;
-      candleCache.set(key, { snapshot, storedAt: Date.now() });
       setState({ status: 'ready', snapshot });
     }).catch(() => { if (active) setState((current) => current.snapshot ? current : { status: 'unavailable', snapshot: null }); });
-    return () => { active = false; controller.abort(); };
-  }, [attempt, market, range]);
+    return () => { active = false; };
+  }, [attempt, enabled, market, range]);
   useEffect(() => {
-    const quote = live.quote;
-    const baseSnapshot = baseSnapshotRef.current;
-    if (!live.isFresh) {
-      if (baseSnapshot && state.snapshot && state.snapshot !== baseSnapshot) setState({ status: 'ready', snapshot: baseSnapshot });
-      return;
-    }
-    if (!quote || !state.snapshot) return;
-    const next = liveQuoteCandle(state.snapshot, quote);
-    const last = state.snapshot.candles.at(-1);
-    if (!next || (last && next.time === last.time && next.close === last.close && next.high === last.high && next.low === last.low)) return;
-    setState((current) => {
-      if (!current.snapshot) return current;
-      const candles = current.snapshot.candles.slice();
+    if (!enabled) return undefined;
+    return subscribeToForegroundResume(() => {
+      if (stateRef.current.status === 'loading') return;
+      const key = `${market}:${range}`;
+      if (stateRef.current.status === 'unavailable' || !candleCache.getFresh(key, Date.now(), MARKET_CACHE_MAX_AGE_MS)) setAttempt((value) => value + 1);
+    });
+  }, [enabled, market, range]);
+  const baseSnapshot = baseSnapshotRef.current;
+  let displayedSnapshot = baseSnapshot;
+  if (baseSnapshot && live.isFresh && live.quote) {
+    const next = liveQuoteCandle(baseSnapshot, live.quote);
+    if (next) {
+      const candles = baseSnapshot.candles.slice();
       if (candles.at(-1)?.time === next.time) candles[candles.length - 1] = next;
       else candles.push(next);
       const first = candles[0];
-      if (!first) return current;
-      return { status: 'ready', snapshot: { ...current.snapshot, candles, points: candles.map((candle) => ({ timestamp: candle.time * 1_000, price: candle.close })), currentPrice: next.close, high: Math.max(current.snapshot.high, next.high), low: Math.min(current.snapshot.low, next.low), percentChange: ((next.close - first.open) / first.open) * 100, updatedAt: quote.sourceAt } };
-    });
-  }, [live.isFresh, live.quote, state.snapshot]);
-  return { ...state, retry: () => setAttempt((value) => value + 1), live };
+      if (first) displayedSnapshot = { ...baseSnapshot, candles, points: candles.map((candle) => ({ timestamp: candle.time * 1_000, price: candle.close })), currentPrice: next.close, high: Math.max(baseSnapshot.high, next.high), low: Math.min(baseSnapshot.low, next.low), percentChange: ((next.close - first.open) / first.open) * 100, updatedAt: live.quote.sourceAt };
+    }
+  }
+  return { ...state, snapshot: enabled ? displayedSnapshot : null, retry: () => setAttempt((value) => value + 1), live };
 }
 
 export function TradeMarketChart({ market }: { market: MarketSymbol }) {
   const [range, setRange] = useState<LiveMarketRange>('1D');
-  const [isMobile, setIsMobile] = useState(false);
+  // Unknown is intentionally distinct from desktop: on a mobile first paint,
+  // matchMedia has not resolved yet and the collapsed chart must stay cold.
+  const [isMobile, setIsMobile] = useState<boolean | null>(null);
   const [mobileExpanded, setMobileExpanded] = useState(false);
   const chartId = useId();
-  const expanded = !isMobile || mobileExpanded;
-  const history = useLiveCandles(market, range);
+  const expanded = isMobile === false || (isMobile === true && mobileExpanded);
+  const history = useLiveCandles(market, range, expanded);
   const { prices } = useUsdPrices();
   const live = useLiveMarketQuote(market);
   const fallbackPrice = prices[market === 'ETH' ? 'ETH' : 'WBTC'];
@@ -104,7 +129,7 @@ export function TradeMarketChart({ market }: { market: MarketSymbol }) {
       <div className="flex min-w-0 items-center gap-3"><span className="market-chart-token"><TokenIcon symbol={market === 'BTC' ? 'WBTC' : 'ETH'} size={34} /></span><div className="min-w-0"><span className="micro-label text-[11px] text-mut">Market</span><h2 className="truncate text-[18px] font-semibold">{market} / USD</h2></div></div>
       <div className="shrink-0 text-right"><p className="text-display text-[24px] font-semibold tabular-nums">{formatUsdPrice(price)}</p><p className={`mt-1 inline-flex items-center gap-1 text-[11px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}>{change === undefined ? 'Change unavailable' : <><span aria-hidden="true">{positive ? '↗' : '↘'}</span>{positive ? '+' : ''}{change.toFixed(2)}% 24h</>}</p></div>
     </header>
-    <button type="button" className="market-chart-toggle" aria-expanded={expanded} aria-controls={chartId} onClick={() => { setMobileExpanded((value) => !value); haptic('selection'); }}><BarChart3 className="h-4 w-4" aria-hidden="true" /><span>{expanded ? 'Hide chart' : 'Show chart'}</span><ChevronDown className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`} aria-hidden="true" /></button>
+    <button type="button" className="market-chart-toggle" aria-expanded={expanded} aria-controls={chartId} aria-disabled={isMobile === null || undefined} disabled={isMobile === null} onClick={() => { setMobileExpanded((value) => !value); haptic('selection'); }}><BarChart3 className="h-4 w-4" aria-hidden="true" /><span>{expanded ? 'Hide chart' : 'Show chart'}</span><ChevronDown className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`} aria-hidden="true" /></button>
     <div id={chartId} className="market-chart-content" hidden={!expanded}><div className="market-chart-frame">
       {history.status === 'loading' && <ChartSkeleton />}
       {history.status === 'unavailable' && <div className="market-chart-empty" role="status"><BarChart3 className="h-6 w-6 text-mut" aria-hidden="true" /><span><strong>Chart temporarily unavailable</strong><small>Trade details are still available.</small></span><button type="button" aria-label="Retry market chart" onClick={history.retry} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-lg text-mut"><RefreshCw className="h-4 w-4" aria-hidden="true" /></button></div>}

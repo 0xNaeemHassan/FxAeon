@@ -5,11 +5,19 @@ import {
   mergeCanonicalWalletAssets,
   parseAlchemyWalletAssets,
   summarizeWalletAssets,
+  walletAssetCountLabel,
   type WalletAssetSnapshot,
 } from '../src/lib/walletAssets';
 
 const wallet = '0x0000000000000000000000000000000000001234';
 const now = Date.parse('2026-09-05T00:00:00.000Z');
+
+test('asset counts stay truthful while canonical reads are pending or unavailable', () => {
+  assert.equal(walletAssetCountLabel(0, 'loading'), 'Loading');
+  assert.equal(walletAssetCountLabel(0, 'unavailable'), 'Unavailable');
+  assert.equal(walletAssetCountLabel(0, 'partial'), 'Updating');
+  assert.equal(walletAssetCountLabel(0, 'ready'), '0 assets');
+});
 
 test('parses exact Alchemy native and ERC-20 balances with validated metadata and prices', () => {
   const payload = { data: { tokens: [
@@ -51,4 +59,16 @@ test('canonical successes do not claim complete discovery after an indexed netwo
   const indexed = parseAlchemyWalletAssets({ data: { tokens: [] }, error: { partialErrors: [{ network: 'base-mainnet' }] } }, wallet, now);
   const merged = mergeCanonicalWalletAssets(indexed, wallet, [{ chainId: 8453, balances: [], failedTokens: [], updatedAt: now }], { prices: {}, status: 'ready', updatedAt: now }, now);
   assert.equal(merged.networks[8453].status, 'partial');
+});
+
+test('pending canonical reads keep the aggregate incomplete', () => {
+  const indexed = parseAlchemyWalletAssets({ data: { tokens: [
+    { address: wallet, network: 'eth-mainnet', tokenAddress: null, tokenBalance: '0x1', tokenMetadata: { symbol: 'ETH', decimals: 18 }, tokenPrices: [] },
+  ] } }, wallet, now);
+  const merged = mergeCanonicalWalletAssets(indexed, wallet, [
+    { chainId: 1, balances: [], failedTokens: [], updatedAt: now, status: 'pending' },
+    { chainId: 8453, balances: [], failedTokens: [], updatedAt: now, status: 'pending' },
+  ], { prices: { ETH: 2400 }, status: 'ready', updatedAt: now }, now);
+  assert.equal(merged.networks[1].status, 'pending');
+  assert.equal(merged.networks[8453].status, 'pending');
 });

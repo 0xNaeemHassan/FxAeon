@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import {
   useConnectWallet,
   useLogin,
@@ -12,7 +12,9 @@ import {
   type SendTransactionModalUIOptions,
 } from '@privy-io/react-auth';
 import { assertLocalForkRpcUrl } from '@/lib/fx/config';
+import { getInitData, isTelegramLaunchContext, restoreTelegramLaunchHash } from '@/lib/telegram';
 import { switchBrowserChain as switchBrowserChainWithConfig } from './switchBrowserChain';
+import { eip6963FocusTrapDestination, getDiscoveredEip6963Providers, recordEip6963Announcement, selectEip6963Provider, shouldBindEip6963ProviderEvents, shouldPromptEip6963Provider, type DiscoveredEip6963Provider, type Eip6963Announcement } from './eip6963';
 
 export const FX_CHAIN_IDS = {
   ethereum: 1,
@@ -108,6 +110,22 @@ type Eip1193Provider = {
   removeListener?: (event: string, listener: (...args: unknown[]) => void) => void;
 };
 
+let eip6963Requested = false;
+
+function discoverEip6963(onChange?: () => void): () => void {
+  if (typeof window === 'undefined') return () => undefined;
+  const onAnnounce = (event: Event) => {
+    const detail = (event as CustomEvent<Eip6963Announcement>).detail;
+    if (recordEip6963Announcement(detail)) onChange?.();
+  };
+  window.addEventListener('eip6963:announceProvider', onAnnounce);
+  if (!eip6963Requested) {
+    eip6963Requested = true;
+    window.dispatchEvent(new Event('eip6963:requestProvider'));
+  }
+  return () => window.removeEventListener('eip6963:announceProvider', onAnnounce);
+}
+
 function browserProvider(): Eip1193Provider | undefined {
   if (typeof window === 'undefined') return undefined;
   if (process.env.NEXT_PUBLIC_FX_SCREENSHOT_MODE === '1') {
@@ -115,7 +133,10 @@ function browserProvider(): Eip1193Provider | undefined {
     const rpcUrl = process.env.NEXT_PUBLIC_FX_ANVIL_RPC_URL;
     if (address && rpcUrl) return screenshotProvider(address, rpcUrl);
   }
-  return window.ethereum;
+  const preferred = window.localStorage.getItem('fxaeon:wallet-provider-rdns');
+  return (selectEip6963Provider(preferred)?.provider)
+    ?? window.ethereum
+    ?? getDiscoveredEip6963Providers()[0]?.provider;
 }
 
 let screenshotProviderInstance: Eip1193Provider | undefined;
@@ -225,6 +246,16 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
     if (authenticated) {
       connectWallet();
       return;
+    }
+    if (isTelegramLaunchContext()) {
+      if (!getInitData()) {
+        throw new Error('Reopen FxAeon from the Telegram bot menu so signed launch data is available.');
+      }
+      // The provider consumes this signed hash automatically. This call is a
+      // safe idempotent recovery for a late bridge/navigation transition; it
+      // never opens the Telegram popup inside the Telegram WebView.
+      restoreTelegramLaunchHash();
+      throw new Error('Telegram sign-in is initializing. Keep this window open and try again in a moment.');
     }
     login({ loginMethods: ['wallet'] });
   }, [authenticated, connectWallet, login]);
@@ -364,13 +395,21 @@ export function PrivyWalletBridge({ children }: { children: ReactNode }) {
 /** Browser-only wallet provider used when the optional Privy service is not configured. */
 export function BrowserWalletProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
+  const [, setProviderVersion] = useState(0);
+  const [chooser, setChooser] = useState<readonly DiscoveredEip6963Provider[] | null>(null);
+  const pendingChoiceRef = useRef<{ resolve: (choice: DiscoveredEip6963Provider) => void; reject: (reason: Error) => void } | null>(null);
   const [address, setAddress] = useState<string>();
   const [chainId, setChainId] = useState<FxChainId>();
   const provider = browserProvider();
 
-  const sync = useCallback(async (requestAccounts = false) => {
-    const currentProvider = browserProvider();
-    if (!currentProvider) throw new Error('No browser wallet detected. Install MetaMask, Coinbase Wallet, or another EVM wallet to continue.');
+  const sync = useCallback(async (requestAccounts = false, providerOverride?: Eip1193Provider) => {
+    if (isTelegramLaunchContext()) {
+      throw new Error('Telegram wallet sign-in is unavailable in this build. Reopen FxAeon from the configured bot menu or use a regular browser.');
+    }
+    const currentProvider = providerOverride ?? browserProvider();
+    if (!currentProvider) {
+      throw new Error('No browser wallet detected. Install MetaMask, Coinbase Wallet, or another EVM wallet to continue.');
+    }
     if (!requestAccounts && window.localStorage.getItem(BROWSER_DISCONNECTED_KEY) === '1') {
       setAddress(undefined);
       setChainId(undefined);
@@ -385,9 +424,30 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    const stopDiscovery = discoverEip6963(() => {
+      const preferred = window.localStorage.getItem('fxaeon:wallet-provider-rdns');
+      if (shouldPromptEip6963Provider(preferred)) {
+        // A late second announcement invalidates any legacy auto-bind that may
+        // have occurred during the single-provider discovery window.
+        setAddress(undefined);
+        setChainId(undefined);
+      }
+      setProviderVersion((version) => version + 1);
+    });
     let cancelled = false;
-    void sync().catch(() => undefined).finally(() => { if (!cancelled) setReady(true); });
-    if (!provider?.on) return () => { cancelled = true; };
+    // Give EIP-6963 announcements a short discovery window before restoring
+    // an existing account. This prevents a legacy window.ethereum account
+    // from becoming the session while the user still has multiple providers
+    // to choose from.
+    const autoSyncTimer = window.setTimeout(() => {
+      const preferred = window.localStorage.getItem('fxaeon:wallet-provider-rdns');
+      if (!shouldBindEip6963ProviderEvents(preferred)) {
+        setReady(true);
+        return;
+      }
+      void sync().catch(() => undefined).finally(() => { if (!cancelled) setReady(true); });
+    }, 200);
+    let listenersAttached = false;
     const onAccounts = (...args: unknown[]) => {
       if (window.localStorage.getItem(BROWSER_DISCONNECTED_KEY) === '1') {
         setAddress(undefined);
@@ -402,26 +462,59 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
       setChainId(parsed === FX_CHAIN_IDS.ethereum || parsed === FX_CHAIN_IDS.base ? parsed : undefined);
     };
     const onDisconnect = () => { setAddress(undefined); setChainId(undefined); };
-    provider.on('accountsChanged', onAccounts);
-    provider.on('chainChanged', onChain);
-    provider.on('disconnect', onDisconnect);
+    const attachListeners = () => {
+      if (!provider?.on || listenersAttached) return;
+      provider.on('accountsChanged', onAccounts);
+      provider.on('chainChanged', onChain);
+      provider.on('disconnect', onDisconnect);
+      listenersAttached = true;
+    };
+    const attachTimer = window.setTimeout(() => {
+      const preferred = window.localStorage.getItem('fxaeon:wallet-provider-rdns');
+      if (shouldBindEip6963ProviderEvents(preferred)) attachListeners();
+    }, 200);
     return () => {
       cancelled = true;
-      provider.removeListener?.('accountsChanged', onAccounts);
-      provider.removeListener?.('chainChanged', onChain);
-      provider.removeListener?.('disconnect', onDisconnect);
+      window.clearTimeout(autoSyncTimer);
+      window.clearTimeout(attachTimer);
+      if (listenersAttached) {
+        provider?.removeListener?.('accountsChanged', onAccounts);
+        provider?.removeListener?.('chainChanged', onChain);
+        provider?.removeListener?.('disconnect', onDisconnect);
+      }
+      stopDiscovery();
     };
   }, [provider, sync]);
 
   const connect = useCallback(async () => {
+    if (isTelegramLaunchContext()) {
+      throw new Error('Telegram wallet sign-in is unavailable in this build. Reopen FxAeon from the configured bot menu or use a regular browser.');
+    }
     window.localStorage.removeItem(BROWSER_DISCONNECTED_KEY);
     try {
-      await sync(true);
+      const providers = getDiscoveredEip6963Providers();
+      const preferred = window.localStorage.getItem('fxaeon:wallet-provider-rdns');
+      let selected: DiscoveredEip6963Provider | undefined = preferred
+        ? providers.find((candidate) => candidate.rdns === preferred)
+        : undefined;
+      if (providers.length > 1 && !selected) {
+        selected = await new Promise<DiscoveredEip6963Provider>((resolve, reject) => {
+          pendingChoiceRef.current = { resolve, reject };
+          setChooser(providers);
+        });
+        window.localStorage.setItem('fxaeon:wallet-provider-rdns', selected.rdns);
+        setProviderVersion((version) => version + 1);
+      }
+      await sync(true, selected?.provider);
     } catch (cause) {
       window.localStorage.setItem(BROWSER_DISCONNECTED_KEY, '1');
       throw cause;
     }
   }, [sync]);
+  useEffect(() => () => {
+    pendingChoiceRef.current?.reject(new Error('Wallet selection was cancelled.'));
+    pendingChoiceRef.current = null;
+  }, []);
   const disconnect = useCallback(async () => {
     window.localStorage.setItem(BROWSER_DISCONNECTED_KEY, '1');
     setAddress(undefined);
@@ -482,7 +575,79 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
     switchChain,
     sendTransaction,
   }), [address, chainId, connect, disconnect, ready, selectedWallet, sendTransaction, switchChain]);
-  return createElement(FxWalletContext.Provider, { value: wallet }, children);
+  const chooseProvider = useCallback((choice: DiscoveredEip6963Provider) => {
+    const pending = pendingChoiceRef.current;
+    pendingChoiceRef.current = null;
+    setChooser(null);
+    pending?.resolve(choice);
+  }, []);
+  const cancelProviderChoice = useCallback(() => {
+    const pending = pendingChoiceRef.current;
+    pendingChoiceRef.current = null;
+    setChooser(null);
+    pending?.reject(new Error('Wallet selection was cancelled.'));
+  }, []);
+  return createElement(
+    FxWalletContext.Provider,
+    { value: wallet },
+    createElement(ReactFragment, null, children, chooser
+      ? createElement(Eip6963ProviderChooser, { providers: chooser, onChoose: chooseProvider, onCancel: cancelProviderChoice })
+      : null),
+  );
+}
+
+function ReactFragment({ children }: { children: ReactNode }) {
+  return children;
+}
+
+function Eip6963ProviderChooser({
+  providers,
+  onChoose,
+  onCancel,
+}: {
+  providers: readonly DiscoveredEip6963Provider[];
+  onChoose: (provider: DiscoveredEip6963Provider) => void;
+  onCancel: () => void;
+}) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const firstButtonRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const previousFocus = document.activeElement as HTMLElement | null;
+    firstButtonRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); onCancel(); return; }
+      if (event.key !== 'Tab') return;
+      const focusable = [...(dialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled])') ?? [])];
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const destination = eip6963FocusTrapDestination({
+        activeInside: Boolean(dialogRef.current?.contains(document.activeElement)),
+        atFirst: document.activeElement === first,
+        atLast: document.activeElement === last,
+        shiftKey: event.shiftKey,
+      });
+      if (destination === 'last') { event.preventDefault(); last.focus(); }
+      else if (destination === 'first') { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => { document.removeEventListener('keydown', onKeyDown); previousFocus?.focus(); };
+  }, [onCancel]);
+  const options = providers.map((provider, index) => createElement('button', {
+        key: provider.rdns,
+        ref: index === 0 ? firstButtonRef : undefined,
+        type: 'button',
+        className: 'button glass-press flex min-h-12 flex-col items-start rounded-xl px-4 py-3 text-left',
+        onClick: () => onChoose(provider),
+      }, createElement('span', { className: 'font-semibold' }, provider.name), createElement('span', { className: 'text-[11px] text-mut' }, provider.rdns)));
+  return createElement('div', { className: 'wallet-provider-chooser-backdrop', role: 'presentation', onMouseDown: (event: MouseEvent) => { if (event.target === event.currentTarget) onCancel(); } },
+    createElement('div', { ref: dialogRef, role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'wallet-provider-chooser-title', className: 'wallet-provider-chooser' },
+      createElement('h2', { id: 'wallet-provider-chooser-title', className: 'text-display text-lg font-semibold' }, 'Choose a wallet'),
+      createElement('p', { className: 'mt-2 text-sm text-mut' }, 'Select which browser wallet should connect to FxAeon.'),
+      createElement('div', { className: 'mt-4 flex flex-col gap-2' }, options),
+      createElement('button', { type: 'button', onClick: onCancel, className: 'mt-3 min-h-11 px-3 text-sm text-mut' }, 'Cancel'),
+    ),
+  );
 }
 
 /** Backwards-compatible name for builds that intentionally omit Privy. */

@@ -168,6 +168,18 @@ test('an honestly empty successful group clears old positions while a total outa
   assert.deepEqual(newlyVerifiedPositions(previous, unavailable), []);
 });
 
+test('post-confirm canonical zero state clears an indexer-retained position row', () => {
+  const previous = [uiPosition({ market: 'ETH', side: 'short' }, 174)];
+  const canonicalClosed: PositionReadResult = {
+    positions: [],
+    successfulGroups: [{ market: 'ETH', side: 'short' }],
+    failedGroups: [],
+    status: 'ready',
+  };
+  assert.deepEqual(mergeVerifiedPositions(previous, canonicalClosed), [],
+    'a successful canonical empty read must invalidate the stale closed row');
+});
+
 test('chain-level read failure marks every retained pool as last verified', () => {
   const previous = POSITION_GROUPS.map((group, index) => uiPosition(group, index + 1));
   const reason = new Error('RPC chain verification failed');

@@ -145,6 +145,69 @@ export async function waitForNextBlock(params: {
   throw new Error(`timed out waiting for a block after ${params.afterBlock}`);
 }
 
+export class TransactionReorgError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TransactionReorgError";
+  }
+}
+
+/**
+ * A receipt is only an inclusion proof. Re-read it while the chain advances
+ * and require three canonical confirmations before a route can continue.
+ * Re-reading the receipt also catches a provider changing the block identity
+ * during a reorg instead of silently treating the old receipt as final.
+ */
+export async function waitForConfirmations(params: {
+  client: Pick<PublicClient, "getBlockNumber" | "getTransactionReceipt">;
+  hash: Hex;
+  receipt: TransactionReceipt;
+  confirmations?: number;
+  timeoutMs?: number;
+  pollMs?: number;
+  onProgress?: (confirmations: number) => void;
+}): Promise<TransactionReceipt> {
+  const required = params.confirmations ?? 3;
+  if (!Number.isSafeInteger(required) || required < 3 || required > 64) {
+    throw new RangeError("confirmation depth must be an integer between 3 and 64");
+  }
+  const timeoutMs = params.timeoutMs ?? 180_000;
+  const pollMs = params.pollMs ?? 2_000;
+  const deadline = Date.now() + timeoutMs;
+  const originalBlock = params.receipt.blockNumber;
+  const originalHash = params.receipt.blockHash?.toLowerCase();
+  let firstAttempt = true;
+  while (firstAttempt || Date.now() < deadline) {
+    firstAttempt = false;
+    let latest: TransactionReceipt;
+    try {
+      latest = await params.client.getTransactionReceipt({ hash: params.hash });
+    } catch {
+      throw new TransactionReorgError("transaction receipt disappeared while waiting for confirmations");
+    }
+    if (
+      latest.transactionHash.toLowerCase() !== params.hash.toLowerCase()
+      || latest.blockNumber !== originalBlock
+      || !latest.blockHash
+      || !originalHash
+      || latest.blockHash.toLowerCase() !== originalHash
+    ) {
+      throw new TransactionReorgError("transaction receipt changed block identity while waiting for confirmations");
+    }
+    if (latest.status !== "success") {
+      throw new TransactionReorgError("transaction receipt status changed while waiting for confirmations");
+    }
+    const head = await params.client.getBlockNumber();
+    if (typeof head !== "bigint") throw new Error("RPC returned an invalid block number during confirmation");
+    const observed = head >= originalBlock ? Number(head - originalBlock + 1n) : 0;
+    params.onProgress?.(observed);
+    if (observed >= required) return latest;
+    if (Date.now() >= deadline) break;
+    await sleep(Math.min(pollMs, Math.max(1, deadline - Date.now())));
+  }
+  throw new Error(`timed out waiting for ${required} confirmations: ${params.hash}`);
+}
+
 /**
  * A receipt proves inclusion and status, but does not bind the transaction's
  * calldata, value, or nonce. Read the mined transaction back before marking a
@@ -268,6 +331,12 @@ export async function runTransactionRoute(params: {
   };
   const policy = clonePolicy(params.policy ?? defaultTransactionPolicy(route));
   const options = params.options ?? {};
+  if (
+    options.confirmations !== undefined
+    && (!Number.isSafeInteger(options.confirmations) || options.confirmations < 3 || options.confirmations > 64)
+  ) {
+    throw new RangeError("confirmation depth must be an integer between 3 and 64");
+  }
   validateRoute(route, policy);
   const client = params.publicClient ?? getPublicClient(route.chainId);
   if (client.chain?.id !== undefined && client.chain.id !== route.chainId) {
@@ -435,6 +504,9 @@ export async function runTransactionRoute(params: {
           if (typeof receipt.blockNumber !== "bigint" || receipt.blockNumber < 0n) {
             throw new Error(`${label} receipt is missing a canonical block number`);
           }
+          if (!/^0x[0-9a-fA-F]{64}$/.test(receipt.blockHash)) {
+            throw new Error(`${label} receipt is missing a canonical block hash`);
+          }
           if (receipt.status !== "success" && receipt.status !== "reverted") {
             throw new Error(`${label} receipt does not contain a terminal on-chain status`);
           }
@@ -471,17 +543,50 @@ export async function runTransactionRoute(params: {
             await runPostConfirmRead(failure);
             return failure;
           }
+          step.status = "included";
+          step.includedBlockNumber = receipt.blockNumber;
+          step.includedBlockHash = receipt.blockHash;
+          step.confirmations = 1;
+          step.requiredConfirmations = options.confirmations ?? 3;
+          notifyStep(step);
+          notifyStatus("included", `${label}: ${hash}`);
+          const confirmedReceipt = await waitForConfirmations({
+            client,
+            hash,
+            receipt,
+            confirmations: options.confirmations,
+            timeoutMs: options.receiptTimeoutMs,
+            pollMs: options.pollMs,
+            onProgress: (confirmations) => {
+              step.status = "confirming";
+              step.confirmations = confirmations;
+              notifyStep(step);
+              notifyStatus(
+                "confirming",
+                `${label}: ${confirmations}/${options.confirmations ?? 3} confirmations`,
+              );
+            },
+          });
+          step.receipt = confirmedReceipt;
           updatePendingHashRecord(pendingRecord, "confirmed");
           step.status = "confirmed";
+          step.confirmations = Math.max(step.confirmations ?? 1, options.confirmations ?? 3);
           notifyStep(step);
           notifyStatus("confirmed", `${label}: ${hash}`);
         } catch (error) {
-          step.status = "failed";
+          // A reorg removes inclusion, but does not prove that the signed
+          // hash reverted. Keep it recoverable in the journal and explicitly
+          // downgrade the UI to submitted so Activity can reconcile it later.
+          const wasFinalityPending = step.status === "included" || step.status === "confirming";
+          if (error instanceof TransactionReorgError) step.status = "submitted";
+          else if (!wasFinalityPending) step.status = "failed";
           step.error = error instanceof Error ? error.message : String(error);
           notifyStep(step);
-          notifyStatus("failed", step.error);
+          notifyStatus(error instanceof TransactionReorgError ? "submitted" : wasFinalityPending ? "confirming" : "failed", step.error);
           const failure = makeFailureResult(route, steps, step.error);
-          await runPostConfirmRead(failure);
+          // A finality timeout/reorg is not a safe state-read boundary. The
+          // recovery journal keeps the hash pending for a later reconciliation.
+          if (!wasFinalityPending) await runPostConfirmRead(failure);
           return failure;
         }
       }

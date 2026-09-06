@@ -31,6 +31,7 @@ import {
 import styles from '@/components/FlowWorkspace.module.css';
 import { calculatePositionUsdValuation, formatUsdCents } from '@/lib/positionValuation';
 import { priceKeyForSymbol } from '@/lib/prices';
+import { resetTransactionAmounts } from '@/lib/transactionState';
 
 type BorrowMode = 'mint' | 'manage';
 type PositionState = { walletAddress: string; items: UiPosition[] };
@@ -56,9 +57,11 @@ export default function BorrowPage() {
   const [mint, setMint] = useState('');
   const [repay, setRepay] = useState('');
   const [withdraw, setWithdraw] = useState('');
+  const [reviewRevision, setReviewRevision] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const deepLinkApplied = useRef(false);
+  const previousWalletContextRef = useRef<string | null>(null);
   // Borrowing is Ethereum-only in the official SDK. Keep the read tied to the
   // selected address while using Ethereum's reviewed client regardless of the
   // wallet's currently displayed chain.
@@ -109,6 +112,50 @@ export default function BorrowPage() {
   const withdrawalTokens = collateralTokensForMarket(selected?.market ?? market);
   const activeTokenOptions = mode === 'manage' ? withdrawalTokens : collateralTokens;
 
+  const resetTransactionContext = useCallback((nextToken: UiToken = 'ETH') => {
+    const defaults = resetTransactionAmounts();
+    setToken(nextToken);
+    setDeposit(defaults.deposit);
+    setMint(defaults.mint);
+    setRepay(defaults.repay);
+    setWithdraw(defaults.withdraw);
+    // Remounting the review state machine immediately discards a prepared
+    // route, including a route that was just displayed in the review sheet.
+    setReviewRevision((revision) => revision + 1);
+  }, []);
+
+  const changeMode = useCallback((nextMode: BorrowMode) => {
+    setMode(nextMode);
+    resetTransactionContext(collateralTokensForMarket(market)[0]);
+  }, [market, resetTransactionContext]);
+
+  const changeMarket = useCallback((nextMarket: UiMarket) => {
+    setMarket(nextMarket);
+    setSelectedKey('new');
+    resetTransactionContext(collateralTokensForMarket(nextMarket)[0]);
+  }, [resetTransactionContext]);
+
+  const changePosition = useCallback((nextKey: string) => {
+    setSelectedKey(nextKey);
+    resetTransactionContext(collateralTokensForMarket(market)[0]);
+  }, [market, resetTransactionContext]);
+
+  const changeToken = useCallback((nextToken: UiToken) => {
+    resetTransactionContext(nextToken);
+  }, [resetTransactionContext]);
+
+  useEffect(() => {
+    const context = `${wallet.address?.toLowerCase() ?? ''}:${wallet.chainId ?? ''}`;
+    const previous = previousWalletContextRef.current;
+    if (previous !== null && previous !== context) {
+      setMode('mint');
+      setMarket('ETH');
+      setSelectedKey('new');
+      resetTransactionContext('ETH');
+    }
+    previousWalletContextRef.current = context;
+  }, [resetTransactionContext, wallet.address, wallet.chainId]);
+
   useEffect(() => {
     if (
       deepLinkApplied.current
@@ -129,7 +176,8 @@ export default function BorrowPage() {
     setMode('mint');
     setMarket(requested.market);
     setSelectedKey(positionKey(requested));
-  }, [positionState, positions, wallet.address]);
+    resetTransactionContext(collateralTokensForMarket(requested.market)[0]);
+  }, [positionState, positions, resetTransactionContext, wallet.address]);
 
   useEffect(() => {
     setSelectedKey((current) => {
@@ -224,11 +272,7 @@ export default function BorrowPage() {
             <div className="rounded-2xl bg-[var(--surface-2,var(--input))] p-1">
               <Segmented
                 value={mode}
-                onChange={(next) => {
-                  setMode(next);
-                  setRepay('');
-                  setWithdraw('');
-                }}
+                onChange={changeMode}
                 ariaLabel="Borrow action"
                 options={[
                   { value: 'mint', label: 'Borrow or add' },
@@ -242,11 +286,7 @@ export default function BorrowPage() {
                 <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-2,var(--input))] p-1">
                   <Segmented
                     value={market}
-                    onChange={(next) => {
-                      setMarket(next);
-                      setSelectedKey('new');
-                      setToken(next === 'ETH' ? 'ETH' : 'WBTC');
-                    }}
+                    onChange={changeMarket}
                     ariaLabel="Collateral market"
                     options={[
                       { value: 'ETH', label: 'ETH' },
@@ -260,7 +300,7 @@ export default function BorrowPage() {
                   positions={marketPositions}
                   allowNew
                   newLabel={`New ${market} position`}
-                  onChange={setSelectedKey}
+                  onChange={changePosition}
                 />
 
                 {selected ? (
@@ -277,7 +317,7 @@ export default function BorrowPage() {
                         ? 'Choose what to add to this existing Trade position.'
                         : 'Choose your starting collateral and how much fxUSD to receive.'}
                     />
-                    <TokenSelect label="Collateral asset" value={token} options={collateralTokens} onChange={setToken} balances={balanceSnapshot.status === 'idle' ? undefined : balanceSnapshot.balances} balanceStatus={wallet.address ? balanceStatus : 'disconnected'} />
+                    <TokenSelect label="Collateral asset" value={token} options={collateralTokens} onChange={changeToken} balances={balanceSnapshot.status === 'idle' ? undefined : balanceSnapshot.balances} balanceStatus={wallet.address ? balanceStatus : 'disconnected'} />
                     <AmountField
                       label={selected ? 'Collateral to add' : 'Starting collateral'}
                       symbol={token}
@@ -304,6 +344,7 @@ export default function BorrowPage() {
                 </Card>
 
                 <ActionReview
+                  key={reviewRevision}
                   planBuilder={planBuilder}
                   label={selected ? 'Review position update' : 'Review new position'}
                   operationLabel={selected ? 'Update collateral position' : 'Open collateral position'}
@@ -315,11 +356,11 @@ export default function BorrowPage() {
                 icon={Coins}
                 title="No borrowing positions"
                 body="Create an ETH or BTC collateral position to borrow fxUSD."
-                action={<Button onClick={() => { setMode('mint'); setSelectedKey('new'); }}>Start borrowing</Button>}
+                action={<Button onClick={() => { setSelectedKey('new'); changeMode('mint'); }}>Start borrowing</Button>}
               />
             ) : (
               <>
-                <PositionSelect value={selectedKey} positions={positions} onChange={setSelectedKey} />
+                <PositionSelect value={selectedKey} positions={positions} onChange={changePosition} />
                 {selected && <PositionSummary position={selected} />}
 
                 <Card className={`${styles.focusCard} p-5`}>
@@ -336,7 +377,7 @@ export default function BorrowPage() {
                       placeholder="Enter repayment"
                       balanceState={balanceStateFor('fxUSD')}
                     />
-                    <TokenSelect label="Receive collateral as" value={token} options={withdrawalTokens} onChange={setToken} balances={balanceSnapshot.status === 'idle' ? undefined : balanceSnapshot.balances} balanceStatus={wallet.address ? balanceStatus : 'disconnected'} />
+                    <TokenSelect label="Receive collateral as" value={token} options={withdrawalTokens} onChange={changeToken} balances={balanceSnapshot.status === 'idle' ? undefined : balanceSnapshot.balances} balanceStatus={wallet.address ? balanceStatus : 'disconnected'} />
                     <AmountField
                       label="Collateral to withdraw"
                       symbol={token}
@@ -351,6 +392,7 @@ export default function BorrowPage() {
                 </Card>
 
                 <ActionReview
+                  key={reviewRevision}
                   planBuilder={planBuilder}
                   label="Review changes"
                   operationLabel={manageOperationLabel}

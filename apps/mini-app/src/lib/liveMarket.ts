@@ -401,11 +401,12 @@ export async function fetchMarketCandles(
   signal?: AbortSignal,
 ): Promise<MarketCandleSnapshot> {
   try {
+    const candleSignal = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(12_000)]);
     const response = await request(coinbaseCandlesEndpoint(market, range), {
       method: 'GET',
       headers: { Accept: 'application/json' },
       cache: 'no-store',
-      signal,
+      signal: candleSignal,
     });
     if (!response.ok) throw new Error(`Coinbase candle service returned ${response.status}`);
     return parseCoinbaseCandlesResponse(await response.json(), market, range);
@@ -414,7 +415,8 @@ export async function fetchMarketCandles(
   }
 
   const fallbackRange = range === '1H' ? '1D' : range;
-  const history = await fetchMarketHistory(market, fallbackRange, request, signal);
+  const fallbackSignal = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(15_000)]);
+  const history = await fetchMarketHistory(market, fallbackRange, request, fallbackSignal);
   return marketHistoryToCandles(history, range);
 }
 

@@ -34,7 +34,7 @@ The problem had two separate delays: `ActionReview` withheld explorer access unt
 
 1. **Broadcast feedback:** `ActionReview` renders approval/action links as soon as `onStep` supplies a valid hash. Links use the captured execution chain, have accessible names and at least 44px targets, and remain available during receipt and state-read waits. A synchronous latch and disabled execution controls prevent duplicate clicks.
 2. **Separate facts:** submitted, receipt-confirmed, updating position/balances, reverted, partially completed, and confirmation-unknown states are distinct. Approval confirmation is not action completion. A receipt whose transaction verification failed does not become UI success.
-3. **Preserve the safety boundary:** simulation, reviewed-route validation, signer/chain binding, calldata/value/nonce checks, journal writes, and sequential receipt checks remain in the existing runner. `onComplete(result, confirmedRoute)` still runs only through `postConfirmRead`, after the required following block.
+3. **Preserve the safety boundary:** simulation, reviewed-route validation, signer/chain binding, calldata/value/nonce checks, journal writes, and sequential receipt checks remain in the existing runner. `onComplete(result, confirmedRoute)` still runs only through `postConfirmRead`, after the required three-confirmation finality boundary.
 4. **Receipt-identified position hints:** `confirmedPositions.ts` binds the new NFT to the reviewed pool and validated mint receipt, including f(x)'s same-receipt mint-to-router then router-to-wallet transfer. Restored hints must revalidate the chain, canonical receipt/block, following-block boundary, destination, mint event, and current owner before display. Storage is wallet-scoped and is not financial authority.
 5. **Truthful delayed hydration:** the pinned official f(x) SDK has no explicit-ID `getPositions` option. Reads target the proven market/side and select the proven ID after SDK discovery. A verified hint can show **Details updating** and its action explorer while indexing lags; collateral, debt, leverage, and valuation are not invented. Normal position cards replace the hint after verified hydration.
 
@@ -54,7 +54,7 @@ The pinned SDK's `assetsWei`, `totalAssetsWei`, and `pendingSharesWei` are **fxU
 - No automatic resubmission, replacement-signing behavior, new signer, relaxed simulation, or bypass of the following-block boundary.
 - No unsupported explicit-ID SDK call, private SDK internals, or production indexer override. The fork test's delayed index adapter is test-only.
 
-The extra current-owner verification in this change applies to receipt-derived hints and their targeted hydration. Ordinary all-market discovery still follows the pinned SDK's index; NFTs transferred outside FxAeon can remain in that index briefly. Independent ownership reconciliation for every indexed row is a separate follow-up, not a guarantee made by this change. Transaction planners retain their existing execution checks.
+Normal all-market discovery now follows the pinned SDK's index only as a discovery hint: every returned ID is independently checked with the canonical pool `ownerOf` read before display. NFTs transferred outside FxAeon therefore become a partial/unavailable group rather than an unverified actionable row. Transaction planners retain their existing execution checks.
 
 ## Verification and evidence
 

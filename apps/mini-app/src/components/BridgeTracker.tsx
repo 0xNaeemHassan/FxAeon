@@ -15,6 +15,7 @@ import {
   type SourceOftSentMatch,
 } from '@/lib/fx/bridgeDelivery';
 import { getWebApp, haptic } from '@/lib/telegram';
+import { isForegroundOnline, subscribeToForegroundResume } from '@/lib/foreground';
 
 export type BridgeStepStatus = 'pending' | 'source_confirmed' | 'destination_verified' | 'failed';
 
@@ -95,6 +96,7 @@ export function BridgeTracker({
   const [retrySequence, setRetrySequence] = useState(0);
   const [manualStarted, setManualStarted] = useState(false);
   const destinationCursorRef = useRef<bigint | null>(null);
+  const retryTimerRef = useRef<number | null>(null);
   const verificationContextKey = [
     status,
     sourceTxHash ?? '',
@@ -130,19 +132,7 @@ export function BridgeTracker({
   // the user returns or the network becomes reachable again.
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const resume = () => {
-      if (document.visibilityState === 'visible' || navigator.onLine) {
-        setRetrySequence((value) => value + 1);
-      }
-    };
-    document.addEventListener('visibilitychange', resume);
-    window.addEventListener('online', resume);
-    window.addEventListener('focus', resume);
-    return () => {
-      document.removeEventListener('visibilitychange', resume);
-      window.removeEventListener('online', resume);
-      window.removeEventListener('focus', resume);
-    };
+    return subscribeToForegroundResume(() => setRetrySequence((value) => value + 1));
   }, []);
 
   useEffect(() => {
@@ -166,6 +156,10 @@ export function BridgeTracker({
     let nextDestinationBlock = destinationCursorRef.current ?? destinationBaselineBlock;
 
     const verify = async () => {
+      if (!isForegroundOnline()) {
+        if (!cancelled) setCanRetry(true);
+        return;
+      }
       try {
         const sourceClient = getPublicClient(sourceChainId);
         await assertPublicClientChain(sourceClient, sourceChainId);
@@ -272,15 +266,17 @@ export function BridgeTracker({
         if (!cancelled) setVerificationError(userSafeError(cause, 'Destination delivery is not verified yet. Check again shortly.'));
       }
       attempts += 1;
-      if (!cancelled && attempts < maxAttempts) {
-        if (document.visibilityState === 'visible') window.setTimeout(verify, pollMs);
+      if (!cancelled && attempts < maxAttempts && isForegroundOnline()) {
+        retryTimerRef.current = window.setTimeout(() => { retryTimerRef.current = null; void verify(); }, pollMs);
       }
       else if (!cancelled) setCanRetry(true);
     };
 
-    void verify();
+    if (isForegroundOnline()) void verify();
+    else setCanRetry(true);
     return () => {
       cancelled = true;
+      if (retryTimerRef.current !== null) { window.clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
     };
   }, [amountLD, autoStart, destinationBaselineBlock, destinationChain, destinationOftAddress, manualStarted, minAmountLD, recipient, retrySequence, sourceChain, sourceOftAddress, sourceSender, sourceStatusConfirmed, sourceTxHash, verificationContextKey]);
 

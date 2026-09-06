@@ -1,7 +1,9 @@
 import { formatUnits, parseUnits, type Address } from 'viem';
 import { tokens as sdkTokens } from '@aladdindao/fx-sdk';
 import type { PositionInfo, TokenSymbol } from '@aladdindao/fx-sdk';
-import { assertConfiguredPublicClientChain, assertPublicClientChain, getEthereumClient, getFxSdk, type FxPublicClient } from '@/lib/fx';
+import { assertConfiguredPublicClientChain, assertPublicClientChain, getEthereumClient, getFxReadFacade, type FxPublicClient } from '@/lib/fx';
+import { withReadDeadline } from '@/lib/fx/readFacade';
+import { positionPoolAddress } from '@/lib/fx/policy';
 
 export type UiMarket = 'ETH' | 'BTC';
 export type UiSide = 'long' | 'short';
@@ -44,6 +46,25 @@ export function positionOutputTokenOptions(market: UiMarket, side: UiSide): read
 
 const WAD = 10n ** 18n;
 const WSTETH_RATE_ABI = [{ type: 'function', name: 'stEthPerToken', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] }] as const;
+const POSITION_STATE_ABI = [{ type: 'function', name: 'getPosition', stateMutability: 'view', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ name: 'collateral', type: 'uint256' }, { name: 'debt', type: 'uint256' }] }] as const;
+
+export async function readCanonicalPositionState(params: {
+  client: Pick<FxPublicClient, 'readContract'>;
+  group: PositionGroup;
+  positionId: number;
+}): Promise<readonly [bigint, bigint]> {
+  if (!Number.isSafeInteger(params.positionId) || params.positionId < 0) throw new TypeError('position ID must be a non-negative safe integer');
+  const state = await withReadDeadline(params.client.readContract({
+    address: positionPoolAddress(params.group.market, params.group.side),
+    abi: POSITION_STATE_ABI,
+    functionName: 'getPosition',
+    args: [BigInt(params.positionId)],
+  }));
+  if (!Array.isArray(state) || state.length !== 2 || typeof state[0] !== 'bigint' || typeof state[1] !== 'bigint' || state[0] < 0n || state[1] < 0n) {
+    throw new TypeError(`canonical position state for ${String(params.positionId)} was malformed`);
+  }
+  return [state[0], state[1]];
+}
 
 export function tokenAddress(token: UiToken | 'fxSAVE' | 'fxUSDBasePool'): Address {
   return TOKEN_META[token].address;
@@ -164,11 +185,12 @@ export function positionTokenDecimals(
  */
 export async function settlePositionGroups(
   readGroup: (group: PositionGroup) => Promise<PositionInfo[]>,
+  verifyGroup?: (group: PositionGroup, positions: PositionInfo[]) => Promise<PositionInfo[]>,
 ): Promise<PositionReadResult> {
   const settled = await Promise.allSettled(POSITION_GROUPS.map(async (group) => {
     const positions = await readGroup(group);
     if (!Array.isArray(positions)) throw new TypeError('Position group response must be an array');
-    return { group, positions };
+    return { group, positions: verifyGroup ? await verifyGroup(group, positions) : positions };
   }));
 
   const positions: UiPosition[] = [];
@@ -202,14 +224,56 @@ export async function settlePositionGroups(
   };
 }
 
+/** Verify every discovered ID against the canonical ERC-721 ownerOf read. */
+export async function verifyPositionGroupOwnership(params: {
+  client: Pick<FxPublicClient, 'readContract'>;
+  walletAddress: string;
+  group: PositionGroup;
+  positions: PositionInfo[];
+}): Promise<PositionInfo[]> {
+  const pool = positionPoolAddress(params.group.market, params.group.side);
+  const valid = params.positions.map((info) => {
+    if (!Number.isSafeInteger(info.positionId) || info.positionId < 0) throw new TypeError('indexer returned a malformed position ID');
+    if (typeof info.rawColls !== 'bigint' || typeof info.rawDebts !== 'bigint' || info.rawColls < 0n || info.rawDebts < 0n) {
+      throw new TypeError(`indexer returned malformed fields for position ${String(info.positionId)}`);
+    }
+    return info;
+  });
+  const checks = await Promise.allSettled(valid.map(async (info) => {
+    const tokenId = BigInt(info.positionId);
+    const state = await readCanonicalPositionState({ client: params.client, group: params.group, positionId: info.positionId });
+    // A fully closed position may burn its ERC-721 before the indexer drops
+    // the historical record. Canonical zero accounting is sufficient to
+    // remove that non-actionable row; active positions still require ownerOf.
+    if (state[0] === 0n && state[1] === 0n) return null;
+    const owner = await withReadDeadline(params.client.readContract({
+      address: pool,
+      abi: [{ type: 'function', name: 'ownerOf', stateMutability: 'view', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ type: 'address' }] }] as const,
+      functionName: 'ownerOf',
+      args: [tokenId],
+    }));
+    if (typeof owner !== 'string' || owner.toLowerCase() !== params.walletAddress.toLowerCase()) {
+      throw new Error(`${params.group.market} ${params.group.side} position ownership verification was incomplete`);
+    }
+    return info;
+  }));
+  const verified: PositionInfo[] = [];
+  checks.forEach((check) => {
+    if (check.status !== 'fulfilled') throw check.reason;
+    if (check.value) verified.push(check.value);
+  });
+  return verified;
+}
+
 export async function readAllPositionsDetailed(walletAddress: string): Promise<PositionReadResult> {
-  await assertConfiguredPublicClientChain(1);
-  const sdk = getFxSdk();
+  await withReadDeadline(assertConfiguredPublicClientChain(1));
+  const sdk = getFxReadFacade();
+  const client = getEthereumClient();
   return settlePositionGroups((group) => sdk.getPositions({
     userAddress: walletAddress,
     market: group.market,
     type: group.side,
-  }));
+  }), (group, positions) => verifyPositionGroupOwnership({ client, walletAddress, group, positions }));
 }
 
 /**

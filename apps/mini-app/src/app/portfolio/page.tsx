@@ -33,7 +33,8 @@ import TokenIcon from '@/components/TokenIcon';
 import { AddressChip, AppShell, Card, EmptyState, SectionTitle } from '@/components/ui';
 import {
   assertConfiguredPublicClientChain,
-  getFxSdk,
+  getFxReadFacade,
+  withReadDeadline,
   type WalletBalancesResult,
   type WalletTokenBalance,
 } from '@/lib/fx';
@@ -107,9 +108,9 @@ function PortfolioWallet() {
     const activeRequest = ++requestId.current;
     setFxSaveState({ identity, snapshot: { ...EMPTY_FX_SAVE, status: 'loading' } });
     try {
-      await assertConfiguredPublicClientChain(1);
+      await withReadDeadline(assertConfiguredPublicClientChain(1));
       if (requestId.current !== activeRequest) return;
-      const sdk = getFxSdk();
+      const sdk = getFxReadFacade();
       const [fxSave, redeem] = await Promise.allSettled([
         sdk.getFxSaveBalance({ userAddress: walletAddress }),
         sdk.getFxSaveClaimable({ userAddress: walletAddress }),
@@ -186,7 +187,7 @@ function PortfolioWallet() {
   const refreshing = walletBalances.isFetching || fxSaveLoading || positionState.refreshing;
   const valuation = liveAssets.data
     ? walletAssetValuation(liveAssets.data)
-    : walletValuation(protocol.balances, priceSnapshot.prices);
+    : walletValuation(protocol.balances, priceSnapshot.prices, liveAssets.status === 'ready');
   const positionValues = positionState.positions.map((position) =>
     positionIsStale(position, positionState.failedGroups) || priceSnapshot.status === 'stale'
       ? null : positionNetEquityUsd(position, priceSnapshot.prices));
@@ -205,7 +206,7 @@ function PortfolioWallet() {
         walletAddress={wallet.address}
         protocol={protocol}
         valuation={portfolioValuation}
-        loading={loading && liveLoading}
+        loading={loading || liveLoading}
         fxSaveLoading={fxSaveLoading}
         refreshing={refreshing}
         onRefresh={() => {
@@ -283,7 +284,7 @@ function PortfolioWallet() {
 
         <PortfolioNetworkTabs value={network} onChange={setNetwork} />
         <PortfolioAssets snapshot={liveAssets.data} loading={liveLoading} network={network} />
-        {!liveAssets.data && <WalletBalancesCard balances={protocol.balances} loading={loading} prices={priceSnapshot.prices} />}
+        {!liveAssets.data && <WalletBalancesCard balances={protocol.balances} loading={loading || liveLoading} prices={priceSnapshot.prices} completeAllowed={liveAssets.status === 'ready'} />}
         <RecentActivityPreview walletAddress={wallet.address as Address} />
       </aside>
     </div>
@@ -437,9 +438,9 @@ function ProtocolCard({ icon: Icon, label, value, hint, href, accent = false }: 
   );
 }
 
-function WalletBalancesCard({ balances, loading, prices }: { balances: WalletBalancesResult | null; loading: boolean; prices: UsdPriceMap }) {
+function WalletBalancesCard({ balances, loading, prices, completeAllowed }: { balances: WalletBalancesResult | null; loading: boolean; prices: UsdPriceMap; completeAllowed: boolean }) {
   const nonZero = balances?.balances.filter((balance) => balance.amountWei > 0n) ?? [];
-  const valuation = walletValuation(balances, prices);
+  const valuation = walletValuation(balances, prices, completeAllowed);
   const assetCountLabel = loading || balances === null
     ? '—'
     : `${nonZero.length} ${nonZero.length === 1 ? 'asset' : 'assets'}`;
@@ -523,7 +524,7 @@ type WalletValuation = {
   reason: string;
 };
 
-function walletValuation(balances: WalletBalancesResult | null, prices: UsdPriceMap): WalletValuation {
+function walletValuation(balances: WalletBalancesResult | null, prices: UsdPriceMap, completeAllowed = true): WalletValuation {
   if (!balances) return { complete: false, totalUsd: null, assetCount: 0, reason: 'Wallet balances are not available yet.' };
   const nonZero = balances.balances.filter((balance) => balance.amountWei > 0n);
   const values = nonZero.map((balance) => {
@@ -542,6 +543,14 @@ function walletValuation(balances: WalletBalancesResult | null, prices: UsdPrice
       reason: `${missingCount} ${missingCount === 1 ? 'asset is' : 'assets are'} missing a verified value.`,
     };
   }
+  if (!completeAllowed) {
+    return {
+      complete: false,
+      totalUsd: values.length > 0 ? values.reduce<number>((total, value) => total + (value ?? 0), 0) : null,
+      assetCount: nonZero.length,
+      reason: 'Expanded wallet assets are still being verified.',
+    };
+  }
   return {
     complete: true,
     totalUsd: values.reduce<number>((total, value) => total + (value ?? 0), 0),
@@ -552,13 +561,17 @@ function walletValuation(balances: WalletBalancesResult | null, prices: UsdPrice
 
 function walletAssetValuation(snapshot: WalletAssetSnapshot): WalletValuation {
   const held = snapshot.assets.filter((asset) => asset.balanceWei > 0n);
+  const incompleteNetworks = Object.values(snapshot.networks).filter((network) => network.status !== 'ready');
+  const networkReason = incompleteNetworks.length > 0
+    ? `${incompleteNetworks.map((network) => network.chainId === 1 ? 'Ethereum' : 'Base').join(' and ')} network balances are ${incompleteNetworks.some((network) => network.status === 'pending') ? 'still being verified' : 'partially unavailable'}.`
+    : '';
   return {
-    complete: snapshot.unpricedAssetCount === 0,
+    complete: incompleteNetworks.length === 0 && snapshot.unpricedAssetCount === 0,
     totalUsd: snapshot.totalUsdValue,
     assetCount: held.length,
     reason: snapshot.unpricedAssetCount > 0
-      ? `${snapshot.unpricedAssetCount} ${snapshot.unpricedAssetCount === 1 ? 'asset is' : 'assets are'} waiting for a price.`
-      : '',
+      ? `${snapshot.unpricedAssetCount} ${snapshot.unpricedAssetCount === 1 ? 'asset is' : 'assets are'} waiting for a price.${networkReason ? ` ${networkReason}` : ''}`
+      : networkReason,
   };
 }
 

@@ -46,6 +46,12 @@ withdrawFxSave
 
 Internal SDK files, aggregators, contracts, or experiments are not product capabilities. Adding a sixteenth method, custom trading primitive, scheduler, alert, analytics system, or protocol reimplementation requires an explicit scope decision; it must never enter through a routine dependency update.
 
+Application reads pass through `apps/mini-app/src/lib/fx/readFacade.ts`, which
+exposes only the approved read subset above. It applies a 12-second deadline
+and rejects malformed SDK/indexer position records before they reach product
+state. Product routes must not import `getFxSdk` for reads; write planners may
+continue using the SDK adapter through the service boundary.
+
 ## Capability matrix
 
 This matrix is the implementation contract for the locked surface. “Refresh” means a new read from the official SDK and chain after the action; local storage is never a source of financial truth.

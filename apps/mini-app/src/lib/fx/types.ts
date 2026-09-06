@@ -125,6 +125,8 @@ export type PlanStatus =
   | "reviewing"
   | "awaiting-user"
   | "submitted"
+  | "included"
+  | "confirming"
   | "confirmed"
   | "failed"
   | "partial";
@@ -133,7 +135,14 @@ export interface TransactionStepResult {
   index: number;
   transaction: PlannedTransaction;
   hash?: Hex;
-  status: "submitted" | "confirmed" | "failed";
+  status: "submitted" | "included" | "confirming" | "confirmed" | "failed";
+  /** Number of canonical confirmations observed for an included receipt. */
+  confirmations?: number;
+  /** Finality target shown in progress UI (production default: three). */
+  requiredConfirmations?: number;
+  /** Receipt identity used to detect a reorg while waiting for finality. */
+  includedBlockNumber?: bigint;
+  includedBlockHash?: Hex;
   error?: string;
   receipt?: TransactionReceipt;
 }
@@ -338,6 +347,8 @@ export interface TransactionRunnerOptions {
   receiptTimeoutMs?: number;
   /** Poll interval for receipt and block confirmation. */
   pollMs?: number;
+  /** Canonical confirmations required before the next route step. */
+  confirmations?: number;
   /** Wait for one additional block after the final transaction. */
   waitForNextBlock?: boolean;
   /** Disable only for deterministic unit tests; production must leave true. */

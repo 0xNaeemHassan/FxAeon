@@ -59,6 +59,13 @@ function assertCloudflareAccountId() {
   }
 }
 
+function assertTelegramBotToken() {
+  const value = requireValue('TELEGRAM_BOT_TOKEN');
+  if (!/^\d+:[A-Za-z0-9_-]{20,}$/.test(value)) {
+    throw new Error('TELEGRAM_BOT_TOKEN has an invalid format');
+  }
+}
+
 try {
   const privyAppId = requireValue('NEXT_PUBLIC_PRIVY_APP_ID');
   if (/\s/.test(privyAppId)) throw new Error('NEXT_PUBLIC_PRIVY_APP_ID cannot contain whitespace');
@@ -69,6 +76,7 @@ try {
   assertTelegramMiniAppUrl();
   requireValue('CLOUDFLARE_API_TOKEN');
   assertCloudflareAccountId();
+  assertTelegramBotToken();
 
   console.log('FxAeon production environment verified: Privy, Alchemy, Telegram, and Cloudflare configuration are structurally valid.');
 } catch (error) {

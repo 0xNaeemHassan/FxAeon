@@ -19,7 +19,7 @@ import {
   usePrivy,
   useWallets,
 } from '@privy-io/react-auth';
-import { getInitData, haptic, isTMA } from '@/lib/telegram';
+import { getInitData, haptic, isTelegramLaunchContext } from '@/lib/telegram';
 import { AddressChip, Button, Card, FullScreenSpinner } from '@/components/ui';
 import FxLogo from '@/components/FxLogo';
 import { usePrivyWallet } from '@/lib/wallet';
@@ -45,7 +45,7 @@ function PrivyLoginFlow() {
   const [phase, setPhase] = useState<Phase>('intro');
   const [error, setError] = useState('');
   const phaseHeadingRef = useRef<HTMLHeadingElement>(null);
-  const telegramContext = isTMA();
+  const telegramContext = isTelegramLaunchContext();
 
   const embeddedWallet = useMemo(
     () => wallets.find((wallet) => wallet.walletClientType === 'privy' || wallet.walletClientType === 'privy-v2'),
@@ -82,10 +82,10 @@ function PrivyLoginFlow() {
     try {
       // In Telegram, Privy consumes the signed launch payload restored by the
       // provider. An empty launch payload cannot authenticate a user safely.
-      if (isTMA() && !getInitData()) {
+      if (telegramContext && !getInitData()) {
         throw new Error('Reopen FxAeon from the Telegram bot menu so the signed launch data is available.');
       }
-      if (isTMA()) {
+      if (telegramContext) {
         // Privy consumes the signed Telegram launch payload at provider mount.
         // Do not open the Telegram login popup inside the Telegram WebView:
         // it cannot reliably post its result back to this document.
@@ -95,10 +95,10 @@ function PrivyLoginFlow() {
     } catch (cause) {
       fail(cause, 'Telegram sign-in failed. Close and reopen the Mini App, then try again.');
     }
-  }, [authenticated, fail, loginWithTelegram, walletAddress]);
+  }, [authenticated, fail, loginWithTelegram, telegramContext, walletAddress]);
 
   useEffect(() => {
-    if (phase !== 'authenticating' || authenticated || !isTMA() || !getInitData()) return;
+    if (phase !== 'authenticating' || authenticated || !telegramContext || !getInitData()) return;
     const timer = window.setTimeout(() => {
       fail(
         new Error('Automatic Telegram sign-in did not complete.'),
@@ -106,7 +106,7 @@ function PrivyLoginFlow() {
       );
     }, 15_000);
     return () => window.clearTimeout(timer);
-  }, [authenticated, fail, phase]);
+  }, [authenticated, fail, phase, telegramContext]);
 
   const { login: openPrivyLogin } = useLogin({
     onComplete: () => setPhase(walletAddress ? 'done' : 'choose'),

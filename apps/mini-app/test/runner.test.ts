@@ -9,6 +9,8 @@ const WALLET = "0x1111111111111111111111111111111111111111" as Address;
 const DESTINATION = "0x2222222222222222222222222222222222222222" as Address;
 const HASH_1 = `0x${"1".repeat(64)}` as Hex;
 const HASH_2 = `0x${"2".repeat(64)}` as Hex;
+const BLOCK_HASH_1 = `0x${"a".repeat(64)}` as Hex;
+const BLOCK_HASH_2 = `0x${"b".repeat(64)}` as Hex;
 const BRIDGE_ABI = parseAbi([
   "function send((uint32 dstEid,bytes32 to,uint256 amountLD,uint256 minAmountLD,bytes extraOptions,bytes composeMsg,bytes oftCmd),(uint256 nativeFee,uint256 lzTokenFee),address refundAddress)",
 ]);
@@ -73,7 +75,7 @@ function bridgeData(): Hex {
 
 function client(params: {
   pendingNonces: number[];
-  receipts: Array<{ status: "success" | "reverted"; blockNumber: bigint }>;
+  receipts: Array<{ status: "success" | "reverted"; blockNumber: bigint; blockHash?: Hex }>;
   blocks: bigint[];
   remoteChainId?: number;
 }): FxPublicClient {
@@ -87,10 +89,12 @@ function client(params: {
     getTransactionCount: async () => params.pendingNonces[Math.min(nonceIndex++, params.pendingNonces.length - 1)],
     getTransactionReceipt: async () => {
       const index = receiptIndex++;
-      const receipt = params.receipts[Math.min(index, params.receipts.length - 1)];
+      const transactionIndex = Math.min(Math.floor(index / 4), params.receipts.length - 1);
+      const receipt = params.receipts[transactionIndex];
       return {
         ...receipt,
-        transactionHash: index === 0 ? HASH_1 : HASH_2,
+        blockHash: receipt.blockHash ?? (transactionIndex === 0 ? BLOCK_HASH_1 : BLOCK_HASH_2),
+        transactionHash: transactionIndex === 0 ? HASH_1 : HASH_2,
         from: WALLET,
         to: DESTINATION,
       };
@@ -146,7 +150,7 @@ test("runner signs SDK steps in order, waits every receipt, then performs post-r
         { status: "success", blockNumber: 10n },
         { status: "success", blockNumber: 12n },
       ],
-      blocks: [13n],
+      blocks: [10n, 11n, 12n, 12n, 13n, 14n],
     }),
     callbacks: {
       requestSignature: cb.requestSignature,
@@ -192,7 +196,7 @@ test("runner journals bridge verification facts only on the submitted bridge act
     oftCmd: "0x",
   };
   const bridgeClient = {
-    ...client({ pendingNonces: [4], receipts: [{ status: "success", blockNumber: 10n }], blocks: [] }),
+    ...client({ pendingNonces: [4], receipts: [{ status: "success", blockNumber: 10n }], blocks: [10n, 11n, 12n] }),
     getTransaction: async ({ hash }: { hash: Hex }) => ({
       hash,
       from: WALLET,
@@ -232,7 +236,7 @@ test("throwing UI observers cannot interrupt journaling or receipt confirmation"
     publicClient: client({
       pendingNonces: [4],
       receipts: [{ status: "success", blockNumber: 10n }],
-      blocks: [],
+      blocks: [10n, 11n, 12n],
     }),
     callbacks: {
       requestSignature: async () => HASH_1,
@@ -293,7 +297,7 @@ test("a partially completed route rereads state after the confirmed prerequisite
     publicClient: client({
       pendingNonces: [4, 5],
       receipts: [{ status: "success", blockNumber: 10n }],
-      blocks: [11n],
+      blocks: [10n, 11n, 12n, 13n],
     }),
     callbacks: {
       requestSignature: cb.requestSignature,
@@ -338,7 +342,7 @@ test("live chain and pending nonce probes run concurrently before signing", asyn
   const base = client({
     pendingNonces: [4],
     receipts: [{ status: "success", blockNumber: 10n }],
-    blocks: [],
+    blocks: [10n, 11n, 12n],
   });
   const concurrentClient = {
     ...base,
@@ -431,6 +435,7 @@ test("runner leaves a signed hash pending when the receipt block is malformed", 
       to: DESTINATION,
       status: "success",
       blockNumber: undefined,
+      blockHash: BLOCK_HASH_1,
     }),
   } as unknown as FxPublicClient;
   const result = await runTransactionRoute({
@@ -455,6 +460,7 @@ test("runner leaves a signed hash pending when the receipt status is non-termina
       to: DESTINATION,
       status: "pending",
       blockNumber: 10n,
+      blockHash: BLOCK_HASH_1,
     }),
   } as unknown as FxPublicClient;
   const result = await runTransactionRoute({
@@ -539,6 +545,6 @@ test("post-confirm reads are skipped when the required next block is unavailable
     },
     options: { simulate: false, pollMs: 0, receiptTimeoutMs: 2 },
   });
-  assert.equal(result.status, "confirmed");
+  assert.equal(result.status, "failed");
   assert.equal(postReads, 0);
 });

@@ -352,12 +352,49 @@ async function runProof(captureStage: string) {
       await expect(page.getByRole('checkbox')).toBeVisible({ timeout: 180_000 });
       assert.equal(submitted.length, signedBefore, 'review must never request a signature');
       await page.screenshot({ path: resolve(artifactRoot, `${scenario.market}-${scenario.side}-review.png`), fullPage: true });
-      await page.getByRole('checkbox').check();
-      const confirmButton: Locator = page.getByRole('button', { name: /^Confirm (?:in wallet|\d+ transactions)$/ });
-      const countMatch: RegExpMatchArray | null = (await confirmButton.innerText()).match(/Confirm (\d+) transactions/);
-      const transactionCount: number = countMatch ? Number(countMatch[1]) : 1;
-      assert.ok(transactionCount >= 1 && transactionCount <= 10, 'review must expose the ordered transaction count');
-      await confirmButton.click();
+      // Interval mining is intentional: the strict production review guard
+      // can observe a new block between the first review and confirmation.
+      // That must return the user to review, never bypass revalidation or
+      // simulation. Re-acknowledge the explicit refresh notice in the proof
+      // harness and retry within a small bound so a genuinely unstable quote
+      // still fails rather than masking a safety regression.
+      let transactionCount = 0;
+      let firstSignatureObserved = false;
+      let confirmButton!: Locator;
+      for (let reviewAttempt = 0; reviewAttempt < 3 && !firstSignatureObserved; reviewAttempt += 1) {
+        await page.getByRole('checkbox').check();
+        confirmButton = page.getByRole('button', { name: /^Confirm (?:in wallet|\d+ transactions)$/ });
+        const countMatch: RegExpMatchArray | null = (await confirmButton.innerText()).match(/Confirm (\d+) transactions/);
+        transactionCount = countMatch ? Number(countMatch[1]) : 1;
+        assert.ok(transactionCount >= 1 && transactionCount <= 10, 'review must expose the ordered transaction count');
+        await confirmButton.click();
+
+        // Poll one non-rejecting state machine. Promise.race with Playwright
+        // expect waiters is unsafe here: the non-winning 180s assertion can
+        // reject before the other state becomes visible.
+        const refreshNotice = page.locator('[role="status"]')
+          .filter({ hasText: 'Quote updated—review again.' }).first();
+        const deadline = Date.now() + 180_000;
+        let outcome: 'submitted' | 'refresh' | undefined;
+        while (!outcome && Date.now() < deadline) {
+          if (routeErrors.length) throw new Error(routeErrors[0]);
+          if (submitted.length >= signedBefore + 1) outcome = 'submitted';
+          else if (await refreshNotice.isVisible().catch(() => false)) outcome = 'refresh';
+          else await page.waitForTimeout(250);
+        }
+        if (!outcome) {
+          throw new Error(`timed out waiting for first signature or quote refresh (submitted ${submitted.length - signedBefore})`);
+        }
+        if (outcome === 'submitted') {
+          firstSignatureObserved = true;
+          break;
+        }
+        if (reviewAttempt === 2) {
+          throw new Error('review quote refreshed repeatedly before the first signature');
+        }
+        await expect(page.getByRole('checkbox')).toBeVisible({ timeout: 30_000 });
+      }
+      assert.equal(firstSignatureObserved, true, 'the first reviewed transaction must be submitted');
       for (let transactionIndex = 0; transactionIndex < transactionCount; transactionIndex += 1) {
         await expect.poll(() => proofValue(submitted.length), { timeout: 180_000 }).toBe(signedBefore + transactionIndex + 1);
         const tx = submitted[signedBefore + transactionIndex];
@@ -638,9 +675,20 @@ async function runProof(captureStage: string) {
       await page.screenshot({ path: resolve(artifactRoot, `${position.market}-${position.side}-closed.png`), fullPage: true });
       console.log(`Browser closed and removed ${position.market} ${position.side} #${position.positionId}`);
     }
-    await expect(page.getByText('No open positions', { exact: true })).toBeVisible();
-    await page.screenshot({ path: resolve(artifactRoot, 'positions-all-closed.png'), fullPage: true });
     assert.equal(closedPositions.length, scenarios.length, 'every supported position must close through the browser');
+    // A delayed/unavailable indexer is allowed to leave the product in its
+    // honest partial-empty state. Every position has already passed the
+    // receipt-bound canonical zero assertion above, so accepting that state
+    // here does not turn partial reads into a claim of an exhaustive empty
+    // portfolio. Prefer the normal ready-empty presentation when it arrives.
+    const readyEmpty = page.getByText('No open positions', { exact: true });
+    const partialEmpty = page.getByText('No positions in verified pools', { exact: true });
+    await expect.poll(async () => {
+      if (await readyEmpty.isVisible().catch(() => false)) return 'ready-empty';
+      if (await partialEmpty.isVisible().catch(() => false)) return 'partial-empty';
+      return 'waiting';
+    }, { timeout: 120_000 }).toMatch(/^(ready-empty|partial-empty)$/);
+    await page.screenshot({ path: resolve(artifactRoot, 'positions-all-closed.png'), fullPage: true });
     assert.ok(existingBorrowProof, 'existing-position borrow must complete through the browser');
     completed = true;
     await context.tracing.stop({ path: resolve(artifactRoot, 'trace.zip') });
