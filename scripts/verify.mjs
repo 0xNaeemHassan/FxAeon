@@ -64,6 +64,7 @@ if (architecture !== 0) process.exit(architecture);
 const quickChecks = await runGroup([
   { args: ['lint'], label: 'lint' },
   { args: ['test:anvil:contract'], label: 'Anvil harness contract' },
+  { args: ['test:telegram:contract'], label: 'Telegram deployment contract' },
   {
     args: ['audit', '--prod', '--audit-level=high', '--ignore-registry-errors'],
     label: 'dependency audit',

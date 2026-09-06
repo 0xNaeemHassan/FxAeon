@@ -1,6 +1,8 @@
 name: Deploy static Mini App
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -37,6 +39,7 @@ jobs:
           NEXT_PUBLIC_TELEGRAM_APP_URL: ${{ vars.NEXT_PUBLIC_TELEGRAM_APP_URL }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         run: pnpm verify:production-env
       - name: Run complete repository verification
         run: pnpm verify
@@ -51,3 +54,8 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Sync Telegram bot metadata and menu
+        run: node scripts/sync_telegram_bot.mjs
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_WEB_APP_URL: https://fxaeon.pages.dev

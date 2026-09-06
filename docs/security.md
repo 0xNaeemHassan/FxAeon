@@ -46,6 +46,10 @@ The human-readable transaction summary is convenience UI, not authority. The val
 - Browser RPC keys are public by design but must use exact origin allowlists, network restrictions, quotas, and alerts.
 - Static previews and production use separate Privy and provider applications.
 - No secrets are placed in `NEXT_PUBLIC_*` variables.
+- `TELEGRAM_BOT_TOKEN` is a protected CI secret only. The production deploy
+  validates it before publishing, then synchronizes the bot name, commands,
+  description, and default Mini App menu to the fixed `https://fxaeon.pages.dev`
+  origin. It is never passed to the Next.js build, browser bundle, or logs.
 - Logs and analytics must not capture Telegram init data, Privy tokens, calldata, full wallet history, or private material.
 
 ## Supply chain

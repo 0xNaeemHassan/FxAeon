@@ -107,6 +107,16 @@ export function isTMA(): boolean {
   return Boolean(tg.initData) || (Boolean(tg.platform) && tg.platform !== 'unknown');
 }
 
+/**
+ * True when this document is a Telegram launch, including the short window
+ * where the host bridge is still loading or has already consumed the launch
+ * hash. This is an intent signal only; signed initData remains the authority
+ * for seamless Telegram authentication.
+ */
+export function isTelegramLaunchContext(): boolean {
+  return isTMA() || hasTelegramLaunchSignal();
+}
+
 /** Signed init data consumed only by Privy's Telegram authentication flow. */
 export function getInitData(): string {
   return getWebApp()?.initData ?? '';

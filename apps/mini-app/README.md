@@ -35,6 +35,13 @@ Wagmi and TanStack Query share standard wallet-balance reads across screens and 
 
 Telegram enhances the host experience but is never required to access the protocol interface.
 
+The protected production deploy also synchronizes the @FxAeonBot metadata and
+default Mini App menu after a successful Pages publish. The bot token stays in
+GitHub Actions secrets and is never a `NEXT_PUBLIC_*` value or part of the
+static artifact. A Telegram launch with a delayed or missing bridge is routed
+to the explicit Telegram/Privy sign-in explanation; an ordinary browser still
+uses its injected EIP-1193 wallet path.
+
 The Positions route uses a compact portfolio list and persistent management ticket. Every verified ETH/BTC long/short row exposes Manage and Close directly; Close is a dedicated full-exit mode with receive-asset selection, a destructive review action, fresh SDK planning, simulation, ordered approvals, receipt tracking, and post-confirmation balance/position refresh.
 
 ## Output and deployment

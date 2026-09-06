@@ -12,18 +12,19 @@
  * providers create independent sessions and can make a wallet appear to
  * change between screens.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { PrivyProvider } from '@privy-io/react-auth';
 import { base, mainnet } from 'viem/chains';
 import { PRIVY_APP_ID } from '@/lib/privyConfig';
-import { restoreTelegramLaunchHash } from '@/lib/telegram';
+import { getWebApp, hasTelegramLaunchSignal, restoreTelegramLaunchHash, waitForTelegramWebApp } from '@/lib/telegram';
 import { PrivyWalletBridge, UnavailableWalletProvider } from '@/lib/wallet';
 import WalletRecoveryCoordinator from '@/components/WalletRecoveryCoordinator';
 import ProtocolPositionProvider from '@/components/ProtocolPositionProvider';
 import WalletDataProvider from '@/components/WalletDataProvider';
 import { walletDemandForPathname } from '@/lib/walletDemand';
 import WalletDemandProvider, { useEffectiveWalletDemand } from '@/components/WalletDemandProvider';
+import { FullScreenSpinner } from '@/components/ui';
 
 export default function PrivyClientProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? '/';
@@ -37,6 +38,24 @@ export default function PrivyClientProvider({ children }: { children: React.Reac
   // useState initializer runs synchronously during the first render — ahead
   // of every child/provider effect — which is exactly the ordering needed.
   // (See restoreTelegramLaunchHash for the full story.)
+  const telegramLaunch = hasTelegramLaunchSignal();
+  const [telegramBridgeSettled, setTelegramBridgeSettled] = useState(
+    () => !PRIVY_APP_ID || !telegramLaunch || Boolean(getWebApp()?.initData),
+  );
+  useEffect(() => {
+    if (!PRIVY_APP_ID || !telegramLaunch || telegramBridgeSettled) return;
+    let cancelled = false;
+    void (async () => {
+      // Privy must mount after a delayed Telegram bridge has exposed signed
+      // initData; otherwise its seamless login check runs too early and can
+      // strand the WebView in the injected-wallet fallback.
+      const tg = getWebApp() ?? await waitForTelegramWebApp();
+      if (cancelled) return;
+      if (tg?.initData) restoreTelegramLaunchHash();
+      setTelegramBridgeSettled(true);
+    })();
+    return () => { cancelled = true; };
+  }, [telegramBridgeSettled, telegramLaunch]);
   useState(() => {
     // A no-Privy build is deliberately used by static/E2E checks. It must
     // remain a plain public site: restoring Telegram's launch hash would
@@ -49,6 +68,7 @@ export default function PrivyClientProvider({ children }: { children: React.Reac
       <WalletDemandProvider routeDemand={demand} routeKey={pathname}><RouteDataProviders>{children}</RouteDataProviders></WalletDemandProvider>
     </UnavailableWalletProvider>
   );
+  if (!telegramBridgeSettled) return <FullScreenSpinner />;
   return (
     <PrivyProvider
       appId={PRIVY_APP_ID}

@@ -20,6 +20,10 @@ export default function ConnectWalletButton({ children, className = '', disabled
     setError('');
     setConnecting(true);
     try {
+      // Telegram WebViews do not expose an injected browser wallet reliably.
+      // The adapter owns the seamless Privy launch-data flow and fails with a
+      // Telegram-specific message when it is not available. Keep the CTA
+      // route-stable; normal browsers retain explicit EIP-1193 discovery.
       await wallet.connect();
       haptic('success');
     } catch (cause) {

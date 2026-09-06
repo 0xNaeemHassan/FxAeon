@@ -106,28 +106,45 @@ test.describe("Telegram bridge availability", () => {
     assertNoBackendRequests(requests);
   });
 
-  test("a direct Telegram protocol route keeps an in-place wallet fallback", async ({ page, requests }) => {
+  test("a Telegram protocol route uses the safe Telegram sign-in path", async ({ page, requests }) => {
     await page.route("**/telegram-web-app.js", (route) => route.abort("failed"));
     await page.goto("/portfolio#tgWebAppData=query_id%3Dtest&tgWebAppVersion=8.0&tgWebAppPlatform=tdesktop", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: /portfolio/i })).toBeVisible();
-    await expect(page.locator("body")).not.toContainText(/Wallet service unavailable/i);
     await expect(page.locator("body")).not.toContainText(/Telegram bridge unavailable/i);
     await page.getByText("Connect wallet", { exact: true }).click();
     await expect(page).toHaveURL(/\/portfolio(?:#.*)?$/);
-    await expect(page.locator(".wallet-connect-toast")).toContainText(/No browser wallet detected/i);
+    await expect(page.locator(".wallet-connect-toast")).toContainText(/Telegram wallet sign-in is unavailable/i);
+    await expect(page.locator("body")).not.toContainText(/No browser wallet detected/i);
     await expect(page.locator("body")).not.toContainText(/Telegram bridge unavailable/i);
     assertNoBackendRequests(requests);
   });
 });
 
-test("missing Privy configuration still offers a browser wallet entry", async ({ page, requests }) => {
-  await page.goto("/login", { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("heading", { name: /connect your wallet/i })).toBeVisible();
-  await expect(page.getByRole("button", { name: /connect browser wallet/i })).toBeVisible();
-  await expect(page.getByText(/02\s*Wallet access|Connect once|A focused home for your Ethereum markets/i)).toHaveCount(0);
-  await expect(page.locator("body")).not.toContainText(/wallet setup unavailable|wallet service unavailable|wallet controls are unavailable/i);
-  await expect(page.locator("body")).not.toContainText(/private key|session signer|delegat(?:ed|ion)/i);
-  assertNoBackendRequests(requests);
+test.describe("Telegram connect CTA with an available bridge", () => {
+  test.use({ telegram: true });
+
+  test("uses the Telegram/Privy entry instead of injected-wallet discovery", async ({ page, requests }) => {
+    await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
+    await page.getByText("Connect wallet", { exact: true }).click();
+    await expect(page).toHaveURL(/\/portfolio\/?$/);
+    await expect(page.locator(".wallet-connect-toast")).toContainText(/Telegram wallet sign-in is unavailable/i);
+    await expect(page.locator("body")).not.toContainText(/No browser wallet detected/i);
+    assertNoBackendRequests(requests);
+  });
+});
+
+test.describe("plain browser wallet login", () => {
+  test.use({ telegram: false });
+
+  test("missing Privy configuration still offers a browser wallet entry", async ({ page, requests }) => {
+    await page.goto("/login", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: /connect your wallet/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /connect browser wallet/i })).toBeVisible();
+    await expect(page.getByText(/02\s*Wallet access|Connect once|A focused home for your Ethereum markets/i)).toHaveCount(0);
+    await expect(page.locator("body")).not.toContainText(/wallet setup unavailable|wallet service unavailable|wallet controls are unavailable/i);
+    await expect(page.locator("body")).not.toContainText(/private key|session signer|delegat(?:ed|ion)/i);
+    assertNoBackendRequests(requests);
+  });
 });
 
 test.describe("connected browser wallet flows", () => {

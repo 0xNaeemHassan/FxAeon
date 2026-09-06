@@ -12,6 +12,7 @@ import {
   type SendTransactionModalUIOptions,
 } from '@privy-io/react-auth';
 import { assertLocalForkRpcUrl } from '@/lib/fx/config';
+import { getInitData, isTelegramLaunchContext, restoreTelegramLaunchHash } from '@/lib/telegram';
 import { switchBrowserChain as switchBrowserChainWithConfig } from './switchBrowserChain';
 import { eip6963FocusTrapDestination, getDiscoveredEip6963Providers, recordEip6963Announcement, selectEip6963Provider, shouldBindEip6963ProviderEvents, shouldPromptEip6963Provider, type DiscoveredEip6963Provider, type Eip6963Announcement } from './eip6963';
 
@@ -246,6 +247,16 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
       connectWallet();
       return;
     }
+    if (isTelegramLaunchContext()) {
+      if (!getInitData()) {
+        throw new Error('Reopen FxAeon from the Telegram bot menu so signed launch data is available.');
+      }
+      // The provider consumes this signed hash automatically. This call is a
+      // safe idempotent recovery for a late bridge/navigation transition; it
+      // never opens the Telegram popup inside the Telegram WebView.
+      restoreTelegramLaunchHash();
+      throw new Error('Telegram sign-in is initializing. Keep this window open and try again in a moment.');
+    }
     login({ loginMethods: ['wallet'] });
   }, [authenticated, connectWallet, login]);
 
@@ -392,8 +403,13 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
   const provider = browserProvider();
 
   const sync = useCallback(async (requestAccounts = false, providerOverride?: Eip1193Provider) => {
+    if (isTelegramLaunchContext()) {
+      throw new Error('Telegram wallet sign-in is unavailable in this build. Reopen FxAeon from the configured bot menu or use a regular browser.');
+    }
     const currentProvider = providerOverride ?? browserProvider();
-    if (!currentProvider) throw new Error('No browser wallet detected. Install MetaMask, Coinbase Wallet, or another EVM wallet to continue.');
+    if (!currentProvider) {
+      throw new Error('No browser wallet detected. Install MetaMask, Coinbase Wallet, or another EVM wallet to continue.');
+    }
     if (!requestAccounts && window.localStorage.getItem(BROWSER_DISCONNECTED_KEY) === '1') {
       setAddress(undefined);
       setChainId(undefined);
@@ -471,6 +487,9 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
   }, [provider, sync]);
 
   const connect = useCallback(async () => {
+    if (isTelegramLaunchContext()) {
+      throw new Error('Telegram wallet sign-in is unavailable in this build. Reopen FxAeon from the configured bot menu or use a regular browser.');
+    }
     window.localStorage.removeItem(BROWSER_DISCONNECTED_KEY);
     try {
       const providers = getDiscoveredEip6963Providers();
