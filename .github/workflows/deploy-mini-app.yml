@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  checks: read
 
 concurrency:
   group: fxaeon-production
@@ -37,8 +38,6 @@ jobs:
           NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL: ${{ secrets.NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL }}
           NEXT_PUBLIC_ALCHEMY_DATA_API_KEY: ${{ secrets.NEXT_PUBLIC_ALCHEMY_DATA_API_KEY }}
           NEXT_PUBLIC_TELEGRAM_APP_URL: ${{ vars.NEXT_PUBLIC_TELEGRAM_APP_URL }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         run: pnpm verify:production-env
       - name: Run complete repository verification
@@ -51,11 +50,12 @@ jobs:
           NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL: ${{ secrets.NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL }}
           NEXT_PUBLIC_ALCHEMY_DATA_API_KEY: ${{ secrets.NEXT_PUBLIC_ALCHEMY_DATA_API_KEY }}
           NEXT_PUBLIC_TELEGRAM_APP_URL: ${{ vars.NEXT_PUBLIC_TELEGRAM_APP_URL }}
-      - name: Deploy to Cloudflare Pages
-        run: pnpm exec wrangler pages deploy apps/mini-app/dist --project-name=fxaeon --commit-dirty=true
+      - name: Wait for Cloudflare Pages deployment
+        run: node scripts/wait_for_cloudflare_check.mjs
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
       - name: Sync Telegram bot metadata and menu
         run: node scripts/sync_telegram_bot.mjs
         env:

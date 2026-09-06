@@ -3,7 +3,9 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const script = readFileSync(new URL('./sync_telegram_bot.mjs', import.meta.url), 'utf8');
-const workflow = readFileSync(new URL('../.github/workflows/deploy-mini-app.yml', import.meta.url), 'utf8');
+// Git may materialize checked-in YAML with CRLF on Windows. Keep workflow
+// structure assertions independent of checkout line endings.
+const workflow = readFileSync(new URL('../.github/workflows/deploy-mini-app.yml', import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
 const provider = readFileSync(new URL('../apps/mini-app/src/components/PrivyClientProvider.tsx', import.meta.url), 'utf8');
 
 test('Telegram sync is constrained to the production static origin', () => {
@@ -15,7 +17,7 @@ test('Telegram sync is constrained to the production static origin', () => {
 });
 
 test('deployment sync uses only the CI secret after Pages deploy', () => {
-  const deployIndex = workflow.indexOf('Deploy to Cloudflare Pages');
+  const deployIndex = workflow.indexOf('Wait for Cloudflare Pages deployment');
   const syncIndex = workflow.indexOf('Sync Telegram bot metadata and menu');
   assert.ok(deployIndex >= 0 && syncIndex > deployIndex);
   assert.match(workflow.slice(syncIndex), /TELEGRAM_BOT_TOKEN:\s*\$\{\{\s*secrets\.TELEGRAM_BOT_TOKEN\s*\}\}/);
