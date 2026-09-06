@@ -40,7 +40,7 @@ import {
 } from '@/lib/fx';
 import { positionTokenDecimals, type UiPosition } from '@/app/trade/fxUi';
 import { formatUsd, priceKeyForSymbol, usdValueForUnits, type UsdPriceMap } from '@/lib/prices';
-import type { WalletAssetSnapshot } from '@/lib/walletAssets';
+import { walletAssetValuation } from '@/lib/walletAssets';
 import { calculatePositionUsdValuation } from '@/lib/positionValuation';
 import { fxSaveUsdValue } from '@/lib/fxSaveUnits';
 import { haptic } from '@/lib/telegram';
@@ -556,22 +556,6 @@ function walletValuation(balances: WalletBalancesResult | null, prices: UsdPrice
     totalUsd: values.reduce<number>((total, value) => total + (value ?? 0), 0),
     assetCount: nonZero.length,
     reason: '',
-  };
-}
-
-function walletAssetValuation(snapshot: WalletAssetSnapshot): WalletValuation {
-  const held = snapshot.assets.filter((asset) => asset.balanceWei > 0n);
-  const incompleteNetworks = Object.values(snapshot.networks).filter((network) => network.status !== 'ready');
-  const networkReason = incompleteNetworks.length > 0
-    ? `${incompleteNetworks.map((network) => network.chainId === 1 ? 'Ethereum' : 'Base').join(' and ')} network balances are ${incompleteNetworks.some((network) => network.status === 'pending') ? 'still being verified' : 'partially unavailable'}.`
-    : '';
-  return {
-    complete: incompleteNetworks.length === 0 && snapshot.unpricedAssetCount === 0,
-    totalUsd: snapshot.totalUsdValue,
-    assetCount: held.length,
-    reason: snapshot.unpricedAssetCount > 0
-      ? `${snapshot.unpricedAssetCount} ${snapshot.unpricedAssetCount === 1 ? 'asset is' : 'assets are'} waiting for a price.${networkReason ? ` ${networkReason}` : ''}`
-      : networkReason,
   };
 }
 

@@ -1,10 +1,16 @@
 .utilityWorkspace {
   width: 100%;
-  max-width: 560px;
+  max-width: 760px;
   margin-inline: auto;
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+/* Utility routes stay focused on phones while using the available desktop
+   canvas instead of leaving a narrow column stranded in the middle. */
+@media (min-width: 1100px) {
+  .utilityWorkspace { max-width: 920px; }
 }
 
 .utilityCard {

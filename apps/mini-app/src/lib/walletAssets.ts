@@ -17,6 +17,13 @@ export type WalletAssetSnapshot = {
   totalUsdValue: number; unpricedAssetCount: number; updatedAt: number; source: 'alchemy' | 'canonical' | 'mixed';
 };
 export type WalletAssetCountState = 'loading' | 'unavailable' | 'partial' | 'ready';
+export type WalletAssetValuation = {
+  complete: boolean;
+  totalUsd: number | null;
+  assetCount: number;
+  unpricedAssetCount: number;
+  reason: string;
+};
 export const ASSET_PRICE_MAX_AGE_MS = 2 * 60_000;
 export const ASSET_BALANCE_MAX_AGE_MS = 2 * 60_000;
 export const ASSET_DISCOVERY_STALE_MS = 60_000;
@@ -72,6 +79,38 @@ export function summarizeWalletAssets(snapshot: WalletAssetSnapshot, now = Date.
   const rawTotal = assets.reduce((sum, asset) => sum + (asset.usdValue ?? 0), 0);
   return { ...snapshot, assets, totalUsdValue: Number.isFinite(rawTotal) ? rawTotal : 0,
     unpricedAssetCount: assets.filter((asset) => asset.balanceWei > 0n && asset.usdValue === null).length };
+}
+
+/**
+ * The single display valuation used by Portfolio and the wallet profile.
+ * `totalUsdValue` is allowed to be partial (it is the sum of independently
+ * verified rows), but `complete` is false until both chain states and every
+ * held row have a fresh validated value. No surface should invent a zero for
+ * a pending network or an unpriced asset.
+ */
+export function walletAssetValuation(snapshot: WalletAssetSnapshot | null): WalletAssetValuation {
+  if (!snapshot) {
+    return { complete: false, totalUsd: null, assetCount: 0, unpricedAssetCount: 0, reason: 'Supported balances are unavailable.' };
+  }
+  const assetCount = snapshot.assets.filter((asset) => asset.balanceWei > 0n).length;
+  const unpricedAssetCount = snapshot.unpricedAssetCount;
+  const incompleteNetworks = Object.values(snapshot.networks).filter((network) => network.status !== 'ready');
+  const reasons: string[] = [];
+  if (unpricedAssetCount > 0) {
+    reasons.push(`${unpricedAssetCount} ${unpricedAssetCount === 1 ? 'asset is' : 'assets are'} waiting for a verified USD value.`);
+  }
+  if (incompleteNetworks.length > 0) {
+    const names = incompleteNetworks.map((network) => network.chainId === 1 ? 'Ethereum' : 'Base').join(' and ');
+    const pending = incompleteNetworks.some((network) => network.status === 'pending');
+    reasons.push(`${names} balances are ${pending ? 'still being verified' : 'partially unavailable'}.`);
+  }
+  return {
+    complete: reasons.length === 0,
+    totalUsd: Number.isFinite(snapshot.totalUsdValue) ? snapshot.totalUsdValue : null,
+    assetCount,
+    unpricedAssetCount,
+    reason: reasons.join(' '),
+  };
 }
 
 export function emptyWalletSnapshot(walletAddress: string, now = Date.now()): WalletAssetSnapshot {

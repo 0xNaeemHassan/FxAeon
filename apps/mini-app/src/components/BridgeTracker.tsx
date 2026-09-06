@@ -14,7 +14,7 @@ import {
   type BridgeEventLog,
   type SourceOftSentMatch,
 } from '@/lib/fx/bridgeDelivery';
-import { getWebApp, haptic } from '@/lib/telegram';
+import { haptic, openExternalLink } from '@/lib/telegram';
 import { isForegroundOnline, subscribeToForegroundResume } from '@/lib/foreground';
 
 export type BridgeStepStatus = 'pending' | 'source_confirmed' | 'destination_verified' | 'failed';
@@ -53,13 +53,6 @@ const DESTINATION_CONFIRMATIONS = 3n;
 
 function explorerFor(chain: 'Ethereum' | 'Base'): string {
   return chain === 'Base' ? 'https://basescan.org' : 'https://etherscan.io';
-}
-
-function openLink(url: string): void {
-  haptic('light');
-  const telegram = getWebApp();
-  if (telegram?.openLink) telegram.openLink(url);
-  else window.open(url, '_blank', 'noopener,noreferrer');
 }
 
 function chainIdFor(chain: 'Ethereum' | 'Base'): 1 | 8453 {
@@ -312,7 +305,7 @@ export function BridgeTracker({
           state={failed ? 'failed' : submitted ? 'done' : 'active'}
           title="Submitted"
           body={failed ? `Submitted on ${sourceChain}, but the transaction reverted.` : submitted ? `Transaction hash saved on ${sourceChain}.` : 'Waiting for the wallet to submit the transaction.'}
-          action={sourceExplorer ? { label: 'Explorer', onClick: () => openLink(sourceExplorer) } : undefined}
+          action={sourceExplorer ? { label: 'Explorer', onClick: () => { openExternalLink(sourceExplorer); } } : undefined}
         />
         <TimelineRow
           state={failed ? 'failed' : sourceDone ? 'done' : submitted ? 'active' : 'pending'}
@@ -323,13 +316,13 @@ export function BridgeTracker({
           state={delivered ? 'done' : sourceDone ? 'active' : 'pending'}
           title="Waiting for destination"
           body={delivered ? `Delivery was verified on ${destinationChain}.` : sourceDone ? `Checking ${destinationChain} for the matching delivery. No ETA is available.` : 'Starts after source confirmation.'}
-          action={layerzeroScan ? { label: 'Track', onClick: () => openLink(layerzeroScan) } : undefined}
+          action={layerzeroScan ? { label: 'Track', onClick: () => { openExternalLink(layerzeroScan); } } : undefined}
         />
         <TimelineRow
           state={delivered ? 'done' : 'pending'}
           title="Received"
           body={delivered ? `${amount ? `${amount} ${token}` : token} was verified at the recipient on ${destinationChain}.` : 'Not verified on the destination yet.'}
-          action={destinationExplorer ? { label: 'Explorer', onClick: () => openLink(destinationExplorer) } : undefined}
+          action={destinationExplorer ? { label: 'Explorer', onClick: () => { openExternalLink(destinationExplorer); } } : undefined}
         />
       </div>
       {(verificationError || hasVerificationContext) && (

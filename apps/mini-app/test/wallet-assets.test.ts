@@ -5,6 +5,7 @@ import {
   mergeCanonicalWalletAssets,
   parseAlchemyWalletAssets,
   summarizeWalletAssets,
+  walletAssetValuation,
   walletAssetCountLabel,
   type WalletAssetSnapshot,
 } from '../src/lib/walletAssets';
@@ -71,4 +72,17 @@ test('pending canonical reads keep the aggregate incomplete', () => {
   ], { prices: { ETH: 2400 }, status: 'ready', updatedAt: now }, now);
   assert.equal(merged.networks[1].status, 'pending');
   assert.equal(merged.networks[8453].status, 'pending');
+});
+
+test('portfolio and wallet profile share one honest partial valuation', () => {
+  const snapshot = parseAlchemyWalletAssets({ data: { tokens: [
+    { address: wallet, network: 'eth-mainnet', tokenAddress: null, tokenBalance: '0xde0b6b3a7640000', tokenMetadata: { symbol: 'ETH', decimals: 18 }, tokenPrices: [{ currency: 'usd', value: '2000', lastUpdatedAt: new Date(now).toISOString() }] },
+    { address: wallet, network: 'base-mainnet', tokenAddress: '0x1111111111111111111111111111111111111111', tokenBalance: '10', tokenMetadata: { symbol: 'TEST', decimals: 18 }, tokenPrices: [] },
+  ] } }, wallet, now);
+  const valuation = walletAssetValuation(snapshot);
+  assert.equal(valuation.assetCount, 2);
+  assert.equal(valuation.unpricedAssetCount, 1);
+  assert.equal(valuation.totalUsd, 2000);
+  assert.equal(valuation.complete, false);
+  assert.match(valuation.reason, /1 asset is waiting/);
 });

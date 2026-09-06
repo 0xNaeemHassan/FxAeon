@@ -198,9 +198,7 @@
   text-transform: none;
 }
 
-.marketChooser,
 .positionActions { border: 0; background: transparent; padding: 0; }
-.marketChooser :global(.segmented),
 .positionActions :global(.segmented) {
   border-color: var(--line);
   border-radius: 16px;
@@ -208,102 +206,17 @@
   padding: 5px;
 }
 
-.marketChooser :global(.segmented-option),
 .positionActions :global(.segmented-option) {
   min-height: 48px;
   border-radius: 12px;
   font-size: 13px;
 }
 
-.marketChooser :global(.segmented-option-active),
 .positionActions :global(.segmented-option-active) {
   background: var(--surface-3);
   box-shadow: none;
   color: var(--text);
 }
-
-.instrumentHeader {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 14px;
-  border: 1px solid var(--line);
-  border-radius: 22px;
-  background: linear-gradient(145deg, var(--surface-2), var(--surface));
-  padding: 18px;
-  box-shadow: var(--elevation-1);
-}
-
-.instrumentTopline,
-.instrumentMeta {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-}
-
-.instrumentIcon {
-  display: inline-flex;
-  width: 44px;
-  height: 44px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid color-mix(in srgb, var(--mint) 28%, var(--line));
-  border-radius: 14px;
-  background: var(--mint-dim);
-}
-
-.instrumentEyebrow {
-  color: var(--mut);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .09em;
-  text-transform: uppercase;
-}
-
-.instrumentPrice {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 3px;
-  text-align: right;
-}
-
-.instrumentMeta {
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
-}
-
-.instrumentFreshness {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-  color: var(--mut);
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-.instrumentFreshness :global(.status-dot-warn) {
-  background: var(--warn);
-  box-shadow: 0 0 0 3px var(--warn-dim);
-}
-
-.instrumentStats {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  margin: 0;
-}
-
-.instrumentStats > div { display: flex; align-items: baseline; gap: 7px; }
-.instrumentStats dt { color: var(--mut); font-size: 10px; }
-.instrumentStats dd { margin: 0; color: var(--text); font-size: 12px; font-weight: 650; font-variant-numeric: tabular-nums; }
-
-.instrumentHeader .marketChooser { margin-top: -1px; }
 
 .tradePositionItem {
   overflow: hidden;
@@ -338,10 +251,6 @@
 .tradePositionActions a:hover { color: var(--text); }
 .tradePositionActions a:last-child { color: var(--danger); }
 .tradePositionActions svg { width: 14px; height: 14px; }
-
-.marketChooser :global(.segmented-option) :global(.market-option-icon) {
-  display: inline-flex;
-}
 
 .tradeLayout {
   display: grid;
@@ -396,6 +305,10 @@
 .marketColumn :global(.market-chart-header h2) { font-size: 20px; letter-spacing: -0.035em; }
 .marketColumn :global(.market-chart-header .micro-label) { font-size: 11px; letter-spacing: 0.04em; }
 .marketColumn :global(.market-chart-header .text-display) { font-size: 28px; }
+.marketColumn :global(.market-chart-market-switch) { border-bottom: 1px solid var(--line); padding: 14px 20px 16px; }
+.marketColumn :global(.market-chart-market-switch .segmented-option) { min-height: 48px; border-radius: 12px; }
+.marketColumn :global(.market-chart-market-switch .market-option-icon) { display: inline-flex; }
+.marketColumn :global(.market-chart-instrument-meta) { padding-inline: 20px; }
 .marketColumn :global(.market-chart-frame) { background-color: var(--bg-raised); }
 .marketColumn :global(.market-chart-footer) { padding: 14px 20px; border-top-color: var(--line); }
 .marketColumn :global(.chart-range-tabs) { border-radius: 12px; background: var(--input); }
@@ -488,16 +401,6 @@
   .positionsWorkspace { gap: 18px; }
   .tradePageHeading .pageEyebrow { display: none; }
   .tradePageHeading h1 { margin-top: 0; }
-  .marketChooser :global(.segmented) { padding: 4px; }
-  .marketChooser :global(.segmented-option) { min-height: 44px; }
-  .marketChooser :global(.segmented-option) > span:last-child { display: none; }
-
-  .instrumentHeader { gap: 11px; border-radius: 18px; padding: 14px; }
-  .instrumentIcon { width: 38px; height: 38px; border-radius: 12px; }
-  .instrumentPrice .text-display { font-size: 20px; }
-  .instrumentMeta { align-items: flex-start; flex-direction: column; gap: 10px; }
-  .instrumentStats { width: 100%; justify-content: space-between; gap: 8px; }
-  .instrumentStats > div { flex-direction: column; align-items: flex-start; gap: 2px; }
   .tradePositionActions a { font-size: 10.5px; }
 
   .marketColumn :global(.market-chart-header) { gap: 10px; padding: 10px 14px; }

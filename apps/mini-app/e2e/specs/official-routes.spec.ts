@@ -250,10 +250,10 @@ test.describe("connected browser wallet flows", () => {
     };
 
     await assertSkipLinkHidden();
-    // The compact mobile ticket now fits leverage in the first fold. Scroll
-    // explicitly to keep exercising the connected-page overlay regression.
-    await page.mouse.wheel(0, 500);
-    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+    // Working routes keep the browser viewport fixed; supporting content is
+    // scrolled by the route's main region instead of moving the app chrome.
+    await main.evaluate((element) => element.scrollTo({ top: 500 }));
+    await expect.poll(() => main.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
     await assertSkipLinkHidden();
 
     const asset = page.getByLabel("Input asset");

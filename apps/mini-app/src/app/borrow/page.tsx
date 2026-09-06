@@ -6,13 +6,13 @@ import Link from 'next/link';
 import { AppShell, Button, Card, EmptyState, LoadingRegion, Skeleton } from '@/components/ui';
 import { ActionReview } from '@/components/ActionReview';
 import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
+import { ProtocolPositionNotice } from '@/components/ProtocolPositionCard';
 import { ConfirmedPositionCards } from '@/components/ConfirmedPositionCards';
 import WalletConnectCTA from '@/components/WalletConnectCTA';
 import { AmountField, InfoNote, Segmented, TokenSelect, useWalletTokenBalances } from '@/components/ProtocolForm';
 import { useUsdPrices } from '@/components/PriceProvider';
 import { planDepositAndMint, planRepayAndWithdraw, type PlannedRoute, type TransactionExecutionResult } from '@/lib/fx';
 import { usePrivyWallet } from '@/lib/wallet';
-import { userSafeError } from '@/lib/errors';
 import {
   ETH_MARKET_TOKENS,
   BTC_MARKET_TOKENS,
@@ -20,8 +20,8 @@ import {
   parseZeroAmount,
   positionCollateralDecimals,
   positionDebtDecimals,
+  positionIsStale,
   positionKey,
-  readAllPositions,
   tokenAddress,
   tokenDecimals,
   type UiMarket,
@@ -34,7 +34,6 @@ import { priceKeyForSymbol } from '@/lib/prices';
 import { resetTransactionAmounts } from '@/lib/transactionState';
 
 type BorrowMode = 'mint' | 'manage';
-type PositionState = { walletAddress: string; items: UiPosition[] };
 
 const EMPTY_POSITIONS: UiPosition[] = [];
 const ETH_COLLATERAL_TOKENS = ETH_MARKET_TOKENS.filter((item) => !['USDC', 'USDT', 'fxUSD'].includes(item));
@@ -50,7 +49,6 @@ export default function BorrowPage() {
   const trackConfirmedPosition = sharedPositions.trackConfirmedPosition;
   const [mode, setMode] = useState<BorrowMode>('mint');
   const [market, setMarket] = useState<UiMarket>('ETH');
-  const [positionState, setPositionState] = useState<PositionState | null>(null);
   const [selectedKey, setSelectedKey] = useState('new');
   const [token, setToken] = useState<UiToken>('ETH');
   const [deposit, setDeposit] = useState('');
@@ -58,8 +56,6 @@ export default function BorrowPage() {
   const [repay, setRepay] = useState('');
   const [withdraw, setWithdraw] = useState('');
   const [reviewRevision, setReviewRevision] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const deepLinkApplied = useRef(false);
   const previousWalletContextRef = useRef<string | null>(null);
   // Borrowing is Ethereum-only in the official SDK. Keep the read tied to the
@@ -73,40 +69,24 @@ export default function BorrowPage() {
   const balanceStateFor = (key: string) => wallet.address
     ? balanceSnapshot.balances[key] ?? { status: balanceStatus ?? 'loading' as const }
     : undefined;
-  const load = useCallback(async () => {
-    const address = wallet.address;
-    if (!address) {
-      setPositionState(null);
-      return;
-    }
-    setLoading(true);
-    setError('');
-    try {
-      const next = (await readAllPositions(address)).filter((position) => position.side === 'long');
-      setPositionState({ walletAddress: address, items: next });
-    } catch (cause) {
-      setError(userSafeError(cause, 'Borrowing state is unavailable. Check the Ethereum connection and try again.'));
-    } finally {
-      setLoading(false);
-    }
-  }, [wallet.address]);
-
+  const refreshPositions = sharedPositions.refresh;
   const refreshAfterAction = useCallback(async (execution: TransactionExecutionResult, route: PlannedRoute) => {
     await trackConfirmedPosition(execution, route);
-    await Promise.all([load(), refreshBalances()]);
-  }, [refreshBalances, load, trackConfirmedPosition]);
-
-  useEffect(() => { void load(); }, [load]);
+    await Promise.all([refreshPositions(), refreshBalances()]);
+  }, [refreshBalances, refreshPositions, trackConfirmedPosition]);
 
   useEffect(() => {
     deepLinkApplied.current = false;
   }, [wallet.address]);
 
   const positions = useMemo(() => {
-    const current = positionState;
-    return current && current.walletAddress === wallet.address ? current.items : EMPTY_POSITIONS;
-  }, [positionState, wallet.address]);
+    const currentAddress = sharedPositions.walletAddress?.toLowerCase();
+    const walletAddress = wallet.address?.toLowerCase();
+    if (!walletAddress || currentAddress !== walletAddress) return EMPTY_POSITIONS;
+    return sharedPositions.positions.filter((position) => position.side === 'long');
+  }, [sharedPositions.positions, sharedPositions.walletAddress, wallet.address]);
   const selected = positions.find((position) => positionKey(position) === selectedKey);
+  const selectedStale = selected ? positionIsStale(selected, sharedPositions.failedGroups) : false;
   const marketPositions = positions.filter((position) => position.market === market);
   const collateralTokens = collateralTokensForMarket(market);
   const withdrawalTokens = collateralTokensForMarket(selected?.market ?? market);
@@ -160,7 +140,7 @@ export default function BorrowPage() {
     if (
       deepLinkApplied.current
       || !wallet.address
-      || positionState?.walletAddress.toLowerCase() !== wallet.address.toLowerCase()
+      || sharedPositions.walletAddress?.toLowerCase() !== wallet.address.toLowerCase()
     ) return;
     deepLinkApplied.current = true;
     const params = new URLSearchParams(window.location.search);
@@ -177,7 +157,7 @@ export default function BorrowPage() {
     setMarket(requested.market);
     setSelectedKey(positionKey(requested));
     resetTransactionContext(collateralTokensForMarket(requested.market)[0]);
-  }, [positionState, positions, resetTransactionContext, wallet.address]);
+  }, [positions, resetTransactionContext, sharedPositions.walletAddress, wallet.address]);
 
   useEffect(() => {
     setSelectedKey((current) => {
@@ -202,6 +182,7 @@ export default function BorrowPage() {
 
   const planBuilder = useMemo(() => {
     if (!wallet.address) return null;
+    if (selectedStale) return null;
     if (mode === 'mint') {
       const depositWei = parseZeroAmount(deposit, token);
       const mintWei = parseZeroAmount(mint, 'fxUSD');
@@ -227,9 +208,17 @@ export default function BorrowPage() {
       withdrawAmount: withdrawWei,
       withdrawTokenAddress: tokenAddress(token),
     });
-  }, [deposit, market, mint, mode, repay, selected, selectedKey, token, wallet.address, withdraw]);
+  }, [deposit, market, mint, mode, repay, selected, selectedKey, selectedStale, token, wallet.address, withdraw]);
 
-  const initialRead = Boolean(wallet.address) && loading && positionState?.walletAddress !== wallet.address;
+  const walletAddress = wallet.address?.toLowerCase();
+  const initialRead = Boolean(walletAddress)
+    && (sharedPositions.walletAddress?.toLowerCase() !== walletAddress
+      || (sharedPositions.status === 'loading' && sharedPositions.lastVerifiedAt === null));
+  const longPoolReadUnavailable = sharedPositions.status === 'unavailable'
+    || sharedPositions.failedGroups.some((group) => group.side === 'long');
+  const positionReadUnavailable = Boolean(walletAddress)
+    && longPoolReadUnavailable
+    && positions.length === 0;
   const repayRequested = repay.trim().toLowerCase() === 'all' || (parseZeroAmount(repay, 'fxUSD') ?? 0n) > 0n;
   const withdrawalRequested = (parseZeroAmount(withdraw, token) ?? 0n) > 0n;
   const manageOperationLabel = repayRequested && withdrawalRequested
@@ -260,15 +249,22 @@ export default function BorrowPage() {
             <Skeleton className="h-14" />
             <Skeleton className="h-72" />
           </LoadingRegion>
-        ) : error ? (
+        ) : positionReadUnavailable ? (
           <EmptyState
             icon={RefreshCw}
             title="Borrowing state unavailable"
-            body={error}
-            action={<Button onClick={() => void load()}>Retry</Button>}
+            body="Borrowing positions could not be verified. Check the Ethereum connection and try again."
+            action={<Button onClick={() => void refreshPositions()}>Retry</Button>}
           />
         ) : (
           <>
+            <ProtocolPositionNotice
+              status={sharedPositions.status}
+              failedGroups={sharedPositions.failedGroups}
+              hasPositions={positions.length > 0}
+              refreshing={sharedPositions.refreshing}
+              onRefresh={() => void refreshPositions()}
+            />
             <div className="rounded-2xl bg-[var(--surface-2,var(--input))] p-1">
               <Segmented
                 value={mode}

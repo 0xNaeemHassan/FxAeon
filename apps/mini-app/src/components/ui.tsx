@@ -63,6 +63,7 @@ export function AppShell({
               <span className="brand-wordmark">FxAeon</span>
             </Link>
             <DesktopNavigation />
+            <div className="app-topbar-market"><LiveMarketStrip /></div>
             <span className="app-topbar-actions">
               <span className="network-state"><span className="status-dot" /> {networkLabel}</span>
               <ThemeToggle />
@@ -70,7 +71,6 @@ export function AppShell({
             </span>
           </div>
         )}
-        {tabs && <LiveMarketStrip />}
         {title && (
           <header className="page-header">
             <div>

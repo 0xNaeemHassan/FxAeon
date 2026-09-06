@@ -1,19 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
   ArrowLeft,
   CheckCircle2,
-  Circle,
   CircleAlert,
   Clock3,
-  ExternalLink,
   LoaderCircle,
   ShieldCheck,
-  X,
-  XCircle,
 } from 'lucide-react';
 import { decodeFunctionData, formatEther, formatUnits } from 'viem';
 import {
@@ -31,11 +26,14 @@ import {
 import { usePrivyWallet } from '@/lib/wallet';
 import { useInvalidateWalletData } from '@/components/WalletDataProvider';
 import { createRouteWalletRefresh } from '@/lib/walletDataRefresh';
-import { getWebApp, haptic } from '@/lib/telegram';
+import { haptic } from '@/lib/telegram';
 import { Button, Card } from '@/components/ui';
 import { userSafeError } from '@/lib/errors';
-import { confirmedUpdateCopy, hasTransactionHash, transactionExplorerUrl, transactionStepKind, transactionStepProgress } from '@/lib/transactionProgress';
+import { confirmedUpdateCopy, hasTransactionHash, transactionStepProgress } from '@/lib/transactionProgress';
 import { BridgeTracker } from '@/components/BridgeTracker';
+import { ReviewOverlay } from '@/components/review/ReviewOverlay';
+import { InlineError, StatusNotice, stepProgress, TransactionHashLink, chainName } from '@/components/review/ReviewProgress';
+import { resultPresentation } from '@/components/review/executionResult';
 import { rawQuoteReviewFacts, routeFinancialReviewFacts, type ReviewFact } from '@/lib/fx/reviewFormatting';
 import styles from './FlowWorkspace.module.css';
 
@@ -68,100 +66,10 @@ type Stage = 'input' | 'planning' | 'review' | 'executing' | 'result';
 // exact snapshot; the runner still simulates it again inside the signing lock.
 const REFRESHED_ROUTE_REUSE_MS = 10_000;
 
-function reviewFocusable(dialog: HTMLElement): HTMLElement[] {
-  return [...dialog.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')]
-    .filter((element) => !element.hasAttribute('hidden') && element.getAttribute('aria-hidden') !== 'true');
-}
-
-function ReviewOverlay({
-  children,
-  label,
-  closeDisabled = false,
-  onClose,
-}: {
-  children: ReactNode;
-  label: string;
-  closeDisabled?: boolean;
-  onClose: () => void;
-}) {
-  const dialogRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    document.body.style.overflow = 'hidden';
-    window.requestAnimationFrame(() => {
-      const dialog = dialogRef.current;
-      if (!dialog) return;
-      (dialog.querySelector<HTMLElement>('[data-review-focus]') ?? reviewFocusable(dialog)[0] ?? dialog).focus({ preventScroll: true });
-    });
-    const onKeyDown = (event: KeyboardEvent) => {
-      const dialog = dialogRef.current;
-      if (!dialog) return;
-      if (event.key === 'Escape' && !closeDisabled) {
-        event.preventDefault();
-        onClose();
-        return;
-      }
-      if (event.key !== 'Tab') return;
-      const focusable = reviewFocusable(dialog);
-      if (!focusable.length) {
-        event.preventDefault();
-        dialog.focus();
-        return;
-      }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      document.body.style.overflow = previousOverflow;
-      previousFocus?.focus({ preventScroll: true });
-    };
-  }, [closeDisabled, onClose]);
-
-  if (typeof document === 'undefined') return null;
-  return createPortal(
-    <div
-      className={styles.reviewOverlay}
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !closeDisabled) onClose();
-      }}
-    >
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={label} tabIndex={-1} className={styles.reviewSheet}>
-        {!closeDisabled && (
-          <button type="button" aria-label="Close transaction review" onClick={onClose} className={`${styles.reviewSheetClose} glass-press`}>
-            <X className="h-5 w-5" aria-hidden="true" />
-          </button>
-        )}
-        {children}
-      </div>
-    </div>,
-    document.body,
-  );
-}
-
 function asRoutes(value: PlannedRoute | readonly PlannedRoute[]): PlannedRoute[] {
   const routes = Array.isArray(value) ? [...value] : [value];
   if (!routes.length) throw new Error('No executable transaction route was returned.');
   return routes;
-}
-
-function chainName(chainId: number): string {
-  return chainId === 8453 ? 'Base' : chainId === 1 ? 'Ethereum' : `Chain ${chainId}`;
-}
-
-function shortHash(hash: string): string {
-  return `${hash.slice(0, 8)}…${hash.slice(-6)}`;
 }
 
 function trimDecimal(value: string): string {
@@ -295,106 +203,6 @@ function approvalSummary(transaction: PlannedTransaction, approval: NonNullable<
 function stepTitle(transaction: PlannedTransaction): string {
   if (transaction.kind !== 'approval') return 'Confirm action';
   return transaction.type === 'approvePosition' ? 'Approve position' : `Approve ${tokenForAddress(transaction.to)?.key ?? 'token'}`;
-}
-
-function stepProgress(step: TransactionStepResult | undefined): {
-  label: string;
-  className: string;
-  icon: ReactNode;
-} {
-  const { state, label } = transactionStepProgress(step);
-  if (state === 'confirmed') return { label, className: 'text-success', icon: <CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5" /> };
-  if (state === 'unknown' || state === 'unverified') return { label, className: 'text-warn', icon: <Clock3 aria-hidden="true" className="h-3.5 w-3.5" /> };
-  if (state === 'stopped' || state === 'reverted') return { label, className: 'text-danger', icon: <XCircle aria-hidden="true" className="h-3.5 w-3.5" /> };
-  if (state === 'submitted' || state === 'included' || state === 'confirming') return { label, className: 'text-mint', icon: <LoaderCircle aria-hidden="true" className="h-3.5 w-3.5 animate-spin" /> };
-  return { label, className: 'text-mut', icon: <Circle aria-hidden="true" className="h-3.5 w-3.5" /> };
-}
-
-function looksLikeWalletRejection(value: string | undefined): boolean {
-  return Boolean(value && /(reject|denied|declin|cancel(?:led|ed)|user refused|user denied)/i.test(value));
-}
-
-function resultPresentation(result: TransactionExecutionResult, bridge: boolean): {
-  title: string;
-  body: string;
-  tone: 'success' | 'warning' | 'danger';
-  icon: typeof CheckCircle2;
-} {
-  const submitted = result.steps.filter(hasTransactionHash);
-  const confirmationUnknown = submitted.some((step) => step.hash && !step.receipt);
-  const verificationIncomplete = submitted.some((step) => transactionStepProgress(step).state === 'unverified');
-  const finalityPending = submitted.some((step) => step.receipt?.status === 'success' && step.status !== 'confirmed');
-  const reverted = result.steps.some((step) => step.receipt?.status === 'reverted');
-
-  if (result.status === 'confirmed') {
-    return bridge
-      ? {
-          title: 'Confirmed on source',
-          body: 'The source route is confirmed. Destination delivery is verified separately below.',
-          tone: 'success',
-          icon: CheckCircle2,
-        }
-      : {
-          title: 'Confirmed',
-          body: `All transaction steps are confirmed on ${chainName(result.chainId)}.`,
-          tone: 'success',
-          icon: CheckCircle2,
-        };
-  }
-  if (confirmationUnknown) {
-    return {
-      title: 'Confirmation unknown',
-      body: 'A transaction was submitted, but its receipt could not be verified. Check the explorer or Activity from the wallet profile. Do not submit this action again.',
-      tone: 'warning',
-      icon: Clock3,
-    };
-  }
-  if (verificationIncomplete) {
-    return {
-      title: 'Verification incomplete',
-      body: 'A receipt exists, but the submitted transaction could not be fully verified. Check the explorer or Activity. Do not submit this action again.',
-      tone: 'warning',
-      icon: AlertTriangle,
-    };
-  }
-  if (finalityPending) {
-    return {
-      title: 'Confirmation pending',
-      body: 'A transaction was included, but finality could not be verified yet. Check Activity or the explorer and do not submit this action again.',
-      tone: 'warning',
-      icon: Clock3,
-    };
-  }
-  if (result.status === 'partial') {
-    return {
-      title: 'Partially completed',
-      body: 'At least one earlier transaction confirmed before the route stopped. Do not repeat the full action; review each step below.',
-      tone: 'warning',
-      icon: AlertTriangle,
-    };
-  }
-  if (reverted) {
-    return {
-      title: 'Reverted',
-      body: 'The submitted transaction reverted on-chain. No later step was submitted.',
-      tone: 'danger',
-      icon: XCircle,
-    };
-  }
-  if (looksLikeWalletRejection(result.error)) {
-    return {
-      title: 'Wallet request declined',
-      body: 'This transaction was not submitted. No later step was opened.',
-      tone: 'danger',
-      icon: XCircle,
-    };
-  }
-  return {
-    title: 'Not submitted',
-    body: userSafeError(result.error, 'The route stopped before a transaction could be confirmed.'),
-    tone: 'danger',
-    icon: CircleAlert,
-  };
 }
 
 function statusPresentation(params: {
@@ -808,7 +616,7 @@ export function ActionReview({
   if (stage === 'input') {
     const progress = statusPresentation({ stage, status, detail: statusDetail, stepResults, stepCount: 0 });
     return (
-      <div className="flex flex-col gap-2.5">
+      <div className={`${styles.reviewTrigger} flex flex-col gap-2.5`}>
         {error && <InlineError message={error} />}
         <Button ref={triggerRef} variant={destructive ? 'danger' : 'primary'} className={styles.primaryAction} disabled={!planBuilder || disabled || !wallet.ready} loading={loading} onClick={() => void review()}>
           <ShieldCheck aria-hidden="true" className="h-4 w-4" /> {label}
@@ -1102,53 +910,6 @@ function AdvancedReviewDetails({ route }: { route: PlannedRoute }) {
       </div>
     </details>
   );
-}
-
-function TransactionHashLink({ step, chainId }: { step: TransactionStepResult; chainId: number }) {
-  const url = transactionExplorerUrl(chainId, step.hash);
-  if (!url || !step.hash) return null;
-  const progress = stepProgress(step);
-  const kind = transactionStepKind(step);
-  return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-label={`${kind} ${step.index + 1}: ${progress.label}. View transaction ${step.hash} on ${chainName(chainId)} explorer (opens in a new tab)`}
-      onClick={(event) => {
-        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-        const telegram = getWebApp();
-        if (telegram?.openLink) {
-          try {
-            telegram.openLink(url);
-            event.preventDefault();
-          } catch {
-            // The native anchor remains a usable fallback outside Telegram.
-          }
-        }
-      }}
-      className="flex min-h-11 items-center justify-between gap-3 rounded-xl bg-[var(--mint-dim)] px-3 py-2 text-[11.5px] font-semibold text-mint focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mint)]"
-    >
-      <span className="min-w-0">
-        <span className="block">{kind} {step.index + 1} · {shortHash(step.hash)}</span>
-        <span className={`mt-1 inline-flex items-center gap-1 text-[10.5px] ${progress.className}`}>{progress.icon}{progress.label}</span>
-      </span>
-      <span className="inline-flex shrink-0 items-center gap-1">Explorer <ExternalLink aria-hidden="true" className="h-3.5 w-3.5" /></span>
-    </a>
-  );
-}
-
-function StatusNotice({ label, body, className, icon }: { label: string; body: string; className: string; icon: ReactNode }) {
-  return (
-    <div role="status" aria-live="polite" aria-atomic="true" className="flex items-start gap-2.5 rounded-xl bg-[rgba(255,255,255,.035)] p-3 text-[11.5px] leading-relaxed">
-      <span className={`mt-0.5 shrink-0 ${className}`}>{icon}</span>
-      <span><span className={`font-semibold ${className}`}>{label}</span><span className="mt-0.5 block text-mut">{body}</span></span>
-    </div>
-  );
-}
-
-function InlineError({ message }: { message: string }) {
-  return <div role="alert" className="flex gap-2.5 rounded-lg border border-[rgba(255,107,118,.2)] bg-[var(--danger-dim)] p-3 text-[11.5px] leading-relaxed text-danger"><AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" /><span>{message}</span></div>;
 }
 
 type BridgeReviewQuote = {
