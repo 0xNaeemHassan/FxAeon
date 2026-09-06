@@ -352,12 +352,40 @@ async function runProof(captureStage: string) {
       await expect(page.getByRole('checkbox')).toBeVisible({ timeout: 180_000 });
       assert.equal(submitted.length, signedBefore, 'review must never request a signature');
       await page.screenshot({ path: resolve(artifactRoot, `${scenario.market}-${scenario.side}-review.png`), fullPage: true });
-      await page.getByRole('checkbox').check();
-      const confirmButton: Locator = page.getByRole('button', { name: /^Confirm (?:in wallet|\d+ transactions)$/ });
-      const countMatch: RegExpMatchArray | null = (await confirmButton.innerText()).match(/Confirm (\d+) transactions/);
-      const transactionCount: number = countMatch ? Number(countMatch[1]) : 1;
-      assert.ok(transactionCount >= 1 && transactionCount <= 10, 'review must expose the ordered transaction count');
-      await confirmButton.click();
+      // Interval mining is intentional: the strict production review guard
+      // can observe a new block between the first review and confirmation.
+      // That must return the user to review, never bypass revalidation or
+      // simulation. Re-acknowledge the explicit refresh notice in the proof
+      // harness and retry within a small bound so a genuinely unstable quote
+      // still fails rather than masking a safety regression.
+      let transactionCount = 0;
+      let firstSignatureObserved = false;
+      let confirmButton!: Locator;
+      for (let reviewAttempt = 0; reviewAttempt < 3 && !firstSignatureObserved; reviewAttempt += 1) {
+        await page.getByRole('checkbox').check();
+        confirmButton = page.getByRole('button', { name: /^Confirm (?:in wallet|\d+ transactions)$/ });
+        const countMatch: RegExpMatchArray | null = (await confirmButton.innerText()).match(/Confirm (\d+) transactions/);
+        transactionCount = countMatch ? Number(countMatch[1]) : 1;
+        assert.ok(transactionCount >= 1 && transactionCount <= 10, 'review must expose the ordered transaction count');
+        await confirmButton.click();
+
+        const firstSignature = expect.poll(() => proofValue(submitted.length), { timeout: 180_000 })
+          .toBe(signedBefore + 1)
+          .then(() => 'submitted' as const);
+        const refreshedReview = expect(page.getByRole('status', { name: 'Quote updated—review again.', exact: true }))
+          .toBeVisible({ timeout: 180_000 })
+          .then(() => 'refresh' as const);
+        const outcome = await Promise.race([firstSignature, refreshedReview]);
+        if (outcome === 'submitted') {
+          firstSignatureObserved = true;
+          break;
+        }
+        if (reviewAttempt === 2) {
+          throw new Error('review quote refreshed repeatedly before the first signature');
+        }
+        await expect(page.getByRole('checkbox')).toBeVisible({ timeout: 30_000 });
+      }
+      assert.equal(firstSignatureObserved, true, 'the first reviewed transaction must be submitted');
       for (let transactionIndex = 0; transactionIndex < transactionCount; transactionIndex += 1) {
         await expect.poll(() => proofValue(submitted.length), { timeout: 180_000 }).toBe(signedBefore + transactionIndex + 1);
         const tx = submitted[signedBefore + transactionIndex];
