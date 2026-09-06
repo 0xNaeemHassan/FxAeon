@@ -62,6 +62,9 @@ function statusCopy(view: RecoveryViewModel): {
   if (view.verification === 'mismatch') {
     return { label: 'Unverified', icon: CircleAlert, className: 'text-warn' };
   }
+  if (view.verification === 'confirming') {
+    return { label: 'Confirming', icon: Clock3, className: 'text-mint' };
+  }
   return { label: 'Pending', icon: Clock3, className: 'text-mint' };
 }
 
@@ -70,6 +73,7 @@ function statusSummary(view: RecoveryViewModel): string {
   if (view.status === 'confirmed') return 'Receipt and mined transaction verified on-chain.';
   if (view.status === 'failed') return 'The transaction reverted on-chain. No later step is resumed automatically.';
   if (view.verification === 'not-found') return 'No receipt yet. The transaction may still be pending.';
+  if (view.verification === 'confirming') return 'Receipt included, but three confirmations are not available yet. Do not submit this action again.';
   if (view.verification === 'rpc-error') return 'The network could not be checked. Nothing was marked failed.';
   return 'The available chain data did not match the saved transaction details, so it remains unverified.';
 }

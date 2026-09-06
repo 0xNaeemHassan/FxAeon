@@ -140,6 +140,13 @@ export function viewModelFromReceipt(
       "The receipt had no canonical block number. FxAeon left it unverified.",
     );
   }
+  if (typeof receipt.blockHash !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(receipt.blockHash)) {
+    return pendingView(
+      record,
+      "mismatch",
+      "The receipt had no canonical block hash. FxAeon left it unverified.",
+    );
+  }
 
   const status: RecoveryStatus = receipt.status === "success" ? "confirmed" : "failed";
   const message = status === "confirmed"
@@ -229,25 +236,26 @@ export async function reconcileWalletJournal(params: {
       const receipt = await client.getTransactionReceipt({ hash: record.hash });
       const view = viewModelFromReceipt(record, receipt);
       if (view.verification !== "receipt") return view;
-      if (typeof client.getBlockNumber === "function") {
-        const head = await client.getBlockNumber({ cacheTime: 0 });
-        const confirmations = head >= receipt.blockNumber ? head - receipt.blockNumber + 1n : 0n;
-        if (confirmations < 3n) {
-          return pendingView(
-            record,
-            "confirming",
-            `Receipt included at block ${receipt.blockNumber.toString()}; waiting for ${confirmations.toString()}/3 confirmations.`,
-          );
-        }
-        // Re-check at the finality boundary. A receipt can be replaced while
-        // a browser is suspended or while an RPC provider catches up to a reorg.
-        const finalReceipt = await client.getTransactionReceipt({ hash: record.hash });
-        if (
-          finalReceipt.transactionHash.toLowerCase() !== receipt.transactionHash.toLowerCase()
-          || finalReceipt.blockNumber !== receipt.blockNumber
-          || (receipt.blockHash && finalReceipt.blockHash?.toLowerCase() !== receipt.blockHash.toLowerCase())
-        ) return pendingView(record, "mismatch", "The transaction changed block identity during finality verification. FxAeon left it pending for recovery.");
+      const head = await client.getBlockNumber({ cacheTime: 0 });
+      const confirmations = head >= receipt.blockNumber ? head - receipt.blockNumber + 1n : 0n;
+      if (confirmations < 3n) {
+        return pendingView(
+          record,
+          "confirming",
+          `Receipt included at block ${receipt.blockNumber.toString()}; waiting for ${confirmations.toString()}/3 confirmations.`,
+        );
       }
+      // Re-check at the finality boundary. A receipt can be replaced while
+      // a browser is suspended or while an RPC provider catches up to a reorg.
+      const finalReceipt = await client.getTransactionReceipt({ hash: record.hash });
+      const finalView = viewModelFromReceipt(record, finalReceipt);
+      if (
+        finalView.verification !== "receipt"
+        || finalReceipt.status !== receipt.status
+        || finalReceipt.transactionHash.toLowerCase() !== receipt.transactionHash.toLowerCase()
+        || finalReceipt.blockNumber !== receipt.blockNumber
+        || finalReceipt.blockHash.toLowerCase() !== receipt.blockHash.toLowerCase()
+      ) return pendingView(record, "mismatch", "The transaction changed block identity or status during finality verification. FxAeon left it pending for recovery.");
       let transaction: MinedTransaction;
       try {
         transaction = await client.getTransaction({ hash: record.hash });
@@ -256,8 +264,8 @@ export async function reconcileWalletJournal(params: {
       }
       const mismatch = minedTransactionMismatch(record, transaction);
       if (mismatch) return pendingView(record, "mismatch", mismatch);
-      updatePendingHashRecord(record, view.status === "confirmed" ? "confirmed" : "failed");
-      return view;
+      updatePendingHashRecord(record, finalView.status === "confirmed" ? "confirmed" : "failed");
+      return finalView;
     } catch (error) {
       return pendingView(
         record,

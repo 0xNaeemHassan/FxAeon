@@ -138,6 +138,8 @@ export interface TransactionStepResult {
   status: "submitted" | "included" | "confirming" | "confirmed" | "failed";
   /** Number of canonical confirmations observed for an included receipt. */
   confirmations?: number;
+  /** Finality target shown in progress UI (production default: three). */
+  requiredConfirmations?: number;
   /** Receipt identity used to detect a reorg while waiting for finality. */
   includedBlockNumber?: bigint;
   includedBlockHash?: Hex;

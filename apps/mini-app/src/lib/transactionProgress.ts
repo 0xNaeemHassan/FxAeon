@@ -28,7 +28,7 @@ export function transactionStepProgress(step: TransactionStepResult | undefined)
   if (step?.receipt?.status === 'reverted') return { state: 'reverted', label: 'Reverted' };
   if (step?.status === 'confirmed' && step.receipt?.status === 'success') return { state: 'confirmed', label: 'Confirmed' };
   if (step?.status === 'included') return { state: 'included', label: 'Included · awaiting confirmations' };
-  if (step?.status === 'confirming') return { state: 'confirming', label: `${step.confirmations ?? 0}/3 confirmations` };
+  if (step?.status === 'confirming') return { state: 'confirming', label: `${step.confirmations ?? 0}/${step.requiredConfirmations ?? 3} confirmations` };
   if (step?.status === 'failed') {
     return step.receipt
       ? { state: 'unverified', label: 'Verification incomplete' }

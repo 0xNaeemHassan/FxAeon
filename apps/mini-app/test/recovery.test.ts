@@ -46,6 +46,7 @@ function receipt(record: PendingHashRecord, overrides: Record<string, unknown> =
     to: DESTINATION,
     status: "success",
     blockNumber: 123n,
+    blockHash: `0x${"c".repeat(64)}`,
     ...overrides,
   } as never;
 }
@@ -58,6 +59,7 @@ function client(
   return {
     chain: chainId === undefined ? undefined : { id: chainId },
     getChainId: async () => chainId ?? 1,
+    getBlockNumber: async () => 125n,
     getTransactionReceipt,
     getTransaction: getTransaction ?? (async ({ hash }) => ({
       hash,
@@ -118,7 +120,9 @@ test("never ages unresolved records out of recovery", async () => {
     }, 1),
   });
 
-  assert.equal(reads, 12);
+  // Each receipt is read once for inclusion and once again at the finality
+  // boundary before recovery can persist a terminal status.
+  assert.equal(reads, 24);
   assert.equal(views.length, 12);
 });
 
@@ -224,6 +228,17 @@ test("a receipt without a canonical block number remains unverified", async () =
   const [view] = await reconcileWalletJournal({
     walletAddress: WALLET,
     getClient: () => client(async () => receipt(record, { blockNumber: undefined }), 1),
+  });
+  assert.equal(view?.status, "pending");
+  assert.equal(view?.verification, "mismatch");
+  assert.equal(readPendingHashJournal()[0]?.status, "pending");
+});
+
+test("a receipt without a canonical block hash remains unverified", async () => {
+  const record = addRecord();
+  const [view] = await reconcileWalletJournal({
+    walletAddress: WALLET,
+    getClient: () => client(async () => receipt(record, { blockHash: undefined }), 1),
   });
   assert.equal(view?.status, "pending");
   assert.equal(view?.verification, "mismatch");

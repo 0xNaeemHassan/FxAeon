@@ -167,12 +167,9 @@ export async function waitForConfirmations(params: {
   pollMs?: number;
   onProgress?: (confirmations: number) => void;
 }): Promise<TransactionReceipt> {
-  // viem receipts always carry a block hash. The one-confirmation fallback is
-  // retained solely for legacy/test adapters that predate block-hash fields;
-  // production cannot enter it because canonical receipts are hash-bound.
-  const required = params.confirmations ?? (params.receipt.blockHash ? 3 : 1);
-  if (!Number.isSafeInteger(required) || required < 1 || required > 64) {
-    throw new RangeError("confirmation depth must be an integer between 1 and 64");
+  const required = params.confirmations ?? 3;
+  if (!Number.isSafeInteger(required) || required < 3 || required > 64) {
+    throw new RangeError("confirmation depth must be an integer between 3 and 64");
   }
   const timeoutMs = params.timeoutMs ?? 180_000;
   const pollMs = params.pollMs ?? 2_000;
@@ -188,24 +185,20 @@ export async function waitForConfirmations(params: {
     } catch {
       throw new TransactionReorgError("transaction receipt disappeared while waiting for confirmations");
     }
-    if (params.receipt.blockHash && (
+    if (
       latest.transactionHash.toLowerCase() !== params.hash.toLowerCase()
       || latest.blockNumber !== originalBlock
-      || (originalHash && latest.blockHash?.toLowerCase() !== originalHash)
-      || (latest.blockHash && originalHash === undefined)
-    )) {
+      || !latest.blockHash
+      || !originalHash
+      || latest.blockHash.toLowerCase() !== originalHash
+    ) {
       throw new TransactionReorgError("transaction receipt changed block identity while waiting for confirmations");
     }
     if (latest.status !== "success") {
       throw new TransactionReorgError("transaction receipt status changed while waiting for confirmations");
     }
     const head = await params.client.getBlockNumber();
-    // Legacy adapters used by older integrations may omit both canonical
-    // block hashes and a block-head method. They cannot participate in
-    // finality verification, so preserve the historical inclusion behavior;
-    // viem production receipts always include blockHash and take the strict
-    // three-confirmation path above.
-    if (!params.receipt.blockHash && typeof head !== "bigint") return latest;
+    if (typeof head !== "bigint") throw new Error("RPC returned an invalid block number during confirmation");
     const observed = head >= originalBlock ? Number(head - originalBlock + 1n) : 0;
     params.onProgress?.(observed);
     if (observed >= required) return latest;
@@ -338,6 +331,12 @@ export async function runTransactionRoute(params: {
   };
   const policy = clonePolicy(params.policy ?? defaultTransactionPolicy(route));
   const options = params.options ?? {};
+  if (
+    options.confirmations !== undefined
+    && (!Number.isSafeInteger(options.confirmations) || options.confirmations < 3 || options.confirmations > 64)
+  ) {
+    throw new RangeError("confirmation depth must be an integer between 3 and 64");
+  }
   validateRoute(route, policy);
   const client = params.publicClient ?? getPublicClient(route.chainId);
   if (client.chain?.id !== undefined && client.chain.id !== route.chainId) {
@@ -505,6 +504,9 @@ export async function runTransactionRoute(params: {
           if (typeof receipt.blockNumber !== "bigint" || receipt.blockNumber < 0n) {
             throw new Error(`${label} receipt is missing a canonical block number`);
           }
+          if (!/^0x[0-9a-fA-F]{64}$/.test(receipt.blockHash)) {
+            throw new Error(`${label} receipt is missing a canonical block hash`);
+          }
           if (receipt.status !== "success" && receipt.status !== "reverted") {
             throw new Error(`${label} receipt does not contain a terminal on-chain status`);
           }
@@ -545,6 +547,7 @@ export async function runTransactionRoute(params: {
           step.includedBlockNumber = receipt.blockNumber;
           step.includedBlockHash = receipt.blockHash;
           step.confirmations = 1;
+          step.requiredConfirmations = options.confirmations ?? 3;
           notifyStep(step);
           notifyStatus("included", `${label}: ${hash}`);
           const confirmedReceipt = await waitForConfirmations({
@@ -558,13 +561,16 @@ export async function runTransactionRoute(params: {
               step.status = "confirming";
               step.confirmations = confirmations;
               notifyStep(step);
-            notifyStatus("confirming", `${label}: ${confirmations}/${options.confirmations ?? (receipt.blockHash ? 3 : 1)} confirmations`);
+              notifyStatus(
+                "confirming",
+                `${label}: ${confirmations}/${options.confirmations ?? 3} confirmations`,
+              );
             },
           });
           step.receipt = confirmedReceipt;
           updatePendingHashRecord(pendingRecord, "confirmed");
           step.status = "confirmed";
-          step.confirmations = Math.max(step.confirmations ?? 1, options.confirmations ?? (receipt.blockHash ? 3 : 1));
+          step.confirmations = Math.max(step.confirmations ?? 1, options.confirmations ?? 3);
           notifyStep(step);
           notifyStatus("confirmed", `${label}: ${hash}`);
         } catch (error) {

@@ -323,6 +323,7 @@ function resultPresentation(result: TransactionExecutionResult, bridge: boolean)
   const submitted = result.steps.filter(hasTransactionHash);
   const confirmationUnknown = submitted.some((step) => step.hash && !step.receipt);
   const verificationIncomplete = submitted.some((step) => transactionStepProgress(step).state === 'unverified');
+  const finalityPending = submitted.some((step) => step.receipt?.status === 'success' && step.status !== 'confirmed');
   const reverted = result.steps.some((step) => step.receipt?.status === 'reverted');
 
   if (result.status === 'confirmed') {
@@ -354,6 +355,14 @@ function resultPresentation(result: TransactionExecutionResult, bridge: boolean)
       body: 'A receipt exists, but the submitted transaction could not be fully verified. Check the explorer or Activity. Do not submit this action again.',
       tone: 'warning',
       icon: AlertTriangle,
+    };
+  }
+  if (finalityPending) {
+    return {
+      title: 'Confirmation pending',
+      body: 'A transaction was included, but finality could not be verified yet. Check Activity or the explorer and do not submit this action again.',
+      tone: 'warning',
+      icon: Clock3,
     };
   }
   if (result.status === 'partial') {
@@ -439,9 +448,10 @@ function statusPresentation(params: {
   if (params.status === 'included' || params.status === 'confirming') {
     const active = params.stepResults.find((step) => step.status === 'included' || step.status === 'confirming');
     const count = active?.confirmations ?? 0;
+    const required = active?.requiredConfirmations ?? 3;
     return {
-      label: params.status === 'included' ? 'Included' : `Confirming · ${count}/3`,
-      body: 'The transaction is in a canonical block. FxAeon is rechecking its block identity until three confirmations; later route steps remain paused.',
+      label: params.status === 'included' ? 'Included' : `Confirming · ${count}/${required}`,
+      body: `The transaction is in a canonical block. FxAeon is rechecking its block identity until ${required} confirmations; later route steps remain paused.`,
       className: 'text-mint',
       icon: <LoaderCircle className="h-4 w-4 animate-spin" />,
     };
@@ -731,7 +741,7 @@ export function ActionReview({
             setStepResults(next);
           },
           // The runner invokes this only after a receipt and the required
-          // following block have both been observed. Keeping the page refresh
+          // confirmation depth have both been observed. Keeping the page refresh
           // inside that boundary prevents stale reads from being presented as
           // the result of a completed financial action.
           postConfirmRead: async (confirmedRoute, execution) => {
@@ -747,7 +757,7 @@ export function ActionReview({
           },
         },
       });
-      // A following-block timeout can skip postConfirmRead despite inclusion.
+      // A finality/confirmation timeout can skip postConfirmRead despite inclusion.
       // Mark wallet data stale for gas/approvals/reverts without moving the
       // protocol onComplete callback outside its authoritative read boundary.
       await refreshWallet(currentRoute, execution);

@@ -195,7 +195,8 @@ test("seeded runner chaos stops signing after rejection, revert, or RPC failure"
           from: WALLET,
           to: DESTINATION,
           status,
-          blockNumber: BigInt(iteration + 1),
+          blockHash: `0x${hash.slice(2).padStart(64, "0")}`,
+          blockNumber: BigInt(iteration),
         } as never;
       },
       getTransaction: async ({ hash }: { hash: Hex }) => {

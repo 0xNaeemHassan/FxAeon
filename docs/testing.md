@@ -106,7 +106,7 @@ The browser gate also compares the USDC amount displayed in the token picker wit
 | fxSAVE claim | cooldown incomplete and complete |
 | bridge | both directions, fxUSD/fxSAVE, self/custom recipient, signer-safe refund, exact Ethereum approval, insufficient fee, delayed/reloaded destination verification, dust-adjusted sends, matching LayerZero source/destination GUID |
 
-Every transaction case must prove chain and parameter correctness, visible plan and simulation, explicit approval per step, preserved order, successful receipt before continuation, failure-stop behavior, one additional block, and a fresh authoritative read.
+Every transaction case must prove chain and parameter correctness, visible plan and simulation, explicit approval per step, preserved order, successful receipt plus three confirmations before continuation, failure-stop/reorg behavior, and a fresh authoritative read.
 
 Mainnet-fork impersonation or protocol-supported safe simulation is required for money-path integration tests. Production user funds are never a fixture. Current Chrome, Firefox, Safari, and Edge plus Telegram Android, iOS, Desktop, and Web must pass the applicable manual interaction checks before production promotion.
 
