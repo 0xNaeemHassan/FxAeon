@@ -20,6 +20,11 @@
   display: flex;
   flex-direction: column;
   gap: 3px;
+  /* The app content is its own viewport on desktop. Keep the rail inside
+     that viewport so every section remains reachable without moving the
+     article out from under the shell chrome. */
+  max-height: calc(100dvh - 160px);
+  overflow: hidden;
 }
 
 .searchLabel {
@@ -84,7 +89,24 @@
   transition: color 140ms ease, border-color 140ms ease, background-color 140ms ease;
 }
 
-.navLinks { display: flex; flex-direction: column; gap: 3px; }
+.navLinks {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 3px;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--mut-2) 70%, transparent) transparent;
+}
+.navLinks::-webkit-scrollbar { width: 6px; }
+.navLinks::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mut-2) 70%, transparent);
+}
+.navLinks::-webkit-scrollbar-track { background: transparent; }
 .resultCount { margin: 8px 10px 0; color: var(--mut-2); font-size: 11px; }
 .emptySearch { margin: 4px 10px 0; color: var(--mut); font-size: 11px; line-height: 1.45; }
 
@@ -210,7 +232,9 @@
     gap: 0;
     margin-bottom: 20px;
     padding: 4px;
+    max-height: none;
     overflow-x: auto;
+    overflow-y: visible;
     border: 1px solid var(--line);
     border-radius: 16px;
     background: color-mix(in srgb, var(--surface) 96%, transparent);
@@ -219,7 +243,15 @@
   .searchLabel { display: block; padding: 4px 8px 2px; }
   .searchRow { margin: 0 4px 5px; }
   .navLabel { display: none; }
-  .navLinks { display: flex; flex-direction: row; gap: 4px; overflow-x: auto; padding: 0 4px 4px; }
+  .navLinks {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: row;
+    gap: 4px;
+    overflow-x: auto;
+    overflow-y: visible;
+    padding: 0 4px 4px;
+  }
   .navLink {
     min-height: 44px;
     flex: 0 0 auto;

@@ -8,6 +8,7 @@ import {
   selectEip6963Provider,
   shouldBindEip6963ProviderEvents,
   shouldPromptEip6963Provider,
+  waitForWalletProvider,
   type Eip6963Announcement,
 } from '../src/lib/wallet/eip6963';
 
@@ -50,4 +51,15 @@ test('chooser focus trap redirects Tab and Shift+Tab when focus starts outside t
   assert.equal(eip6963FocusTrapDestination({ activeInside: false, atFirst: false, atLast: false, shiftKey: true }), 'last');
   assert.equal(eip6963FocusTrapDestination({ activeInside: true, atFirst: true, atLast: false, shiftKey: true }), 'last');
   assert.equal(eip6963FocusTrapDestination({ activeInside: true, atFirst: false, atLast: true, shiftKey: false }), 'first');
+});
+
+test('wallet provider wait resolves when a delayed EIP-6963 announcement arrives', async () => {
+  const target = new EventTarget();
+  let delayed: Eip6963Announcement['provider'];
+  const pending = waitForWalletProvider(() => delayed, target, { pollMs: 5, timeoutMs: 250 });
+  setTimeout(() => {
+    delayed = provider();
+    target.dispatchEvent(new Event('eip6963:announceProvider'));
+  }, 30);
+  assert.equal(await pending, delayed);
 });

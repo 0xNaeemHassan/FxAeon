@@ -520,7 +520,7 @@
   }
   .fieldStack > :first-child { grid-column: 1 / -1; }
   .fieldStack > :nth-child(2) { min-width: 0; }
-  .fieldStack > :nth-child(3) { align-self: end; }
+  .fieldStack > :nth-child(3) { grid-column: 1 / -1; align-self: end; }
   .compactAmountField {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -545,7 +545,7 @@
   .tradeRoot .compactTokenSelect > button { min-height: 44px; max-width: 126px; padding: 5px 8px; }
   .tradeRoot :global(.range-control) { padding: 8px; }
   .tradeRoot .compactRangeField { grid-template-columns: minmax(70px, .72fr) minmax(90px, 1fr); gap: 7px; padding: 5px; }
-  .tradeRoot .compactRangeField :global(.field-control) { min-height: 42px; padding-inline: 9px; font-size: 17px; }
+  .tradeRoot .compactRangeField :global(.field-control) { min-height: 44px; padding-inline: 9px; font-size: 17px; }
   .tradeRoot :global(.range-control) .lever { margin-top: 2px; }
   .advancedDetails summary { min-height: 42px; }
   .ticketColumn { gap: 6px; }

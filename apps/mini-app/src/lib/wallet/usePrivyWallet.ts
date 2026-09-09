@@ -14,7 +14,7 @@ import {
 import { assertLocalForkRpcUrl } from '@/lib/fx/config';
 import { getInitData, isTelegramLaunchContext, restoreTelegramLaunchHash, waitForTelegramWebApp } from '@/lib/telegram';
 import { switchBrowserChain as switchBrowserChainWithConfig } from './switchBrowserChain';
-import { eip6963FocusTrapDestination, getDiscoveredEip6963Providers, recordEip6963Announcement, selectEip6963Provider, shouldBindEip6963ProviderEvents, shouldPromptEip6963Provider, type DiscoveredEip6963Provider, type Eip6963Announcement } from './eip6963';
+import { eip6963FocusTrapDestination, getDiscoveredEip6963Providers, recordEip6963Announcement, selectEip6963Provider, shouldBindEip6963ProviderEvents, shouldPromptEip6963Provider, waitForWalletProvider, type DiscoveredEip6963Provider, type Eip6963Announcement } from './eip6963';
 
 export const FX_CHAIN_IDS = {
   ethereum: 1,
@@ -429,6 +429,7 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string>();
   const [chainId, setChainId] = useState<FxChainId>();
   const provider = browserProvider();
+  const discoveryAbortRef = useRef<AbortController | null>(null);
 
   const sync = useCallback(async (requestAccounts = false, providerOverride?: Eip1193Provider) => {
     if (isTelegramLaunchContext()) {
@@ -528,7 +529,19 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
       return;
     }
     window.localStorage.removeItem(BROWSER_DISCONNECTED_KEY);
+    const discoveryAbort = new AbortController();
+    discoveryAbortRef.current?.abort();
+    discoveryAbortRef.current = discoveryAbort;
     try {
+      // Readiness only means the initial restore window has completed. A
+      // wallet extension can still inject window.ethereum or announce via
+      // EIP-6963 after that point, so hold this user initiated request until
+      // there is a concrete provider to pass to sync(true).
+      const availableProvider = await waitForWalletProvider(
+        browserProvider,
+        window,
+        { signal: discoveryAbort.signal },
+      );
       const providers = getDiscoveredEip6963Providers();
       const preferred = window.localStorage.getItem('fxaeon:wallet-provider-rdns');
       let selected: DiscoveredEip6963Provider | undefined = preferred
@@ -542,13 +555,16 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
         window.localStorage.setItem('fxaeon:wallet-provider-rdns', selected.rdns);
         setProviderVersion((version) => version + 1);
       }
-      await sync(true, selected?.provider);
+      await sync(true, selected?.provider ?? availableProvider);
     } catch (cause) {
-      window.localStorage.setItem(BROWSER_DISCONNECTED_KEY, '1');
+      if (!discoveryAbort.signal.aborted) window.localStorage.setItem(BROWSER_DISCONNECTED_KEY, '1');
       throw cause;
+    } finally {
+      if (discoveryAbortRef.current === discoveryAbort) discoveryAbortRef.current = null;
     }
   }, [sync]);
   useEffect(() => () => {
+    discoveryAbortRef.current?.abort();
     pendingChoiceRef.current?.reject(new Error('Wallet selection was cancelled.'));
     pendingChoiceRef.current = null;
   }, []);
