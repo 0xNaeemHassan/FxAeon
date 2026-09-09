@@ -42,9 +42,9 @@ function TelegramUnavailableFlow() {
   return (
     <main className={`${styles.loginPanel} auth-panel mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col justify-center px-6`}>
       <Card className={`${styles.loginCard} w-full p-6`}>
-        <h1 className="text-display text-[28px] font-semibold">Telegram sign-in unavailable</h1>
+        <h1 className="text-display text-[28px] font-semibold">Telegram wallet setup</h1>
         <p className="mt-2 text-[14px] leading-relaxed text-mut">
-          This deployment is not configured for Telegram wallet sign-in. Reopen FxAeon from the bot menu after the production wallet service is configured, or use the app in a regular browser with an injected EVM wallet.
+          Reopen FxAeon from the bot menu after Telegram wallet sign-in is configured, or use the app in a regular browser with an injected EVM wallet.
         </p>
         <Link href="/" className="button button-primary glass-press mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-full px-4 py-3 text-[14px] font-semibold">
           Continue in browser <ArrowRight className="h-4 w-4" aria-hidden="true" />

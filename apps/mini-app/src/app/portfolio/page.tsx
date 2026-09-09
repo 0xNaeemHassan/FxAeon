@@ -11,7 +11,6 @@ import {
   Layers2,
   PiggyBank,
   RefreshCw,
-  ShieldCheck,
   type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -30,7 +29,8 @@ import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
 import { ConfirmedPositionCards } from '@/components/ConfirmedPositionCards';
 import RecentActivityPreview from '@/components/RecentActivityPreview';
 import TokenIcon from '@/components/TokenIcon';
-import { AddressChip, AppShell, Card, EmptyState, SectionTitle } from '@/components/ui';
+import { tokenSymbol } from '@/lib/fx/tokenPresentation';
+import { AddressChip, AppShell, Card, SectionTitle } from '@/components/ui';
 import {
   assertConfiguredPublicClientChain,
   getFxReadFacade,
@@ -47,7 +47,7 @@ import { haptic } from '@/lib/telegram';
 import { usePrivyWallet, useWalletReadyTimeout } from '@/lib/wallet';
 import styles from '@/app/AccountWorkspace.module.css';
 import ConnectWalletButton from '@/components/ConnectWalletButton';
-import { PortfolioAssets, PortfolioNetworkTabs, type PortfolioNetwork } from '@/components/PortfolioAssets';
+import { displayAssetSymbol, PortfolioAssets, PortfolioNetworkTabs, type PortfolioNetwork } from '@/components/PortfolioAssets';
 
 const EMPTY_FX_SAVE: FxSaveSnapshot = {
   status: 'idle',
@@ -68,7 +68,6 @@ export default function PortfolioPage() {
       <div className={`${styles.workspace} portfolio-dashboard stagger flex flex-col`}>
         <header className={`${styles.heading} portfolio-page-heading`}>
           <div>
-            <p className={styles.eyebrow}>Overview / Ethereum</p>
             <h1 className="text-display mt-1.5 text-[30px] font-semibold leading-tight">Portfolio</h1>
           </div>
         </header>
@@ -152,12 +151,10 @@ function PortfolioWallet() {
   if (!ready || !walletState.ready) {
     if (walletTimedOut) {
       return (
-        <EmptyState
-          icon={RefreshCw}
-          title="Wallet did not load"
-          body="Check your connection, update your browser or Telegram, then reopen FxAeon."
-          action={<button type="button" onClick={() => window.location.reload()} className="button button-primary min-h-11 w-full rounded-xl px-4">Reload wallet</button>}
-        />
+        <div role="status" aria-live="polite" className="flex items-center gap-3 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5">
+          <span className="text-[12px] text-warn">Wallet provider is unavailable.</span>
+          <button type="button" aria-label="Retry wallet provider" onClick={() => window.location.reload()} className="glass-press ml-auto flex min-h-11 min-w-11 items-center justify-center rounded-xl text-mut"><RefreshCw className="h-4 w-4" aria-hidden="true" /></button>
+        </div>
       );
     }
     return <PortfolioLoading />;
@@ -197,11 +194,12 @@ function PortfolioWallet() {
     ? valuation
     : { ...valuation, totalUsd: valuation.totalUsd + protocolEquityUsd,
       complete: valuation.complete && missingPositions === 0,
-      reason: missingPositions ? `${missingPositions} position ${missingPositions === 1 ? 'value is' : 'values are'} updating${valuation.complete ? '.' : ` · ${valuation.reason}`}` : valuation.reason };
+      reason: valuation.reason };
 
   return (
-    <div id="overview" className={styles.overview}>
+      <div id="overview" className={styles.overview}>
       <div className={styles.primaryColumn}>
+        <RecentActivityPreview walletAddress={wallet.address as Address} />
         <SupportedValueCard
         walletAddress={wallet.address}
         protocol={protocol}
@@ -214,13 +212,13 @@ function PortfolioWallet() {
           void Promise.allSettled([liveAssets.refresh(), walletBalances.refresh(), loadProtocol(), positionState.refresh()]);
         }}
         positionValue={positionState.pendingPositions.length > 0
-          ? `${positionState.positions.length + positionState.pendingPositions.length} updating`
+          ? '…'
           : positionState.status === 'idle' || positionState.status === 'loading'
           ? '…'
           : positionState.status === 'ready'
             ? String(positionState.positions.length)
-            : positionState.status === 'partial' && positionState.positions.length > 0
-              ? `${positionState.positions.length} shown`
+              : positionState.status === 'partial' && positionState.positions.length > 0
+              ? String(positionState.positions.length)
               : positionState.status === 'unavailable' && positionState.lastVerifiedAt !== null
                 ? `${positionState.positions.length} last`
                 : '—'}
@@ -229,7 +227,8 @@ function PortfolioWallet() {
         <QuickActions />
         <MarketOverview />
 
-        <SectionTitle right={<Link href="/positions" className="glass-press flex min-h-11 items-center gap-1 px-1 text-[11px] font-semibold text-mint">{positionState.positions.length > 2 ? `View all ${positionState.positions.length}` : 'Manage positions'} <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" /></Link>}>Protocol positions</SectionTitle>
+        <section className={styles.portfolioPositionsSection} aria-labelledby="portfolio-positions-heading">
+        <SectionTitle right={<Link href="/trade" className="glass-press flex min-h-11 items-center gap-1 px-1 text-[11px] font-semibold text-mint">Open trade <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" /></Link>}><span id="portfolio-positions-heading">Positions</span></SectionTitle>
         <div className="flex flex-col gap-2.5">
           <ProtocolPositionNotice status={positionState.status} failedGroups={positionState.failedGroups} hasPositions={positionState.positions.length + positionState.pendingPositions.length > 0} refreshing={positionState.refreshing} onRefresh={() => void positionState.refresh()} compact />
           <ConfirmedPositionCards />
@@ -239,8 +238,8 @@ function PortfolioWallet() {
               const manageHref = `/positions?position=${key}`;
               return (
                 <div key={`${position.market}:${position.side}:${position.info.positionId}`} className={styles.portfolioPositionItem}>
-                  <ProtocolPositionCard position={position} compact href={manageHref} stale={positionIsStale(position, positionState.failedGroups)} />
-                  <div className={styles.portfolioPositionActions} aria-label={`Actions for ${position.market} ${position.side} position ${position.info.positionId}`}>
+                  <ProtocolPositionCard position={position} compact />
+                  <div role="group" className={styles.portfolioPositionActions} aria-label={`Actions for ${position.market} ${position.side} position ${position.info.positionId}`}>
                     <Link href={manageHref} className="glass-press">Manage</Link>
                     {position.side === 'long' && <Link href={`/borrow?market=${position.market}&position=${position.info.positionId}`} className="glass-press">Borrow</Link>}
                     <Link href={`/positions?position=${key}&action=close`} className="glass-press">Close</Link>
@@ -252,6 +251,9 @@ function PortfolioWallet() {
             <ProtocolCard icon={Layers2} label="Positions" value="0 open" hint="Open an ETH or BTC position" href="/trade" />
           ) : null}
         </div>
+        </section>
+
+        <EarnPositionCard protocol={protocol} loading={fxSaveLoading} prices={priceSnapshot.prices} />
       </div>
 
       <aside className={styles.secondaryColumn}>
@@ -260,7 +262,7 @@ function PortfolioWallet() {
           <ProtocolCard
             icon={PiggyBank}
             label="fxSAVE"
-            value={fxSaveLabel(protocol, priceSnapshot.prices, fxSaveLoading)}
+            value={fxSaveLabel(protocol, priceSnapshot.prices)}
             hint={protocol.redeemReady ? 'Withdrawal ready to claim' : 'Save, request, and claim'}
             href="/earn"
             accent={protocol.redeemReady === true}
@@ -274,18 +276,9 @@ function PortfolioWallet() {
           />
         </div>
 
-      {(protocol.status === 'partial' || protocol.status === 'unavailable') && (
-        <p role="status" className="mt-3 rounded-xl bg-[var(--warn-dim)] px-3 py-2.5 text-[11px] leading-relaxed text-warn">
-          {protocol.status === 'partial'
-            ? 'Some Ethereum reads are unavailable. FxAeon is showing only the state it could verify.'
-            : 'Ethereum reads are unavailable right now. Your wallet remains connected; refresh to try again.'}
-        </p>
-      )}
-
         <PortfolioNetworkTabs value={network} onChange={setNetwork} />
-        <PortfolioAssets snapshot={liveAssets.data} loading={liveLoading} network={network} />
+        <PortfolioAssets snapshot={liveAssets.data} loading={liveLoading} status={liveAssets.status} onRetry={() => void liveAssets.refresh()} network={network} />
         {!liveAssets.data && <WalletBalancesCard balances={protocol.balances} loading={loading || liveLoading} prices={priceSnapshot.prices} completeAllowed={liveAssets.status === 'ready'} />}
-        <RecentActivityPreview walletAddress={wallet.address as Address} />
       </aside>
     </div>
   );
@@ -293,28 +286,42 @@ function PortfolioWallet() {
 
 function DisconnectedPortfolio({ authenticated }: { authenticated: boolean }) {
   return (
-    <div id="overview" className={styles.overview}>
+    <div id="overview" className={`${styles.overview} ${styles.disconnectedOverview}`}>
       <div className={styles.primaryColumn}>
-      <Card glow className={`${styles.connectCard} relative overflow-hidden p-5`}>
-        <div className="relative">
-          <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--mint-dim)] text-mint">
-            <ShieldCheck className="h-5 w-5" aria-hidden="true" />
-          </span>
-          <h2 className="text-display mt-5 text-[23px] font-semibold">{authenticated ? 'Choose a wallet' : 'Your on-chain home'}</h2>
-          <p className="mt-2 max-w-[390px] text-[12.5px] leading-relaxed text-mut">
-            Connect to see supported wallet value, exact asset balances, positions, fxSAVE, and activity.
-          </p>
-          <ConnectWalletButton className="button button-primary glass-press mt-5 flex min-h-12 w-full max-w-[280px] items-center justify-center gap-2 rounded-xl px-4 py-3 text-[14px] font-semibold">
-            {authenticated ? 'Choose wallet' : 'Connect wallet'}
-          </ConnectWalletButton>
-        </div>
-      </Card>
-      </div>
-      <aside className={styles.secondaryColumn}>
+        <Card glow elevation={2} className={`${styles.valueCard} ${styles.disconnectedValueCard} relative overflow-hidden p-5`}>
+          <div className={styles.valueMain}>
+            <div>
+              <p className={`${styles.valueAmount} text-display text-[38px] font-semibold leading-none tabular-nums`}>—</p>
+            </div>
+            <ConnectWalletButton className="button button-primary glass-press flex min-h-11 w-full max-w-[190px] items-center justify-center gap-2 rounded-xl px-3 py-2 text-[12px] font-semibold">
+              {authenticated ? 'Choose wallet' : 'Connect wallet'}
+            </ConnectWalletButton>
+          </div>
+        </Card>
+
         <QuickActions />
         <MarketOverview />
-      </aside>
+      </div>
+
     </div>
+  );
+}
+
+function EarnPositionCard({ protocol, loading, prices }: { protocol: ProtocolSnapshot; loading: boolean; prices: UsdPriceMap }) {
+  const hasPosition = protocol.fxSaveShares !== null || protocol.fxSaveAssets !== null;
+  if (!loading && !hasPosition) return null;
+  const usd = fxSaveUsdValue('assetsWei', protocol.fxSaveAssets, prices);
+  return (
+    <section className={styles.portfolioEarnSection} aria-labelledby="portfolio-earn-heading">
+      <SectionTitle right={<Link href="/earn" className="glass-press flex min-h-11 items-center gap-1 px-1 text-[11px] font-semibold text-mint">Open Earn <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" /></Link>}><span id="portfolio-earn-heading">Earn position</span></SectionTitle>
+      <Card className={styles.portfolioEarnCard}>
+        {loading ? <div role="status" aria-label="Loading fxSAVE position" className={styles.portfolioEarnSkeleton}><span className="skeleton h-5 w-28 rounded" /><span className="skeleton h-8 w-44 rounded" /><span className="skeleton h-3 w-32 rounded" /></div> : <>
+          <div className={styles.portfolioEarnTopline}><div><p className="text-[13px] text-mut">fxSAVE</p><strong className="text-display text-[24px] font-semibold tabular-nums">{protocol.fxSaveShares ?? '0'} fxSAVE</strong></div><PiggyBank className="h-6 w-6 text-mint" aria-hidden="true" /></div>
+          <div className={styles.portfolioEarnMetrics}><span><small>Value</small><strong>{usd === null ? '—' : formatUsd(usd)}</strong></span><span><small>Underlying</small><strong>{protocol.fxSaveAssets ?? '—'} fxUSD</strong></span></div>
+          <div role="group" className={styles.portfolioEarnActions} aria-label="fxSAVE actions"><Link href="/earn?mode=deposit" className="glass-press">Deposit</Link><Link href="/earn?mode=withdraw" className="glass-press">Withdraw</Link><Link href="/earn?mode=claim" className="glass-press">Claim</Link></div>
+        </>}
+      </Card>
+    </section>
   );
 }
 
@@ -343,7 +350,6 @@ function SupportedValueCard({
     <Card glow elevation={2} className={`${styles.valueCard} relative overflow-hidden p-5`}>
       <div className={styles.valueTopline}>
         <div>
-          <p className={styles.eyebrow}>Portfolio value</p>
           <div className="mt-2"><AddressChip address={walletAddress} /></div>
         </div>
         <button type="button" aria-label="Refresh portfolio" onClick={onRefresh} disabled={refreshing} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-xl text-mut hover:text-mint disabled:opacity-50">
@@ -356,14 +362,12 @@ function SupportedValueCard({
           <p className={`${styles.valueAmount} text-display text-[38px] font-semibold leading-none tabular-nums`}>
             {loading ? '—' : valuation.totalUsd === null ? '—' : formatUsd(valuation.totalUsd)}
           </p>
-          <p className={`${styles.valueHint} mt-2 text-[11px] text-mut`}>
+          <p className={`${styles.valueHint} mt-2 text-[11px] text-mut`} aria-live="polite">
             {loading
-              ? 'Reading supported Ethereum balances…'
-              : valuation.totalUsd !== null
-                ? valuation.complete
-                  ? `${valuation.assetCount} ${valuation.assetCount === 1 ? 'asset' : 'assets'}`
-                  : `${formatAssetCount(valuation.assetCount)} · ${valuation.reason}`
-                : valuation.reason}
+              ? <span className="skeleton inline-block h-3 w-28 align-middle" aria-label="Loading portfolio value" />
+              : !valuation.complete
+                ? <span className="text-warn">{protocol.status === 'unavailable' ? 'Portfolio value unavailable' : 'Partial value · verify reads'}</span>
+                : `${valuation.assetCount} ${valuation.assetCount === 1 ? 'asset' : 'assets'}`}
           </p>
         </div>
       </div>
@@ -457,11 +461,11 @@ function WalletBalancesCard({ balances, loading, prices, completeAllowed }: { ba
         </div>
 
         {loading && <div className="m-4 h-24 animate-pulse rounded-xl bg-[var(--surface-2)]" role="status" aria-label="Loading wallet balances" />}
-        {!loading && !balances && <p className="m-4 rounded-xl bg-[var(--warn-dim)] px-3 py-2 text-[11px] leading-relaxed text-warn">Supported token balances are unavailable. Refresh when Ethereum responds.</p>}
+        {!loading && !balances && <div className="m-4 rounded-xl border border-[var(--line)] bg-[var(--warn-dim)] p-4 text-[12px] text-warn" role="status" aria-live="polite"><p>Wallet balances are unavailable.</p><p className="mt-1 text-mut">Retry the wallet read before relying on the total.</p></div>}
         {!loading && balances && nonZero.length === 0 && (
           <div className="flex items-center gap-3 px-4 py-5">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] text-mut"><Coins className="h-5 w-5" aria-hidden="true" /></span>
-            <span><strong className="block text-[12.5px]">{balances.failedTokens.length > 0 ? 'No positive balances verified yet' : 'No supported assets found'}</strong><span className="mt-1 block text-[11px] text-mut">{balances.failedTokens.length > 0 ? 'Retry the unavailable asset reads before confirming this wallet is empty.' : 'Receive a supported token to see it here.'}</span></span>
+            <span><strong className="block text-[12.5px]">{balances.failedTokens.length > 0 ? 'Some asset balances are unavailable' : 'No supported assets found'}</strong>{balances.failedTokens.length === 0 ? <span className="mt-1 block text-[11px] text-mut">Receive a supported token to see it here.</span> : <span className="mt-1 block text-[11px] text-mut">The visible list is partial until the failed reads recover.</span>}</span>
           </div>
         )}
         {!loading && nonZero.length > 0 && (
@@ -472,16 +476,13 @@ function WalletBalancesCard({ balances, loading, prices, completeAllowed }: { ba
             })}
           </div>
         )}
-        {!loading && balances && balances.failedTokens.length > 0 && (
-          <p role="status" className="m-3 rounded-xl bg-[var(--warn-dim)] px-3 py-2 text-[11px] leading-relaxed text-warn">Some balances could not refresh. The total includes available values.</p>
-        )}
       </Card>
     </section>
   );
 }
 
 function WalletBalanceRow({ balance, price }: { balance: WalletTokenBalance; price: number | undefined }) {
-  const label = balance.key === 'fxUSDBasePool' ? 'Base pool' : balance.key;
+  const label = tokenSymbol(balance.key);
   return (
     <div className={`${styles.balanceRow} flex min-h-[68px] items-center justify-between gap-3 py-3`}>
       <div className="flex min-w-0 items-center gap-3">
@@ -525,7 +526,7 @@ type WalletValuation = {
 };
 
 function walletValuation(balances: WalletBalancesResult | null, prices: UsdPriceMap, completeAllowed = true): WalletValuation {
-  if (!balances) return { complete: false, totalUsd: null, assetCount: 0, reason: 'Wallet balances are not available yet.' };
+  if (!balances) return { complete: false, totalUsd: null, assetCount: 0, reason: '' };
   const nonZero = balances.balances.filter((balance) => balance.amountWei > 0n);
   const values = nonZero.map((balance) => {
     const key = priceKeyForSymbol(balance.key);
@@ -548,7 +549,7 @@ function walletValuation(balances: WalletBalancesResult | null, prices: UsdPrice
       complete: false,
       totalUsd: values.length > 0 ? values.reduce<number>((total, value) => total + (value ?? 0), 0) : null,
       assetCount: nonZero.length,
-      reason: 'Expanded wallet assets are still being verified.',
+      reason: 'Loading expanded wallet assets.',
     };
   }
   return {
@@ -575,26 +576,23 @@ function positionNetEquityUsd(position: UiPosition, prices: UsdPriceMap): number
   return Number.isFinite(value) ? value : null;
 }
 
-function fxSaveLabel(protocol: ProtocolSnapshot, prices: UsdPriceMap, loading: boolean): string {
+function fxSaveLabel(protocol: ProtocolSnapshot, prices: UsdPriceMap): string {
   const units = protocol.fxSaveShares !== null
     ? `${protocol.fxSaveShares} fxSAVE`
     : protocol.fxSaveAssets !== null
       ? `${protocol.fxSaveAssets} fxSAVE`
       : null;
-  if (units === null) return loading ? 'Loading…' : 'Unavailable';
+  if (units === null) return '—';
   const usdValue = fxSaveUsdValue('assetsWei', protocol.fxSaveAssets, prices);
   return `${units}${usdValue === null ? '' : ` · ${formatUsd(usdValue)} est.`}`;
-}
-
-function formatAssetCount(count: number): string {
-  return `${count} ${count === 1 ? 'asset' : 'assets'}`;
 }
 
 function formatWalletAmount(balance: WalletTokenBalance): string {
   const value = formatUnits(balance.amountWei, balance.decimals);
   const [whole, fraction = ''] = value.split('.');
   const trimmed = fraction.slice(0, 8).replace(/0+$/, '');
-  return trimmed ? `${whole}.${trimmed} ${balance.key}` : `${whole} ${balance.key}`;
+  const label = displayAssetSymbol(balance.key);
+  return trimmed ? `${whole}.${trimmed} ${label}` : `${whole} ${label}`;
 }
 
 function formatProtocolAmount(value: bigint): string {

@@ -11,6 +11,7 @@ import type {
   BridgeRouteQuote,
   FxPublicClient,
   PendingBridgeContext,
+  PendingActionIntent,
   PlannedRoute,
   TransactionExecutionResult,
   TransactionPolicy,
@@ -480,6 +481,7 @@ export async function runTransactionRoute(params: {
           step.hash = hash;
           const pendingRecord = recordPendingHash({
             operation: route.operation,
+            intent: pendingActionIntent(route),
             walletAddress: route.walletAddress,
             chainId: route.chainId,
             hash,
@@ -576,7 +578,7 @@ export async function runTransactionRoute(params: {
         } catch (error) {
           // A reorg removes inclusion, but does not prove that the signed
           // hash reverted. Keep it recoverable in the journal and explicitly
-          // downgrade the UI to submitted so Activity can reconcile it later.
+          // downgrade the UI to submitted so History can reconcile it later.
           const wasFinalityPending = step.status === "included" || step.status === "confirming";
           if (error instanceof TransactionReorgError) step.status = "submitted";
           else if (!wasFinalityPending) step.status = "failed";
@@ -603,4 +605,19 @@ export async function runTransactionRoute(params: {
       return result;
     },
   });
+}
+function pendingActionIntent(route: PlannedRoute): PendingActionIntent | undefined {
+  const intent = route.policy?.reviewedAction;
+  if (!intent) return route.operation === 'buildBridgeTx' ? 'Bridge' : undefined;
+  switch (intent.kind) {
+    case 'position-increase': return intent.positionId === 0 ? 'Open position' : 'Increase position';
+    case 'position-reduce': return intent.isClosePosition ? 'Close position' : 'Reduce position';
+    case 'position-adjust': return 'Adjust leverage';
+    case 'deposit-and-mint': return intent.positionId === 0 ? 'Borrow' : 'Add collateral';
+    case 'repay-and-withdraw': return intent.minimumRepayAmount > 0n && intent.withdrawAmount > 0n ? 'Repay and withdraw' : intent.minimumRepayAmount > 0n ? 'Repay' : 'Withdraw collateral';
+    case 'fxsave-deposit': return 'Deposit';
+    case 'fxsave-withdraw': return intent.instant ? 'Withdraw' : 'Queue withdrawal';
+    case 'fxsave-claim': return 'Claim';
+    default: return undefined;
+  }
 }

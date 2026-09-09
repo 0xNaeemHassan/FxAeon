@@ -230,7 +230,7 @@ function PrivyLoginFlow() {
 
   const busy = phase === 'authenticating';
   return (
-    <main className="mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col justify-center px-6 py-10">
+    <main className={`${styles.loginPanel} mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col justify-center px-6 py-10`}>
       <div className="flex flex-col">
         <div className={`${styles.loginCard} glass mx-auto w-full max-w-sm p-6`}>
           <div className="flex flex-col items-center text-center">

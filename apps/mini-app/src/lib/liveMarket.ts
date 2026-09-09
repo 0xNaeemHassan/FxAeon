@@ -297,10 +297,6 @@ export function createCoinbaseTickerController(options: {
   };
 }
 
-export function marketCandleGranularity(range: LiveMarketRange): number {
-  return RANGE_GRANULARITY_SECONDS[range];
-}
-
 export function coinbaseCandlesEndpoint(
   market: MarketSymbol,
   range: LiveMarketRange,

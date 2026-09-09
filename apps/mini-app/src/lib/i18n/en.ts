@@ -9,7 +9,7 @@ const en: Messages = {
   'common.openInTelegram': 'Open in Telegram',
   'common.save': 'Save changes',
   'common.saved': 'Saved',
-  'common.loading': 'Loading live protocol state…',
+  'common.loading': 'Loading protocol state…',
   'loginCard.signIn': 'Sign in to FxAeon',
   'loginCard.telegram': 'Continue with Telegram',
   'loginCard.email': 'Continue with email',

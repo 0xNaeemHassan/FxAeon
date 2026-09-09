@@ -43,13 +43,13 @@ export default function RecentActivityPreview({ walletAddress }: { walletAddress
       await refreshWallet(reconciled, walletAddress, isCurrent);
       if (!isCurrent()) return;
       if (reconciled.length === 0) {
-        setSnapshot({ identity, items: [], loading: false, error: 'Saved activity exists on this device, but its chain status could not be reconciled. Retry when RPC access is available.' });
+        setSnapshot({ identity, items: [], loading: false, error: 'Saved history exists on this device, but its chain status could not be reconciled. Retry when RPC access is available.' });
         return;
       }
       setSnapshot({ identity, items: [...reconciled].reverse().slice(0, 3), loading: false, error: '' });
     } catch {
       if (!isCurrent()) return;
-      setSnapshot({ identity, items: [], loading: false, error: 'Saved activity could not be checked against chain receipts. Nothing was treated as complete or failed.' });
+      setSnapshot({ identity, items: [], loading: false, error: 'Saved history could not be checked against chain receipts. Nothing was treated as complete or failed.' });
     }
   }, [identity, refreshWallet, walletAddress]);
 
@@ -62,26 +62,27 @@ export default function RecentActivityPreview({ walletAddress }: { walletAddress
   return (
     <section className={styles.section} aria-labelledby="recent-activity-title">
       <SectionTitle right={(
-        <button type="button" aria-label="Refresh recent activity" onClick={() => { haptic('light'); void load(); }} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-lg text-mut hover:text-mint">
+        <button type="button" aria-label="Refresh recent history" onClick={() => { haptic('light'); void load(); }} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-lg text-mut hover:text-mint">
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
         </button>
       )}>
-        <span id="recent-activity-title">Recent activity</span>
+        <span id="recent-activity-title">Recent history</span>
       </SectionTitle>
       <Card className={`${styles.activityCard} portfolio-activity-card p-0`}>
         {loading ? (
-          <div className="space-y-2 p-3" role="status" aria-label="Loading recent activity">
+          <div className="space-y-2 p-3" role="status" aria-label="Loading recent history">
             <div className="skeleton h-[58px]" /><div className="skeleton h-[58px]" />
           </div>
         ) : loadError ? (
-          <div className="flex items-start gap-3 px-4 py-5" role="status">
+          <div className="flex items-center gap-3 px-4 py-5" role="status" aria-live="polite">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--warn-dim)] text-warn"><CircleAlert className="h-5 w-5" aria-hidden="true" /></span>
-            <span><strong className="block text-[12.5px]">Chain status unavailable</strong><span className="mt-1 block text-[11px] leading-relaxed text-mut">{loadError}</span></span>
+            <span className="min-w-0 flex-1 text-[11px] leading-relaxed text-warn">Receipt status is unavailable. Retry before relying on this history.</span>
+            <button type="button" aria-label="Retry recent history" onClick={() => { haptic('light'); void load(); }} className="glass-press flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-mut"><RefreshCw className="h-4 w-4" aria-hidden="true" /></button>
           </div>
         ) : items.length ? (
           <>
             {items.some((item) => item.verification === 'rpc-error') && (
-              <p role="status" className="mx-3 mt-3 rounded-lg bg-[var(--warn-dim)] px-3 py-2 text-[10.5px] leading-relaxed text-warn">Some saved transactions could not be checked against chain receipts. Their local status is not treated as proof.</p>
+              <div role="status" aria-live="polite" className="mx-3 mt-3 flex items-center gap-2 rounded-lg bg-[var(--warn-dim)] px-3 py-2"><span className="min-w-0 flex-1 text-[11px] text-warn">Some receipt details are unavailable.</span><button type="button" aria-label="Retry receipt details" onClick={() => { haptic('light'); void load(); }} className="glass-press flex min-h-9 min-w-9 items-center justify-center rounded-lg text-warn"><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /></button></div>
             )}
             <ul className={`${styles.activityList} divide-y divide-[var(--line)] px-3`}>
               {items.map((item) => <ActivityRow key={item.record.id} item={item} />)}
@@ -90,11 +91,11 @@ export default function RecentActivityPreview({ walletAddress }: { walletAddress
         ) : (
           <div className={`${styles.activityEmpty} flex items-center gap-3 px-4 py-5`}>
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] text-mut"><History className="h-5 w-5" aria-hidden="true" /></span>
-            <span><strong className="block text-[12.5px]">No recent FxAeon activity</strong><span className="mt-1 block text-[11px] text-mut">Transactions submitted on this device will appear here.</span></span>
+            <span><strong className="block text-[12.5px]">No recent FxAeon history</strong><span className="mt-1 block text-[11px] text-mut">Transactions submitted on this device will appear here.</span></span>
           </div>
         )}
-        <Link href="/activity" className={`${styles.activityLink} glass-press flex min-h-12 items-center justify-between border-t border-[var(--line)] px-4 text-[12px] font-semibold text-mint`}>
-          Open full activity <ChevronRight className="h-4 w-4" aria-hidden="true" />
+        <Link href="/history" className={`${styles.activityLink} glass-press flex min-h-12 items-center justify-between border-t border-[var(--line)] px-4 text-[12px] font-semibold text-mint`}>
+          Open full history <ChevronRight className="h-4 w-4" aria-hidden="true" />
         </Link>
       </Card>
     </section>
@@ -108,7 +109,7 @@ function ActivityRow({ item }: { item: RecoveryViewModel }) {
     <li className={`${styles.activityRow} flex items-center gap-3 py-3`}>
       <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] ${status.className}`}><Icon className="h-4 w-4" aria-hidden="true" /></span>
       <span className="min-w-0 flex-1">
-        <strong className="block truncate text-[12.5px]">{operationLabel(item.record.operation)}</strong>
+        <strong className="block truncate text-[12.5px]">{operationLabel(item.record.operation, item.record.intent)}</strong>
         <span className="mt-1 block truncate text-[10.5px] text-mut">{item.record.chainId === 8453 ? 'Base' : 'Ethereum'} · {new Date(item.record.submittedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
       </span>
       <span className={`shrink-0 text-[10px] font-semibold ${status.className}`}>{status.label}</span>
@@ -116,7 +117,8 @@ function ActivityRow({ item }: { item: RecoveryViewModel }) {
   );
 }
 
-function operationLabel(operation: string): string {
+function operationLabel(operation: string, intent?: string): string {
+  if (intent) return intent;
   const labels: Record<string, string> = {
     increasePosition: 'Opened or increased position',
     reducePosition: 'Reduced position',
@@ -132,8 +134,9 @@ function operationLabel(operation: string): string {
 }
 
 function activityStatus(item: RecoveryViewModel): { label: string; className: string; icon: LucideIcon } {
-  if (item.status === 'confirmed') return { label: 'Confirmed', className: 'text-success', icon: CheckCircle2 };
-  if (item.status === 'failed') return { label: 'Reverted', className: 'text-danger', icon: XCircle };
-  if (item.verification === 'rpc-error' || item.verification === 'mismatch') return { label: 'Check needed', className: 'text-warn', icon: CircleAlert };
-  return { label: 'Pending', className: 'text-mint', icon: Clock3 };
+  if (item.status === 'confirmed') return { label: 'Completed', className: 'text-success', icon: CheckCircle2 };
+  if (item.status === 'failed') return { label: 'Failed', className: 'text-danger', icon: XCircle };
+  if (item.verification === 'confirming') return { label: 'Confirming', className: 'text-mint', icon: Clock3 };
+  if (item.verification === 'rpc-error' || item.verification === 'mismatch') return { label: 'Submitted', className: 'text-warn', icon: CircleAlert };
+  return { label: 'Submitted', className: 'text-mint', icon: Clock3 };
 }

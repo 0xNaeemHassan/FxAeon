@@ -2,6 +2,7 @@
   width: 100%;
   max-width: 1120px;
   margin-inline: auto;
+  min-height: 0;
 }
 
 .docsLayout {
@@ -10,6 +11,7 @@
   align-items: start;
   justify-content: center;
   gap: clamp(28px, 6vw, 72px);
+  min-height: 0;
 }
 
 .docsNav {
@@ -95,6 +97,7 @@
 
 .docsContent {
   min-width: 0;
+  min-height: 0;
 }
 
 .docsIntro {

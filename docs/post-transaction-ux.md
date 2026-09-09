@@ -26,7 +26,9 @@ These are three distinct evidence sources. Jumper's archived public frontend at 
 - **GMX:** each position exposes close/edit actions directly. The close flow is a dedicated seller surface initialized to 100%, retains explicit receive-token selection, calculates amount plus USD output, validates liquidity/fees/next-position risk, and keeps submission state locked. Full close is a product mode, not a hidden slider edge case. Sources: [position item](https://github.com/gmx-io/gmx-interface/blob/c48a6ebbf2d9598e7600f050ea0e3f2cd07b6947/src/components/PositionItem/PositionItem.tsx), [position seller](https://github.com/gmx-io/gmx-interface/blob/c48a6ebbf2d9598e7600f050ea0e3f2cd07b6947/src/components/PositionSeller/PositionSeller.tsx), [receive output](https://github.com/gmx-io/gmx-interface/blob/c48a6ebbf2d9598e7600f050ea0e3f2cd07b6947/src/components/DecreaseReceiveOutput/DecreaseReceiveOutput.tsx).
 - **Aave:** financial actions use a focused modal state machine with separate waiting, success, and error views. FxAeon now presents its route-rich review in a focused review sheet, keeping one selected action's facts and wallet steps together without weakening the existing simulation, validation, or receipt boundary. Sources: [waiting](https://github.com/aave/interface/blob/28f295eccc714d40ff9afd19882fddd127228f52/src/components/transactions/FlowCommons/BaseWaiting.tsx), [success](https://github.com/aave/interface/blob/28f295eccc714d40ff9afd19882fddd127228f52/src/components/transactions/FlowCommons/BaseSuccess.tsx).
 
-FxAeon's adoption is a compact position list plus one persistent management ticket. Every row has an explicit Close action; Add, Reduce, Close, and Leverage are separate modes. Close always plans the official SDK full-close intent, uses a destructive visual treatment, shows the selected receive asset and available balance, then enters the same simulation/review/receipt boundary as every other financial action.
+FxAeon's adoption is a compact position list plus one persistent management ticket. Every row has an explicit Close action; Add, Reduce, Close, and Leverage are separate modes. Close always plans the official SDK full-close intent, uses a destructive visual treatment, shows the selected receive asset and available balance, then enters the same simulation/review/receipt boundary as every other financial action. The editor is replaced by the review in the same route and main card, so the selected action does not become a second page or a large blocking overlay.
+
+The shared product sequence is **Edit → Live preview → Review → Awaiting signature → Submitted → Included → Confirming → Confirmed**, with explicit Failed and Cancelled terminal states. A disconnected primary action says **Connect wallet** and resumes the same draft after connection. A signature-required History entry reopens the wallet/chain/action-scoped review; it does not reconstruct or persist executable calldata.
 
 ## Patterns adopted in FxAeon
 
@@ -49,7 +51,7 @@ The pinned SDK's `assetsWei`, `totalAssetsWei`, and `pendingSharesWei` are **fxU
 ## Deliberately not copied
 
 - No Jumper/Uniswap portfolio-history backend dependency or synthesized receipts.
-- No timeout-to-failure shortcut for a transaction with an unverified receipt; preserve its identity and point to the explorer/Activity.
+- No timeout-to-failure shortcut for a transaction with an unverified receipt; preserve its identity and point to the explorer/History.
 - No approval-as-action-success shortcut, inferred destination delivery, or optimistic position accounting.
 - No automatic resubmission, replacement-signing behavior, new signer, relaxed simulation, or bypass of the following-block boundary.
 - No unsupported explicit-ID SDK call, private SDK internals, or production indexer override. The fork test's delayed index adapter is test-only.

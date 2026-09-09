@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import {
   CheckCircle2,
   CircleAlert,
@@ -12,8 +13,16 @@ import {
 import type { Address } from 'viem';
 import { Button, Card, SectionTitle } from '@/components/ui';
 import { BridgeTracker } from '@/components/BridgeTracker';
-import { getPublicClient, reconcileWalletJournal, type RecoveryViewModel } from '@/lib/fx';
-import { haptic } from '@/lib/telegram';
+import {
+  cancelSignatureRequiredDraft,
+  getPublicClient,
+  reconcileWalletJournal,
+  readSignatureRequiredDrafts,
+  signatureDraftResumePath,
+  type RecoveryViewModel,
+  type SignatureRequiredDraft,
+} from '@/lib/fx';
+import { haptic, openExternalLink } from '@/lib/telegram';
 import { useInvalidateWalletData } from '@/components/WalletDataProvider';
 import { createRecoveryWalletRefresh, createWalletReadScope } from '@/lib/walletDataRefresh';
 
@@ -26,11 +35,21 @@ function chainName(chainId: RecoveryViewModel['record']['chainId']): string {
   return chainId === 8453 ? 'Base' : 'Ethereum';
 }
 
-function operationName(operation: string): string {
-  return operation
-    .replace(/^getFxSave/, 'fxSAVE ')
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/^./, (value) => value.toUpperCase());
+function operationName(operation: string, intent?: string): string {
+  if (intent) return intent;
+  const labels: Record<string, string> = {
+    increasePosition: 'Opened or increased position',
+    reducePosition: 'Reduced position',
+    adjustPositionLeverage: 'Adjusted leverage',
+    depositAndMint: 'Minted fxUSD',
+    repayAndWithdraw: 'Repaid and withdrew',
+    depositFxSave: 'Deposit Fx Save',
+    withdrawFxSave: 'Withdraw fxSAVE',
+    getRedeemTx: 'Claim fxSAVE',
+    buildBridgeTx: 'Move assets',
+  };
+  return labels[operation]
+    ?? operation.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (value) => value.toUpperCase());
 }
 
 function shortHash(hash: string): string {
@@ -41,7 +60,7 @@ function submittedAt(timestamp: number): string {
   // UTC keeps the static/hydrated render deterministic and avoids implying
   // that a local timestamp is protocol state.
   const date = new Date(timestamp);
-  if (!Number.isFinite(date.getTime())) return 'time unavailable';
+  if (!Number.isFinite(date.getTime())) return 'time pending';
   return date.toISOString().slice(0, 16).replace('T', ' UTC ');
 }
 
@@ -51,21 +70,15 @@ function statusCopy(view: RecoveryViewModel): {
   className: string;
 } {
   if (view.status === 'confirmed') {
-    return { label: 'Confirmed', icon: CheckCircle2, className: 'text-success' };
+    return { label: 'Completed', icon: CheckCircle2, className: 'text-success' };
   }
   if (view.status === 'failed') {
-    return { label: 'Reverted', icon: XCircle, className: 'text-danger' };
-  }
-  if (view.verification === 'rpc-error') {
-    return { label: 'Check unavailable', icon: CircleAlert, className: 'text-warn' };
-  }
-  if (view.verification === 'mismatch') {
-    return { label: 'Unverified', icon: CircleAlert, className: 'text-warn' };
+    return { label: 'Failed', icon: XCircle, className: 'text-danger' };
   }
   if (view.verification === 'confirming') {
     return { label: 'Confirming', icon: Clock3, className: 'text-mint' };
   }
-  return { label: 'Pending', icon: Clock3, className: 'text-mint' };
+  return { label: 'Submitted', icon: view.verification === 'rpc-error' || view.verification === 'mismatch' ? CircleAlert : Clock3, className: view.verification === 'rpc-error' || view.verification === 'mismatch' ? 'text-warn' : 'text-mint' };
 }
 
 function statusSummary(view: RecoveryViewModel): string {
@@ -76,6 +89,38 @@ function statusSummary(view: RecoveryViewModel): string {
   if (view.verification === 'confirming') return 'Receipt included, but three confirmations are not available yet. Do not submit this action again.';
   if (view.verification === 'rpc-error') return 'The network could not be checked. Nothing was marked failed.';
   return 'The available chain data did not match the saved transaction details, so it remains unverified.';
+}
+
+function DraftItem({ draft, onCancel }: { draft: SignatureRequiredDraft; onCancel: (id: string) => void }) {
+  const cancelled = draft.status === 'cancelled';
+  return (
+    <li className="rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.025)] p-3">
+      <div className="flex items-start gap-3">
+        <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)] ${cancelled ? 'text-mut' : 'text-mint'}`}>
+          {cancelled ? <XCircle className="h-4 w-4" aria-hidden="true" /> : <Clock3 className="h-4 w-4" aria-hidden="true" />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <p className="text-[12.5px] font-semibold">{operationName(draft.operation)}</p>
+              <p className="mt-0.5 text-[10.5px] text-mut">{chainName(draft.chainId)} · {submittedAt(draft.updatedAt)}</p>
+            </div>
+            <span className={`shrink-0 text-[10px] font-semibold uppercase tracking-[0.1em] ${cancelled ? 'text-mut' : 'text-mint'}`}>
+              {cancelled ? 'Cancelled' : 'Signature required'}
+            </span>
+          </div>
+          <p className="mt-2 break-words text-[11.5px] leading-relaxed text-mut">
+            {cancelled ? 'This local review was cancelled and cannot be signed.' : 'A fresh review is required before the wallet can be asked to sign.'}
+          </p>
+          <div className="mt-2.5 flex items-center justify-end gap-2">
+            {!cancelled && <Link href={signatureDraftResumePath(draft)} className="inline-flex min-h-11 items-center rounded-lg px-2 text-[10.5px] font-semibold text-mint hover:bg-[var(--mint-dim)]">Resume review</Link>}
+            {!cancelled && <button type="button" onClick={() => onCancel(draft.id)} className="inline-flex min-h-11 items-center rounded-lg px-2 text-[10.5px] font-semibold text-mut hover:bg-[var(--surface-2)]">Cancel</button>}
+          </div>
+          <p className="mt-1 border-t border-[var(--line)] pt-2 text-[10px] text-[var(--mut-2)]">Stored on this device and scoped to this wallet.</p>
+        </div>
+      </div>
+    </li>
+  );
 }
 
 function RecoveryItem({ view, trackBridge, autoTrackBridge }: { view: RecoveryViewModel; trackBridge: boolean; autoTrackBridge: boolean }) {
@@ -90,7 +135,7 @@ function RecoveryItem({ view, trackBridge, autoTrackBridge }: { view: RecoveryVi
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <p className="text-[12.5px] font-semibold">{operationName(view.record.operation)}</p>
+              <p className="text-[12.5px] font-semibold">{operationName(view.record.operation, view.record.intent)}</p>
               <p className="mt-0.5 text-[10.5px] text-mut">{chainName(view.record.chainId)} · {submittedAt(view.record.submittedAt)}</p>
             </div>
             <span className={`shrink-0 text-[10px] font-semibold uppercase tracking-[0.1em] ${status.className}`}>{status.label}</span>
@@ -102,6 +147,12 @@ function RecoveryItem({ view, trackBridge, autoTrackBridge }: { view: RecoveryVi
               href={view.explorerUrl}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={(event) => {
+                // Telegram WebViews need their host-aware opener; keeping the
+                // href preserves keyboard/middle-click behaviour in browsers.
+                event.preventDefault();
+                openExternalLink(view.explorerUrl);
+              }}
               className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-[10.5px] font-semibold text-mint hover:bg-[var(--mint-dim)]"
             >
               Explorer <ExternalLink className="h-3 w-3" aria-hidden="true" />
@@ -148,9 +199,11 @@ function formatBridgeAmount(value: string): string {
 }
 
 /**
- * A read-only recovery surface for wallet-submitted hashes. This component
- * never resumes a route: a confirmed prerequisite only tells the user to
- * open the original flow and plan it again from fresh chain state.
+ * A wallet-scoped history surface for submitted hashes and unsigned reviews.
+ * Submitted transactions are reconciled from chain receipts. Signature drafts
+ * only reopen the original product route; that route must rebuild and
+ * simulate its transaction from current state before asking the wallet to
+ * sign.
  */
 export default function PendingTransactionRecovery({ walletAddress, embedded = false }: Props) {
   const identity = walletAddress.toLowerCase();
@@ -158,9 +211,10 @@ export default function PendingTransactionRecovery({ walletAddress, embedded = f
   readScope.current.select(walletAddress);
   const invalidateWalletData = useInvalidateWalletData();
   const refreshWallet = useMemo(() => createRecoveryWalletRefresh(invalidateWalletData), [invalidateWalletData]);
-  const [snapshot, setSnapshot] = useState({ identity: '', views: [] as RecoveryViewModel[], loading: true, refreshing: false, error: '' });
+  const [snapshot, setSnapshot] = useState({ identity: '', views: [] as RecoveryViewModel[], drafts: [] as SignatureRequiredDraft[], loading: true, refreshing: false, error: '' });
   const current = snapshot.identity === identity;
   const views = useMemo(() => current ? snapshot.views : [], [current, snapshot.views]);
+  const drafts = useMemo(() => current ? snapshot.drafts : [], [current, snapshot.drafts]);
   const loading = !current || snapshot.loading;
   const refreshing = !current || snapshot.refreshing;
   const error = current ? snapshot.error : '';
@@ -168,8 +222,9 @@ export default function PendingTransactionRecovery({ walletAddress, embedded = f
   const refresh = useCallback(async () => {
     const isCurrent = readScope.current.start(walletAddress);
     if (!isCurrent) return;
-    setSnapshot((previous) => ({ identity, views: previous.identity === identity ? previous.views : [], loading: previous.identity !== identity || previous.loading, refreshing: true, error: '' }));
+    setSnapshot((previous) => ({ identity, views: previous.identity === identity ? previous.views : [], drafts: previous.identity === identity ? previous.drafts : [], loading: previous.identity !== identity || previous.loading, refreshing: true, error: '' }));
     try {
+      const localDrafts = readSignatureRequiredDrafts(walletAddress);
       const next = await reconcileWalletJournal({
         walletAddress,
         getClient: getPublicClient,
@@ -177,7 +232,7 @@ export default function PendingTransactionRecovery({ walletAddress, embedded = f
       if (!isCurrent()) return;
       await refreshWallet(next, walletAddress, isCurrent);
       if (!isCurrent()) return;
-      setSnapshot({ identity, views: [...next].reverse(), loading: false, refreshing: false, error: '' });
+      setSnapshot({ identity, views: [...next].reverse(), drafts: [...localDrafts].sort((left, right) => right.updatedAt - left.updatedAt), loading: false, refreshing: false, error: '' });
     } catch {
       if (!isCurrent()) return;
       setSnapshot((previous) => ({ ...previous, loading: false, refreshing: false, error: 'Saved transactions could not be checked. Nothing was marked complete or failed.' }));
@@ -195,6 +250,12 @@ export default function PendingTransactionRecovery({ walletAddress, embedded = f
       .slice(0, 2)
       .map((view) => view.record.id),
   ), [views]);
+  const cancelDraft = useCallback((id: string) => {
+    cancelSignatureRequiredDraft(id);
+    setSnapshot((previous) => previous.identity === identity
+      ? { ...previous, drafts: previous.drafts.map((draft) => draft.id === id ? { ...draft, status: 'cancelled', updatedAt: Date.now() } : draft) }
+      : previous);
+  }, [identity]);
   return (
     <section aria-labelledby="transaction-recovery-title">
       {!embedded && <SectionTitle
@@ -213,9 +274,9 @@ export default function PendingTransactionRecovery({ walletAddress, embedded = f
           </button>
         )}
       >
-        <span id="transaction-recovery-title">Activity</span>
+        <span id="transaction-recovery-title">History</span>
       </SectionTitle>}
-      {embedded && <h2 id="transaction-recovery-title" className="sr-only">Activity</h2>}
+      {embedded && <h2 id="transaction-recovery-title" className="sr-only">History</h2>}
       <Card className="p-3.5">
         {error && <p role="status" className="mb-3 text-[11px] text-warn">{error}</p>}
         {loading ? (
@@ -223,10 +284,11 @@ export default function PendingTransactionRecovery({ walletAddress, embedded = f
             <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-mint border-t-transparent" aria-hidden="true" />
             Checking saved transactions…
           </div>
-        ) : views.length === 0 ? (
-          <p className="px-1 py-2 text-[12px] leading-relaxed text-mut">No submitted transactions need checking for this wallet.</p>
+        ) : views.length === 0 && drafts.length === 0 ? (
+          <p className="px-1 py-2 text-[12px] leading-relaxed text-mut">No transaction history is saved for this wallet.</p>
         ) : (
           <ul className="flex flex-col gap-2.5" aria-live="polite">
+            {drafts.map((draft) => <DraftItem key={draft.id} draft={draft} onCancel={cancelDraft} />)}
             {views.map((view) => (
               <RecoveryItem
                 key={view.record.id}
@@ -240,8 +302,8 @@ export default function PendingTransactionRecovery({ walletAddress, embedded = f
             ))}
           </ul>
         )}
-        {!loading && views.length > 0 && (
-          <p className="mt-3 px-1 text-[11px] leading-relaxed text-mut">Checking is read-only. A saved transaction is never resent, and later steps are never resumed automatically.</p>
+        {!loading && (views.length > 0 || drafts.length > 0) && (
+          <p className="mt-3 px-1 text-[11px] leading-relaxed text-mut">History is read-only. A saved transaction is never resent, and signing always rebuilds and simulates a fresh route.</p>
         )}
         <Button
           variant="ghost"

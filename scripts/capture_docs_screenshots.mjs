@@ -358,7 +358,7 @@ async function main() {
   if (captureProfile === 'audit') {
     // A local-only visual contact set. No fixture wallet or market values are
     // necessary: disconnected and unavailable states must be designed too.
-    const routes = ['/', '/login', '/portfolio', '/trade', '/positions', '/earn', '/borrow', '/move', '/more', '/settings', '/activity', '/qr', '/docs'];
+    const routes = ['/', '/login', '/portfolio', '/trade', '/positions', '/earn', '/borrow', '/move', '/more', '/settings', '/history', '/qr', '/docs'];
     for (const theme of ['official', 'dark', 'light']) {
       for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000 }]) {
         const context = await createCaptureContext({ viewport, theme });

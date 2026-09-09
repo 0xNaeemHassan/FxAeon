@@ -58,7 +58,7 @@ test.describe('wallet session isolation', () => {
     assertNoBackendRequests(requests);
   });
 
-  test('activity never relabels a prior wallet receipt after an account switch', async ({ page, requests }) => {
+  test('history never relabels a prior wallet receipt after an account switch', async ({ page, requests }) => {
     await page.addInitScript(({ accountA, accountB }) => {
       const hashA = `0x${'a'.repeat(64)}`;
       const hashB = `0x${'b'.repeat(64)}`;
@@ -67,13 +67,13 @@ test.describe('wallet session isolation', () => {
         { id: `1:${accountB.toLowerCase()}:${hashB}`, operation: 'depositFxSave', walletAddress: accountB, chainId: 1, hash: hashB, to: '0x3333333333333333333333333333333333333333', nonce: 2, dataHash: hashB, valueWei: '0', submittedAt: 2, status: 'pending' },
       ]));
     }, { accountA: ACCOUNT_A, accountB: ACCOUNT_B });
-    await page.goto('/activity', { waitUntil: 'domcontentloaded' });
-    await expect(page.getByText('Increase Position', { exact: true })).toBeVisible();
+    await page.goto('/history', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByText('Opened or increased position', { exact: true })).toBeVisible();
     await expect(page.getByText('Deposit Fx Save', { exact: true })).toHaveCount(0);
 
     await setAccounts(page, [ACCOUNT_B]);
     await expect(page.getByText('Deposit Fx Save', { exact: true })).toBeVisible();
-    await expect(page.getByText('Increase Position', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Opened or increased position', { exact: true })).toHaveCount(0);
     assertNoBackendRequests(requests);
   });
 });

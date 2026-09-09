@@ -1,10 +1,10 @@
 .workspace {
   width: 100%;
-  max-width: 560px;
+  max-width: 920px;
   margin-inline: auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .productSwitch {
@@ -26,6 +26,23 @@
   background: color-mix(in srgb, var(--surface) 94%, var(--surface-2));
 }
 
+.formHeader { min-width: 0; }
+
+/* Move is intentionally a compact flow: the route, amount, recipient and
+ * review trigger remain one viewport-sized workspace on Telegram phones. */
+.moveCard { min-width: 0; }
+.moveEyebrow,
+.moveSupportCopy { display: block; }
+.moveNetworkFlow { margin-top: 12px; }
+.moveFormFields { display: flex; flex-direction: column; gap: 10px; }
+.moveAmountHero { padding-block: 0; }
+.recipientSection { min-width: 0; }
+.advancedAddressGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.advancedAddressGrid > label:last-child { grid-column: 1 / -1; }
+.modeNotice { margin: -2px 0 0; }
+.bridgePreview { display: flex; flex-direction: column; gap: 7px; padding: 9px; border: 1px solid var(--line); border-radius: 16px; background: color-mix(in srgb, var(--surface-2) 72%, var(--surface)); }
+.bridgePreviewGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+
 .summaryCard {
   border-radius: 24px;
   background: color-mix(in srgb, var(--surface) 94%, var(--mint) 6%);
@@ -36,87 +53,38 @@
   background: color-mix(in srgb, var(--surface) 94%, var(--surface-2));
 }
 
-.reviewOverlay {
-  position: fixed;
-  z-index: 90;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  background: color-mix(in srgb, var(--bg) 68%, transparent);
-  backdrop-filter: blur(12px);
-  overscroll-behavior: contain;
-}
-
-.reviewSheet {
-  position: relative;
-  width: min(100%, 520px);
-  height: min(88dvh, 820px);
-  max-height: min(88dvh, 820px);
-  display: flex;
-  min-height: 0;
-  flex-direction: column;
-  overflow: hidden;
-  overscroll-behavior: contain;
+/* Transaction review is part of the product card. It replaces the editor in
+ * place and must never create a second viewport or trap the app behind a
+ * portal-backed modal. */
+.reviewInlineCard {
+  width: 100%;
+  max-width: 920px;
+  margin-inline: auto;
   border: 1px solid color-mix(in srgb, var(--mint) 24%, var(--line));
-  border-radius: 28px;
-  background: var(--surface);
-  box-shadow: 0 30px 90px rgba(0, 0, 0, .48);
-  scrollbar-width: thin;
+  box-shadow: 0 18px 48px color-mix(in srgb, var(--bg) 26%, transparent);
 }
 
-.reviewSheetCard {
-  border: 0 !important;
-  border-radius: inherit !important;
-  box-shadow: none !important;
-  min-height: 0;
-  flex: 1 1 auto;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-bottom: 132px !important;
-  scroll-padding-block: 12px 144px;
+.reviewInlineContent {
+  width: 100%;
+  min-width: 0;
 }
 
-/* Keep the route's first review action reachable above the fixed app nav. */
-.reviewTrigger {
-  position: sticky;
-  z-index: 10;
-  bottom: max(64px, env(safe-area-inset-bottom, 0px));
-  margin-inline: -2px;
-  padding: 6px 2px;
-  background: linear-gradient(to top, var(--bg) 68%, transparent);
-}
-
-.reviewSheetClose {
-  position: sticky;
-  z-index: 2;
-  top: 12px;
-  float: right;
-  display: inline-flex;
-  width: 44px;
-  height: 44px;
-  margin: 12px 12px -56px 0;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: var(--mut);
-  background: color-mix(in srgb, var(--surface-2) 92%, transparent);
-}
-
-.reviewSheetActions {
-  position: absolute;
-  z-index: 3;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  margin: 0;
-  padding: 12px 20px calc(12px + env(safe-area-inset-bottom, 0px));
+.reviewInlineActions {
+  margin-top: 16px;
+  padding-top: 12px;
   border-top: 1px solid var(--line);
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
-  box-shadow: 0 -14px 30px color-mix(in srgb, var(--bg) 36%, transparent);
-  backdrop-filter: blur(16px);
+}
+
+/* Review actions belong to the route card. Keeping them in normal flow makes
+   the connection/confirmation control feel attached to the form instead of
+   floating over the shell navigation. */
+.reviewTrigger {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
 }
 
 .eyebrow {
@@ -204,30 +172,469 @@
 @media (max-width: 560px) {
   .workspace { gap: 12px; }
   .networkFlow {
-    grid-template-columns: 1fr;
-    justify-items: stretch;
+    grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1fr);
     gap: 6px;
   }
   .networkArrow {
-    justify-self: center;
-    transform: rotate(90deg);
+    justify-self: stretch;
+    transform: none;
   }
   .reviewFacts { grid-template-columns: 1fr; }
-  .reviewOverlay {
-    align-items: flex-end;
-    padding: 0;
+}
+
+@media (max-width: 640px) {
+  .workspace { max-width: 100%; gap: 8px; }
+  .moveCard { padding: 12px !important; border-radius: 18px; }
+  .moveCard > :first-child h2 { font-size: 18px; }
+  .moveNetworkFlow { margin-top: 8px; }
+  .networkNode { min-height: 58px; padding: 9px 10px; border-radius: 14px; }
+  .networkArrow { min-height: 44px; min-width: 44px; }
+  .moveCard .hairline { margin-block: 9px; }
+  .moveCard .bridgePreview,
+  .moveCard .modeNotice { display: none; }
+  .moveFormFields { gap: 8px; }
+  .moveFormFields > details > summary { min-height: 44px; }
+  .moveFormFields > details > div { padding: 8px; }
+  .advancedAddressGrid { gap: 8px; }
+  .advancedAddressGrid label > span { margin-bottom: 4px; font-size: 11px; }
+  .advancedAddressGrid input,
+  .recipientSection input { min-height: 48px; padding-inline: 10px; }
+  .moveAmountHero :global(.amount-control) { min-height: 70px; }
+  .moveAmountHero :global(.amount-control) input { font-size: 28px; }
+  .recipientSection > div:first-child { margin-bottom: 4px; }
+  .recipientSection > div:last-child { min-height: 48px; }
+  .bridgePreview { padding: 8px; gap: 6px; }
+  .bridgePreviewGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .reviewTrigger { margin-top: 12px; padding-top: 10px; }
+  .reviewTrigger .primaryAction { min-height: 48px; }
+}
+
+/* The 360–640px band is still used by short phones (for example 360×640 and
+   374×706). Keep the canonical bridge controls paired there too; otherwise
+   the fixed tab bar can force the app-content pane to become scrollable. */
+@media (min-width: 360px) and (max-width: 640px) and (max-height: 760px) {
+  /* Short phones still have the full bridge/borrow ticket mounted. Keep the
+     shell chrome and the first review action in one frame by removing only
+     redundant route copy and pairing independent ticket fields. */
+  .borrowWorkspace,
+  .earnWorkspace { gap: 6px; }
+  .borrowWorkspace .productSwitch,
+  .earnWorkspace .productSwitch { padding: 3px; }
+  .borrowWorkspace .productSwitch > a,
+  .borrowWorkspace .productSwitch > span,
+  .earnWorkspace .productSwitch > a,
+  .earnWorkspace .productSwitch > span { min-height: 40px; padding-inline: 8px; font-size: 12px; }
+  .borrowWorkspace .disconnectedBorrowForm > div,
+  .earnWorkspace .focusCard > div { gap: 6px !important; }
+  .borrowWorkspace .disconnectedBorrowFields { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px !important; }
+  .borrowWorkspace .disconnectedBorrowFields > .formHeader { grid-column: 1 / -1; }
+  .borrowWorkspace .disconnectedBorrowFields > .formHeader p { display: block; }
+  .borrowWorkspace .disconnectedBorrowFields > .formHeader + div { grid-column: 1 / -1; }
+  .borrowWorkspace .disconnectedBorrowFields > label,
+  .borrowWorkspace .disconnectedBorrowFields > div > label { min-width: 0; }
+  .borrowWorkspace .disconnectedBorrowFields > label > span,
+  .borrowWorkspace .disconnectedBorrowFields > div > label > span { margin-bottom: 3px; font-size: 10px; line-height: 1.1; }
+  .borrowWorkspace .disconnectedBorrowFields :global(.field-control),
+  .borrowWorkspace .disconnectedBorrowFields :global(.amount-control) { min-height: 48px !important; padding-inline: 8px !important; border-radius: 12px; }
+  .borrowWorkspace .disconnectedBorrowFields :global(.amount-control) input { font-size: 21px !important; }
+  .borrowWorkspace .disconnectedBorrowFields :global(.token-pill) { padding: 5px 6px; font-size: 10px; }
+
+  .moveCard { padding: 10px !important; }
+  .moveEyebrow,
+  .moveSupportCopy { display: none; }
+  .moveCard > :first-child h2 { margin-top: 0; font-size: 17px; }
+  .moveNetworkFlow { margin-top: 7px; }
+  .networkNode { min-height: 52px; padding: 8px 9px; border-radius: 14px; }
+  .networkNode > span:first-child { font-size: 10px; }
+  .networkNode > span:last-child { margin-top: 0; font-size: 12px; }
+  .moveCard .hairline { margin-block: 7px; }
+  .moveFormFields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
   }
-  .reviewSheet {
-    width: 100%;
-    height: calc(100dvh - max(16px, env(safe-area-inset-top)));
-    max-height: calc(100dvh - max(16px, env(safe-area-inset-top)));
-    border-right: 0;
-    border-bottom: 0;
-    border-left: 0;
-    border-radius: 28px 28px 0 0;
-    padding-bottom: env(safe-area-inset-bottom);
+  .moveFormFields > details { grid-column: 2; grid-row: 1; }
+  .moveFormFields > .moveAmountHero { grid-column: 1; grid-row: 2; }
+  .moveFormFields > .recipientSection { grid-column: 2; grid-row: 2; }
+  .moveFormFields > .modeNotice { display: none; }
+  .moveFormFields > div:first-child { grid-column: 1; grid-row: 1; }
+  .moveFormFields > div:first-child > span { margin-bottom: 4px; font-size: 10px; }
+  .moveFormFields > div:first-child .field-control { min-height: 48px; padding-inline: 8px; font-size: 12px; }
+  .moveFormFields > details > summary { min-height: 48px; padding-inline: 8px; font-size: 10px; }
+  .moveAmountHero :global(.amount-control) { min-height: 72px; gap: 4px; padding-inline: 8px; }
+  .moveAmountHero :global(.amount-control) input { min-width: 0; font-size: 21px; }
+  .moveAmountHero :global(.amount-control) .token-pill { gap: 3px; padding-inline: 4px; font-size: 10px; }
+  .moveAmountHero > :global(div) > div:first-child { margin-bottom: 4px; }
+  .moveAmountHero > :global(div) > div:first-child > span { font-size: 10px; }
+  .recipientSection > div:first-child { min-height: 24px; margin-bottom: 4px; }
+  .recipientSection > div:first-child > span { font-size: 10px; }
+  .recipientSection > div:first-child > button { min-height: 32px; padding-inline: 4px; font-size: 10px; }
+  .recipientSection > div:last-child { min-height: 48px; gap: 2px; border-radius: 12px; padding-inline: 7px; }
+  .recipientSection > div:last-child > span { font-size: 10px; }
+  .recipientSection > div:last-child > span:last-child { text-align: right; }
+}
+
+@media (max-width: 359px) {
+  /* A 320px Telegram viewport has only a small content band between the
+     shell header and fixed navigation. Keep the complete canonical flow in
+     that band by pairing independent controls while retaining 44px targets. */
+  .moveCard { padding: 8px !important; }
+  .moveEyebrow,
+  .moveSupportCopy { display: none; }
+  .moveCard > :first-child h2 { margin-top: 0; font-size: 16px; }
+  .moveNetworkFlow { grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1fr); gap: 4px; }
+  .networkNode { min-height: 48px; padding: 7px 8px; }
+  .networkNode > span:first-child { font-size: 10px; }
+  .networkNode > span:last-child { margin-top: 0; font-size: 12px; }
+  .networkArrow { min-width: 44px; min-height: 44px; }
+  .moveCard .hairline { margin-block: 5px; }
+  .moveFormFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .moveFormFields > details { grid-column: 2; grid-row: 1; }
+  .moveFormFields > .moveAmountHero { grid-column: 1; grid-row: 2; }
+  .moveFormFields > .recipientSection { grid-column: 2; grid-row: 2; }
+  .moveFormFields > .modeNotice { display: none; }
+  .moveFormFields > div:first-child { grid-column: 1; grid-row: 1; }
+  .moveFormFields > div:first-child > span { margin-bottom: 4px; font-size: 10px; }
+  .moveFormFields > div:first-child .field-control { min-height: 48px; padding-inline: 8px; font-size: 12px; }
+  .moveFormFields > details > summary { min-height: 48px; padding-inline: 8px; font-size: 10px; }
+  .moveAmountHero :global(.amount-control) { min-height: 76px; gap: 4px; padding-inline: 8px; }
+  .moveAmountHero :global(.amount-control) input { min-width: 0; font-size: 20px; }
+  .moveAmountHero :global(.amount-control) .token-pill { gap: 3px; padding-inline: 4px; font-size: 10px; }
+  .moveAmountHero > :global(div) > div:first-child { margin-bottom: 4px; }
+  .moveAmountHero > :global(div) > div:first-child > span { font-size: 10px; }
+  .recipientSection > div:first-child { min-height: 24px; margin-bottom: 4px; }
+  .recipientSection > div:first-child > span { font-size: 10px; }
+  .recipientSection > div:first-child > button { min-height: 44px; padding-inline: 4px; font-size: 10px; }
+  .recipientSection > div:last-child { min-height: 48px; gap: 2px; border-radius: 12px; padding-inline: 6px; }
+  .recipientSection > div:last-child > span { display: none; }
+  .recipientSection > div:last-child > span:last-child { display: block; max-width: 100%; text-align: right; }
+  .recipientSection > div:last-child > button { min-height: 40px; padding-inline: 4px; font-size: 10px; }
+  .advancedAddressGrid { grid-template-columns: 1fr; }
+  .advancedAddressGrid > label:last-child { grid-column: auto; }
+  .bridgePreview { gap: 4px; padding: 6px; }
+  /* Route preview is derived metadata and unavailable while disconnected;
+     keep the canonical bridge ticket and review action as the focal surface
+     on the shortest phones. */
+  .moveCard .bridgePreview { display: none; }
+  .bridgePreviewGrid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; }
+  .bridgePreviewGrid > div { padding: 5px 4px; }
+  .bridgePreviewGrid > div span { font-size: 9px; }
+  .bridgePreview > p { display: none; }
+}
+
+/* Earn and Borrow share the flow primitives, but their forms contain more
+   state than Move. Keep the complete first action visible on short phones by
+   pairing independent fields while preserving the 44px control floor. */
+.earnWorkspace,
+.borrowWorkspace { min-width: 0; }
+
+/* Keep paired financial inputs aligned and compact without sacrificing touch size. */
+.borrowAmountGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.borrowAmountGrid > * { min-width: 0; }
+.borrowWorkspace .borrowAmountGrid { grid-column: 1 / -1; }
+.disconnectedBorrowFields .borrowAmountGrid { grid-column: 1 / -1; }
+.optionalWithdrawSettings { min-width: 0; }
+
+@media (max-width: 640px) {
+  .borrowAmountGrid { gap: 8px; }
+  .borrowAmountGrid :global(.amount-control) {
+    min-height: 64px !important;
+    padding-inline: 9px !important;
+    gap: 5px;
   }
-  .reviewSheetActions {
-    padding: 12px 20px calc(20px + env(safe-area-inset-bottom, 0px));
+  .borrowAmountGrid :global(.amount-control) input {
+    min-width: 0;
+    font-size: 21px !important;
+  }
+  .borrowAmountGrid :global(.token-pill) {
+    flex-shrink: 0;
+    gap: 3px;
+    padding: 5px 6px;
+    font-size: 10px;
+  }
+  .borrowAmountGrid :global(.token-pill svg) { width: 18px; height: 18px; }
+
+  /* Decision-critical withdrawal and borrowing context remains visible on
+     mobile. Secondary prose may wrap, but mode, fee, cooldown, and risk
+     controls must not disappear. */
+  .disconnectedEarnCard .optionalWithdrawSettings,
+  .disconnectedEarnCard :global(.info-note) { display: block; }
+  .earnWorkspace .optionalWithdrawSettings :global(.toggle-row) { min-height: 56px; }
+  .earnWorkspace .focusCard :global(.info-note),
+  .borrowWorkspace .focusCard :global(.info-note) { display: flex; }
+}
+
+@media (min-width: 840px) {
+  /* Desktop has room for a two-column bridge ticket. Pair independent
+     controls so the amount, recipient and review action stay in one frame
+     without sacrificing the route preview. */
+  .moveCard { padding: 14px !important; }
+  .moveCard .moveSupportCopy { display: none; }
+  .moveCard .moveNetworkFlow { margin-top: 8px; }
+  .moveCard .networkNode { min-height: 58px; padding: 10px; }
+  .moveCard .hairline { margin-block: 8px; }
+  .moveCard .moveFormFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .moveCard .moveFormFields > div:first-child { grid-column: 1; grid-row: 1; }
+  .moveCard .moveFormFields > details { grid-column: 2; grid-row: 1; }
+  .moveCard .moveFormFields > .modeNotice { display: none; }
+  .moveCard .moveFormFields > .moveAmountHero { grid-column: 1; grid-row: 2; }
+  .moveCard .moveFormFields > .recipientSection { grid-column: 2; grid-row: 2; }
+  .moveCard .moveFormFields > .bridgePreview { grid-column: 1 / -1; grid-row: 3; }
+  .moveCard .moveAmountHero :global(.amount-control) { min-height: 92px; }
+  .moveCard .recipientSection > div:last-child { min-height: 56px; }
+  .moveCard .bridgePreview { padding: 7px; gap: 5px; }
+  .moveCard .bridgePreviewGrid { gap: 5px; }
+
+  /* Desktop keeps the same single-ticket hierarchy, but uses the available
+     width to pair independent disconnected borrow fields. */
+  .borrowWorkspace .disconnectedBorrowForm,
+  .borrowWorkspace .disconnectedBorrowFields { gap: 12px !important; }
+  .borrowWorkspace .disconnectedBorrowFields { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .borrowWorkspace .disconnectedBorrowFields > .formHeader { grid-column: 1 / -1; }
+  .borrowWorkspace .disconnectedBorrowFields > .formHeader p,
+  .borrowWorkspace .disconnectedBorrowFields :global(.info-note) { display: block; }
+  .borrowWorkspace .disconnectedBorrowFields > .formHeader + div { grid-column: 1 / -1; }
+  .earnWorkspace .focusCard { padding: 14px !important; }
+  .earnWorkspace .focusCard > div { gap: 12px !important; }
+  .earnWorkspace .focusCard .formHeader,
+  .earnWorkspace .focusCard :global(.info-note) { display: block; }
+  .earnWorkspace > :global(.ui-card:first-of-type) p:nth-child(2) { display: none; }
+  .earnWorkspace .focusCard :global(.field-control) { min-height: 50px !important; }
+  .earnWorkspace .focusCard :global(.amount-control) { min-height: 72px !important; }
+  .earnWorkspace .focusCard :global(.range-control) { min-height: 46px !important; }
+}
+
+@media (min-width: 641px) and (max-width: 839px) {
+  /* Tablet shells have enough width for denser tickets but still retain the
+     fixed navigation clearance of the mobile host. */
+  .earnWorkspace,
+  .borrowWorkspace,
+  .moveWorkspace { gap: 10px; }
+  .borrowWorkspace .focusCard,
+  .earnWorkspace .focusCard { padding: 14px !important; }
+  .borrowWorkspace .disconnectedBorrowForm,
+  .borrowWorkspace .disconnectedBorrowFields { gap: 10px !important; }
+  .borrowWorkspace .disconnectedBorrowFields .formHeader p,
+  .borrowWorkspace .disconnectedBorrowFields :global(.info-note) { display: block; }
+  .moveWorkspace .moveCard .bridgePreview,
+  .moveWorkspace .moveCard .modeNotice { display: none; }
+}
+
+@media (max-width: 640px) {
+  .earnWorkspace,
+  .borrowWorkspace { gap: 8px; }
+
+  .earnWorkspace .focusCard,
+  .borrowWorkspace .focusCard,
+  .earnWorkspace .summaryCard,
+  .borrowWorkspace .summaryCard { padding: 12px !important; border-radius: 18px; }
+
+  .earnWorkspace .focusCard > div,
+  .borrowWorkspace .focusCard > div { gap: 8px !important; }
+
+  .earnWorkspace :global(.field-control),
+  .borrowWorkspace :global(.field-control),
+  .earnWorkspace :global(.range-control),
+  .borrowWorkspace :global(.range-control) { min-height: 48px !important; padding-inline: 10px !important; }
+
+  .earnWorkspace :global(.amount-control),
+  .borrowWorkspace :global(.amount-control) { min-height: 64px !important; padding-inline: 10px !important; }
+
+  .earnWorkspace :global(.amount-control) input,
+  .borrowWorkspace :global(.amount-control) input { font-size: 26px !important; }
+
+  .earnWorkspace :global(.token-pill),
+  .borrowWorkspace :global(.token-pill) { padding: 7px 9px; font-size: 11px; }
+
+  .earnWorkspace :global(.info-note),
+  .borrowWorkspace :global(.info-note) { padding: 8px !important; font-size: 10.5px; line-height: 1.35; }
+
+  .earnWorkspace .sectionTitle,
+  .borrowWorkspace .sectionTitle { font-size: 15px; }
+  .earnWorkspace .supportCopy,
+  .borrowWorkspace .supportCopy { font-size: 11px; line-height: 1.35; }
+
+  .borrowWorkspace select { min-height: 48px !important; padding-inline: 10px !important; font-size: 14px !important; }
+  .borrowWorkspace .summaryCard h2 { margin-top: 4px; font-size: 16px; }
+  .borrowWorkspace .summaryCard [class*='mt-4'] { margin-top: 8px !important; }
+  .borrowWorkspace .summaryCard [class*='mt-3'] { margin-top: 6px !important; }
+
+  /* Disconnected borrow reads do not have live balances or a route yet. Keep
+     the ticket itself complete, but defer explanatory/status copy until a
+     wallet is connected so the review action is never pushed below the fold. */
+  .borrowWorkspace .disconnectedBorrowForm,
+  .borrowWorkspace .disconnectedBorrowFields { gap: 8px !important; }
+  .borrowWorkspace .disconnectedBorrowFields .formHeader p,
+  .borrowWorkspace .disconnectedBorrowFields > p,
+  .borrowWorkspace .disconnectedBorrowFields :global(.info-note) { display: block; }
+}
+
+@media (max-width: 359px) and (max-height: 700px) {
+  /* Borrow has two compact selectors before its ticket. On the shortest
+     phones the route title is redundant with the shell and costs the exact
+     space needed for the ticket's first action. */
+  .earnWorkspace,
+  .borrowWorkspace { gap: 6px; }
+
+  .earnWorkspace .productSwitch,
+  .borrowWorkspace .productSwitch { padding: 3px; }
+  .earnWorkspace .productSwitch > a,
+  .earnWorkspace .productSwitch > span,
+  .borrowWorkspace .productSwitch > a,
+  .borrowWorkspace .productSwitch > span { min-height: 44px; padding-inline: 6px; font-size: 11px; }
+
+  .earnWorkspace .focusCard,
+  .borrowWorkspace .focusCard,
+  .earnWorkspace .summaryCard,
+  .borrowWorkspace .summaryCard { padding: 8px !important; }
+  .earnWorkspace .focusCard > div,
+  .borrowWorkspace .focusCard > div { gap: 6px !important; }
+
+  /* Form labels remain present, but their supporting copy uses the available
+     width more efficiently at 320px. */
+  .earnWorkspace .supportCopy,
+  .borrowWorkspace .supportCopy { font-size: 10px; line-height: 1.25; }
+  .earnWorkspace :global(.amount-control),
+  .borrowWorkspace :global(.amount-control) { min-height: 56px !important; }
+  .earnWorkspace :global(.amount-control) input,
+  .borrowWorkspace :global(.amount-control) input { font-size: 22px !important; }
+  .earnWorkspace :global(.field-control),
+  .borrowWorkspace :global(.field-control),
+  .earnWorkspace :global(.range-control),
+  .borrowWorkspace :global(.range-control) { min-height: 46px !important; }
+
+  .borrowWorkspace .disconnectedBorrowForm,
+  .borrowWorkspace .disconnectedBorrowForm > div { gap: 6px !important; }
+  .borrowWorkspace .disconnectedBorrowForm .formHeader h2 { font-size: 15px !important; }
+  .borrowWorkspace .disconnectedBorrowForm .formHeader p { display: block; }
+  .borrowWorkspace .disconnectedBorrowForm :global(.field-control),
+  .borrowWorkspace .disconnectedBorrowForm :global(.amount-control) { min-height: 44px !important; }
+  .borrowWorkspace .disconnectedBorrowForm :global(.amount-control) input { font-size: 20px !important; }
+  .borrowWorkspace .disconnectedBorrowForm :global(.info-note) { display: flex; }
+
+  /* The disconnected ticket still exposes every input, but the compact 320px
+     viewport pairs independent fields so the first review action stays in the
+     same frame. Labels remain visible and the controls keep a comfortable
+     touch target. */
+  .borrowWorkspace .disconnectedBorrowFields { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px !important; }
+  .borrowWorkspace .disconnectedBorrowFields > .formHeader { grid-column: 1 / -1; }
+  .borrowWorkspace .disconnectedBorrowFields > .formHeader h2 { margin: 0; }
+  .borrowWorkspace .disconnectedBorrowFields > .formHeader + div { grid-column: 1 / -1; }
+  .borrowWorkspace .disconnectedBorrowFields > .formHeader + p { grid-column: 1 / -1; margin: 0; padding: 4px 8px !important; }
+  .borrowWorkspace .disconnectedBorrowFields > label > span,
+  .borrowWorkspace .disconnectedBorrowFields > div > label > span { margin-bottom: 2px; font-size: 10px; line-height: 1.1; }
+  .borrowWorkspace .disconnectedBorrowFields > label,
+  .borrowWorkspace .disconnectedBorrowFields > div > label { min-width: 0; }
+  .borrowWorkspace .disconnectedBorrowFields :global(.field-control),
+  .borrowWorkspace .disconnectedBorrowFields :global(.amount-control) { padding-inline: 7px !important; border-radius: 11px; }
+  .borrowWorkspace .disconnectedBorrowFields :global(.amount-control) { gap: 4px !important; }
+  .borrowWorkspace .disconnectedBorrowFields :global([class*='amountBalanceMeta']) { display: flex; }
+  .borrowWorkspace .disconnectedBorrowFields :global(.amount-control) .token-pill { gap: 2px; padding: 4px 5px; font-size: 10px; }
+  .borrowWorkspace .disconnectedBorrowFields :global(.amount-control) .token-pill svg { width: 18px; height: 18px; }
+
+  .borrowWorkspace > .productSwitch > a,
+  .borrowWorkspace > .productSwitch > span { min-height: 44px; }
+  .borrowWorkspace > div.rounded-2xl { padding: 2px !important; }
+  .borrowWorkspace > div.rounded-2xl .segmented-option { min-height: 44px; padding-block: 5px; }
+
+  .earnWorkspace > :global(.ui-card):first-of-type { min-height: 40px; padding: 6px 10px !important; }
+  .earnWorkspace > :global(.ui-card):first-of-type p:nth-child(2) { display: none; }
+  .earnWorkspace > div.rounded-2xl { padding: 2px !important; }
+  .earnWorkspace > div.rounded-2xl .segmented-option { min-height: 44px; padding-block: 5px; }
+  .earnWorkspace .focusCard .formHeader p { display: block; }
+  .earnWorkspace .focusCard :global(.field-control),
+  .earnWorkspace .focusCard :global(.amount-control) { min-height: 44px !important; padding-inline: 7px !important; border-radius: 11px; }
+  .earnWorkspace .focusCard :global(.amount-control) input { font-size: 20px !important; }
+
+  .borrowWorkspace .focusCard > div,
+  .earnWorkspace .focusCard > div { display: flex; flex-direction: column; align-items: stretch; }
+  .borrowWorkspace .focusCard > div > :global(.info-note),
+  .earnWorkspace .focusCard > div > :global(.info-note) { width: 100%; }
+
+  .borrowWorkspace .summaryCard h2 { font-size: 15px; }
+  .borrowWorkspace .summaryCard .metric,
+  .earnWorkspace .summaryCard .metric { padding: 7px !important; }
+  .borrowWorkspace .summaryCard [class*='mt-4'],
+  .earnWorkspace .summaryCard [class*='mt-5'] { margin-top: 6px !important; }
+}
+
+/* Canonical Move stays legible on normal phones: one full-width field per
+   row, while the very shortest layout above remains intentionally compact. */
+@media (min-width: 360px) and (max-width: 640px) {
+  .moveCard .moveFormFields {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .moveCard .moveFormFields > details { display: none; }
+  .moveCard .moveFormFields > .moveAmountHero,
+  .moveCard .moveFormFields > .recipientSection {
+    grid-column: auto;
+    grid-row: auto;
+  }
+}
+
+/* Final narrow-screen guardrails. The paired disconnected borrow fields are
+   intentionally dense, but the value and token pill must still read as one
+   complete control. Keep the balance line quiet until a wallet can provide a
+   real value, and give the token selector enough room to show its symbol. */
+@media (max-width: 640px) {
+  .borrowWorkspace .disconnectedBorrowFields :global([class*='amountBalanceMeta']) { display: flex !important; }
+  .borrowWorkspace .disconnectedBorrowFields :global(.amount-control) {
+    gap: 3px !important;
+    padding-inline: 6px !important;
+  }
+  .borrowWorkspace .disconnectedBorrowFields :global(.amount-control) input {
+    min-width: 0;
+    font-size: 20px !important;
+    letter-spacing: -0.04em;
+  }
+  .borrowWorkspace .disconnectedBorrowFields :global(.amount-control) .token-pill {
+    gap: 2px;
+    padding: 3px 4px;
+    font-size: 9px;
+  }
+  .borrowWorkspace .disconnectedBorrowFields :global(.amount-control) .token-pill svg {
+    width: 17px;
+    height: 17px;
+  }
+}
+
+@media (max-width: 420px) {
+  .borrowAmountGrid { grid-template-columns: minmax(0, 1fr); }
+  .borrowAmountGrid > * { width: 100%; }
+  .earnWorkspace .focusCard :global(.amount-control),
+  .borrowWorkspace .focusCard :global(.amount-control) { min-height: 72px !important; }
+  .earnWorkspace .focusCard :global(.amount-control) input,
+  .borrowWorkspace .focusCard :global(.amount-control) input { font-size: 24px !important; }
+}
+
+
+/* On the shortest Telegram viewport the asset selector gets a full row so
+   fxUSD/fxSAVE never collapses to an ellipsis. Amount and recipient remain
+   paired beneath it, preserving the first review action above the nav. */
+@media (max-width: 359px) {
+  .moveCard .moveFormFields {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .moveCard .moveFormFields > details { display: none; }
+  .moveCard .moveFormFields > .moveAmountHero,
+  .moveCard .moveFormFields > .recipientSection { grid-column: auto; grid-row: auto; }
+  .moveCard .moveFormFields > div:first-child {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+  .moveCard .moveFormFields > .moveAmountHero,
+  .moveCard .moveFormFields > .recipientSection {
+    grid-row: 2;
   }
 }

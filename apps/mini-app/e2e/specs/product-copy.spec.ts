@@ -3,17 +3,11 @@ import { expect, test, assertNoBackendRequests } from '../fixtures/test';
 test.describe('product copy and session visibility', () => {
   test.use({ telegram: false });
 
-  test('landing page uses the concise product copy and credits whiz', async ({ page, requests }) => {
+  test('root opens the concise Portfolio workspace', async ({ page, requests }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await expect(page.getByRole('heading', { name: /your next move/i })).toBeVisible();
-    await expect(page.getByText(/all in one place/i)).toBeVisible();
-    await expect(page.getByText(/all from your wallet/i)).toHaveCount(0);
-    await expect(page.getByText('Your assets. Your wallet. Your call.', { exact: true })).toHaveCount(0);
-    await expect(page.getByText('Made for the way you move.', { exact: true })).toHaveCount(0);
-    const whiz = page.getByRole('link', { name: /Made by whiz/ });
-    await expect(whiz).toBeVisible();
-    await expect(whiz).toContainText('❤️');
-    await expect(whiz).toHaveAttribute('href', 'https://x.com/0xWhizMiz');
+    await expect(page).toHaveURL(/\/portfolio\/?$/);
+    await expect(page.getByRole('heading', { name: 'Portfolio', exact: true })).toBeVisible();
+    await expect(page.getByText('Connect wallet', { exact: true }).last()).toBeVisible();
     assertNoBackendRequests(requests);
   });
 

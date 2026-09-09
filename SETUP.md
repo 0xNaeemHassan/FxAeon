@@ -42,12 +42,12 @@ When configured, Privy should allow the exact local, preview, and production ori
 
 ### Where production values go
 
-The checked-in deployment workflow reads build-time values before it creates the static `dist/` artifact. Add them in **GitHub → repository Settings → Secrets and variables → Actions**:
+The checked-in deployment workflow reads build-time values before it creates a verification `dist/` artifact. Add them in **GitHub → repository Settings → Secrets and variables → Actions**:
 
 - **Secrets:** `NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL`, `NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL`, `NEXT_PUBLIC_ALCHEMY_DATA_API_KEY`, and (when used) `NEXT_PUBLIC_PRIVY_APP_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`.
 - **Variables:** `NEXT_PUBLIC_TELEGRAM_APP_URL` — for this deployment use `https://t.me/FxAeonBot` (or a Telegram direct Mini App link if BotFather assigns one).
 
-For a local build, copy `apps/mini-app/.env.example` to `apps/mini-app/.env.local` and replace the two Alchemy placeholders with the matching `/v2/<key>` endpoints. Cloudflare Pages dashboard builds must define the same values under **Workers & Pages → project → Settings → Environment variables** for the selected Preview/Production environment; they are consumed at build time, not dynamically at runtime.
+For a local build, copy `apps/mini-app/.env.example` to `apps/mini-app/.env.local` and replace the two Alchemy placeholders with the matching `/v2/<key>` endpoints. Cloudflare Pages dashboard builds must define the same values under **Workers & Pages → project → Settings → Environment variables** for the selected Preview/Production environment; they are consumed at build time, not dynamically at runtime. GitHub secrets do not automatically become Cloudflare build variables. The release workflow therefore checks the published JavaScript for the expected public Privy app ID before it updates the Telegram bot menu.
 
 ## Development
 
@@ -92,7 +92,7 @@ Optional `ANVIL_FORK_BLOCK`, `ANVIL_PORT`, and `FX_ANVIL_ITERATIONS` variables c
 
 ## Static deployment
 
-The release artifact is `apps/mini-app/dist/`. The checked-in Cloudflare Pages workflow targets the `fxaeon` project—the project behind `https://fxaeon.pages.dev/`—and performs a frozen install, production-environment validation, the complete `pnpm verify` gate, and then deploys that directory. Verify that the target project exists before dispatching the manual workflow.
+The release artifact is `apps/mini-app/dist/`. Cloudflare Pages' native Git integration publishes the `fxaeon` project—the project behind `https://fxaeon.pages.dev/`. The checked-in GitHub workflow independently performs a frozen installation, production-environment validation, the complete `pnpm verify` gate, builds the same artifact, waits for the commit-scoped Cloudflare Pages check, and verifies that the live bundle contains the expected public wallet configuration before updating Telegram. Verify that the target project exists before dispatching the manual workflow.
 
 ### Cloudflare dashboard build settings
 
@@ -105,7 +105,7 @@ The pasted build log reaches `Success: Build command completed` and then fails b
 | Build output directory | `apps/mini-app/dist` |
 | Deploy command | Leave blank for Pages; Pages publishes the output directory automatically |
 
-If the provider requires an explicit deploy command, use `pnpm exec wrangler pages deploy apps/mini-app/dist --project-name=fxaeon` instead of `npx wrangler deploy`. The repository workflow already uses this Pages-specific command. Do not configure a Worker deploy for this static export.
+If the provider requires an explicit deploy command, use `pnpm exec wrangler pages deploy apps/mini-app/dist --project-name=fxaeon` instead of `npx wrangler deploy`. The repository currently uses Cloudflare's native Pages Git build and waits for its commit check; it does not run Wrangler from GitHub Actions. Do not configure a Worker deploy for this static export.
 
 The protected environment supplies:
 

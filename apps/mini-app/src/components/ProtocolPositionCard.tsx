@@ -36,18 +36,15 @@ function positionValuation(position: UiPosition, prices: ReturnType<typeof useUs
 function PositionBody({
   position,
   compact,
-  stale,
 }: {
   position: UiPosition;
   compact: boolean;
-  stale: boolean;
 }) {
-  const { prices, status: priceStatus, refreshing: pricesRefreshing } = useUsdPrices();
+  const { prices } = useUsdPrices();
   const collateral = formatAmount(position.info.rawColls, positionTokenDecimals(position, 'collateral'));
   const debt = formatAmount(position.info.rawDebts, positionTokenDecimals(position, 'debt'));
   const valuation = positionValuation(position, prices);
-  const pricePending = priceStatus === 'loading' || pricesRefreshing;
-  const missingPrice = pricePending ? 'Value loading…' : 'Price delayed · retrying';
+  const missingPrice = '—';
   const netEquity = valuation.netEquityUsdCents === null ? '—' : formatUsdCents(valuation.netEquityUsdCents);
   const collateralUsd = valuation.collateralUsdCents === null ? missingPrice : formatUsdCents(valuation.collateralUsdCents);
   const debtUsd = valuation.debtUsdCents === null ? missingPrice : formatUsdCents(valuation.debtUsdCents);
@@ -63,7 +60,6 @@ function PositionBody({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className={`text-display text-[15px] font-semibold ${position.side === 'long' ? 'text-success' : 'text-danger'}`}>{position.market} {position.side === 'long' ? 'Long' : 'Short'}</span>
-            {stale && <span className="rounded-full bg-[rgba(255,194,102,.12)] px-2 py-0.5 text-[12px] font-semibold text-warn">Last verified</span>}
           </div>
           <p className="mt-1 text-[12px] text-mut">#{position.info.positionId} · {leverage} {leverageInfo.label}</p>
         </div>
@@ -71,7 +67,6 @@ function PositionBody({
           <span className="block text-[11px] text-mut">Est. net equity</span>
           <span className="mt-0.5 block break-words text-[14px] font-semibold tabular-nums">{netEquity}</span>
           {valuation.netEquityUsdCents === null && <span className="block text-[10px] text-mut">{missingPrice}</span>}
-          {priceStatus === 'stale' && <span className="block text-[10px] text-mut">Last prices</span>}
         </div>
         <ArrowUpRight className="h-4 w-4 shrink-0 text-[var(--mut-2)]" aria-hidden="true" />
       </div>
@@ -101,7 +96,6 @@ export function ProtocolPositionCard({
   compact = false,
   highlighted = false,
   selected = false,
-  stale = false,
   href,
   onSelect,
   onNavigate,
@@ -111,14 +105,13 @@ export function ProtocolPositionCard({
   compact?: boolean;
   highlighted?: boolean;
   selected?: boolean;
-  stale?: boolean;
   href?: string;
   onSelect?: () => void;
   onNavigate?: () => void;
   className?: string;
 }) {
   const classes = `astryx-card ${href || onSelect ? 'glass-press' : ''} block w-full rounded-2xl border p-3.5 text-left transition ${selected ? 'border-[var(--mint)] bg-[var(--surface-2)]' : 'border-[var(--line)]'} ${highlighted ? 'ring-2 ring-[var(--success)] ring-offset-2 ring-offset-[var(--bg)]' : ''} ${className}`;
-  const body = <PositionBody position={position} compact={compact} stale={stale} />;
+  const body = <PositionBody position={position} compact={compact} />;
 
   if (href) {
     return <Link href={href} onClick={onNavigate} className={classes} data-position-key={positionKey(position)}>{body}</Link>;
@@ -152,16 +145,16 @@ export function ProtocolPositionNotice({
 }) {
   if (status === 'idle' || status === 'loading' || status === 'ready') return null;
   const groups = failedGroups.map((group) => `${group.market} ${group.side}`).join(', ');
-  const message = status === 'partial'
-    ? `Could not refresh ${groups || 'some positions'}. Affected positions show their last verified details.`
+  const label = status === 'partial' && hasPositions
+    ? `Refreshing ${groups || 'position details'}`
     : hasPositions
-      ? 'Could not refresh your positions. Showing last verified details.'
-      : 'Positions are temporarily unavailable. Try refreshing.';
+      ? `Could not refresh ${groups || 'positions'}; showing last verified details`
+      : 'Positions are temporarily unavailable';
 
   return (
-    <div role="status" className={`flex items-start gap-2.5 rounded-xl border border-[rgba(255,194,102,.2)] bg-[rgba(255,194,102,.08)] text-warn ${compact ? 'p-2.5' : 'p-3'}`}>
+    <div role="status" aria-label={label} className={`flex items-center gap-2.5 rounded-xl border border-[rgba(255,194,102,.2)] bg-[rgba(255,194,102,.08)] text-warn ${compact ? 'p-2.5' : 'p-3'}`}>
       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-      <p className="flex-1 text-[12px] leading-relaxed">{message}</p>
+      <span className="flex-1 text-[11px] leading-relaxed">{label}</span>
       {onRefresh && (
         <button type="button" onClick={onRefresh} disabled={refreshing} aria-label="Retry position verification" className="glass-press flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg disabled:opacity-50">
           <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} aria-hidden="true" />

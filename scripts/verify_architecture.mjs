@@ -28,12 +28,18 @@ for (const file of await walk(sourceRoot)) {
   const source = await readFile(file, 'utf8');
   const name = relative(root, file).replaceAll('\\', '/');
   const isFacade = name.startsWith('apps/mini-app/src/lib/fx/');
-  if (/from\s+["']@aladdindao\/fx-sdk["']/.test(source)
+  if (source.includes('@aladdindao/fx-sdk')
     && !isFacade && !directSdkAllowlist.has(name)) {
     fail(`direct SDK import must stay behind the fx façade or an audited display adapter: ${name}`);
   }
   if (/from\s+["']@\/lib\/fx\/sdk["']/.test(source) && !isFacade) {
     fail(`SDK singleton import escaped the fx façade: ${name}`);
+  }
+  // Keep the process-wide SDK singleton private even when a route tries to
+  // reach it through the barrel export (`@/lib/fx`). Product code should use
+  // the typed read façade or the service boundary instead.
+  if (/\b(?:getFxSdk|createFxSdkFacade)\s*\(/.test(source) && !isFacade) {
+    fail(`SDK singleton construction escaped the fx façade: ${name}`);
   }
   if (/\bnew\s+(?:Shared)?Worker\s*\(|navigator\.serviceWorker\.register\s*\(|\bimportScripts\s*\(/.test(source)
     && !isFacade) {

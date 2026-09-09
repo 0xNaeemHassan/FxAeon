@@ -9,7 +9,7 @@
  * wallet at the time it is submitted.
  */
 import { useCallback, useMemo, useState } from 'react';
-import { KeyRound, Plus, Wallet } from 'lucide-react';
+import { KeyRound, Plus, RefreshCw, Wallet } from 'lucide-react';
 import {
   useCreateWallet,
   useExportWallet,
@@ -52,7 +52,7 @@ function PrivyWalletControls() {
       await createWallet();
       haptic('success');
     } catch (cause) {
-      setError(userSafeError(cause, 'Wallet creation was cancelled or unavailable.'));
+      setError(userSafeError(cause, 'Wallet creation was cancelled.'));
       haptic('error');
     } finally {
       setBusy('none');
@@ -65,7 +65,7 @@ function PrivyWalletControls() {
     try {
       await connect();
     } catch (cause) {
-      setError(userSafeError(cause, 'Wallet connection was cancelled or unavailable.'));
+      setError(userSafeError(cause, 'Wallet connection was cancelled.'));
       haptic('error');
     } finally {
       setBusy('none');
@@ -83,7 +83,7 @@ function PrivyWalletControls() {
     } catch (cause) {
       // Closing the modal is expected. Surface other failures for recovery.
       if (cause instanceof Error && !/cancel|exit|closed/i.test(cause.message)) {
-        setError(userSafeError(cause, 'Wallet export is temporarily unavailable.'));
+        setError(userSafeError(cause, 'Wallet export could not be completed.'));
       }
     } finally {
       setBusy('none');
@@ -91,7 +91,7 @@ function PrivyWalletControls() {
   }, [embedded?.address, exportWallet]);
 
   if (!ready) {
-    if (readyTimedOut) return <div role="alert"><Card><p className="text-[13px] font-semibold">Wallet did not load</p><p className="mt-1 text-[12px] leading-relaxed text-mut">Check your connection or reopen FxAeon.</p><Button onClick={() => window.location.reload()} className="mt-3">Reload wallet</Button></Card></div>;
+    if (readyTimedOut) return <div role="alert" aria-live="polite" aria-label="Wallet provider unavailable"><Card className="flex flex-col gap-3"><p className="text-[12px] text-warn">Wallet services did not become available. Retry before attempting a wallet action.</p><Button aria-label="Retry wallet provider" onClick={() => window.location.reload()} className="flex min-h-11 items-center justify-center rounded-xl px-3"><RefreshCw className="h-4 w-4" aria-hidden="true" /> Retry wallet</Button></Card></div>;
     return <div role="status" aria-live="polite"><Card className="h-24 animate-pulse"><span className="sr-only">Loading wallet provider</span></Card></div>;
   }
 

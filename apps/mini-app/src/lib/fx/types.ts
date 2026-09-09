@@ -358,6 +358,8 @@ export interface TransactionRunnerOptions {
 export interface PendingHashRecord {
   id: string;
   operation: OfficialFxMethod;
+  /** Human action captured from the reviewed route; never controls execution. */
+  intent?: PendingActionIntent;
   walletAddress: Address;
   chainId: FxChainId;
   hash: Hex;
@@ -375,6 +377,11 @@ export interface PendingHashRecord {
   updatedAt?: number;
   status: "pending" | "confirmed" | "failed";
 }
+
+export type PendingActionIntent =
+  | 'Open position' | 'Increase position' | 'Reduce position' | 'Close position'
+  | 'Adjust leverage' | 'Borrow' | 'Add collateral' | 'Repay' | 'Withdraw collateral'
+  | 'Repay and withdraw' | 'Deposit' | 'Withdraw' | 'Queue withdrawal' | 'Claim' | 'Bridge';
 
 export interface PendingBridgeContext {
   destinationChainId: FxChainId;

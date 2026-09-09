@@ -2,9 +2,14 @@
 
 These documents describe the active client-first product and its release process.
 
+FxAeon opens directly to Portfolio in both the browser and Telegram Mini App;
+there is no landing page in the app. Product routes keep their forms and
+primary actions together, while `/docs` is the intentionally scrollable
+reading surface.
+
 ## User guide
 
-The client includes a searchable, read-only [`/docs` guide](../apps/mini-app/src/app/docs/page.tsx), available from **More → FxAeon docs** in this revision. It covers getting started, wallet signing, Trade, Earn, Borrow, Move, fees, recovery, and risks. The guide supports the app’s official, neutral-dark, and light themes and needs neither a connected wallet nor Telegram. A local or preview build of this revision is required until it is deployed.
+The client includes a searchable, read-only [`/docs` guide](../apps/mini-app/src/app/docs/page.tsx), available from **More → FxAeon docs** in this revision. It covers getting started, wallet signing, Trade, Positions, Earn, Borrow, Move, History, fees, recovery, and risks. The guide supports the app’s official, neutral-dark, and light themes and needs neither a connected wallet nor Telegram. A local or preview build of this revision is required until it is deployed.
 
 ![FxAeon’s in-app documentation with searchable section navigation](assets/fxaeon-docs.png)
 

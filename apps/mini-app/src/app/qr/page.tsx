@@ -58,7 +58,7 @@ function WalletQr() {
   };
 
   return (
-    <div className={styles.utilityWorkspace}>
+    <div className={`${styles.utilityWorkspace} ${styles.qrWorkspace}`}>
       <Card className={`${styles.utilityCard} flex flex-col items-center gap-4 p-5`}>
         <div className="rounded-2xl bg-white p-3.5 shadow-sm">
           <QRCodeSVG value={address} size={208} level="M" title="Your EVM wallet address" />

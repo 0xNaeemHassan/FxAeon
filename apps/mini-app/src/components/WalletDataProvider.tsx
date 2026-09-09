@@ -38,11 +38,6 @@ const WalletAssetsContext = createContext<WalletAssetsHookResult>({
 });
 const RealtimeChainContext = createContext<Record<FxChainId, RealtimeChainState>>(EMPTY_CHAIN_STATE);
 
-export type WalletPulse = {
-  assets: WalletAssetsHookResult;
-  chains: Record<FxChainId, RealtimeChainState>;
-};
-
 export default function WalletDataProvider({ children, enabled = true, expandedAssets = true, chainPulse = true }: { children: React.ReactNode; enabled?: boolean; expandedAssets?: boolean; chainPulse?: boolean }) {
   const wallet = usePrivyWallet();
   const [config] = useState(createWalletDataConfig);
@@ -110,7 +105,7 @@ export function useWalletBalances({ address, chainId = 1, enabled = true }: {
     data: status === 'ready' ? query.data ?? null : null,
     status,
     isFetching: active && query.isFetching,
-    error: status === 'unavailable' ? 'Wallet balances are temporarily unavailable.' : '',
+    error: '',
     refresh,
   }), [active, query.data, query.isFetching, refresh, status]);
 }
@@ -139,10 +134,6 @@ export function useWalletAssets({ address, enabled = true }: { address?: string;
 export function useRealtimeChainState(chainId?: FxChainId): Record<FxChainId, RealtimeChainState> | RealtimeChainState {
   const state = useContext(RealtimeChainContext);
   return chainId ? state[chainId] : state;
-}
-
-export function useWalletPulse({ address, enabled = true }: { address?: string; enabled?: boolean } = {}): WalletPulse {
-  return { assets: useWalletAssets({ address, enabled }), chains: useContext(RealtimeChainContext) };
 }
 
 function WalletAssetLayer({ address, enabled, expandedAssets, chainPulse, children }: { address?: string; enabled: boolean; expandedAssets: boolean; chainPulse: boolean; children: React.ReactNode }) {
@@ -263,7 +254,7 @@ function WalletAssetLayer({ address, enabled, expandedAssets, chainPulse, childr
       : Object.values(merged.networks).some((network) => network.status === 'unavailable') ? 'unavailable'
         : Object.values(merged.networks).some((network) => network.status === 'partial') ? 'partial' : 'ready'
       : indexed.isError && ethereum.isError && base.isError ? 'unavailable' : 'loading';
-  const error = status === 'unavailable' ? 'Wallet assets are temporarily unavailable.' : status === 'partial' ? 'Some wallet assets are temporarily unavailable.' : '';
+  const error = '';
   const value = useMemo<WalletAssetsHookResult>(() => ({ data: merged, status, isFetching: indexed.isFetching || ethereum.isFetching || base.isFetching, error, refresh }), [base.isFetching, error, ethereum.isFetching, indexed.isFetching, merged, refresh, status]);
   return <WalletAssetsContext.Provider value={value}><RealtimeChainContext.Provider value={chainStates}><BalanceBlockWatcher chainId={1} /><BalanceBlockWatcher chainId={8453} />{children}</RealtimeChainContext.Provider></WalletAssetsContext.Provider>;
 }

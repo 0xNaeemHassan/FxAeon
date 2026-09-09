@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   createWalletDemandRegistry,
   type WalletDemand,
@@ -22,7 +22,7 @@ export default function WalletDemandProvider({ routeDemand, routeKey, children }
   const registryRef = useRef<WalletDemandRegistry | null>(null);
   if (!registryRef.current) registryRef.current = createWalletDemandRegistry(routeDemand);
   registryRef.current.setRouteDemand(routeDemand);
-  const [, setRevision] = useState(0);
+  const [revision, setRevision] = useState(0);
   const [profile, setProfile] = useState<{ address: string; routeKey: string } | null>(null);
   const register = useCallback((demand: WalletDemandRegistration) => {
     const unregister = registryRef.current!.register(demand);
@@ -40,7 +40,17 @@ export default function WalletDemandProvider({ routeDemand, routeKey, children }
   // provider's enable transition. Associate the open state with its pathname
   // to distinguish those two cases without global UI state.
   const walletProfileAddress = isWalletProfileOpenForRoute(profile, profile?.address, routeKey) ? profile!.address : null;
-  const value: WalletDemandContextValue = { demand: registryRef.current!.getDemand(), register, walletProfileAddress, setWalletProfileAddress };
+  // Registration changes are the only event that can alter the effective
+  // demand. Keep the context value stable across unrelated route renders so
+  // every consumer does not re-render just because the provider function ran.
+  const { effective: demand } = useMemo(() => ({
+    effective: registryRef.current!.getDemand(),
+    // Keep route changes and registration revisions explicit dependencies of
+    // this snapshot; both can alter the registry before this render.
+    revision,
+    routeDemand,
+  }), [revision, routeDemand]);
+  const value = useMemo<WalletDemandContextValue>(() => ({ demand, register, walletProfileAddress, setWalletProfileAddress }), [demand, register, setWalletProfileAddress, walletProfileAddress]);
   return <WalletDemandContext.Provider value={value}>{children}</WalletDemandContext.Provider>;
 }
 

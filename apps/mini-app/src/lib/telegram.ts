@@ -57,6 +57,25 @@ function locationHasTelegramLaunchParams(): boolean {
   return /(?:^|[?&#])tgWebApp(?:Data|Version|Platform|ThemeParams)=/i.test(locationValue);
 }
 
+/**
+ * Detect the Telegram host even when its WebApp bridge has not finished
+ * loading.  A Mini App can briefly render before `telegram-web-app.js`
+ * attaches `window.Telegram`; treating that interval as an ordinary browser
+ * is what used to surface the misleading “No browser wallet detected” error
+ * in Telegram.  The user-agent/proxy hints are only host signals — signed
+ * `WebApp.initData` remains the authentication authority.
+ */
+export function looksLikeTelegramUserAgent(userAgent: string): boolean {
+  return /Telegram/i.test(userAgent);
+}
+
+function userAgentHasTelegramHost(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const telegramProxy = typeof window !== 'undefined'
+    && typeof (window as Window & { TelegramWebviewProxy?: unknown }).TelegramWebviewProxy !== 'undefined';
+  return looksLikeTelegramUserAgent(navigator.userAgent) || telegramProxy;
+}
+
 // Capture the launch marker before client navigation or an authentication SDK
 // can consume/replace the initial hash. This is only an availability hint;
 // signed WebApp.initData remains the authentication authority.
@@ -114,7 +133,7 @@ export function isTMA(): boolean {
  * for seamless Telegram authentication.
  */
 export function isTelegramLaunchContext(): boolean {
-  return isTMA() || hasTelegramLaunchSignal();
+  return isTMA() || hasTelegramLaunchSignal() || userAgentHasTelegramHost();
 }
 
 /** Open a reviewed external URL through Telegram when available. */

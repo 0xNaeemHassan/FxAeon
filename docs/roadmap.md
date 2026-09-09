@@ -1,6 +1,6 @@
 # Roadmap and release posture
 
-This document describes the current implementation. FxAeon is one static application with first-class web and Telegram launch surfaces: Privy or the connected browser wallet owns signing, the pinned official f(x) SDK supplies protocol reads and unsigned plans, Alchemy RPC provides browser read infrastructure, and Ethereum/Base remain the source of truth.
+This document describes the current implementation. FxAeon is one static application with first-class web and Telegram launch surfaces: the root opens Portfolio directly, Privy or the connected browser wallet owns signing, the pinned official f(x) SDK supplies protocol reads and unsigned plans, Alchemy RPC provides browser read infrastructure, and Ethereum/Base remain the source of truth. There is no app landing page.
 
 ## Non-negotiable product invariants
 
@@ -8,7 +8,7 @@ This document describes the current implementation. FxAeon is one static applica
 - Only the 15 methods in [`sdk-scope.md`](sdk-scope.md) are product capabilities.
 - Every write is planned from current inputs, validated against SDK calldata, simulated when the provider supports the ordered call, and explicitly approved in the user's wallet one step at a time.
 - Wallet, chain, and form changes invalidate a prepared review. Receipts, bridge GUIDs, and canonical SDK rereads—not local storage—establish state.
-- USD prices and charts are optional display context with freshness, confidence, shape, and range checks; PnL, health, liquidation, APY, ETA, and unsupported balances remain omitted rather than approximated.
+- USD prices and charts are optional display context with freshness, confidence, shape, and range checks; PnL, health, and liquidation values remain omitted rather than approximated. APY and route ETA appear only when a validated provider or protocol route supplies them; unsupported balances remain unavailable rather than guessed.
 
 ## Deliberately deferred tactics
 
@@ -19,7 +19,7 @@ This document describes the current implementation. FxAeon is one static applica
 | Web Worker | Not used | No measured main-thread blocker justifies moving wallet or protocol lifecycle across a Worker boundary. |
 | Service Worker caching | Removed from the active product | Financial state must remain online and chain-authoritative; a one-time legacy `/sw.js` unregister remains only as stale-client cleanup. |
 | Route prefetch | Narrow, in-memory only | Trade may warm one exact route for a faster Review surface; it expires quickly, is never persisted, and the final route is rebuilt, simulated, and validated before signing. |
-| USD display pricing | Read-only, independently validated | DefiLlama supplies current token prices; one bounded, batched CoinGecko contract-price fallback with adaptive rate-limit retry/backoff fills missing quotes. Current-price context has no source badge; CoinGecko also supplies separately validated ETH/BTC chart history. Missing quotes never become an assumed peg or erase other validated prices. All display feeds remain isolated from SDK planning, policy, calldata, simulation, signing, and chain-authoritative state. |
+| USD display pricing | Read-only, independently validated | DefiLlama supplies current token prices; one bounded, batched CoinGecko contract-price fallback with adaptive rate-limit retry/backoff fills missing quotes. The merged market header has no source badge or duplicate spot/chart quote; CoinGecko also supplies separately validated ETH/BTC chart history. Missing quotes never become an assumed peg or erase other validated prices. All display feeds remain isolated from SDK planning, policy, calldata, simulation, signing, and chain-authoritative state. |
 | Lighthouse upload | Not used | Release evidence comes from browser tests, bundle budgets, dependency audits, and static build checks without a telemetry service. |
 
 Transitive `ioredis` and `workerd` entries may remain in the frozen dependency graph through third-party browser/development tooling. They are not imported by the app, have no configured endpoints, and do not create Redis or Worker production services.
@@ -30,7 +30,7 @@ These are measurements from the local release gate, not universal performance cl
 
 - Static bundle: `245 assets`, `7.82 MiB` total.
 - JavaScript: `203 assets`, `6.94 MiB` raw, `2.12 MiB` gzip; largest asset `0.54 MiB`.
-- Release E2E: `51` tests passed, covering browser entry, scoped routes, cross-workspace USD context, independent token-price fallback, price continuity across hard navigation/feed retries, owned-balance picker states, leverage keyboard/touch controls, wallet profile/Activity, Earn-to-borrow access, three-theme persistence, accessible skip navigation, responsive charts and compact sparklines, guide search/deep links, and Telegram/mobile safety checks. The width sweep covers 320, 360, 375, 390, 412, and 430px.
+- Release E2E: `51` tests passed, covering browser entry, scoped routes, cross-workspace USD context, independent token-price fallback, price continuity across hard navigation/feed retries, owned-balance picker states, leverage keyboard/touch controls, wallet profile/History, Earn-to-borrow access, three-theme persistence, accessible skip navigation, responsive charts and compact sparklines, guide search/deep links, and Telegram/mobile safety checks. The width sweep covers 320, 360, 375, 390, 412, and 430px.
 - Unit/security suite: `270` total tests (`266` passed, `4` skipped when the protected fork environment is absent), including exact installed SDK debt-ratio packing across both module formats, bigint-safe USD position and owned-token valuation, and wallet/source-chain balance refresh guards.
 - Chaos campaign: `2` campaigns passed, including 2,000 route mutations and 600 runner iterations.
 - Local Anvil gates (3 September 2026, block `25893155`): `100` snapshot/revert iterations, `100` ordered-route stress iterations, and the Node four-position protocol proof—including a real fxUSD borrow against an existing ETH long with position-ID preservation—passed. The separate browser gate opened and verified coexisting ETH/BTC long/short positions, exercised in-place wallet account switching/disconnect and the existing-long borrow flow, checked delayed discovery and cross-workspace views, and restored its snapshot. The protected workflow requires all three gates; local working-tree results and an older green badge do not replace CI on the release commit.
@@ -42,5 +42,12 @@ These are measurements from the local release gate, not universal performance cl
 2. Re-run static build, dependency audit, bundle check, and mobile route tests for every release.
 3. Test current desktop/mobile browsers and Telegram Android, iOS, Desktop, and Web launch behavior and wallet prompts manually; automated tests use no production funds or live signing authority.
 4. Add a new SDK capability only through a reviewed scope-lock change and a matching matrix entry, tests, review UI, recovery behavior, and documentation.
+
+The interaction contract is deliberately compact: disconnected users can edit
+each product form, the primary action connects the wallet in place, and the
+same draft continues through live preview and in-card review. Product routes
+keep their final action rail above the fixed navigation without page scrolling.
+The documentation route and an expanded mobile Trade chart are the intentional
+scrollable exceptions.
 
 The next promotion checks are the protected Alchemy workflow for the release commit and broader real-device coverage across ordinary mobile browsers and Telegram.

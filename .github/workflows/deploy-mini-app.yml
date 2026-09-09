@@ -56,6 +56,12 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_SHA: ${{ github.sha }}
+      - name: Verify live wallet configuration
+        run: node scripts/verify_live_public_config.mjs
+        env:
+          EXPECTED_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID }}
+          GITHUB_SHA: ${{ github.sha }}
+          LIVE_APP_URL: https://fxaeon.pages.dev
       - name: Sync Telegram bot metadata and menu
         run: node scripts/sync_telegram_bot.mjs
         env:

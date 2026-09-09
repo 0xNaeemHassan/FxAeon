@@ -4,7 +4,7 @@
  * FxAeon shared UI kit — every screen composes these so the app feels like
  * one product instead of disconnected pages.
  */
-import { forwardRef, ReactNode, useEffect, useRef, useState } from 'react';
+import { forwardRef, ReactNode, useEffect, useRef, useState, type ButtonHTMLAttributes, type MouseEventHandler } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -20,7 +20,6 @@ import {
 import { haptic } from '@/lib/telegram';
 import { useT } from '@/lib/i18n';
 import FxLogo from '@/components/FxLogo';
-import LiveMarketStrip from '@/components/LiveMarketStrip';
 import ThemeToggle from '@/components/ThemeToggle';
 import WalletProfile from '@/components/WalletProfile';
 
@@ -41,7 +40,7 @@ export function AppShell({
   const headingRef = useRef<HTMLHeadingElement>(null);
   const contentRef = useRef<HTMLElement>(null);
   const documentTitle = title ?? (pathname === '/portfolio' ? 'Portfolio' : undefined);
-  const networkLabel = ['/move', '/qr', '/activity'].includes(pathname) ? 'Ethereum + Base' : 'Ethereum';
+  const networkLabel = ['/move', '/qr', '/history', '/activity'].includes(pathname) ? 'Ethereum + Base' : 'Ethereum';
 
   useEffect(() => {
     const target = headingRef.current ?? contentRef.current;
@@ -53,9 +52,12 @@ export function AppShell({
   }, [documentTitle]);
 
   return (
-    <div className={`app-shell mx-auto min-h-[var(--tg-viewport-stable-height)] w-full ${tabs ? 'app-shell-tabs' : 'pb-[calc(env(safe-area-inset-bottom,0px)+1rem)]'}`}>
+    <div
+      data-shell-tabs={tabs ? 'true' : 'false'}
+      className={`app-shell mx-auto w-full ${tabs ? 'app-shell-tabs' : 'app-shell-no-tabs pb-[calc(env(safe-area-inset-bottom,0px)+1rem)]'}`}
+    >
       <a href="#main-content" className="skip-link">Skip to main content</a>
-      <div className="app-workspace">
+      <div className="app-workspace" data-route={pathname ?? ''}>
         {tabs && (
           <div className="app-topbar">
             <Link href="/portfolio" aria-label="FxAeon portfolio" className="flex items-center gap-2.5">
@@ -63,9 +65,8 @@ export function AppShell({
               <span className="brand-wordmark">FxAeon</span>
             </Link>
             <DesktopNavigation />
-            <div className="app-topbar-market"><LiveMarketStrip /></div>
             <span className="app-topbar-actions">
-              <span className="network-state"><span className="status-dot" /> {networkLabel}</span>
+              <span className="network-state" aria-label={`Route scope ${networkLabel}`}><span className="status-dot" /> Route scope · {networkLabel}</span>
               <ThemeToggle />
               <WalletProfile />
             </span>
@@ -79,7 +80,13 @@ export function AppShell({
             </div>
           </header>
         )}
-        <main ref={contentRef} id="main-content" tabIndex={-1} className={`app-content ${tabs ? 'app-content-tabs' : ''} flex-1 outline-none ${['/more', '/settings', '/qr'].includes(pathname) ? 'utility-content' : ''}`}>{children}</main>
+        <main
+          ref={contentRef}
+          id="main-content"
+          data-shell-content="true"
+          tabIndex={-1}
+          className={`app-content ${tabs ? 'app-content-tabs' : ''} flex-1 outline-none ${['/more', '/settings', '/qr'].includes(pathname) ? 'utility-content' : ''}`}
+        >{children}</main>
       </div>
       {tabs && <TabBar />}
     </div>
@@ -91,7 +98,7 @@ const TABS: { href: string; labelKey: string; icon: LucideIcon; also?: string[] 
   { href: '/trade', labelKey: 'nav.trade', icon: CandlestickChart, also: ['/positions'] },
   { href: '/earn', labelKey: 'nav.earn', icon: PiggyBank, also: ['/borrow'] },
   { href: '/move', labelKey: 'nav.move', icon: ArrowLeftRight, also: ['/qr'] },
-  { href: '/more', labelKey: 'nav.more', icon: LayoutGrid, also: ['/settings', '/activity', '/docs'] },
+  { href: '/more', labelKey: 'nav.more', icon: LayoutGrid, also: ['/settings', '/history', '/activity', '/docs'] },
 ];
 
 export function TabBar() {
@@ -119,7 +126,7 @@ export function TabBar() {
 
   return (
     <>
-      <nav className="mobile-tabbar pointer-events-none fixed inset-x-0 bottom-0 z-40" aria-label="Primary navigation">
+      <nav data-fixed-navigation="true" className="mobile-tabbar pointer-events-none fixed inset-x-0 bottom-0 z-40" aria-label="Primary navigation">
         <div className="tabbar-safe mx-auto w-full max-w-[520px]">
           <div className="tabbar pointer-events-auto">{links}</div>
         </div>
@@ -176,9 +183,9 @@ function buttonClasses(variant: 'primary' | 'ghost' | 'danger' | 'outline' | 'gl
   return `button glass-press astryx-interactive flex min-h-12 w-full items-center justify-center gap-2 px-5 py-3 text-[14px] disabled:cursor-not-allowed disabled:opacity-50 ${styles} ${className}`;
 }
 
-export const Button = forwardRef<HTMLButtonElement, {
+export const Button = forwardRef<HTMLButtonElement, Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'onClick' | 'disabled' | 'className'> & {
   children: ReactNode;
-  onClick?: () => void;
+  onClick?: MouseEventHandler<HTMLButtonElement>;
   variant?: 'primary' | 'ghost' | 'danger' | 'outline' | 'glass';
   disabled?: boolean;
   loading?: boolean;
@@ -190,16 +197,19 @@ export const Button = forwardRef<HTMLButtonElement, {
   disabled = false,
   loading = false,
   className = '',
+  type = 'button',
+  ...nativeProps
 }, ref) {
   return (
     <button
       ref={ref}
-      type="button"
+      {...nativeProps}
+      type={type}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      onClick={() => {
+      onClick={(event) => {
         haptic('medium');
-        onClick?.();
+        onClick?.(event);
       }}
       className={buttonClasses(variant, className)}
     >
@@ -210,43 +220,6 @@ export const Button = forwardRef<HTMLButtonElement, {
     </button>
   );
 });
-
-export function ButtonLink({
-  children,
-  href,
-  variant = 'primary',
-  external = false,
-  className = '',
-}: {
-  children: ReactNode;
-  href: string;
-  variant?: 'primary' | 'ghost' | 'danger' | 'outline' | 'glass';
-  external?: boolean;
-  className?: string;
-}) {
-  if (!external) {
-    return (
-      <Link
-        href={href}
-        onClick={() => haptic('medium')}
-        className={buttonClasses(variant, className)}
-      >
-        {children}
-      </Link>
-    );
-  }
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      onClick={() => haptic('medium')}
-      className={buttonClasses(variant, className)}
-    >
-      {children}
-    </a>
-  );
-}
 
 export function Stat({
   label,

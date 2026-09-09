@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { Activity, BarChart3, ChevronDown, RefreshCw } from 'lucide-react';
+import { BarChart3, ChevronDown, RefreshCw } from 'lucide-react';
 import TokenIcon from '@/components/TokenIcon';
 import { useLiveMarketQuote, useUsdPrices } from '@/components/PriceProvider';
 import { fetchMarketHistory, type MarketHistorySnapshot, type MarketRange, type MarketSymbol } from '@/lib/marketData';
@@ -100,7 +100,7 @@ function useLiveCandles(market: MarketSymbol, range: LiveMarketRange, enabled: b
       if (first) displayedSnapshot = { ...baseSnapshot, candles, points: candles.map((candle) => ({ timestamp: candle.time * 1_000, price: candle.close })), currentPrice: next.close, high: Math.max(baseSnapshot.high, next.high), low: Math.min(baseSnapshot.low, next.low), percentChange: ((next.close - first.open) / first.open) * 100, updatedAt: live.quote.sourceAt };
     }
   }
-  return { ...state, snapshot: enabled ? displayedSnapshot : null, retry: () => setAttempt((value) => value + 1), live };
+  return { ...state, snapshot: enabled ? displayedSnapshot : null, retry: () => setAttempt((value) => value + 1) };
 }
 
 export function TradeMarketChart({ market, onMarketChange }: { market: MarketSymbol; onMarketChange?: (market: MarketSymbol) => void }) {
@@ -112,7 +112,7 @@ export function TradeMarketChart({ market, onMarketChange }: { market: MarketSym
   const chartId = useId();
   const expanded = isMobile === false || (isMobile === true && mobileExpanded);
   const history = useLiveCandles(market, range, expanded);
-  const { prices, status } = useUsdPrices();
+  const { prices } = useUsdPrices();
   const live = useLiveMarketQuote(market);
   const fallbackPrice = prices[market === 'ETH' ? 'ETH' : 'WBTC'];
   const price = live.isFresh ? live.quote?.price : fallbackPrice ?? history.snapshot?.currentPrice;
@@ -120,36 +120,40 @@ export function TradeMarketChart({ market, onMarketChange }: { market: MarketSym
   const high = live.isFresh ? live.quote?.high24h : history.snapshot?.high;
   const low = live.isFresh ? live.quote?.low24h : history.snapshot?.low;
   const positive = change !== undefined && change >= 0;
-  const freshness = live.isFresh
-    ? 'Live market feed'
-    : live.status === 'connecting' || live.status === 'reconnecting'
-      ? 'Reconnecting · validated price shown'
-      : status === 'unavailable'
-        ? 'Market feed unavailable'
-        : 'Using last validated price';
   useEffect(() => {
-    const media = window.matchMedia('(max-width: 640px)');
-    const update = () => setIsMobile(media.matches);
+    // Treat compact tablets as mobile-first as well. The chart stays cold
+    // until explicitly expanded below the desktop two-column breakpoint.
+    const media = window.matchMedia('(max-width: 839px)');
+    const update = () => {
+      // Read the viewport directly: resize can fire before matchMedia has
+      // delivered its change event, and the stale value would collapse a
+      // chart that should remain expanded when returning from desktop.
+      const next = window.innerWidth <= 839;
+      setIsMobile(next);
+    };
     update();
     media.addEventListener('change', update);
-    return () => media.removeEventListener('change', update);
+    window.addEventListener('resize', update);
+    return () => {
+      media.removeEventListener('change', update);
+      window.removeEventListener('resize', update);
+    };
   }, []);
   return <section className={`${styles.marketChart} market-chart-panel`} data-mobile-expanded={expanded} aria-label={`${market} market chart`}>
     <header className="market-chart-header">
       <div className="flex min-w-0 items-center gap-3"><span className="market-chart-token"><TokenIcon symbol={market === 'BTC' ? 'WBTC' : 'ETH'} size={34} /></span><div className="min-w-0"><span className="micro-label text-[11px] text-mut">Market</span><h2 className="truncate text-[18px] font-semibold">{market} / USD</h2></div></div>
-      <div className="shrink-0 text-right"><p className="text-display text-[24px] font-semibold tabular-nums">{formatUsdPrice(price)}</p><p className={`mt-1 inline-flex items-center gap-1 text-[11px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}>{change === undefined ? 'Change unavailable' : <><span aria-hidden="true">{positive ? '↗' : '↘'}</span>{positive ? '+' : ''}{change.toFixed(2)}% 24h</>}</p></div>
+      <div className="shrink-0 text-right"><p className="text-display text-[24px] font-semibold tabular-nums">{formatUsdPrice(price)}</p><p className={`mt-1 inline-flex items-center gap-1 text-[11px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}>{change === undefined ? '—' : <><span aria-hidden="true">{positive ? '↗' : '↘'}</span>{positive ? '+' : ''}{change.toFixed(2)}% 24h</>}</p></div>
     </header>
     <div className="market-chart-instrument-meta">
-      <span className="market-chart-freshness" role="status"><span className={`status-dot ${live.isFresh ? '' : 'status-dot-warn'}`} aria-hidden="true" />{freshness}</span>
       <dl className="market-chart-stats"><div><dt>24h high</dt><dd>{formatUsdPrice(high)}</dd></div><div><dt>24h low</dt><dd>{formatUsdPrice(low)}</dd></div></dl>
     </div>
     {onMarketChange && <div className="market-chart-market-switch"><Segmented value={market} onChange={onMarketChange} ariaLabel="Market" options={[{ value: 'ETH', label: 'ETH market', sub: 'Ethereum', ariaLabel: 'ETH', icon: <TokenIcon symbol="ETH" size={20} /> }, { value: 'BTC', label: 'BTC market', sub: 'Wrapped BTC', ariaLabel: 'BTC', icon: <TokenIcon symbol="WBTC" size={20} /> }]} /></div>}
     <button type="button" className="market-chart-toggle" aria-expanded={expanded} aria-controls={chartId} aria-disabled={isMobile === null || undefined} disabled={isMobile === null} onClick={() => { setMobileExpanded((value) => !value); haptic('selection'); }}><BarChart3 className="h-4 w-4" aria-hidden="true" /><span>{expanded ? 'Hide chart' : 'Show chart'}</span><ChevronDown className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`} aria-hidden="true" /></button>
     <div id={chartId} className="market-chart-content" hidden={!expanded}><div className="market-chart-frame">
       {history.status === 'loading' && <ChartSkeleton />}
-      {history.status === 'unavailable' && <div className="market-chart-empty" role="status"><BarChart3 className="h-6 w-6 text-mut" aria-hidden="true" /><span><strong>Chart temporarily unavailable</strong><small>Trade details are still available.</small></span><button type="button" aria-label="Retry market chart" onClick={history.retry} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-lg text-mut"><RefreshCw className="h-4 w-4" aria-hidden="true" /></button></div>}
+      {history.status === 'unavailable' && <div className="market-chart-empty" role="status" aria-live="polite"><span className="text-[12px] text-mut">Market history is unavailable.</span><button type="button" aria-label="Retry market chart" onClick={history.retry} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-lg text-mut"><RefreshCw className="h-4 w-4" aria-hidden="true" /></button></div>}
       {history.status === 'ready' && history.snapshot && <LazyCandlestickChart snapshot={history.snapshot} />}
-    </div><footer className="market-chart-footer"><a href={`https://www.coingecko.com/en/coins/${market === 'ETH' ? 'ethereum' : 'bitcoin'}`} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-1.5 text-[11px] text-mut hover:text-mint"><Activity className="h-3.5 w-3.5 text-mint" aria-hidden="true" />CoinGecko</a><span className="inline-flex min-h-11 items-center gap-1.5 text-[11px] text-mut"><span className="status-dot" aria-hidden="true" />{live.status === 'live' && live.isFresh ? 'Live market' : 'Price updates paused'}</span><div role="radiogroup" aria-label="Chart range" className="chart-range-tabs">{RANGE_OPTIONS.map((option) => <button key={option} type="button" role="radio" aria-checked={range === option} tabIndex={range === option ? 0 : -1} onClick={() => { setRange(option); haptic('selection'); }} onKeyDown={(event) => { const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End']; if (!keys.includes(event.key)) return; event.preventDefault(); const current = RANGE_OPTIONS.indexOf(option); const backwards = event.key === 'ArrowLeft' || event.key === 'ArrowUp'; const next = event.key === 'Home' ? 0 : event.key === 'End' ? RANGE_OPTIONS.length - 1 : (current + (backwards ? -1 : 1) + RANGE_OPTIONS.length) % RANGE_OPTIONS.length; setRange(RANGE_OPTIONS[next]); event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus(); haptic('selection'); }} className={range === option ? 'chart-range-active' : ''}>{option}</button>)}</div></footer></div>
+    </div><footer className="market-chart-footer"><div role="radiogroup" aria-label="Chart range" className="chart-range-tabs">{RANGE_OPTIONS.map((option) => <button key={option} type="button" role="radio" aria-checked={range === option} tabIndex={range === option ? 0 : -1} onClick={() => { setRange(option); haptic('selection'); }} onKeyDown={(event) => { const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End']; if (!keys.includes(event.key)) return; event.preventDefault(); const current = RANGE_OPTIONS.indexOf(option); const backwards = event.key === 'ArrowLeft' || event.key === 'ArrowUp'; const next = event.key === 'Home' ? 0 : event.key === 'End' ? RANGE_OPTIONS.length - 1 : (current + (backwards ? -1 : 1) + RANGE_OPTIONS.length) % RANGE_OPTIONS.length; setRange(RANGE_OPTIONS[next]); event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus(); haptic('selection'); }} className={range === option ? 'chart-range-active' : ''}>{option}</button>)}</div></footer></div>
   </section>;
 }
 
@@ -160,7 +164,7 @@ export function MarketMiniCard({ market }: { market: MarketSymbol }) {
   const price = live.isFresh ? live.quote?.price : prices[market === 'ETH' ? 'ETH' : 'WBTC'] ?? history.snapshot?.currentPrice;
   const change = live.isFresh ? live.quote?.percentChange24h : history.snapshot?.percentChange;
   const positive = change !== undefined && change >= 0;
-  return <div className={`${styles.marketMiniCard} portfolio-market-card`} aria-label={`${market} market overview`}><div className="flex items-center justify-between gap-2"><span className="flex items-center gap-2"><TokenIcon symbol={market === 'BTC' ? 'WBTC' : 'ETH'} size={28} /><strong className="text-[13px]">{market}</strong></span><span className={`text-[10.5px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}>{change === undefined ? '—' : `${positive ? '+' : ''}${change.toFixed(2)}%`}</span></div><p className="mt-3 text-display text-[20px] font-semibold tabular-nums">{formatUsdPrice(price)}</p><div className="market-chart-compact mt-2 h-[54px]">{history.status === 'ready' && history.snapshot ? <Sparkline snapshot={history.snapshot} /> : <span className="text-[11px] text-mut">Chart unavailable</span>}</div></div>;
+  return <div className={`${styles.marketMiniCard} portfolio-market-card`} aria-label={`${market} market overview`}><div className="flex items-center justify-between gap-2"><span className="flex items-center gap-2"><TokenIcon symbol={market === 'BTC' ? 'WBTC' : 'ETH'} size={28} /><strong className="text-[13px]">{market}</strong></span><span className={`text-[10.5px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}>{change === undefined ? '—' : `${positive ? '+' : ''}${change.toFixed(2)}%`}</span></div><p className="mt-3 text-display text-[20px] font-semibold tabular-nums">{formatUsdPrice(price)}</p><div className="market-chart-compact mt-2 h-[54px]">{history.status === 'ready' && history.snapshot ? <Sparkline snapshot={history.snapshot} /> : <span className="text-[11px] text-mut">—</span>}</div></div>;
 }
 
 function LazyCandlestickChart({ snapshot }: { snapshot: MarketCandleSnapshot }) {
@@ -203,7 +207,7 @@ function LazyCandlestickChart({ snapshot }: { snapshot: MarketCandleSnapshot }) 
     else seriesRef.current.setData(toChartData(next));
     renderedCandlesRef.current = next;
   }, [snapshot.candles]);
-  if (failed) return <div className="market-chart-empty" role="img" aria-label={`${snapshot.market} ${snapshot.range} USD price chart unavailable`}><BarChart3 className="h-6 w-6 text-mut" aria-hidden="true" /><span><strong>{snapshot.market} price chart</strong><small>Current {formatUsdPrice(snapshot.currentPrice)} · high {formatUsdPrice(snapshot.high)} · low {formatUsdPrice(snapshot.low)}</small></span></div>;
+  if (failed) return <div className="market-chart-empty" role="img" aria-label={`${snapshot.market} ${snapshot.range} USD price chart`}><BarChart3 className="h-6 w-6 text-mut" aria-hidden="true" /><span><strong>{snapshot.market} price chart</strong><small>Current {formatUsdPrice(snapshot.currentPrice)} · high {formatUsdPrice(snapshot.high)} · low {formatUsdPrice(snapshot.low)}</small></span></div>;
   return <div ref={hostRef} className="market-chart-graphic" role="img" aria-label={`${snapshot.market} ${snapshot.range} USD price chart, current price ${formatUsdPrice(snapshot.currentPrice)}`}><span className="sr-only">High {formatUsdPrice(snapshot.high)}. Low {formatUsdPrice(snapshot.low)}.</span></div>;
 }
 

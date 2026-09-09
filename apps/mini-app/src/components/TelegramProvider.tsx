@@ -132,6 +132,11 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!telegramReady || !isTMA() || ROOT_PATHS.has(pathname ?? '/')) return;
     return showBackButton(() => {
+      let consumed = false;
+      window.dispatchEvent(new CustomEvent<{ consume: () => void; isConsumed: () => boolean }>('fxaeon:telegram-back', {
+        detail: { consume: () => { consumed = true; }, isConsumed: () => consumed },
+      }));
+      if (consumed) return;
       if (stack.current.length > 1) router.back();
       else getWebApp()?.close();
     });

@@ -23,7 +23,7 @@ test.describe('independent USD price availability', () => {
   });
 
   for (const available of [true, false]) {
-    test(`a missing fxUSD price ${available ? 'uses a validated fallback' : 'does not erase ETH and BTC'}`, async ({ page, requests }) => {
+    test(`a missing fxUSD price ${available ? 'does not leak a unit quote into inputs' : 'does not erase ETH and BTC'}`, async ({ page, requests }) => {
       await page.unroute('https://coins.llama.fi/**');
       await page.route('https://coins.llama.fi/**', async route => {
         const ids = decodeURIComponent(new URL(route.request().url()).pathname.split('/prices/current/')[1] ?? '').split(',');
@@ -45,14 +45,20 @@ test.describe('independent USD price availability', () => {
         await route.fulfill({ contentType: 'application/json', body: JSON.stringify(payload) });
       });
       await page.goto('/trade', { waitUntil: 'domcontentloaded' });
-      const prices = page.getByRole('region', { name: 'Market prices' });
-      await expect(prices.getByText('$2,400.00', { exact: true })).toBeVisible();
-      await expect(prices.getByText('$104,000.00', { exact: true })).toBeVisible();
-      if (available) await expect(prices.getByText('$0.998', { exact: true })).toBeVisible();
-      else {
-        await expect(prices).not.toContainText('Partial USD');
-        await expect(prices.locator('.market-strip-item').filter({ hasText: 'fxUSD' })).toHaveCount(0);
-      }
+      const ethMarket = page.getByRole('region', { name: 'ETH market chart' });
+      await expect(ethMarket.getByText('$2,400.00', { exact: true })).toBeVisible();
+      await ethMarket.getByRole('radio', { name: 'BTC', exact: true }).click();
+      const btcMarket = page.getByRole('region', { name: 'BTC market chart' });
+      await expect(btcMarket.getByText('$104,000.00', { exact: true })).toBeVisible();
+      await btcMarket.getByRole('radio', { name: 'ETH', exact: true }).click();
+      await page.getByRole('button', { name: 'Input asset', exact: true }).click();
+      const fxUsd = page.getByRole('listbox', { name: 'Input asset options' }).getByRole('option', { name: /^fxUSD/ });
+      // Trade deliberately keeps picker rows focused on balance state; the
+      // authoritative display prices remain the ETH/BTC market charts above.
+      // A fallback quote must never be presented as an owned balance value.
+      await expect(fxUsd).not.toContainText('$0.998');
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('region', { name: 'Market prices' })).toHaveCount(0);
       expect(fallbackCalls).toBe(1);
       assertNoBackendRequests(requests);
     });

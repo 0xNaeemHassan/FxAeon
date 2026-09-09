@@ -2,7 +2,7 @@
 
 import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, Info, LoaderCircle, Search } from 'lucide-react';
+import { ChevronDown, Info, Search } from 'lucide-react';
 import TokenIcon from '@/components/TokenIcon';
 import { useUsdPrices } from '@/components/PriceProvider';
 import { useWalletBalances } from '@/components/WalletDataProvider';
@@ -11,6 +11,7 @@ import { calculateFractionDecimal, compareExactDecimals, decimalInputError, form
 import { formatUsdCents } from '@/lib/positionValuation';
 import { formatUsd, formatUsdPrice, priceKeyForSymbol, usdValueForDecimal, type UsdPriceMap } from '@/lib/prices';
 import styles from '@/components/trade-surfaces.module.css';
+import { tokenName, tokenPresentation, tokenSymbol } from '@/lib/fx/tokenPresentation';
 import {
   balanceMapForResult,
   tokenBalanceFor,
@@ -56,7 +57,7 @@ export function useWalletTokenBalances(walletAddress?: string, chainId?: number,
   return {
     status: query.status,
     balances,
-    reason: query.status === 'unavailable' ? 'Available balances are temporarily unavailable.' : undefined,
+    reason: undefined,
     refresh,
   };
 }
@@ -202,6 +203,10 @@ export function AmountField({
   allowZero = false,
   showPercentages = true,
   showMax = true,
+  showUsdValue = true,
+  showUnitPrice = true,
+  compact = false,
+  disabled = false,
   maxDecimals = 18,
   placeholder = '0.00',
   constraintError,
@@ -218,6 +223,13 @@ export function AmountField({
   allowZero?: boolean;
   showPercentages?: boolean;
   showMax?: boolean;
+  /** Hide the secondary token-price readout when a parent owns the market surface. */
+  showUsdValue?: boolean;
+  /** Keep the entered amount's USD worth while omitting the per-unit quote. */
+  showUnitPrice?: boolean;
+  /** Put value and balance metadata on one compact line in dense tickets. */
+  compact?: boolean;
+  disabled?: boolean;
   maxDecimals?: number;
   placeholder?: string;
   constraintError?: string | null;
@@ -228,6 +240,10 @@ export function AmountField({
   const errorId = `${inputId}-error`;
   const balanceId = `${inputId}-balance`;
   const [touched, setTouched] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
   const { prices } = useUsdPrices();
   const priceKey = priceKeyForSymbol(symbol);
   const usdPrice = priceKey ? prices[priceKey] : undefined;
@@ -252,7 +268,7 @@ export function AmountField({
   );
 
   return (
-    <div>
+    <div className={compact ? styles.compactAmountField : undefined}>
       <FieldLabel hint={hint} hintId={hintId} htmlFor={inputId}>{label}</FieldLabel>
       <div className={`${styles.amountField} amount-control group flex min-h-[76px] items-center gap-3 px-4 ${error ? 'field-error' : ''}`}>
         <input
@@ -260,6 +276,7 @@ export function AmountField({
           value={value}
           onChange={(event) => onChange(normalise(event.target.value))}
           onBlur={() => setTouched(true)}
+          disabled={disabled || !hydrated}
           inputMode="decimal"
           autoComplete="off"
           placeholder={placeholder}
@@ -274,33 +291,33 @@ export function AmountField({
           <TokenIcon symbol={symbol} size={22} /> {symbol}
         </span>}
       </div>
-      {usdPrice && (
-        <div className="mt-2 flex items-center justify-between gap-3 px-1 text-[11px] text-mut" aria-live="polite">
+      {showUsdValue && usdPrice && (
+        <div className={`${styles.amountUsdMeta} mt-2 flex items-center justify-between gap-3 px-1 text-[11px] text-mut`} aria-live="polite">
           <span>{usdValue === null ? 'Enter an amount for USD value' : `≈ ${formatUsd(usdValue)}`}</span>
-          <span>{formatUsdPrice(usdPrice)} / {displayTokenSymbol(symbol)}</span>
+          {showUnitPrice && <span>{formatUsdPrice(usdPrice)} / {displayTokenSymbol(symbol)}</span>}
         </div>
       )}
       {(balance !== undefined || balanceState !== undefined || allowAll) && (
-        <div id={balanceId} className="mt-2 flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] text-mut">
+        <div id={balanceId} className={`${styles.amountBalanceMeta} mt-2 flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] text-mut`}>
           <div className="flex min-w-0 items-center gap-1 truncate">
             {(balance !== undefined || balanceState !== undefined) && (
-              <span className="truncate" title={balanceState?.reason ?? (availableBalance ?? 'Balance unavailable')}>
+              <span className="truncate" title={balanceState?.reason ?? (availableBalance ?? 'Balance pending')}>
                 Available: <span className="font-semibold text-[var(--text)]">
                   {balanceState?.status === 'loading'
-                    ? `loading… ${displayTokenSymbol(symbol)}`
+                    ? '—'
                     : balanceState?.status === 'disconnected'
-                      ? `connect wallet · ${displayTokenSymbol(symbol)}`
+                      ? '—'
                     : balanceState?.status === 'unavailable'
-                      ? `unavailable · ${displayTokenSymbol(symbol)}`
+                      ? '—'
                       : availableBalance
                         ? `${formatExactDecimal(availableBalance, 4)} ${displayTokenSymbol(symbol)}`
-                        : `unavailable · ${displayTokenSymbol(symbol)}`}
+                        : '—'}
                 </span>
               </span>
             )}
           </div>
           <div className="flex items-center gap-1">
-            {showPercentages && hasValidBalance && [25, 50, 75].map((pct) => (
+            {showPercentages && hasValidBalance && (compact ? [] : [25, 50, 75]).map((pct) => (
               <button
                 key={pct}
                 type="button"
@@ -309,6 +326,7 @@ export function AmountField({
                   const fraction = calculateFractionDecimal(availableBalance, pct, maxDecimals);
                   if (fraction) onChange(fraction);
                 }}
+                disabled={disabled || !hydrated}
                 className="fraction-button min-h-11 min-w-11 px-2 py-0.5 text-[10.5px] font-semibold text-mut"
               >
                 {pct}%
@@ -321,11 +339,12 @@ export function AmountField({
                   haptic('selection');
                   onChange('all');
                 }}
+                disabled={disabled || !hydrated}
                 className="fraction-button fraction-button-active min-h-11 min-w-11 px-2.5 py-0.5 text-[10.5px] font-bold text-mint"
               >
                 MAX
               </button>
-            ) : showMax && showPercentages && hasValidBalance ? (
+            ) : showMax && hasValidBalance ? (
               <button
                 type="button"
                 onClick={() => {
@@ -333,6 +352,7 @@ export function AmountField({
                   const fraction = calculateFractionDecimal(availableBalance, 100, maxDecimals);
                   if (fraction) onChange(fraction);
                 }}
+                disabled={disabled || !hydrated}
                 className="fraction-button fraction-button-active min-h-11 min-w-11 px-2.5 py-0.5 text-[10.5px] font-bold text-mint"
               >
                 MAX
@@ -431,11 +451,20 @@ export function TokenSelect<T extends string>({
       if (closingRef.current || !dialog || dialog.contains(event.target as Node)) return;
       getDialogFocusable(dialog)[0]?.focus();
     };
+    const onTelegramBack = (event: Event) => {
+      if (!open) return;
+      const detail = (event as CustomEvent<{ consume?: () => void; isConsumed?: () => boolean }>).detail;
+      if (detail?.isConsumed?.()) return;
+      closePicker();
+      detail?.consume?.();
+    };
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('focusin', onFocusIn);
+    window.addEventListener('fxaeon:telegram-back', onTelegramBack);
     return () => {
       document.removeEventListener('focusin', onFocusIn);
       document.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('fxaeon:telegram-back', onTelegramBack);
       document.body.style.overflow = previousOverflow;
       if (restoreFocusRef.current) {
         restoreFocusRef.current = false;
@@ -543,7 +572,7 @@ export function TokenSelect<T extends string>({
                     type="button"
                     role="option"
                     aria-selected={active}
-                    aria-label={`${displayTokenSymbol(option)}${active ? ' selected' : ''}`}
+                      aria-label={`${tokenSymbol(option)}${active ? ' selected' : ''}`}
                     aria-describedby={(pickerBalances || pickerStatus) ? `${balanceId} ${balanceUsdId}` : undefined}
                     tabIndex={active ? 0 : -1}
                     onClick={() => choose(option)}
@@ -558,8 +587,8 @@ export function TokenSelect<T extends string>({
                   >
                     <TokenIcon symbol={option} size={30} />
                     <span className={styles.tokenPickerRowCopy}>
-                      <span className={styles.tokenPickerSymbol}>{displayTokenSymbol(option)}</span>
-                      <span className={styles.tokenPickerName}>{displayTokenName(option)}</span>
+                      <span className={styles.tokenPickerSymbol}>{tokenSymbol(option)}</span>
+                      <span className={styles.tokenPickerName}>{tokenName(option)} · {tokenPresentation(option).role}</span>
                     </span>
                     {(pickerBalances || pickerStatus) && (
                       <span className={styles.tokenPickerValue}>
@@ -650,6 +679,7 @@ export function LeverageField({
   min = 0.1,
   max = 20,
   error,
+  compact = false,
 }: {
   value: number;
   onChange: (value: number) => void;
@@ -657,6 +687,7 @@ export function LeverageField({
   min?: number;
   max?: number;
   error?: string | null;
+  compact?: boolean;
 }) {
   const inputId = useId();
   const sliderId = `${inputId}-slider`;
@@ -667,7 +698,7 @@ export function LeverageField({
   return (
     <div>
       <FieldLabel htmlFor={inputId} hint={`${min}× – ${max}×`}>{label}</FieldLabel>
-      <div className={`${styles.rangeField} range-control p-3 ${invalid ? 'field-error' : ''}`}>
+      <div className={`${styles.rangeField} ${compact ? styles.compactRangeField : ''} range-control p-3 ${invalid ? 'field-error' : ''}`}>
         <div className="flex items-center gap-3">
           <input
             id={inputId}
@@ -723,46 +754,24 @@ export function LeverageField({
   );
 }
 
-function displayTokenSymbol(symbol: string): string {
-  if (symbol.toLowerCase() === 'usdc') return 'USDC';
-  if (symbol === 'fxUSDBasePool' || symbol.toLowerCase() === 'fxusd base pool') return 'Base pool';
-  return symbol;
-}
-
-function displayTokenName(symbol: string): string {
-  const names: Record<string, string> = {
-    ETH: 'Ethereum',
-    WETH: 'Wrapped Ether',
-    STETH: 'Lido Staked Ether',
-    WSTETH: 'Wrapped staked Ether',
-    BTC: 'Bitcoin',
-    WBTC: 'Wrapped Bitcoin',
-    USDC: 'USD Coin',
-    USDT: 'Tether USD',
-    FXUSD: 'f(x) USD',
-    FXSAVE: 'f(x) Savings',
-    FXUSDBASEPOOL: 'Base pool',
-    FXN: 'f(x) Network',
-    FRAX: 'Frax',
-  };
-  return names[symbol.replace(/\s+/g, '').toUpperCase()] ?? 'Protocol token';
-}
+function displayTokenSymbol(symbol: string): string { return tokenSymbol(symbol); }
+function displayTokenName(symbol: string): string { return tokenName(symbol); }
 
 function optionBalanceLabel(balance: TokenBalanceView | undefined, symbol: string): string {
   const display = displayTokenSymbol(symbol);
-  if (balance?.status === 'disconnected') return 'Connect wallet';
-  if (!balance || balance.status === 'unavailable') return 'Balance unavailable';
-  if (balance.status === 'loading') return 'Loading balance…';
-  if (balance.amount === undefined) return 'Balance unavailable';
+  if (balance?.status === 'disconnected') return '—';
+  if (!balance || balance.status === 'unavailable') return '—';
+  if (balance.status === 'loading') return '—';
+  if (balance.amount === undefined) return '—';
   return `${formatExactDecimal(balance.amount, 4)} ${display}`;
 }
 
 function optionBalanceUsdContent(balance: TokenBalanceView | undefined, symbol: string, prices: UsdPriceMap): ReactNode {
-  if (balance?.status === 'disconnected') return 'To see balances';
-  if (balance?.status === 'loading') return <span className="inline-flex items-center gap-1"><LoaderCircle className="h-3 w-3 animate-spin" aria-hidden="true" />Loading value</span>;
+  if (balance?.status === 'disconnected') return 'Connect wallet to see balances';
+  if (balance?.status === 'loading') return <span className="skeleton inline-block h-3 w-20 align-middle" aria-label="Loading value" />;
   const cents = usdCentsForTokenBalance(balance, symbol, prices);
   if (balance?.status === 'ready' && cents === null) {
-    return <span className="inline-flex items-center gap-1"><LoaderCircle className="h-3 w-3 animate-spin" aria-hidden="true" />Updating value</span>;
+    return <span className="text-warn" aria-label="Price unavailable">Price unavailable</span>;
   }
   if (cents === null) return null;
   if (cents === 0n && /[1-9]/.test(balance?.amount ?? '')) return '≈ <$0.01';

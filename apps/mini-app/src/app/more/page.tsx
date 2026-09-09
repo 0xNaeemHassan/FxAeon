@@ -2,35 +2,33 @@
 
 import { type ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { Activity, ArrowUpRight, BookOpen, ChevronRight, CircleHelp, QrCode, Settings, Wallet } from 'lucide-react';
+import { BookOpen, History, ChevronRight, QrCode, RefreshCw, Settings, Wallet } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell, AddressChip, Card } from '@/components/ui';
 import { haptic } from '@/lib/telegram';
 import { usePrivyWallet, useWalletReadyTimeout } from '@/lib/wallet';
-import AppearancePreference from '@/components/AppearancePreference';
 import styles from '@/components/UtilitySurfaces.module.css';
 import ConnectWalletButton from '@/components/ConnectWalletButton';
+import AppearancePreference from '@/components/AppearancePreference';
 
 /** Secondary destinations only. Primary trading flows stay in the tab bar. */
 export default function MorePage() {
   return (
     <AppShell title="More">
-      <div className={styles.utilityWorkspace}>
+      <div className={`${styles.utilityWorkspace} ${styles.moreWorkspace}`}>
         <WalletSummary />
 
         <Section label="Account">
-          <MoreRow href="/activity" icon={Activity} title="Activity" body="Pending and confirmed transactions" />
+          <MoreRow href="/history" icon={History} title="History" body="Pending and completed transactions" />
           <MoreRow href="/qr" icon={QrCode} title="Receive" body="Wallet address and QR code" />
           <MoreRow href="/settings" icon={Settings} title="Settings" body="Wallet and preferences" />
         </Section>
 
-        <AppearancePreference />
-
         <Section label="Resources">
-          <MoreRow href="/docs" icon={BookOpen} title="FxAeon docs" body="Guides, limits, and safety" />
-          <MoreRow external href="https://fx.aladdin.club/" icon={BookOpen} title="f(x) Protocol" body="Open the protocol app" />
-          <MoreRow external href="https://fxprotocol.gitbook.io/fx-docs" icon={CircleHelp} title="f(x) docs" body="Protocol mechanics and risks" />
+          <MoreRow href="/docs" icon={BookOpen} title="FxAeon docs" body="Guides for wallets, trading, and actions" />
         </Section>
+
+        <AppearancePreference />
       </div>
     </AppShell>
   );
@@ -45,42 +43,38 @@ function WalletSummary() {
   if (!ready || !walletState.ready) {
     if (timedOut) {
       return (
-        <Card className="border-[rgba(255,194,102,.24)]">
-          <p className="text-[13px] font-semibold">Wallet provider did not load</p>
-          <p className="mt-1 text-[12px] leading-relaxed text-mut">Wallet status is unavailable. Reload to try again.</p>
-          <button type="button" onClick={() => window.location.reload()} className="button button-primary glass-press mt-3 flex min-h-11 w-full items-center justify-center rounded-xl px-4">
-            Reload
-          </button>
-        </Card>
+        <div role="status" aria-live="polite"><Card className={`${styles.utilityCard} flex items-center gap-3 p-3`}>
+          <span className="text-[12px] text-warn">Wallet provider is unavailable.</span>
+          <button type="button" aria-label="Retry wallet provider" onClick={() => window.location.reload()} className="glass-press ml-auto flex min-h-11 min-w-11 items-center justify-center rounded-xl text-mut"><RefreshCw className="h-4 w-4" aria-hidden="true" /></button>
+        </Card></div>
       );
     }
-    return <div role="status" aria-live="polite"><Card className="h-20 animate-pulse"><span className="sr-only">Loading wallet</span></Card></div>;
+    return <div role="status" aria-live="polite"><Card className={`${styles.utilityCard} h-14 animate-pulse`}><span className="sr-only">Loading wallet</span></Card></div>;
   }
 
   if (!authenticated || !wallet) {
     return (
-      <Card className={`${styles.utilityCard} flex items-center gap-3 p-4`}>
+      <Card className={`${styles.utilityCard} flex items-center gap-2.5 p-3`}>
         <Wallet className="h-5 w-5 shrink-0 text-mint" aria-hidden="true" />
         <div className="min-w-0 flex-1">
           <p className="text-[13.5px] font-medium">Connect a wallet</p>
           <p className="mt-0.5 text-[12px] leading-relaxed text-mut">Your wallet and address appear here after connection.</p>
         </div>
         <ConnectWalletButton aria-label={authenticated ? 'Choose wallet' : 'Connect wallet'} className="flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1 rounded-xl bg-[var(--mint-dim)] text-mint">
-          <ChevronRight className="h-5 w-5" aria-hidden="true" />
+          <ChevronRight className="h-[18px] w-[18px]" aria-hidden="true" />
         </ConnectWalletButton>
       </Card>
     );
   }
 
   return (
-    <Card className={`${styles.utilityCard} p-4`}>
-      <div className="flex items-center gap-3">
-        <Wallet className="h-5 w-5 shrink-0 text-mint" aria-hidden="true" />
+    <Card className={`${styles.utilityCard} p-3`}>
+      <div className="flex items-center gap-2.5">
+        <Wallet className="h-[18px] w-[18px] shrink-0 text-mint" aria-hidden="true" />
         <div className="min-w-0 flex-1">
           <p className="text-[12px] text-mut">Connected wallet</p>
           <div className="mt-1"><AddressChip address={wallet.address} /></div>
         </div>
-        <span className="text-[12px] font-medium text-success">Ready</span>
       </div>
     </Card>
   );
@@ -91,12 +85,12 @@ function Section({ label, children }: { label: string; children: ReactNode }) {
   return (
     <section className={styles.utilitySection} aria-labelledby={id}>
       <h2 id={id} className={styles.sectionLabel}>{label}</h2>
-      <div className={`${styles.rowGroup} divide-y divide-[var(--line)]`}>{children}</div>
+      <div className={`${styles.rowGroup} ${styles.actionGrid}`}>{children}</div>
     </section>
   );
 }
 
-function MoreRow({ href, icon: Icon, title, body, external = false }: { href: string; icon: LucideIcon; title: string; body: string; external?: boolean }) {
+function MoreRow({ href, icon: Icon, title, body }: { href: string; icon: LucideIcon; title: string; body: string }) {
   const inner = (
     <>
       <Icon className="h-[18px] w-[18px] shrink-0 text-mint" strokeWidth={1.9} aria-hidden="true" />
@@ -104,10 +98,9 @@ function MoreRow({ href, icon: Icon, title, body, external = false }: { href: st
         <span className="block text-[13.5px] font-medium">{title}</span>
         <span className="mt-0.5 block truncate text-[11.5px] text-mut">{body}</span>
       </span>
-      {external ? <ArrowUpRight className="h-4 w-4 shrink-0 text-[var(--mut-2)]" aria-hidden="true" /> : <ChevronRight className="h-4 w-4 shrink-0 text-[var(--mut-2)]" aria-hidden="true" />}
+      <ChevronRight className="h-4 w-4 shrink-0 text-[var(--mut-2)]" aria-hidden="true" />
     </>
   );
-  const className = 'glass-press flex min-h-[68px] items-center gap-3 px-4 py-3';
-  if (external) return <a href={href} target="_blank" rel="noopener noreferrer" onClick={() => haptic('light')} className={className}>{inner}</a>;
+  const className = `${styles.moreRow} glass-press flex min-h-12 items-center gap-2.5 px-3 py-2`;
   return <Link href={href} onClick={() => haptic('light')} className={className}>{inner}</Link>;
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { openExternalLink, waitForTelegramWebApp, type TgWebApp } from '../src/lib/telegram';
+import { looksLikeTelegramUserAgent, openExternalLink, waitForTelegramWebApp, type TgWebApp } from '../src/lib/telegram';
 
 type FakeWindow = {
   Telegram?: { WebApp?: TgWebApp };
@@ -26,6 +26,13 @@ function installWindow(webApp?: TgWebApp): { fake: FakeWindow; restore: () => vo
 function bridge(): TgWebApp {
   return { initData: 'signed', platform: 'tdesktop' } as TgWebApp;
 }
+
+test('Telegram host detection covers mobile and desktop WebView user agents', () => {
+  assert.equal(looksLikeTelegramUserAgent('Mozilla/5.0 Telegram-Android/11.0'), true);
+  assert.equal(looksLikeTelegramUserAgent('Mozilla/5.0 Telegram-iOS/10.0'), true);
+  assert.equal(looksLikeTelegramUserAgent('Mozilla/5.0 TelegramDesktop/5.8'), true);
+  assert.equal(looksLikeTelegramUserAgent('Mozilla/5.0 Chrome/140.0 Safari/537.36'), false);
+});
 
 test('Telegram bridge availability resolves immediately when already present', async () => {
   const { restore } = installWindow(bridge());

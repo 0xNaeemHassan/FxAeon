@@ -1,7 +1,7 @@
 .networkTabs { display: flex; gap: 4px; padding: 4px; border-radius: 14px; background: var(--surface-2); }
 .networkTabs button { min-height: 44px; flex: 1; border-radius: 10px; padding: 8px 12px; font-size: 13px; font-weight: 600; color: var(--mut); }
 .networkTabs button[aria-pressed='true'] { color: var(--text); background: var(--surface-3); box-shadow: var(--elevation-1); }
-.assets { min-width: 0; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); overflow: hidden; }
+.assets { min-width: 0; max-height: min(420px, 48dvh); border: 1px solid var(--line); border-radius: 20px; background: var(--surface); overflow-y: auto; overscroll-behavior: contain; }
 .sectionHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 20px 20px 12px; }
 .sectionHeading h2 { font-size: 17px; font-weight: 650; }
 .sectionHeading > span { color: var(--mut); font-size: 12px; }

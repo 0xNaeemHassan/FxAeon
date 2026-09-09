@@ -45,7 +45,7 @@
 
 FxAeon turns the official f(x) SDK into a focused, reviewable product surface for both ordinary browsers and Telegram Mini Apps. The same static application, wallet boundary, SDK adapter, and transaction policy run in both environments, with a violet-black dark theme, lavender actions, and a read-only in-app `/docs` guide.
 
-<img src="docs/assets/fxaeon-web.png" alt="FxAeon web landing page" width="100%" />
+<img src="docs/assets/fxaeon-portfolio.png" alt="FxAeon Portfolio application" width="100%" />
 
 <table>
   <tr>
@@ -101,9 +101,9 @@ Populated views show positions opened through FxAeon's review and confirmation f
 | fxSAVE | Read balances/configuration, deposit assets, queue or execute redemptions, and claim completed withdrawals; verified zero-share balances remain exact zero |
 | Bridge | Quote and build Ethereum ↔ Base LayerZero routes with source-receipt and destination-GUID verification |
 | Market price context | Timestamp- and confidence-validated current asset prices across forms, pickers, Portfolio, Earn, positions, and the wallet profile, plus validated ETH/BTC market history for charts; display-only and never an execution input |
-| Wallet profile | Privy embedded wallets or browser-injected EVM wallets, supported-asset balances, live USD totals, dedicated activity, and in-place connect/disconnect/account switching—without a custody server |
+| Wallet profile | Privy embedded wallets or browser-injected EVM wallets, supported-asset balances, live USD totals, dedicated History, and in-place connect/disconnect/account switching—without a custody server |
 | Shared wallet data | Wagmi and TanStack Query keep balances consistent across Portfolio, token pickers, and Move, with account-scoped caching and receipt-backed refreshes |
-| Recovery | Reload-safe pending transaction and bridge journals in a dedicated Activity view, always revalidated against chain data |
+| Recovery | Reload-safe pending transaction and bridge journals in a dedicated History view, always revalidated against chain data |
 | Interface | Mobile-first controls, searchable token pickers with available quantities and their USD worth, a real leverage slider, and official, neutral-dark, and light themes |
 
 The immutable public surface contains exactly 15 SDK methods. [`fx-scope.lock.json`](fx-scope.lock.json) and the scope verifier prevent protocol internals, unsupported routes, or backend authority from silently entering the product.
@@ -116,7 +116,7 @@ Token and network marks use maintained AladdinDAO/SmolDapp assets (with local SV
 - **Self-custodial execution.** Privy or the connected external wallet remains the only signing authority. FxAeon never accepts a private key.
 - **Official planning path.** Protocol reads and unsigned transaction plans come from the pinned <code>@aladdindao/fx-sdk</code> package.
 - **Chain-authoritative state.** Ethereum, Base, receipts, and matching LayerZero events establish financial truth—not a database or browser cache.
-- **Price context without price authority.** DefiLlama supplies the primary validated current-price snapshot; missing token quotes are requested through one bounded, batched CoinGecko contract-price fallback with adaptive rate-limit retry/backoff. Each token is validated independently, quotes older than 15 minutes are rejected, no stablecoin peg is substituted, and the current-price strip has no source badge. CoinGecko separately supplies validated ETH/BTC history for the 1D/7D/30D charts. Invalid data is rejected; a failed refresh retains the last validated snapshot with an explicit retrying/stale state. These display feeds remain isolated from SDK planning, validation, simulation, and signing.
+- **Price context without price authority.** DefiLlama supplies the primary validated current-price snapshot; missing token quotes are requested through one bounded, batched CoinGecko contract-price fallback with adaptive rate-limit retry/backoff. Each token is validated independently, quotes older than 15 minutes are rejected, and no stablecoin peg is substituted. Compact market context has no source badge or duplicate spot/chart price. CoinGecko separately supplies validated ETH/BTC history for the 1D/7D/30D charts. Invalid data is rejected; a failed refresh retains the last validated snapshot with an explicit retrying/stale state. These display feeds remain isolated from SDK planning, validation, simulation, and signing.
 - **Inspectable transaction review sheet.** Targets, selectors, values, approvals, chains, nonces, route order, amounts, limits, and applicable fees are shown and validated before wallet confirmation.
 - **Static delivery.** The production artifact is a deterministic Cloudflare Pages export with no application server, Worker, queue, or privileged runtime.
 
@@ -184,19 +184,21 @@ cp apps/mini-app/.env.example apps/mini-app/.env.local
 pnpm dev
 ```
 
-Open <http://localhost:3000> in a browser. The normal web flow opens Portfolio, where wallet connection, account switching, and disconnect are handled in place from the app shell and wallet panel; `/login` remains an explicit standalone setup screen. Telegram is optional for local development; use a Telegram test launch only when validating host-specific viewport, theme, haptic, or seamless-login behavior.
+Open <http://localhost:3000> in a browser. The root route opens Portfolio directly—there is no intervening landing page. Wallet connection, account switching, and disconnect happen in place from the app shell and wallet panel; `/login` remains an explicit standalone setup screen. Telegram is optional for local development; use a Telegram test launch only when validating host-specific viewport, theme, haptic, or seamless-login behavior.
 
 ### Public build configuration
 
 | Variable | Purpose |
 | --- | --- |
-| `NEXT_PUBLIC_PRIVY_APP_ID` | Optional public Privy application identifier; omit it to use an injected browser wallet |
+| `NEXT_PUBLIC_PRIVY_APP_ID` | Public Privy application identifier; required for Privy/Telegram authentication and optional only when using an injected browser wallet |
 | `NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL` | Origin-restricted Ethereum browser endpoint |
 | `NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL` | Origin-restricted Base browser endpoint |
 | `NEXT_PUBLIC_ALCHEMY_DATA_API_KEY` | Origin-restricted Alchemy Data API key for foreground Ethereum/Base asset discovery |
 | `NEXT_PUBLIC_TELEGRAM_APP_URL` | Secondary Telegram launch link; browser entry does not depend on it |
 
 Every `NEXT_PUBLIC_*` value is embedded in the browser bundle. Never place a private key, Telegram bot token, Privy secret, authorization key, or unrestricted provider credential in client configuration. Without Privy, FxAeon connects directly to the wallet extension through EIP-1193; signing still happens in that wallet and no fallback server is involved.
+
+Cloudflare Pages must receive the same public build variables as the verified release build; GitHub Actions secrets are not implicitly inherited by a native Pages Git build. The deployment workflow checks the live public Privy configuration after Pages publishes, then synchronizes the Telegram bot profile and Mini App menu with the protected `TELEGRAM_BOT_TOKEN`. The bot token is never shipped to the browser.
 
 See [`SETUP.md`](SETUP.md) for provider restrictions, protected deployment variables, fork-test configuration, and Cloudflare Pages deployment.
 

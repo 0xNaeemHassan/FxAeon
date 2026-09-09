@@ -12,6 +12,7 @@ import TokenIcon from '@/components/TokenIcon';
 import { AddressChip } from '@/components/ui';
 import { formatUsd } from '@/lib/prices';
 import { walletAssetCountLabel, type WalletAsset, type WalletAssetSnapshot } from '@/lib/walletAssets';
+import { tokenName, tokenSymbol } from '@/lib/fx/tokenPresentation';
 import styles from './PortfolioAssets.module.css';
 
 export type PortfolioNetwork = 'all' | 1 | 8453;
@@ -35,10 +36,21 @@ export function AssetIcon({ asset, size = 36 }: { asset: WalletAsset; size?: num
 
 /** Exact decimal text stays available even when a row's long quantity wraps. */
 export function AssetQuantity({ asset }: { asset: WalletAsset }) {
-  return <span className={styles.quantity}>{asset.balance} <span>{asset.symbol}</span></span>;
+  return <span className={styles.quantity}>{asset.balance} <span>{displayAssetSymbol(asset.symbol)}</span></span>;
 }
 
-export function PortfolioAssets({ snapshot, loading, network = 'all' }: { snapshot: WalletAssetSnapshot | null; loading: boolean; network?: PortfolioNetwork }) {
+/** Keep protocol implementation names out of the normal portfolio surface. */
+export function displayAssetSymbol(symbol: string): string {
+  return tokenSymbol(symbol);
+}
+
+export function PortfolioAssets({ snapshot, loading, status, onRetry, network = 'all' }: {
+  snapshot: WalletAssetSnapshot | null;
+  loading: boolean;
+  status?: 'idle' | 'loading' | 'ready' | 'partial' | 'unavailable';
+  onRetry?: () => void;
+  network?: PortfolioNetwork;
+}) {
   const [search, setSearch] = useState('');
   const [selection, setSelection] = useState<{ wallet: string; id: string } | null>(null);
   const selected = selection?.wallet === snapshot?.walletAddress ? snapshot?.assets.find((asset) => asset.id === selection?.id) : undefined;
@@ -61,13 +73,13 @@ export function PortfolioAssets({ snapshot, loading, network = 'all' }: { snapsh
     <div className={styles.sectionHeading}><h2 id="portfolio-assets-heading">Assets</h2><span>{walletAssetCountLabel(assets.length, countState)}</span></div>
     <label className={styles.search}><Search size={18} aria-hidden="true" /><span className="sr-only">Search assets</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search assets" autoComplete="off" /></label>
     {loading && !snapshot ? <div className={styles.loading} role="status" aria-label="Loading assets"><span /><span /><span /></div>
-      : !snapshot ? <p className={styles.empty} role="status">Assets could not load. Refresh to try again.</p>
+      : !snapshot ? <div className="rounded-xl border border-[var(--line)] bg-[var(--warn-dim)] p-3 text-[12px] text-warn" role="status" aria-live="polite"><p>Asset balances are unavailable.</p>{onRetry && <button type="button" onClick={onRetry} className="mt-2 min-h-11 rounded-lg px-2 font-semibold text-mint">Retry balances</button>}</div>
       : assets.length === 0 ? <div className={styles.empty}><Coins size={24} aria-hidden="true" /><p>{search ? 'No matching assets.' : incomplete ? 'No assets found in the balances available so far.' : 'No assets on this network yet.'}</p>{!search && <Link href="/qr">Receive assets</Link>}</div>
-      : <ul className={styles.assetList}>{assets.map((asset) => <li key={asset.id}><button type="button" className={styles.assetRow} onClick={() => setSelection({ wallet: snapshot.walletAddress, id: asset.id })} aria-label={`View ${asset.symbol} on ${networkLabel(asset.chainId)}`}>
-        <AssetIcon asset={asset} /><span className={styles.assetName}><strong>{asset.symbol}</strong><small>{networkLabel(asset.chainId)}</small></span>
+      : <ul className={styles.assetList}>{assets.map((asset) => <li key={asset.id}><button type="button" className={styles.assetRow} onClick={() => setSelection({ wallet: snapshot.walletAddress, id: asset.id })} aria-label={`View ${displayAssetSymbol(asset.symbol)} on ${networkLabel(asset.chainId)}`}>
+        <AssetIcon asset={asset} /><span className={styles.assetName}><strong>{displayAssetSymbol(asset.symbol)}</strong><small>{tokenName(asset.symbol)} · {networkLabel(asset.chainId)}</small></span>
         <span className={styles.assetWorth}><strong key={asset.usdValue} className={styles.changedValue}>{formatUsd(asset.usdValue)}</strong><AssetQuantity asset={asset} /></span>
       </button></li>)}</ul>}
-    {incomplete && snapshot && <p className={styles.networkNote} role="status">{networks.filter((chain) => snapshot.networks[chain].status !== 'ready').map(networkLabel).join(' and ')} balances may be incomplete.</p>}
+    {incomplete && snapshot && <div className={styles.networkNote} role="status" aria-live="polite"><span>{status === 'unavailable' ? 'Some network balances are unavailable.' : status === 'partial' ? 'Some balances are verified; other network reads are incomplete.' : 'Loading remaining network balances.'}</span>{onRetry && status !== 'loading' && <button type="button" onClick={onRetry} className="ml-2 min-h-11 rounded-lg px-2 font-semibold text-mint">Retry</button>}</div>}
     {selected && <AssetSheet asset={selected} onClose={() => setSelection(null)} />}
   </section>;
 }
@@ -97,14 +109,14 @@ function AssetSheet({ asset, onClose }: { asset: WalletAsset; onClose: () => voi
   const earnable = asset.chainId === 1 && key && ['USDC', 'fxUSD', 'fxUSDBasePool', 'fxSAVE'].includes(key);
   return createPortal(<dialog ref={dialog} className={styles.dialog} onCancel={(event) => { event.preventDefault(); onClose(); }} onClick={(event) => { if (event.target === event.currentTarget) onClose(); }} aria-labelledby="asset-sheet-title">
     <article className={styles.sheet}>
-      <header><span className={styles.sheetIdentity}><AssetIcon asset={asset} size={44} /><span><h2 id="asset-sheet-title">{asset.symbol}</h2><p>{asset.name} · {networkLabel(asset.chainId)}</p></span></span><button type="button" onClick={onClose} aria-label="Close asset details"><X size={20} /></button></header>
+      <header><span className={styles.sheetIdentity}><AssetIcon asset={asset} size={44} /><span><h2 id="asset-sheet-title">{displayAssetSymbol(asset.symbol)}</h2><p>{tokenName(asset.symbol)} · {networkLabel(asset.chainId)}</p></span></span><button type="button" onClick={onClose} aria-label="Close asset details"><X size={20} /></button></header>
       <div className={styles.sheetBalance}><span>Balance</span><strong>{formatUsd(asset.usdValue)}</strong><AssetQuantity asset={asset} /></div>
       <dl className={styles.details}><div><dt>Current price</dt><dd>{formatUsd(asset.priceStatus === 'fresh' ? asset.priceUsd : null)}</dd></div><div><dt>Network</dt><dd>{networkLabel(asset.chainId)}</dd></div><div><dt>Contract</dt><dd>{asset.tokenAddress ? <AddressChip address={asset.tokenAddress} /> : 'Native asset'}</dd></div></dl>
       <nav className={styles.sheetActions} aria-label={`${asset.symbol} actions`}>
         <Link href="/qr" onClick={onClose}><ArrowDownToLine size={18} />Receive</Link>
         {tradeable && <Link href={`/trade?market=${key === 'WBTC' ? 'BTC' : 'ETH'}&asset=${key}`} onClick={onClose}><CandlestickChart size={18} />Trade</Link>}
-        {bridgeable && <Link href="/move" onClick={onClose}><ArrowLeftRight size={18} />Move</Link>}
-        {earnable && <Link href="/earn" onClick={onClose}><PiggyBank size={18} />Earn</Link>}
+        {bridgeable && <Link href={`/move?token=${encodeURIComponent(key)}`} onClick={onClose}><ArrowLeftRight size={18} />Move</Link>}
+        {earnable && <Link href={key === 'fxSAVE' ? '/earn?mode=claim' : `/earn?mode=deposit&token=${encodeURIComponent(key)}`} onClick={onClose}><PiggyBank size={18} />Earn</Link>}
       </nav>
       {asset.tokenAddress && <a className={styles.explorer} href={`${explorer}/token/${asset.tokenAddress}`} target="_blank" rel="noopener noreferrer">View contract <ExternalLink size={14} aria-hidden="true" /></a>}
     </article>

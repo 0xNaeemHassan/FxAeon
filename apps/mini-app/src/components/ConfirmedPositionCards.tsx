@@ -15,7 +15,7 @@ export function ConfirmedPositionCards({ market }: { market?: 'ETH' | 'BTC' }) {
         <div><p className="text-[14px] font-semibold">{hint.market} {hint.side === 'long' ? 'Long' : 'Short'} <span className="font-normal text-mut">#{hint.positionId}</span></p><p className="mt-1.5 flex items-center gap-1.5 text-[12px] font-medium text-success"><ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />Position confirmed</p></div>
         <button type="button" aria-label="Refresh confirmed position details" disabled={checkingConfirmedPositions} onClick={() => void refreshConfirmedPositions()} className="glass-press inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-mut disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${checkingConfirmedPositions ? 'animate-spin' : ''}`} aria-hidden="true" /></button>
       </div>
-      <p className="mt-2 text-[13px] text-mut">Details updating</p>
+      <span className="skeleton mt-2 block h-3.5 w-32 rounded" role="status" aria-label="Loading position details" />
       <a href={`https://etherscan.io/tx/${hint.transactionHash}`} target="_blank" rel="noopener noreferrer" onClick={(event) => { if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && openExternalLink(`https://etherscan.io/tx/${hint.transactionHash}`)) event.preventDefault(); }} aria-label="View confirmed position transaction" className="glass-press mt-1 inline-flex min-h-11 items-center gap-1.5 text-[12px] font-semibold text-mint">View transaction<ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" /></a>
     </div>)}
   </div>;

@@ -21,7 +21,7 @@ const OFFICIAL_ROUTES = [
   "/move",
   "/more",
   "/settings",
-  "/activity",
+  "/history",
   "/qr",
   "/docs",
 ] as const;
@@ -52,19 +52,15 @@ test.describe("official f(x) client routes", () => {
 test.describe("browser entry", () => {
   test.use({ telegram: false });
 
-  test("landing page describes the official scope and remains backend-free", async ({ page, requests }) => {
-    await page.goto("/", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("main:visible")).toBeVisible();
-    await expect(page.locator("body")).toContainText(/f\(x\)|FxAeon/i);
-    await expect(page.getByRole("link", { name: /launch web app/i })).toBeVisible();
-    await expect(page.getByRole("link", { name: /open in telegram/i })).toBeVisible();
-    await expect(page.locator("body")).not.toContainText(/DCA|take[- ]?profit|stop[- ]?loss|whale|arbitrage|copy trading/i);
+  test("legacy Activity deep links resolve to the History workspace", async ({ page, requests }) => {
+    await page.goto("/activity", { waitUntil: "domcontentloaded" });
+    await expect(page).toHaveURL(/\/history\/?$/);
+    await expect(page.getByRole("heading", { name: "History", level: 1 })).toBeVisible();
     assertNoBackendRequests(requests);
   });
 
-  test("plain browser users can enter the app without Telegram", async ({ page, requests }) => {
+  test("root resolves directly to the wallet-owned Portfolio workspace", async ({ page, requests }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await page.getByRole("link", { name: /launch web app/i }).click();
     await expect(page).toHaveURL(/\/portfolio\/?$/);
     await expect(page.getByRole("heading", { name: /portfolio/i })).toBeVisible();
     await expect(page.locator("body")).not.toContainText(/runs inside Telegram|open the .*Mini App from Telegram to continue/i);
@@ -87,12 +83,11 @@ test.describe("browser entry", () => {
 test.describe("Telegram bridge availability", () => {
   test.use({ telegram: false });
 
-  test("a failed Telegram script cannot block the plain browser landing", async ({ page, requests }) => {
+  test("a failed Telegram script cannot block the plain browser Portfolio", async ({ page, requests }) => {
     await page.route("**/telegram-web-app.js", (route) => route.abort("failed"));
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("link", { name: /open.*telegram/i })).toBeVisible({ timeout: 3_000 });
-    await expect(page.getByRole("link", { name: /launch web app/i })).toBeVisible();
-    await expect(page.locator("body")).not.toContainText(/Loading live protocol state/i);
+    await expect(page).toHaveURL(/\/portfolio\/?(?:#.*)?$/);
+    await expect(page.getByRole("heading", { name: /portfolio/i })).toBeVisible({ timeout: 3_000 });
     assertNoBackendRequests(requests);
   });
 
@@ -113,8 +108,7 @@ test.describe("Telegram bridge availability", () => {
     await expect(page.locator("body")).not.toContainText(/Telegram bridge unavailable/i);
     await page.getByText("Connect wallet", { exact: true }).click();
     await expect(page).toHaveURL(/\/portfolio(?:#.*)?$/);
-    await expect(page.locator(".wallet-connect-toast")).toContainText(/Telegram wallet sign-in is unavailable/i);
-    await expect(page.locator("body")).not.toContainText(/No browser wallet detected/i);
+    await expect(page.locator("body")).not.toContainText(/sign-in is initializing|Telegram wallet sign-in is unavailable|No browser wallet detected/i);
     await expect(page.locator("body")).not.toContainText(/Telegram bridge unavailable/i);
     assertNoBackendRequests(requests);
   });
@@ -127,8 +121,7 @@ test.describe("Telegram connect CTA with an available bridge", () => {
     await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
     await page.getByText("Connect wallet", { exact: true }).click();
     await expect(page).toHaveURL(/\/portfolio\/?$/);
-    await expect(page.locator(".wallet-connect-toast")).toContainText(/Telegram wallet sign-in is unavailable/i);
-    await expect(page.locator("body")).not.toContainText(/No browser wallet detected/i);
+    await expect(page.locator("body")).not.toContainText(/sign-in is initializing|Telegram wallet sign-in is unavailable|No browser wallet detected/i);
     assertNoBackendRequests(requests);
   });
 });
@@ -161,7 +154,6 @@ test.describe("connected browser wallet flows", () => {
     await expect(page.getByRole("heading", { name: /portfolio/i })).toBeVisible();
     await expect(page.getByText(/0x930f/i).first()).toBeVisible();
     await expect(page.getByText("Wallet balances", { exact: true })).toHaveCount(0);
-    await expect(page.getByText('Ethereum reads are unavailable right now.', { exact: false })).toBeVisible();
     await expect(page.locator('.portfolio-value-metrics').getByText('—', { exact: true })).toHaveCount(3);
     await expect(page.getByText('Verified units', { exact: true })).toHaveCount(0);
     await expect(page.getByText('0 assets', { exact: true })).toHaveCount(0);
@@ -171,17 +163,17 @@ test.describe("connected browser wallet flows", () => {
     assertNoBackendRequests(requests);
   });
 
-  test("wallet profile opens only on demand and exposes Activity", async ({ page, requests }) => {
+  test("wallet profile opens only on demand and exposes History", async ({ page, requests }) => {
     await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
     await assertNoTopOverlay(page);
     await page.getByRole("button", { name: "Open wallet profile" }).click();
     const profile = page.getByRole("dialog", { name: "Wallet profile" });
     await expect(profile).toBeVisible();
     await expect(profile.getByRole("link", { name: "View wallet on Etherscan" })).toHaveAttribute("href", /etherscan\.io\/address\/0x930f/i);
-    await expect(profile.getByRole("link", { name: /Activity/ })).toBeVisible();
-    await profile.getByRole("link", { name: /Activity/ }).click();
-    await expect(page).toHaveURL(/\/activity\/?$/);
-    await expect(page.getByRole("heading", { name: "Activity", level: 1 })).toBeVisible();
+    await expect(profile.getByRole("link", { name: /History/ })).toBeVisible();
+    await profile.getByRole("link", { name: /History/ }).click();
+    await expect(page).toHaveURL(/\/history\/?$/);
+    await expect(page.getByRole("heading", { name: "History", level: 1 })).toBeVisible();
     assertNoBackendRequests(requests);
   });
 
@@ -235,7 +227,7 @@ test.describe("connected browser wallet flows", () => {
     assertNoBackendRequests(requests);
   });
 
-  test("skip link stays hidden during connected Trade scrolling and remains keyboard accessible", async ({ page, requests }) => {
+  test("skip link stays hidden while connected Trade remains fixed and remains keyboard accessible", async ({ page, requests }) => {
     await page.goto("/trade", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("button", { name: "Open wallet profile" })).toBeVisible();
     const skipLink = page.getByRole("link", { name: "Skip to main content", exact: true });
@@ -250,10 +242,10 @@ test.describe("connected browser wallet flows", () => {
     };
 
     await assertSkipLinkHidden();
-    // Working routes keep the browser viewport fixed; supporting content is
-    // scrolled by the route's main region instead of moving the app chrome.
+    // Collapsed Trade is a single-frame ticket. Supporting content only
+    // becomes scrollable when the mobile chart is explicitly expanded.
     await main.evaluate((element) => element.scrollTo({ top: 500 }));
-    await expect.poll(() => main.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    await expect.poll(() => main.evaluate((element) => element.scrollTop)).toBe(0);
     await assertSkipLinkHidden();
 
     const asset = page.getByLabel("Input asset");
@@ -335,8 +327,8 @@ test.describe("market price context", () => {
     const ethOption = page.getByRole("listbox", { name: "Input asset options" }).getByRole("option", { name: /^ETH selected$/ });
     // This build has no RPC configured: a known token price is not evidence
     // of an owned balance, and must not appear as the wallet's USD worth.
-    await expect(ethOption).toContainText("Balance unavailable");
-    await expect(ethOption).not.toContainText("USD unavailable");
+    await expect(ethOption).toContainText("—");
+    await expect(ethOption).not.toContainText(/unavailable/i);
     await expect(ethOption.getByText("$2,400.00", { exact: true })).toHaveCount(0);
     await page.keyboard.press("Escape");
     const slider = page.getByRole("slider", { name: "Target leverage slider" });
@@ -364,7 +356,12 @@ test.describe("market price context", () => {
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
     await expect(chartContent).toBeVisible();
 
-    await page.setViewportSize({ width: 641, height: 844 });
+    await page.setViewportSize({ width: 768, height: 844 });
+    await expect(toggle).toBeVisible();
+    await expect(toggle).toHaveText("Hide chart");
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(chartContent).toBeVisible();
+    await page.setViewportSize({ width: 840, height: 844 });
     await expect(chartContent).toBeVisible();
     await expect(toggle).toBeHidden();
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
@@ -381,26 +378,39 @@ test.describe("market price context", () => {
     assertNoBackendRequests(requests);
   });
 
-  test("keeps compact market context available across every asset workspace", async ({ page, requests }) => {
-    for (const route of ["/portfolio", "/positions", "/borrow", "/earn", "/move", "/more", "/settings", "/activity", "/qr"]) {
+  test("keeps the top bar free of a duplicate market-price strip across every asset workspace", async ({ page, requests }) => {
+    for (const route of ["/portfolio", "/positions", "/borrow", "/earn", "/move", "/more", "/settings", "/history", "/qr"]) {
       await page.goto(route, { waitUntil: "domcontentloaded" });
-      const strip = page.getByRole("region", { name: "Market prices" });
-      await expect(strip.getByText("$2,400.00", { exact: true })).toBeVisible();
-      await expect(strip.locator(".market-strip-item").filter({ hasText: "FXN" })).toContainText("$26.00");
-      const geometry = await strip.evaluate((element) => {
-        const frame = element.getBoundingClientRect();
-        const items = [...element.querySelectorAll<HTMLElement>(".market-strip-item")]
-          .map((item) => item.getBoundingClientRect());
-        return {
-          frameCenter: frame.left + frame.width / 2,
-          contentCenter: (items[0].left + items[items.length - 1].right) / 2,
-          overflows: items[0].left < frame.left || items[items.length - 1].right > frame.right,
-        };
-      });
-      expect(geometry.overflows).toBe(false);
-      expect(Math.abs(geometry.contentCenter - geometry.frameCenter)).toBeLessThanOrEqual(2);
-      await expect(strip).not.toContainText("Live USD");
+      await expect(page.locator("main:visible")).toBeVisible();
+      await expect(page.getByRole("region", { name: "Market prices" })).toHaveCount(0);
     }
+    assertNoBackendRequests(requests);
+  });
+
+  test("disconnected portfolio keeps its action tiles in the overview card", async ({ page, requests }) => {
+    await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
+    const actions = page.getByRole("region", { name: "Actions", exact: true });
+    await expect(actions).toBeVisible({ timeout: 10_000 });
+    for (const label of ["Receive", "Trade", "Move", "Earn"]) {
+      await expect(actions.getByRole("link", { name: label, exact: true })).toBeVisible();
+    }
+    await expect(page.locator("svg.lucide-shield-check")).toHaveCount(0);
+    assertNoBackendRequests(requests);
+  });
+
+  test("portfolio keeps positions and fxSAVE actions inline", async ({ page, requests }) => {
+    await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "Positions", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Open trade", exact: true }).first()).toHaveAttribute("href", "/trade");
+    const openEarn = page.getByRole("link", { name: "Open Earn", exact: true });
+    if (await openEarn.count()) await expect(openEarn.first()).toHaveAttribute("href", "/earn");
+    // The no-RPC fixture cannot fabricate protocol positions. When a
+    // canonical read returns one, the card and its Manage/Borrow/Close links
+    // stay in this region; when it does not, the empty state is still valid.
+    const positions = page.getByRole("region", { name: "Positions", exact: true });
+    await expect(positions).toBeVisible();
+    const earn = page.getByRole("heading", { name: "Earn position", exact: true });
+    if (await earn.count()) await expect(earn).toBeVisible();
     assertNoBackendRequests(requests);
   });
 
@@ -443,12 +453,12 @@ test.describe("market price context", () => {
     });
 
     await page.goto("/trade", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("region", { name: "Market prices" }).getByText("$2,400.00", { exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: "ETH market chart" }).getByText("$2,400.00", { exact: true })).toBeVisible();
     await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
-    const strip = page.getByRole("region", { name: "Market prices" });
-    await expect(strip.getByText("$2,400.00", { exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Market prices" })).toHaveCount(0);
+    const marketCard = page.getByLabel("ETH market overview");
+    await expect(marketCard.getByText("$2,400.00", { exact: true })).toBeVisible();
     await expect.poll(() => calls).toBeGreaterThan(1);
-    await expect(strip).not.toContainText("Last USD");
     assertNoBackendRequests(requests);
   });
 });
@@ -481,14 +491,25 @@ test.describe("browser wallet connection", () => {
     assertNoBackendRequests(requests);
   });
 
-  test("Move recipient connects the wallet without leaving the route", async ({ page, requests }) => {
+  test("Move keeps recipient editable and centralizes wallet connection in review", async ({ page, requests }) => {
     await page.goto("/move", { waitUntil: "domcontentloaded" });
-    await page.getByRole("button", { name: "Connect wallet for recipient", exact: true }).click();
-    await expect(page).toHaveURL(/\/move\/?$/);
-    await expect(page.getByText("Connected wallet", { exact: true })).toBeVisible();
-    await expect(page.getByText("0x930f…98b9", { exact: true })).toBeVisible();
+    await expect(page.getByText("Connect wallet in Review", { exact: true })).toBeVisible();
+    await expect(page.locator(".reviewTrigger").getByRole("button", { name: "Connect wallet", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Connect wallet for recipient", exact: true })).toHaveCount(0);
+    // The shortest phone layout keeps derived route metadata out of the first
+    // frame so the recipient and review action remain immediately reachable.
+    await expect(page.getByRole("region", { name: "Bridge route preview", exact: true })).toHaveCount(0);
     await assertNoTopOverlay(page);
+    assertNoBackendRequests(requests);
+  });
+
+  test("mobile portfolio keeps both ETH and BTC markets in the overview", async ({ page, requests }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/portfolio', { waitUntil: 'domcontentloaded' });
+    const markets = page.getByRole('heading', { name: 'Markets', exact: true });
+    await expect(markets).toBeVisible();
+    await expect(page.getByLabel('ETH market overview')).toBeVisible();
+    await expect(page.getByLabel('BTC market overview')).toBeVisible();
     assertNoBackendRequests(requests);
   });
 });
@@ -497,7 +518,7 @@ test.describe("theme control", () => {
   test.use({ telegram: false });
 
   test("switches among official, dark, and light themes, supports radio-key navigation, and persists the choice", async ({ page, requests }) => {
-    await page.goto("/more", { waitUntil: "domcontentloaded" });
+    await page.goto("/settings", { waitUntil: "domcontentloaded" });
     const appearance = page.getByRole("radiogroup", { name: "Appearance theme", exact: true });
     await expect(appearance.getByRole("radio")).toHaveCount(3);
     const officialTheme = appearance.getByRole("radio", { name: /^Official/ });
@@ -512,7 +533,7 @@ test.describe("theme control", () => {
     await page.getByRole("button", { name: "Switch to light theme" }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     await expect(page.getByRole("main").getByRole("button", { name: "Connect wallet", exact: true })).toHaveCSS("color", "rgb(255, 255, 255)");
-    await page.goto("/more", { waitUntil: "domcontentloaded" });
+    await page.goto("/settings", { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "Switch to official theme" }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "official");
     await page.evaluate(() => {
@@ -521,6 +542,41 @@ test.describe("theme control", () => {
     });
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(page.locator("html")).toHaveAttribute("data-theme", "official");
+    assertNoBackendRequests(requests);
+  });
+});
+
+test.describe("Move and More compact surfaces", () => {
+  test.use({ telegram: false });
+
+  test("More exposes wallet/account destinations, docs, and appearance choices", async ({ page, requests }) => {
+    await page.goto("/more", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("link", { name: /History/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Receive/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Settings/ })).toBeVisible();
+    await expect(page.getByRole("radiogroup", { name: "Appearance theme", exact: true })).toBeVisible();
+    await expect(page.getByText("Resources", { exact: true })).toBeVisible();
+    await expect(page.getByText("FxAeon docs", { exact: true })).toBeVisible();
+    await page.goto("/settings", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("radiogroup", { name: "Appearance theme", exact: true })).toBeVisible();
+    assertNoBackendRequests(requests);
+  });
+
+  test("Move keeps the bridge form focused on the supported asset flow", async ({ page, requests }) => {
+    await page.goto("/move", { waitUntil: "domcontentloaded" });
+    await expect(page.getByText("Advanced OFT", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Review move/ }).or(page.getByRole("button", { name: "Connect wallet", exact: true })).first()).toBeVisible();
+    assertNoBackendRequests(requests);
+  });
+
+  test("Move keeps raw input separate from quote-backed output", async ({ page, requests }) => {
+    await page.goto("/move", { waitUntil: "domcontentloaded" });
+    const amount = page.getByLabel("Amount in fxUSD");
+    await amount.fill("not-a-number");
+    await expect(page.getByText("Enter a plain decimal number.", { exact: true })).toBeVisible();
+    await expect(page.getByText(/Expected receive|ETA/i)).toHaveCount(0);
+    await amount.fill("1");
+    await expect(page.getByText(/Expected receive|ETA/i)).toHaveCount(0);
     assertNoBackendRequests(requests);
   });
 });

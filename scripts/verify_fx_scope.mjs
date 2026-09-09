@@ -35,6 +35,7 @@ const allowedRoutes = new Set([
   // User documentation is a read-only surface, not an additional SDK method.
   'docs',
   'earn',
+  'history',
   'login',
   'more',
   'move',

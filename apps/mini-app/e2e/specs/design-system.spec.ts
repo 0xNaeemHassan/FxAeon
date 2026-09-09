@@ -9,7 +9,7 @@ test.describe('cohesive responsive design', () => {
     for (const theme of ['official', 'dark', 'light'] as const) {
       await page.getByRole('radio', { name: new RegExp(`^${theme}`, 'i') }).click();
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
-      for (const route of ['/trade', '/positions', '/portfolio', '/earn', '/borrow', '/move', '/activity', '/settings', '/qr', '/docs']) {
+      for (const route of ['/trade', '/positions', '/portfolio', '/earn', '/borrow', '/move', '/history', '/settings', '/qr', '/docs']) {
         await page.goto(route, { waitUntil: 'domcontentloaded' });
         await expect(page.locator('main:visible')).toBeVisible();
         await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
@@ -35,7 +35,7 @@ test.describe('cohesive responsive design', () => {
     await expect(ticket).toBeVisible();
     await expect(chart.getByText('f(x) market · Ethereum', { exact: true })).toHaveCount(0);
     await expect(chart.getByText('CoinGecko history · display only', { exact: true })).toHaveCount(0);
-    await expect(chart.getByRole('link', { name: 'CoinGecko', exact: true })).toBeVisible();
+    await expect(chart.getByRole('link', { name: 'CoinGecko', exact: true })).toHaveCount(0);
     const chartBox = await chart.boundingBox();
     const ticketBox = await ticket.boundingBox();
     expect(chartBox).not.toBeNull();
@@ -62,22 +62,41 @@ test.describe('cohesive responsive design', () => {
       const content = page.locator('.app-content-tabs');
       await expect(shell).toBeVisible();
       await expect(content).toBeVisible();
+      await expect(page.locator('.market-strip')).toHaveCount(0);
       const geometry = await page.evaluate(() => {
         const root = document.documentElement;
+        const body = document.body;
+        const shell = document.querySelector<HTMLElement>('.app-shell-tabs');
         const main = document.querySelector<HTMLElement>('.app-content-tabs');
-        if (!main) throw new Error('working route content is missing');
+        if (!main || !shell) throw new Error('working route content is missing');
         const style = getComputedStyle(main);
+        const shellRect = shell.getBoundingClientRect();
+        const mobileNav = document.querySelector<HTMLElement>('.mobile-tabbar');
+        const mobileNavRect = mobileNav && getComputedStyle(mobileNav).display !== 'none'
+          ? mobileNav.getBoundingClientRect()
+          : null;
         return {
           pageOverflow: root.scrollHeight - root.clientHeight,
+          bodyOverflow: body.scrollHeight - body.clientHeight,
           contentOverflow: main.scrollHeight - main.clientHeight,
           overflowY: style.overflowY,
           bottomPadding: Number.parseFloat(style.paddingBottom),
+          shellBottom: shellRect.bottom,
+          viewportBottom: window.innerHeight,
+          mobileNavTop: mobileNavRect?.top ?? null,
         };
       });
       expect(geometry.pageOverflow, `page must not scroll at ${width}px`).toBeLessThanOrEqual(1);
+      expect(geometry.bodyOverflow, `body must not scroll at ${width}px`).toBeLessThanOrEqual(1);
+      expect(geometry.shellBottom, `shell must fit at ${width}px`).toBeLessThanOrEqual(geometry.viewportBottom + 1);
       expect(geometry.overflowY).toBe('auto');
       expect(geometry.contentOverflow).toBeGreaterThanOrEqual(0);
-      expect(geometry.bottomPadding).toBeGreaterThan(width <= 640 ? 68 : 39);
+      if (width <= 640) expect(geometry.bottomPadding).toBeGreaterThan(68);
+      else if (width < 840) expect(geometry.bottomPadding).toBeGreaterThan(39);
+      else expect(geometry.bottomPadding).toBeGreaterThanOrEqual(0);
+      if (geometry.mobileNavTop !== null) {
+        expect(geometry.bottomPadding).toBeGreaterThanOrEqual(geometry.viewportBottom - geometry.mobileNavTop - 1);
+      }
     }
     assertNoBackendRequests(requests);
   });

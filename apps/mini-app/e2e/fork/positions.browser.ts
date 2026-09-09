@@ -739,7 +739,7 @@ async function runProof(captureStage: string) {
       positionUsdLabelsVerified: true, directCloseActionVerified: true,
       existingLongBorrowDeepLinkVerified: true, existingLongBorrowExecuted: true,
       borrowedFxUsdReceived: true, existingLongPositionIdPreserved: true,
-      instantReviewOverlayVerified: true,
+      instantReviewVerified: true,
       everySupportedPositionClosed: true, closeOutputBalanceRefreshVerified: true,
       readSurfaces: ['trade', 'positions', 'portfolio', 'earn', 'move'] }, positions, existingBorrow: existingBorrowProof, closedPositions }, null, 2));
   console.log('Real browser four-position open-and-close acceptance proof complete; fork snapshot reverted.');

@@ -19,9 +19,10 @@ test('production validation, deterministic verification, and deployment build ar
   const verification = workflow.indexOf('run: pnpm verify\n');
   const productionBuild = workflow.indexOf('run: pnpm build\n');
   const wait = workflow.indexOf('Wait for Cloudflare Pages deployment');
+  const liveConfig = workflow.indexOf('Verify live wallet configuration');
   const sync = workflow.indexOf('Sync Telegram bot metadata and menu');
   assert.ok(validation >= 0 && validation < verification);
-  assert.ok(verification < productionBuild && productionBuild < wait && wait < sync);
+  assert.ok(verification < productionBuild && productionBuild < wait && wait < liveConfig && liveConfig < sync);
 });
 
 test('complete verification has no production public variables in scope', () => {
@@ -54,4 +55,12 @@ test('native Cloudflare deployment is gated without Wrangler credentials', () =>
   assert.match(wait, /GITHUB_SHA:\s*\$\{\{\s*github\.sha\s*\}\}/);
   assert.doesNotMatch(workflow, /CLOUDFLARE_(?:API_TOKEN|ACCOUNT_ID)/);
   assert.doesNotMatch(productionEnvValidator, /CLOUDFLARE_(?:API_TOKEN|ACCOUNT_ID)/);
+});
+
+test('the published Cloudflare bundle is checked for the protected public wallet configuration', () => {
+  const verification = step('Verify live wallet configuration');
+  assert.match(verification, /run: node scripts\/verify_live_public_config\.mjs/);
+  assert.match(verification, /EXPECTED_PUBLIC_PRIVY_APP_ID:\s*\$\{\{\s*secrets\.NEXT_PUBLIC_PRIVY_APP_ID\s*\}\}/);
+  assert.match(verification, /GITHUB_SHA:\s*\$\{\{\s*github\.sha\s*\}\}/);
+  assert.match(verification, /LIVE_APP_URL:\s*https:\/\/fxaeon\.pages\.dev/);
 });

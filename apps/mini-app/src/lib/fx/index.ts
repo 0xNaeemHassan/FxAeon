@@ -17,3 +17,4 @@ export * from "./reviewPreparation";
 export * from "./lock";
 export * from "./journal";
 export * from "./recovery";
+export * from "./drafts";

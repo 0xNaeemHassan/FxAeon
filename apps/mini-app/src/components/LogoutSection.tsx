@@ -29,7 +29,7 @@ function PrivyLogoutControls() {
       await logout();
       haptic('success');
     } catch (e) {
-      setError(userSafeError(e, 'Logout is temporarily unavailable. Try again.'));
+      setError(userSafeError(e, 'Logout could not be completed. Try again.'));
     } finally {
       setLoggingOut(false);
     }

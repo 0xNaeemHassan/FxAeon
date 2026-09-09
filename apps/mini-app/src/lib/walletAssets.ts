@@ -26,15 +26,12 @@ export type WalletAssetValuation = {
 };
 export const ASSET_PRICE_MAX_AGE_MS = 2 * 60_000;
 export const ASSET_BALANCE_MAX_AGE_MS = 2 * 60_000;
-export const ASSET_DISCOVERY_STALE_MS = 60_000;
 const ADDRESS = /^0x[0-9a-f]{40}$/i;
 const record = (value: unknown): Record<string, unknown> | null => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 const label = (value: unknown, fallback: string, max: number) => typeof value === 'string' && value.trim() ? value.replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, '').trim().slice(0, max) || fallback : fallback;
 
 export function walletAssetCountLabel(count: number, state: WalletAssetCountState): string {
-  if (state === 'loading') return 'Loading';
-  if (state === 'unavailable') return 'Unavailable';
-  if (state === 'partial') return 'Updating';
+  if (state !== 'ready') return '—';
   return `${count} ${count === 1 ? 'asset' : 'assets'}`;
 }
 
@@ -90,7 +87,7 @@ export function summarizeWalletAssets(snapshot: WalletAssetSnapshot, now = Date.
  */
 export function walletAssetValuation(snapshot: WalletAssetSnapshot | null): WalletAssetValuation {
   if (!snapshot) {
-    return { complete: false, totalUsd: null, assetCount: 0, unpricedAssetCount: 0, reason: 'Supported balances are unavailable.' };
+    return { complete: false, totalUsd: null, assetCount: 0, unpricedAssetCount: 0, reason: '' };
   }
   const assetCount = snapshot.assets.filter((asset) => asset.balanceWei > 0n).length;
   const unpricedAssetCount = snapshot.unpricedAssetCount;
@@ -100,12 +97,11 @@ export function walletAssetValuation(snapshot: WalletAssetSnapshot | null): Wall
     reasons.push(`${unpricedAssetCount} ${unpricedAssetCount === 1 ? 'asset is' : 'assets are'} waiting for a verified USD value.`);
   }
   if (incompleteNetworks.length > 0) {
-    const names = incompleteNetworks.map((network) => network.chainId === 1 ? 'Ethereum' : 'Base').join(' and ');
-    const pending = incompleteNetworks.some((network) => network.status === 'pending');
-    reasons.push(`${names} balances are ${pending ? 'still being verified' : 'partially unavailable'}.`);
+    // Keep incomplete network reads represented by the incomplete flag while
+    // leaving transient diagnostics out of the user-facing valuation copy.
   }
   return {
-    complete: reasons.length === 0,
+    complete: reasons.length === 0 && incompleteNetworks.length === 0,
     totalUsd: Number.isFinite(snapshot.totalUsdValue) ? snapshot.totalUsdValue : null,
     assetCount,
     unpricedAssetCount,

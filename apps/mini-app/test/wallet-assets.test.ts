@@ -14,9 +14,9 @@ const wallet = '0x0000000000000000000000000000000000001234';
 const now = Date.parse('2026-09-05T00:00:00.000Z');
 
 test('asset counts stay truthful while canonical reads are pending or unavailable', () => {
-  assert.equal(walletAssetCountLabel(0, 'loading'), 'Loading');
-  assert.equal(walletAssetCountLabel(0, 'unavailable'), 'Unavailable');
-  assert.equal(walletAssetCountLabel(0, 'partial'), 'Updating');
+  assert.equal(walletAssetCountLabel(0, 'loading'), '—');
+  assert.equal(walletAssetCountLabel(0, 'unavailable'), '—');
+  assert.equal(walletAssetCountLabel(0, 'partial'), '—');
   assert.equal(walletAssetCountLabel(0, 'ready'), '0 assets');
 });
 

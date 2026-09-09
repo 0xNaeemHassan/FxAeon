@@ -58,7 +58,7 @@ export function filterJournalForWallet(
 
 /**
  * Never age an unresolved transaction or a source-confirmed bridge out of
- * recovery merely because newer activity exists. Only completed non-bridge
+ * recovery merely because newer history exists. Only completed non-bridge
  * history is capped; local status is still revalidated from chain receipts.
  */
 export function selectRecoveryRecords(

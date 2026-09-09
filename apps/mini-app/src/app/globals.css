@@ -31,6 +31,14 @@
   --warn: #f2b84b;
   --warn-dim: rgba(242, 184, 75, 0.11);
   --tg-viewport-stable-height: 100dvh;
+  --shell-max-width: 680px;
+  --shell-inline-padding: 16px;
+  --shell-top-padding: calc(env(safe-area-inset-top, 0px) + 12px);
+  --shell-bottom-padding: 0px;
+  --header-height: 52px;
+  /* Keep the first actionable surface close to the shell chrome. Product
+     routes can still breathe through their own section spacing below. */
+  --header-gap: 10px;
 
   /* 4px rhythm and compact transactional geometry. */
   --space-1: 4px;
@@ -49,6 +57,7 @@
   --elevation-0: none;
   --elevation-1: 0 4px 24px rgba(0, 0, 0, 0.10);
   --elevation-2: 0 24px 80px rgba(0, 0, 0, 0.32);
+  --elevation-3: var(--elevation-2);
 
   /* Compatibility aliases for existing component class names. */
   --astryx-surface-canvas: var(--bg);
@@ -81,12 +90,14 @@
   --astryx-duration-fast: 120ms;
   --astryx-duration-normal: 180ms;
 
-  /* Bottom-nav geometry: 60px panel + edge safe area + 12px breathing room. */
+  /* Bottom-nav geometry: panel + safe area + one 8px spacing unit. Keep the
+     reserve in one token so route-level action rails and scroll padding clear
+     the same fixed navigation surface on every host. */
   --tabbar-panel-height: 68px;
   --tabbar-edge-gap: max(env(safe-area-inset-bottom, 0px), 8px);
-  --tabbar-reserve: calc(var(--tabbar-panel-height) + var(--tabbar-edge-gap) + 24px);
+  --tabbar-reserve: calc(var(--tabbar-panel-height) + var(--tabbar-edge-gap) + 8px);
   /* Scroll content must clear the fixed tab bar and its safe-area inset. */
-  --content-bottom-clearance: calc(var(--tabbar-reserve) + 12px);
+  --content-bottom-clearance: calc(var(--tabbar-reserve) + 4px);
 }
 
 /* Saved preferences are applied by a tiny pre-hydration initializer in the
@@ -153,15 +164,20 @@
 }
 
 html {
+  width: 100%;
+  height: 100%;
   background: var(--bg);
   color-scheme: dark;
+  overflow: hidden;
   scroll-behavior: smooth;
 }
 
 body {
-  min-height: var(--tg-viewport-stable-height);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
   margin: 0;
-  overflow-x: hidden;
+  overflow: hidden;
   background: var(--bg);
   color: var(--text);
   font-feature-settings: 'ss01' on, 'cv05' on, 'cv11' on;
@@ -282,10 +298,13 @@ summary:focus-visible {
   position: relative;
   isolation: isolate;
   display: flex;
-  min-height: 100dvh;
+  width: min(100%, var(--shell-max-width));
+  height: var(--tg-viewport-stable-height, 100dvh);
+  min-height: 0;
+  max-height: 100%;
   flex-direction: column;
-  max-width: 680px;
-  padding: calc(env(safe-area-inset-top, 0px) + 12px) 16px 0;
+  overflow: hidden;
+  padding: var(--shell-top-padding) var(--shell-inline-padding) var(--shell-bottom-padding);
 }
 
 .app-workspace {
@@ -300,6 +319,10 @@ summary:focus-visible {
   height: var(--tg-viewport-stable-height, 100dvh);
 }
 
+.app-shell-no-tabs {
+  min-height: var(--tg-viewport-stable-height, 100dvh);
+}
+
 .app-content {
   width: 100%;
   margin-inline: auto;
@@ -307,6 +330,7 @@ summary:focus-visible {
 
 .app-content-tabs {
   min-height: 0;
+  flex: 1 1 auto;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-bottom: var(--content-bottom-clearance);
@@ -317,12 +341,12 @@ summary:focus-visible {
   display: flex;
   min-width: 0;
   width: 100%;
-  min-height: 56px;
+  min-height: var(--header-height);
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  margin-bottom: 24px;
-  padding-bottom: 8px;
+  margin-bottom: var(--header-gap);
+  padding-bottom: 4px;
 }
 
 .brand-wordmark { font-size: 22px; font-weight: 700; letter-spacing: -.055em; }
@@ -330,60 +354,12 @@ summary:focus-visible {
 .utility-content { max-width: 560px; }
 .page-header:has(+ .utility-content) { max-width: 560px; margin-inline: auto; }
 
-.app-topbar-market {
-  min-width: 0;
-  flex: 1 1 160px;
-}
-
-.app-topbar-market .market-strip {
-  min-height: 40px;
-  margin: 0;
-  padding: 0;
-}
-
 .app-topbar-actions {
   display: flex;
   min-width: 0;
   align-items: center;
   gap: 8px;
 }
-
-.market-strip {
-  display: flex;
-  min-height: 32px;
-  align-items: center;
-  gap: 12px;
-  margin: -8px 0 24px;
-  overflow: hidden;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  padding: 4px 0;
-}
-
-.market-strip-items {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  justify-content: safe center;
-  gap: 12px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.market-strip-items::-webkit-scrollbar { display: none; }
-
-.market-strip-item {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.market-strip-item > span { color: var(--mut); }
-.market-strip-item strong { color: var(--text); font-weight: 650; font-variant-numeric: tabular-nums; }
 
 .wallet-profile-backdrop {
   position: fixed;
@@ -449,7 +425,7 @@ summary:focus-visible {
   align-items: flex-end;
   justify-content: space-between;
   gap: 20px;
-  margin-bottom: 28px;
+  margin-bottom: 18px;
 }
 
 .page-header h1 {
@@ -849,21 +825,6 @@ select.field-control option {
   padding: 12px 16px;
 }
 
-.market-chart-freshness {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-  color: var(--mut);
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-.market-chart-freshness .status-dot-warn {
-  background: var(--warn);
-  box-shadow: 0 0 0 3px var(--warn-dim);
-}
-
 .market-chart-stats {
   display: flex;
   align-items: center;
@@ -924,50 +885,6 @@ select.field-control option {
 .market-chart-compact {
   height: 54px;
   touch-action: auto;
-}
-
-.market-chart-gridline {
-  stroke: color-mix(in srgb, var(--text) 8%, transparent);
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
-}
-
-.market-chart-crosshair {
-  stroke: color-mix(in srgb, var(--text) 42%, transparent);
-  stroke-width: 1;
-  stroke-dasharray: 4 4;
-  vector-effect: non-scaling-stroke;
-}
-
-.market-chart-tooltip {
-  position: absolute;
-  z-index: 2;
-  display: grid;
-  min-width: 108px;
-  gap: 2px;
-  pointer-events: none;
-  transform: translate(-50%, -100%);
-  border: 1px solid var(--line-strong);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-raised) 94%, transparent);
-  box-shadow: var(--elevation-2);
-  padding: 7px 9px;
-  color: var(--text);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-  backdrop-filter: blur(8px);
-}
-
-.market-chart-tooltip strong {
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.market-chart-tooltip small {
-  color: var(--mut);
-  font-size: 8.5px;
-  white-space: nowrap;
 }
 
 .market-chart-footer {
@@ -1070,20 +987,6 @@ select.field-control option {
   height: 7px;
   border-radius: var(--radius-full);
   background: var(--surface-3);
-}
-
-.market-chart-mini-empty {
-  display: inline-flex;
-  width: 100%;
-  height: 54px;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border-top: 1px dashed var(--line);
-  color: var(--mut-2);
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: .015em;
 }
 
 .portfolio-context-tabs {
@@ -1363,11 +1266,6 @@ input[type='range'].lever::-moz-range-thumb {
   cursor: grab;
 }
 
-/* Mobile safe areas */
-.pb-safe {
-  padding-bottom: var(--tabbar-reserve);
-}
-
 .tabbar-safe {
   padding: 0 12px var(--tabbar-edge-gap);
   background: transparent;
@@ -1378,10 +1276,18 @@ input[type='range'].lever::-moz-range-thumb {
 }
 
 @media (min-width: 840px) {
+  :root {
+    --shell-max-width: 1344px;
+    --shell-inline-padding: 32px;
+    --shell-top-padding: 20px;
+    /* Desktop has no fixed bottom navigation, so reserve no phantom rail. */
+    --shell-bottom-padding: 0px;
+    --header-gap: 14px;
+  }
+
   .app-shell.app-shell-tabs {
     display: flex;
-    max-width: 1344px;
-    padding: 20px 32px 48px;
+    max-width: var(--shell-max-width);
   }
 
   .app-workspace {
@@ -1393,15 +1299,15 @@ input[type='range'].lever::-moz-range-thumb {
 
   .app-content { max-width: 1120px; }
   .app-content.utility-content { max-width: 560px; }
-  .app-topbar { max-width: none; margin: 0 auto 32px; }
+  .app-topbar { max-width: 1120px; margin: 0 auto var(--header-gap); }
   .desktop-navigation { display: flex; align-items: center; gap: 4px; margin-right: auto; margin-left: 32px; }
   .desktop-navigation a { display: grid; min-height: 44px; place-items: center; padding: 0 18px; border-radius: 999px; font-size: 14px; font-weight: 600; color: var(--mut); transition: background-color 120ms ease, color 120ms ease; }
   .desktop-navigation a:hover { color: var(--text); background: var(--surface); }
   .desktop-navigation a[aria-current='page'] { color: var(--mint); background: var(--mint-dim); }
-  .page-header { max-width: 1120px; margin: 0 auto 28px; }
+  .page-header { max-width: 1120px; margin: 0 auto 20px; }
   .page-header h1 { font-size: 34px; }
   .mobile-tabbar { display: none; }
-  .app-content-tabs { padding-bottom: 40px; }
+  .app-content-tabs { padding-bottom: 0; scroll-padding-bottom: 0; }
 
   .wallet-profile-backdrop { align-items: center; }
   .wallet-profile-sheet { border-radius: 22px; }
@@ -1418,8 +1324,83 @@ input[type='range'].lever::-moz-range-thumb {
 }
 
 @media (max-width: 640px) {
-  .app-topbar { flex-wrap: wrap; row-gap: 4px; }
-  .app-topbar-market { order: 3; flex-basis: 100%; }
+  :root {
+    --shell-top-padding: calc(env(safe-area-inset-top, 0px) + 8px);
+    --header-height: 48px;
+    --header-gap: 8px;
+  }
+
+  .app-topbar {
+    flex-wrap: wrap;
+    row-gap: 2px;
+    padding-bottom: 2px;
+  }
+  .app-topbar > a { gap: 8px; }
+  .app-topbar > a > svg { width: 28px; height: 28px; }
+  .brand-wordmark { font-size: 20px; }
+  /* The fixed tab bar already names every primary route. Keep mobile action
+     surfaces focused on their first control instead of repeating the route
+     title and subtitle above it. Documentation keeps its heading because it
+     is a reading surface and intentionally remains scrollable. */
+  :where(
+    .app-workspace[data-route='/portfolio'],
+    .app-workspace[data-route='/trade'],
+    .app-workspace[data-route='/earn'],
+    .app-workspace[data-route='/borrow'],
+    .app-workspace[data-route='/move'],
+    .app-workspace[data-route='/more'],
+    .app-workspace[data-route='/positions'],
+    .app-workspace[data-route='/activity'],
+    .app-workspace[data-route='/history'],
+    .app-workspace[data-route='/settings'],
+    .app-workspace[data-route='/qr'],
+    .app-workspace[data-route='/login']
+  ) > .page-header {
+    /* Keep a route-level h1 in the accessibility tree after the visual
+       heading is removed from the compact mobile fold. The shell and the
+       first product card remain in the same geometry, while screen readers
+       still get a reliable page name and focus target. */
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+  .page-header { margin-bottom: 8px; }
+  .page-header h1 { font-size: 24px; line-height: 1.05; }
+  .page-subtitle { margin-top: 2px; font-size: 12px; line-height: 1.35; }
+  /* Trade keeps its Positions shortcut, but the repeated route title yields
+     the vertical space to the instrument header. Portfolio tabs carry the
+     same context, so its standalone heading can disappear entirely. */
+  .trade-page-heading { min-height: 0; margin-bottom: 0; }
+  .trade-page-heading > div,
+  .portfolio-page-heading > div {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+  /* Utility surfaces and the portfolio dashboard can scroll on short phones.
+     Keep the shared content reserve so their final controls remain above the
+     fixed tab bar and focus scrolling clears the same navigation surface. */
+  .app-workspace[data-route='/settings'] > .app-content-tabs,
+  .app-workspace[data-route='/qr'] > .app-content-tabs,
+  .app-workspace[data-route='/more'] > .app-content-tabs,
+  .app-workspace[data-route='/portfolio'] > .app-content-tabs {
+    padding-bottom: var(--content-bottom-clearance);
+    scroll-padding-bottom: var(--content-bottom-clearance);
+  }
   .market-chart-toggle { display: flex; }
 
   /* Keep the first mobile paint compact before the viewport effect runs. */
@@ -1441,13 +1422,25 @@ input[type='range'].lever::-moz-range-thumb {
   .market-chart-stats > div { flex-direction: column; align-items: flex-start; gap: 2px; }
 }
 
+/* The shell remains mobile-first through tablet widths. Keep the chart cold
+   until the user asks for it; expanded chart content is the intentional scroll
+   exception on these narrower layouts. */
+@media (min-width: 641px) and (max-width: 839px) {
+  .market-chart-toggle { display: flex; }
+  .market-chart-panel[data-mobile-expanded='false'] .market-chart-content { display: none; }
+}
+
+/* Short Telegram/browser viewports have very little vertical room. Reduce
+   only the shared chrome gap; controls and their touch targets stay intact.
+   The content reserve intentionally does not collapse here: doing so lets
+   the fixed tab bar cover the last review/action control on short phones. */
+@media (max-height: 620px) {
+  :root { --header-gap: 8px; }
+}
+
 @media (max-width: 430px) {
   .network-state { display: none; }
   .wallet-control-label { display: none; }
-  .market-strip-items { gap: 8px; }
-  .market-strip-item { gap: 3px; font-size: 11px; }
-  .market-strip-item > img,
-  .market-strip-item > svg { display: none; }
 
   .trade-page-heading,
   .portfolio-page-heading {
@@ -1456,7 +1449,7 @@ input[type='range'].lever::-moz-range-thumb {
   }
 
   .trade-page-heading h1,
-  .portfolio-page-heading h1 { font-size: 28px; }
+  .portfolio-page-heading h1 { font-size: 25px; }
 
   .market-chart-header {
     align-items: flex-start;

@@ -12,7 +12,7 @@ import {
   type SendTransactionModalUIOptions,
 } from '@privy-io/react-auth';
 import { assertLocalForkRpcUrl } from '@/lib/fx/config';
-import { getInitData, isTelegramLaunchContext, restoreTelegramLaunchHash } from '@/lib/telegram';
+import { getInitData, isTelegramLaunchContext, restoreTelegramLaunchHash, waitForTelegramWebApp } from '@/lib/telegram';
 import { switchBrowserChain as switchBrowserChainWithConfig } from './switchBrowserChain';
 import { eip6963FocusTrapDestination, getDiscoveredEip6963Providers, recordEip6963Announcement, selectEip6963Provider, shouldBindEip6963ProviderEvents, shouldPromptEip6963Provider, type DiscoveredEip6963Provider, type Eip6963Announcement } from './eip6963';
 
@@ -208,6 +208,15 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
   const { wallets, ready: walletsReady } = useWallets();
   const { sendTransaction: sendEmbeddedTransaction } = useSendTransaction();
   const [selectedAddress, setSelectedAddress] = useState<string>();
+  // A Telegram launch can finish Privy's seamless authentication shortly
+  // after the provider has rendered. Keep the current value in a ref so a
+  // click made during that hand-off can await the same session rather than
+  // running its action callback against an unauthenticated wallet.
+  const authenticatedRef = useRef(authenticated);
+
+  useEffect(() => {
+    authenticatedRef.current = authenticated;
+  }, [authenticated]);
 
   const selectedWallet = useMemo(() => {
     const selected = selectedAddress
@@ -248,6 +257,10 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
       return;
     }
     if (isTelegramLaunchContext()) {
+      // Telegram's WebApp bridge can arrive after the shell and Privy have
+      // rendered. Wait for that bridge here as a final hand-off guard instead
+      // of surfacing the old "sign-in is initializing" dead end.
+      if (!getInitData()) await waitForTelegramWebApp();
       if (!getInitData()) {
         throw new Error('Reopen FxAeon from the Telegram bot menu so signed launch data is available.');
       }
@@ -255,7 +268,22 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
       // safe idempotent recovery for a late bridge/navigation transition; it
       // never opens the Telegram popup inside the Telegram WebView.
       restoreTelegramLaunchHash();
-      throw new Error('Telegram sign-in is initializing. Keep this window open and try again in a moment.');
+      // When the button was pressed before Privy completed its automatic
+      // Telegram auth, wait for that in-flight session. Once it is ready,
+      // continue into Privy's explicit wallet selector so the user still
+      // approves the wallet connection themselves. A bounded failure keeps
+      // the CTA recoverable and avoids the old generic browser-wallet error.
+      if (!authenticatedRef.current) {
+        const startedAt = Date.now();
+        while (!authenticatedRef.current && Date.now() - startedAt < 15_000) {
+          await new Promise<void>((resolve) => window.setTimeout(resolve, 100));
+        }
+      }
+      if (!authenticatedRef.current) {
+        throw new Error('Automatic Telegram sign-in did not complete. Reopen FxAeon from the bot menu and try again.');
+      }
+      await connectWallet();
+      return;
     }
     login({ loginMethods: ['wallet'] });
   }, [authenticated, connectWallet, login]);
@@ -404,7 +432,12 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
 
   const sync = useCallback(async (requestAccounts = false, providerOverride?: Eip1193Provider) => {
     if (isTelegramLaunchContext()) {
-      throw new Error('Telegram wallet sign-in is unavailable in this build. Reopen FxAeon from the configured bot menu or use a regular browser.');
+      // The no-Privy build is also used by the static client/E2E harness. A
+      // Telegram host must never fall through to browser-wallet discovery,
+      // but it also cannot authenticate without Privy's launch-data flow.
+      // Keep the provider in a quiet, disconnected state so the CTA remains
+      // usable and never paints a misleading browser-wallet error.
+      return;
     }
     const currentProvider = providerOverride ?? browserProvider();
     if (!currentProvider) {
@@ -488,7 +521,11 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
 
   const connect = useCallback(async () => {
     if (isTelegramLaunchContext()) {
-      throw new Error('Telegram wallet sign-in is unavailable in this build. Reopen FxAeon from the configured bot menu or use a regular browser.');
+      // Telegram authentication is owned by the Privy adapter above when it
+      // is configured. In the intentionally no-Privy/static build there is no
+      // safe auth action to invoke; resolve quietly rather than reporting a
+      // browser-wallet or Telegram-popup error in the host UI.
+      return;
     }
     window.localStorage.removeItem(BROWSER_DISCONNECTED_KEY);
     try {

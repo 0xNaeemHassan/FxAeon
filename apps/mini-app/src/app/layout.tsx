@@ -47,7 +47,7 @@ export default function RootLayout({
             never blocks FxAeon's browser-compatible routes or login. */}
         <Script
           src="https://telegram.org/js/telegram-web-app.js"
-          strategy="beforeInteractive"
+          strategy="afterInteractive"
         />
       </head>
       <body className={inter.className}>

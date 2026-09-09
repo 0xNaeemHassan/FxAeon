@@ -8,6 +8,7 @@ import { useLocale } from '@/lib/i18n';
 import { haptic } from '@/lib/telegram';
 import { SETTINGS_KEY } from '@/lib/settings';
 import { usePrivyWallet } from '@/lib/wallet';
+import AppearancePreference from '@/components/AppearancePreference';
 import styles from '@/components/UtilitySurfaces.module.css';
 
 const WalletSection = dynamic(() => import('@/components/WalletSection'), {
@@ -78,7 +79,7 @@ export default function SettingsPage() {
 
   return (
     <AppShell title={t('settings.title')} subtitle="Wallet and preferences">
-      <div className={styles.utilityWorkspace}>
+      <div className={`${styles.utilityWorkspace} ${styles.settingsWorkspace}`}>
         <div className={styles.utilitySection}>
           <WalletSection />
         </div>
@@ -98,7 +99,9 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        <div className="mt-6">
+        <AppearancePreference />
+
+        <div className={`${styles.utilityAction} mt-6`}>
           <Button onClick={save}>
             {saved ? <><Check className="h-4 w-4" aria-hidden="true" /> {t('common.saved')}</> : t('common.save')}
           </Button>
@@ -106,7 +109,7 @@ export default function SettingsPage() {
         </div>
 
         {walletState.ready && walletState.authenticated && (
-          <div className={styles.utilitySection}>
+          <div className={`${styles.utilitySection} ${styles.settingsLogout}`}>
             <LogoutSection />
           </div>
         )}

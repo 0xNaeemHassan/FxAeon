@@ -17,7 +17,7 @@ The release process is intentionally layered. Credential-free checks run on ever
 - `pnpm test:anvil:all`: runs the real position proof, transport stress, and Earn proof serially against one fork process.
 - `pnpm test:anvil:browser`: builds the local-fork app, opens ETH/BTC long/short positions through the mobile browser's review-sheet/confirmation UI, exercises in-place wallet account switching/disconnect and real fxUSD borrowing against the existing ETH long, captures the populated UI, then fully closes all four positions through their direct Close controls and verifies zeroed pool accounting before restoring its snapshot. This is a separate gate from the Node-runner proof.
 - `pnpm test:stress`: runs the credential-free chaos campaign and then the protected dummy-route fork stress. It does not replace the real protocol proof.
-- `pnpm test:e2e`: browser entry without Telegram, official-route and mobile/Telegram viewport navigation, semantic landmarks, 44px controls, no horizontal overflow at 320/360/375/390/412/430px, honest disconnected state, deterministic current-price and market-history validation, and absence of backend traffic.
+- `pnpm test:e2e`: browser entry without Telegram, root → Portfolio navigation with no landing page, official-route and mobile/Telegram viewport navigation, semantic landmarks, 44px controls, no horizontal overflow at 320/360/375/390/412/430px, honest disconnected state, deterministic current-price and market-history validation, in-card wallet/review continuation, and absence of backend traffic.
 - `pnpm build`: browser-only static export with no Node runtime.
 - `pnpm check:bundle`: checks total, JavaScript, gzip, and largest-asset budgets and scans the export for forbidden telemetry and server artifacts.
 
@@ -90,7 +90,7 @@ The browser gate also compares the USDC amount displayed in the token picker wit
 
 ## Capability acceptance
 
-`wallet-recovery-trigger.test.ts` covers cross-tab journal-key routing, bounded terminal-history selection, same-tick and overlapping trigger coalescing, receipt-only refresh, and idempotent terminal storage writes. `wallet-session.spec.ts` exercises injected-wallet account changes and disconnects through the rendered drawer and Activity view.
+`wallet-recovery-trigger.test.ts` covers cross-tab journal-key routing, bounded terminal-history selection, same-tick and overlapping trigger coalescing, receipt-only refresh, and idempotent terminal storage writes. `wallet-session.spec.ts` exercises injected-wallet account changes and disconnects through the rendered drawer and History view.
 
 | Flow | Required cases |
 | --- | --- |
@@ -106,7 +106,7 @@ The browser gate also compares the USDC amount displayed in the token picker wit
 | fxSAVE claim | cooldown incomplete and complete |
 | bridge | both directions, fxUSD/fxSAVE, self/custom recipient, signer-safe refund, exact Ethereum approval, insufficient fee, delayed/reloaded destination verification, dust-adjusted sends, matching LayerZero source/destination GUID |
 
-Every transaction case must prove chain and parameter correctness, visible plan and simulation, explicit approval per step, preserved order, successful receipt plus three confirmations before continuation, failure-stop/reorg behavior, and a fresh authoritative read.
+Every transaction case must prove chain and parameter correctness, visible plan and simulation, explicit approval per step, preserved order, successful receipt plus three confirmations before continuation, failure-stop/reorg behavior, and a fresh authoritative read. Browser cases also assert the shared Edit → Live preview → Review → Awaiting signature → Submitted → Confirming → Confirmed/Failed flow, with the final control visible above fixed navigation.
 
 Mainnet-fork impersonation or protocol-supported safe simulation is required for money-path integration tests. Production user funds are never a fixture. Current Chrome, Firefox, Safari, and Edge plus Telegram Android, iOS, Desktop, and Web must pass the applicable manual interaction checks before production promotion.
 
@@ -114,7 +114,7 @@ The browser suite deliberately keeps accessibility checks dependency-light: rout
 
 ## Documentation captures
 
-The standard capture command covers the landing page, Trade workspace, token picker, Move, the standalone login setup screen, disconnected Portfolio, and 390 × 844 mobile Trade/Portfolio views. Normal wallet connection, account switching, and disconnect remain in-place app-shell flows; the login capture is a dedicated setup-state reference. Mobile Portfolio uses the light theme; the other standard views use the Official violet theme. Start the static export locally, then run `pnpm docs:screenshots` in another terminal. `FX_SCREENSHOT_BASE_URL` can select a different loopback HTTP origin; it defaults to `http://localhost:4321`.
+The standard capture command covers root/Portfolio, the Trade workspace, token picker, Move, the standalone login setup screen, disconnected Portfolio, and 390 × 844 mobile Trade/Portfolio views. It does not capture an app landing page because none exists. Normal wallet connection, account switching, and disconnect remain in-place app-shell flows; the login capture is a dedicated setup-state reference. Mobile Portfolio uses the light theme; the other standard views use the Official violet theme. Start the static export locally, then run `pnpm docs:screenshots` in another terminal. `FX_SCREENSHOT_BASE_URL` can select a different loopback HTTP origin; it defaults to `http://localhost:4321`.
 
 ```powershell
 pnpm build
@@ -129,4 +129,4 @@ For populated positions, prefer the browser gate's staged captures: it reuses th
 
 Review the generated image files and capture report before promoting them into `docs/assets/`. The report records rendered IDs, viewports, image hashes, and whether display data was external or illustrative. A successful capture is evidence for those images; do not assume previously checked-in screenshots share a newer run's provenance.
 
-Capture checks compare document and Chromium viewport offsets before and after each frame and reject displaced headers or navigation. The compact [standard screenshot manifest](fixtures/standard-screenshot-manifest.json) records the committed images and hashes; the full local capture report retains scroll measurements.
+Capture checks compare document and Chromium viewport offsets before and after each frame and reject displaced headers or navigation. They also assert that product-route primary actions and review confirmation rails are above fixed navigation at supported phone and desktop sizes. `/docs` and an expanded mobile Trade chart are intentionally scrollable; the full local capture report retains those scroll measurements. The compact [standard screenshot manifest](fixtures/standard-screenshot-manifest.json) records the committed images and hashes.
