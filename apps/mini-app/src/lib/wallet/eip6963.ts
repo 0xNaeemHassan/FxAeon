@@ -7,7 +7,7 @@ export type Eip6963Announcement = { info?: { rdns?: string; name?: string }; pro
 export type DiscoveredEip6963Provider = { provider: Eip6963Provider; name: string; rdns: string };
 export type WalletProviderDiscoveryTarget = Pick<EventTarget, 'addEventListener' | 'removeEventListener'>;
 const discovered: DiscoveredEip6963Provider[] = [];
-const DEFAULT_PROVIDER_WAIT_TIMEOUT_MS = 5_000;
+const DEFAULT_PROVIDER_WAIT_TIMEOUT_MS = 1_000;
 const DEFAULT_PROVIDER_WAIT_POLL_MS = 25;
 const safeText = (value: unknown, fallback: string) => typeof value === 'string' ? value.replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e]/g, '').trim().slice(0, 96) || fallback : fallback;
 export function recordEip6963Announcement(announcement: Eip6963Announcement): DiscoveredEip6963Provider | null {
@@ -43,7 +43,7 @@ export function waitForWalletProvider(
   const pollMs = options.pollMs ?? DEFAULT_PROVIDER_WAIT_POLL_MS;
   return new Promise<Eip6963Provider>((resolve, reject) => {
     let pollTimer: ReturnType<typeof setTimeout> | undefined;
-    let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+    const timeoutTimer = setTimeout(() => finish(), timeoutMs);
     let settled = false;
 
     const cleanup = () => {
@@ -82,7 +82,6 @@ export function waitForWalletProvider(
       onAbort();
       return;
     }
-    timeoutTimer = setTimeout(() => finish(), timeoutMs);
     check();
   });
 }
