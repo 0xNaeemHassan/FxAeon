@@ -26,6 +26,7 @@ test('Telegram sync is constrained to the production static origin', () => {
 
 test('Telegram sync clears unhandled commands and verifies every persisted setting', async () => {
   const calls = [];
+  let menuReadbacks = 0;
   const expectedMenu = {
     type: 'web_app',
     text: 'Open FxAeon',
@@ -35,7 +36,7 @@ test('Telegram sync clears unhandled commands and verifies every persisted setti
     const method = new URL(input).pathname.split('/').pop();
     const payload = JSON.parse(init.body);
     calls.push({ method, payload });
-    const result = {
+    let result = {
       setMyName: true,
       getMyName: { name: 'FxAeon' },
       setMyShortDescription: true,
@@ -45,8 +46,13 @@ test('Telegram sync clears unhandled commands and verifies every persisted setti
       setMyCommands: true,
       getMyCommands: [],
       setChatMenuButton: true,
-      getChatMenuButton: { web_app: expectedMenu.web_app, text: expectedMenu.text, type: expectedMenu.type },
     }[method];
+    if (method === 'getChatMenuButton') {
+      menuReadbacks += 1;
+      result = menuReadbacks === 1
+        ? { type: 'default' }
+        : { web_app: { url: `${expectedMenu.web_app.url}/` }, text: expectedMenu.text, type: expectedMenu.type };
+    }
     return { ok: true, status: 200, json: async () => ({ ok: true, result }) };
   };
 
@@ -77,11 +83,48 @@ test('Telegram sync clears unhandled commands and verifies every persisted setti
     'setMyShortDescription', 'getMyShortDescription',
     'setMyDescription', 'getMyDescription',
     'setMyCommands', 'getMyCommands',
-    'setChatMenuButton', 'getChatMenuButton',
+    'setChatMenuButton', 'getChatMenuButton', 'getChatMenuButton',
   ]);
   assert.deepEqual(calls.find(({ method }) => method === 'setMyCommands').payload, { commands: [] });
   assert.match(calls.find(({ method }) => method === 'setMyDescription').payload.description, /long or short.*fxSAVE.*fxUSD.*Ethereum.*Base/i);
   assert.match(calls.find(({ method }) => method === 'setMyDescription').payload.description, /https:\/\/fxaeon\.com\/(?:|docs)/);
+});
+
+test('persistent menu readback mismatch is bounded and has secret-free diagnostics', async () => {
+  const token = '987654321:abcdefghijklmnopqrstuvwxyz';
+  const calls = [];
+  let description = '';
+  const fetchImpl = async (input, init) => {
+    const method = new URL(input).pathname.split('/').pop();
+    const payload = JSON.parse(init.body);
+    calls.push(method);
+    if (method === 'setMyDescription') description = payload.description;
+    const result = {
+      setMyName: true,
+      getMyName: { name: 'FxAeon' },
+      setMyShortDescription: true,
+      getMyShortDescription: { short_description: 'Positions, fxSAVE, and fxUSD on Ethereum.' },
+      setMyDescription: true,
+      getMyDescription: { description },
+      setMyCommands: true,
+      getMyCommands: [],
+      setChatMenuButton: true,
+      getChatMenuButton: { type: 'default' },
+    }[method];
+    return { ok: true, status: 200, json: async () => ({ ok: true, result }) };
+  };
+
+  await assert.rejects(
+    syncTelegramBot({ token, fetchImpl, timeoutMs: 100 }),
+    (error) => {
+      assert.match(error.message, /getChatMenuButton readback mismatch \(type=default, text=mismatch, web-app-url=mismatch\)/);
+      assert.doesNotMatch(error.message, new RegExp(token));
+      assert.doesNotMatch(error.message, /https?:\/\//);
+      return true;
+    },
+  );
+  assert.equal(calls.filter((method) => method === 'setChatMenuButton').length, 1);
+  assert.equal(calls.filter((method) => method === 'getChatMenuButton').length, 3);
 });
 
 test('Telegram sync bounds a stalled request and excludes the bot token from errors', async () => {
