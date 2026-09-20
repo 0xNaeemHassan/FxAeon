@@ -275,7 +275,7 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
       connectPendingRef.current = null;
     };
   }, []);
-  const { wallets, ready: walletsReady } = useWallets();
+  const { wallets } = useWallets();
   const { sendTransaction: sendEmbeddedTransaction } = useSendTransaction();
   // A Telegram launch can finish Privy's seamless authentication shortly
   // after the provider has rendered. Keep the current value in a ref so a
@@ -491,7 +491,14 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
   }, [authenticated, selectedWallet, sendEmbeddedTransaction]);
 
   return {
-    ready: ready && walletsReady,
+    // Privy's provider readiness is the gate for opening its login and wallet
+    // flows. The wallet list can hydrate a little later (especially on a cold
+    // custom-origin or Telegram launch); treating that secondary feed as a
+    // provider outage made routes replace a usable connect CTA with
+    // “Wallet provider is unavailable.” Consumers already handle an empty
+    // wallet list as the disconnected state, and the list will re-render when
+    // the wallet list changes.
+    ready,
     authenticated,
     connectionVersion,
     wallets,
