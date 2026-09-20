@@ -257,9 +257,13 @@ export const onRequestGet: PagesFunction<GasFunctionEnv> = async ({ request, env
     if (cacheEntry && cacheEntry.staleUntil > Date.now()) {
       return jsonResponse({ ...cacheEntry.snapshot, stale: true });
     }
+    // Cloudflare Pages reserves 502/504 for its own gateway errors and can
+    // replace those response bodies with a plain-text error page. Keep this
+    // optional upstream failure inside the JSON API contract with 503 so the
+    // browser can reliably select its bounded RPC fallback.
     return jsonResponse({ error: error instanceof Error && error.message.includes("timed out")
       ? "gas oracle timed out"
-      : "gas oracle unavailable" }, error instanceof Error && error.message.includes("timed out") ? 504 : 502);
+      : "gas oracle unavailable" }, 503);
   }
 };
 
