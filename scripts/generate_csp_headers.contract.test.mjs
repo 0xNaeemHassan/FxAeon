@@ -8,7 +8,7 @@ import {
 } from './generate_csp_headers.mjs';
 
 const sourceHeaders = `/*
-  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; frame-ancestors https://web.telegram.org; script-src 'self' https://telegram.org https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.example.test; worker-src 'self'; manifest-src 'self'; report-uri /csp-report; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; frame-ancestors https://web.telegram.org; script-src 'self' https://telegram.org https://auth.privy.io https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.example.test; worker-src 'self'; manifest-src 'self'; report-uri /csp-report; upgrade-insecure-requests
 
 /_next/static/*
   Cache-Control: public, max-age=31536000, immutable
@@ -33,7 +33,7 @@ test('splits CSP into a short HTTP policy and a strict early per-document meta p
   assert.doesNotMatch(generated.headerPolicy, /(?:^|;\s*)(?:default-src|script-src)\b/i);
   assert.ok(decoded);
   assert.match(decoded, /default-src 'self'/);
-  assert.match(decoded, /script-src 'self' https:\/\/telegram\.org https:\/\/challenges\.cloudflare\.com/);
+  assert.match(decoded, /script-src 'self' https:\/\/telegram\.org https:\/\/auth\.privy\.io https:\/\/challenges\.cloudflare\.com/);
   assert.doesNotMatch(decoded.match(/(?:^|;\s*)script-src\s+([^;]+)/i)?.[1] ?? '', /'unsafe-inline'/);
   assert.doesNotMatch(decoded, /(?:^|;\s*)(?:frame-ancestors|report-uri|report-to|sandbox)\b/i);
 

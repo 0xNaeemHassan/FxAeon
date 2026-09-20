@@ -180,6 +180,9 @@ const scriptDirective = staticHeaders.match(/script-src\s+([^;]+)/)?.[1];
 if (!scriptDirective || scriptDirective.includes("'unsafe-inline'")) {
   fail("the production script-src policy must be hash-based and cannot allow 'unsafe-inline'");
 }
+if (!scriptDirective.split(/\s+/).includes('https://auth.privy.io')) {
+  fail('the production script-src policy must allow Privy’s Telegram login bridge');
+}
 const connectSources = staticHeaders.match(/connect-src\s+([^;]+)/)?.[1].split(/\s+/) ?? [];
 if (connectSources.includes('https:') || connectSources.includes('wss:')) {
   fail('connect-src contains a broad scheme source instead of reviewed hosts');
