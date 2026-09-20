@@ -15,7 +15,7 @@ test('recognizes a valid public gas-oracle snapshot without logging its payload'
   assert.deepEqual(inspectGasOracleResponse(200, JSON.stringify(validSnapshot)), { configured: true });
 });
 
-test('requests only the fixed oracle URL and detects only the explicit missing-binding response', async () => {
+test('requests only the fixed oracle URL and detects an unavailable optional binding', async () => {
   let observed;
   const result = await checkLiveGasOracle({
     url: 'https://fxaeon.com/api/gas',
@@ -31,8 +31,11 @@ test('requests only the fixed oracle URL and detects only the explicit missing-b
   assert.equal(observed.options.cache, 'no-store');
 });
 
+test('treats the exact upstream-unavailable response as optional during the first probe', () => {
+  assert.deepEqual(inspectGasOracleResponse(502, JSON.stringify({ error: 'gas oracle unavailable' })), { configured: false });
+});
+
 test('fails closed for upstream failures, invalid schemas, and unrelated 503 responses', () => {
-  assert.throws(() => inspectGasOracleResponse(502, JSON.stringify({ error: 'gas oracle unavailable' })), /unexpected response/);
   assert.throws(() => inspectGasOracleResponse(503, JSON.stringify({ error: 'temporarily unavailable' })), /unexpected response/);
   assert.throws(() => inspectGasOracleResponse(200, JSON.stringify({ ...validSnapshot, gasPriceWei: '0' })), /schema check/);
   assert.throws(() => inspectGasOracleResponse(200, '<secret or unexpected body>'), /invalid JSON/);
