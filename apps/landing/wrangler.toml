@@ -4,3 +4,7 @@
 name = "fxaeon-landing"
 compatibility_date = "2026-06-09"
 pages_build_output_dir = "dist"
+
+[vars]
+NODE_VERSION = "22.23.2"
+SKIP_DEPENDENCY_INSTALL = "true"

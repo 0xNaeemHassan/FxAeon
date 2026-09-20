@@ -79,6 +79,22 @@ is a provider-loading state, not an authentication gate. This verifies the
 configured app shell and theme only. No Privy sign-in, email, Telegram
 handoff, or wallet transaction was attempted.
 
+### Live deployment and release gate
+
+The authenticated Cloudflare dashboard confirms the existing `fxaeon` Pages
+project is associated with `fxaeon.com` and `www.fxaeon.com`. The separate
+`fxaeon-landing` project uses `apps/landing` as its root, `node build.mjs` as
+its build command, `dist` as its output, and watches `apps/landing/*`;
+`fxaeon.xyz` shows Active SSL. A live browser check shows the updated landing
+and its app links reaching `fxaeon.com`. On the app, Connect opens the Privy
+modal with email, Telegram, and external-wallet options; no sign-in was
+completed, and no wallet confirmation was made.
+
+The first merged-main release gate failed in its redirect-URL parser. PR `#195`
+contains a fix, but its full release gate and Telegram menu synchronization
+are still pending. The browser observations above do not prove native Telegram
+handoff, wallet signing, bridge destination delivery, or P&L/ROI.
+
 ### Source and test status
 
 The focused Portfolio asset-summary tests pass `14/14`, covering partial
@@ -94,6 +110,8 @@ and the complete browser suite passed `109/109` in 5.8 minutes; see
 audits report zero known vulnerabilities. Two pre-existing high-severity
 development-dependency findings were resolved by updating `js-yaml` to `4.3.2`
 and Miniflare's nested `sharp` to `0.35.4`. Final lint passed with zero warnings.
+These PR `#193` checks establish source and browser verification; they do not
+complete the pending deployment-release gate described above.
 
 The protocol, Earn, stress, and browser-fork proofs are separately recorded
 above. The landing's final full-hero wash and card direction passed visual
@@ -103,7 +121,8 @@ review; 14 theme/width states retained the same contrast minima.
 
 - Verify native Privy sign-in, Telegram seamless login and handoff, injected
   wallet confirmation, keyboard/device behavior, and bridge destination
-  delivery in their supported hosts.
+  delivery in their supported hosts. No P&L/ROI evidence is claimed or inferred
+  from current position value.
 
 See [`testing.md`](testing.md) for commands and evidence boundaries and
 [`position-screenshot-fixture.md`](position-screenshot-fixture.md) for the

@@ -379,6 +379,17 @@ try {
   }
   assert.deepEqual(errors, [], 'Landing threw browser errors');
   assert.deepEqual(externalRequests, [], 'Landing loaded unneeded external services');
+  await page.setViewportSize({ width: 1536, height: 647 });
+  await page.goto(origin, { waitUntil: 'networkidle' });
+  const [shortDesktopHeaderBounds, shortDesktopTitleBounds] = await Promise.all([
+    page.locator('.site-header').boundingBox(),
+    page.locator('.hero h1').boundingBox(),
+  ]);
+  assert.ok(shortDesktopHeaderBounds && shortDesktopTitleBounds, 'Short desktop header and hero title must be measurable');
+  assert.ok(
+    shortDesktopTitleBounds.y >= shortDesktopHeaderBounds.y + shortDesktopHeaderBounds.height + 16,
+    `Hero title overlaps the header at 1536x647: header=${JSON.stringify(shortDesktopHeaderBounds)}, title=${JSON.stringify(shortDesktopTitleBounds)}`,
+  );
   await page.setViewportSize({ width: 1440, height: 650 });
   await page.goto(origin, { waitUntil: 'networkidle' });
   const launchBounds = await page.locator('.hero a[href="https://fxaeon.com/"]').boundingBox();

@@ -263,5 +263,5 @@ footer p { grid-column: 1 / -1; margin: 4px 0 0; color: var(--muted); font-size:
   .closing { padding: 48px 0; }.closing-content { display: grid; justify-items: start; gap: 22px; width: calc(100% - 40px); }.closing h2 { font-size: clamp(48px, 13vw, 64px); }.closing-copy > p:last-child { max-width: 250px; margin-top: 12px; font-size: 13px; }.closing-mark { right: -12%; width: 170px; opacity: .1; }
   footer { width: calc(100% - 40px); padding-bottom: 28px; }.footer-links { gap: 18px; }
 }
-@media (min-width: 801px) and (max-height: 800px) { .hero { min-height: 0; padding-block: 33px 50px; }.hero-art { min-height: 470px; }.hero h1 { font-size: clamp(68px, 8vw, 110px); }.lede { margin-top: 22px; }.actions { margin-top: 22px; }.micro { margin-top: 22px; } }
+@media (min-width: 801px) and (max-height: 800px) { .hero { min-height: 0; padding-block: 100px 50px; }.hero-art { min-height: 470px; }.hero h1 { font-size: clamp(68px, 8vw, 110px); }.lede { margin-top: 22px; }.actions { margin-top: 22px; }.micro { margin-top: 22px; } }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation: none !important; transition: none !important; } }
