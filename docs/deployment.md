@@ -28,7 +28,7 @@ protected values to GitHub Actions for the release workflow:
 | `NEXT_PUBLIC_ALCHEMY_DATA_API_KEY` | Secret | Browser-visible wallet-token discovery key, restricted by origin and quota |
 | `NEXT_PUBLIC_TELEGRAM_APP_URL` | Variable | `https://t.me/FxAeonBot` or a configured Mini App launcher |
 | `TELEGRAM_BOT_TOKEN` | Secret | Bot metadata and menu synchronization; never a `NEXT_PUBLIC_*` value |
-| `ETHERSCAN_API_KEY` | Secret | Read-only `/api/gas` Pages Function binding |
+| `ETHERSCAN_API_KEY` | Optional secret | Read-only `/api/gas` Pages Function binding; when absent, the app uses its bounded RPC gas estimate fallback |
 | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | Secrets | Set or verify the Pages gas-oracle secret |
 
 All `NEXT_PUBLIC_*` values are exposed in the compiled client. The production
@@ -45,8 +45,9 @@ defaults in its source when no Telegram URL is set.
 `.github/workflows/deploy-mini-app.yml` runs on `main` or manual dispatch. It
 validates production inputs, runs `pnpm verify`, builds the static app, waits
 for the commit-matched Cloudflare Pages check for project `fxaeon`, verifies
-the live gas-oracle binding and public Privy configuration, then synchronizes
-the Telegram bot metadata and default Mini App menu. A Telegram sync does not
+the optional live gas-oracle binding when its secret is configured, verifies the
+public Privy configuration, then synchronizes the Telegram bot metadata and
+default Mini App menu. A Telegram sync does not
 configure the native Main Mini App or profile launch button; those remain
 BotFather settings.
 
