@@ -16,6 +16,11 @@ From the repository root, use `pnpm build:landing` and `pnpm preview:landing`.
 For Cloudflare Pages set the root directory to `apps/landing`, build command
 to `node build.mjs`, and output directory to `dist`. Attach only `fxaeon.xyz`
 to this project; `fxaeon.com` belongs to the financial app project.
+The Wrangler config pins the Pages build image to Node `22.23.2` and sets
+`SKIP_DEPENDENCY_INSTALL=true`; keep these build controls in `wrangler.toml`
+instead of duplicating them in dashboard variables. Set the Pages build watch
+include path to `apps/landing/*` (leave excludes empty) so changes elsewhere in
+the monorepo do not start another landing build.
 
 Set `NEXT_PUBLIC_TELEGRAM_APP_URL` at build time to the bot or named mini-app
 launcher (`https://t.me/<bot>[/<app>]`, optionally with `?startapp=...`).

@@ -68,11 +68,12 @@ FxAeon has two independent Cloudflare Pages projects. `fxaeon-landing` serves
 the wallet-free marketing site from `apps/landing/dist` at
 [fxaeon.xyz](https://fxaeon.xyz/). The existing `fxaeon` project serves the static Next.js
 financial app from `apps/mini-app/dist` at [fxaeon.com](https://fxaeon.com/),
-with `/portfolio` retained as a compatibility route. The financial workflow
-waits for the native Pages deployment check, validates the deployment's public
-Privy configuration, and then synchronizes the Telegram menu to
-`https://fxaeon.com/`. The landing site has no Privy or wallet configuration and
-must not share the financial project's deployment variables or Pages project.
+with `/portfolio` retained as a compatibility route. On a successful release,
+the financial workflow waits for the native Pages deployment check, validates
+the deployment's public Privy configuration, and then synchronizes the Telegram
+menu to `https://fxaeon.com/`. The landing site has no Privy or wallet
+configuration and must not share the financial project's deployment variables
+or Pages project.
 
 ## External integration evidence
 
