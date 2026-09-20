@@ -259,10 +259,10 @@ export async function fetchEtherscanGasOracle(
 }
 
 export const onRequestGet: PagesFunction<GasFunctionEnv> = async ({ request, env }) => {
-  if (!queryIsAllowed(request)) return jsonResponse({ error: "unsupported query" }, 400);
-  const apiKey = typeof env?.ETHERSCAN_API_KEY === "string" ? env.ETHERSCAN_API_KEY.trim() : "";
-  if (!apiKey || apiKey.length > MAX_API_KEY_LENGTH) return jsonResponse({ error: "gas oracle unavailable" }, 503);
   try {
+    if (!queryIsAllowed(request)) return jsonResponse({ error: "unsupported query" }, 400);
+    const apiKey = typeof env?.ETHERSCAN_API_KEY === "string" ? env.ETHERSCAN_API_KEY.trim() : "";
+    if (!apiKey || apiKey.length > MAX_API_KEY_LENGTH) return jsonResponse({ error: "gas oracle unavailable" }, 503);
     const snapshot = await fetchEtherscanGasOracle(apiKey);
     return jsonResponse(snapshot);
   } catch (error) {
@@ -279,5 +279,12 @@ export const onRequest: PagesFunction<GasFunctionEnv> = async ({ request, env })
   if (request.method !== "GET") {
     return new Response(null, { status: 405, headers: { allow: "GET" } });
   }
-  return onRequestGet({ request, env });
+  // Keep an unexpected platform/runtime failure inside the JSON contract. The
+  // browser can then use its bounded RPC fallback instead of receiving a
+  // provider-generated HTML/plain-text 502 response.
+  try {
+    return await onRequestGet({ request, env });
+  } catch {
+    return jsonResponse({ error: "gas oracle unavailable" }, 503);
+  }
 };
