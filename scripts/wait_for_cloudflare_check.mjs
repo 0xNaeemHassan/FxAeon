@@ -3,7 +3,7 @@ import { pathToFileURL } from 'node:url';
 
 // The financial workflow supplies this explicitly so a separate landing
 // project check cannot accidentally authorize the financial release.
-const CHECK_NAME = process.env.CLOUDFLARE_CHECK_NAME?.trim() || 'Cloudflare Pages: fxaeon';
+const CHECK_NAME = process.env.CLOUDFLARE_CHECK_NAME?.trim() || 'Cloudflare Pages';
 const PROJECT_NAME = process.env.CLOUDFLARE_PAGES_PROJECT?.trim() || 'fxaeon';
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 const DEFAULT_INTERVAL_MS = 15 * 1000;

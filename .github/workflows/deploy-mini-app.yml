@@ -53,7 +53,7 @@ jobs:
       - name: Wait for Cloudflare Pages deployment
         run: node scripts/wait_for_cloudflare_check.mjs
         env:
-          CLOUDFLARE_CHECK_NAME: "Cloudflare Pages: fxaeon"
+          CLOUDFLARE_CHECK_NAME: "Cloudflare Pages"
           CLOUDFLARE_PAGES_PROJECT: fxaeon
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}

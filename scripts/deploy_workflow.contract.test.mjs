@@ -53,7 +53,7 @@ test('native Cloudflare deployment is gated without Wrangler credentials', () =>
   assert.match(wait, /GITHUB_TOKEN:\s*\$\{\{\s*github\.token\s*\}\}/);
   assert.match(wait, /GITHUB_REPOSITORY:\s*\$\{\{\s*github\.repository\s*\}\}/);
   assert.match(wait, /GITHUB_SHA:\s*\$\{\{\s*github\.sha\s*\}\}/);
-  assert.match(wait, /CLOUDFLARE_CHECK_NAME:\s*["']?Cloudflare Pages: fxaeon["']?/);
+  assert.match(wait, /CLOUDFLARE_CHECK_NAME:\s*["']?Cloudflare Pages["']?/);
   assert.match(wait, /CLOUDFLARE_PAGES_PROJECT:\s*fxaeon/);
   assert.doesNotMatch(workflow, /CLOUDFLARE_(?:API_TOKEN|ACCOUNT_ID)/);
   assert.doesNotMatch(productionEnvValidator, /CLOUDFLARE_(?:API_TOKEN|ACCOUNT_ID)/);
