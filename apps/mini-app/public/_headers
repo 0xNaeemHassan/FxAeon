@@ -1,4 +1,5 @@
 /*
+  Privy uses this reviewed custom origin for its wallet iframe and API calls.
   Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
