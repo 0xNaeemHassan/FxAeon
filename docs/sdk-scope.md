@@ -61,9 +61,9 @@ accounting are rechecked on every reuse. `canonicalPositionReader.ts` hydrates
 fallback IDs using the pinned SDK 1.0.5 pool configuration, rate/FxRoute quotes,
 and 18-decimal position accounting. BTC quotes compare both SDK FxRoute paths
 and select the greatest output independently for buying and selling. Regression
-coverage checks route selection and single-route failure. Read-only fork checks
-match the SDK for all four market/side groups; funded browser parity remains
-pending. A protected fork harness may preload actual historical
+coverage checks route selection and single-route failure. Protected browser
+fork tests exercise all four market/side groups; their procedure and evidence
+are described in [`testing.md`](testing.md). A fork harness may preload actual historical
 `ownerOf` storage read-only before the browser build to avoid cold-fork
 storage delay; this is functional setup, not a provider-performance benchmark.
 All writes remain on the official SDK methods above.
@@ -75,9 +75,9 @@ This matrix is the implementation contract for the locked surface. “Refresh”
 | Method | Product action | Chain | Read/write | Required inputs | SDK output | Signing and route behavior | Expected refresh |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `getPositions` | View ETH/BTC long/short positions | Ethereum | Read | wallet, market, side | Position records with raw collateral/debt, leverage, and token metadata | No signing | Reload positions when Portfolio/Positions opens or after a position action |
-| `increasePosition` | Open or add to a position | Ethereum | Write | market, side, position ID, wallet, leverage, input token, amount, slippage, audited route target | One or more ordered SDK routes | Each approval/action is explicitly signed; later steps wait for the prior receipt | Read positions after the canonical receipt |
-| `reducePosition` | Reduce or close a position | Ethereum | Write | market, side, position ID, wallet, output token, amount, close flag, slippage, audited route target | One or more ordered SDK routes with minimum-output data | Ordered per-step wallet approval; stop on rejection, revert, timeout, or nonce drift | Read positions after the canonical receipt |
-| `adjustPositionLeverage` | Change position leverage | Ethereum | Write | market, side, position ID, wallet, target leverage, slippage, audited route target | One or more ordered SDK routes | Explicit wallet approval for every returned step | Read positions after the canonical receipt |
+| `increasePosition` | Open or add to a position | Ethereum | Write | market, side, position ID, wallet, leverage, input token, amount, slippage, reviewed route target | One or more ordered SDK routes | Each approval/action is explicitly signed; later steps wait for the prior receipt | Read positions after the canonical receipt |
+| `reducePosition` | Reduce or close a position | Ethereum | Write | market, side, position ID, wallet, output token, amount, close flag, slippage, reviewed route target | One or more ordered SDK routes with minimum-output data | Ordered per-step wallet approval; stop on rejection, revert, timeout, or nonce drift | Read positions after the canonical receipt |
+| `adjustPositionLeverage` | Change position leverage | Ethereum | Write | market, side, position ID, wallet, target leverage, slippage, reviewed route target | One or more ordered SDK routes | Explicit wallet approval for every returned step | Read positions after the canonical receipt |
 | `depositAndMint` | Add long collateral and mint fxUSD | Ethereum | Write | market, position ID, wallet, collateral token, deposit amount, mint amount | Ordered transaction array with route details | Exact token approval when returned, then action; no later submission before receipt | Read positions after the canonical receipt |
 | `repayAndWithdraw` | Repay fxUSD and/or withdraw long collateral | Ethereum | Write | market, position ID, wallet, repay amount, withdrawal amount, withdrawal token | Ordered transaction array with route details | Exact repayment approval when returned, then action; failure stops the route | Read positions after the canonical receipt |
 | `getBridgeQuote` | Preview Ethereum/Base bridge fee | Ethereum or Base source | Read | source/destination chain, token key or reviewed OFT, amount, recipient, source RPC | Native and LayerZero token fee | No signing; quote is informational until a fresh route is built | Requote whenever bridge inputs or source RPC change |

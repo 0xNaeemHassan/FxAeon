@@ -9,7 +9,7 @@
 
 /* More is a directory, not a feed: keep every destination in the first
    viewport by grouping its short action rows into a compact grid. */
-.moreWorkspace { gap: 8px; }
+.moreWorkspace { gap: 12px; }
 
 /* Persistent form actions stay available when the settings content pane is
    scrolled, while the document itself remains a fixed app viewport. */
@@ -52,7 +52,51 @@
   font-weight: 700;
 }
 
-.moreWorkspace .sectionLabel { font-size: 11px; letter-spacing: .02em; }
+.moreWorkspace .sectionLabel { color: var(--mut-2); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+
+.walletSummaryCard {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--mint) 24%, var(--line));
+  background:
+    radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--mint) 14%, transparent), transparent 44%),
+    color-mix(in srgb, var(--surface) 94%, var(--mint) 6%);
+}
+
+.walletIcon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--mint) 24%, var(--line));
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--mint-dim) 82%, var(--surface));
+}
+
+.moreIconWell {
+  display: grid;
+  width: 31px;
+  height: 31px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--mint) 18%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--mint-dim) 75%, var(--surface));
+  transition: transform 160ms ease, background-color 160ms ease;
+}
+
+.moreRow:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--mint);
+  outline-offset: -3px;
+}
+
+.moreRow:hover .moreIconWell {
+  transform: translateY(-1px);
+  background: var(--mint-dim);
+}
 
 .preferenceChoice {
   min-width: 44px;
@@ -75,6 +119,8 @@
 }
 
 .preferenceChoice:hover { border-color: var(--line-strong); }
+.preferenceChoice:focus-visible,
+.themeChoice:focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
 
 .rowGroup {
   overflow: hidden;
@@ -94,9 +140,10 @@
 .moreRow {
   min-width: 0;
   min-height: 48px;
+  transition: background-color 160ms ease, color 160ms ease;
 }
 
-.moreRow:hover { background: color-mix(in srgb, var(--surface-2) 78%, var(--mint) 22%); }
+.moreRow:hover { color: var(--text); background: color-mix(in srgb, var(--surface-2) 78%, var(--mint) 22%); }
 
 /* More is a directory with two short link groups and a theme picker. Keep
    every 44px interaction in the compact shell on short phones. */
@@ -226,23 +273,122 @@
 .settingsWorkspace .utilitySection { gap: 6px; }
 .settingsWorkspace :global(.ui-card) { border-radius: 18px; }
 .settingsWorkspace .utilityCard { padding: 12px !important; border-radius: 18px; }
+.slippagePanel {
+  border: 1px solid color-mix(in srgb, var(--mint) 20%, var(--line));
+  background:
+    radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--mint) 12%, transparent), transparent 42%),
+    color-mix(in srgb, var(--surface) 95%, var(--mint) 5%);
+}
+.slippagePanel > p:first-child { max-width: 58ch; }
+.settingsScopeNote {
+  margin-top: 7px;
+  color: var(--mut-2);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.settingsWorkspace .slippagePanel > .settingsScopeNote { display: block; }
 .settingsWorkspace .utilityAction { margin-top: 0 !important; padding-top: 4px; }
 .settingsWorkspace .preferenceChoice { margin-top: 6px; }
 .settingsLogout { min-width: 0; }
 
-.qrWorkspace { gap: 10px; }
+.qrWorkspace { gap: 12px; }
 .qrWorkspace :global(.ui-card) { border-radius: 18px; }
-.qrWorkspace > :global(.ui-card:first-child) { gap: 10px !important; padding: 12px !important; }
-.qrWorkspace > :global(.ui-card:first-child) > div:first-child { padding: 8px; border-radius: 16px; }
-.qrWorkspace > :global(.ui-card:first-child) > div:first-child svg { width: min(208px, 58vw); height: min(208px, 58vw); }
+.receiveCard {
+  display: grid !important;
+  grid-template-columns: minmax(240px, .9fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(22px, 4vw, 42px) !important;
+  padding: clamp(20px, 3vw, 34px) !important;
+  border: 1px solid color-mix(in srgb, var(--mint) 21%, var(--line));
+  background:
+    radial-gradient(ellipse at 0% 0%, color-mix(in srgb, var(--mint) 10%, transparent), transparent 36%),
+    color-mix(in srgb, var(--surface) 96%, var(--mint) 4%);
+}
+.qrCodeStage {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  padding: 20px 14px 14px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--surface-2) 75%, var(--surface));
+}
+.qrCodeStage::before,
+.qrCodeStage::after {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-color: color-mix(in srgb, var(--mint) 64%, transparent);
+  border-style: solid;
+  content: '';
+  pointer-events: none;
+}
+.qrCodeStage::before { top: 9px; left: 9px; border-width: 1px 0 0 1px; border-top-left-radius: 8px; }
+.qrCodeStage::after { right: 9px; bottom: 9px; border-width: 0 1px 1px 0; border-bottom-right-radius: 8px; }
+.qrCodeStage > svg {
+  display: block;
+  width: min(224px, 58vw);
+  height: auto;
+  max-width: 100%;
+  padding: 10px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 9px 24px color-mix(in srgb, #000 13%, transparent);
+}
+.receiveAddressPanel { min-width: 0; width: 100%; }
+.addressLabel { color: var(--mut-2); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.networkBadges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.networkBadges span {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  padding: 4px 9px;
+  border: 1px solid color-mix(in srgb, var(--mint) 20%, var(--line));
+  border-radius: 999px;
+  color: var(--mint);
+  background: var(--mint-dim);
+  font-size: 10px;
+  font-weight: 700;
+}
+.copyButton { border-color: color-mix(in srgb, var(--mint) 25%, var(--line)) !important; color: var(--text) !important; }
+.copyButton:hover { background: var(--mint-dim); }
+.addressValue {
+  margin-top: 12px !important;
+  padding: 13px !important;
+  border-color: color-mix(in srgb, var(--mint) 20%, var(--line)) !important;
+  border-radius: 14px !important;
+  background: var(--input) !important;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.7;
+  user-select: all;
+}
 .qrWorkspace > :global(.ui-card:first-child) button svg { width: 18px; height: 18px; }
-.qrWorkspace > :global(.ui-card:first-child) p[class*='mt-3'] { margin-top: 8px; padding: 8px; }
+.qrWorkspace > :global(.ui-card:first-child) p[aria-live] { margin-top: 7px; }
 .qrWorkspace > :global(.ui-card:last-child) { padding: 10px !important; }
+.networkWarning { border-color: color-mix(in srgb, var(--warn) 34%, var(--line)) !important; background: color-mix(in srgb, var(--warn) 7%, var(--surface)) !important; }
 
 @media (min-width: 840px) {
   /* Keep the session action available on desktop as well as in the wallet
      profile. The settings route is a direct destination users can bookmark. */
   .settingsLogout { display: flex; }
+}
+
+@media (max-width: 640px) {
+  .receiveCard { grid-template-columns: minmax(0, 1fr); gap: 14px !important; padding: 14px !important; }
+  .qrCodeStage { padding: 14px 12px 12px; border-radius: 18px; }
+  .qrCodeStage > svg { width: min(208px, 58vw); padding: 8px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .moreIconWell,
+  .moreRow,
+  .preferenceChoice,
+  .themeChoice { transition: none; }
 }
 
 @media (min-width: 360px) and (max-width: 600px) {

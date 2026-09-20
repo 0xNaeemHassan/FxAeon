@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Address } from "viem";
-import {
-  prepareRoutesForReview,
-  routesMatchForSigning,
-  selectRefreshedRoute,
-} from "../src/lib/fx/reviewPreparation";
+import { CallExecutionError, RawContractError, type Address } from "viem";
+import { prepareRoutesForReview } from "../src/lib/fx/reviewPreparation";
 import type { FxPublicClient, PlannedRoute, TransactionPolicy } from "../src/lib/fx/types";
 
 const WALLET = "0x1111111111111111111111111111111111111111" as Address;
@@ -17,7 +13,7 @@ const POLICY: TransactionPolicy = {
   allowedSelectors: { [DESTINATION.toLowerCase()]: ["0x12345678"] },
 };
 
-function route(routeType: string, nonce = 4, data = "0x12345678"): PlannedRoute {
+function route(routeType: string): PlannedRoute {
   return {
     operation: "increasePosition",
     chainId: 1,
@@ -26,9 +22,9 @@ function route(routeType: string, nonce = 4, data = "0x12345678"): PlannedRoute 
       chainId: 1,
       from: WALLET,
       to: DESTINATION,
-      data: data as `0x${string}`,
+      data: "0x12345678",
       value: 0n,
-      nonce,
+      nonce: 4,
       kind: "action",
       operation: "increasePosition",
     }],
@@ -64,19 +60,21 @@ test("review simulations start concurrently and preserve SDK route order", async
   assert.deepEqual(prepared.failures, []);
 });
 
-test("signing equality detects calldata, nonce, and economic limit changes", () => {
-  const reviewed = route("native");
-  assert.equal(routesMatchForSigning(reviewed, route("native")), true);
-  assert.equal(routesMatchForSigning(reviewed, route("native", 5)), false);
-  assert.equal(routesMatchForSigning(reviewed, route("native", 4, "0x12345679")), false);
-  assert.equal(routesMatchForSigning(reviewed, { ...route("native"), details: { routeType: "native", minOut: "99" } }), false);
-});
+test("review preview keeps the actionable message from a nested protocol revert", async () => {
+  const protocolRevert = new CallExecutionError(
+    new RawContractError({ data: "0x9c89bf50" }),
+    { account: WALLET, to: DESTINATION },
+  );
+  const prepared = await prepareRoutesForReview(
+    [route("native")],
+    WALLET,
+    () => ({
+      chain: { id: 1 },
+      simulateCalls: async () => ({ results: [{ status: "failure", error: protocolRevert }] }),
+    } as unknown as FxPublicClient),
+  );
 
-test("refresh keeps the selected route type when quote fields change", () => {
-  const reviewed = route("second");
-  const rebuilt = [
-    { ...route("first"), details: { routeType: "first", minOut: "98" } },
-    { ...route("second"), details: { routeType: "second", minOut: "97" } },
-  ];
-  assert.equal(selectRefreshedRoute(reviewed, rebuilt, 1), rebuilt[1]);
+  assert.deepEqual(prepared.viable, []);
+  assert.deepEqual(prepared.failures, ["native: Lower leverage or add collateral."]);
+  assert.doesNotMatch(prepared.failures.join(" "), /0x9c89bf50|CallExecutionError/);
 });

@@ -44,7 +44,7 @@ export interface RouteGasCostEstimate {
   status: GasCostStatus;
   fetchedAt: number;
   validUntil: number;
-  /** Latest block observed while resolving the estimate, when available. */
+  /** Optional head-block provenance when supplied independently. */
   blockNumber?: bigint;
   fee?: GasFeeSnapshot;
   steps: readonly GasStepEstimate[];
@@ -349,14 +349,6 @@ export async function estimatePlannedRouteCost(
     return unavailableEstimate(route, routeKey, fetchedAt, validUntil, nativeValueWei, 'chain unavailable');
   }
 
-  let blockNumber: bigint | undefined;
-  try {
-    blockNumber = await boundedCall(client.getBlockNumber(), timeoutMs, options.signal);
-  } catch (error) {
-    if (isAbortError(error)) throw error;
-    // A block tag is useful provenance but is not required for eth_estimateGas.
-  }
-
   // Always settle this parallel request before the step loop completes. If a
   // fee request aborts while eth_estimateGas is still running, leaving a
   // rejected promise pending would surface as an unhandled rejection.
@@ -474,7 +466,6 @@ export async function estimatePlannedRouteCost(
     status,
     fetchedAt,
     validUntil,
-    blockNumber,
     fee,
     steps: completeSteps,
     estimatedGasUnits,

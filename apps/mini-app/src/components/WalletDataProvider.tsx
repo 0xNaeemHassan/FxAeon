@@ -89,6 +89,7 @@ export function useWalletBalances({ address, chainId = 1, enabled = true }: {
   data: WalletBalancesResult | null;
   status: 'idle' | 'loading' | 'ready' | 'unavailable';
   isFetching: boolean;
+  updatedAt: number | null;
   error: string;
   refresh: () => Promise<WalletBalancesResult | undefined>;
 } {
@@ -118,9 +119,10 @@ export function useWalletBalances({ address, chainId = 1, enabled = true }: {
     data: status === 'ready' ? query.data ?? null : null,
     status,
     isFetching: active && query.isFetching,
+    updatedAt: status === 'ready' && query.dataUpdatedAt > 0 ? query.dataUpdatedAt : null,
     error: '',
     refresh,
-  }), [active, query.data, query.isFetching, refresh, status]);
+  }), [active, query.data, query.dataUpdatedAt, query.isFetching, refresh, status]);
 }
 
 export function useInvalidateWalletData() {

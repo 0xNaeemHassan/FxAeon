@@ -7,6 +7,7 @@ import { assertPublicClientChain, getPublicClient } from "./clients";
 import { recordPendingHash, updatePendingHashRecord } from "./journal";
 import { withWalletChainLock } from "./lock";
 import { defaultTransactionPolicy } from "./policy";
+import { normalizeFxProtocolError } from "./errorNormalization";
 import type {
   BridgeRouteQuote,
   FxPublicClient,
@@ -277,7 +278,11 @@ export async function simulatePlannedRoute(
     for (let index = 0; index < result.results.length; index += 1) {
       const item = result.results[index];
       if (item.status !== "success") {
-        const error = (item as { error?: { message?: string } }).error?.message ?? "execution reverted";
+        const error = normalizeFxProtocolError(
+          (item as { error?: unknown }).error,
+          "The protocol rejected this route. Review the position inputs.",
+          route.operation,
+        );
         return { success: false, error, failedTxIndex: index };
       }
     }
@@ -285,7 +290,11 @@ export async function simulatePlannedRoute(
   } catch (error) {
     return {
       success: false,
-      error: `simulation unavailable: ${error instanceof Error ? error.message : String(error)}`,
+      error: normalizeFxProtocolError(
+        error,
+        "Simulation is unavailable. Check your connection and try again.",
+        route.operation,
+      ),
     };
   }
 }

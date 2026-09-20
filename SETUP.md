@@ -1,149 +1,63 @@
-# Local setup and deployment
+# Setup
 
-FxAeon has two independent static sites: the financial Next.js app in
-`apps/mini-app` and the marketing site in `apps/landing`. The financial app
-supports modern browsers and Telegram Mini Apps. It has no application backend,
-Telegram webhook process, database, Redis instance, worker, queue, or production
-container to configure. A deployment may expose one optional, read-only Pages
-Function at `/api/gas` for the Ethereum gas display; it has no signing,
-protocol-state, or wallet authority.
+FxAeon is a pnpm workspace with two independent sites: the static Next.js app in
+`apps/mini-app` and the standalone marketing site in `apps/landing`.
 
-## Prerequisites
+## Requirements
 
 - Node.js 22
-- Corepack with pnpm 11.19.0
-- Optional Privy application configured for the web origins you use and Telegram login; browser users can connect an injected EVM wallet without Privy
-- Domain-restricted browser RPC endpoints for Ethereum and Base
-- Optional: a Telegram test bot for validating the Mini App launch context
+- Corepack and pnpm 11.19.0
 
-## Install
-
-```bash
+```powershell
 corepack enable
 corepack prepare pnpm@11.19.0 --activate
 pnpm install --frozen-lockfile
 ```
 
-## Configure the browser build
-
-Copy the example file:
+## Run the app
 
 ```powershell
 Copy-Item apps/mini-app/.env.example apps/mini-app/.env.local
-```
-
-The client accepts only public configuration:
-
-| Variable | Purpose |
-| --- | --- |
-| `NEXT_PUBLIC_PRIVY_APP_ID` | Public Privy application identifier for email, external-wallet, and enabled Telegram sign-in; required for the complete login experience |
-| `NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL` | Domain-restricted Ethereum RPC endpoint |
-| `NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL` | Domain-restricted Base RPC endpoint |
-| `NEXT_PUBLIC_ALCHEMY_DATA_API_KEY` | Domain-restricted Alchemy Data API key for foreground token discovery on Ethereum/Base |
-| `NEXT_PUBLIC_TELEGRAM_APP_URL` | Secondary Telegram Main Mini App or menu URL; browser entry does not depend on it |
-
-`NEXT_PUBLIC_*` values are embedded in the browser bundle. Never place a bot token, Privy secret, authorization key, private key, unrestricted RPC key, or other signing authority in this file. Inject production values through the protected deployment environment, not through committed files.
-
-Runtime configuration accepts only HTTPS Alchemy application endpoints for the
-matching chain: `eth-mainnet.g.alchemy.com/v2/<key>` for Ethereum and
-`base-mainnet.g.alchemy.com/v2/<key>` for Base, without credentials, custom
-ports, query strings, or fragments. A localhost RPC is accepted only by an
-explicit screenshot/test build for a disposable local fork. The client also
-probes `eth_chainId` at financial planning, signing, and recovery boundaries.
-
-When configured, Privy should allow the exact local, preview, and production origins and expose only Ethereum (chain ID `1`) and Base (chain ID `8453`). Provider applications should use separate preview and production credentials with origin allowlists, network restrictions, usage caps, and alerts. The Alchemy Data key is browser-visible by design, but should still be restricted to the deployed app origins and capped conservatively. If Privy is omitted, FxAeon uses the browser wallet's EIP-1193 provider directly; no account is requested until the user presses Connect.
-
-Enable email and wallet authentication in Privy's dashboard. For Telegram,
-enable Telegram login and seamless Mini App authentication, configure the bot
-there, and set its allowed domain through BotFather. A bot token stored in
-GitHub secrets does not enable Privy authentication. Keep that token out of
-browser configuration. See [Privy's Telegram setup](https://docs.privy.io/guide/dashboard/telegram).
-
-Positions, Borrow, and fxSAVE use Ethereum as their financial source of truth.
-Move supports the supported `fxUSD` and `fxSAVE` bridge routes in either
-Ethereum/Base direction; Base is not presented as a position or fxSAVE ledger.
-
-### Where production values go
-
-The checked-in deployment workflow reads build-time values before it creates a verification `dist/` artifact. Add them in **GitHub → repository Settings → Secrets and variables → Actions**:
-
-- **Secrets/configuration:** `NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL`, `NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL`, `NEXT_PUBLIC_ALCHEMY_DATA_API_KEY`, and (when used) `NEXT_PUBLIC_PRIVY_APP_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`.
-- **Variables:** `NEXT_PUBLIC_TELEGRAM_APP_URL` — for this deployment use `https://t.me/FxAeonBot` (or a Telegram direct Mini App link if BotFather assigns one).
-
-For a local build, copy `apps/mini-app/.env.example` to `apps/mini-app/.env.local` and replace the two Alchemy placeholders with the matching `/v2/<key>` endpoints. Cloudflare Pages dashboard builds must define the same values under **Workers & Pages → project → Settings → Environment variables** for the selected Preview/Production environment; they are consumed at build time, not dynamically at runtime. GitHub secrets do not automatically become Cloudflare build variables. On a successful release, the workflow checks the published JavaScript for the expected public Privy app ID before requesting a Telegram bot-menu update. That sync uses only the fixed `https://api.telegram.org` Bot API host, validates the Mini App URL against the FxAeon HTTPS origins without credentials, ports, queries, or fragments, clears the default command suggestions because this Mini App has no Telegram command handler, and performs bounded writes followed by exact metadata/menu readbacks; any timeout, API error, or readback mismatch stops the job. Configure the native Main Mini App and its profile launch button separately in `@BotFather`; the workflow's menu update does not replace that BotFather setting.
-
-## Development
-
-```bash
 pnpm dev
 ```
 
-Open `http://localhost:3000` to use the complete browser application. Telegram is optional: use a Mini App launch only when testing seamless Telegram authentication, native theme/viewport behavior, haptics, or the host Back button. Use a disposable test wallet for local work in either environment.
+Open `http://localhost:3000`. The app opens Portfolio. Without Privy
+configuration, connect an injected EVM wallet explicitly. Telegram is optional
+for local browser work.
 
-## Verification
+The browser build accepts these public, build-time settings:
 
-Run the aggregate release gate:
+| Variable | Use |
+| --- | --- |
+| `NEXT_PUBLIC_PRIVY_APP_ID` | Privy login and wallet connection; optional when using an injected browser wallet |
+| `NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL` | Restricted Ethereum RPC endpoint |
+| `NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL` | Restricted Base RPC endpoint |
+| `NEXT_PUBLIC_ALCHEMY_DATA_API_KEY` | Optional wallet-token discovery on Ethereum and Base |
+| `NEXT_PUBLIC_TELEGRAM_APP_URL` | Telegram bot or Mini App link |
 
-```bash
+All `NEXT_PUBLIC_*` values ship in the browser bundle. Use origin-restricted,
+quota-limited provider credentials. Never put private keys, Privy secrets, or a
+Telegram bot token in this file. Local RPC endpoints are accepted only by
+explicit local-fork test builds.
+
+## Run the landing site
+
+```powershell
+pnpm build:landing
+pnpm preview:landing
+```
+
+The built site is in `apps/landing/dist/` and is served locally at
+`http://localhost:4173` by default. See [`docs/deployment.md`](docs/deployment.md)
+for the separate Cloudflare Pages projects and production configuration.
+
+## Verify a change
+
+```powershell
 pnpm verify
 ```
 
-For the built artifact, run the Playwright suite:
-
-```bash
-pnpm test:e2e
-```
-
-The suite builds and serves the static export with empty wallet credentials. In CI, `pnpm build` runs once and `E2E_BUILD=0 pnpm test:e2e` reuses that exact artifact. It covers browser entry, mobile and Telegram-sized routing, unavailable states, accessibility, and the absence of FxAeon application-backend traffic; the optional same-origin `/api/gas` function is not enabled in credential-free E2E. It never uses production funds.
-
-The deterministic stress harness is opt-in:
-
-```bash
-pnpm test:chaos
-```
-
-Anvil fork tests require a locally running Anvil binary and an operator-supplied Ethereum fork endpoint. Keep the endpoint in the process environment or a secret manager; do not commit it. The dedicated `ANVIL_FORK_URL` is preferred; the reviewed `NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL` is accepted as a convenient fallback for the heavy fork gate:
-
-```powershell
-$env:ANVIL_FORK_URL = (Get-Secret FXAEON_ANVIL_FORK_URL)
-pnpm test:anvil
-```
-
-If the Alchemy endpoint is already loaded in the shell, `pnpm test:anvil` uses `NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL` automatically when `ANVIL_FORK_URL` is absent. The URL is passed to Anvil only, redacted from logs, and removed before application tests start.
-
-Optional `ANVIL_FORK_BLOCK`, `ANVIL_PORT`, and `FX_ANVIL_ITERATIONS` variables control the fork block, port, and randomized iteration count. The test script refuses to run when the endpoint or binary is missing.
-
-## Static deployment
-
-The financial release artifact is `apps/mini-app/dist/`. The existing Cloudflare Pages project `fxaeon` is associated with `https://fxaeon.com/` and `https://www.fxaeon.com/`; `https://fxaeon.pages.dev/` is its preview origin. The app opens Portfolio at `/`; `/portfolio` remains a backwards-compatible alias. The public marketing site uses a separate Pages project, `fxaeon-landing`, configured with `apps/landing` as its root, `node build.mjs` as its build command, `dist` as its output, and `apps/landing/*` as its watch paths. `https://fxaeon.xyz/` shows Active SSL, and a live browser check confirmed the updated landing and its app links. Keep the two projects' custom domains, build settings, and deployment checks separate.
-
-On a successful release, the financial workflow performs a frozen installation, production-environment validation, the complete `pnpm verify` gate, builds the artifact, waits for the commit-scoped `Cloudflare Pages` check, and verifies the live bundle's expected public wallet configuration before updating Telegram. Because Cloudflare uses the same check name for Pages projects, the checker also requires the check's Cloudflare details URL to contain `/pages/view/fxaeon/`; a successful landing-project deployment cannot authorize the financial release. The first merged-main release gate failed in its redirect-URL parser. PR `#195` contains a fix, but its full release gate and Telegram menu synchronization are still pending.
-
-### Cloudflare dashboard build settings
-
-The pasted build log reaches `Success: Build command completed` and then fails because `npx wrangler deploy` is a Workers deploy command running from the root of this pnpm workspace. Configure the Cloudflare project as **Pages** and use:
-
-| Setting | Value |
-| --- | --- |
-| Root directory | `/` |
-| Build command | `pnpm --filter @fxaeon/mini-app build` |
-| Build output directory | `apps/mini-app/dist` |
-| Deploy command | Leave blank for Pages; Pages publishes the output directory automatically |
-
-If the provider requires an explicit deploy command for the financial project, use `pnpm exec wrangler pages deploy apps/mini-app/dist --project-name=fxaeon` instead of `npx wrangler deploy`. For the landing project, use `apps/landing` as the root directory, `node build.mjs` as the build command, and `dist` as its output directory; its project configuration is [apps/landing/wrangler.toml](apps/landing/wrangler.toml). The repository uses Cloudflare's native Pages Git builds and waits for their commit checks; it does not run Wrangler from GitHub Actions. Do not configure a Worker deploy for either static export.
-
-The protected financial environment supplies:
-
-- `NEXT_PUBLIC_PRIVY_APP_ID`
-- domain-restricted Ethereum and Base RPC URLs
-- `NEXT_PUBLIC_TELEGRAM_APP_URL`
-
-The production Privy application ID is deployment configuration and is never
-committed. Configure separate Privy applications and exact origins for
-development, preview, and production. Privy's [cookie configuration guidance](https://docs.privy.io/recipes/react/cookies)
-describes the separate development/production cookie setup. Cloudflare's
-project-to-domain associations are currently verified; confirm the exact Privy
-allowed origins and redirect settings separately. The live Connect modal check
-did not submit an authentication attempt.
-
-The release has no application server, Worker, database, delegated signer, or secret-bearing client API. It may include one optional Cloudflare Pages Function at `/api/gas`, a fixed read-only Ethereum gas-price oracle. If enabled, add `ETHERSCAN_API_KEY` as a Pages **Secret** binding in the production and preview environments; it is never a `NEXT_PUBLIC_*` variable and is never included in the browser bundle. The function rejects query parameters, accepts only GET, uses a fixed Etherscan v2 gas-oracle request for chain `1`, and returns a bounded stale value during a short upstream outage. Leaving the binding unset disables only this Etherscan fallback; the primary RPC fee and gas estimates remain usable when the configured RPC supports them.
+This runs scope and architecture checks, landing build/tests, lint, source tests,
+production build, typecheck, bundle/secret checks, built-browser tests, and
+landing-browser checks. Protected Anvil fork gates are separate; see
+[`docs/testing.md`](docs/testing.md).

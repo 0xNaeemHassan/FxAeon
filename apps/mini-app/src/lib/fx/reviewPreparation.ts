@@ -1,4 +1,5 @@
 import { getPublicClient } from "./clients";
+import { normalizeFxProtocolError } from "./errorNormalization";
 import { defaultTransactionPolicy } from "./policy";
 import { simulatePlannedRoute } from "./runner";
 import type { FxPublicClient, PlannedRoute } from "./types";
@@ -35,7 +36,11 @@ export async function prepareRoutesForReview(
         : { failure: `${routeLabel}: ${simulation.error}` };
     } catch (cause) {
       return {
-        failure: `${routeLabel}: ${cause instanceof Error ? cause.message : String(cause)}`,
+        failure: `${routeLabel}: ${normalizeFxProtocolError(
+          cause,
+          "This route could not be prepared. Check the inputs and try again.",
+          route.operation,
+        )}`,
       };
     }
   }));
@@ -44,43 +49,4 @@ export async function prepareRoutesForReview(
     viable: outcomes.flatMap((outcome) => "route" in outcome && outcome.route ? [outcome.route] : []),
     failures: outcomes.flatMap((outcome) => "failure" in outcome && outcome.failure ? [outcome.failure] : []),
   };
-}
-
-function canonicalReviewValue(value: unknown): string {
-  if (typeof value === "bigint") return `bigint:${value.toString()}`;
-  if (value === undefined) return "undefined";
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonicalReviewValue).join(",")}]`;
-  return `{${Object.entries(value as Record<string, unknown>)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, nested]) => `${JSON.stringify(key)}:${canonicalReviewValue(nested)}`)
-    .join(",")}}`;
-}
-
-/**
- * Strict equality for everything the review binds: wallet/chain authority,
- * ordered transaction calldata/value/nonce, policy, and quote/details.
- */
-export function routesMatchForSigning(left: PlannedRoute, right: PlannedRoute): boolean {
-  return canonicalReviewValue(left) === canonicalReviewValue(right);
-}
-
-/** Pick the rebuilt form of the route the user selected without inventing order. */
-export function selectRefreshedRoute(
-  reviewedRoute: PlannedRoute,
-  rebuiltRoutes: readonly PlannedRoute[],
-  reviewedIndex: number,
-): PlannedRoute {
-  if (!rebuiltRoutes.length) throw new Error("No executable transaction route was returned.");
-
-  const exact = rebuiltRoutes.find((candidate) => routesMatchForSigning(reviewedRoute, candidate));
-  if (exact) return exact;
-
-  const routeType = reviewedRoute.details?.routeType;
-  if (routeType) {
-    const sameType = rebuiltRoutes.filter((candidate) => candidate.details?.routeType === routeType);
-    if (sameType.length === 1) return sameType[0];
-  }
-
-  return rebuiltRoutes[Math.min(Math.max(reviewedIndex, 0), rebuiltRoutes.length - 1)];
 }

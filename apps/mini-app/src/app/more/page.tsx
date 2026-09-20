@@ -62,7 +62,7 @@ function WalletSummary() {
   if (!ready || !walletState.ready) {
     if (timedOut) {
       return (
-        <div role="status" aria-live="polite"><Card className={`${styles.utilityCard} flex items-center gap-3 p-3`}>
+        <div role="status" aria-live="polite"><Card className={`${styles.utilityCard} ${styles.walletSummaryCard} flex items-center gap-3 p-3`}>
           <span className="text-[12px] text-warn">Wallet provider is unavailable.</span>
           <button type="button" aria-label="Retry wallet provider" onClick={() => window.location.reload()} className="glass-press ml-auto flex min-h-11 min-w-11 items-center justify-center rounded-xl text-mut"><RefreshCw className="h-4 w-4" aria-hidden="true" /></button>
         </Card></div>
@@ -73,8 +73,8 @@ function WalletSummary() {
 
   if (!authenticated || !wallet) {
     return (
-      <Card className={`${styles.utilityCard} flex items-center gap-2.5 p-3`}>
-        <Wallet className="h-5 w-5 shrink-0 text-mint" aria-hidden="true" />
+      <Card className={`${styles.utilityCard} ${styles.walletSummaryCard} flex items-center gap-2.5 p-3`}>
+        <span className={styles.walletIcon}><Wallet className="h-5 w-5 shrink-0 text-mint" aria-hidden="true" /></span>
         <div className="min-w-0 flex-1">
           <p className="text-[13.5px] font-medium">{authenticated ? 'Choose a wallet' : 'Connect a wallet'}</p>
         </div>
@@ -86,9 +86,9 @@ function WalletSummary() {
   }
 
   return (
-    <Card className={`${styles.utilityCard} p-3`}>
+    <Card className={`${styles.utilityCard} ${styles.walletSummaryCard} p-3`}>
       <div className="flex items-center gap-2.5">
-        <Wallet className="h-[18px] w-[18px] shrink-0 text-mint" aria-hidden="true" />
+        <span className={styles.walletIcon}><Wallet className="h-[18px] w-[18px] shrink-0 text-mint" aria-hidden="true" /></span>
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-1.5 text-[12px] text-mut"><CircleCheck className="h-3.5 w-3.5 text-mint" aria-hidden="true" />Connected wallet</p>
           <div className="mt-1"><AddressChip address={wallet.address} /></div>
@@ -116,7 +116,7 @@ function Section({ label, children }: { label: string; children: ReactNode }) {
 function MoreRow({ href, icon: Icon, title }: { href: string; icon: LucideIcon; title: string }) {
   const inner = (
     <>
-      <Icon className="h-[18px] w-[18px] shrink-0 text-mint" strokeWidth={1.9} aria-hidden="true" />
+      <span className={styles.moreIconWell}><Icon className="h-[18px] w-[18px] shrink-0 text-mint" strokeWidth={1.9} aria-hidden="true" /></span>
       <span className="min-w-0 flex-1 text-[13.5px] font-medium">{title}</span>
       <ChevronRight className="h-4 w-4 shrink-0 text-[var(--mut-2)]" aria-hidden="true" />
     </>
@@ -128,7 +128,7 @@ function MoreRow({ href, icon: Icon, title }: { href: string; icon: LucideIcon; 
 function MoreExternalRow({ href, icon: Icon, title }: { href: string; icon: LucideIcon; title: string }) {
   const inner = (
     <>
-      <Icon className="h-[18px] w-[18px] shrink-0 text-mint" strokeWidth={1.9} aria-hidden="true" />
+      <span className={styles.moreIconWell}><Icon className="h-[18px] w-[18px] shrink-0 text-mint" strokeWidth={1.9} aria-hidden="true" /></span>
       <span className="min-w-0 flex-1 text-[13.5px] font-medium">{title}</span>
       <ExternalLink className="h-4 w-4 shrink-0 text-[var(--mut-2)]" aria-hidden="true" />
     </>

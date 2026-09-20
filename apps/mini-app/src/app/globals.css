@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* FxAeon — one quiet canvas, focused controls, confident financial hierarchy. */
+/* FxAeon — a focused canvas with a little atmosphere and clear surface depth. */
 :root {
   /* Color roles: one source of truth for CSS and Tailwind utilities. */
   --bg: #100e18;
@@ -56,8 +56,8 @@
 
   /* Elevation is reserved for floating or review surfaces. */
   --elevation-0: none;
-  --elevation-1: 0 4px 24px rgba(0, 0, 0, 0.10);
-  --elevation-2: 0 24px 80px rgba(0, 0, 0, 0.32);
+  --elevation-1: 0 8px 24px rgba(5, 2, 12, 0.18), 0 1px 0 rgba(255, 255, 255, 0.025) inset;
+  --elevation-2: 0 18px 52px rgba(5, 2, 12, 0.34), 0 1px 0 rgba(255, 255, 255, 0.035) inset;
   --elevation-3: var(--elevation-2);
 
   /* Compatibility aliases for existing component class names. */
@@ -99,6 +99,10 @@
   --tabbar-reserve: calc(var(--tabbar-panel-height) + var(--tabbar-edge-gap) + 8px);
   /* Scroll content must clear the fixed tab bar and its safe-area inset. */
   --content-bottom-clearance: calc(var(--tabbar-reserve) + 4px);
+  --canvas-wash: rgba(185, 160, 255, 0.2);
+  --canvas-wash-secondary: rgba(196, 149, 255, 0.07);
+  --surface-highlight: rgba(255, 255, 255, 0.055);
+  --surface-shadow: rgba(5, 2, 12, 0.24);
 }
 
 /* Saved preferences are applied by a tiny pre-hydration initializer in the
@@ -127,8 +131,12 @@
   --success: #53d5a0;
   --danger: #ff5368;
   --warn: #f2b84b;
-  --elevation-1: 0 4px 24px rgba(0, 0, 0, 0.14);
-  --elevation-2: 0 24px 80px rgba(0, 0, 0, 0.42);
+  --elevation-1: 0 8px 24px rgba(0, 0, 0, 0.28), 0 1px 0 rgba(255, 255, 255, 0.02) inset;
+  --elevation-2: 0 18px 52px rgba(0, 0, 0, 0.48), 0 1px 0 rgba(255, 255, 255, 0.025) inset;
+  --canvas-wash: rgba(185, 160, 255, 0.14);
+  --canvas-wash-secondary: rgba(196, 149, 255, 0.05);
+  --surface-highlight: rgba(255, 255, 255, 0.04);
+  --surface-shadow: rgba(0, 0, 0, 0.4);
 }
 
 :root[data-theme='light'] {
@@ -155,8 +163,12 @@
   --success: #128354;
   --danger: #c92b49;
   --warn: #90630c;
-  --elevation-1: 0 4px 24px rgba(51, 27, 80, 0.04);
-  --elevation-2: 0 24px 80px rgba(51, 27, 80, 0.14);
+  --elevation-1: 0 8px 24px rgba(54, 34, 79, 0.07), 0 1px 0 rgba(255, 255, 255, 0.85) inset;
+  --elevation-2: 0 18px 52px rgba(54, 34, 79, 0.13), 0 1px 0 rgba(255, 255, 255, 0.9) inset;
+  --canvas-wash: rgba(135, 89, 207, 0.17);
+  --canvas-wash-secondary: rgba(163, 98, 196, 0.075);
+  --surface-highlight: rgba(255, 255, 255, 0.9);
+  --surface-shadow: rgba(58, 34, 84, 0.1);
 }
 
 * {
@@ -179,7 +191,10 @@ body {
   min-height: 0;
   margin: 0;
   overflow: hidden;
-  background: var(--bg);
+  background:
+    radial-gradient(ellipse 58% 35% at 50% 0%, var(--canvas-wash), transparent 76%),
+    radial-gradient(ellipse 34% 30% at 100% 74%, var(--canvas-wash-secondary), transparent 78%),
+    var(--bg);
   color: var(--text);
   font-feature-settings: 'ss01' on, 'cv05' on, 'cv11' on;
   font-variant-numeric: tabular-nums;
@@ -282,8 +297,8 @@ summary:focus-visible {
 }
 
 ::selection {
-  background: rgba(79, 124, 255, 0.38);
-  color: #fff;
+  background: var(--mint-dim);
+  color: var(--text);
 }
 
 ::-webkit-scrollbar {
@@ -366,9 +381,17 @@ summary:focus-visible {
   gap: 20px;
   margin-bottom: var(--header-gap);
   padding-bottom: 4px;
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--line) 58%, transparent);
 }
 
-.brand-wordmark { font-size: 22px; font-weight: 700; letter-spacing: -.055em; }
+.brand-wordmark {
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 740;
+  letter-spacing: -.055em;
+  text-shadow: 0 1px 18px color-mix(in srgb, var(--mint) 16%, transparent);
+}
+.app-topbar > a:first-child { animation: shell-enter 240ms var(--astryx-ease-out) both; }
 .desktop-navigation { display: none; }
 .utility-content { max-width: 560px; }
 .app-content.utility-content > .page-header { max-width: 560px; margin-inline: auto; }
@@ -379,6 +402,28 @@ summary:focus-visible {
   min-width: 0;
   align-items: center;
   gap: 8px;
+}
+
+.app-topbar-actions > button,
+.app-topbar-actions > .network-selector-wrap > button {
+  border-color: color-mix(in srgb, var(--line) 84%, transparent);
+  background: linear-gradient(155deg, color-mix(in srgb, var(--surface-2) 68%, transparent), color-mix(in srgb, var(--surface) 94%, transparent));
+  box-shadow: 0 1px 0 var(--surface-highlight) inset;
+  transition: border-color var(--astryx-duration-fast) ease, background-color var(--astryx-duration-fast) ease, color var(--astryx-duration-fast) ease, transform var(--astryx-duration-fast) var(--astryx-ease-spring);
+}
+
+.app-topbar-actions > button:hover:not(:disabled),
+.app-topbar-actions > .network-selector-wrap > button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--mint) 44%, var(--line));
+  color: var(--mint-bright);
+}
+
+.app-topbar-actions > button[aria-label='Connect wallet'],
+.app-topbar-actions > button[aria-label='Open wallet profile'] {
+  border: 1px solid color-mix(in srgb, var(--mint) 42%, var(--line));
+  border-radius: 15px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--mint) 16%, var(--surface-2)), var(--surface));
+  box-shadow: 0 1px 0 var(--surface-highlight) inset, 0 4px 14px color-mix(in srgb, var(--surface-shadow) 64%, transparent);
 }
 
 .wallet-profile-backdrop {
@@ -437,6 +482,7 @@ summary:focus-visible {
   justify-content: space-between;
   gap: 20px;
   margin-bottom: 12px;
+  animation: shell-enter 220ms var(--astryx-ease-out) both;
 }
 
 .network-selector-wrap {
@@ -449,15 +495,16 @@ summary:focus-visible {
 
 .network-selector {
   display: inline-flex;
+  width: 44px;
   min-height: 44px;
-  max-width: 148px;
+  max-width: 44px;
   align-items: center;
-  gap: 7px;
+  justify-content: center;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--surface);
   color: var(--text);
-  padding: 0 11px;
+  padding: 0;
   font-size: 12px;
   font-weight: 650;
   white-space: nowrap;
@@ -514,7 +561,7 @@ summary:focus-visible {
 .page-header h1 {
   margin-top: 5px;
   font-size: 27px;
-  font-weight: 650;
+  font-weight: 680;
   line-height: 1.05;
   letter-spacing: -.035em;
 }
@@ -545,11 +592,11 @@ summary:focus-visible {
 /* Surfaces */
 .glass {
   border-radius: var(--radius-lg);
-  border: 1px solid transparent;
-  background: var(--surface);
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  background: linear-gradient(150deg, color-mix(in srgb, var(--surface-2) 38%, var(--surface)), var(--surface) 74%);
+  box-shadow: var(--elevation-1);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
 .card {
@@ -568,9 +615,11 @@ summary:focus-visible {
 }
 
 .card-glow {
-  border-color: color-mix(in srgb, var(--mint) 42%, var(--line));
-  background: var(--surface-2);
-  box-shadow: none;
+  border-color: color-mix(in srgb, var(--mint) 32%, var(--line));
+  background:
+    radial-gradient(ellipse 68% 58% at 100% 0%, color-mix(in srgb, var(--mint) 10%, transparent), transparent 78%),
+    linear-gradient(145deg, var(--surface-2), var(--surface));
+  box-shadow: var(--elevation-1);
 }
 
 .stat-card,
@@ -580,7 +629,8 @@ summary:focus-visible {
 }
 
 .stat-card {
-  background: var(--surface-2);
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  background: linear-gradient(150deg, color-mix(in srgb, var(--surface-3) 24%, var(--surface-2)), var(--surface-2));
 }
 
 .empty-state {
@@ -607,11 +657,11 @@ summary:focus-visible {
 /* ── Astryx Component Primitives ── */
 .astryx-card {
   position: relative;
-  background: var(--astryx-surface-default);
-  border: 1px solid color-mix(in srgb, var(--line) 36%, transparent);
+  background: linear-gradient(150deg, color-mix(in srgb, var(--surface-2) 62%, var(--surface)), var(--astryx-surface-default) 68%);
+  border: 1px solid color-mix(in srgb, var(--line) 66%, transparent);
   border-radius: var(--astryx-radius-lg);
   box-shadow: var(--elevation-1);
-  transition: border-color var(--astryx-duration-fast) ease, background-color var(--astryx-duration-fast) ease;
+  transition: border-color var(--astryx-duration-normal) ease, background-color var(--astryx-duration-normal) ease, box-shadow var(--astryx-duration-normal) ease, transform var(--astryx-duration-fast) var(--astryx-ease-spring);
 }
 
 .astryx-card::before,
@@ -620,8 +670,8 @@ summary:focus-visible {
 }
 
 .astryx-card-elevated {
-  background: var(--astryx-surface-raised);
-  border: 1px solid var(--astryx-border-strong);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--surface-3) 46%, var(--surface-2)), var(--astryx-surface-raised) 70%);
+  border: 1px solid color-mix(in srgb, var(--astryx-border-strong) 74%, var(--line));
   border-radius: var(--astryx-radius-xl);
   box-shadow: var(--astryx-elevation-2);
 }
@@ -633,7 +683,8 @@ summary:focus-visible {
 }
 
 .astryx-interactive:hover {
-  border-color: var(--astryx-border-strong);
+  border-color: color-mix(in srgb, var(--mint) 46%, var(--line-strong));
+  box-shadow: var(--elevation-1), 0 0 0 1px color-mix(in srgb, var(--mint) 8%, transparent);
 }
 
 .astryx-interactive:active {
@@ -665,8 +716,8 @@ summary:focus-visible {
   border: 1px solid transparent;
   border-radius: var(--radius-full);
   text-decoration: none;
-  transition: transform 120ms ease, filter 140ms ease, box-shadow 140ms ease,
-    border-color 120ms ease, opacity 120ms ease;
+  transition: transform var(--astryx-duration-fast) var(--astryx-ease-spring), filter var(--astryx-duration-normal) ease, box-shadow var(--astryx-duration-normal) ease,
+    border-color var(--astryx-duration-fast) ease, background-color var(--astryx-duration-fast) ease, opacity var(--astryx-duration-fast) ease;
 }
 
 .button::after {
@@ -674,15 +725,15 @@ summary:focus-visible {
 }
 
 .button-primary {
-  background: var(--mint);
+  background: linear-gradient(120deg, color-mix(in srgb, var(--mint-bright) 24%, var(--mint)), var(--mint) 62%, color-mix(in srgb, var(--mint) 88%, white));
   border-color: var(--mint);
   color: var(--on-accent);
-  box-shadow: 0 3px 12px color-mix(in srgb, var(--mint) 9%, transparent);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.24) inset, 0 5px 16px color-mix(in srgb, var(--mint) 16%, transparent);
 }
 
 .button-primary:hover {
-  filter: brightness(1.08);
-  box-shadow: none;
+  filter: brightness(1.045);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.28) inset, 0 7px 20px color-mix(in srgb, var(--mint) 20%, transparent);
 }
 
 .button-ghost {
@@ -709,12 +760,12 @@ summary:focus-visible {
 /* Navigation */
 .tabbar {
   min-height: var(--tabbar-panel-height);
-  border: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--line-strong) 56%, var(--line));
   border-radius: 24px;
-  background: var(--surface);
-  box-shadow: var(--elevation-2);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--surface-2) 84%, transparent), color-mix(in srgb, var(--surface) 96%, transparent));
+  box-shadow: 0 12px 34px var(--surface-shadow), 0 1px 0 var(--surface-highlight) inset;
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -723,7 +774,7 @@ summary:focus-visible {
 
 .nav-item {
   position: relative;
-  transition: color 120ms ease, background-color 120ms ease, transform 120ms ease;
+  transition: color var(--astryx-duration-fast) ease, background-color var(--astryx-duration-fast) ease, border-color var(--astryx-duration-fast) ease, box-shadow var(--astryx-duration-fast) ease, transform var(--astryx-duration-fast) var(--astryx-ease-spring);
 }
 
 .nav-item:active {
@@ -731,11 +782,9 @@ summary:focus-visible {
 }
 
 .nav-item-active {
-  background: var(--mint-dim);
-}
-
-.nav-item-active .nav-icon::after {
-  content: none;
+  border: 1px solid color-mix(in srgb, var(--mint) 22%, transparent);
+  background: linear-gradient(155deg, color-mix(in srgb, var(--mint) 17%, var(--surface-2)), color-mix(in srgb, var(--mint) 8%, var(--surface)));
+  box-shadow: 0 1px 0 var(--surface-highlight) inset, 0 4px 14px color-mix(in srgb, var(--mint) 8%, transparent);
 }
 
 .nav-item-mobile {
@@ -772,9 +821,18 @@ summary:focus-visible {
 .amount-control,
 .range-control,
 .toggle-row {
-  border: 1px solid transparent;
+  border: 1px solid color-mix(in srgb, var(--line) 74%, transparent);
   border-radius: var(--radius-md);
   background: var(--input);
+}
+
+.segmented,
+.toggle-row { background: color-mix(in srgb, var(--bg) 32%, var(--surface)); }
+
+.field-control,
+.amount-control {
+  background: linear-gradient(150deg, color-mix(in srgb, var(--bg) 34%, var(--input)), var(--input) 76%);
+  box-shadow: 0 1px 0 var(--surface-highlight) inset;
 }
 
 .segmented-option {
@@ -1412,10 +1470,10 @@ input[type='range'].lever::-moz-range-thumb {
   .app-content { max-width: 1120px; }
   .app-content.utility-content { max-width: 560px; }
   .app-topbar { max-width: 1120px; margin: 0 auto var(--header-gap); }
-  .desktop-navigation { display: flex; align-items: center; gap: 4px; margin-right: auto; margin-left: 32px; }
-  .desktop-navigation a { display: grid; min-height: 44px; place-items: center; padding: 0 18px; border-radius: 999px; font-size: 14px; font-weight: 600; color: var(--mut); white-space: nowrap; transition: background-color 120ms ease, color 120ms ease, transform 120ms var(--astryx-ease-spring); }
-  .desktop-navigation a:hover { color: var(--text); background: var(--surface); }
-  .desktop-navigation a[aria-current='page'] { color: var(--mint); background: var(--mint-dim); }
+  .desktop-navigation { display: flex; align-items: center; gap: 5px; margin-right: auto; margin-left: 32px; }
+  .desktop-navigation a { position: relative; display: grid; min-height: 44px; place-items: center; padding: 0 17px; border: 1px solid transparent; border-radius: 999px; font-size: 13px; font-weight: 620; color: var(--mut); white-space: nowrap; transition: background-color var(--astryx-duration-fast) ease, color var(--astryx-duration-fast) ease, border-color var(--astryx-duration-fast) ease, transform var(--astryx-duration-fast) var(--astryx-ease-spring); }
+  .desktop-navigation a:hover { color: var(--text); border-color: color-mix(in srgb, var(--line) 74%, transparent); background: color-mix(in srgb, var(--surface-2) 62%, transparent); }
+  .desktop-navigation a[aria-current='page'] { color: var(--mint-bright); border-color: color-mix(in srgb, var(--mint) 24%, var(--line)); background: linear-gradient(155deg, color-mix(in srgb, var(--mint) 17%, var(--surface-2)), color-mix(in srgb, var(--mint) 7%, var(--surface))); box-shadow: 0 1px 0 var(--surface-highlight) inset; }
   .page-header { max-width: 1120px; margin: 0 auto 20px; }
   .page-header h1 { font-size: 34px; }
   .mobile-tabbar { display: none; }
@@ -1555,8 +1613,6 @@ input[type='range'].lever::-moz-range-thumb {
 
 @media (max-width: 430px) {
   .wallet-control-label { display: none; }
-  .network-selector { width: 44px; max-width: 44px; justify-content: center; padding-inline: 0; }
-  .network-selector-label { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
   /* Keep the 220px menu inside the viewport when the 44px selector sits at
      the right edge of a 320px shell. */
   .network-selector-menu { right: -16px; }
@@ -1671,6 +1727,11 @@ input[type='range'].lever::-moz-range-thumb {
     animation: none;
     background-position: 50% 0;
   }
+}
+
+@keyframes shell-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @media (forced-colors: active) {

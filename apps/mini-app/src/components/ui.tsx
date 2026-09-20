@@ -24,6 +24,7 @@ import ThemeToggle from '@/components/ThemeToggle';
 import WalletProfile from '@/components/WalletProfile';
 import NetworkSelector from '@/components/NetworkSelector';
 import { ValueOrSkeleton } from '@/components/MissingValue';
+import { compactAddress } from '@/lib/addressPresentation';
 
 /* ------------------------------------------------------------------ shell */
 
@@ -295,7 +296,7 @@ export async function copyText(value: string): Promise<boolean> {
 
 export function AddressChip({ address }: { address: string }) {
   const [copied, setCopied] = useState(false);
-  const short = `${address.slice(0, 6)}…${address.slice(-4)}`;
+  const short = compactAddress(address);
   return (
     <button
       type="button"

@@ -7,24 +7,29 @@
 
 .docsLayout {
   display: grid;
-  grid-template-columns: 190px minmax(0, 70ch);
+  grid-template-columns: 216px minmax(0, 72ch);
   align-items: start;
   justify-content: center;
-  gap: clamp(28px, 6vw, 72px);
+  gap: clamp(24px, 5vw, 64px);
   min-height: 0;
 }
 
 .docsNav {
   position: sticky;
-  top: 12px;
+  top: 8px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 7px;
   /* The app content is its own viewport on desktop. Keep the rail inside
      that viewport so every section remains reachable without moving the
      article out from under the shell chrome. */
   max-height: calc(var(--tg-viewport-height, 100dvh) - 132px);
   overflow: hidden;
+  padding: 12px 10px 10px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--surface) 94%, var(--mint) 6%);
+  box-shadow: 0 12px 30px color-mix(in srgb, #000 9%, transparent);
 }
 
 .contentsDisclosure {
@@ -49,48 +54,74 @@
 }
 .contentsSummary::-webkit-details-marker { display: none; }
 .contentsCount { color: var(--mut-2); font-size: 11px; font-weight: 500; }
+.contentsChevron {
+  display: none;
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  margin-left: 2px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform 160ms ease;
+}
+.contentsDisclosure[open] .contentsChevron { transform: rotate(225deg) translate(-1px, -1px); }
 
 .searchLabel {
-  margin-bottom: 5px;
-  padding-inline: 10px;
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 700;
+  padding-inline: 4px;
+  color: var(--mut-2);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .12em;
+  text-transform: uppercase;
 }
 
 .searchRow {
   position: relative;
   display: flex;
   align-items: center;
-  margin-bottom: 13px;
+  margin-bottom: 6px;
+  border-radius: 13px;
+  background: var(--input);
 }
 
 .searchInput {
   min-height: 44px;
   width: 100%;
-  padding: 10px 58px 10px 12px;
+  padding: 10px 48px 10px 37px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 13px;
   color: var(--text);
-  background: var(--input);
+  background: transparent;
   font-size: 13px;
   outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
 }
 
-.searchInput:focus { border-color: var(--mint); box-shadow: 0 0 0 3px var(--mint-dim); }
+.searchIcon {
+  position: absolute;
+  left: 12px;
+  width: 15px;
+  height: 15px;
+  color: var(--mut-2);
+  pointer-events: none;
+}
+.searchInput:focus { border-color: var(--mint); background: var(--surface); box-shadow: 0 0 0 3px var(--mint-dim); }
+.searchInput:focus + .clearSearch { color: var(--text); }
 .searchInput::placeholder { color: var(--mut-2); }
+.searchInput::-webkit-search-cancel-button { appearance: none; }
 
 .clearSearch {
   position: absolute;
-  right: 7px;
-  min-height: 44px;
-  min-width: 44px;
-  padding: 5px 8px;
-  border-radius: 8px;
+  right: 3px;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 10px;
   color: var(--mint);
-  font-size: 11px;
-  font-weight: 700;
 }
+.clearSearch svg { width: 14px; height: 14px; }
 
 .clearSearch:hover { background: var(--mint-dim); }
 
@@ -98,13 +129,14 @@
   display: flex;
   align-items: center;
   min-height: 44px;
-  padding: 9px 10px;
-  border-left: 2px solid transparent;
-  border-radius: 0 10px 10px 0;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 11px;
   color: var(--mut);
-  font-size: 12px;
+  font-size: 12.5px;
+  font-weight: 550;
   line-height: 1.3;
-  transition: color 140ms ease, border-color 140ms ease, background-color 140ms ease;
+  transition: color 160ms ease, border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
 }
 
 .navLinks {
@@ -112,7 +144,7 @@
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   overflow-y: auto;
   overscroll-behavior-y: contain;
   scrollbar-gutter: stable;
@@ -132,6 +164,15 @@
   border-color: var(--mint);
   color: var(--text);
   background: var(--mint-dim);
+  transform: translateX(2px);
+}
+
+.navLink[aria-current='location'] {
+  border-color: color-mix(in srgb, var(--mint) 40%, var(--line));
+  color: var(--text);
+  background: color-mix(in srgb, var(--mint-dim) 78%, var(--surface));
+  font-weight: 700;
+  box-shadow: inset 2px 0 0 var(--mint);
 }
 
 .docsContent {
@@ -141,13 +182,12 @@
 
 .docsIntro {
   margin-bottom: 18px;
-  padding: 4px 0 0;
+  padding: 2px 0 0;
 }
 
-.docsIntro h1,
-.docsIntro h2 {
-  margin-top: 8px;
-  font-size: clamp(25px, 4vw, 34px);
+.docsIntro h1 {
+  margin-top: 0;
+  font-size: clamp(30px, 4vw, 42px);
   font-weight: 750;
   line-height: 1.05;
   letter-spacing: -.045em;
@@ -155,18 +195,23 @@
 
 .section {
   scroll-margin-top: 32px;
-  padding-block: 24px;
+  padding: 23px 0 25px 17px;
   border-top: 1px solid var(--line);
+  border-left: 2px solid transparent;
+  transition: border-color 180ms ease;
 }
 
 .section:first-of-type { border-top: 0; padding-top: 0; }
+.sectionActive { border-left-color: color-mix(in srgb, var(--mint) 72%, transparent); }
 
 .section h2 {
-  font-size: 24px;
+  font-size: clamp(21px, 2.2vw, 25px);
   font-weight: 750;
   line-height: 1.15;
   letter-spacing: -.03em;
 }
+
+.sectionActive h2 { color: var(--text); }
 
 .section h3 {
   margin-top: 22px;
@@ -177,8 +222,8 @@
 .section p,
 .section li {
   color: var(--mut);
-  font-size: 14px;
-  line-height: 1.65;
+  font-size: 14.5px;
+  line-height: 1.72;
 }
 
 .section p { margin-top: 10px; }
@@ -191,16 +236,19 @@
 .callout {
   margin-top: 16px;
   padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--surface-2);
+  border: 1px solid color-mix(in srgb, var(--mint) 20%, var(--line));
+  border-left: 3px solid var(--mint);
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--surface-2) 84%, var(--mint) 16%);
 }
 
 .callout p { margin-top: 0; }
 .callout strong { color: var(--mint); }
 
 .docsFooter {
-  padding-block: 24px 40px;
+  margin-left: 19px;
+  padding: 22px 0 40px;
+  border-top: 1px solid var(--line);
   color: var(--mut-2);
   font-size: 12px;
   line-height: 1.55;
@@ -224,21 +272,23 @@
 @media (max-width: 760px) {
   .docsLayout { display: block; }
   .docsNav {
-    position: relative;
-    top: auto;
-    z-index: auto;
+    position: sticky;
+    top: 0;
+    z-index: 5;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: start;
     gap: 0;
-    margin-bottom: 12px;
-    padding: 4px;
+    margin: 0 0 14px;
+    padding: 5px;
     max-height: none;
     overflow: visible;
-    border: 1px solid var(--line);
-    border-radius: 16px;
-    background: color-mix(in srgb, var(--surface) 96%, transparent);
-    backdrop-filter: blur(12px);
+    border: 1px solid color-mix(in srgb, var(--mint) 18%, var(--line));
+    border-radius: 17px;
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    box-shadow: 0 8px 20px color-mix(in srgb, #000 10%, transparent);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
   }
   .searchLabel {
     position: absolute;
@@ -255,7 +305,9 @@
   .contentsDisclosure { grid-column: 2; }
   .contentsDisclosure { display: block; overflow: visible; }
   .contentsDisclosure[open] { grid-column: 1 / -1; }
-  .contentsSummary { display: flex; }
+  .contentsSummary { display: flex; min-width: 112px; padding: 8px 9px; }
+  .contentsChevron { display: block; }
+  .contentsSummary > span:first-child { margin-right: auto; }
   .contentsDisclosure > .navLinks,
   .contentsDisclosure > .emptySearch { margin-top: 0; }
   .contentsDisclosure:not([open]) > .navLinks,
@@ -272,15 +324,27 @@
   .navLink {
     min-height: 44px;
     flex: 0 0 auto;
-    border: 0;
+    border: 1px solid transparent;
     border-radius: 11px;
     padding: 10px 12px;
     white-space: nowrap;
   }
   .navLink:hover,
-  .navLink:focus-visible { border: 0; }
+  .navLink:focus-visible { border-color: var(--mint); transform: none; }
+  .navLink[aria-current='location'] { border-color: color-mix(in srgb, var(--mint) 46%, var(--line)); box-shadow: inset 0 -2px 0 var(--mint); }
   .emptySearch { margin: 3px 8px 4px; }
-  .section { scroll-margin-top: 24px; }
-  .docsIntro { margin-bottom: 10px; }
-  .docsIntro h1 { margin-top: 0; font-size: 24px; }
+  .section { scroll-margin-top: 168px; padding: 20px 0 22px 12px; }
+  .section:first-of-type { padding-top: 0; }
+  .docsIntro { margin-bottom: 14px; padding: 0; }
+  .docsIntro h1 { margin-top: 0; font-size: 30px; }
+  .section p,
+  .section li { font-size: 14px; line-height: 1.68; }
+  .docsFooter { margin-left: 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navLink,
+  .searchInput,
+  .contentsChevron,
+  .section { transition: none; }
 }

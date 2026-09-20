@@ -191,8 +191,11 @@ test.describe("connected browser wallet flows", () => {
     await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
     await assertNoTopOverlay(page);
     await page.getByRole("button", { name: "Open wallet profile" }).click();
-    const profile = page.getByRole("dialog", { name: "Wallet profile" });
+    const profile = page.getByRole("dialog");
     await expect(profile).toBeVisible();
+    await expect(profile).toHaveAccessibleName("Wallet 0x930f0000000000000000000000000000000098b9");
+    await expect(profile.getByRole("heading", { level: 2 })).toHaveText("0x930f…98b9");
+    await expect(profile.getByText("Wallet value", { exact: true })).toBeVisible();
     await expect(profile.getByRole("link", { name: "View wallet on Etherscan" })).toHaveAttribute("href", /etherscan\.io\/address\/0x930f/i);
     await expect(profile.getByRole("link", { name: /History/ })).toBeVisible();
     await profile.getByRole("link", { name: /History/ }).click();

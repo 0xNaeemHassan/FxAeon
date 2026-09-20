@@ -6,6 +6,8 @@ import { test } from 'node:test';
 // contract's structural substring checks independent of checkout settings.
 const workflow = readFileSync(new URL('../.github/workflows/deploy-mini-app.yml', import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
 const productionEnvValidator = readFileSync(new URL('./validate_production_env.mjs', import.meta.url), 'utf8');
+const pagesConfig = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
+const gasFunction = readFileSync(new URL('../functions/api/gas.ts', import.meta.url), 'utf8');
 
 function step(name) {
   const start = workflow.indexOf(`      - name: ${name}`);
@@ -15,14 +17,20 @@ function step(name) {
 }
 
 test('production validation, deterministic verification, and deployment build are ordered', () => {
+  const secretSync = workflow.indexOf('Sync production Pages gas-oracle secret');
   const validation = workflow.indexOf('run: pnpm verify:production-env');
   const verification = workflow.indexOf('run: pnpm verify\n');
   const productionBuild = workflow.indexOf('run: pnpm build\n');
   const wait = workflow.indexOf('Wait for Cloudflare Pages deployment');
+  const gasCheck = workflow.indexOf('Check live gas-oracle binding');
+  const gasRedeploy = workflow.indexOf('Redeploy verified artifact after syncing the Pages secret');
+  const gasVerify = workflow.indexOf('Verify live gas oracle');
   const liveConfig = workflow.indexOf('Verify live wallet configuration');
   const sync = workflow.indexOf('Sync Telegram bot metadata and menu');
-  assert.ok(validation >= 0 && validation < verification);
-  assert.ok(verification < productionBuild && productionBuild < wait && wait < liveConfig && liveConfig < sync);
+  assert.ok(secretSync >= 0 && secretSync < validation && validation < verification);
+  assert.ok(verification < productionBuild && productionBuild < wait);
+  assert.ok(wait < gasCheck && gasCheck < gasRedeploy && gasRedeploy < gasVerify);
+  assert.ok(gasVerify < liveConfig && liveConfig < sync);
 });
 
 test('complete verification has no production public variables in scope', () => {
@@ -45,9 +53,9 @@ test('the deployed artifact is rebuilt with every required production public var
   }
 });
 
-test('native Cloudflare deployment is gated without Wrangler credentials', () => {
+test('native deployment remains SHA-gated and Pages credentials are limited to secret sync and fallback upload', () => {
   assert.match(workflow, /permissions:\s*\n\s+contents: read\s*\n\s+checks: read/);
-  assert.doesNotMatch(workflow, /wrangler pages deploy/);
+  assert.match(workflow, /jobs:\s*\n\s+deploy:\s*\n\s+name: Build and deploy Cloudflare Pages\s*\n\s+if: github\.ref == 'refs\/heads\/main'/);
   const wait = step('Wait for Cloudflare Pages deployment');
   assert.match(wait, /run: node scripts\/wait_for_cloudflare_check\.mjs/);
   assert.match(wait, /GITHUB_TOKEN:\s*\$\{\{\s*github\.token\s*\}\}/);
@@ -55,8 +63,40 @@ test('native Cloudflare deployment is gated without Wrangler credentials', () =>
   assert.match(wait, /GITHUB_SHA:\s*\$\{\{\s*github\.sha\s*\}\}/);
   assert.match(wait, /CLOUDFLARE_CHECK_NAME:\s*["']?Cloudflare Pages["']?/);
   assert.match(wait, /CLOUDFLARE_PAGES_PROJECT:\s*fxaeon/);
-  assert.doesNotMatch(workflow, /CLOUDFLARE_(?:API_TOKEN|ACCOUNT_ID)/);
+
+  const secretSync = step('Sync production Pages gas-oracle secret');
+  assert.match(secretSync, /CLOUDFLARE_ACCOUNT_ID:\s*\$\{\{\s*secrets\.CLOUDFLARE_ACCOUNT_ID\s*\}\}/);
+  assert.match(secretSync, /CLOUDFLARE_API_TOKEN:\s*\$\{\{\s*secrets\.CLOUDFLARE_API_TOKEN\s*\}\}/);
+  assert.match(secretSync, /ETHERSCAN_API_KEY:\s*\$\{\{\s*secrets\.ETHERSCAN_API_KEY\s*\}\}/);
+  assert.match(secretSync, /printf '%s' "\$ETHERSCAN_API_KEY" \| pnpm exec wrangler pages secret put ETHERSCAN_API_KEY --project-name=fxaeon --env=production/);
+  assert.doesNotMatch(secretSync, /wrangler pages secret put[^\n]*\$\{\{/);
+  assert.match(secretSync, /WRANGLER_SEND_METRICS:\s*['"]?false/);
+
+  const gasCheck = step('Check live gas-oracle binding');
+  assert.match(gasCheck, /run: node scripts\/check_live_gas_oracle\.mjs/);
+  assert.match(gasCheck, /LIVE_GAS_ORACLE_URL:\s*https:\/\/fxaeon\.com\/api\/gas/);
+  const gasRedeploy = step('Redeploy verified artifact after syncing the Pages secret');
+  assert.match(gasRedeploy, /if: steps\.gas_oracle\.outputs\.configured == 'false'/);
+  assert.match(gasRedeploy, /wrangler pages deploy apps\/mini-app\/dist --project-name=fxaeon --branch=main --commit-hash=/);
+  assert.match(gasRedeploy, /CLOUDFLARE_API_TOKEN:\s*\$\{\{\s*secrets\.CLOUDFLARE_API_TOKEN\s*\}\}/);
+  assert.match(gasRedeploy, /CLOUDFLARE_ACCOUNT_ID:\s*\$\{\{\s*secrets\.CLOUDFLARE_ACCOUNT_ID\s*\}\}/);
+  assert.match(gasRedeploy, /WRANGLER_SEND_METRICS:\s*['"]?false/);
+  assert.doesNotMatch(gasRedeploy, /working-directory:/);
+  assert.match(gasRedeploy, /apps\/mini-app\/dist/);
+  assert.match(pagesConfig, /^name = "fxaeon"$/m);
+  assert.match(pagesConfig, /^pages_build_output_dir = "apps\/mini-app\/dist"$/m);
+  assert.match(gasFunction, /export const onRequestGet/);
+  assert.match(gasFunction, /env\?\.ETHERSCAN_API_KEY/);
   assert.doesNotMatch(productionEnvValidator, /CLOUDFLARE_(?:API_TOKEN|ACCOUNT_ID)/);
+});
+
+test('gas-oracle probe accepts only the explicit missing-binding response for its fallback', () => {
+  const probe = readFileSync(new URL('./check_live_gas_oracle.mjs', import.meta.url), 'utf8');
+  assert.match(probe, /status === 503[\s\S]*body\.error === 'gas oracle unavailable'/);
+  assert.match(probe, /redirect:\s*'error'/);
+  assert.match(probe, /cache:\s*'no-store'/);
+  assert.match(probe, /--require-configured/);
+  assert.doesNotMatch(probe, /console\.log\([^\n]*body/);
 });
 
 test('the published Cloudflare bundle is checked for the protected public wallet configuration', () => {

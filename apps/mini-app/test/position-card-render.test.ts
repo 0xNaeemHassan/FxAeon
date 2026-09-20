@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -9,9 +12,25 @@ import { renderToStaticMarkup } from 'react-dom/server';
 const globalReact = globalThis as typeof globalThis & { React?: typeof React };
 const previousReact = globalReact.React;
 globalReact.React = React;
+const testRequire = createRequire(import.meta.url);
+const positionCardStylesPath = fileURLToPath(new URL('../src/components/ProtocolPositionCard.module.css', import.meta.url));
 
 test('server-rendered shared position cards use accessible placeholders and preserve raw units', async () => {
+  const previousCssLoader = testRequire.extensions['.css'];
   try {
+    // tsx runs this focused source test through CommonJS; teach only that
+    // loader how to expose this CSS module's class names during SSR.
+    testRequire.extensions['.css'] = (loadedModule, filename) => {
+      if (filename.toLowerCase() !== positionCardStylesPath.toLowerCase()) {
+        if (previousCssLoader) return previousCssLoader(loadedModule, filename);
+        throw new Error(`Unexpected CSS import in position card render test: ${filename}`);
+      }
+
+      const source = readFileSync(filename, 'utf8');
+      const classNames = [...source.matchAll(/\.([_a-zA-Z][\w-]*)/g)].map((match) => match[1]);
+      loadedModule.exports = Object.fromEntries([...new Set(classNames)].map((name) => [name, `test-${name}`]));
+    };
+
     const { ProtocolPositionCard } = await import('../src/components/ProtocolPositionCard');
     const html = renderToStaticMarkup(React.createElement(ProtocolPositionCard, {
       position: {
@@ -61,6 +80,8 @@ test('server-rendered shared position cards use accessible placeholders and pres
     }));
     assert.ok((zeroHtml.match(/\$0\.00/g) ?? []).length >= 3, 'known zero balances stay visible as $0.00');
   } finally {
+    if (previousCssLoader) testRequire.extensions['.css'] = previousCssLoader;
+    else delete testRequire.extensions['.css'];
     if (previousReact) globalReact.React = previousReact;
     else Reflect.deleteProperty(globalThis, 'React');
   }

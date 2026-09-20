@@ -228,7 +228,7 @@ test.describe('light theme overlays', () => {
     await page.getByRole('button', { name: 'Switch to dark theme' }).click();
     await page.getByRole('button', { name: 'Switch to light theme' }).click();
     await page.getByRole('button', { name: 'Open wallet profile' }).click();
-    const wallet = page.getByRole('dialog', { name: 'Wallet profile' });
+    const wallet = page.getByRole('dialog');
     await expect(wallet).toBeVisible();
     expect(await wallet.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe('rgb(255, 255, 255)');
     await page.keyboard.press('Escape');

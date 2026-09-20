@@ -39,10 +39,10 @@ const mocks: Record<string, string> = {
       });
       return { viable: [route], failures: [] };
     }
-    export const routesMatchForSigning = (a, b) => { const h = H(); return !h.executeVersion && a.details?.routeType === b.details?.routeType; };
-    export const selectRefreshedRoute = (_starting, rebuilt, index) => (Array.isArray(rebuilt) ? rebuilt[index] ?? rebuilt[0] : rebuilt);
     export async function runTransactionRoute({ route, callbacks }) {
       const h = H(); h.runnerCount += 1;
+      h.lastExecutedRouteVersion = route.harnessRouteVersion;
+      if (h.deferRunner) { h.deferRunner = false; await new Promise((resolve) => h.executionResolvers.push(resolve)); }
       if (h.failRunner) { h.failRunner = false; throw new Error('mock execution failure'); }
       callbacks.onStatus?.('submitted', 'mock submitted');
       const hash = await callbacks.requestSignature(route.transactions[0]);
@@ -52,7 +52,7 @@ const mocks: Record<string, string> = {
       await callbacks.postConfirmRead?.(route, result);
       return result;
     }
-    export const saveSignatureRequiredDraft = () => ({ id: 'mock-draft' });
+    export const saveSignatureRequiredDraft = () => { const h = H(); h.draftSaveCount += 1; return { id: 'mock-draft' }; };
     export const removeSignatureRequiredDraft = () => {};
     export const cancelSignatureRequiredDraft = () => {};
   `,
@@ -100,6 +100,7 @@ const mocks: Record<string, string> = {
     import React from 'react';
     export const chainName = (id) => id === 8453 ? 'Base' : 'Ethereum';
     export const stepProgress = () => ({ label: 'Confirmed', className: '', icon: null });
+    export const CalldataDisclosure = ({ data }) => <div><button type="button">Copy</button><pre>{data}</pre></div>;
     export const StatusNotice = ({ label, body }) => <div role="status"><strong>{label}</strong><span>{body}</span></div>;
     export const InlineError = ({ message }) => <div role="alert">{message}</div>;
     export const TransactionHashLink = () => null;
@@ -192,7 +193,7 @@ async function expectNoEnabledCurrentAction(page: import('@playwright/test').Pag
   expect(await metric(page, 'send')).toBe(0);
 }
 
-async function metric(page: import('@playwright/test').Page, key: 'prepare' | 'plan' | 'runner' | 'send'): Promise<number> {
+async function metric(page: import('@playwright/test').Page, key: 'prepare' | 'plan' | 'runner' | 'send' | 'draftSave'): Promise<number> {
   return page.evaluate((metricKey) => {
     const harness = (window as typeof window & { __actionReviewHarness?: Record<string, number> }).__actionReviewHarness;
     return harness?.[`${metricKey}Count`] ?? 0;
@@ -210,12 +211,11 @@ test.describe('ActionReview isolated orchestration', () => {
     await expect(page.getByRole('button', { name: 'Open position v1', exact: true })).toBeVisible({ timeout: 2_000 });
     const actionDetails = page.locator('section[aria-label="Review details"]');
     await expect(actionDetails).toBeVisible();
-    const advancedDetails = actionDetails.locator('details').filter({ hasText: /^Advanced details/ }).first();
-    await expect(advancedDetails).toHaveCount(1);
-    await advancedDetails.locator('summary').click();
-    await expect(advancedDetails.getByText('Contract', { exact: true })).toBeVisible();
-    await expect(advancedDetails.getByText('0x00000000000000000000000000000000000000bb', { exact: true })).toBeVisible();
-    await expect(advancedDetails.getByText('0x12345678', { exact: true }).first()).toBeVisible();
+    const quoteDetails = actionDetails.locator('details').filter({ hasText: /^Quote details/ }).first();
+    await expect(quoteDetails).toHaveCount(1);
+    await quoteDetails.locator('summary').click();
+    await expect(quoteDetails.getByText('Route', { exact: true })).toBeVisible();
+    await expect(quoteDetails.getByText('Terms 1', { exact: true })).toBeVisible();
     expect(await metric(page, 'runner')).toBe(0);
     expect(await metric(page, 'send')).toBe(0);
     await page.getByRole('button', { name: 'Open position v1', exact: true }).click();
@@ -319,14 +319,104 @@ test.describe('ActionReview isolated orchestration', () => {
     expect(await metric(page, 'send')).toBe(0);
   });
 
-  test('returns changed execution terms inline without signing', async ({ page }) => {
+  test('uses the simulated visible route if the planner changes after the quote', async ({ page }) => {
     await openHarness(page);
     await expect(page.getByRole('button', { name: 'Open position v1', exact: true })).toBeVisible({ timeout: 2_000 });
-    await page.getByRole('button', { name: 'Change on execute', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Open position v1', exact: true })).toBeEnabled();
+    await page.getByRole('button', { name: 'Change planner after quote', exact: true }).click();
     await page.getByRole('button', { name: 'Open position v1', exact: true }).click();
-    await expect(page.getByText('Details changed. Check the updated action before continuing.', { exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Confirmed', exact: true })).toBeVisible();
+    const executedRouteVersion = await page.evaluate(() => (globalThis as typeof globalThis & { __actionReviewHarness?: { lastExecutedRouteVersion?: number } }).__actionReviewHarness?.lastExecutedRouteVersion);
+    expect(executedRouteVersion).toBe(1);
+    expect(await metric(page, 'plan')).toBe(1);
+    expect(await metric(page, 'runner')).toBe(1);
+    expect(await metric(page, 'send')).toBe(1);
+  });
+
+  test('blocks a preview whose refresh is still pending after its 30-second freshness window', async ({ page }) => {
+    await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+    await openHarness(page);
+    // Let the debounced first quote finish under the fake clock before
+    // switching the harness to defer the subsequent background refresh.
+    await page.clock.runFor(500);
+    const action = page.getByRole('button', { name: 'Open position v1', exact: true });
+    await expect(action).toBeVisible({ timeout: 2_000 });
+    await expect(action).toBeEnabled();
+    await expect.poll(() => metric(page, 'plan')).toBe(1);
+    await expect.poll(() => metric(page, 'prepare')).toBe(1);
+    await page.getByRole('button', { name: 'Defer preview', exact: true }).click();
+
+    // Initial preview starts after a short debounce, so advance past the full
+    // refresh interval measured from that first route's preparation time.
+    await page.clock.runFor(16_000);
+    await expect.poll(() => metric(page, 'prepare')).toBe(2);
+    await expect.poll(async () => (await previewRequests(page)).some((request) => (
+      request.routeVersion === 1
+      && request.routeType === 'Terms 1'
+      && request.routeWalletAddress === '0x00000000000000000000000000000000000000aa'
+      && request.previewWalletAddress === '0x00000000000000000000000000000000000000aa'
+      && request.connectionVersion === 1
+      && !request.settled
+    ))).toBe(true);
+    const refresh = (await previewRequests(page)).find((request) => (
+      request.routeVersion === 1
+      && request.routeType === 'Terms 1'
+      && request.connectionVersion === 1
+      && !request.settled
+    ));
+    expect(refresh?.settled).toBe(false);
+    await page.clock.runFor(15_000);
+
+    await expect(action).toBeDisabled();
     expect(await metric(page, 'runner')).toBe(0);
     expect(await metric(page, 'send')).toBe(0);
+    await resolvePreviewRequest(page, refresh!.id);
+    await expect(action).toBeEnabled();
+    expect(await metric(page, 'runner')).toBe(0);
+    expect(await metric(page, 'send')).toBe(0);
+  });
+
+  test('expires a resumed legacy review and refreshes before enabling confirmation', async ({ page }) => {
+    await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+    await openHarness(page);
+    await page.getByRole('button', { name: 'Resume legacy review', exact: true }).click();
+    const confirm = page.getByRole('button', { name: 'Confirm in wallet', exact: true });
+    await expect(confirm).toBeVisible({ timeout: 2_000 });
+    await expect(confirm).toBeEnabled();
+    await expect.poll(() => metric(page, 'plan')).toBe(1);
+    await expect.poll(() => metric(page, 'prepare')).toBe(1);
+
+    await page.clock.runFor(31_000);
+    // Flush a zero-delay freshness callback if React committed the review
+    // effect at the end of the same fake-clock advancement.
+    await page.clock.runFor(1);
+    await expect(confirm).toHaveCount(0);
+    expect(await metric(page, 'runner')).toBe(0);
+    expect(await metric(page, 'send')).toBe(0);
+    const action = page.getByRole('button', { name: 'Open position v1', exact: true });
+    await expect(action).toBeVisible();
+    await expect(action).toBeEnabled({ timeout: 5_000 });
+    expect(await metric(page, 'runner')).toBe(0);
+    expect(await metric(page, 'send')).toBe(0);
+  });
+
+  test('persists a resume hint only when the wallet request starts', async ({ page }) => {
+    await openHarness(page);
+    const action = page.getByRole('button', { name: 'Open position v1', exact: true });
+    await expect(action).toBeVisible({ timeout: 2_000 });
+
+    await page.getByRole('button', { name: 'Fail before wallet request', exact: true }).click();
+    await action.click();
+    await expect(page.getByRole('alert')).toContainText('mock execution failure');
+    expect(await metric(page, 'runner')).toBe(1);
+    expect(await metric(page, 'send')).toBe(0);
+    expect(await metric(page, 'draftSave')).toBe(0);
+
+    await action.click();
+    await expect(page.getByRole('heading', { name: 'Confirmed', exact: true })).toBeVisible();
+    expect(await metric(page, 'runner')).toBe(2);
+    expect(await metric(page, 'send')).toBe(1);
+    expect(await metric(page, 'draftSave')).toBe(1);
   });
 
   test('exposes Try again after preview failure and recovers without signing', async ({ page }) => {
@@ -339,20 +429,20 @@ test.describe('ActionReview isolated orchestration', () => {
     expect(await metric(page, 'send')).toBe(0);
   });
 
-  test('drops a deferred execution after the account changes before refresh resolves', async ({ page }) => {
+  test('drops a deferred execution after the account changes before the wallet request', async ({ page }) => {
     await openHarness(page);
     const primary = page.getByRole('button', { name: 'Open position v1', exact: true });
     await expect(primary).toBeVisible({ timeout: 2_000 });
     await expect(primary).toBeEnabled({ timeout: 5_000 });
-    await page.getByRole('button', { name: 'Defer next execution', exact: true }).click();
+    await page.getByRole('button', { name: 'Defer before wallet request', exact: true }).click();
     await expect(primary).toBeEnabled({ timeout: 5_000 });
     await primary.click();
-    await expect.poll(() => metric(page, 'plan')).toBe(2);
+    await expect.poll(() => metric(page, 'runner')).toBe(1);
     await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Connect wallet', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Resolve execution', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Connect wallet', exact: true })).toBeVisible();
-    expect(await metric(page, 'runner')).toBe(0);
+    expect(await metric(page, 'runner')).toBe(1);
     expect(await metric(page, 'send')).toBe(0);
   });
 });

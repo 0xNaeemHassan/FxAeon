@@ -71,6 +71,8 @@ const quickChecks = await runGroup([
   { args: ['test:telegram:contract'], label: 'Telegram deployment contract' },
   { args: ['test:live-public-config:contract'], label: 'Live public configuration contract' },
   { args: ['test:architecture:contract'], label: 'Architecture import contract' },
+  { args: ['exec', 'node', '--test', 'scripts/generate_csp_headers.contract.test.mjs'], label: 'CSP generation contract' },
+  { args: ['exec', 'node', '--test', 'scripts/cloudflare_headers.contract.test.mjs'], label: 'Cloudflare headers contract' },
   { args: ['test:landing'], label: 'Standalone landing contract' },
   { args: ['exec', 'node', '--test', 'scripts/verify_frontend_secrets.test.mjs', 'scripts/launch_readiness.test.mjs'], label: 'Launch readiness contracts' },
   { args: ['exec', 'node', 'scripts/verify_frontend_secrets.mjs'], label: 'Frontend secret scan' },
