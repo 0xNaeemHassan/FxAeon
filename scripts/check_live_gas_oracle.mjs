@@ -15,7 +15,13 @@ export function inspectGasOracleResponse(status, bodyText) {
     throw new Error(`gas oracle returned invalid JSON (HTTP ${status})`);
   }
 
-  if (status === 503 && body && typeof body === 'object' && body.error === 'gas oracle unavailable') {
+  // The Pages Function uses 503 when the binding is missing and 502 when an
+  // optional binding is present but its upstream is temporarily unavailable.
+  // Both are an unavailable optional oracle for the first post-deploy probe;
+  // `requireConfigured` still rejects the returned `configured: false` result
+  // when production explicitly expects Etherscan-backed gas data.
+  if ((status === 502 || status === 503)
+    && body && typeof body === 'object' && body.error === 'gas oracle unavailable') {
     return { configured: false };
   }
   if (status !== 200 || !body || typeof body !== 'object' || Array.isArray(body)) {
