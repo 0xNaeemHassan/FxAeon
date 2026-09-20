@@ -80,7 +80,7 @@ test('upstream errors become an unavailable response without echoing upstream da
       request: new Request('https://fxaeon.pages.dev/api/gas'),
       env: { ETHERSCAN_API_KEY: 'server-key' },
     });
-    assert.equal(response.status, 502);
+    assert.equal(response.status, 503);
     assert.deepEqual(await response.json(), { error: 'gas oracle unavailable' });
   } finally {
     globalThis.fetch = originalFetch;
