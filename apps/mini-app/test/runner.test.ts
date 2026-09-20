@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { encodeFunctionData, parseAbi, type Address, type Hex } from "viem";
+import {
+  CallExecutionError,
+  encodeFunctionData,
+  parseAbi,
+  RawContractError,
+  type Address,
+  type Hex,
+} from "viem";
 import { clearPendingHashJournalForTests, readPendingHashJournal, readPendingHashes } from "../src/lib/fx/journal";
 import { runTransactionRoute, simulatePlannedRoute, waitForReceipt } from "../src/lib/fx/runner";
 import type { FxPublicClient, PlannedRoute, PlannedTransaction, TransactionPolicy } from "../src/lib/fx/types";
@@ -39,9 +46,9 @@ test("receipt waiting always makes the immediate RPC probe at a zero deadline", 
   assert.equal(receipt.transactionHash, HASH_1);
 });
 
-function route(count = 2): PlannedRoute {
+function route(count = 2, operation: PlannedRoute["operation"] = "increasePosition"): PlannedRoute {
   return {
-    operation: "increasePosition",
+    operation,
     chainId: 1,
     walletAddress: WALLET,
     transactions: Array.from({ length: count }, (_, index): PlannedTransaction => ({
@@ -52,7 +59,7 @@ function route(count = 2): PlannedRoute {
       value: 0n,
       nonce: 4 + index,
       kind: "action",
-      operation: "increasePosition",
+      operation,
     })),
   };
 }
@@ -550,6 +557,69 @@ test("simulation fails closed when the RPC omits an ordered route result", async
   const result = await simulatePlannedRoute(route(2), partialClient);
   assert.equal(result.success, false);
   assert.match(result.error ?? "", /returned 1 results for 2 transactions/);
+});
+
+test("simulation maps nested viem debt-ratio reverts with operation-specific guidance", async () => {
+  const tooLittleDebt = new CallExecutionError(
+    new RawContractError({ data: "0xe91ee887" }),
+    { account: WALLET, to: DESTINATION },
+  );
+  const tooMuchDebt = new CallExecutionError(
+    new RawContractError({ data: "0x9c89bf50" }),
+    { account: WALLET, to: DESTINATION },
+  );
+
+  const thrownResult = await simulatePlannedRoute(route(1), {
+    chain: { id: 1 },
+    simulateCalls: async () => { throw tooLittleDebt; },
+  } as unknown as FxPublicClient);
+  assert.deepEqual(thrownResult, {
+    success: false,
+    error: "Increase leverage to meet the minimum debt ratio.",
+  });
+
+  const returnedResult = await simulatePlannedRoute(route(1), {
+    chain: { id: 1 },
+    simulateCalls: async () => ({ results: [{ status: "failure", error: tooMuchDebt }] }),
+  } as unknown as FxPublicClient);
+  assert.deepEqual(returnedResult, {
+    success: false,
+    error: "Lower leverage or add collateral.",
+    failedTxIndex: 0,
+  });
+
+  const borrowTooLittle = await simulatePlannedRoute(route(1, "depositAndMint"), {
+    chain: { id: 1 },
+    simulateCalls: async () => { throw tooLittleDebt; },
+  } as unknown as FxPublicClient);
+  assert.equal(borrowTooLittle.success, false);
+  if (!borrowTooLittle.success) assert.equal(borrowTooLittle.error, "Borrow amount is too low for this collateral.");
+
+  const borrowTooMuch = await simulatePlannedRoute(route(1, "depositAndMint"), {
+    chain: { id: 1 },
+    simulateCalls: async () => ({ results: [{ status: "failure", error: tooMuchDebt }] }),
+  } as unknown as FxPublicClient);
+  assert.equal(borrowTooMuch.success, false);
+  if (!borrowTooMuch.success) assert.equal(borrowTooMuch.error, "Reduce the borrow amount or add collateral.");
+
+  const unrelatedOperation = await simulatePlannedRoute(route(1, "repayAndWithdraw"), {
+    chain: { id: 1 },
+    simulateCalls: async () => ({ results: [{ status: "failure", error: tooMuchDebt }] }),
+  } as unknown as FxPublicClient);
+  assert.equal(unrelatedOperation.success, false);
+  if (!unrelatedOperation.success) assert.equal(unrelatedOperation.error, "Debt is above the allowed range for this collateral.");
+});
+
+test("simulation hides unknown provider diagnostics behind a safe fallback", async () => {
+  const result = await simulatePlannedRoute(route(1), {
+    chain: { id: 1 },
+    simulateCalls: async () => { throw new Error("request failed at https://rpc.example/v2/private-key"); },
+  } as unknown as FxPublicClient);
+  assert.deepEqual(result, {
+    success: false,
+    error: "Simulation is unavailable. Check your connection and try again.",
+  });
+  assert.doesNotMatch(result.error ?? "", /rpc\.example|private-key/);
 });
 
 test("an explicitly requested post-confirm block wait can skip a read when unavailable", async () => {

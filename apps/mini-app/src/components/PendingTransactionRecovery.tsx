@@ -52,6 +52,22 @@ function operationName(operation: string, intent?: string): string {
     ?? operation.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (value) => value.toUpperCase());
 }
 
+function draftOperationName(operation: string): string {
+  const labels: Record<string, string> = {
+    increasePosition: 'Open or increase position',
+    reducePosition: 'Reduce position',
+    adjustPositionLeverage: 'Adjust leverage',
+    depositAndMint: 'Borrow fxUSD',
+    repayAndWithdraw: 'Repay and withdraw',
+    depositFxSave: 'Deposit to fxSAVE',
+    withdrawFxSave: 'Withdraw from fxSAVE',
+    getRedeemTx: 'Claim fxSAVE',
+    buildBridgeTx: 'Move assets',
+  };
+  return labels[operation]
+    ?? operation.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (value) => value.toUpperCase());
+}
+
 function shortHash(hash: string): string {
   return `${hash.slice(0, 8)}…${hash.slice(-6)}`;
 }
@@ -92,31 +108,26 @@ function statusSummary(view: RecoveryViewModel): string {
 }
 
 function DraftItem({ draft, onCancel }: { draft: SignatureRequiredDraft; onCancel: (id: string) => void }) {
-  const cancelled = draft.status === 'cancelled';
   return (
     <li className="rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.025)] p-3">
       <div className="flex items-start gap-3">
-        <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)] ${cancelled ? 'text-mut' : 'text-mint'}`}>
-          {cancelled ? <XCircle className="h-4 w-4" aria-hidden="true" /> : <Clock3 className="h-4 w-4" aria-hidden="true" />}
+        <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)] text-mint">
+          <Clock3 className="h-4 w-4" aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <p className="text-[12.5px] font-semibold">{operationName(draft.operation)}</p>
+              <p className="text-[12.5px] font-semibold">{draftOperationName(draft.operation)}</p>
               <p className="mt-0.5 text-[10.5px] text-mut">{chainName(draft.chainId)} · {submittedAt(draft.updatedAt)}</p>
             </div>
-            <span className={`shrink-0 text-[10px] font-semibold uppercase tracking-[0.1em] ${cancelled ? 'text-mut' : 'text-mint'}`}>
-              {cancelled ? 'Cancelled' : 'Signature required'}
+            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.1em] text-mut">
+              Unsubmitted
             </span>
           </div>
-          <p className="mt-2 break-words text-[11.5px] leading-relaxed text-mut">
-            {cancelled ? 'This local draft was dismissed and can no longer be signed.' : 'A fresh review is required before the wallet can be asked to sign.'}
-          </p>
           <div className="mt-2.5 flex items-center justify-end gap-2">
-            {!cancelled && <Link href={signatureDraftResumePath(draft)} className="inline-flex min-h-11 items-center rounded-lg px-2 text-[10.5px] font-semibold text-mint hover:bg-[var(--mint-dim)]">Resume review</Link>}
-            {!cancelled && <button type="button" onClick={() => onCancel(draft.id)} className="inline-flex min-h-11 items-center rounded-lg px-2 text-[10.5px] font-semibold text-mut hover:bg-[var(--surface-2)]">Dismiss draft</button>}
+            <Link href={signatureDraftResumePath(draft)} className="inline-flex min-h-11 items-center rounded-lg px-2 text-[10.5px] font-semibold text-mint hover:bg-[var(--mint-dim)]">Continue</Link>
+            <button type="button" onClick={() => onCancel(draft.id)} className="inline-flex min-h-11 items-center rounded-lg px-2 text-[10.5px] font-semibold text-mut hover:bg-[var(--surface-2)]">Dismiss</button>
           </div>
-          <p className="mt-1 border-t border-[var(--line)] pt-2 text-[10px] text-[var(--mut-2)]">Stored on this device and scoped to this wallet.</p>
         </div>
       </div>
     </li>
@@ -199,11 +210,10 @@ function formatBridgeAmount(value: string): string {
 }
 
 /**
- * A wallet-scoped history surface for submitted hashes and unsigned reviews.
- * Submitted transactions are reconciled from chain receipts. Signature drafts
- * only reopen the original product route; that route must rebuild and
- * simulate its transaction from current state before asking the wallet to
- * sign.
+ * A wallet-scoped activity surface for submitted hashes and unsigned resume
+ * drafts. Submitted transactions are reconciled from chain receipts. Drafts
+ * only reopen the original product route; that route must rebuild and simulate
+ * its transaction from current state before asking the wallet to sign.
  */
 export default function PendingTransactionRecovery({ walletAddress, embedded = false }: Props) {
   const identity = walletAddress.toLowerCase();
@@ -214,7 +224,7 @@ export default function PendingTransactionRecovery({ walletAddress, embedded = f
   const [snapshot, setSnapshot] = useState({ identity: '', views: [] as RecoveryViewModel[], drafts: [] as SignatureRequiredDraft[], loading: true, refreshing: false, error: '' });
   const current = snapshot.identity === identity;
   const views = useMemo(() => current ? snapshot.views : [], [current, snapshot.views]);
-  const drafts = useMemo(() => current ? snapshot.drafts : [], [current, snapshot.drafts]);
+  const drafts = useMemo(() => current ? snapshot.drafts.filter((draft) => draft.status === 'signature-required') : [], [current, snapshot.drafts]);
   const loading = !current || snapshot.loading;
   const refreshing = !current || snapshot.refreshing;
   const error = current ? snapshot.error : '';
@@ -287,20 +297,38 @@ export default function PendingTransactionRecovery({ walletAddress, embedded = f
         ) : views.length === 0 && drafts.length === 0 ? (
           <p className="px-1 py-2 text-[12px] leading-relaxed text-mut">No transaction history is saved for this wallet.</p>
         ) : (
-          <ul className="flex flex-col gap-2.5" aria-live="polite">
-            {drafts.map((draft) => <DraftItem key={draft.id} draft={draft} onCancel={cancelDraft} />)}
-            {views.map((view) => (
-              <RecoveryItem
-                key={view.record.id}
-                view={view}
-                // Every independently confirmed bridge needs its own delivery
-                // correlation. Tracking only the first bridge would leave
-                // later transfers permanently unverified in the recovery UI.
-                trackBridge={view.status === 'confirmed' && Boolean(view.record.bridge)}
-                autoTrackBridge={autoBridgeIds.has(view.record.id)}
-              />
-            ))}
-          </ul>
+          <div className="flex flex-col gap-4" aria-live="polite">
+            {drafts.length > 0 && (
+              <details className="rounded-xl border border-[var(--line)] px-3">
+                <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-2 text-[11px] font-semibold text-mut">
+                  <span>Drafts ({drafts.length})</span>
+                  <span className="text-[10px] font-medium text-[var(--mut-2)]">Not submitted</span>
+                </summary>
+                <p className="pb-2 text-[10.5px] leading-relaxed text-mut">Continue rebuilds the action from current details before asking for a signature.</p>
+                <ul className="flex flex-col gap-2.5 pb-3">
+                  {drafts.map((draft) => <DraftItem key={draft.id} draft={draft} onCancel={cancelDraft} />)}
+                </ul>
+              </details>
+            )}
+            {views.length > 0 && (
+              <section aria-labelledby="submitted-history-title">
+                <h3 id="submitted-history-title" className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-mut">Submitted transactions</h3>
+                <ul className="flex flex-col gap-2.5">
+                  {views.map((view) => (
+                    <RecoveryItem
+                      key={view.record.id}
+                      view={view}
+                      // Every independently confirmed bridge needs its own delivery
+                      // correlation. Tracking only the first bridge would leave
+                      // later transfers permanently unverified in the recovery UI.
+                      trackBridge={view.status === 'confirmed' && Boolean(view.record.bridge)}
+                      autoTrackBridge={autoBridgeIds.has(view.record.id)}
+                    />
+                  ))}
+                </ul>
+              </section>
+            )}
+          </div>
         )}
         {!loading && (views.length > 0 || drafts.length > 0) && (
           <p className="mt-3 px-1 text-[11px] leading-relaxed text-mut">Saved on this device for this wallet.</p>

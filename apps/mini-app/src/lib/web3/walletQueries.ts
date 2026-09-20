@@ -47,6 +47,13 @@ export async function readWagmiWalletBalances(
   const remoteChain = await getChainId(config.getClient({ chainId }));
   if (remoteChain !== chainId) throw new Error(`RPC endpoint returned chain ${remoteChain}; expected ${chainId}`);
   signal?.throwIfAborted();
+  return readWagmiWalletBalancesOnVerifiedChain(config, address, chainId, signal);
+}
+
+async function readWagmiWalletBalancesOnVerifiedChain(
+  config: WalletDataConfig, address: Address, chainId: 1, signal?: AbortSignal,
+): Promise<WalletBalancesResult> {
+  signal?.throwIfAborted();
   const tokens = Object.values(FX_TOKENS).filter((token) => !token.native);
   const [native, erc20] = await Promise.allSettled([
     getBalance(config, { address, chainId }),
@@ -98,7 +105,7 @@ export async function readCanonicalWalletAssets(
   signal?.throwIfAborted();
 
   if (chainId === 1) {
-    const result = await readWagmiWalletBalances(config, walletAddress, chainId, signal);
+    const result = await readWagmiWalletBalancesOnVerifiedChain(config, address, chainId, signal);
     return {
       chainId,
       balances: result.balances.map((balance) => ({

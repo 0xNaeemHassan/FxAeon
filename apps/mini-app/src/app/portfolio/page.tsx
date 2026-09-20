@@ -40,7 +40,8 @@ import {
 } from '@/lib/fx';
 import { positionTokenDecimals, type UiPosition } from '@/app/trade/fxUi';
 import { formatUsd, priceKeyForSymbol, usdValueForUnits, type UsdPriceMap } from '@/lib/prices';
-import { summarizeWalletAssets, walletAssetValuation } from '@/lib/walletAssets';
+import { walletAssetValuation } from '@/lib/walletAssets';
+import { knownFreshPortfolioSubtotal, mergeFreshCanonicalWalletBalances } from '@/lib/portfolioValuation';
 import { calculatePositionUsdValuation } from '@/lib/positionValuation';
 import { fxSaveUsdValue, normalizedFxSaveAssetsWei } from '@/lib/fxSaveUnits';
 import { haptic } from '@/lib/telegram';
@@ -200,16 +201,16 @@ function PortfolioWallet() {
   const refreshing = walletBalances.isFetching || liveAssets.isFetching || fxSaveLoading || (fxSaveRefreshing.identity === identity && fxSaveRefreshing.active) || positionState.refreshing;
   const fallbackValuation = walletValuation(protocol.balances, priceSnapshot.prices, liveAssets.status === 'ready');
   const valuationNow = Date.now();
-  const displayAssets = liveAssets.data ? summarizeWalletAssets(liveAssets.data, valuationNow) : null;
+  const displayAssets = liveAssets.data
+    ? mergeFreshCanonicalWalletBalances(liveAssets.data, walletBalances.data, walletBalances.updatedAt, priceSnapshot, valuationNow)
+    : null;
   const valuation = displayAssets ? walletAssetValuation(displayAssets) : fallbackValuation;
   const pricedWalletRows = displayAssets?.assets.filter((asset) => asset.balanceWei > 0n && asset.usdValue !== null && asset.priceStatus === 'fresh') ?? [];
   const allWalletRowsPriced = displayAssets
     ? pricedWalletRows.length === displayAssets.assets.filter((asset) => asset.balanceWei > 0n).length
     : true;
-  const knownWalletValueCount = displayAssets ? pricedWalletRows.length : fallbackValuation.knownAssetCount;
-  const knownWalletSubtotalUsd = displayAssets
-    ? pricedWalletRows.reduce((sum, asset) => sum + (asset.usdValue ?? 0), 0)
-    : fallbackValuation.knownSubtotalUsd ?? 0;
+  const knownWalletSubtotal = knownFreshPortfolioSubtotal(displayAssets, walletBalances.data, walletBalances.updatedAt, priceSnapshot, valuationNow);
+  const knownWalletSubtotalUsd = knownWalletSubtotal.totalUsd ?? 0;
   const positionValues = positionState.positions.map((position) =>
     positionIsStale(position, positionState.failedGroups) || priceSnapshot.status === 'stale'
       ? null : positionNetEquityUsd(position, priceSnapshot.prices));
@@ -220,7 +221,7 @@ function PortfolioWallet() {
     && positionState.pendingPositions.length === 0 && missingPositions === 0;
   const portfolioComplete = valuation.complete && allWalletRowsPriced && positionsComplete;
   const knownSubtotalUsd = knownWalletSubtotalUsd + protocolEquityUsd;
-  const hasKnownSubtotal = knownWalletValueCount > 0 || knownPositionCount > 0;
+  const hasKnownSubtotal = knownWalletSubtotal.hasKnownValue || knownPositionCount > 0;
   const portfolioValuation = {
     ...valuation,
     complete: portfolioComplete,
@@ -256,6 +257,13 @@ function PortfolioWallet() {
                 ? `${positionState.positions.length} last`
                 : '—'}
         />
+
+        {liveAssets.data ? <>
+          <PortfolioNetworkTabs value={network} onChange={setNetwork} />
+          <PortfolioAssets snapshot={displayAssets} loading={liveLoading} refreshing={liveAssets.isFetching} onRetry={() => void liveAssets.refresh()} network={network} />
+        </> : <WalletBalancesCard balances={protocol.balances} loading={loading || liveLoading} refreshing={refreshing} prices={priceSnapshot.prices} completeAllowed={liveAssets.status === 'ready'} onRefresh={() => {
+          void Promise.allSettled([liveAssets.refresh(), walletBalances.refresh(), loadProtocol(), positionState.refresh()]);
+        }} />}
 
         <QuickActions />
         <MarketOverview />
@@ -310,11 +318,6 @@ function PortfolioWallet() {
           />
         </div>
 
-        <PortfolioNetworkTabs value={network} onChange={setNetwork} />
-        <PortfolioAssets snapshot={liveAssets.data} loading={liveLoading} refreshing={liveAssets.isFetching} onRetry={() => void liveAssets.refresh()} network={network} />
-        {!liveAssets.data && <WalletBalancesCard balances={protocol.balances} loading={loading || liveLoading} refreshing={refreshing} prices={priceSnapshot.prices} completeAllowed={liveAssets.status === 'ready'} onRefresh={() => {
-          void Promise.allSettled([liveAssets.refresh(), walletBalances.refresh(), loadProtocol(), positionState.refresh()]);
-        }} />}
       </aside>
     </div>
   );

@@ -20,6 +20,7 @@ import {
   createWalletQueryClient,
   invalidateWalletQueries,
   moveBalanceQueryOptions,
+  readCanonicalWalletAssets,
   readWagmiWalletBalances,
   walletBalanceQueryKey,
   walletBalanceQueryOptions,
@@ -151,6 +152,15 @@ test("reads exact native/ERC20 bigint balances while preserving partial token fa
   const partialNative = await readWagmiWalletBalances(configFor(state), wallet, 1);
   assert.ok(partialNative.failedTokens.includes("ETH"));
   assert.ok(partialNative.balances.some((balance) => balance.key === "USDC" && balance.amountWei === 900719925474099312345678n));
+});
+
+test("canonical Ethereum reads verify the RPC chain once before reading balances", async () => {
+  const state = makeState();
+  const snapshot = await readCanonicalWalletAssets(configFor(state), wallet, 1);
+  assert.equal(snapshot.chainId, 1);
+  assert.equal(state.calls.filter((method) => method === "eth_chainId").length, 1);
+  assert.equal(state.calls.filter((method) => method === "eth_getBalance").length, 1);
+  assert.equal(state.calls.filter((method) => method === "eth_call").length, 1);
 });
 
 test("rejects RPC chain mismatch before any native or ERC20 balance read", async () => {

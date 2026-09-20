@@ -40,10 +40,14 @@ test.describe('network selector', () => {
     await waitForConnectedNetwork(page, 'Ethereum');
     const button = selector(page);
     await expect(button).toHaveAttribute('aria-label', 'Change network, current Ethereum');
+    await expect(button.locator('img[aria-label="Ethereum logo"]')).toBeVisible();
+    await expect(button.locator('.network-selector-label')).toHaveClass(/sr-only/);
+    await expect(button.locator('svg')).toHaveCount(0);
 
     await button.click();
     await chooseNetwork(page, 'Base');
     await expect(button).toHaveAttribute('aria-label', 'Change network, current Base');
+    await expect(button.locator('img[aria-label="Base logo"]')).toBeVisible();
 
     await button.click();
     await chooseNetwork(page, 'Ethereum');

@@ -35,6 +35,18 @@ export function AssetIcon({ asset, size = 36 }: { asset: WalletAsset; size?: num
   return <span className={styles.assetFallback} style={{ width: size, height: size }} aria-hidden="true">{asset.symbol.slice(0, 2).toUpperCase() || <Coins size={18} />}</span>;
 }
 
+/** Keep the token mark primary and identify the network with a small local badge. */
+export function AssetNetworkIcon({ asset, size = 36 }: { asset: WalletAsset; size?: number }) {
+  const network = networkLabel(asset.chainId);
+  const chainMark = asset.chainId === 8453 ? 'base' : 'ethereum';
+  return <span className={styles.assetNetworkIcon} style={{ width: size, height: size }}>
+    <AssetIcon asset={asset} size={size} />
+    <span className={styles.chainBadge} aria-hidden="true" title={`${network} network`}>
+      <img src={`/chain-icons/${chainMark}.png`} width="14" height="14" alt="" />
+    </span>
+  </span>;
+}
+
 /** Exact decimal text stays available even when a row's long quantity wraps. */
 export function AssetQuantity({ asset }: { asset: WalletAsset }) {
   return <span className={styles.quantity}>{asset.balance} <span>{displayAssetSymbol(asset.symbol)}</span></span>;
@@ -93,7 +105,7 @@ export function PortfolioAssets({ snapshot, loading, refreshing = false, onRetry
       : assets.length === 0 && incomplete && !search ? null
         : assets.length === 0 ? <div className={styles.empty}><Coins size={24} aria-hidden="true" /><p>{search ? 'No matching assets.' : 'No assets on this network yet.'}</p>{!search && <Link href="/qr">Receive assets</Link>}</div>
       : <ul className={styles.assetList}>{assets.map((asset) => <li key={asset.id}><button type="button" className={styles.assetRow} onClick={() => setSelection({ wallet: snapshot.walletAddress, id: asset.id })} aria-label={`View ${displayAssetSymbol(asset.symbol)} on ${networkLabel(asset.chainId)}`}>
-        <AssetIcon asset={asset} /><span className={styles.assetName}><strong>{displayAssetSymbol(asset.symbol)}</strong><small>{tokenName(asset.symbol)} · {networkLabel(asset.chainId)}</small></span>
+        <AssetNetworkIcon asset={asset} /><span className={styles.assetName}><strong>{displayAssetSymbol(asset.symbol)}</strong><small>{networkLabel(asset.chainId)}</small></span>
         <span className={styles.assetWorth}><strong key={asset.usdValue} className={styles.changedValue}><ValueOrSkeleton value={formatUsd(asset.usdValue)} width="md" status={loading ? 'loading' : 'unavailable'} label="Asset value unavailable" /></strong><AssetQuantity asset={asset} /></span>
       </button></li>)}</ul>}
     {selected && <AssetSheet asset={selected} onClose={() => setSelection(null)} />}

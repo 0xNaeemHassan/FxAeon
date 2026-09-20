@@ -1,7 +1,8 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { AlertTriangle, CheckCircle2, Circle, Clock3, ExternalLink, LoaderCircle, XCircle } from 'lucide-react';
+import { AlertTriangle, Check, CheckCircle2, Circle, Clock3, Copy, ExternalLink, LoaderCircle, XCircle } from 'lucide-react';
+import { useState } from 'react';
 import type { TransactionStepResult } from '@/lib/fx';
 import { openExternalLink } from '@/lib/telegram';
 import { transactionExplorerUrl, transactionStepKind, transactionStepProgress } from '@/lib/transactionProgress';
@@ -64,4 +65,30 @@ export function StatusNotice({ label, body, className, icon }: { label: string; 
 
 export function InlineError({ message }: { message: string }) {
   return <div role="alert" className="flex gap-2.5 rounded-lg border border-[rgba(255,107,118,.2)] bg-[var(--danger-dim)] p-3 text-[11.5px] leading-relaxed text-danger"><AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" /><span>{message}</span></div>;
+}
+
+export function CalldataDisclosure({ data }: { data: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(data);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopied(false);
+    }
+  };
+  return (
+    <div className="mt-2 border-t border-[var(--line)] pt-2">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="text-[10px] font-semibold text-mut">Calldata</span>
+        <button type="button" className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-[10px] font-semibold text-mut hover:text-[var(--text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--mint)]" onClick={() => void copy()}>
+          {copied ? <Check aria-hidden="true" className="h-3.5 w-3.5" /> : <Copy aria-hidden="true" className="h-3.5 w-3.5" />}
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      <pre className="max-h-28 overflow-auto rounded-lg bg-[rgba(0,0,0,.18)] p-2 font-mono text-[9px] leading-relaxed text-[var(--mut-2)] [overflow-wrap:anywhere]" tabIndex={0} aria-label="Transaction calldata">{data}</pre>
+      <span role="status" className="sr-only">{copied ? 'Calldata copied' : ''}</span>
+    </div>
+  );
 }

@@ -16,6 +16,7 @@ concurrency:
 jobs:
   deploy:
     name: Build and deploy Cloudflare Pages
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     environment: production
@@ -29,6 +30,18 @@ jobs:
           node-version: '22'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Sync production Pages gas-oracle secret
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          if [[ -z "${ETHERSCAN_API_KEY:-}" ]]; then
+            echo "::error::The production Pages gas-oracle secret is not configured in GitHub Actions."
+            exit 1
+          fi
+          printf '%s' "$ETHERSCAN_API_KEY" | pnpm exec wrangler pages secret put ETHERSCAN_API_KEY --project-name=fxaeon --env=production
       - name: Install browser verification runtime
         run: pnpm --dir apps/mini-app exec playwright install --with-deps chromium
       - name: Validate public build configuration
@@ -58,6 +71,23 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_SHA: ${{ github.sha }}
+      - name: Check live gas-oracle binding
+        id: gas_oracle
+        run: node scripts/check_live_gas_oracle.mjs
+        env:
+          LIVE_GAS_ORACLE_URL: https://fxaeon.com/api/gas
+      - name: Redeploy verified artifact after syncing the Pages secret
+        if: steps.gas_oracle.outputs.configured == 'false'
+        run: pnpm exec wrangler pages deploy apps/mini-app/dist --project-name=fxaeon --branch=main --commit-hash="$GITHUB_SHA" --commit-message="Verified Pages secret binding for $GITHUB_SHA"
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GITHUB_SHA: ${{ github.sha }}
+          WRANGLER_SEND_METRICS: 'false'
+      - name: Verify live gas oracle
+        run: node scripts/check_live_gas_oracle.mjs --require-configured
+        env:
+          LIVE_GAS_ORACLE_URL: https://fxaeon.com/api/gas
       - name: Verify live wallet configuration
         run: node scripts/verify_live_public_config.mjs
         env:

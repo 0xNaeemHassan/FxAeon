@@ -456,9 +456,7 @@ export default function BorrowPage() {
           placeholder="0.00"
         />
       </div>
-      <InfoNote>{selected
-        ? 'Enter collateral to make the position safer, fxUSD to borrow more, or both. The amount borrowed is added to your debt. The protocol deducts its borrowing fee from the fxUSD you receive.'
-          : 'FxAeon opens one collateralized long position. The amount borrowed is added to your debt. The protocol deducts its borrowing fee from the fxUSD you receive. The action details show the resulting collateral and debt before you sign.'}</InfoNote>
+      <InfoNote>Borrowing fees are deducted from the fxUSD you receive.</InfoNote>
     </div>
   ) : (
     <div className="flex flex-col gap-4">

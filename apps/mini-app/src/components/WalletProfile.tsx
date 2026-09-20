@@ -3,10 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
+import { useEnsAddress, useEnsName } from 'wagmi';
+import type { Address } from 'viem';
 import { History, ChevronRight, ExternalLink, LogOut, RefreshCw, Settings, Wallet, X, type LucideIcon } from 'lucide-react';
-import { AssetIcon, AssetQuantity, networkLabel } from '@/components/PortfolioAssets';
+import { AssetNetworkIcon, AssetQuantity, networkLabel } from '@/components/PortfolioAssets';
 import { AddressChip } from '@/components/ui';
-import { useWalletAssets } from '@/components/WalletDataProvider';
+import { useWalletAssets, useWalletBalances } from '@/components/WalletDataProvider';
+import { useUsdPrices } from '@/components/PriceProvider';
 import {
   ProtocolPositionCard,
   ProtocolPositionNotice,
@@ -16,15 +19,19 @@ import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
 import { useWalletDemand, useWalletProfileSession } from '@/components/WalletDemandProvider';
 import { ConfirmedPositionCards } from '@/components/ConfirmedPositionCards';
 import { formatUsd } from '@/lib/prices';
+import { compactAddress } from '@/lib/addressPresentation';
 import { userSafeError } from '@/lib/errors';
-import { tokenName, tokenSymbol } from '@/lib/fx/tokenPresentation';
+import { tokenSymbol } from '@/lib/fx/tokenPresentation';
 import { haptic, openExternalLink } from '@/lib/telegram';
 import { usePrivyWallet } from '@/lib/wallet';
+import { canonicalWalletBalancesSnapshot, knownFreshPortfolioSubtotal, mergeFreshCanonicalWalletBalances } from '@/lib/portfolioValuation';
+import { walletAssetValuation } from '@/lib/walletAssets';
 import styles from '@/app/AccountWorkspace.module.css';
 import ConnectWalletButton from '@/components/ConnectWalletButton';
 import { ValueOrSkeleton } from '@/components/MissingValue';
 
 const WALLET_PROFILE_DEMAND = { expandedAssets: true, chainPulse: true, positions: true } as const;
+const ENS_QUERY_POLICY = { retry: 1, retryDelay: 1_000, staleTime: 5 * 60_000, gcTime: 30 * 60_000, refetchOnWindowFocus: false } as const;
 
 export default function WalletProfile() {
   const wallet = usePrivyWallet();
@@ -44,7 +51,39 @@ export default function WalletProfile() {
   const walletAssets = useWalletAssets({ address: wallet.address, enabled: open && wallet.ready && Boolean(wallet.address) });
   const assets = walletAssets.data;
   const loading = walletAssets.status === 'idle' || walletAssets.status === 'loading';
-  const refreshingBalances = walletAssets.isFetching;
+  const walletBalances = useWalletBalances({ address: wallet.address, chainId: 1, enabled: open && wallet.ready && Boolean(wallet.address) });
+  const priceSnapshot = useUsdPrices();
+  const valuationNow = Date.now();
+  const displayAssets = assets
+    ? mergeFreshCanonicalWalletBalances(assets, walletBalances.data, walletBalances.updatedAt, priceSnapshot, valuationNow)
+    : wallet.address
+      ? canonicalWalletBalancesSnapshot(wallet.address, walletBalances.data, walletBalances.updatedAt, priceSnapshot,
+        walletAssets.status === 'unavailable' ? 'unavailable' : 'pending', valuationNow)
+      : null;
+  const knownWalletValue = knownFreshPortfolioSubtotal(displayAssets, walletBalances.data, walletBalances.updatedAt, priceSnapshot, valuationNow);
+  const walletSnapshotValuation = walletAssetValuation(displayAssets);
+  const walletValueIsPartial = knownWalletValue.totalUsd !== null && !walletSnapshotValuation.complete;
+  const walletAssetCountLabel = knownWalletValue.assetCount > 0 || walletSnapshotValuation.complete
+    ? `${knownWalletValue.assetCount} ${knownWalletValue.assetCount === 1 ? 'asset' : 'assets'}`
+    : '—';
+  const walletValueLoading = loading || walletBalances.status === 'idle' || walletBalances.status === 'loading' || priceSnapshot.status === 'loading';
+  const refreshingBalances = walletAssets.isFetching || walletBalances.isFetching;
+  const reverseEnsName = useEnsName({
+    address: wallet.address as Address | undefined,
+    chainId: 1,
+    query: { ...ENS_QUERY_POLICY, enabled: open && Boolean(wallet.address) },
+  });
+  const forwardEnsAddress = useEnsAddress({
+    name: reverseEnsName.data ?? '',
+    chainId: 1,
+    query: { ...ENS_QUERY_POLICY, enabled: open && Boolean(wallet.address) && Boolean(reverseEnsName.data) },
+  });
+  const verifiedEnsName = reverseEnsName.data && forwardEnsAddress.data?.toLowerCase() === wallet.address?.toLowerCase()
+    ? reverseEnsName.data : null;
+  const walletHeading = verifiedEnsName ?? (wallet.address ? compactAddress(wallet.address) : 'Wallet');
+  const profileDialogName = verifiedEnsName
+    ? `Wallet profile for ${verifiedEnsName}; address ${wallet.address}`
+    : `Wallet ${wallet.address}`;
   const openerRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -106,7 +145,7 @@ export default function WalletProfile() {
     return () => window.removeEventListener('fxaeon:telegram-back', onTelegramBack);
   }, [open, setOpenWallet]);
 
-  const nonZero = useMemo(() => assets?.assets.filter((asset) => asset.balanceWei > 0n) ?? [], [assets]);
+  const nonZero = useMemo(() => displayAssets?.assets.filter((asset) => asset.balanceWei > 0n) ?? [], [displayAssets]);
   const walletExplorer = wallet.chainId === 8453 ? 'https://basescan.org' : 'https://etherscan.io';
   const walletExplorerName = wallet.chainId === 8453 ? 'BaseScan' : 'Etherscan';
 
@@ -148,15 +187,20 @@ export default function WalletProfile() {
       </button>
       {open && typeof document !== 'undefined' && createPortal(
         <div className={`${styles.walletBackdrop} wallet-profile-backdrop`} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpenWallet(null); }}>
-          <aside ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="wallet-profile-title" className={`${styles.walletSheet} wallet-profile-sheet`} onMouseDown={(event) => event.stopPropagation()}>
+          <aside ref={dialogRef} role="dialog" aria-modal="true" aria-label={profileDialogName} className={`${styles.walletSheet} wallet-profile-sheet`} onMouseDown={(event) => event.stopPropagation()}>
             <header className={`${styles.walletHeader} wallet-profile-header`}>
               <div>
-                <h2 id="wallet-profile-title" className="text-display mt-1 text-[22px] font-semibold">Wallet profile</h2>
+                <h2 title={wallet.address} className="text-display mt-1 text-[22px] font-semibold">{walletHeading}</h2>
               </div>
               <button ref={closeRef} type="button" aria-label="Close wallet profile" onClick={() => setOpenWallet(null)} className={`${styles.walletIconAction} glass-press`}><X className="h-5 w-5" aria-hidden="true" /></button>
             </header>
 
             <div className={`${styles.walletSummary} wallet-profile-summary`}>
+              <div className={styles.walletSummaryValue}>
+                <p>Wallet value</p>
+                <strong><ValueOrSkeleton value={!knownWalletValue.hasKnownValue || knownWalletValue.totalUsd === null ? '—' : walletValueIsPartial ? <span role="status" title="Known subtotal only. Other balances may be missing." aria-label={`Known subtotal only. Other balances may be missing. ${formatUsd(knownWalletValue.totalUsd)}`}>{formatUsd(knownWalletValue.totalUsd)}</span> : formatUsd(knownWalletValue.totalUsd)} width="xl" status={walletValueLoading ? 'loading' : 'unavailable'} label={walletValueLoading ? 'Loading wallet value' : 'Wallet value unavailable because no priced balances are available'} /></strong>
+                <small><ValueOrSkeleton value={walletAssetCountLabel} width="sm" status={walletValueLoading ? 'loading' : 'unavailable'} label={walletValueLoading ? 'Loading asset count' : 'Asset count unavailable'} /></small>
+              </div>
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-2">
                   <AddressChip address={wallet.address} />
@@ -176,7 +220,7 @@ export default function WalletProfile() {
                   >
                     <ExternalLink className="h-4 w-4" aria-hidden="true" />
                   </a>
-                  <button type="button" onClick={() => void Promise.allSettled([walletAssets.refresh(), refreshPositions()])} disabled={refreshingBalances || positionState.refreshing} aria-label="Refresh balances and positions" title="Refresh balances and positions" className={`${styles.walletIconAction} glass-press`}><RefreshCw className={`h-4 w-4 ${refreshingBalances || positionState.refreshing ? 'animate-spin' : ''}`} aria-hidden="true" /></button>
+                  <button type="button" onClick={() => void Promise.allSettled([walletAssets.refresh(), walletBalances.refresh(), refreshPositions()])} disabled={refreshingBalances || positionState.refreshing} aria-label="Refresh balances and positions" title="Refresh balances and positions" className={`${styles.walletIconAction} glass-press`}><RefreshCw className={`h-4 w-4 ${refreshingBalances || positionState.refreshing ? 'animate-spin' : ''}`} aria-hidden="true" /></button>
                 </div>
               </div>
             </div>
@@ -185,10 +229,10 @@ export default function WalletProfile() {
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div><h3 id="wallet-profile-balances-title" className="text-[15px] font-semibold">Balances</h3></div>
               </div>
-              {loading && !assets && <div className="h-28 animate-pulse rounded-xl bg-[var(--surface-2)]" />}
-              {refreshingBalances && assets && <div role="status" aria-label="Refreshing asset balances" className="skeleton h-3 w-44 rounded" />}
-              {!loading && !assets && <p role="status" aria-live="polite" className="p-3 text-[12px] text-mut"><ValueOrSkeleton value="—" status="unavailable" label="Balance data unavailable" /></p>}
-              {!loading && assets && walletAssets.status === 'ready' && nonZero.length === 0 && <p className="rounded-xl border border-[var(--line)] p-3 text-[12px] text-mut">No token balances detected.</p>}
+              {loading && !displayAssets && <div className="h-28 animate-pulse rounded-xl bg-[var(--surface-2)]" />}
+              {refreshingBalances && displayAssets && <div role="status" aria-label="Refreshing asset balances" className="skeleton h-3 w-44 rounded" />}
+              {!loading && !displayAssets && <p role="status" aria-live="polite" className="p-3 text-[12px] text-mut"><ValueOrSkeleton value="—" status="unavailable" label="Balance data unavailable" /></p>}
+              {!loading && displayAssets && walletSnapshotValuation.complete && nonZero.length === 0 && <p className="rounded-xl border border-[var(--line)] p-3 text-[12px] text-mut">No token balances detected.</p>}
               {nonZero.map((asset) => <WalletAssetRow key={asset.id} asset={asset} />)}
             </section>
 
@@ -230,8 +274,8 @@ function WalletAssetRow({ asset }: { asset: import('@/lib/walletAssets').WalletA
   const label = tokenSymbol(asset.symbol);
   return (
     <div className={`${styles.walletAssetRow} flex items-center gap-3 border-b border-[var(--line)] py-3 last:border-b-0`}>
-      <AssetIcon asset={asset} size={34} />
-      <div className="min-w-0 flex-1"><p className="text-[14px] font-semibold">{label}</p><p className="mt-0.5 truncate text-[11px] text-mut">{tokenName(asset.symbol)} · {networkLabel(asset.chainId)} · <AssetQuantity asset={asset} /></p></div>
+      <AssetNetworkIcon asset={asset} size={34} />
+      <div className="min-w-0 flex-1"><p className="text-[14px] font-semibold">{label}<span className="sr-only"> on {networkLabel(asset.chainId)}</span></p><p className="mt-0.5 truncate text-[11px] text-mut"><AssetQuantity asset={asset} /></p></div>
       <div className="text-right"><p className="text-[14px] font-semibold tabular-nums"><ValueOrSkeleton value={asset.usdValue === null ? '—' : formatUsd(asset.usdValue)} status={asset.usdValue === null ? 'unavailable' : undefined} label="Value unavailable" /></p><p className="mt-0.5 text-[10.5px] text-mut"><ValueOrSkeleton value={asset.priceStatus === 'fresh' && asset.priceUsd !== null ? formatUsd(asset.priceUsd) : '—'} status="unavailable" label="Price unavailable" /></p></div>
     </div>
   );

@@ -1,7 +1,7 @@
 'use client';
 
 import { createPortal } from 'react-dom';
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { ChevronDown, Info, Search } from 'lucide-react';
 import TokenIcon from '@/components/TokenIcon';
 import { useUsdPrices } from '@/components/PriceProvider';
@@ -76,6 +76,11 @@ export function Segmented<T extends string>({
   ariaLabel: string;
   tone?: 'default' | 'sides';
 }) {
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
+
   return (
     <div className={`${styles.formSegmented} segmented ${tone === 'sides' ? 'segmented-sides' : ''} grid grid-flow-col auto-cols-fr p-1`} role="radiogroup" aria-label={ariaLabel}>
       {options.map((option) => {
@@ -89,6 +94,7 @@ export function Segmented<T extends string>({
             aria-checked={active}
             data-value={option.value}
             tabIndex={active ? 0 : -1}
+            disabled={!hydrated}
             onClick={() => {
               haptic('selection');
               onChange(option.value);
@@ -347,7 +353,8 @@ export function AmountField({
           aria-errormessage={error ? errorId : undefined}
           aria-invalid={Boolean(error)}
           required={!allowZero}
-          className={`${styles.amountInput} min-h-11 min-w-0 flex-1 bg-transparent text-[25px] font-semibold text-[var(--text)] outline-none placeholder:text-[var(--mut-2)]`}
+          style={{ '--amount-entry-length': Math.max(value.length, 10) } as CSSProperties}
+          className={`${styles.amountInput} min-h-11 min-w-0 flex-1 bg-transparent font-semibold text-[var(--text)] outline-none placeholder:text-[var(--mut-2)]`}
         />
         {tokenSelector ?? <span className="token-pill flex shrink-0 items-center gap-2 px-2.5 py-2 text-[12px] font-semibold">
           <TokenIcon symbol={symbol} size={22} /> {symbol}

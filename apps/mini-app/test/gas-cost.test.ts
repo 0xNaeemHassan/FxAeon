@@ -58,12 +58,27 @@ test('estimates every route step and separates gas from native transaction value
     now: () => 10_000,
   });
   assert.equal(estimate.status, 'current');
-  assert.equal(estimate.blockNumber, 123n);
+  assert.equal(estimate.blockNumber, undefined);
   assert.equal(estimate.estimatedGasUnits, 21_000n);
   assert.equal(estimate.executionGasFeeWei, 63_000n);
   assert.equal(estimate.nativeValueWei, 12n);
   assert.equal(estimate.totalNativeCostWei, 63_012n);
   assert.equal(estimate.steps[0].gasFeeWei, 63_000n);
+});
+
+test('does not spend an RPC request on optional block provenance before estimating gas', async () => {
+  let blockReads = 0;
+  const client = {
+    ...clientFor(async () => 21_000n),
+    getBlockNumber: async () => {
+      blockReads += 1;
+      return new Promise<bigint>(() => undefined);
+    },
+  } as FxPublicClient;
+  const estimate = await estimatePlannedRouteCost(route(), { client, timeoutMs: 250 });
+  assert.equal(blockReads, 0);
+  assert.equal(estimate.status, 'current');
+  assert.equal(estimate.estimatedGasUnits, 21_000n);
 });
 
 test('keeps approval estimate when dependent action estimation fails', async () => {

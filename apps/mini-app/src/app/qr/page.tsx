@@ -53,29 +53,32 @@ function WalletQr() {
 
   return (
     <div className={`${styles.utilityWorkspace} ${styles.qrWorkspace}`}>
-      <Card className={`${styles.utilityCard} flex flex-col items-center gap-4 p-5`}>
-        <div className="rounded-2xl bg-white p-3.5 shadow-sm">
+      <Card className={`${styles.utilityCard} ${styles.receiveCard} flex flex-col items-center gap-4 p-5`}>
+        <div className={styles.qrCodeStage}>
           <QRCodeSVG value={address} size={208} level="M" title="Your EVM wallet address for Ethereum or Base" />
         </div>
-        <div className="w-full">
+        <div className={styles.receiveAddressPanel}>
           <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[12px] text-mut">Wallet address</p>
-              <p className="mt-0.5 text-[13px] font-semibold">Ethereum · Base supported</p>
+            <div className="min-w-0">
+              <p className={styles.addressLabel}>Receive address</p>
+              <div className={styles.networkBadges} aria-label="Address works on Ethereum and Base">
+                <span>Ethereum</span>
+                <span>Base</span>
+              </div>
             </div>
-            <button type="button" onClick={copy} aria-label={copied ? 'Address copied' : 'Copy wallet address'} className="glass glass-press flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-[11px] font-semibold text-mut">
+            <button type="button" onClick={copy} aria-label={copied ? 'Address copied' : 'Copy wallet address'} className={`${styles.copyButton} glass glass-press flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-[11px] font-semibold text-mut`}>
               {copied ? <Check className="h-[18px] w-[18px] text-success" aria-hidden="true" /> : <Copy className="h-[18px] w-[18px] text-mut" aria-hidden="true" />}
               <span>{copied ? 'Copied' : 'Copy'}</span>
             </button>
           </div>
-          <p title="Select this address to copy it manually" className="mt-3 select-all break-all rounded-2xl border border-[var(--line)] bg-[var(--input)] p-3 font-mono text-[12px] leading-relaxed">{address}</p>
+          <p title="Select this address to copy it manually" className={`${styles.addressValue} mt-3 select-all break-all rounded-2xl border border-[var(--line)] bg-[var(--input)] p-3 font-mono text-[12px] leading-relaxed`}>{address}</p>
         </div>
         <p className={`min-h-4 text-center text-[11px] ${copyFailed ? 'text-danger' : 'text-mut'}`} aria-live="polite">
           {copyFailed ? 'Copy was blocked. Press and hold the address to copy it.' : copied ? 'Address copied to clipboard.' : ''}
         </p>
       </Card>
 
-      <Card className="flex items-start gap-2.5 border-[rgba(255,194,75,0.3)] p-4">
+      <Card className={`${styles.networkWarning} flex items-start gap-2.5 border-[rgba(255,194,75,0.3)] p-4`}>
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warn" aria-hidden="true" />
         <p className="text-[12px] leading-relaxed text-mut"><span className="font-medium text-warn">Check the network before sending.</span> Use Ethereum or Base, then confirm the token is supported on that network.</p>
       </Card>

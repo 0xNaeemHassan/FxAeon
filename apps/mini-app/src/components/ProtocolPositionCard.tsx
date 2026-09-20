@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { AlertTriangle, ArrowUpRight, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ChevronRight, RefreshCw } from 'lucide-react';
 import React from 'react';
 import {
   formatAmount,
@@ -16,6 +16,7 @@ import { MissingValue } from '@/components/MissingValue';
 import TokenIcon from '@/components/TokenIcon';
 import { formatUsdPrice, priceKeyForSymbol } from '@/lib/prices';
 import { calculatePositionUsdValuation, debtCollateralRatioPercent, formatUsdCents } from '@/lib/positionValuation';
+import styles from './ProtocolPositionCard.module.css';
 
 function Skeleton({ className = '' }: { className?: string }) {
   return <div aria-hidden="true" className={`skeleton ${className}`} />;
@@ -86,30 +87,52 @@ function PositionBody({
   const positionValueTitle = valuation.netEquityUsdCents === null
     ? pricesAreCurrent ? 'Loading position value' : 'Position value unavailable until prices refresh'
     : 'Collateral value minus debt';
+  const sideLabel = position.side === 'long' ? 'Long' : 'Short';
 
   return (
-    <>
-      <div className="flex min-w-0 items-start gap-x-3">
+    <div className={`${styles.content} ${compact ? styles.compactContent : ''}`}>
+      <div className={styles.identity}>
+        <div className={styles.tokenIcon}>
         <TokenIcon symbol={position.market === 'ETH' ? 'ETH' : 'WBTC'} size={compact ? 34 : 40} />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={`text-display text-[15px] font-semibold ${position.side === 'long' ? 'text-success' : 'text-danger'}`}>{position.market} {position.side === 'long' ? 'Long' : 'Short'}</span>
-          </div>
-          <p className="mt-1 text-[12px] text-mut">#{position.info.positionId} · {leverage} {leverageInfo.label}</p>
         </div>
-        {interactive && <ArrowUpRight className="h-4 w-4 shrink-0 text-[var(--mut-2)]" aria-hidden="true" />}
+        <div className={styles.identityText}>
+          <div className={styles.marketLine}>
+            <span className={styles.market}>{position.market}</span>
+            {' '}
+            <span className={`${styles.side} ${position.side === 'long' ? styles.long : styles.short}`}>{sideLabel}</span>
+          </div>
+          <p className={styles.positionMeta}>Position #{position.info.positionId}<span aria-hidden="true">·</span><strong>{leverage}</strong> {leverageInfo.label}</p>
+        </div>
+        {interactive && <span className={styles.navigateIcon} aria-hidden="true"><ChevronRight /></span>}
       </div>
-      <div className={`${compact ? 'mt-2.5 pt-2' : 'mt-3 pt-3'} flex items-end justify-between gap-3 border-t border-[var(--line)]`} title={positionValueTitle}>
-        <span className="text-[12px] text-mut">Position value</span>
-        <span className={`${compact ? 'text-[16px]' : 'text-[18px]'} min-w-0 shrink break-words text-right font-semibold tabular-nums`}>{netEquity}</span>
+      <div className={styles.positionValue} title={positionValueTitle}>
+        <div className={styles.positionValueLabel}>
+          <span>Position value</span>
+          <span className={styles.valueBasis}>Collateral − debt</span>
+        </div>
+        <span className={styles.positionValueNumber}>{netEquity}</span>
       </div>
-      <div className={`${compact ? 'mt-2.5 pt-2' : 'mt-3 pt-3'} grid grid-cols-2 gap-x-4 gap-y-3 border-t border-[var(--line)]`}>
-        <div className="min-w-0"><span className="text-[12px] text-mut">Collateral</span><p className="mt-0.5 break-words text-[13px] font-semibold">{collateral} {position.info.rawCollsToken}</p><p className="mt-0.5 break-words text-[12px] tabular-nums text-mut">{collateralUsd}</p></div>
-        <div className="min-w-0"><span className="text-[12px] text-mut">Debt</span><p className="mt-0.5 break-words text-[13px] font-semibold">{debt} {position.info.rawDebtsToken}</p><p className="mt-0.5 break-words text-[12px] tabular-nums text-mut">{debtUsd}</p></div>
-        <div className="min-w-0"><span className="text-[12px] text-mut">Market price</span><p className="mt-0.5 break-words text-[13px] font-semibold tabular-nums">{marketPriceDisplay}</p></div>
-        <div className="min-w-0" title="Debt value divided by collateral value"><span className="text-[12px] text-mut">Debt / collateral</span><p className="mt-0.5 break-words text-[13px] font-semibold tabular-nums">{debtCollateralDisplay}</p></div>
+      <div className={styles.metrics}>
+        <div className={styles.metric}>
+          <span className={styles.metricLabel}>Collateral</span>
+          <p className={styles.metricValue}>{collateral} {position.info.rawCollsToken}</p>
+          <p className={styles.metricDetail}>{collateralUsd}</p>
+        </div>
+        <div className={styles.metric}>
+          <span className={styles.metricLabel}>Debt</span>
+          <p className={styles.metricValue}>{debt} {position.info.rawDebtsToken}</p>
+          <p className={styles.metricDetail}>{debtUsd}</p>
+        </div>
+        <div className={styles.metric}>
+          <span className={styles.metricLabel}>Market price</span>
+          <p className={styles.metricValue}>{marketPriceDisplay}</p>
+        </div>
+        <div className={styles.metric} title="Debt value divided by collateral value">
+          <span className={styles.metricLabel}>Debt / collateral</span>
+          <p className={styles.metricValue}>{debtCollateralDisplay}</p>
+        </div>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -132,7 +155,7 @@ export function ProtocolPositionCard({
   onNavigate?: () => void;
   className?: string;
 }) {
-  const classes = `astryx-card ${href || onSelect ? 'glass-press' : ''} block min-w-0 w-full rounded-2xl border p-3.5 text-left transition ${selected ? 'border-[var(--mint)] bg-[var(--surface-2)]' : 'border-[var(--line)]'} ${highlighted ? 'ring-2 ring-[var(--success)] ring-offset-2 ring-offset-[var(--bg)]' : ''} ${className}`;
+  const classes = `${styles.card} ${compact ? styles.compact : ''} ${href || onSelect ? styles.interactive : ''} ${selected ? styles.selected : ''} ${highlighted ? styles.highlighted : ''} ${className}`;
   const body = <PositionBody position={position} compact={compact} interactive={Boolean(href || onSelect)} />;
 
   if (href) {

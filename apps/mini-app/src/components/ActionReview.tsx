@@ -15,8 +15,6 @@ import {
   formatRouteGasCost,
   prepareRoutesForReview,
   runTransactionRoute,
-  routesMatchForSigning,
-  selectRefreshedRoute,
   type PlannedRoute,
   type PlannedTransaction,
   type PlanStatus,
@@ -34,10 +32,12 @@ import { Button, Card } from '@/components/ui';
 import { ValueOrSkeleton } from '@/components/MissingValue';
 import ConnectWalletButton from '@/components/ConnectWalletButton';
 import { userSafeError } from '@/lib/errors';
+import { compactAddress } from '@/lib/addressPresentation';
 import { confirmedUpdateCopy, hasTransactionHash, transactionStepProgress } from '@/lib/transactionProgress';
 import { BridgeTracker } from '@/components/BridgeTracker';
-import { InlineError, StatusNotice, stepProgress, TransactionHashLink, chainName } from '@/components/review/ReviewProgress';
+import { CalldataDisclosure, InlineError, StatusNotice, stepProgress, TransactionHashLink, chainName } from '@/components/review/ReviewProgress';
 import { resultPresentation } from '@/components/review/executionResult';
+import { splitReviewFacts } from '@/components/review/reviewSummary';
 import { rawQuoteReviewFacts, routeFinancialReviewFacts, type ReviewFact } from '@/lib/fx/reviewFormatting';
 import styles from './FlowWorkspace.module.css';
 
@@ -46,14 +46,13 @@ export type ActionPlanBuilder = () => Promise<PlannedRoute | readonly PlannedRou
 export type ActionReviewStage = 'input' | 'planning' | 'review' | 'executing' | 'result';
 
 export interface ActionReviewProps {
-  /** Build a fresh SDK route for initial review and confirm-time refresh. */
+  /** Build the route for initial preview, background refresh, and explicit review. */
   planBuilder: ActionPlanBuilder | null;
   /**
    * Read an exact, short-lived in-memory route prepared for these inputs.
    * Returning null falls back to planBuilder. Prefetched routes still pass
-   * the normal review simulation. The initial route is rebuilt before signing;
-   * a newly reviewed route may be reused briefly, but the runner always
-   * performs its final simulation immediately before opening the wallet.
+   * the normal review simulation; signing uses the displayed route only while
+   * its intent, wallet session, and freshness window still match.
    */
   prefetchedPlan?: () => Promise<PlannedRoute | readonly PlannedRoute[] | null>;
   label?: string;
@@ -102,10 +101,8 @@ export interface ActionReviewProps {
 
 type Stage = ActionReviewStage;
 
-// A route which changed during the confirm-time rebuild has just been fully
-// displayed and simulated. Keep it reusable for a short window; the runner
-// still simulates it again inside the signing lock.
-const REFRESHED_ROUTE_REUSE_MS = 10_000;
+const PREVIEW_REFRESH_INTERVAL_MS = 15_000;
+const PREVIEW_FRESHNESS_MS = 30_000;
 
 function asRoutes(value: PlannedRoute | readonly PlannedRoute[]): PlannedRoute[] {
   const routes = Array.isArray(value) ? [...value] : [value];
@@ -115,10 +112,6 @@ function asRoutes(value: PlannedRoute | readonly PlannedRoute[]): PlannedRoute[]
 
 function trimDecimal(value: string): string {
   return value.includes('.') ? value.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '') : value;
-}
-
-function compactAddress(value: string): string {
-  return `${value.slice(0, 6)}…${value.slice(-4)}`;
 }
 
 function signatureDraftActionKey(route: PlannedRoute): string {
@@ -145,9 +138,50 @@ function formatTokenAmount(value: bigint, tokenAddress?: string, fallback = 'raw
   return `${trimDecimal(formatUnits(value, token.decimals))} ${token.key}`;
 }
 
+function conciseDecimal(value: string, places = 6): string {
+  const [whole, fraction = ''] = value.split('.');
+  const shown = fraction.slice(0, places).replace(/0+$/, '');
+  const omitted = /[1-9]/.test(fraction.slice(places));
+  if (omitted && whole === '0' && !shown) return `<0.${'0'.repeat(Math.max(places - 1, 0))}1`;
+  const groupedWhole = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return `${omitted ? '≈ ' : ''}${groupedWhole}${shown ? `.${shown}` : ''}`;
+}
+
+function addTokenAmountFact(facts: ReviewFact[], label: string, value: bigint, tokenAddress?: string, fallback = 'raw units'): void {
+  const token = tokenForAddress(tokenAddress);
+  if (!token) {
+    addFact(facts, label, `${value.toString()} ${fallback}`);
+    return;
+  }
+  const exact = trimDecimal(formatUnits(value, token.decimals));
+  facts.push({ label, value: `${conciseDecimal(exact)} ${token.key}`, title: `${exact} ${token.key}` });
+}
+
+function addWadAmountFact(facts: ReviewFact[], label: string, value: bigint, unit: string): void {
+  const exact = trimDecimal(formatUnits(value, 18));
+  facts.push({ label, value: `${conciseDecimal(exact)} ${unit}`, title: `${exact} ${unit}` });
+}
+
 function addFact(facts: ReviewFact[], label: string, value: string | undefined): void {
   if (!value || facts.some((fact) => fact.label === label)) return;
   facts.push({ label, value });
+}
+
+function addNativeCostFact(facts: ReviewFact[], label: string, exactValue: string | undefined): void {
+  if (!exactValue || facts.some((fact) => fact.label === label)) return;
+  const match = exactValue.match(/^(\d[\d,]*(?:\.\d+)?)\s+(ETH|Gwei)(.*)$/);
+  if (!match) {
+    addFact(facts, label, exactValue);
+    return;
+  }
+  const [, amount, unit, qualifier] = match;
+  const isMax = /\bmax\b/i.test(qualifier);
+  const shortQualifier = isMax ? ' max' : label === 'Total cost' ? ' total' : '';
+  facts.push({
+    label,
+    value: `${conciseDecimal(amount, 6)} ${unit}${shortQualifier}`,
+    title: exactValue,
+  });
 }
 
 function primaryReviewFacts(route: PlannedRoute): ReviewFact[] {
@@ -156,11 +190,11 @@ function primaryReviewFacts(route: PlannedRoute): ReviewFact[] {
   if (intent) {
     switch (intent.kind) {
       case 'position-increase':
-        addFact(facts, 'Amount', formatTokenAmount(intent.inputAmount, intent.inputTokenAddress));
+        addTokenAmountFact(facts, 'Amount', intent.inputAmount, intent.inputTokenAddress);
         if (intent.requestedLeverage !== undefined) addFact(facts, 'Target leverage', `${intent.requestedLeverage}×`);
         if (intent.slippagePercent !== undefined) addFact(facts, 'Slippage', `${intent.slippagePercent}%`);
         addFact(facts, 'Position', intent.positionId === 0 ? 'New position' : `#${intent.positionId}`);
-        addFact(facts, 'Risk', 'New leverage can increase liquidation exposure');
+        addFact(facts, 'Risk', 'Liquidation risk may increase');
         break;
       case 'position-reduce':
         addFact(facts, 'Position', `#${intent.positionId}`);
@@ -171,27 +205,27 @@ function primaryReviewFacts(route: PlannedRoute): ReviewFact[] {
         addFact(facts, 'Position', `#${intent.positionId}`);
         if (intent.requestedLeverage !== undefined) addFact(facts, 'Target leverage', `${intent.requestedLeverage}×`);
         if (intent.slippagePercent !== undefined) addFact(facts, 'Slippage', `${intent.slippagePercent}%`);
-        addFact(facts, 'Risk', 'Changing leverage can alter liquidation exposure');
+        addFact(facts, 'Risk', 'Liquidation risk may change');
         break;
       case 'deposit-and-mint':
-        addFact(facts, 'Deposit', formatTokenAmount(intent.depositAmount, intent.depositTokenAddress));
-        addFact(facts, 'Borrow', formatTokenAmount(intent.mintAmount, FX_TOKENS.fxUSD.address));
+        addTokenAmountFact(facts, 'Deposit', intent.depositAmount, intent.depositTokenAddress);
+        addTokenAmountFact(facts, 'Borrow', intent.mintAmount, FX_TOKENS.fxUSD.address);
         addFact(facts, 'Position', intent.positionId === 0 ? 'New position' : `#${intent.positionId}`);
-        addFact(facts, 'Risk', intent.mintAmount > 0n ? 'Added debt can increase liquidation exposure' : 'Collateral change affects the liquidation buffer');
+        addFact(facts, 'Risk', intent.mintAmount > 0n ? 'Added debt may increase liquidation risk' : 'Collateral changes affect the liquidation buffer');
         break;
       case 'repay-and-withdraw':
-        addFact(facts, 'Repay', formatTokenAmount(intent.minimumRepayAmount, intent.repayTokenAddress));
-        addFact(facts, 'Withdraw', formatTokenAmount(intent.withdrawAmount, intent.withdrawTokenAddress));
+        addTokenAmountFact(facts, 'Repay', intent.minimumRepayAmount, intent.repayTokenAddress);
+        addTokenAmountFact(facts, 'Withdraw', intent.withdrawAmount, intent.withdrawTokenAddress);
         addFact(facts, 'Position', `#${intent.positionId}`);
-        addFact(facts, 'Risk', intent.withdrawAmount > 0n ? 'Withdrawal can reduce the liquidation buffer' : 'Repayment should reduce debt after confirmation');
+        addFact(facts, 'Risk', intent.withdrawAmount > 0n ? 'Withdrawal may reduce the liquidation buffer' : 'Repayment should reduce debt');
         break;
       case 'fxsave-deposit':
-        addFact(facts, 'Deposit', formatTokenAmount(intent.amount, intent.tokenInAddress));
+        addTokenAmountFact(facts, 'Deposit', intent.amount, intent.tokenInAddress);
         addFact(facts, 'Recipient', compactAddress(intent.receiver));
         if (intent.slippagePercent !== undefined) addFact(facts, 'Slippage', `${intent.slippagePercent}%`);
         break;
       case 'fxsave-withdraw':
-        addFact(facts, 'fxSAVE', formatTokenAmount(intent.amount, FX_TOKENS.fxSAVE.address));
+        addTokenAmountFact(facts, 'fxSAVE', intent.amount, FX_TOKENS.fxSAVE.address);
         addFact(facts, 'Receive', tokenForAddress(intent.tokenOutAddress)?.key ?? compactAddress(intent.tokenOutAddress));
         addFact(facts, 'Mode', intent.directBasePool ? 'Direct' : intent.instant ? 'Instant' : 'Queued');
         if (intent.slippagePercent !== undefined) addFact(facts, 'Slippage', `${intent.slippagePercent}%`);
@@ -211,16 +245,22 @@ function primaryReviewFacts(route: PlannedRoute): ReviewFact[] {
   if (isBridgeQuote(route.quote)) {
     addFact(facts, 'Asset', route.quote.bridgeToken ?? 'Bridge asset');
     if (route.quote.bridgeAmount !== undefined) {
-      addFact(facts, 'Amount', `${trimDecimal(formatUnits(route.quote.bridgeAmount, 18))} ${route.quote.bridgeToken ?? 'tokens'}`);
+      addWadAmountFact(facts, 'Amount', route.quote.bridgeAmount, route.quote.bridgeToken ?? 'tokens');
     }
     if (route.quote.minAmountLD !== undefined) {
-      addFact(facts, 'Minimum received', `${trimDecimal(formatUnits(route.quote.minAmountLD, 18))} ${route.quote.bridgeToken ?? 'tokens'}`);
+      addWadAmountFact(facts, 'Minimum received', route.quote.minAmountLD, route.quote.bridgeToken ?? 'tokens');
     }
     if (route.quote.recipient) addFact(facts, 'Recipient', route.quote.recipient);
-    addFact(facts, 'Bridge fee', `${trimDecimal(formatEther(route.quote.nativeFee))} ETH`);
+    addWadAmountFact(facts, 'Bridge fee', route.quote.nativeFee, 'ETH');
   }
 
   return facts;
+}
+
+function safePreviewFailure(cause: unknown, fallback: string): string {
+  const message = userSafeError(cause, fallback);
+  if (!message || /0x[a-f\d]{128,}|\bcalldata\b|raw (?:rpc|transaction) data/i.test(message)) return fallback;
+  return message.length > 150 ? `${message.slice(0, 147).trimEnd()}…` : message;
 }
 
 function routeFacts(route: PlannedRoute, gasCost: Pick<UseGasCostResult, 'estimate' | 'estimateIsCurrent'>, executionCost?: ActionReviewProps['executionCost']): ReviewFact[] {
@@ -228,11 +268,11 @@ function routeFacts(route: PlannedRoute, gasCost: Pick<UseGasCostResult, 'estima
   const currentGasCost = gasCost.estimateIsCurrent && gasCost.estimate
     ? formatRouteGasCost(gasCost.estimate)
     : undefined;
-  if (currentGasCost?.gasFee) addFact(facts, 'Gas fee', currentGasCost.gasFee);
-  if (currentGasCost?.totalCost) addFact(facts, 'Total cost', currentGasCost.totalCost);
-  if (executionCost?.gasFee) addFact(facts, 'Gas fee', executionCost.gasFee);
+  if (currentGasCost?.gasFee) addNativeCostFact(facts, 'Gas fee', currentGasCost.gasFee);
+  if (currentGasCost?.totalCost) addNativeCostFact(facts, 'Total cost', currentGasCost.totalCost);
+  if (executionCost?.gasFee) addNativeCostFact(facts, 'Gas fee', executionCost.gasFee);
   if (executionCost?.protocolFee) addFact(facts, 'Protocol fee', executionCost.protocolFee);
-  if (executionCost?.totalCost) addFact(facts, 'Total cost', executionCost.totalCost);
+  if (executionCost?.totalCost) addNativeCostFact(facts, 'Total cost', executionCost.totalCost);
   return facts;
 }
 
@@ -397,12 +437,14 @@ export function ActionReview({
   const [executionRoute, setExecutionRoute] = useState<PlannedRoute | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [reviewTitle, setReviewTitle] = useState<string | null>(null);
-  const [reviewNotice, setReviewNotice] = useState<string | null>(null);
   const [networkSwitching, setNetworkSwitching] = useState(false);
   const [reviewContext, setReviewContext] = useState<{ walletAddress: string; chainId?: number; connectionVersion: number } | null>(null);
   const [resumeAfterConnect, setResumeAfterConnect] = useState(false);
   const [previewRoutes, setPreviewRoutes] = useState<PlannedRoute[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewUpdating, setPreviewUpdating] = useState(false);
+  const [previewPreparedAt, setPreviewPreparedAt] = useState<number | null>(null);
+  const [previewIsStale, setPreviewIsStale] = useState(true);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewRetry, setPreviewRetry] = useState(0);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -412,7 +454,6 @@ export function ActionReview({
   // repeated clicks in the same frame cannot start a second execution.
   const busyRef = useRef(false);
   const executionStepsRef = useRef<TransactionStepResult[]>([]);
-  const refreshedRouteRef = useRef<{ route: PlannedRoute; at: number } | null>(null);
   const signatureDraftIdRef = useRef<string | null>(null);
   const resumedReviewRef = useRef<number | null>(null);
   // Every asynchronous planning/execution attempt owns a generation. Route,
@@ -421,7 +462,10 @@ export function ActionReview({
   const generationRef = useRef(0);
   const previewGenerationRef = useRef(0);
   const previewRouteRef = useRef<PlannedRoute | null>(null);
-  const previewSeedRef = useRef<{ route: PlannedRoute; walletAddress: string; chainId?: number; connectionVersion: number } | null>(null);
+  const previewPreparedAtRef = useRef<number | null>(null);
+  const previewOwnerRef = useRef<{ intentKey: string | ActionPlanBuilder | null; walletAddress?: string; chainId?: number; connectionVersion: number } | null>(null);
+  const planBuilderRef = useRef(planBuilder);
+  const prefetchedPlanRef = useRef(prefetchedPlan);
   const mountedRef = useRef(true);
   const liveWalletRef = useRef({
     authenticated: wallet.authenticated,
@@ -431,6 +475,8 @@ export function ActionReview({
   });
   const onStageChangeRef = useRef(onStageChange);
   onStageChangeRef.current = onStageChange;
+  planBuilderRef.current = planBuilder;
+  prefetchedPlanRef.current = prefetchedPlan;
 
   const isCurrentGeneration = useCallback((generation: number) => (
     mountedRef.current && generationRef.current === generation
@@ -462,12 +508,22 @@ export function ActionReview({
   const previewRoute = stage === 'input' ? previewRoutes[selectedRoute] ?? previewRoutes[0] : undefined;
   const activeRoute = stage === 'input' ? previewRoute : route;
   const gasCost = useRouteGasCost(activeRoute, { enabled: Boolean(activeRoute && stage !== 'planning') });
+  const previewIntentKey = draftState === undefined ? planBuilder : JSON.stringify(draftState);
 
   // Prepare a read-only, debounced route while the editor remains mounted.
   // This supplies useful facts before the primary action, but it never changes
   // stage or opens a wallet. The generation and wallet checks discard late
   // results after input, account, network, or component changes.
   useEffect(() => {
+    // The input preview lifecycle must stop when entering the separate review
+    // surface, but it must leave the review's own freshness timestamp intact.
+    // Otherwise the review() timestamp below is immediately cleared here.
+    if (stage !== 'input') {
+      setPreviewLoading(false);
+      setPreviewUpdating(false);
+      return undefined;
+    }
+
     previewGenerationRef.current += 1;
     const previewGeneration = previewGenerationRef.current;
     const previewWalletAddress = wallet.address?.toLowerCase();
@@ -477,16 +533,28 @@ export function ActionReview({
     let running = false;
     let timer: number | undefined;
 
-    const seededPreview = previewSeedRef.current;
-    const preserveSeed = stage === 'input' && Boolean(
-      seededPreview
-      && seededPreview.walletAddress === previewWalletAddress
-      && seededPreview.chainId === previewChainId
-      && seededPreview.connectionVersion === previewConnectionVersion,
+    const previousPreview = previewRouteRef.current;
+    const previousOwner = previewOwnerRef.current;
+    const preservePreview = Boolean(
+      previousPreview
+      && previousOwner?.intentKey === previewIntentKey
+      && previousOwner.connectionVersion === previewConnectionVersion
+      && previousPreview.walletAddress.toLowerCase() === previewWalletAddress
+      && previousPreview.chainId === previewChainId,
     );
-    previewSeedRef.current = null;
-    previewRouteRef.current = preserveSeed ? seededPreview!.route : null;
-    setPreviewRoutes(preserveSeed ? [seededPreview!.route] : []);
+    previewOwnerRef.current = {
+      intentKey: previewIntentKey,
+      walletAddress: previewWalletAddress,
+      chainId: previewChainId,
+      connectionVersion: previewConnectionVersion,
+    };
+    previewRouteRef.current = preservePreview ? previousPreview : null;
+    setPreviewRoutes(preservePreview ? [previousPreview!] : []);
+    if (!preservePreview) {
+      previewPreparedAtRef.current = null;
+      setPreviewPreparedAt(null);
+      setPreviewIsStale(true);
+    }
     setPreviewError(null);
 
     const isVisibleAndOnline = () => (
@@ -510,50 +578,78 @@ export function ActionReview({
       timer = window.setTimeout(() => {
         timer = undefined;
         if (isVisibleAndOnline()) void load();
-        else schedule(15_000);
+        else schedule(PREVIEW_REFRESH_INTERVAL_MS);
       }, delay);
     };
     const load = async () => {
       if (running || !isCurrentPreview()) return;
       if (!isVisibleAndOnline()) {
-        schedule(15_000);
+        schedule(PREVIEW_REFRESH_INTERVAL_MS);
         return;
       }
       running = true;
-      setPreviewLoading(true);
+      const hasCurrentQuote = Boolean(previewRouteRef.current);
+      if (!hasCurrentQuote) setPreviewLoading(true);
+      setPreviewUpdating(hasCurrentQuote);
       setPreviewError(null);
       try {
-        const prefetched = await prefetchedPlan?.();
+        const currentPlanBuilder = planBuilderRef.current;
+        if (!currentPlanBuilder) throw new Error('Enter valid action details to prepare a quote.');
+        const prefetched = await prefetchedPlanRef.current?.();
         if (!isCurrentPreview()) return;
-        const planned = asRoutes(prefetched ?? await planBuilder!());
+        const planned = asRoutes(prefetched ?? await currentPlanBuilder());
         if (!isCurrentPreview()) return;
-        const { viable } = await prepareRoutesForReview(planned, previewWalletAddress!);
+        const { viable, failures } = await prepareRoutesForReview(planned, previewWalletAddress!);
         if (!isCurrentPreview()) return;
-        if (!viable.length) throw new Error('No executable route was returned.');
+        if (!viable.length) {
+          const reason = failures
+            .map((failure) => safePreviewFailure(failure, ''))
+            .find(Boolean);
+          throw new Error(reason ?? 'No executable transaction route is available.');
+        }
+        const currentType = previewRouteRef.current?.details?.routeType;
+        const selectedIndex = currentType
+          ? viable.findIndex((candidate) => candidate.details?.routeType === currentType)
+          : -1;
+        const nextIndex = selectedIndex >= 0 ? selectedIndex : 0;
         setPreviewRoutes(viable);
-        previewRouteRef.current = viable[0] ?? null;
-      } catch {
+        setSelectedRoute(nextIndex);
+        previewRouteRef.current = viable[nextIndex] ?? null;
+        const preparedAt = Date.now();
+        previewPreparedAtRef.current = preparedAt;
+        setPreviewPreparedAt(preparedAt);
+        setPreviewIsStale(false);
+      } catch (cause) {
         if (isCurrentPreview()) {
-          setPreviewRoutes([]);
-          previewRouteRef.current = null;
-          setPreviewError('We could not update the action details. Try again.');
+          if (!previewRouteRef.current) setPreviewRoutes([]);
+          const quoteIsFresh = Boolean(previewPreparedAtRef.current && Date.now() - previewPreparedAtRef.current < PREVIEW_FRESHNESS_MS);
+          setPreviewIsStale(!quoteIsFresh);
+          const reason = safePreviewFailure(cause, 'Try again.');
+          setPreviewError(previewRouteRef.current
+            ? quoteIsFresh
+              ? `Quote refresh failed: ${reason}. The shown quote is still current.`
+              : `Quote refresh failed: ${reason}. Refresh before continuing.`
+            : `Could not prepare: ${reason}`);
         }
       } finally {
         running = false;
         if (isCurrentPreview()) {
           setPreviewLoading(false);
-          schedule(15_000);
+          setPreviewUpdating(false);
+          schedule(PREVIEW_REFRESH_INTERVAL_MS);
         }
       }
     };
 
-    if (stage !== 'input' || !planBuilder || disabled || !wallet.ready || !wallet.authenticated || !previewWalletAddress) {
+    if (!planBuilderRef.current || disabled || !wallet.ready || !wallet.authenticated || !previewWalletAddress) {
       setPreviewLoading(false);
+      setPreviewUpdating(false);
       return undefined;
     }
-    schedule(preserveSeed ? 15_000 : 350);
+    schedule(350);
     const refreshWhenActive = () => {
       if (!isCurrentPreview() || running || !isVisibleAndOnline()) return;
+      if (previewPreparedAtRef.current === null || Date.now() - previewPreparedAtRef.current >= PREVIEW_FRESHNESS_MS) setPreviewIsStale(true);
       if (timer !== undefined) window.clearTimeout(timer);
       timer = undefined;
       void load();
@@ -567,7 +663,25 @@ export function ActionReview({
       window.removeEventListener('online', refreshWhenActive);
       if (previewGenerationRef.current === previewGeneration) previewGenerationRef.current += 1;
     };
-  }, [disabled, planBuilder, prefetchedPlan, previewRetry, stage, wallet.address, wallet.authenticated, wallet.chainId, wallet.connectionVersion, wallet.ready]);
+  }, [disabled, previewIntentKey, previewRetry, stage, wallet.address, wallet.authenticated, wallet.chainId, wallet.connectionVersion, wallet.ready]);
+
+  useEffect(() => {
+    if ((stage !== 'input' && stage !== 'review') || previewPreparedAt === null) return undefined;
+    const remaining = Math.max(0, PREVIEW_FRESHNESS_MS - (Date.now() - previewPreparedAt));
+    const timer = window.setTimeout(() => {
+      setPreviewIsStale(true);
+      if (stage === 'review') {
+        setError('This review expired. Refreshing the quote before continuing.');
+        setRoutes([]);
+        setSelectedRoute(0);
+        setReviewContext(null);
+        setReviewTitle(null);
+        setStatus('planning');
+        setStage('input');
+      }
+    }, remaining);
+    return () => window.clearTimeout(timer);
+  }, [previewPreparedAt, stage]);
 
   useEffect(() => {
     previewRouteRef.current = previewRoutes[selectedRoute] ?? previewRoutes[0] ?? null;
@@ -578,30 +692,6 @@ export function ActionReview({
       headingRef.current?.focus({ preventScroll: true });
     }
   }, [stage]);
-
-  // Keep only a local resume hint for the exact wallet/chain/action/path. The
-  // route itself is never persisted; confirm-time planning and simulation are
-  // still mandatory before the wallet prompt.
-  useEffect(() => {
-    if (stage !== 'review' || !route || !wallet.authenticated || !wallet.address) return;
-    const resumePath = draftResumePath ?? `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    try {
-      const draft = saveSignatureRequiredDraft({
-        walletAddress: route.walletAddress,
-        chainId: route.chainId,
-        operation: route.operation,
-        actionKey: draftActionKey ?? signatureDraftActionKey(route),
-        resumePath,
-        formState: draftState,
-      });
-      signatureDraftIdRef.current = draft.id;
-    } catch {
-      // A local storage/draft schema problem must not crash an otherwise
-      // simulated review. The route remains fresh and signing-safe; only the
-      // optional reload hint is unavailable.
-      signatureDraftIdRef.current = null;
-    }
-  }, [draftActionKey, draftResumePath, draftState, route, stage, wallet.address, wallet.authenticated]);
 
   const reset = useCallback(() => {
     if (busyRef.current) return;
@@ -621,11 +711,8 @@ export function ActionReview({
     executionStepsRef.current = [];
     setRefreshing(false);
     setReviewTitle(null);
-    setReviewNotice(null);
     setReviewContext(null);
     setResumeAfterConnect(false);
-    refreshedRouteRef.current = null;
-    previewSeedRef.current = null;
     setStatus('planning');
     setStatusDetail('');
     window.requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
@@ -656,10 +743,7 @@ export function ActionReview({
     setStepResults([]);
     setExecutionRoute(null);
     setReviewTitle(null);
-    setReviewNotice(null);
     setReviewContext(null);
-    refreshedRouteRef.current = null;
-    previewSeedRef.current = null;
     setResumeAfterConnect(false);
     setStatus('planning');
     setStatusDetail('');
@@ -752,8 +836,6 @@ export function ActionReview({
       setStepResults([]);
       executionStepsRef.current = [];
       setExecutionRoute(null);
-      setReviewNotice(null);
-      refreshedRouteRef.current = null;
       // Snapshot the human-readable action with the calldata. Inputs remain
       // visible above the review card, but later form edits must never rename
       // an already reviewed route.
@@ -761,6 +843,10 @@ export function ActionReview({
       setReviewContext({ walletAddress, chainId: wallet.chainId, connectionVersion: wallet.connectionVersion });
       setStatus('reviewing');
       setStatusDetail('Route ready.');
+      const preparedAt = Date.now();
+      previewPreparedAtRef.current = preparedAt;
+      setPreviewPreparedAt(preparedAt);
+      setPreviewIsStale(false);
       setStage('review');
       haptic('selection');
     } catch (cause) {
@@ -798,9 +884,33 @@ export function ActionReview({
     const startingRoute = inputRoute ?? route;
     const directFromInput = stage === 'input' && Boolean(inputRoute);
     if (!startingRoute || loading || busyRef.current || (!directFromInput && stage !== 'review') || (!directFromInput && status === 'failed') || stepResults.some(hasTransactionHash)) return;
+    const executionWalletAddress = startingRoute.walletAddress.toLowerCase();
+    const previewOwner = previewOwnerRef.current;
+    const previewSessionMatches = previewOwner?.intentKey === previewIntentKey
+      && previewOwner.walletAddress?.toLowerCase() === executionWalletAddress
+      && previewOwner.chainId === wallet.chainId
+      && previewOwner.connectionVersion === wallet.connectionVersion;
+    if ((directFromInput && !previewSessionMatches)
+      || !previewPreparedAtRef.current
+      || Date.now() - previewPreparedAtRef.current >= PREVIEW_FRESHNESS_MS) {
+      setPreviewIsStale(true);
+      setError(directFromInput
+        ? previewSessionMatches ? 'This quote expired. Refreshing it before continuing.' : 'Action details changed. Updating the quote before continuing.'
+        : 'This review expired. Refreshing the quote before continuing.');
+      if (!directFromInput) {
+        setRoutes([]);
+        setSelectedRoute(0);
+        setReviewContext(null);
+        setReviewTitle(null);
+        setStatus('planning');
+        setStage('input');
+      } else {
+        setPreviewRetry((value) => value + 1);
+      }
+      return;
+    }
     const generation = generationRef.current + 1;
     generationRef.current = generation;
-    const executionWalletAddress = startingRoute.walletAddress.toLowerCase();
     const executionConnectionVersion = wallet.connectionVersion;
     const isCurrentExecution = () => {
       if (!isCurrentGeneration(generation)) return false;
@@ -812,94 +922,25 @@ export function ActionReview({
     busyRef.current = true;
     setLoading(true);
     setError(null);
-    // Bind direct execution to the wallet session immediately, before the
-    // confirm-time rebuild. Deliberate network switching remains valid during
-    // execution, while account/reconnect changes invalidate this context.
+    // Bind the displayed route to this wallet session before simulation.
+    // Deliberate network switching remains valid during execution, while
+    // account/reconnect changes invalidate this context.
     setReviewContext({ walletAddress: executionWalletAddress, connectionVersion: executionConnectionVersion });
-    if (!signatureDraftIdRef.current) {
-      try {
-        const draft = saveSignatureRequiredDraft({
-          walletAddress: startingRoute.walletAddress,
-          chainId: startingRoute.chainId,
-          operation: startingRoute.operation,
-          actionKey: draftActionKey ?? signatureDraftActionKey(startingRoute),
-          resumePath: draftResumePath ?? `${window.location.pathname}${window.location.search}${window.location.hash}`,
-          formState: draftState,
-        });
-        signatureDraftIdRef.current = draft.id;
-      } catch {
-        signatureDraftIdRef.current = null;
-      }
-    }
     setStage('executing');
-    // Keep the signed route visible while the confirm-time rebuild is pending;
-    // a deferred planner must never blank the action card.
+    // Keep the displayed route visible while the runner performs its final
+    // policy validation and simulation immediately before each wallet request.
     setExecutionRoute(startingRoute);
     setStatus('planning');
-    setStatusDetail('Refreshing the selected route before signing.');
+    setStatusDetail('Checking the displayed quote before signing.');
     setStepResults([]);
     executionStepsRef.current = [];
     setRefreshing(false);
     // Scope refreshes to the captured review, never the currently selected wallet.
     const refreshWallet = createRouteWalletRefresh(invalidateWalletData);
-    let currentRoute = startingRoute;
+    const currentRoute = startingRoute;
     let postConfirmReadStarted = false;
     try {
-      const recentRefresh = refreshedRouteRef.current;
-      const canReuseRecentRefresh = recentRefresh
-        && Date.now() - recentRefresh.at <= REFRESHED_ROUTE_REUSE_MS
-        && routesMatchForSigning(startingRoute, recentRefresh.route);
-
-      if (!canReuseRecentRefresh) {
-        if (!planBuilder) throw new Error('The transaction inputs are no longer available. Check them again.');
-        const rebuilt = asRoutes(await planBuilder());
-        if (!isCurrentExecution()) throw new Error('The selected wallet changed while refreshing the route.');
-        const liveWallet = liveWalletRef.current;
-        if (!liveWallet.authenticated || liveWallet.address?.toLowerCase() !== startingRoute.walletAddress.toLowerCase()) {
-          throw new Error('The selected wallet changed while refreshing the route.');
-        }
-        currentRoute = selectRefreshedRoute(startingRoute, rebuilt, selectedRoute);
-        if (currentRoute.walletAddress.toLowerCase() !== startingRoute.walletAddress.toLowerCase()) {
-          throw new Error('The selected wallet changed while refreshing the route.');
-        }
-        if (currentRoute.chainId !== startingRoute.chainId || currentRoute.operation !== startingRoute.operation) {
-          throw new Error('The refreshed transaction changed network or operation. Check it again.');
-        }
-
-        if (!routesMatchForSigning(startingRoute, currentRoute)) {
-          setStatus('reviewing');
-          setStatusDetail('Checking the refreshed transaction against current chain state.');
-          const { viable, failures } = await prepareRoutesForReview([currentRoute], startingRoute.walletAddress);
-          if (!isCurrentExecution()) throw new Error('The selected wallet changed while checking the refreshed route.');
-          if (!viable.length) {
-            throw new Error(`The refreshed transaction could not be simulated: ${failures.join('; ')}`);
-          }
-          const refreshedRoute = viable[0];
-          refreshedRouteRef.current = { route: refreshedRoute, at: Date.now() };
-          previewSeedRef.current = {
-            route: refreshedRoute,
-            walletAddress: startingRoute.walletAddress.toLowerCase(),
-            chainId: startingRoute.chainId,
-            connectionVersion: executionConnectionVersion,
-          };
-          setPreviewRoutes([refreshedRoute]);
-          previewRouteRef.current = refreshedRoute;
-          setRoutes([]);
-          setSelectedRoute(0);
-          setExecutionRoute(null);
-          setReviewNotice('Details changed. Check the updated action before continuing.');
-          setStatus('planning');
-          setStatusDetail('');
-          setError(null);
-          setStage('input');
-          return;
-        }
-      }
-
-      setReviewNotice(null);
       setExecutionRoute(currentRoute);
-      setStatus('awaiting-user');
-      setStatusDetail('Each transaction opens in your wallet separately.');
       const execution = await runTransactionRoute({
         route: currentRoute,
         callbacks: {
@@ -920,6 +961,25 @@ export function ActionReview({
               || liveWallet.address?.toLowerCase() !== request.from.toLowerCase()
               || liveWallet.connectionVersion !== executionConnectionVersion) {
               throw new Error('The selected wallet changed before signing.');
+            }
+            setStatus('awaiting-user');
+            setStatusDetail('Review this transaction in your wallet.');
+            // Persist the unsigned resume hint only after the runner's final
+            // validation/simulation has reached the wallet request boundary.
+            if (!signatureDraftIdRef.current) {
+              try {
+                const draft = saveSignatureRequiredDraft({
+                  walletAddress: startingRoute.walletAddress,
+                  chainId: startingRoute.chainId,
+                  operation: startingRoute.operation,
+                  actionKey: draftActionKey ?? signatureDraftActionKey(startingRoute),
+                  resumePath: draftResumePath ?? `${window.location.pathname}${window.location.search}${window.location.hash}`,
+                  formState: draftState,
+                });
+                signatureDraftIdRef.current = draft.id;
+              } catch {
+                signatureDraftIdRef.current = null;
+              }
             }
             const signed = await wallet.sendTransaction({
               chainId: request.chainId,
@@ -1020,12 +1080,6 @@ export function ActionReview({
         }
         setError(message);
         if (directFromInput) {
-          previewSeedRef.current = {
-            route: startingRoute,
-            walletAddress: executionWalletAddress,
-            chainId: startingRoute.chainId,
-            connectionVersion: executionConnectionVersion,
-          };
           setPreviewRoutes([startingRoute]);
           previewRouteRef.current = startingRoute;
           setExecutionRoute(null);
@@ -1047,7 +1101,7 @@ export function ActionReview({
         setLoading(false);
       }
     }
-  }, [draftActionKey, draftResumePath, draftState, invalidateWalletData, isCurrentGeneration, loading, onComplete, planBuilder, reviewTitle, route, selectedRoute, stage, status, stepResults, wallet]);
+  }, [draftActionKey, draftResumePath, draftState, invalidateWalletData, isCurrentGeneration, loading, onComplete, previewIntentKey, reviewTitle, route, stage, status, stepResults, wallet]);
 
   // A connect click leaves the editor and its read-only preview in place. It
   // never opens the legacy review surface or requests a signature; the user
@@ -1079,20 +1133,18 @@ export function ActionReview({
           selectedRoute={selectedRoute}
           onSelect={(index) => {
             setSelectedRoute(index);
-            setReviewNotice(null);
           }}
           decisionBefore={decisionBefore}
           gasCost={gasCost}
           executionCost={executionCost}
-          updating={previewLoading || gasCost.status === 'refreshing'}
+          updating={previewUpdating}
         />}
         {previewError && (
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-[rgba(255,194,102,.24)] bg-[var(--warn-dim)] px-3 py-2 text-[12px]">
-            <span className="text-warn">{previewError}</span>
-            <Button variant="outline" className="shrink-0 px-2.5 py-1.5 text-[11px]" onClick={() => setPreviewRetry((value) => value + 1)} disabled={previewLoading}>Try again</Button>
+          <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-[rgba(255,194,102,.24)] bg-[var(--warn-dim)] px-3 py-2 text-[12px]">
+            <span className="min-w-0 break-words text-warn">{previewError}</span>
+            <Button variant="outline" className="w-full px-2.5 py-1.5 text-[11px] sm:w-auto sm:self-start" onClick={() => setPreviewRetry((value) => value + 1)} disabled={previewLoading}>Try again</Button>
           </div>
         )}
-        {reviewNotice && <p role="status" className="rounded-xl border border-[rgba(255,194,102,.24)] bg-[var(--warn-dim)] px-3 py-2 text-[12px] font-semibold text-warn">{reviewNotice}</p>}
         {error && <InlineError message={error} />}
         {disconnected ? (
           <ConnectWalletButton
@@ -1107,7 +1159,7 @@ export function ActionReview({
             Connect wallet
           </ConnectWalletButton>
         ) : (
-          <Button ref={triggerRef} variant={destructive ? 'danger' : 'primary'} className={styles.primaryAction} disabled={!planBuilder || !previewRoute || previewLoading || disabled || !wallet.ready} loading={loading || previewLoading} onClick={() => void execute(previewRoute ?? undefined)}>
+          <Button ref={triggerRef} variant={destructive ? 'danger' : 'primary'} className={styles.primaryAction} disabled={!planBuilder || !previewRoute || previewLoading || previewIsStale || disabled || !wallet.ready} loading={loading || previewLoading} onClick={() => void execute(previewRoute ?? undefined)}>
             {previewAction ?? (previewLoading ? 'Updating quote' : actionButtonLabel(label, operationLabel))}
           </Button>
         )}
@@ -1202,6 +1254,7 @@ export function ActionReview({
   const stepCount = route.transactions.length;
   const approvalCount = route.transactions.filter((transaction) => transaction.kind === 'approval').length;
   const facts = routeFacts(route, gasCost, executionCost);
+  const reviewFacts = splitReviewFacts(facts);
   const gasEstimateStatus = gasCost.estimate?.status === 'partial'
     ? 'Partial route estimate'
     : gasCost.estimate?.status === 'unavailable'
@@ -1271,8 +1324,6 @@ export function ActionReview({
                 if (busyRef.current || stage !== 'review') return;
                 setSelectedRoute(index);
                 setStepResults([]);
-                setReviewNotice(null);
-                refreshedRouteRef.current = null;
               }}
               onKeyDown={(event) => {
                 const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
@@ -1286,8 +1337,6 @@ export function ActionReview({
                     : (index + (backwards ? -1 : 1) + routes.length) % routes.length;
                 setSelectedRoute(next);
                 setStepResults([]);
-                setReviewNotice(null);
-                refreshedRouteRef.current = null;
                 event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
               }}
               className={`flex min-h-12 items-center justify-between rounded-xl border px-3 text-left disabled:cursor-default ${selectedRoute === index ? 'border-[rgba(139,109,255,.55)] bg-[var(--mint-dim)]' : 'border-[var(--line)] bg-[rgba(255,255,255,.025)]'}`}
@@ -1303,16 +1352,17 @@ export function ActionReview({
       <div className={styles.reviewFacts}>
         <ReviewRow label="Network" value={chainName(route.chainId)} />
         <ReviewRow label="Wallet" value={compactAddress(route.walletAddress)} title={route.walletAddress} />
-        {facts.map((fact) => <ReviewRow key={`${fact.label}-${fact.value}`} label={fact.label} value={fact.value} title={fact.title} />)}
+        {reviewFacts.summary.map((fact) => <ReviewRow key={`${fact.label}-${fact.value}`} label={fact.label} value={fact.value} title={fact.title} />)}
         {approvals.length > 0 && <ReviewRow label="Approvals" value={approvals.join('; ')} />}
      </div>
 
       {wrongNetwork && <p role="status" className="mt-2 rounded-xl border border-[rgba(255,194,102,.24)] bg-[var(--warn-dim)] px-3 py-2 text-[11.5px] leading-relaxed text-warn">Wallet is on {chainName(wallet.chainId!)}. Confirmation will switch to {chainName(route.chainId)} before signing.</p>}
       {unsupportedNetwork && <p role="status" className="mt-2 rounded-xl border border-[rgba(255,194,102,.24)] bg-[var(--warn-dim)] px-3 py-2 text-[11.5px] leading-relaxed text-warn">Wallet network is unavailable or unsupported. Confirmation will request {chainName(route.chainId)} before signing.</p>}
 
-      <DecisionContext route={route} facts={facts} beforeFacts={decisionBefore} />
+      <DecisionContext beforeFacts={decisionBefore} />
 
-     <AdvancedReviewDetails route={route} />
+      <QuoteFactDetails facts={facts} />
+      <AdvancedReviewDetails route={route} />
 
       <details className="group mt-3 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.02)] px-3" open={stage === 'executing' || showExecutionProgress}>
         <summary id="transaction-steps-heading" className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-[12px] font-semibold text-mut">
@@ -1338,7 +1388,7 @@ export function ActionReview({
               {approval && <ReviewRow label="Approval spender" value={approval.spender} />}
               {approval && <ReviewRow label={approval.valueLabel} value={approval.value.toString()} />}
               <p className="mt-1 font-mono text-[10px] text-mut">Selector: {transaction.data.slice(0, 10)}</p>
-              <p className="mt-1 break-all font-mono text-[9px] leading-relaxed text-[var(--mut-2)]">{transaction.data}</p>
+              <CalldataDisclosure data={transaction.data} />
             </div>
           </div>
           );
@@ -1346,8 +1396,7 @@ export function ActionReview({
         </section>
       </details>
 
-      {!showExecutionProgress && <div className="mt-4"><StatusNotice {...progress} /></div>}
-      {reviewNotice && <p role="status" className="mt-3 rounded-xl border border-[rgba(255,194,102,.24)] bg-[var(--warn-dim)] px-3 py-2 text-[12px] font-semibold text-warn">{reviewNotice}</p>}
+      {!showExecutionProgress && !(stage === 'review' && status === 'reviewing') && <div className="mt-4"><StatusNotice {...progress} /></div>}
       {error && <div className="mt-3"><InlineError message={error} /></div>}
       {stage === 'review' && (
         <div className={styles.reviewInlineActions}>
@@ -1386,12 +1435,13 @@ function InlinePreviewSummary({
 }) {
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const facts = routeFacts(route, gasCost, executionCost);
+  const reviewFacts = splitReviewFacts(facts);
   const approvals = route.transactions
     .map((transaction) => {
       const approval = approvalFacts(transaction);
       if (!approval) return null;
-      const token = tokenForAddress(transaction.to)?.key ?? 'token';
-      return `${token} ${approval.valueLabel === 'Position NFT ID' ? `#${approval.value.toString()}` : formatTokenAmount(approval.value, transaction.to)} → ${compactAddress(approval.spender)}`;
+      const amount = approval.valueLabel === 'Position NFT ID' ? `#${approval.value.toString()}` : formatTokenAmount(approval.value, transaction.to);
+      return `${amount} → ${compactAddress(approval.spender)}`;
     })
     .filter((value): value is string => Boolean(value));
   return (
@@ -1427,12 +1477,13 @@ function InlinePreviewSummary({
           })}
         </div>
       )}
-      <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-1 gap-x-5 gap-y-1.5 sm:grid-cols-2">
         <ReviewRow label="Network" value={chainName(route.chainId)} />
-        {facts.map((fact) => <ReviewRow key={`${fact.label}-${fact.value}`} label={fact.label} value={fact.value} title={fact.title} />)}
+        {reviewFacts.summary.map((fact) => <ReviewRow key={`${fact.label}-${fact.value}`} label={fact.label} value={fact.value} title={fact.title} />)}
         {approvals.length > 0 && <ReviewRow label="Approvals" value={approvals.join('; ')} />}
       </div>
-      <DecisionContext route={route} facts={facts} beforeFacts={decisionBefore} />
+      <DecisionContext beforeFacts={decisionBefore} />
+      <QuoteFactDetails facts={facts} />
       <AdvancedReviewDetails route={route} />
     </section>
   );
@@ -1448,12 +1499,12 @@ function AdvancedReviewDetails({ route }: { route: PlannedRoute }) {
   const rawQuoteFacts = rawQuoteReviewFacts(route);
   const hasDetails = Boolean(
     route.details?.requestedAmount
+      || route.transactions.length
       || rawQuoteFacts.length
       || route.details?.sdkSlippagePercent !== undefined
       || route.details?.economicLimits?.length
       || route.details?.conversionPaths?.length
       || route.policy?.reviewedAction?.expectedActionDataFingerprint
-      || route.transactions.length > 0
       || bridgeQuote,
   );
   if (!hasDetails) return null;
@@ -1471,19 +1522,24 @@ function AdvancedReviewDetails({ route }: { route: PlannedRoute }) {
         {route.details?.economicLimits?.map((limit, index) => <ReviewRow key={`limit-${index}`} label={limit.label} value={`${limit.value} raw units`} />)}
         {route.details?.conversionPaths?.map((path, index) => <ReviewRow key={`path-${index}`} label={`${path.label} fingerprint`} value={path.fingerprint} />)}
         {route.policy?.reviewedAction?.expectedActionDataFingerprint && <ReviewRow label="Action fingerprint" value={route.policy.reviewedAction.expectedActionDataFingerprint} />}
-        {route.transactions.map((transaction, index) => {
-          const approval = approvalFacts(transaction);
-          return (
-            <div key={`transaction-${index}`} className="border-t border-[var(--line)] pt-2 first:border-t-0 first:pt-0">
-              <p className="mb-1 text-[11px] font-semibold text-[var(--text)]">{stepTitle(transaction)} {index + 1}</p>
-              <ReviewRow label="Contract" value={transaction.to} />
-              {approval && <ReviewRow label="Approval spender" value={approval.spender} />}
-              {approval && <ReviewRow label={approval.valueLabel} value={approval.value.toString()} />}
-              <ReviewRow label="Selector" value={transaction.data.slice(0, 10)} />
-              <ReviewRow label="Calldata" value={transaction.data} />
-            </div>
-          );
-        })}
+        {route.transactions.length > 0 && (
+          <div className="flex flex-col gap-2 border-t border-[var(--line)] pt-3" aria-label="Prepared transactions">
+            <p className="text-[11px] font-semibold text-mut">Prepared transactions</p>
+            {route.transactions.map((transaction, index) => {
+              const approval = approvalFacts(transaction);
+              return (
+                <div key={`${transaction.to}-${index}`} className="flex flex-col gap-1.5 rounded-lg border border-[var(--line)] bg-[rgba(255,255,255,.02)] p-2.5">
+                  <p className="text-[11px] font-semibold">{stepTitle(transaction)} {index + 1}</p>
+                  <ReviewRow label="Contract" value={transaction.to} />
+                  <ReviewRow label="Transaction value (wei)" value={transaction.value.toString()} />
+                  {approval && <ReviewRow label="Approval spender" value={approval.spender} />}
+                  {approval && <ReviewRow label={approval.valueLabel} value={approval.value.toString()} />}
+                  <CalldataDisclosure data={transaction.data} />
+                </div>
+              );
+            })}
+          </div>
+        )}
         {bridgeQuote && (
           <>
             {bridgeQuote.sourceOftAddress && <ReviewRow label="Source OFT" value={bridgeQuote.sourceOftAddress} />}
@@ -1537,23 +1593,22 @@ type BridgeReviewQuote = {
 function isBridgeQuote(value: unknown): value is BridgeReviewQuote {
   return Boolean(value && typeof value === 'object' && 'nativeFee' in value && typeof (value as { nativeFee?: unknown }).nativeFee === 'bigint');
 }
-function DecisionContext({ route, facts, beforeFacts }: { route: PlannedRoute; facts: ReviewFact[]; beforeFacts?: ReviewFact[] }) {
-  const intent = route.policy?.reviewedAction;
-  const source = intent && 'positionId' in intent
-    ? (intent.positionId === 0 ? 'New position' : `Position #${intent.positionId}`)
-    : null;
-  const outcome = intent?.kind === 'position-reduce' && intent.isClosePosition
-    ? 'Close position'
-    : intent?.kind === 'position-reduce'
-      ? 'Reduce position'
-      : intent?.kind === 'position-increase'
-        ? 'Open or increase position'
-        : intent?.kind === 'deposit-and-mint'
-          ? 'Change collateral and fxUSD debt'
-          : intent?.kind === 'repay-and-withdraw'
-            ? 'Repay debt and withdraw collateral'
-            : null;
-  const hasResultFacts = facts.some((fact) => /^Estimated|^Minimum|^Execution/.test(fact.label));
-  const afterFacts = facts.filter((fact) => /^Estimated/.test(fact.label));
-  return <details aria-label="What changes" className="group mt-4 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-3"><summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-[12px] font-semibold"><span>What changes</span><span className="text-[11px] font-normal text-[var(--mut-2)] group-open:hidden">Verified state and outcome</span></summary><div className="border-t border-[var(--line)] py-3">{source && <p className="text-[11px] leading-relaxed text-mut"><strong className="text-[var(--text)]">Source:</strong> {source}</p>}{beforeFacts && beforeFacts.length > 0 && <div className="mt-2 grid gap-1">{beforeFacts.map((fact) => <ReviewRow key={`before-${fact.label}`} label={fact.label} value={fact.value} title={fact.title} />)}</div>}{outcome && <p className="mt-2 text-[11px] leading-relaxed text-mut"><strong className="text-[var(--text)]">Outcome:</strong> {outcome}</p>}{afterFacts.length > 0 && <div className="mt-2 grid gap-1">{afterFacts.map((fact) => <ReviewRow key={`after-${fact.label}`} label={fact.label.replace(/^Estimated\s*/, '')} value={fact.value} title={fact.title} />)}</div>}{!hasResultFacts && <p className="mt-2 text-[11px] leading-relaxed text-warn">No verified collateral, debt, or execution estimate was returned. No risk metric is inferred.</p>}</div></details>;
+function QuoteFactDetails({ facts }: { facts: ReviewFact[] }) {
+  if (!facts.length) return null;
+  return <details className="group mt-2 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.02)] px-3">
+    <summary className="flex min-h-10 cursor-pointer items-center justify-between gap-3 text-[11px] font-semibold text-mut">
+      <span>Quote details</span><span className="text-[10px] font-normal text-[var(--mut-2)] group-open:hidden">Exact values and route</span>
+    </summary>
+    <div className="flex flex-col gap-1 border-t border-[var(--line)] py-2">
+      {facts.map((fact) => <ReviewRow key={`${fact.label}-${fact.value}`} label={fact.label} value={fact.title ?? fact.value} title={fact.title ?? fact.value} />)}
+    </div>
+  </details>;
+}
+
+function DecisionContext({ beforeFacts }: { beforeFacts?: ReviewFact[] }) {
+  if (!beforeFacts?.length) return null;
+  return <details aria-label="Current position" className="group mt-2 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-3">
+    <summary className="flex min-h-10 cursor-pointer items-center justify-between gap-3 text-[11px] font-semibold text-mut"><span>Current position</span><span className="text-[10px] font-normal text-[var(--mut-2)] group-open:hidden">Verified values</span></summary>
+    <div className="grid gap-1 border-t border-[var(--line)] py-2">{beforeFacts.map((fact) => <ReviewRow key={`before-${fact.label}`} label={fact.label} value={fact.value} title={fact.title} />)}</div>
+  </details>;
 }

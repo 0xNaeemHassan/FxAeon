@@ -376,7 +376,7 @@ async function runProof(captureStage: string) {
           return {
             heading: card.querySelector('p')?.textContent?.trim() ?? '',
             contract: rows.Contract ?? '',
-            calldata: rows.Calldata ?? '',
+            calldata: card.querySelector('pre[aria-label="Transaction calldata"]')?.textContent?.trim() ?? '',
           };
         });
       });
@@ -963,7 +963,7 @@ async function runProof(captureStage: string) {
         }
       }
       await page.getByRole('button', { name: 'Open wallet profile' }).click();
-      const drawer = page.getByRole('dialog', { name: 'Wallet profile', exact: true });
+      const drawer = page.getByRole('dialog', { name: `Wallet ${wallet}`, exact: true });
       await expect(drawer).toBeVisible();
       await expect(drawer.locator('[data-position-key]')).toHaveCount(2);
       for (const position of positions.filter(p => p.market === 'ETH')) {

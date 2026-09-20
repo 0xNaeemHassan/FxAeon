@@ -88,8 +88,9 @@ export default function SettingsPage() {
           <h2 id="settings-slippage-title" className={styles.sectionLabel}>
             <span className="flex items-center gap-1.5"><Sliders className="h-3.5 w-3.5" aria-hidden="true" /> {t('settings.maxSlippage')}</span>
           </h2>
-          <div className={`${styles.utilityCard} p-4`}>
-            <p id="settings-slippage-help" className="text-[13px] leading-relaxed text-mut">Set the maximum output change you&apos;ll accept when a trade executes.</p>
+          <div className={`${styles.utilityCard} ${styles.slippagePanel} p-4`}>
+            <p id="settings-slippage-help" className="text-[13px] leading-relaxed text-mut">Slippage sets how far the output may move from the quote before an action stops.</p>
+            <p className={styles.settingsScopeNote}>Used for Trade, Positions, and eligible fxSAVE actions.</p>
             <ChoiceGrid
               ariaLabel={t('settings.maxSlippage')}
               ariaDescribedBy="settings-slippage-help"

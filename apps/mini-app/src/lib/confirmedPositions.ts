@@ -12,8 +12,10 @@ import type { UiPosition } from '../app/trade/fxUi';
 import { assertPublicClientChain, getEthereumClient } from './fx/clients';
 import { capabilityPolicy, positionPoolAddress } from './fx/policy';
 import { getFxReadFacade } from './fx/readFacade';
+import { withReadDeadline } from './fx/readFacade';
 import type { FxPublicClient, FxSdkFacade, PlannedRoute, PlannedTransaction, TransactionExecutionResult } from './fx/types';
 import { validateRoute } from './fx/validation';
+import { readCanonicalPositionInfo } from '../app/trade/canonicalPositionReader';
 
 /** AFPool's ERC-721 event in the pinned fx-sdk@1.0.5 ABI. Not an ERC-20 transfer. */
 export const POSITION_TRANSFER_EVENT = {
@@ -291,12 +293,37 @@ export async function readConfirmedPosition(
   const parsed = parseConfirmedPositionHint(hint, walletAddress);
   if (!parsed || !await verifyConfirmedPositionHint(parsed, walletAddress, dependencies)) return null;
   const sdk = dependencies.sdk ?? getFxReadFacade();
-  const positions = await sdk.getPositions({ userAddress: parsed.walletAddress, market: parsed.market, type: parsed.side });
-  if (!Array.isArray(positions)) return null;
+  let positions: PositionInfo[] = [];
+  try {
+    // Keep a lagging indexer from holding the receipt-bound UI hostage. The
+    // canonical pool reader below is authoritative for a freshly minted NFT.
+    const indexed = await withReadDeadline(sdk.getPositions({
+      userAddress: parsed.walletAddress,
+      market: parsed.market,
+      type: parsed.side,
+    }), 3_000);
+    if (Array.isArray(indexed)) positions = indexed;
+  } catch {
+    // Direct canonical hydration is the deliberate fast path while indexing catches up.
+  }
   const matches = positions.filter((info) => info && info.positionId === parsed.positionId);
-  if (matches.length !== 1 || !validPositionInfo(matches[0], parsed)) return null;
-  // Indexer/network reads may be slow; do not hydrate an NFT transferred or a
-  // receipt reorged while the SDK response was in flight.
-  if (!await verifyConfirmedPositionHint(parsed, walletAddress, dependencies)) return null;
-  return { market: parsed.market, side: parsed.side, info: matches[0] };
+  if (matches.length === 1 && validPositionInfo(matches[0], parsed)) {
+    // Indexer/network reads may be slow; do not hydrate an NFT transferred or a
+    // receipt reorged while the SDK response was in flight.
+    if (!await verifyConfirmedPositionHint(parsed, walletAddress, dependencies)) return null;
+    return { market: parsed.market, side: parsed.side, info: matches[0] };
+  }
+
+  try {
+    const client = dependencies.client ?? getEthereumClient();
+    const info = await withReadDeadline(readCanonicalPositionInfo({
+      client,
+      group: { market: parsed.market, side: parsed.side },
+      positionId: parsed.positionId,
+    }), 20_000);
+    if (!validPositionInfo(info, parsed) || !await verifyConfirmedPositionHint(parsed, walletAddress, { client })) return null;
+    return { market: parsed.market, side: parsed.side, info };
+  } catch {
+    return null;
+  }
 }
