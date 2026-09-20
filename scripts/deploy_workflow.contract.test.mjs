@@ -65,10 +65,14 @@ test('native deployment remains SHA-gated and Pages credentials are limited to s
   assert.match(wait, /CLOUDFLARE_PAGES_PROJECT:\s*fxaeon/);
 
   const secretSync = step('Sync production Pages gas-oracle secret');
+  assert.match(secretSync, /id: gas_secret/);
   assert.match(secretSync, /CLOUDFLARE_ACCOUNT_ID:\s*\$\{\{\s*secrets\.CLOUDFLARE_ACCOUNT_ID\s*\}\}/);
   assert.match(secretSync, /CLOUDFLARE_API_TOKEN:\s*\$\{\{\s*secrets\.CLOUDFLARE_API_TOKEN\s*\}\}/);
   assert.match(secretSync, /ETHERSCAN_API_KEY:\s*\$\{\{\s*secrets\.ETHERSCAN_API_KEY\s*\}\}/);
   assert.match(secretSync, /printf '%s' "\$ETHERSCAN_API_KEY" \| pnpm exec wrangler pages secret put ETHERSCAN_API_KEY --project-name=fxaeon --env=production/);
+  assert.match(secretSync, /configured=false/);
+  assert.match(secretSync, /configured=true/);
+  assert.match(secretSync, /RPC gas estimate fallback/);
   assert.doesNotMatch(secretSync, /wrangler pages secret put[^\n]*\$\{\{/);
   assert.match(secretSync, /WRANGLER_SEND_METRICS:\s*['"]?false/);
 
@@ -76,7 +80,7 @@ test('native deployment remains SHA-gated and Pages credentials are limited to s
   assert.match(gasCheck, /run: node scripts\/check_live_gas_oracle\.mjs/);
   assert.match(gasCheck, /LIVE_GAS_ORACLE_URL:\s*https:\/\/fxaeon\.com\/api\/gas/);
   const gasRedeploy = step('Redeploy verified artifact after syncing the Pages secret');
-  assert.match(gasRedeploy, /if: steps\.gas_oracle\.outputs\.configured == 'false'/);
+  assert.match(gasRedeploy, /if: steps\.gas_secret\.outputs\.configured == 'true' && steps\.gas_oracle\.outputs\.configured == 'false'/);
   assert.match(gasRedeploy, /wrangler pages deploy apps\/mini-app\/dist --project-name=fxaeon --branch=main --commit-hash=/);
   assert.match(gasRedeploy, /CLOUDFLARE_API_TOKEN:\s*\$\{\{\s*secrets\.CLOUDFLARE_API_TOKEN\s*\}\}/);
   assert.match(gasRedeploy, /CLOUDFLARE_ACCOUNT_ID:\s*\$\{\{\s*secrets\.CLOUDFLARE_ACCOUNT_ID\s*\}\}/);
@@ -87,6 +91,9 @@ test('native deployment remains SHA-gated and Pages credentials are limited to s
   assert.match(pagesConfig, /^pages_build_output_dir = "apps\/mini-app\/dist"$/m);
   assert.match(gasFunction, /export const onRequestGet/);
   assert.match(gasFunction, /env\?\.ETHERSCAN_API_KEY/);
+  const gasVerify = step('Verify live gas oracle');
+  assert.match(gasVerify, /if: steps\.gas_secret\.outputs\.configured == 'true'/);
+  assert.match(gasVerify, /--require-configured/);
   assert.doesNotMatch(productionEnvValidator, /CLOUDFLARE_(?:API_TOKEN|ACCOUNT_ID)/);
 });
 
