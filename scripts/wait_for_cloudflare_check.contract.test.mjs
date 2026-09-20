@@ -10,6 +10,7 @@ const nativeDetails = 'https://dash.cloudflare.com/?to=/ACCOUNT/pages/view/fxaeo
 test('only the financial Pages project can satisfy the deployment gate', () => {
   assert.equal(isTargetCloudflareRun({ name: 'Cloudflare Pages', details_url: details }), true);
   assert.equal(isTargetCloudflareRun({ name: 'Cloudflare Pages', details_url: nativeDetails }), true);
+  assert.equal(isTargetCloudflareRun({ name: 'Cloudflare Pages: fxaeon', details_url: nativeDetails }), true);
   assert.equal(isTargetCloudflareRun({
     name: 'Cloudflare Pages',
     details_url: details.replace('/fxaeon/', '/fxaeon-landing/'),
@@ -24,7 +25,9 @@ test('only the financial Pages project can satisfy the deployment gate', () => {
   assert.equal(isTargetCloudflareRun({ name: 'Cloudflare Pages', details_url: 'https://dash.cloudflare.com/?to=https%3A%2F%2Fevil.example%2Fpages%2Fview%2Ffxaeon%2Fdep-1' }), false);
   assert.equal(isTargetCloudflareRun({ name: 'Cloudflare Pages', details_url: 'https://dash.cloudflare.com/?to=%2FACCOUNT%2Fpages%2Fview%2Ffxaeon%2FDEPLOYMENT' }), false);
   assert.equal(isTargetCloudflareRun({ name: 'Cloudflare Pages', details_url: 'https://dash.cloudflare.com/?to=/ACCOUNT/pages/view/fxaeon/DEPLOYMENT&next=https://evil.example' }), false);
-  assert.equal(isTargetCloudflareRun({ name: 'Cloudflare Pages: fxaeon', details_url: details }), false);
+  assert.equal(isTargetCloudflareRun({ name: 'Cloudflare Pages: fxaeon', details_url: details.replace('/fxaeon/', '/fxaeon-landing/') }), false);
+  assert.equal(isTargetCloudflareRun({ name: 'Cloudflare Pages: fxaeon-landing', details_url: nativeDetails.replace('/fxaeon/', '/fxaeon-landing/') }), false);
+  assert.equal(isTargetCloudflareRun({ name: 'Cloudflare Pages: fxaeon-other', details_url: nativeDetails }), false);
 });
 
 test('direct CLI execution fails clearly when required environment is absent', () => {
