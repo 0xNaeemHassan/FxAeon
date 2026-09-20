@@ -450,7 +450,7 @@ async function capture(page, file, route, prepare) {
     }
     // Publish the frame only after both DOM and Chromium offsets are checked.
     writeFileSync(path.join(output, file), buffer);
-    captures.push({ file, route, viewport: page.viewportSize(), renderedPositionKeys, scrollEvidence: { before, after }, sha256: createHash('sha256').update(buffer).digest('hex') });
+    captures.push({ file, route, viewport: page.viewportSize(), renderedPositionKeys, scrollEvidence: { before, after }, capturedAt: new Date().toISOString(), sha256: createHash('sha256').update(buffer).digest('hex') });
   } finally {
     await session.detach();
   }
@@ -484,6 +484,15 @@ async function waitForPopulatedPortfolio(page) {
 
 async function waitForPopulatedTrade(page) {
   await waitForPositionKeys(page, positionManifest.positions.filter((position) => position.market === 'ETH'));
+}
+
+async function captureInFreshContext({ file, route, viewport, theme, prepare }) {
+  const context = await createCaptureContext({ viewport, theme });
+  try {
+    await capture(await context.newPage(), file, route, prepare);
+  } finally {
+    await context.close();
+  }
 }
 
 async function main() {
@@ -522,37 +531,36 @@ async function main() {
     return;
   }
 
-  const desktopContext = await createCaptureContext({ viewport: { width: 1440, height: 900 }, theme: 'official' });
-  const desktopPage = await desktopContext.newPage();
-
-  await capture(desktopPage, 'fxaeon-web.png', '/');
-  await capture(desktopPage, 'fxaeon-trade.png', '/trade', async (current) => {
-    await current.getByLabel('Amount in ETH').fill('1.25');
+  const desktopViewport = { width: 1440, height: 900 };
+  const desktopScreens = [
+    { file: 'fxaeon-web.png', route: '/' },
+    { file: 'fxaeon-trade.png', route: '/trade', prepare: async (current) => {
+      await current.getByLabel('Amount in ETH').fill('1.25');
+    } },
+    { file: 'fxaeon-token-picker.png', route: '/trade', prepare: async (current) => {
+      await current.getByLabel('Amount in ETH').fill('1.25');
+      await current.getByLabel('Input asset').click();
+      const picker = current.getByRole('dialog', { name: 'Input asset' });
+      await picker.waitFor({ state: 'visible' });
+      await current.waitForFunction(() => [...document.querySelectorAll('[role="dialog"] img')].every((image) => image.complete && image.naturalWidth > 0), null, { timeout: 15_000 });
+    } },
+    { file: 'fxaeon-bridge.png', route: '/move' },
+    { file: 'fxaeon-login.png', route: '/login', prepare: waitForStandardLogin },
+    { file: 'fxaeon-portfolio.png', route: '/portfolio' },
+    { file: 'fxaeon-docs.png', route: '/docs' },
+  ];
+  for (const screen of desktopScreens) {
+    await captureInFreshContext({ ...screen, viewport: desktopViewport, theme: 'official' });
+  }
+  await captureInFreshContext({
+    file: 'fxaeon-trade-mobile.png', route: '/trade',
+    viewport: { width: 390, height: 844 }, theme: 'official',
+    prepare: async (current) => { await current.getByLabel('Amount in ETH').fill('1.25'); },
   });
-  await capture(desktopPage, 'fxaeon-token-picker.png', '/trade', async (current) => {
-    await current.getByLabel('Amount in ETH').fill('1.25');
-    await current.getByLabel('Input asset').click();
-    const picker = current.getByRole('dialog', { name: 'Input asset' });
-    await picker.waitFor({ state: 'visible' });
-    await current.waitForFunction(() => [...document.querySelectorAll('[role="dialog"] img')].every((image) => image.complete && image.naturalWidth > 0), null, { timeout: 15_000 });
+  await captureInFreshContext({
+    file: 'fxaeon-portfolio-mobile.png', route: '/portfolio',
+    viewport: { width: 390, height: 844 }, theme: 'light',
   });
-  await capture(desktopPage, 'fxaeon-bridge.png', '/move');
-  await capture(desktopPage, 'fxaeon-login.png', '/login', waitForStandardLogin);
-  await capture(desktopPage, 'fxaeon-portfolio.png', '/portfolio');
-  await capture(desktopPage, 'fxaeon-docs.png', '/docs');
-  await desktopContext.close();
-
-  const mobileTradeContext = await createCaptureContext({ viewport: { width: 390, height: 844 }, theme: 'official' });
-  const mobileTradePage = await mobileTradeContext.newPage();
-  await capture(mobileTradePage, 'fxaeon-trade-mobile.png', '/trade', async (current) => {
-    await current.getByLabel('Amount in ETH').fill('1.25');
-  });
-  await mobileTradeContext.close();
-
-  const mobilePortfolioContext = await createCaptureContext({ viewport: { width: 390, height: 844 }, theme: 'light' });
-  const mobilePortfolioPage = await mobilePortfolioContext.newPage();
-  await capture(mobilePortfolioPage, 'fxaeon-portfolio-mobile.png', '/portfolio');
-  await mobilePortfolioContext.close();
 
 }
 
@@ -569,6 +577,7 @@ try {
     externalRequestFailures,
     unclassifiedConsoleErrors: classifyConsoleErrors().unclassifiedErrors,
     devIndicator: 'nextjs-portal-hidden-after-zero-page-and-unclassified-console-errors',
+    routeIsolation: captureProfile === 'standard' ? 'fresh-page-and-browser-context-per-capture' : 'profile-default',
     positionDiscovery: positionManifest ? 'exact-four-sdk-owner-id-queries-only' : 'not-intercepted',
     positionFixtureExecutionSurface: positionManifest?.executionSurface ?? 'unspecified',
     observedDiscoveryGroups: [...interceptedGroups].sort(),

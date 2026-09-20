@@ -35,16 +35,16 @@ The owner has deferred the full legal policy and Terms until official support is
 - `node apps/landing/build.mjs` and `node --test apps/landing/test/static.test.mjs`
 - Local landing requests: home, robots, sitemap, document CSS and icon return 200; a missing path returns the custom 404; preview includes CSP.
 
-Final verification completed across the aggregate run and a separate browser
-rerun. `%TEMP%/fxaeon-final-release-verify-latest.log` records 380 source/unit
-checks (376 passed, four skipped), successful build/export, typecheck, bundle,
-secret scan, audit and landing checks (eight static plus 14 theme/viewport
-states). Its initial browser stage reached 108/109 and exited `1`. After
-test-only hardening of stale-preview test scheduling, the focused harness passed
-3/3 across two workers and the full built-browser suite passed 109/109 in 5.8
-minutes; see `%TEMP%/fxaeon-final-109-e2e-identity.log`. Final lint passed with
-zero warnings. Results span separate runs; no single aggregate exited `0`. The
-follow-up source secret scan covered 153 files with zero findings, and
+Final verification passed on PR `#193` head
+`064229b6fb6640f9d16087ab48da13e85b05f356`: all six CI checks passed, including
+Client CI's full `pnpm verify` with exit code `0` and built-browser E2E. After
+test-only hardening of stale-preview scheduling, the focused harness passed 3/3
+and the full browser suite passed 109/109 in 5.8 minutes; see
+`%TEMP%/fxaeon-final-109-e2e-identity.log`. Full and production dependency
+audits report zero known vulnerabilities. Two pre-existing high-severity
+development-dependency findings were resolved by updating `js-yaml` to 4.3.2
+and Miniflare's nested `sharp` to 0.35.4. Final lint passed with zero warnings.
+The follow-up source secret scan covered 153 files with zero findings, and
 launch/privacy/scanner tests passed 4/4. The final landing theme/motion
 iteration passed eight static tests and all 14 theme/width browser states,
 including the independent final composite contrast review.
@@ -52,6 +52,11 @@ Current landing captures are
 `artifacts/landing/landing-390.png`, `landing-1440.png`,
 `landing-light-390.png`, `landing-light-1440.png`, and the two
 `landing-hero-390-{dark,light}.png` crops.
+The nine standard app documentation screenshots were refreshed with live
+external display data and verified zero runtime, fallback, or discovery errors;
+their routes, viewports, and hashes are in
+[`standard-screenshot-manifest.json`](fixtures/standard-screenshot-manifest.json).
+They are rendered UI documentation, separate from the funded browser-fork proof.
 
 `artifacts/current-polish/full-report.json` records 180 app captures across 15
 routes, six viewport sizes, and disconnected/connected wallet states. There were

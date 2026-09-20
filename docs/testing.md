@@ -28,17 +28,18 @@ prices/charts, while position ownership and accounting come from the fork. The
 standalone `pnpm docs:screenshots:positions` command is a separate Node-runner
 capture path; it proves rendered fork state, not browser transaction execution.
 
-Final verification completed across the aggregate run and a separate browser
-rerun. `%TEMP%/fxaeon-final-release-verify-latest.log` records `380` source/unit
-checks (`376` passed, `4` skipped) and passing build/export, typecheck, bundle,
-frontend-secret scan, audit, and landing checks (eight static plus 14
-theme/viewport states). Its initial browser stage reached `108/109` and exited
-`1`. After test-only hardening of stale-preview test scheduling, the focused
-harness passed `3/3` across two workers and the complete built-artifact browser
-suite passed `109/109` in 5.8 minutes; see
-`%TEMP%/fxaeon-final-109-e2e-identity.log`. Final lint passed with zero
-warnings. These results span separate runs; no single aggregate command exited
-`0`.
+Final verification passed on PR `#193` head
+`064229b6fb6640f9d16087ab48da13e85b05f356`: all six CI checks passed, including
+Client CI's full `pnpm verify` with exit code `0` and built-artifact browser
+E2E. The earlier local aggregate counted `380` source/unit checks (`376` passed,
+`4` skipped); its initial browser attempt reached `108/109` and exited `1` on
+stale-preview test scheduling. After test-only scheduling hardening, the
+focused harness passed `3/3` across two workers and the complete browser suite
+passed `109/109` in 5.8 minutes; see
+`%TEMP%/fxaeon-final-109-e2e-identity.log`. Full and production dependency
+audits report zero known vulnerabilities. Two pre-existing high-severity
+development-dependency findings were resolved by updating `js-yaml` to `4.3.2`
+and Miniflare's nested `sharp` to `0.35.4`. Final lint passed with zero warnings.
 Native Privy and Telegram flows, device-specific wallet behavior, and bridge
 destination delivery remain unverified.
 
@@ -196,7 +197,7 @@ The browser suite deliberately keeps accessibility checks dependency-light: rout
 
 ## Documentation captures
 
-The standard capture command covers the Portfolio app home, compatibility Portfolio route, Trade workspace, token picker, Move, the standalone login setup screen, disconnected Portfolio, and 390 × 844 mobile Trade/Portfolio views. Normal wallet connection, account switching, and disconnect remain in-place app-shell flows; the login capture is a dedicated setup-state reference. Mobile Portfolio uses the light theme; the other standard views use the Official violet theme. Start the static export locally, then run `pnpm docs:screenshots` in another terminal. `FX_SCREENSHOT_BASE_URL` can select a different loopback HTTP origin; it defaults to `http://localhost:4321`.
+The standard capture command covers app home, Trade, token picker, Move, the standalone login setup screen, the compatibility Portfolio route, Docs, and 390 × 844 mobile Trade/Portfolio views. Normal wallet connection, account switching, and disconnect remain in-place app-shell flows; the login capture is a dedicated setup-state reference. Mobile Portfolio uses the light theme; the other standard views use the Official violet theme. Start the static export locally, then run `pnpm docs:screenshots` in another terminal. `FX_SCREENSHOT_BASE_URL` can select a different loopback HTTP origin; it defaults to `http://localhost:4321`.
 
 ```powershell
 pnpm build
@@ -207,14 +208,12 @@ pnpm docs:screenshots
 
 The capture helper waits for configured login readiness and visible candle
 pixels, reports app runtime errors separately from external quote failures, and
-excludes the development toolbar only after page assertions. The latest
-recapture did not complete or promote: it saved Web, Trade, token-picker, Bridge,
-and login views, then Portfolio's two-sparkline readiness timed out after 60
-seconds on a reused page. A fresh isolated page displayed both charts without
-runtime errors, but a separate diagnostic observed a CoinGecko fallback CORS
-failure, so there is no clean nine-view result. The existing standard images
-and manifest remain unchanged; the landing's connected-position aliases are
-separate browser-fork evidence.
+excludes the development toolbar only after page assertions. The nine promoted
+captures were completed on 20 September 2026, each in a fresh page and browser
+context, using live external display data. The standard manifest records zero
+page, console, external-fallback, unclassified-console, and discovery errors.
+The images document rendered UI states; no wallet transaction was submitted.
+The landing's connected-position aliases are separate browser-fork evidence.
 
 Display prices and CoinGecko history are unmodified external data by default. Unavailable providers produce the application's honest unavailable states. For deterministic design regression only, set `FX_SCREENSHOT_MARKET_DATA=fixture`; every resulting image is visibly labelled **Illustrative prices & charts**, and the capture report records that mode. Synthetic display data is never execution, oracle, PnL, or return evidence.
 

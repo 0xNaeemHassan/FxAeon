@@ -76,12 +76,13 @@ do not redraw the mark.
 
 The standard UI set is in [assets/](assets/) and listed in
 [standard-screenshot-manifest.json](fixtures/standard-screenshot-manifest.json).
-These captures predate the current domain split and polish pass, so they are
-reference artwork rather than current release evidence:
+The nine views were refreshed on 20 September 2026 with a fresh page and browser
+context per frame, using live external display data. The manifest records their
+routes, viewports, hashes, and zero page, console, fallback, or discovery errors.
+They document rendered UI states; no wallet transaction was submitted.
 
-- `fxaeon-web.png` — public landing, 1440 × 900
-- `fxaeon-trade.png`, `fxaeon-token-picker.png`, `fxaeon-bridge.png`, and `fxaeon-login.png` — desktop app states, 1440 × 900
-- `fxaeon-portfolio.png` and `fxaeon-docs.png` — desktop app states, 1440 × 900
+- `fxaeon-web.png` — app home (`/`), 1440 × 900
+- `fxaeon-trade.png`, `fxaeon-token-picker.png`, `fxaeon-bridge.png`, `fxaeon-login.png`, `fxaeon-portfolio.png`, and `fxaeon-docs.png` — desktop app states, 1440 × 900
 - `fxaeon-trade-mobile.png` and `fxaeon-portfolio-mobile.png` — mobile states, 390 × 844
 
 The four populated position images (`fxaeon-portfolio-positions.png`,
@@ -94,13 +95,10 @@ use the all-four-position browser capture (`fxaeon-positions.png` and
 `fxaeon-positions-mobile.png`). These images show fork state, not production
 balances or actual market-price evidence; the
 landing hero wash and card direction passed visual review after 14 theme/width
-states with unchanged contrast minima. The latest standard recapture stopped
-without promotion after saving five views (web, Trade, token picker, bridge,
-and login). Portfolio's two-sparkline readiness timed out after 60 seconds on a
-reused page, though a fresh isolated page displayed both charts without runtime
-errors. Existing standard images and their manifest remain unchanged and
-predate the current domain split. The landing's connected-position aliases are
-separate, current browser-fork captures.
+states with unchanged contrast minima. These standard UI captures are separate
+from the four populated position images above, which use browser-fork state,
+illustrative display prices/charts, and their own manifest. The landing's
+connected-position aliases point to those separate browser-fork captures.
 
 ## Theme system
 

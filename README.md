@@ -80,7 +80,7 @@
   </tr>
 </table>
 
-Standard UI captures document prior builds. The four populated position screenshots were refreshed from the successful browser gate at block `25965421`; their [manifest](docs/fixtures/position-screenshot-manifest.json) records the rendered states and visibly labelled illustrative prices/charts. They show fork-backed positions, not production balances or real market prices. See [capture provenance](docs/position-screenshot-fixture.md). [Mobile positions](docs/assets/fxaeon-positions-mobile.png) · [Connected Trade](docs/assets/fxaeon-trade-connected.png).
+The nine standard UI captures were refreshed on 20 September 2026 using live external display data; their [manifest](docs/fixtures/standard-screenshot-manifest.json) records routes, viewports, hashes, and zero page, console, fallback, or discovery errors. They document rendered app states and do not prove wallet transactions. The four populated position screenshots are separate browser-fork evidence from block `25965421`; their [manifest](docs/fixtures/position-screenshot-manifest.json) records fork-backed positions and visibly labelled illustrative prices/charts. They show fork state, not production balances or real market prices. See [capture provenance](docs/position-screenshot-fixture.md). [Mobile positions](docs/assets/fxaeon-positions-mobile.png) · [Connected Trade](docs/assets/fxaeon-trade-connected.png).
 
 ### Capabilities
 
@@ -232,15 +232,15 @@ screenshots use visibly labelled illustrative display data; the separate
 node-runner command is available for rendering fork state without browser
 transaction execution.
 
-Final verification completed across separate runs. The aggregate log
-`%TEMP%/fxaeon-final-release-verify-latest.log` records `380` source/unit checks
-(`376` passed, `4` skipped) and passing build/export, typecheck, bundle,
-frontend-secret scan, audit, and landing checks. Its first browser stage reached
-`108/109` and exited `1`; after test-only hardening of stale-preview scheduling,
-the focused harness passed `3/3` and the full built-browser suite passed
-`109/109` in 5.8 minutes (`%TEMP%/fxaeon-final-109-e2e-identity.log`). Final lint
-passed with zero warnings. These results span separate runs; no single aggregate
-invocation exited `0`.
+Final verification passed on PR `#193` head
+`064229b6fb6640f9d16087ab48da13e85b05f356`: all six CI checks passed, including
+Client CI's full `pnpm verify` with exit code `0` and built-browser E2E. Test-only
+hardening of stale-preview scheduling passed focused checks `3/3` and
+the full browser suite `109/109` in 5.8 minutes
+(`%TEMP%/fxaeon-final-109-e2e-identity.log`). Full and production dependency
+audits report zero known vulnerabilities. Two pre-existing high-severity
+development-dependency findings were resolved by updating `js-yaml` to `4.3.2`
+and Miniflare's nested `sharp` to `0.35.4`. Final lint passed with zero warnings.
 
 Separately, the all-suite protocol, Earn, and stress run passed `4/4` tests
 with no skips in `%TEMP%/fxaeon-final-all-fork.log`; the browser-fork proof

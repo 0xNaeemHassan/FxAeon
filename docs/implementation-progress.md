@@ -47,6 +47,16 @@ the fork snapshot. The run log is
 This proves the named funded fork lifecycle. It does not prove native Privy,
 Telegram, device-specific wallet behavior, or bridge destination delivery.
 
+### Standard UI documentation captures
+
+The nine standard screenshots in `docs/assets/` were refreshed on 20 September
+2026 at `2026-09-20T05:56:32Z`, using a fresh page and browser context for each
+view and live external display data. The manifest
+`docs/fixtures/standard-screenshot-manifest.json` records the routes, viewports,
+hashes, and zero page, console, fallback, or discovery errors. No wallet
+transaction was submitted. These screenshots document rendered UI states and
+are separate from the fork-backed position evidence below.
+
 ### Position documentation capture
 
 The promoted four-image capture is recorded in
@@ -55,13 +65,7 @@ The promoted four-image capture is recorded in
 visibly labelled illustrative display prices/charts. The four app screenshots
 and desktop/mobile landing aliases are hash-validated against that manifest.
 The images show fork state, not production balances or real market prices. The
-remaining standard UI captures predate the current domain split and are not
-current visual release evidence. The latest standard recapture was not
-promoted: five views were saved before Portfolio's two-sparkline readiness
-check timed out on a reused page. A fresh isolated page displayed both charts
-without runtime errors. Existing standard images and their manifest remain
-unchanged; the landing's connected-position aliases are separate, current fork
-captures.
+landing's connected-position aliases are separate, current fork captures.
 
 ### Configured Privy theme hydration
 
@@ -81,32 +85,25 @@ The focused Portfolio asset-summary tests pass `14/14`, covering partial
 subtotals, stale-value exclusion, pending reads, unknown values, and confirmed
 zero. Portfolio typecheck passes after the supported-value card prop-shape fix.
 
-Final verification completed across the aggregate run and a separate browser
-rerun. `%TEMP%/fxaeon-final-release-verify-latest.log` records `380` source/unit
-checks (`376` passed, `4` skipped) and passing build/export, typecheck, bundle,
-frontend-secret scan, audit, and landing checks (eight static plus 14
-theme/viewport states). Its initial browser stage reached `108/109` and exited
-`1`. After test-only hardening of stale-preview test scheduling, the focused
-harness passed `3/3` across two workers and the complete built-browser suite
-passed `109/109` in 5.8 minutes; see
-`%TEMP%/fxaeon-final-109-e2e-identity.log`. Final lint passed with zero
-warnings. These are results across separate runs, not one aggregate command
-with exit code `0`.
+Final verification passed on PR `#193` head
+`064229b6fb6640f9d16087ab48da13e85b05f356`: all six CI checks passed, including
+Client CI's full `pnpm verify` with exit code `0` and built-browser E2E. After
+test-only hardening of stale-preview scheduling, focused checks passed `3/3`
+and the complete browser suite passed `109/109` in 5.8 minutes; see
+`%TEMP%/fxaeon-final-109-e2e-identity.log`. Full and production dependency
+audits report zero known vulnerabilities. Two pre-existing high-severity
+development-dependency findings were resolved by updating `js-yaml` to `4.3.2`
+and Miniflare's nested `sharp` to `0.35.4`. Final lint passed with zero warnings.
 
 The protocol, Earn, stress, and browser-fork proofs are separately recorded
 above. The landing's final full-hero wash and card direction passed visual
-review; 14 theme/width states retained the same contrast minima. The standard
-nine-view screenshot refresh remains incomplete; see the recapture note above.
-The landing's connected-position aliases are separately current.
+review; 14 theme/width states retained the same contrast minima.
 
 ## Remaining verification gaps
 
 - Verify native Privy sign-in, Telegram seamless login and handoff, injected
   wallet confirmation, keyboard/device behavior, and bridge destination
   delivery in their supported hosts.
-- Complete and review the standard UI screenshot refresh before publication.
-  The promoted landing position captures are already tied to their manifest and
-  illustrative market-data mode.
 
 See [`testing.md`](testing.md) for commands and evidence boundaries and
 [`position-screenshot-fixture.md`](position-screenshot-fixture.md) for the

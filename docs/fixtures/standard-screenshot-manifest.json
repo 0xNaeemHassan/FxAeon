@@ -1,13 +1,26 @@
 {
   "schemaVersion": 1,
   "proof": "fxaeon-documentation-captures",
-  "capturedAt": "2026-09-13T10:58:48.314Z",
+  "capturedAt": "2026-09-20T05:56:32.365Z",
   "profile": "standard",
   "marketData": "external-display-data-unmodified",
+  "routeIsolation": "fresh-page-and-browser-context-per-capture",
+  "devIndicator": "nextjs-portal-hidden-after-zero-page-and-unclassified-console-errors",
+  "runtimeErrorCounts": {
+    "pageErrors": 0,
+    "consoleErrors": 0,
+    "knownExternalFallbackErrors": 0,
+    "unclassifiedConsoleErrors": 0,
+    "discoveryErrors": 0
+  },
   "assertions": {
     "allFramesAtDocumentOrigin": true,
-    "loginReadyWithoutLoadingSplash": true
+    "loginReadyWithoutLoadingSplash": true,
+    "desktopTradeChartRenderedCandles": true,
+    "freshBrowserContextPerFrame": true,
+    "zeroPageAndConsoleErrors": true
   },
+  "scope": "Rendered documentation states with live external display data; no wallet transaction was submitted.",
   "captures": [
     {
       "file": "fxaeon-web.png",
@@ -16,8 +29,8 @@
         "width": 1440,
         "height": 900
       },
-      "sha256": "3eff015c0d2a20ad4410e94228277580831860268d401f6c7a04dbd561ca00b3",
-      "capturedAt": "2026-09-13T13:44:59.2515906Z"
+      "sha256": "970fcc886e96d730cebe0ebdd9e24887b7580aae96b1bed4eee5816f89328ed7",
+      "capturedAt": "2026-09-20T05:55:37.893Z"
     },
     {
       "file": "fxaeon-trade.png",
@@ -26,8 +39,8 @@
         "width": 1440,
         "height": 900
       },
-      "sha256": "84fdaa82c85233c64f31e551731ee735c9b3505bb411bf06ba9550029ac69d2d",
-      "capturedAt": "2026-09-13T14:53:01.213Z"
+      "sha256": "f697019d394f7c2e39ef8f74423c9db2292a85575af16c5bf0c0bc466efcd85b",
+      "capturedAt": "2026-09-20T05:55:42.871Z"
     },
     {
       "file": "fxaeon-token-picker.png",
@@ -36,7 +49,8 @@
         "width": 1440,
         "height": 900
       },
-      "sha256": "5eaf5a232e7ffb2d843134a8149e3c3c61732a4f6623816a34e004fef2bdcd62"
+      "sha256": "53367ec0b8f0ace8b1904d4e0d4363e8f2bf644cfc170c46672949e5074e86d6",
+      "capturedAt": "2026-09-20T05:55:48.962Z"
     },
     {
       "file": "fxaeon-bridge.png",
@@ -45,7 +59,8 @@
         "width": 1440,
         "height": 900
       },
-      "sha256": "38f55c11c2922e4f867b1a66cf607a7e43642b3cdb5770cd6f9c03823dc571af"
+      "sha256": "b97aeaa15881ad5ced0536d35a24df5bc885ee880610e996f2e27da5ae5a39f1",
+      "capturedAt": "2026-09-20T05:55:53.927Z"
     },
     {
       "file": "fxaeon-login.png",
@@ -54,7 +69,8 @@
         "width": 1440,
         "height": 900
       },
-      "sha256": "49f3df602fab1bd6504ef45d6ae5cc733c49e14d02f00b2a41299c90a2a1f9e5"
+      "sha256": "3f9ca3292f74b33026f7d415e56e58a244162a7e2a6a87e0a00f8c7f6ab18315",
+      "capturedAt": "2026-09-20T05:55:57.296Z"
     },
     {
       "file": "fxaeon-portfolio.png",
@@ -63,7 +79,8 @@
         "width": 1440,
         "height": 900
       },
-      "sha256": "5b583fac9a23f25503dd619482b86e31c25fcb972c33c57810e5841a8349bf84"
+      "sha256": "1ba2399d1d1abfe0e106aa90070754999670ccbf5ea63dd551c59248f889a2fe",
+      "capturedAt": "2026-09-20T05:56:02.034Z"
     },
     {
       "file": "fxaeon-docs.png",
@@ -72,7 +89,8 @@
         "width": 1440,
         "height": 900
       },
-      "sha256": "ef147089243fe9206dbb6c948033baed844c19a7213e444215cfe85ec5dc7ac9"
+      "sha256": "3291e8e8ec794e342fae5808cd63a0cb45c5b9f38bd34d48f32af5600328f583",
+      "capturedAt": "2026-09-20T05:56:18.803Z"
     },
     {
       "file": "fxaeon-trade-mobile.png",
@@ -81,8 +99,8 @@
         "width": 390,
         "height": 844
       },
-      "sha256": "3cb01a4975272896f71a7ce39b77fe7c5e97e1ff8be917159872f09605f67b9a",
-      "capturedAt": "2026-09-13T14:52:20.868Z"
+      "sha256": "3ecbd86183faad0b5a2d6015cac35a7b3366b5e680562c645c9e1fec4588a56a",
+      "capturedAt": "2026-09-20T05:56:24.369Z"
     },
     {
       "file": "fxaeon-portfolio-mobile.png",
@@ -91,7 +109,8 @@
         "width": 390,
         "height": 844
       },
-      "sha256": "a73277adec66563680abfa6f181ca3729d938a183dfb64bf2da79aaae7f68211"
+      "sha256": "b73f9bc22df825e9989be9597366285fceccb29d200893df85de51c4556b3fda",
+      "capturedAt": "2026-09-20T05:56:32.356Z"
     }
   ]
 }
