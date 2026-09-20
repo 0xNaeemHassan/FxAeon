@@ -50,10 +50,36 @@ export function isTargetCloudflareRun(run) {
   if (run?.name !== CHECK_NAME || typeof run?.details_url !== 'string') return false;
   try {
     const detailsUrl = new URL(run.details_url);
-    const projectMarker = `/pages/view/${encodeURIComponent(PROJECT_NAME)}/`;
-    return detailsUrl.protocol === 'https:'
-      && detailsUrl.hostname === 'dash.cloudflare.com'
-      && detailsUrl.pathname.includes(projectMarker);
+    if (detailsUrl.protocol !== 'https:'
+      || detailsUrl.hostname !== 'dash.cloudflare.com'
+      || detailsUrl.username
+      || detailsUrl.password
+      || detailsUrl.port
+      || detailsUrl.hash) return false;
+
+    let route;
+    if (detailsUrl.search) {
+      // Cloudflare's native check links use a relative dashboard route in
+      // `to`. Requiring its literal, sole query parameter rejects encoded or
+      // external redirect targets while accepting the native URL shape.
+      if (detailsUrl.pathname !== '/') return false;
+      const targets = detailsUrl.searchParams.getAll('to');
+      if (targets.length !== 1 || detailsUrl.searchParams.size !== 1) return false;
+      route = targets[0];
+      if (detailsUrl.search !== `?to=${route}`) return false;
+    } else {
+      // Retain support for Cloudflare links that put the route in the path.
+      route = detailsUrl.pathname;
+    }
+
+    const segments = route.split('/');
+    return segments.length === 6
+      && segments[0] === ''
+      && /^[A-Za-z0-9_-]+$/.test(segments[1])
+      && segments[2] === 'pages'
+      && segments[3] === 'view'
+      && segments[4] === PROJECT_NAME
+      && /^[A-Za-z0-9_-]+$/.test(segments[5]);
   } catch {
     return false;
   }
