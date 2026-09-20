@@ -43,8 +43,12 @@ jobs:
             echo "configured=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          printf '%s' "$ETHERSCAN_API_KEY" | pnpm exec wrangler pages secret put ETHERSCAN_API_KEY --project-name=fxaeon --env=production
-          echo "configured=true" >> "$GITHUB_OUTPUT"
+          if printf '%s' "$ETHERSCAN_API_KEY" | pnpm exec wrangler pages secret put ETHERSCAN_API_KEY --project-name=fxaeon --env=production; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Pages secret sync was not authorized; deploying with the RPC gas estimate fallback."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Install browser verification runtime
         run: pnpm --dir apps/mini-app exec playwright install --with-deps chromium
       - name: Validate public build configuration

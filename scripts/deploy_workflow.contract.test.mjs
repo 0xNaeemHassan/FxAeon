@@ -73,6 +73,7 @@ test('native deployment remains SHA-gated and Pages credentials are limited to s
   assert.match(secretSync, /configured=false/);
   assert.match(secretSync, /configured=true/);
   assert.match(secretSync, /RPC gas estimate fallback/);
+  assert.match(secretSync, /Pages secret sync was not authorized/);
   assert.doesNotMatch(secretSync, /wrangler pages secret put[^\n]*\$\{\{/);
   assert.match(secretSync, /WRANGLER_SEND_METRICS:\s*['"]?false/);
 
