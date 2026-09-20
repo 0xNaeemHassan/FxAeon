@@ -4,7 +4,7 @@
  * Telegram Mini App platform glue.
  *
  * - calls WebApp.ready() + expand() on mount
- * - keeps --tg-viewport-stable-height in sync (viewportChanged)
+ * - keeps dynamic/stable viewport CSS variables in sync (viewportChanged)
  * - tracks an in-app navigation stack so the NATIVE BackButton does the
  *   right thing on every launch type:
  *     · in-app history → router.back()

@@ -55,11 +55,12 @@ function client(
   getTransactionReceipt: FxPublicClient["getTransactionReceipt"],
   chainId?: 1 | 8453,
   getTransaction?: FxPublicClient["getTransaction"],
+  head = 125n,
 ): FxPublicClient {
   return {
     chain: chainId === undefined ? undefined : { id: chainId },
     getChainId: async () => chainId ?? 1,
-    getBlockNumber: async () => 125n,
+    getBlockNumber: async () => head,
     getTransactionReceipt,
     getTransaction: getTransaction ?? (async ({ hash }) => ({
       hash,
@@ -104,6 +105,23 @@ test("reconciles with the public client for each record's chain and persists onl
   assert.ok(readPendingHashJournal().every((record) => record.status === "confirmed"));
   assert.equal(views[0]?.verification, "receipt");
   assert.equal(explorerTransactionUrl(8453, OTHER_HASH), `https://basescan.org/tx/${OTHER_HASH}`);
+});
+
+test("reconciles a receipt at its mined block while retaining final receipt and transaction identity checks", async () => {
+  const record = addRecord();
+  let receiptReads = 0;
+  const [view] = await reconcileWalletJournal({
+    walletAddress: WALLET,
+    getClient: () => client(async () => {
+      receiptReads += 1;
+      return receipt(record);
+    }, 1, undefined, 123n),
+  });
+
+  assert.equal(view?.status, "confirmed");
+  assert.equal(view?.verification, "receipt");
+  assert.equal(receiptReads, 2, "recovery must recheck the receipt before persisting completion");
+  assert.equal(readPendingHashJournal().find((item) => item.id === record.id)?.status, "confirmed");
 });
 
 test("never ages unresolved records out of recovery", async () => {

@@ -22,8 +22,27 @@ import { useT } from '@/lib/i18n';
 import FxLogo from '@/components/FxLogo';
 import ThemeToggle from '@/components/ThemeToggle';
 import WalletProfile from '@/components/WalletProfile';
+import NetworkSelector from '@/components/NetworkSelector';
+import { ValueOrSkeleton } from '@/components/MissingValue';
 
 /* ------------------------------------------------------------------ shell */
+
+const PAGE_TITLES: Record<string, string> = {
+  '/': 'Portfolio',
+  '/portfolio': 'Portfolio',
+  '/trade': 'Trade',
+  '/positions': 'Positions',
+  '/earn': 'Earn',
+  '/borrow': 'Borrow',
+  '/move': 'Move',
+  '/qr': 'Receive',
+  '/more': 'More',
+  '/settings': 'Settings',
+  '/history': 'History',
+  '/activity': 'History',
+  '/docs': 'Docs',
+  '/login': 'Sign in',
+};
 
 export function AppShell({
   title,
@@ -39,8 +58,10 @@ export function AppShell({
   const pathname = usePathname();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const contentRef = useRef<HTMLElement>(null);
-  const documentTitle = title ?? (pathname === '/portfolio' ? 'Portfolio' : undefined);
-  const networkLabel = ['/move', '/qr', '/history', '/activity'].includes(pathname) ? 'Ethereum + Base' : 'Ethereum';
+  // Keep browser/tab titles correct for routes that own their heading inside
+  // the workspace (Portfolio and Trade). The visual shell heading remains
+  // opt-in via `title`, so action pages do not get a second large title.
+  const documentTitle = title ?? PAGE_TITLES[pathname ?? '/'];
 
   useEffect(() => {
     const target = headingRef.current ?? contentRef.current;
@@ -59,25 +80,17 @@ export function AppShell({
       <a href="#main-content" className="skip-link">Skip to main content</a>
       <div className="app-workspace" data-route={pathname ?? ''}>
         {tabs && (
-          <div className="app-topbar">
-            <Link href="/portfolio" aria-label="FxAeon portfolio" className="flex items-center gap-2.5">
+          <header className="app-topbar">
+            <Link href="/" aria-label="FxAeon portfolio" className="flex items-center gap-2.5">
               <FxLogo size={32} />
               <span className="brand-wordmark">FxAeon</span>
             </Link>
             <DesktopNavigation />
             <span className="app-topbar-actions">
-              <span className="network-state" aria-label={`Route scope ${networkLabel}`}><span className="status-dot" /> Route scope · {networkLabel}</span>
+              <NetworkSelector />
               <ThemeToggle />
               <WalletProfile />
             </span>
-          </div>
-        )}
-        {title && (
-          <header className="page-header">
-            <div>
-              <h1 ref={headingRef} tabIndex={-1} className="text-display outline-none">{title}</h1>
-              {subtitle && <p className="page-subtitle">{subtitle}</p>}
-            </div>
           </header>
         )}
         <main
@@ -85,8 +98,18 @@ export function AppShell({
           id="main-content"
           data-shell-content="true"
           tabIndex={-1}
-          className={`app-content ${tabs ? 'app-content-tabs' : ''} flex-1 outline-none ${['/more', '/settings', '/qr'].includes(pathname) ? 'utility-content' : ''}`}
-        >{children}</main>
+          className={`app-content ${tabs ? 'app-content-tabs' : ''} flex-1 outline-none ${['/more', '/settings', '/history', '/qr'].includes(pathname) ? 'utility-content' : ''}`}
+        >
+          {title && (
+            <header className="page-header">
+              <div>
+                <h1 ref={headingRef} tabIndex={-1} className="text-display outline-none">{title}</h1>
+                {subtitle && <p className="page-subtitle">{subtitle}</p>}
+              </div>
+            </header>
+          )}
+          {children}
+        </main>
       </div>
       {tabs && <TabBar />}
     </div>
@@ -94,18 +117,22 @@ export function AppShell({
 }
 
 const TABS: { href: string; labelKey: string; icon: LucideIcon; also?: string[] }[] = [
-  { href: '/portfolio', labelKey: 'nav.home', icon: Home },
+  { href: '/', labelKey: 'nav.home', icon: Home, also: ['/portfolio'] },
   { href: '/trade', labelKey: 'nav.trade', icon: CandlestickChart, also: ['/positions'] },
   { href: '/earn', labelKey: 'nav.earn', icon: PiggyBank, also: ['/borrow'] },
   { href: '/move', labelKey: 'nav.move', icon: ArrowLeftRight, also: ['/qr'] },
   { href: '/more', labelKey: 'nav.more', icon: LayoutGrid, also: ['/settings', '/history', '/activity', '/docs'] },
 ];
 
+function isTabActive(pathname: string | null, href: string, also?: string[]) {
+  return pathname === href || Boolean(also?.some((prefix) => pathname?.startsWith(prefix)));
+}
+
 export function TabBar() {
   const pathname = usePathname();
   const t = useT();
   const links = TABS.map(({ href, labelKey, icon: Icon, also }) => {
-    const active = pathname === href || Boolean(also?.some((prefix) => pathname.startsWith(prefix)));
+    const active = isTabActive(pathname, href, also);
     return (
       <Link
         key={href}
@@ -141,9 +168,9 @@ function DesktopNavigation() {
   return (
     <nav className="desktop-navigation" aria-label="Primary navigation">
       {TABS.map(({ href, labelKey, also }) => {
-        const active = pathname === href || Boolean(also?.some((prefix) => pathname.startsWith(prefix)));
+        const active = isTabActive(pathname, href, also);
         return <Link key={href} href={href} aria-current={active ? 'page' : undefined} onClick={() => haptic('selection')}>
-          {href === '/portfolio' ? 'Portfolio' : t(labelKey)}
+          {href === '/' ? 'Portfolio' : t(labelKey)}
         </Link>;
       })}
     </nav>
@@ -238,7 +265,7 @@ export function Stat({
       <span
         className={`text-display text-[20px] font-semibold leading-none ${accent ? 'text-mint' : ''}`}
       >
-        {value}
+        <ValueOrSkeleton value={value} width="md" />
       </span>
       {sub && <span className="text-[11px] text-mut">{sub}</span>}
     </div>
@@ -357,7 +384,7 @@ export function FullScreenSpinner({ asMain = false }: { asMain?: boolean } = {})
   // spinner does NOT count as a contentful paint (Lighthouse NO_FCP).
   const Element = asMain ? 'main' : 'div';
   return (
-    <Element role="status" aria-live="polite" aria-label={t('common.loading')} className="flex min-h-[var(--tg-viewport-stable-height)] flex-col items-center justify-center gap-4 px-6 text-center">
+    <Element role="status" aria-live="polite" aria-label={t('common.loading')} className="flex min-h-[var(--tg-viewport-height,var(--tg-viewport-stable-height))] flex-col items-center justify-center gap-4 px-6 text-center">
       <div className="brand-orbit anim-scale-in">
         <FxLogo size={56} />
       </div>

@@ -1,7 +1,7 @@
 'use client';
 
 /** Compatibility entry for old links; normal wallet flows open in place. */
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useState, type MouseEvent } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { ArrowRight, Wallet } from 'lucide-react';
@@ -9,7 +9,7 @@ import { privyConfigured } from '@/lib/privyConfig';
 import { Button, Card, FullScreenSpinner } from '@/components/ui';
 import { usePrivyWallet } from '@/lib/wallet';
 import { userSafeError } from '@/lib/errors';
-import { haptic, isTelegramLaunchContext } from '@/lib/telegram';
+import { haptic, isTelegramLaunchContext, openExternalLink } from '@/lib/telegram';
 import styles from '@/components/UtilitySurfaces.module.css';
 
 // The Privy SDK is heavy. Loading the flow dynamically keeps it
@@ -39,16 +39,22 @@ function LoginContent() {
 }
 
 function TelegramUnavailableFlow() {
+  const browserUrl = 'https://fxaeon.com/';
+  const openBrowser = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && openExternalLink(browserUrl)) {
+      event.preventDefault();
+    }
+  };
   return (
     <main className={`${styles.loginPanel} auth-panel mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col justify-center px-6`}>
       <Card className={`${styles.loginCard} w-full p-6`}>
-        <h1 className="text-display text-[28px] font-semibold">Telegram wallet setup</h1>
+        <h1 className="text-display text-[28px] font-semibold">Connect in your browser</h1>
         <p className="mt-2 text-[14px] leading-relaxed text-mut">
-          Reopen FxAeon from the bot menu after Telegram wallet sign-in is configured, or use the app in a regular browser with an injected EVM wallet.
+          Wallet sign-in isn’t available here. Open FxAeon in your browser to connect a wallet.
         </p>
-        <Link href="/" className="button button-primary glass-press mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-full px-4 py-3 text-[14px] font-semibold">
+        <a href={browserUrl} target="_blank" rel="noopener noreferrer" onClick={openBrowser} className="button button-primary glass-press mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-full px-4 py-3 text-[14px] font-semibold">
           Continue in browser <ArrowRight className="h-4 w-4" aria-hidden="true" />
-        </Link>
+        </a>
       </Card>
       <Link href="/" className="mt-4 inline-flex min-h-11 items-center text-[12px] font-semibold text-mint">← Back to home</Link>
     </main>
@@ -79,12 +85,12 @@ function BrowserWalletFlow() {
         <Card className={`${styles.loginCard} w-full p-6`}>
           <span className="auth-wallet-icon"><Wallet className="h-6 w-6 text-mint" strokeWidth={1.8} aria-hidden="true" /></span>
           <h1 className="text-display mt-5 text-[28px] font-semibold">Connect your wallet</h1>
-          <p className="mt-2 text-[14px] leading-relaxed text-mut">Use MetaMask, Coinbase Wallet, or another EVM wallet. Every transaction requires approval in your wallet.</p>
+          <p className="mt-2 text-[14px] leading-relaxed text-mut">Connect MetaMask, Coinbase Wallet, or another EVM wallet. Review and approve each transaction in your wallet.</p>
 
           {wallet.authenticated && wallet.address ? (
             <div className="mt-5">
               <div className="auth-address">{wallet.address}</div>
-              <Link href="/portfolio" onClick={() => haptic('medium')} className="button button-primary glass-press mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-full px-4 py-3 text-[14px] font-semibold">Continue to FxAeon <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
+              <Link href="/" onClick={() => haptic('medium')} className="button button-primary glass-press mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-full px-4 py-3 text-[14px] font-semibold">Continue to FxAeon <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
             </div>
           ) : (
             <>

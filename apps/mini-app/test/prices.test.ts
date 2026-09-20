@@ -4,7 +4,6 @@ import { FX_TOKENS, type FxTokenKey } from "../src/lib/fx/tokens";
 import {
   formatUsd,
   coinGeckoTokenPriceEndpoint,
-  coinGeckoTokenPricesEndpoint,
   createUsdPriceFetcher,
   parseCoinGeckoTokenPriceResponse,
   parseUsdPriceCache,
@@ -36,6 +35,18 @@ test("accepts recent, confident prices and maps ETH to WETH", () => {
   assert.equal(snapshot.prices.fxUSD, 1);
   assert.equal(snapshot.prices.FXN, 1);
   assert.equal(snapshot.updatedAt, (now - 12) * 1_000);
+  assert.equal(snapshot.updatedAts.ETH, (now - 12) * 1_000);
+});
+
+test("preserves each quote timestamp when another token is older", () => {
+  const now = 2_000_000_000;
+  const payload = validPayload(now);
+  payload.coins[`ethereum:${FX_TOKENS.WETH.address.toLowerCase()}`].timestamp = now - 10;
+  payload.coins[`ethereum:${FX_TOKENS.FXN.address.toLowerCase()}`].timestamp = now - 120;
+  const snapshot = parseUsdPriceResponse(payload, now);
+  assert.equal(snapshot.updatedAt, (now - 120) * 1_000);
+  assert.equal(snapshot.updatedAts.ETH, (now - 10) * 1_000);
+  assert.equal(snapshot.updatedAts.FXN, (now - 120) * 1_000);
 });
 
 test("rejects stale and low-confidence prices without discarding independently valid tokens", () => {
@@ -93,8 +104,6 @@ test("CoinGecko fallback validates the exact contract, numeric price, and timest
   assert.equal(parseCoinGeckoTokenPriceResponse({ unrelated: { usd: 1, last_updated_at: now } }, 'fxUSD', now), null);
   assert.equal(new URL(coinGeckoTokenPriceEndpoint('fxUSD')).searchParams.get('contract_addresses'), address);
   assert.equal(new URL(coinGeckoTokenPriceEndpoint('ETH')).searchParams.get('contract_addresses'), FX_TOKENS.WETH.address.toLowerCase());
-  const batched = new URL(coinGeckoTokenPricesEndpoint(['ETH', 'WETH', 'fxUSD'])).searchParams.get('contract_addresses')?.split(',');
-  assert.deepEqual(batched, [FX_TOKENS.WETH.address.toLowerCase(), address], 'shared WETH/ETH identity is deduplicated in one request');
 });
 
 test("a delayed protocol price uses a fresh CoinGecko quote without replacing fresh primary tokens", async () => {
@@ -115,6 +124,33 @@ test("a delayed protocol price uses a fresh CoinGecko quote without replacing fr
   const second = await fetchPrices(request);
   assert.equal(second.prices.fxUSD, 0.998);
   assert.equal(calls.filter(url => url.includes('api.coingecko.com')).length, 1, 'fallback cached for one minute');
+});
+
+test("publishes validated primary prices before a slow optional fallback completes", async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const payload = validPayload(now);
+  const address = FX_TOKENS.fxUSD.address.toLowerCase();
+  delete payload.coins[`ethereum:${address}`];
+  let releaseFallback: (() => void) | undefined;
+  const fallback = new Promise<void>((resolve) => { releaseFallback = resolve; });
+  const request = (async input => {
+    const url = String(input);
+    if (url.includes('coins.llama.fi')) return Response.json(payload);
+    await fallback;
+    return Response.json({ [address]: { usd: 0.998, last_updated_at: now - 3 } });
+  }) as typeof fetch;
+  const updates: Array<{ prices: Record<string, number>; updatedAt: number | null }> = [];
+  const resultPromise = createUsdPriceFetcher()(request, undefined, (snapshot) => {
+    updates.push({ prices: { ...snapshot.prices }, updatedAt: snapshot.updatedAt });
+  });
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  assert.equal(updates.length, 1);
+  assert.equal(updates[0].prices.ETH, 2_400);
+  assert.equal(updates[0].prices.fxUSD, undefined);
+  releaseFallback?.();
+  const result = await resultPromise;
+  assert.equal(result.prices.fxUSD, 0.998);
+  assert.equal(result.updatedAts.fxUSD, (now - 3) * 1000);
 });
 
 test("unavailable fallback prices stay absent instead of assuming the stablecoin peg", async () => {
@@ -144,7 +180,31 @@ test("fallback traffic is bounded and respects rate-limit backoff", async () => 
     return Response.json({}, { status: 503 });
   }) as typeof fetch;
   await assert.rejects(createUsdPriceFetcher()(failing), /no validated prices/);
-  assert.equal(boundedRequests, 1, 'all missing contract prices share one fallback request');
+  assert.equal(boundedRequests, 1, 'a provider failure stops further fallback requests');
+});
+
+test('keyless fallback requests one contract at a time, deduplicates aliases, and publishes recovered quotes', async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const addresses: string[] = [];
+  const updates: Array<Record<string, number>> = [];
+  const request = (async input => {
+    const url = new URL(String(input));
+    if (url.hostname === 'coins.llama.fi') return Response.json({}, { status: 503 });
+    const address = url.searchParams.get('contract_addresses')!;
+    assert.equal(address.split(',').length, 1, 'the unauthenticated API rejects multi-address requests');
+    addresses.push(address);
+    return Response.json({ [address]: { usd: 2.5, last_updated_at: now } });
+  }) as typeof fetch;
+  const fetchPrices = createUsdPriceFetcher();
+  const first = await fetchPrices(request, undefined, snapshot => updates.push({ ...snapshot.prices }));
+  assert.equal(first.prices.ETH, 2.5);
+  assert.equal(first.prices.WETH, 2.5);
+  assert.equal(first.prices.fxUSD, 2.5);
+  assert.equal(addresses.length, new Set(Object.values(FX_TOKENS).map(token => token.address.toLowerCase()).filter(address => address !== FX_TOKENS.ETH.address.toLowerCase())).size);
+  assert.equal(new Set(addresses).size, addresses.length, 'shared token identities consume one request');
+  assert.equal(updates[0].fxUSD, 2.5, 'the first recovered quote is available before the remaining requests');
+  await fetchPrices(request);
+  assert.equal(new Set(addresses).size, addresses.length, 'fresh fallback values are cached');
 });
 
 test("aborting a price refresh does not request fallback data", async () => {

@@ -56,6 +56,31 @@ test("signature-required history drafts are scoped and contain no executable req
   })?.draft.id, draft.id);
 });
 
+test("numeric UI draft values preserve bounded decimal controls", () => {
+  const draft = saveSignatureRequiredDraft({
+    walletAddress: WALLET,
+    chainId: 1,
+    operation: "increasePosition",
+    actionKey: "trade:ETH:long:ETH",
+    resumePath: "/trade",
+    formState: { leverage: 2.1, slippage: 0.5 },
+  });
+  assert.deepEqual(restoreSignatureRequiredDraft(draft.id, {
+    walletAddress: WALLET,
+    chainId: 1,
+    operation: "increasePosition",
+    actionKey: "trade:ETH:long:ETH",
+  })?.formState, { leverage: 2.1, slippage: 0.5 });
+  assert.throws(() => saveSignatureRequiredDraft({
+    walletAddress: WALLET,
+    chainId: 1,
+    operation: "increasePosition",
+    actionKey: "trade:ETH:long:ETH",
+    resumePath: "/trade",
+    formState: { leverage: 2.1234567 },
+  }), /form state is invalid/);
+});
+
 test("draft cancellation is terminal until a caller explicitly creates a fresh draft", () => {
   const draft = saveSignatureRequiredDraft({
     walletAddress: WALLET,

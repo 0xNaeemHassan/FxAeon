@@ -12,7 +12,7 @@ import {
   type SendTransactionModalUIOptions,
 } from '@privy-io/react-auth';
 import { assertLocalForkRpcUrl } from '@/lib/fx/config';
-import { getInitData, isTelegramLaunchContext, restoreTelegramLaunchHash, waitForTelegramWebApp } from '@/lib/telegram';
+import { getInitData, isTelegramLaunchContext, restoreTelegramLaunchHash } from '@/lib/telegram';
 import { switchBrowserChain as switchBrowserChainWithConfig } from './switchBrowserChain';
 import { eip6963FocusTrapDestination, getDiscoveredEip6963Providers, recordEip6963Announcement, selectEip6963Provider, shouldBindEip6963ProviderEvents, shouldPromptEip6963Provider, waitForWalletProvider, type DiscoveredEip6963Provider, type Eip6963Announcement } from './eip6963';
 
@@ -57,6 +57,8 @@ export type FxSelectedWallet = ConnectedWallet & {
 export type FxPrivyWallet = {
   ready: boolean;
   authenticated: boolean;
+  /** Increments only after a provider reports a successful connection. */
+  connectionVersion: number;
   wallets: ConnectedWallet[];
   selectedWallet?: FxSelectedWallet;
   /** Current selected wallet network when Privy has a supported chain value. */
@@ -64,7 +66,7 @@ export type FxPrivyWallet = {
   address?: string;
   isEmbedded: boolean;
   /** Request an account from the user's browser wallet. No private key leaves the wallet. */
-  connect: () => Promise<void>;
+  connect: (options?: { external?: boolean }) => Promise<void>;
   /** End the app wallet session. This never transfers assets or exposes keys. */
   disconnect: () => Promise<void>;
   selectWallet: (address: string) => void;
@@ -103,6 +105,17 @@ function asHexQuantity(value: string | number | bigint | undefined): string | un
 function isEmbedded(wallet: ConnectedWallet | undefined): boolean {
   return wallet?.walletClientType === 'privy' || wallet?.walletClientType === 'privy-v2';
 }
+
+function callbackError(cause: unknown, fallback: string): Error {
+  const cancelled = cause === 'exited_auth_flow' || cause === 'user_rejected';
+  return new Error(cancelled ? 'Sign-in cancelled.' : fallback, { cause });
+}
+
+type PendingConnection = {
+  kind: 'login' | 'wallet';
+  resolve: () => void;
+  reject: (cause: Error) => void;
+};
 
 type Eip1193Provider = {
   request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
@@ -202,12 +215,68 @@ async function switchBrowserChain(provider: Eip1193Provider, chainId: FxChainId)
  */
 function usePrivyWalletAdapter(): FxPrivyWallet {
   const { ready, authenticated } = usePrivy();
-  const { login } = useLogin();
   const { logout } = useLogout();
-  const { connectWallet } = useConnectWallet();
+  const [selectedAddress, setSelectedAddress] = useState<string>();
+  const [connectionVersion, setConnectionVersion] = useState(0);
+  const mountedRef = useRef(false);
+  const connectPendingRef = useRef<PendingConnection | null>(null);
+  const { login } = useLogin({
+    onComplete: ({ user, loginAccount }) => {
+      const pending = connectPendingRef.current;
+      if (!pending || pending.kind !== 'login') return;
+      if (!mountedRef.current) {
+        connectPendingRef.current = null;
+        pending.reject(new Error('Wallet connection was cancelled.'));
+        return;
+      }
+      // Privy's user.wallet is the first linked wallet, which need not be
+      // the external wallet the user selected for this login.
+      const loginAddress = loginAccount?.type === 'wallet' && loginAccount.chainType === 'ethereum'
+        ? loginAccount.address : user.wallet?.address;
+      if (loginAddress) setSelectedAddress(loginAddress);
+      connectPendingRef.current = null;
+      pending.resolve();
+    },
+    onError: (cause) => {
+      const pending = connectPendingRef.current;
+      if (!pending || pending.kind !== 'login') return;
+      connectPendingRef.current = null;
+      pending.reject(callbackError(cause, 'Sign-in failed. Please try again.'));
+    },
+  });
+  const { connectWallet } = useConnectWallet({
+    onSuccess: ({ wallet }) => {
+      const pending = connectPendingRef.current;
+      // Privy may deliver a late callback after a cancelled/unmounted modal.
+      // Without an active waiter it must not resurrect the selected wallet.
+      if (!pending || pending.kind !== 'wallet') return;
+      if (!mountedRef.current) {
+        connectPendingRef.current = null;
+        pending.reject(new Error('Wallet connection was cancelled.'));
+        return;
+      }
+      setSelectedAddress(wallet.address);
+      setConnectionVersion((version) => version + 1);
+      connectPendingRef.current = null;
+      pending.resolve();
+    },
+    onError: (cause) => {
+      const pending = connectPendingRef.current;
+      if (!pending || pending.kind !== 'wallet') return;
+      connectPendingRef.current = null;
+      pending.reject(callbackError(cause, 'Wallet connection failed. Please try again.'));
+    },
+  });
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      connectPendingRef.current?.reject(new Error('Wallet connection was cancelled.'));
+      connectPendingRef.current = null;
+    };
+  }, []);
   const { wallets, ready: walletsReady } = useWallets();
   const { sendTransaction: sendEmbeddedTransaction } = useSendTransaction();
-  const [selectedAddress, setSelectedAddress] = useState<string>();
   // A Telegram launch can finish Privy's seamless authentication shortly
   // after the provider has rendered. Keep the current value in a ref so a
   // click made during that hand-off can await the same session rather than
@@ -231,6 +300,10 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
       wallets.find((wallet) => isEmbedded(wallet)) ?? wallets.find((wallet) => wallet.type === 'ethereum')
     ) as FxSelectedWallet | undefined;
   }, [selectedAddress, wallets]);
+  const selectedWalletRef = useRef<FxSelectedWallet | undefined>(selectedWallet);
+  useEffect(() => {
+    selectedWalletRef.current = selectedWallet;
+  }, [selectedWallet]);
 
   const selectedChainId = useMemo(() => {
     const chainId = asChainNumber(selectedWallet?.chainId);
@@ -251,44 +324,67 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
     if (wallet) setSelectedAddress(wallet.address);
   }, [wallets]);
 
-  const connect = useCallback(async () => {
-    if (authenticated) {
-      connectWallet();
+  const connectExternalWallet = useCallback(() => new Promise<void>((resolve, reject) => {
+    connectPendingRef.current?.reject(new Error('Wallet connection was superseded.'));
+    connectPendingRef.current = { kind: 'wallet', resolve, reject };
+    try {
+      // The hook currently returns void, but resolving this through a promise
+      // also handles SDK versions that return an async modal operation.
+      void Promise.resolve(connectWallet()).catch((cause) => {
+        const pending = connectPendingRef.current;
+        if (!pending || pending.kind !== 'wallet') return;
+        connectPendingRef.current = null;
+        pending.reject(cause instanceof Error ? cause : new Error('Wallet connection was cancelled.'));
+      });
+    } catch (cause) {
+      connectPendingRef.current = null;
+      reject(cause instanceof Error ? cause : new Error('Wallet connection was cancelled.'));
+    }
+  }), [connectWallet]);
+
+  const connectWithPrivyLogin = useCallback(() => new Promise<void>((resolve, reject) => {
+    connectPendingRef.current?.reject(new Error('Wallet connection was superseded.'));
+    connectPendingRef.current = { kind: 'login', resolve, reject };
+    try {
+      // Keep the dashboard as the authority for enabled account methods. The
+      // current app enables wallet and email; Telegram becomes available here
+      // automatically when its Privy dashboard setting is enabled.
+      login();
+    } catch (cause) {
+      connectPendingRef.current = null;
+      reject(cause instanceof Error ? cause : new Error('Sign-in was cancelled.'));
+    }
+  }), [login]);
+
+  const connect = useCallback(async ({ external = false }: { external?: boolean } = {}) => {
+    if (external) {
+      await connectExternalWallet();
       return;
     }
     if (isTelegramLaunchContext()) {
-      // Telegram's WebApp bridge can arrive after the shell and Privy have
-      // rendered. Wait for that bridge here as a final hand-off guard instead
-      // of surfacing the old "sign-in is initializing" dead end.
-      if (!getInitData()) await waitForTelegramWebApp();
-      if (!getInitData()) {
-        throw new Error('Reopen FxAeon from the Telegram bot menu so signed launch data is available.');
+      // Restore signed launch data when it is already available. A missing or
+      // late Telegram bridge must still fall through to a usable Privy modal;
+      // never make a financial CTA wait for bridge hydration.
+      if (getInitData()) restoreTelegramLaunchHash();
+      if (authenticatedRef.current && isEmbedded(selectedWalletRef.current)) return;
+      if (authenticatedRef.current) {
+        await connectExternalWallet();
+        return;
       }
-      // The provider consumes this signed hash automatically. This call is a
-      // safe idempotent recovery for a late bridge/navigation transition; it
-      // never opens the Telegram popup inside the Telegram WebView.
-      restoreTelegramLaunchHash();
-      // When the button was pressed before Privy completed its automatic
-      // Telegram auth, wait for that in-flight session. Once it is ready,
-      // continue into Privy's explicit wallet selector so the user still
-      // approves the wallet connection themselves. A bounded failure keeps
-      // the CTA recoverable and avoids the old generic browser-wallet error.
-      if (!authenticatedRef.current) {
-        const startedAt = Date.now();
-        while (!authenticatedRef.current && Date.now() - startedAt < 15_000) {
-          await new Promise<void>((resolve) => window.setTimeout(resolve, 100));
-        }
-      }
-      if (!authenticatedRef.current) {
-        throw new Error('Automatic Telegram sign-in did not complete. Reopen FxAeon from the bot menu and try again.');
-      }
-      await connectWallet();
+      await connectWithPrivyLogin();
       return;
     }
-    login({ loginMethods: ['wallet'] });
-  }, [authenticated, connectWallet, login]);
+    if (authenticated) {
+      await connectExternalWallet();
+      return;
+    }
+    await connectWithPrivyLogin();
+  }, [authenticated, connectExternalWallet, connectWithPrivyLogin]);
 
   const disconnect = useCallback(async () => {
+    const pending = connectPendingRef.current;
+    connectPendingRef.current = null;
+    pending?.reject(new Error('Wallet connection was cancelled.'));
     await logout();
     setSelectedAddress(undefined);
   }, [logout]);
@@ -397,6 +493,7 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
   return {
     ready: ready && walletsReady,
     authenticated,
+    connectionVersion,
     wallets,
     selectedWallet,
     chainId: selectedChainId,
@@ -428,10 +525,19 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
   const pendingChoiceRef = useRef<{ resolve: (choice: DiscoveredEip6963Provider) => void; reject: (reason: Error) => void } | null>(null);
   const [address, setAddress] = useState<string>();
   const [chainId, setChainId] = useState<FxChainId>();
+  const [connectionVersion, setConnectionVersion] = useState(0);
   const provider = browserProvider();
   const discoveryAbortRef = useRef<AbortController | null>(null);
+  const connectAttemptRef = useRef(0);
+  const boundProviderRef = useRef<Eip1193Provider | undefined>(undefined);
+  const currentProviderRef = useRef(provider);
+  currentProviderRef.current = provider;
+  const currentAddressRef = useRef(address);
+  currentAddressRef.current = address;
 
-  const sync = useCallback(async (requestAccounts = false, providerOverride?: Eip1193Provider) => {
+  const sync = useCallback(async (requestAccounts = false, providerOverride?: Eip1193Provider, attempt = connectAttemptRef.current) => {
+    const currentAttempt = () => attempt === connectAttemptRef.current;
+    const ensureCurrent = () => { if (!currentAttempt()) throw new Error('Wallet connection was cancelled.'); };
     if (isTelegramLaunchContext()) {
       // The no-Privy build is also used by the static client/E2E harness. A
       // Telegram host must never fall through to browser-wallet discovery,
@@ -450,12 +556,27 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
       return;
     }
     const accounts = await currentProvider.request({ method: requestAccounts ? 'eth_requestAccounts' : 'eth_accounts' });
+    ensureCurrent();
     const nextAddress = Array.isArray(accounts) && typeof accounts[0] === 'string' ? accounts[0] : undefined;
+    if (requestAccounts && !nextAddress) throw new Error('Wallet connection was cancelled.');
     setAddress(nextAddress);
+    if (requestAccounts && nextAddress) setConnectionVersion((version) => version + 1);
     const rawChain = await currentProvider.request({ method: 'eth_chainId' });
+    ensureCurrent();
     const parsed = asChainNumber(typeof rawChain === 'string' ? rawChain : String(rawChain));
     setChainId(parsed === FX_CHAIN_IDS.ethereum || parsed === FX_CHAIN_IDS.base ? parsed : undefined);
   }, []);
+
+  useEffect(() => {
+    const previous = boundProviderRef.current;
+    boundProviderRef.current = provider;
+    // An EIP-6963 provider can be replaced while retaining the same account.
+    // Bump the identity version so action rails waiting on a connection event
+    // cannot mistake the old provider for the newly selected one.
+    if (previous && provider && previous !== provider && address) {
+      setConnectionVersion((version) => version + 1);
+    }
+  }, [address, provider]);
 
   useEffect(() => {
     const stopDiscovery = discoverEip6963(() => {
@@ -529,6 +650,7 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
       return;
     }
     window.localStorage.removeItem(BROWSER_DISCONNECTED_KEY);
+    const attempt = ++connectAttemptRef.current;
     const discoveryAbort = new AbortController();
     discoveryAbortRef.current?.abort();
     discoveryAbortRef.current = discoveryAbort;
@@ -547,28 +669,42 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
       let selected: DiscoveredEip6963Provider | undefined = preferred
         ? providers.find((candidate) => candidate.rdns === preferred)
         : undefined;
-      if (providers.length > 1 && !selected) {
+      // An explicit reconnect is also the user's opportunity to switch
+      // between announced wallets. The preferred provider is used for silent
+      // restore above, but should not silently win a user initiated choice.
+      if (providers.length > 1) {
         selected = await new Promise<DiscoveredEip6963Provider>((resolve, reject) => {
           pendingChoiceRef.current = { resolve, reject };
           setChooser(providers);
         });
+        if (attempt !== connectAttemptRef.current) throw new Error('Wallet connection was cancelled.');
         window.localStorage.setItem('fxaeon:wallet-provider-rdns', selected.rdns);
         setProviderVersion((version) => version + 1);
       }
-      await sync(true, selected?.provider ?? availableProvider);
+      await sync(true, selected?.provider ?? availableProvider, attempt);
     } catch (cause) {
-      if (!discoveryAbort.signal.aborted) window.localStorage.setItem(BROWSER_DISCONNECTED_KEY, '1');
+      if (!discoveryAbort.signal.aborted && attempt === connectAttemptRef.current) window.localStorage.setItem(BROWSER_DISCONNECTED_KEY, '1');
       throw cause;
     } finally {
       if (discoveryAbortRef.current === discoveryAbort) discoveryAbortRef.current = null;
     }
   }, [sync]);
   useEffect(() => () => {
+    // Invalidate restores/connects before a provider request can resolve, so
+    // no late result updates state after this provider unmounts.
+    connectAttemptRef.current += 1;
     discoveryAbortRef.current?.abort();
     pendingChoiceRef.current?.reject(new Error('Wallet selection was cancelled.'));
     pendingChoiceRef.current = null;
   }, []);
   const disconnect = useCallback(async () => {
+    connectAttemptRef.current += 1;
+    discoveryAbortRef.current?.abort();
+    discoveryAbortRef.current = null;
+    const pending = pendingChoiceRef.current;
+    pendingChoiceRef.current = null;
+    setChooser(null);
+    pending?.reject(new Error('Wallet connection was cancelled.'));
     window.localStorage.setItem(BROWSER_DISCONNECTED_KEY, '1');
     setAddress(undefined);
     setChainId(undefined);
@@ -589,9 +725,28 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
     [address, chainId, provider],
   );
   const switchChain = useCallback(async (nextChain: FxChainId) => {
-    if (!provider || !selectedWallet) throw new Error('Connect a browser wallet before switching networks.');
-    await switchBrowserChain(provider, nextChain);
-    setChainId(nextChain);
+    const switchProvider = provider;
+    const switchWallet = selectedWallet;
+    if (!switchProvider || !switchWallet) throw new Error('Connect a browser wallet before switching networks.');
+    const attempt = connectAttemptRef.current;
+    const switchAddress = switchWallet.address.toLowerCase();
+    const isCurrent = () => attempt === connectAttemptRef.current
+      && currentProviderRef.current === switchProvider
+      && currentAddressRef.current?.toLowerCase() === switchAddress;
+    await switchBrowserChain(switchProvider, nextChain);
+    if (!isCurrent()) throw new Error('The selected wallet changed while switching networks.');
+    const rawChain = await switchProvider.request({ method: 'eth_chainId' });
+    if (!isCurrent()) throw new Error('The selected wallet changed while checking the switched network.');
+    const parsedChain = asChainNumber(typeof rawChain === 'string' ? rawChain : String(rawChain));
+    const actualChain = parsedChain === FX_CHAIN_IDS.ethereum || parsedChain === FX_CHAIN_IDS.base
+      ? parsedChain : undefined;
+    // Publish what the provider actually reports, including an unsupported
+    // result as undefined, before rejecting a mismatch with the requested
+    // network. Never write this state after account/provider teardown.
+    setChainId(actualChain);
+    if (actualChain !== nextChain) {
+      throw new Error(`Wallet network switch reported ${parsedChain === undefined ? 'an unsupported network' : `chain ${parsedChain}`} instead of chain ${nextChain}.`);
+    }
   }, [provider, selectedWallet]);
   const sendTransaction = useCallback(async (transaction: FxWalletTransaction) => {
     if (!provider || !selectedWallet?.address) throw new Error('Connect a browser wallet before signing a transaction.');
@@ -617,6 +772,7 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
   const wallet: FxPrivyWallet = useMemo(() => ({
     ready,
     authenticated: Boolean(address),
+    connectionVersion,
     wallets: selectedWallet ? [selectedWallet] : [],
     selectedWallet,
     chainId,
@@ -627,7 +783,7 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
     selectWallet: () => undefined,
     switchChain,
     sendTransaction,
-  }), [address, chainId, connect, disconnect, ready, selectedWallet, sendTransaction, switchChain]);
+  }), [address, chainId, connect, connectionVersion, disconnect, ready, selectedWallet, sendTransaction, switchChain]);
   const chooseProvider = useCallback((choice: DiscoveredEip6963Provider) => {
     const pending = pendingChoiceRef.current;
     pendingChoiceRef.current = null;

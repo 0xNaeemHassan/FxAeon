@@ -10,8 +10,9 @@ test.describe('independent USD price availability', () => {
     await page.goto('/trade', { waitUntil: 'domcontentloaded' });
     await page.getByRole('button', { name: 'Input asset', exact: true }).click();
     const list = page.getByRole('listbox', { name: 'Input asset options' });
-    const eth = list.getByRole('option', { name: /^ETH selected$/ });
-    await expect(eth).toContainText('Connect wallet');
+    const eth = list.getByRole('option', { name: /^ETH\b.*\bselected$/i });
+    await expect(eth).toHaveAttribute('aria-selected', 'true');
+    await expect(eth).not.toHaveAttribute('aria-describedby');
     await expect(eth.getByText('$2,400.00', { exact: true })).toHaveCount(0);
     await expect(eth.getByText('≈ $0.00', { exact: true })).toHaveCount(0);
     for (const row of await list.getByRole('option').all()) {

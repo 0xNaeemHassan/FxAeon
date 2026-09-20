@@ -6,24 +6,25 @@ import { AppShell } from '@/components/ui';
 import styles from './Docs.module.css';
 
 const sections = [
-  { id: 'overview', label: 'Overview', keywords: 'sdk scope networks capabilities pulse realtime portfolio' },
-  { id: 'getting-started', label: 'Getting started', keywords: 'connect wallet review approve onboarding' },
-  { id: 'access', label: 'Browser & Telegram', keywords: 'browser telegram mini app launch authentication' },
-  { id: 'wallets', label: 'Wallets & signing', keywords: 'privy signer private key security' },
-  { id: 'trade', label: 'Trade & leverage', keywords: 'eth btc long short leverage market' },
-  { id: 'positions', label: 'Position management', keywords: 'collateral debt close reduce increase' },
-  { id: 'earn', label: 'Earn', keywords: 'fxsave deposit withdraw redeem claim cooldown' },
-  { id: 'borrow', label: 'Borrow', keywords: 'fxusd collateral debt mint repay liquidation safety' },
-  { id: 'move', label: 'Move between chains', keywords: 'bridge ethereum base oft layerzero recipient' },
-  { id: 'fees', label: 'Fees & slippage', keywords: 'gas network fee native quote slippage coingecko defillama oracle price' },
+  { id: 'overview', label: 'Overview', keywords: 'sdk f(x) protocol networks portfolio supported actions' },
+  { id: 'getting-started', label: 'Getting started', keywords: 'connect wallet review approve onboarding transaction' },
+  { id: 'access', label: 'Browser & Telegram', keywords: 'browser telegram mini app launch authentication email' },
+  { id: 'wallets', label: 'Wallets & signing', keywords: 'wallet signer private key security approval transaction' },
+  { id: 'trade', label: 'Trade & leverage', keywords: 'eth btc long short leverage market price chart' },
+  { id: 'positions', label: 'Position management', keywords: 'collateral debt close reduce increase adjust value' },
+  { id: 'earn', label: 'Earn', keywords: 'fxsave usdc fxusd deposit withdraw redeem claim cooldown vault' },
+  { id: 'borrow', label: 'Borrow', keywords: 'fxusd collateral debt mint repay liquidation safety withdraw' },
+  { id: 'move', label: 'Move between chains', keywords: 'bridge ethereum base layerzero recipient fxusd fxsave' },
+  { id: 'fees', label: 'Fees & slippage', keywords: 'gas network fee native quote slippage price' },
   { id: 'history', label: 'History & recovery', keywords: 'history journal receipt hash pending submitted confirming completed failed cancelled signature' },
-  { id: 'privacy', label: 'Privacy & risks', keywords: 'privacy risk contract custody storage' },
+  { id: 'privacy', label: 'Privacy & risks', keywords: 'privacy risk contract custody storage wallet chain' },
   { id: 'troubleshooting', label: 'Troubleshooting', keywords: 'wallet review bridge pending error' },
 ] as const;
 
 export default function DocsPage() {
   const [search, setSearch] = useState('');
   const [hydrated, setHydrated] = useState(false);
+  const [contentsOpen, setContentsOpen] = useState(true);
   const normalizedSearch = search.trim().toLowerCase();
   const visibleSections = useMemo(
     () => normalizedSearch
@@ -34,10 +35,28 @@ export default function DocsPage() {
 
   useEffect(() => {
     setHydrated(true);
+    const media = window.matchMedia('(max-width: 760px)');
+    const syncContents = () => setContentsOpen(!media.matches);
+    syncContents();
+    media.addEventListener('change', syncContents);
     const scrollToCurrentSection = () => {
-      const id = decodeURIComponent(window.location.hash.slice(1));
+      const encodedId = window.location.hash.slice(1);
+      if (!encodedId) return;
+      let id = encodedId;
+      try {
+        id = decodeURIComponent(encodedId);
+      } catch {
+        // Leave malformed hashes addressable without breaking the page.
+      }
       if (!id) return;
-      document.getElementById(id)?.scrollIntoView({ block: 'start' });
+      const scroll = () => document.getElementById(id)?.scrollIntoView({ block: 'start' });
+      if (media.matches) {
+        setContentsOpen(true);
+        // Opening the disclosure changes the document offset; scroll after layout settles.
+        requestAnimationFrame(() => requestAnimationFrame(scroll));
+      } else {
+        scroll();
+      }
     };
     const restoreHashPosition = () => {
       requestAnimationFrame(() => requestAnimationFrame(scrollToCurrentSection));
@@ -46,11 +65,14 @@ export default function DocsPage() {
 
     restoreHashPosition();
     window.addEventListener('hashchange', restoreHashPosition);
-    return () => window.removeEventListener('hashchange', restoreHashPosition);
+    return () => {
+      window.removeEventListener('hashchange', restoreHashPosition);
+      media.removeEventListener('change', syncContents);
+    };
   }, []);
 
   return (
-    <AppShell title="Docs" subtitle="A practical guide to using FxAeon.">
+    <AppShell>
       <div className={styles.docsPage}>
         <div className={styles.docsLayout}>
           <nav className={styles.docsNav} aria-label="Documentation sections" aria-busy={!hydrated}>
@@ -60,154 +82,150 @@ export default function DocsPage() {
                 id="docs-search"
                 type="search"
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setSearch(value);
+                  if (value.trim()) setContentsOpen(true);
+                }}
                 disabled={!hydrated}
-                placeholder="Search sections"
+                placeholder="Search"
                 className={styles.searchInput}
                 autoComplete="off"
               />
               {search && <button type="button" className={styles.clearSearch} onClick={() => setSearch('')}>Clear</button>}
             </div>
-            <span className={styles.navLabel}>On this page</span>
-            <div className={styles.navLinks}>
-              {visibleSections.map((section) => <a key={section.id} href={`#${section.id}`} className={styles.navLink}>{section.label}</a>)}
-            </div>
-            <p className={styles.resultCount} aria-live="polite">
-              {visibleSections.length === 0 ? 'No sections found' : `${visibleSections.length} ${visibleSections.length === 1 ? 'section' : 'sections'}`}
-            </p>
-            {visibleSections.length === 0 && <p className={styles.emptySearch}>Try “wallet”, “bridge”, or “slippage”.</p>}
+            <details
+              className={styles.contentsDisclosure}
+              open={contentsOpen}
+              onToggle={(event) => setContentsOpen(event.currentTarget.open)}
+            >
+              <summary className={styles.contentsSummary}>
+                <span>Contents</span>
+                <span className={styles.contentsCount} aria-live="polite">
+                  {visibleSections.length === 0 ? 'No matches' : `${visibleSections.length} ${visibleSections.length === 1 ? 'section' : 'sections'}`}
+                </span>
+              </summary>
+              <div className={styles.navLinks}>
+                {visibleSections.map((section) => <a key={section.id} href={`#${section.id}`} className={styles.navLink}>{section.label}</a>)}
+              </div>
+              {visibleSections.length === 0 && <p className={styles.emptySearch}>Try “wallet”, “bridge”, or “slippage”.</p>}
+            </details>
           </nav>
 
           <div className={styles.docsContent}>
             <header className={styles.docsIntro}>
-              <p className={styles.kicker}>FxAeon documentation</p>
-              <h2>Use your wallet.<br />Understand every route.</h2>
-              <p className={styles.introCopy}>FxAeon is a focused interface for f(x) positions, fxSAVE, fxUSD borrowing, and Ethereum–Base movement. This guide explains what the app does, what your wallet approves, and where to look when an action needs attention.</p>
-              <div className={styles.factGrid} aria-label="FxAeon scope">
-                <div className={styles.fact}><strong>Two networks</strong><span>Ethereum and Base</span></div>
-                <div className={styles.fact}><strong>Wallet-first</strong><span>Every write is explicitly approved</span></div>
-                <div className={styles.fact}><strong>Read before write</strong><span>Routes are rebuilt and checked before signing</span></div>
-                <div className={styles.fact}><strong>Live context</strong><span>Portfolio balances and market prices refresh in the foreground</span></div>
-              </div>
+              <h1 id="docs-page-heading">Docs</h1>
             </header>
 
             <section id="overview" className={styles.section}>
               <h2>Overview</h2>
-              <p>FxAeon prepares each action, shows what your wallet will approve, and asks the selected wallet to approve every transaction. Ethereum is the source of truth for positions and fxSAVE state. Base is supported for moving assets between chains.</p>
-              <p>Portfolio is the Pulse surface: it combines exact Ethereum and Base wallet reads with indexed discovery, verified protocol equity, fxSAVE, FXN, and live USD context. Assets remain visible when one network or price feed is delayed, with a concise partial-value note instead of a guessed zero. The interface deliberately does not provide spot swaps, an order book, limit orders, automated execution, or a server account. Prices and charts help you read the screen; they are not execution inputs.</p>
-              <p>When the page is visible and online, a reviewed Alchemy WebSocket can announce new blocks and wallet-filtered token transfers. Those events trigger bounded refreshes; the app stops sockets in hidden or offline tabs and falls back to polling when a feed pauses.</p>
-              <details className={styles.callout}>
-                <summary className="cursor-pointer text-[14px] font-semibold text-[var(--text)]">Supported protocol actions</summary>
-                <p>For technical reference, FxAeon uses these reviewed f(x) methods:</p>
-                <ul>
-                  <li><code>getPositions</code>, <code>increasePosition</code>, <code>reducePosition</code>, <code>adjustPositionLeverage</code></li>
-                  <li><code>depositAndMint</code>, <code>repayAndWithdraw</code></li>
-                  <li><code>getBridgeQuote</code>, <code>buildBridgeTx</code></li>
-                  <li><code>getFxSaveBalance</code>, <code>getFxSaveConfig</code>, <code>getFxSaveRedeemStatus</code>, <code>getFxSaveClaimable</code>, <code>getRedeemTx</code>, <code>depositFxSave</code>, <code>withdrawFxSave</code></li>
-                </ul>
-              </details>
+              <p>Trade ETH and BTC, earn with fxSAVE, and borrow fxUSD on Ethereum. Move fxUSD and fxSAVE between Ethereum and Base.</p>
+              <p>FxAeon uses the official f(x) SDK for supported protocol reads and transaction plans. For protocol design and contract details, read the <a href="https://fxprotocol.gitbook.io/fx-docs" target="_blank" rel="noopener noreferrer">f(x) protocol docs</a>.</p>
             </section>
 
             <section id="getting-started" className={styles.section}>
               <h2>Getting started</h2>
               <ol>
-                <li>Open FxAeon in a supported browser or from the Telegram Mini App. The app starts on Portfolio; there is no landing page.</li>
-                <li>Connect or choose the wallet you want to use. Check the address shown in the wallet profile.</li>
-                <li>Start with Portfolio to inspect verified positions, or choose Trade, Earn, Borrow, or Move. A disconnected form stays editable.</li>
-                <li>Enter an amount and use the primary action. It connects the wallet when needed, then continues to the live preview and in-card review.</li>
-                <li>Read the network, wallet, amounts, approvals, and transaction steps. Approve each wallet request. A submitted transaction is shown immediately, while each route step waits for three confirmations before the next step or final state is accepted.</li>
+                <li>Open FxAeon in a supported browser or Telegram. The app workspace starts on Portfolio.</li>
+                <li>Connect your wallet, then choose Trade, Earn, Borrow, or Move.</li>
+                <li>Enter the amount and check the asset, network, recipient, output, and fees.</li>
+                <li>Confirm each transaction in your wallet. Each step continues after its matching receipt is verified.</li>
               </ol>
             </section>
 
             <section id="access" className={styles.section}>
               <h2>Browser & Telegram</h2>
-              <p>The web app and Telegram Mini App offer the same FxAeon actions. Telegram adds native sizing, haptics, and navigation, while your selected wallet still approves transactions.</p>
-              <p>When Privy is available, it supports login and wallet controls inside Telegram. On the web, you can explicitly connect a supported browser wallet; if several are installed, choose the provider you intend to use. If a Telegram connect click arrives while bridge or Privy bootstrap is still settling, FxAeon queues that intent and opens the wallet flow automatically when ready. It does not show a browser-wallet error inside Telegram or require a second click.</p>
-              <p>Production deploys validate the public build configuration, publish the static app, and then synchronize the @FxAeonBot profile and default Mini App menu from CI. The bot token remains a protected GitHub secret: it is used only by the post-deploy sync, never by the browser build or a <code>NEXT_PUBLIC_*</code> variable.</p>
+              <p>The web app and Telegram Mini App offer the same actions. Telegram adds native sizing, haptics, and navigation.</p>
+              <p>Use Connect wallet to sign in with email or an existing wallet, on the web or in Telegram. Each transaction requires confirmation in your selected wallet.</p>
             </section>
 
             <section id="wallets" className={styles.section}>
               <h2>Wallets & signing</h2>
-              <p>The address shown by your selected Privy or browser wallet is always used as the sender. FxAeon does not receive or store private keys.</p>
-              <div className={styles.callout}><p><strong>Before you approve:</strong> confirm the wallet address, network, recipient, amount, contract, and approval spender. Technical calldata, selector, value, and nonce are available in the review disclosure.</p></div>
+              <p>Your connected wallet supplies the sender. FxAeon does not receive or store private keys.</p>
+              <p>A transaction may need more than one approval. If its terms change before signing, review the updated details and choose the action again.</p>
+              <div className={styles.callout}><p><strong>Before approval:</strong> confirm the address, network, recipient, amount, contract, and any approval request in your wallet.</p></div>
             </section>
 
             <section id="trade" className={styles.section}>
               <h2>Trade & leverage</h2>
-              <p>Trade supports Ethereum ETH and BTC markets with long and short positions. The Pro ticket keeps one authoritative live price header and lazy candlestick ranges for 1H, 1D, 7D, and 30D. You can choose an input asset, amount, side, and target leverage. The app reads each pool’s available leverage range and refreshes those limits while the SDK prices the route. If a pool limit changed, the target is moved inside the new range and review stops so you can check it again.</p>
-              <p>Trade is not a general exchange: there is no spot swap, limit order, order book, or background strategy. Use the review to see the route, minimum-output information, approvals, and any slippage setting before signing. Confirm rebuilds the selected SDK route against current state; if its calldata, minimum output, quote, or other reviewed fact changed, FxAeon shows the refreshed route and requires a new acknowledgement before opening the wallet.</p>
+              <p>Trade supports ETH and BTC long and short positions on Ethereum. Choose an input asset, amount, side, and leverage. The market panel shows current price and 1H, 1D, 7D, and 30D charts.</p>
+              <p>Action details show the transaction steps, minimum output, approvals, and slippage. The primary action checks the latest plan before opening your wallet. If terms change, review the new details and choose the action again.</p>
             </section>
 
             <section id="positions" className={styles.section}>
               <h2>Position management</h2>
-              <p>Positions are read from Ethereum and shown with their market, side, collateral, debt, and leverage context. A position can be increased, reduced, closed, or adjusted to a new leverage target when the selected route supports it.</p>
-              <p>When validated display prices are available, <strong>estimated net equity</strong> is calculated as collateral value in USD minus debt value in USD. It is a display estimate, not a liquidation value, P&amp;L, close quote, oracle value, or guarantee of what a transaction will return. A missing price is shown as —; retained position data stays visible while it refreshes.</p>
-              <p>Refreshing is important after a write. A stale or incomplete position is not treated as a safe current quote, and the app can block review until state is read again. Increasing or adjusting a position applies the same current leverage-limit and fresh-route checks used when opening one.</p>
+              <p>Positions are read from Ethereum and show market, side, collateral, debt, and leverage. Increase, reduce, close, or adjust leverage when the selected action supports it.</p>
+              <p>Cards show a reference market price and estimated collateral and debt. These are display values, not health, P&amp;L, ROI, entry, or liquidation metrics.</p>
+              <p>When display prices are validated, <strong>position value</strong> is estimated collateral value minus debt in USD. It is a display estimate, not a liquidation value or execution quote. Unavailable values stay blank or show a loading skeleton while available position data remains visible.</p>
+              <p>After a transaction, the app rereads state. Stale data can block an action until the current position and plan are available.</p>
             </section>
 
             <section id="earn" className={styles.section}>
               <h2>Earn with fxSAVE</h2>
-              <p>Earn reads your fxSAVE balance, vault value when available, redemption status, and claimable preview from Ethereum. The page stays focused on three actions: deposit, withdraw, and claim fxSAVE. Supported input and receive assets are shown by the current protocol route.</p>
-              <p>Deposit forms show the selected wallet’s verified available balance for each supported input. Token pickers pair the available quantity with its estimated USD worth, not the price of one token. A balance stays in a loading state when Ethereum does not respond; that state is never treated as zero. Your fxSAVE balance remains the authoritative withdrawal limit.</p>
-              <p>Withdrawals can be instant or queued where the selected asset supports that path. A queued redemption remains pending through its cooldown; claim review becomes available when the current redemption state says it is ready. Final review shows the selected route and slippage when applicable. Earn displays the configured instant-redemption fee before review.</p>
+              <p>Earn reads fxSAVE balances, vault value, redemption status, and claimable amounts from Ethereum. Its actions are deposit, withdraw, and claim.</p>
+              <p>Deposit supports fxUSD and USDC. Forms show the selected wallet’s verified balance, and token pickers pair quantity with estimated USD worth. Unavailable balances stay in a loading state; fxSAVE remains the withdrawal limit.</p>
+              <p>Withdrawals may be instant or queued. Queued redemptions remain pending through cooldown and expose Claim when ready. Action details show the transaction steps, slippage, and the instant-redemption fee when applicable.</p>
             </section>
 
             <section id="borrow" className={styles.section}>
               <h2>Borrow fxUSD</h2>
-              <p>Borrow creates or manages a long collateral position in the ETH or BTC market. Deposit collateral and mint fxUSD, or repay fxUSD and withdraw collateral. The position selector keeps collateral and debt context visible before a review.</p>
-              <p>Collateral and fxUSD repayment fields show the selected wallet’s verified Ethereum balance when available. Pending reads are kept distinct from a verified zero. A collateral withdrawal is limited by the selected position and its contract rules, not by the wallet’s free-token balance.</p>
-              <p>Choose the action you intend—deposit collateral and mint fxUSD, or repay debt and withdraw collateral. The review states exactly which balance, debt, and position values will change. Withdrawing collateral can reduce the position’s safety margin and increase liquidation risk under the protocol’s contract rules. FxAeon does not promise a liquidation buffer; read the current collateral, debt, and reviewed route carefully before signing.</p>
+              <p>Borrow manages a long ETH or BTC collateral position. Deposit collateral and mint fxUSD, or repay fxUSD and withdraw collateral. The position selector keeps collateral and debt context visible.</p>
+              <p>Fields show the selected wallet’s verified Ethereum balance when available. Pending reads stay distinct from zero. Withdrawable collateral is limited by the selected position and contract rules.</p>
+              <p>Review the action details before signing. Withdrawing collateral can reduce the safety margin and increase liquidation risk.</p>
             </section>
 
             <section id="move" className={styles.section}>
               <h2>Move between chains</h2>
-              <p>Move bridges supported fxUSD and fxSAVE assets between Ethereum and Base through the f(x) bridge. Choose the direction, asset, amount, and recipient. If you are disconnected, the recipient control opens the wallet selector without leaving Move. The connected wallet remains the source signer and fee-refund address. The destination recipient defaults to that wallet, but you can explicitly choose another recipient.</p>
-              <p>The current Move form exposes configured canonical routes only. It reads available balances on the selected source chain: Ethereum uses the underlying approval token, while Base uses the configured source OFT. The connected wallet remains the source signer and fee-refund address.</p>
-              <p>Advanced custom-contract/OFT routing is not exposed in this build. Older signature-required drafts may still carry an advanced mode marker for safe recovery, but the live form does not let a user create or edit those routes. Ethereum may require one exact approval before the canonical OFT send.</p>
-              <div className={styles.callout}><p><strong>Bridge risk:</strong> check the source network, destination network, recipient, and token identity. A confirmed source transaction is not the same as delivered destination funds. FxAeon verifies matching LayerZero events from the captured destination baseline block.</p></div>
+              <p>Move bridges supported fxUSD and fxSAVE between Ethereum and Base through the f(x) bridge. Choose direction, asset, amount, and recipient. The connected wallet signs and receives fees; the recipient defaults to that wallet.</p>
+              <p>Supported actions are checked against the selected chain, asset, balance, bridge connection, fee quote, and recipient. Advanced bridge mode exposes token and deployment fields for expert users. Ethereum may require one approval before the send.</p>
+              <div className={styles.callout}><p><strong>Before approval:</strong> check both networks, token identity, recipient, amount, and fee. Source confirmation and destination delivery are separate states; FxAeon verifies matching LayerZero events.</p></div>
             </section>
 
             <section id="fees" className={styles.section}>
               <h2>Fees & slippage</h2>
-              <p>Move bridge reviews include the current native LayerZero fee quote. Other routes can show a native transaction value when the SDK returns one, but FxAeon does not present a universal gas forecast. Protocol, redemption, or route-specific charges are surfaced when the SDK returns them; FxAeon does not invent a fee estimate.</p>
-              <p>Slippage is a device-local preference used by Trade, Positions, and routed or instant fxSAVE forms. Presets are 0.1%, 0.5%, 1%, and 2%. Borrow uses its guarded route default; Move uses the bridge route’s quoted minimum delivery. Direct pool-token and queued fxSAVE paths omit a user slippage value. Lower tolerance can make a route fail; higher tolerance permits a worse minimum output. Slippage protection is not a promise about price.</p>
-              <p>USD values and charts are display-only. Current display prices are primarily validated from DefiLlama; a bounded CoinGecko contract-price fallback can fill independently validated missing token quotes. ETH/BTC ticks use the public Coinbase feed only when they are current, monotonic, and close to the validated anchor; an interruption immediately falls back to the last validated snapshot. ETH/BTC history uses Coinbase candles with CoinGecko fallback for 1H, 1D, 7D, and 30D. Execution uses on-chain route data, oracle behavior, and contract checks, not these display feeds.</p>
+              <p>Move shows the current LayerZero fee quote. Other actions show estimated gas and network cost when data is available; Base may add network and operator fees. Unavailable estimates stay labelled.</p>
+              <p>Slippage presets are 0.1%, 0.5%, 1%, and 2% for Trade, Positions, and applicable fxSAVE actions. Borrow and Move use their action defaults. Lower tolerance can fail; higher tolerance allows a lower minimum output.</p>
+              <p>USD values and charts are display data. Execution follows the live protocol quote and contract checks.</p>
             </section>
 
             <section id="history" className={styles.section}>
               <span id="recovery" aria-hidden="true" />
               <h2>History & recovery</h2>
-              <p>History is the sole transaction-history surface. It includes Signature required, Submitted, Confirming, Completed, Failed, and Cancelled states. A signature-required entry reopens the exact wallet/chain/action-scoped review draft so you can continue signing; it never stores private keys or executable calldata.</p>
-              <p>After your wallet returns a transaction hash, FxAeon saves it on this device so History can check the receipt again. A hash can be linked before inclusion, but FxAeon does not mark a step terminal until the matching receipt remains canonical through three confirmations. This saved record is not a complete blockchain history or proof of balance, position, delivery, or authorization.</p>
-              <p>History reconciles hashes against the selected wallet and chain. It never resends automatically. If a route partially completes, do not repeat the full action; inspect each step and the current on-chain state. For a bridge, wait for separate destination delivery verification. Unsigned drafts are local-only and are not promised across devices.</p>
+              <p>History tracks Signature required, Submitted, Confirming, Completed, Failed, and Cancelled. A signature-required entry restores its wallet, chain, and action details for deliberate continuation. Connecting or refreshing never opens a wallet prompt.</p>
+              <p>After a transaction hash is returned, FxAeon saves it on this device and checks the matching receipt and mined transaction details. A step is complete after its receipt is verified. This record is not a complete blockchain history.</p>
+              <p>History checks the selected wallet and chain and never resends automatically. Inspect partially completed actions and wait for separate bridge delivery verification before retrying.</p>
             </section>
 
             <section id="privacy" className={styles.section}>
               <h2>Privacy & risks</h2>
+              <p><a href="/privacy.html">How FxAeon handles your data</a></p>
               <ul>
-                <li>No FxAeon server account, delegated signer, background executor, or private-key field exists.</li>
-                <li>Theme, slippage, and recovery hints are device-local storage. Local values can be stale or manipulated and are reread against chain truth.</li>
-                <li>Wallet prompts remain the signing boundary. Review every contract, selector, amount, recipient, approval, and network.</li>
-                <li>Contract and liquidation outcomes are determined on-chain. Do not treat a UI preview, USD display, or safety label as a guarantee.</li>
-                <li>Public RPC, wallet connector, SDK, token contracts, bridge infrastructure, and the underlying chains remain external trust dependencies.</li>
+                <li>FxAeon has no account server, delegated signer, background executor, or private-key field. Your wallet approves each transaction.</li>
+                <li>Theme, slippage, and recovery hints are stored on this device and reread against chain state.</li>
+                <li>Review the address, network, contract, amount, recipient, and approval in every wallet prompt.</li>
+                <li>Contract outcomes and liquidation risk are determined by the protocol and network. Wallets, network services, token contracts, bridges, and chains remain external dependencies.</li>
               </ul>
             </section>
 
             <section id="troubleshooting" className={styles.section}>
               <h2>Troubleshooting</h2>
               <h3>Wallet is not available</h3>
-              <p>Wait for the wallet provider, reload if the screen reports a timeout, or reopen the Mini App from Telegram’s bot menu. Confirm that the wallet is connected and selected.</p>
-              <h3>The review button is disabled</h3>
-              <p>Check that an amount is positive, the input is valid for the token decimals, the selected position is current, and any slippage or leverage value is within the displayed bounds.</p>
-              <h3>The route stopped or a receipt is unclear</h3>
-              <p>Read the status and History entry. A rejection, revert, nonce drift, timeout, or unmatched receipt stops later steps. Do not resubmit until the wallet and chain state are understood.</p>
-              <h3>A bridge is source-confirmed but not delivered</h3>
-              <p>Keep the History entry. Destination delivery is checked separately using the reviewed LayerZero identifiers and recipient; source confirmation alone is not proof of arrival.</p>
+              <p>Wait for the wallet to load, reload if the screen reports a timeout, or reopen the Mini App from Telegram’s bot menu. Confirm that the wallet is connected and selected.</p>
+              <h3>The action button is disabled</h3>
+              <p>Check that an amount is positive, the amount format is valid for the selected token, the selected position is current, and any slippage or leverage value is within the displayed bounds.</p>
+              <h3>The action stopped or a receipt is unclear</h3>
+              <p>Read the status and History entry. A rejection, failed transaction, changed account, timeout, or receipt that does not match stops later steps. Do not resubmit until the wallet and chain state are understood.</p>
+              <h3>Sent but not received</h3>
+              <p>Keep the History entry open. A source transaction can confirm before destination funds arrive; FxAeon checks delivery separately.</p>
             </section>
 
             <footer className={styles.docsFooter}>
-              FxAeon’s documentation describes the active client surface. Contract behavior, network state, quotes, and wallet prompts remain authoritative at the time of each action.
-              <span className="ml-1"><Link href="/more" className="text-mint underline underline-offset-2">Back to More</Link></span>
+              Check current contract, network, quote, and wallet details when you act.
+              <nav className={styles.footerLinks} aria-label="Documentation links">
+                <Link href="/" className="text-mint underline underline-offset-2">Portfolio</Link>
+                <Link href="/more" className="text-mint underline underline-offset-2">More</Link>
+                <a href="https://fxprotocol.gitbook.io/fx-docs" target="_blank" rel="noopener noreferrer" className="text-mint underline underline-offset-2">f(x) protocol docs</a>
+              </nav>
             </footer>
           </div>
         </div>

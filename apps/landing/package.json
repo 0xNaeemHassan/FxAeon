@@ -1,0 +1,11 @@
+{
+  "name": "@fxaeon/landing",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Standalone static landing page for fxaeon.xyz",
+  "scripts": {
+    "build": "node build.mjs",
+    "serve": "node serve.mjs",
+    "test": "node --test test/static.test.mjs"
+  }
+}

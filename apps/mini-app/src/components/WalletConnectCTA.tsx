@@ -44,12 +44,26 @@ export default function WalletConnectCTA({
     );
   }
 
-  const title = authenticated ? 'Choose a wallet' : 'Connect your wallet';
-  const action = authenticated ? 'Choose wallet' : 'Connect wallet';
+  // A disconnected account only needs the next action. Keep this entry
+  // lightweight so routes with their own action rail do not gain a second
+  // explanatory card.
+  if (!authenticated) {
+    return (
+      <ConnectWalletButton
+        aria-label="Connect wallet"
+        className="button button-primary glass-press flex min-h-11 w-full items-center justify-center rounded-xl px-4 py-2.5 text-[13px] font-semibold"
+      >
+        Connect wallet
+      </ConnectWalletButton>
+    );
+  }
+
+  const title = 'Choose a wallet';
+  const action = 'Choose wallet';
 
   if (compact) {
     return (
-      <Card className="wallet-connect-cta wallet-connect-cta-compact flex items-center gap-2.5 rounded-2xl border-[rgba(255,194,102,.24)] p-3">
+      <Card className="wallet-connect-cta wallet-connect-cta-compact flex items-center gap-2.5 rounded-2xl p-3">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)] text-mint">
           <WalletCards className="h-[18px] w-[18px]" aria-hidden="true" />
         </span>
@@ -68,7 +82,7 @@ export default function WalletConnectCTA({
   }
 
   return (
-    <Card className="wallet-connect-cta border-[rgba(255,194,102,.24)] p-4">
+    <Card className="wallet-connect-cta p-4">
       <div className="flex items-start gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)] text-mint">
           <WalletCards className="h-5 w-5" aria-hidden="true" />
@@ -77,6 +91,7 @@ export default function WalletConnectCTA({
           <p className="text-[14px] font-semibold">{title}</p>
           <p className="mt-1 text-[11.5px] leading-relaxed text-mut">{body}</p>
           <ConnectWalletButton
+            aria-label={action}
             className="button button-primary glass-press mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold"
           >
             {action}

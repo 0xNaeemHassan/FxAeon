@@ -68,6 +68,11 @@ const OFT_PEER_ABI = [{
   outputs: [{ name: "", type: "bytes32" }],
 }] as const;
 
+function assertNonZeroAddress(value: Address, label: string): Address {
+  if (value.toLowerCase() === ZERO_ADDRESS.toLowerCase()) throw new Error(`${label} cannot be the zero address`);
+  return value;
+}
+
 /** Keep the app's cross-version viem client boundary structural at read sites. */
 async function readBridgeContract(client: { readContract: unknown }, request: unknown): Promise<unknown> {
   if (typeof client.readContract !== "function") throw new Error("bridge RPC client cannot perform contract reads");
@@ -178,6 +183,23 @@ export async function validateAdvancedBridgeContracts(params: {
   sourceApprovalRequired: boolean;
   destinationApprovalRequired: boolean;
 }> {
+  // Keep these checks at the planner boundary as well as in the UI. Advanced
+  // routes may be rebuilt by recovery or confirm-time refresh code that does
+  // not pass through the original form event handlers.
+  const sourceOftAddress = assertNonZeroAddress(
+    assertChecksummedAddress(String(params.sourceOftAddress), "source OFT"),
+    "source OFT",
+  );
+  const destinationOftAddress = assertNonZeroAddress(
+    assertChecksummedAddress(String(params.destinationOftAddress), "destination OFT"),
+    "destination OFT",
+  );
+  const ethereumApprovalTokenAddress = params.ethereumApprovalTokenAddress === undefined
+    ? undefined
+    : assertNonZeroAddress(
+      assertChecksummedAddress(String(params.ethereumApprovalTokenAddress), "Ethereum underlying approval token"),
+      "Ethereum underlying approval token",
+    );
   await Promise.all([
     assertPublicClientChain(params.sourceClient, params.sourceChainId),
     assertPublicClientChain(params.destinationClient, params.destinationChainId),
@@ -188,22 +210,24 @@ export async function validateAdvancedBridgeContracts(params: {
   if (params.destinationClient.chain?.id !== undefined && params.destinationClient.chain.id !== params.destinationChainId) {
     throw new Error("advanced bridge destination RPC client chain does not match the selected destination chain");
   }
-  const sourceMetadata = await readOftMetadata({ client: params.sourceClient, address: params.sourceOftAddress, label: "source OFT" });
-  const destinationMetadata = await readOftMetadata({ client: params.destinationClient, address: params.destinationOftAddress, label: "destination OFT" });
+  const sourceMetadata = await readOftMetadata({ client: params.sourceClient, address: sourceOftAddress, label: "source OFT" });
+  const destinationMetadata = await readOftMetadata({ client: params.destinationClient, address: destinationOftAddress, label: "destination OFT" });
+  assertNonZeroAddress(sourceMetadata.localTokenAddress, "source OFT local token");
+  assertNonZeroAddress(destinationMetadata.localTokenAddress, "destination OFT local token");
   await assertDeployed18DecimalToken({ client: params.sourceClient, address: sourceMetadata.localTokenAddress, label: "source local token" });
   await assertDeployed18DecimalToken({ client: params.destinationClient, address: destinationMetadata.localTokenAddress, label: "destination local token" });
   if (params.sourceChainId === 1) {
     if (sourceMetadata.approvalRequired) {
-      if (!params.ethereumApprovalTokenAddress) throw new Error("Ethereum OFTAdapter requires an explicit underlying approval token");
-      if (params.ethereumApprovalTokenAddress.toLowerCase() !== sourceMetadata.localTokenAddress.toLowerCase()) {
+      if (!ethereumApprovalTokenAddress) throw new Error("Ethereum OFTAdapter requires an explicit underlying approval token");
+      if (ethereumApprovalTokenAddress.toLowerCase() !== sourceMetadata.localTokenAddress.toLowerCase()) {
         throw new Error("Ethereum approval token must exactly match the source OFT token() metadata");
       }
-    } else if (params.ethereumApprovalTokenAddress) {
+    } else if (ethereumApprovalTokenAddress) {
       throw new Error("This Ethereum OFT does not require approval; remove the supplied approval token");
     }
   } else if (sourceMetadata.approvalRequired) {
     throw new Error("Base-source OFTAdapter approval is unsupported in advanced mode");
-  } else if (params.ethereumApprovalTokenAddress) {
+  } else if (ethereumApprovalTokenAddress) {
     throw new Error("An Ethereum underlying approval token is only valid for an Ethereum source bridge");
   }
 
@@ -216,13 +240,13 @@ export async function validateAdvancedBridgeContracts(params: {
   try {
     [sourcePeer, destinationPeer] = await Promise.all([
       readBridgeContract(params.sourceClient, {
-        address: params.sourceOftAddress,
+        address: sourceOftAddress,
         abi: OFT_PEER_ABI,
         functionName: "peers",
         args: [getEidByChainId(params.destinationChainId)],
       }),
       readBridgeContract(params.destinationClient, {
-        address: params.destinationOftAddress,
+        address: destinationOftAddress,
         abi: OFT_PEER_ABI,
         functionName: "peers",
         args: [getEidByChainId(params.sourceChainId)],
@@ -231,8 +255,8 @@ export async function validateAdvancedBridgeContracts(params: {
   } catch (cause) {
     throw new Error(`advanced OFTs do not expose a readable LayerZero peers(uint32) surface: ${cause instanceof Error ? cause.message : String(cause)}`);
   }
-  assertPeer(sourcePeer, params.destinationOftAddress, "source OFT");
-  assertPeer(destinationPeer, params.sourceOftAddress, "destination OFT");
+  assertPeer(sourcePeer, destinationOftAddress, "source OFT");
+  assertPeer(destinationPeer, sourceOftAddress, "destination OFT");
 
   return {
     sourceTokenAddress: sourceMetadata.localTokenAddress,

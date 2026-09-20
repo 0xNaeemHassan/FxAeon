@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   ArrowDownToLine,
   ArrowLeftRight,
@@ -40,13 +40,14 @@ import {
 } from '@/lib/fx';
 import { positionTokenDecimals, type UiPosition } from '@/app/trade/fxUi';
 import { formatUsd, priceKeyForSymbol, usdValueForUnits, type UsdPriceMap } from '@/lib/prices';
-import { walletAssetValuation } from '@/lib/walletAssets';
+import { summarizeWalletAssets, walletAssetValuation } from '@/lib/walletAssets';
 import { calculatePositionUsdValuation } from '@/lib/positionValuation';
-import { fxSaveUsdValue } from '@/lib/fxSaveUnits';
+import { fxSaveUsdValue, normalizedFxSaveAssetsWei } from '@/lib/fxSaveUnits';
 import { haptic } from '@/lib/telegram';
 import { usePrivyWallet, useWalletReadyTimeout } from '@/lib/wallet';
 import styles from '@/app/AccountWorkspace.module.css';
 import ConnectWalletButton from '@/components/ConnectWalletButton';
+import { ValueOrSkeleton } from '@/components/MissingValue';
 import { displayAssetSymbol, PortfolioAssets, PortfolioNetworkTabs, type PortfolioNetwork } from '@/components/PortfolioAssets';
 
 const EMPTY_FX_SAVE: FxSaveSnapshot = {
@@ -58,9 +59,9 @@ const EMPTY_FX_SAVE: FxSaveSnapshot = {
 
 /**
  * Portfolio deliberately reports only state that FxAeon can verify. Wallet
- * value is the sum of fresh wallet balances plus verified protocol equity. A
- * partial total remains useful when one asset is unpriced, and the card calls
- * that out without presenting an estimate as a verified complete total.
+ * value uses complete fresh reads when available. During incomplete reads,
+ * the headline may show only the subtotal of individually valued rows and
+ * keeps that limitation available to assistive technology and on hover.
  */
 export default function PortfolioPage() {
   return (
@@ -97,6 +98,9 @@ function PortfolioWallet() {
   const liveAssets = useWalletAssets({ address: walletAddress, enabled: Boolean(walletAddress) });
   const [network, setNetwork] = useState<PortfolioNetwork>('all');
   const [fxSaveState, setFxSaveState] = useState<{ identity: string; snapshot: FxSaveSnapshot }>({ identity: '', snapshot: EMPTY_FX_SAVE });
+  const [fxSaveRefreshing, setFxSaveRefreshing] = useState<{ identity: string; active: boolean }>({ identity: '', active: false });
+  const fxSaveStateRef = useRef(fxSaveState);
+  fxSaveStateRef.current = fxSaveState;
   const fxSaveSnapshot = fxSaveState.identity === identity ? fxSaveState.snapshot : EMPTY_FX_SAVE;
   const requestId = useRef(0);
   const realtime = useRealtimeChainState(1) as import('@/lib/realtimeChain').RealtimeChainState;
@@ -105,7 +109,14 @@ function PortfolioWallet() {
   const loadProtocol = useCallback(async () => {
     if (!walletAddress) return;
     const activeRequest = ++requestId.current;
-    setFxSaveState({ identity, snapshot: { ...EMPTY_FX_SAVE, status: 'loading' } });
+    const previousState = fxSaveStateRef.current;
+    const previous = previousState.identity === identity ? previousState.snapshot : EMPTY_FX_SAVE;
+    const hasVerifiedSnapshot = previous.status !== 'idle' && previous.status !== 'loading';
+    setFxSaveRefreshing({ identity, active: true });
+    // Keep a verified same-wallet snapshot visible while a block-triggered
+    // refresh is pending. Reset only when this is the first read for a new
+    // wallet identity, so the headline never flickers during background work.
+    if (!hasVerifiedSnapshot) setFxSaveState({ identity, snapshot: { ...EMPTY_FX_SAVE, status: 'loading' } });
     try {
       await withReadDeadline(assertConfiguredPublicClientChain(1));
       if (requestId.current !== activeRequest) return;
@@ -122,16 +133,21 @@ function PortfolioWallet() {
         snapshot: {
           status: fulfilled === 2 ? 'ready' : fulfilled > 0 ? 'partial' : 'unavailable',
           fxSaveShares: fxSave.status === 'fulfilled' ? formatProtocolAmount(fxSave.value.balanceWei) : null,
-          fxSaveAssets: fxSave.status === 'fulfilled' && fxSave.value.assetsWei !== undefined
-            ? formatProtocolAmount(fxSave.value.assetsWei)
+          fxSaveAssets: fxSave.status === 'fulfilled'
+            && normalizedFxSaveAssetsWei(fxSave.value.balanceWei, fxSave.value.assetsWei) !== undefined
+            ? formatProtocolAmount(normalizedFxSaveAssetsWei(fxSave.value.balanceWei, fxSave.value.assetsWei)!)
             : null,
           redeemReady: redeem.status === 'fulfilled' ? redeem.value.isCooldownComplete : null,
         },
       });
     } catch {
       if (requestId.current === activeRequest) {
-        setFxSaveState({ identity, snapshot: { ...EMPTY_FX_SAVE, status: 'unavailable' } });
+        setFxSaveState({ identity, snapshot: hasVerifiedSnapshot
+          ? { ...previous, status: 'unavailable' }
+          : { ...EMPTY_FX_SAVE, status: 'unavailable' } });
       }
+    } finally {
+      if (requestId.current === activeRequest) setFxSaveRefreshing({ identity, active: false });
     }
   }, [identity, walletAddress]);
 
@@ -181,40 +197,57 @@ function PortfolioWallet() {
       ? hasVerifiedReads ? 'partial' : 'unavailable'
       : loading || fxSaveLoading ? 'loading' : 'ready',
   };
-  const refreshing = walletBalances.isFetching || fxSaveLoading || positionState.refreshing;
-  const valuation = liveAssets.data
-    ? walletAssetValuation(liveAssets.data)
-    : walletValuation(protocol.balances, priceSnapshot.prices, liveAssets.status === 'ready');
+  const refreshing = walletBalances.isFetching || liveAssets.isFetching || fxSaveLoading || (fxSaveRefreshing.identity === identity && fxSaveRefreshing.active) || positionState.refreshing;
+  const fallbackValuation = walletValuation(protocol.balances, priceSnapshot.prices, liveAssets.status === 'ready');
+  const valuationNow = Date.now();
+  const displayAssets = liveAssets.data ? summarizeWalletAssets(liveAssets.data, valuationNow) : null;
+  const valuation = displayAssets ? walletAssetValuation(displayAssets) : fallbackValuation;
+  const pricedWalletRows = displayAssets?.assets.filter((asset) => asset.balanceWei > 0n && asset.usdValue !== null && asset.priceStatus === 'fresh') ?? [];
+  const allWalletRowsPriced = displayAssets
+    ? pricedWalletRows.length === displayAssets.assets.filter((asset) => asset.balanceWei > 0n).length
+    : true;
+  const knownWalletValueCount = displayAssets ? pricedWalletRows.length : fallbackValuation.knownAssetCount;
+  const knownWalletSubtotalUsd = displayAssets
+    ? pricedWalletRows.reduce((sum, asset) => sum + (asset.usdValue ?? 0), 0)
+    : fallbackValuation.knownSubtotalUsd ?? 0;
   const positionValues = positionState.positions.map((position) =>
     positionIsStale(position, positionState.failedGroups) || priceSnapshot.status === 'stale'
       ? null : positionNetEquityUsd(position, priceSnapshot.prices));
   const missingPositions = positionValues.filter((value) => value === null).length;
   const protocolEquityUsd = positionValues.reduce<number>((sum, value) => sum + (value ?? 0), 0);
-  const portfolioValuation = valuation.totalUsd === null
-    ? valuation
-    : { ...valuation, totalUsd: valuation.totalUsd + protocolEquityUsd,
-      complete: valuation.complete && missingPositions === 0,
-      reason: valuation.reason };
+  const knownPositionCount = positionValues.filter((value) => value !== null).length;
+  const positionsComplete = positionState.status === 'ready'
+    && positionState.pendingPositions.length === 0 && missingPositions === 0;
+  const portfolioComplete = valuation.complete && allWalletRowsPriced && positionsComplete;
+  const knownSubtotalUsd = knownWalletSubtotalUsd + protocolEquityUsd;
+  const hasKnownSubtotal = knownWalletValueCount > 0 || knownPositionCount > 0;
+  const portfolioValuation = {
+    ...valuation,
+    complete: portfolioComplete,
+    totalUsd: portfolioComplete && valuation.totalUsd !== null
+      ? valuation.totalUsd + protocolEquityUsd : null,
+    reason: '',
+  };
 
   return (
       <div id="overview" className={styles.overview}>
       <div className={styles.primaryColumn}>
-        <RecentActivityPreview walletAddress={wallet.address as Address} />
         <SupportedValueCard
         walletAddress={wallet.address}
         protocol={protocol}
         valuation={portfolioValuation}
+        displayTotalUsd={portfolioComplete ? portfolioValuation.totalUsd : hasKnownSubtotal ? knownSubtotalUsd : null}
+        displayTotalIsPartial={!portfolioComplete && hasKnownSubtotal}
         loading={loading || liveLoading}
-        fxSaveLoading={fxSaveLoading}
         refreshing={refreshing}
         onRefresh={() => {
           haptic('light');
           void Promise.allSettled([liveAssets.refresh(), walletBalances.refresh(), loadProtocol(), positionState.refresh()]);
         }}
-        positionValue={positionState.pendingPositions.length > 0
-          ? '…'
+          positionValue={positionState.pendingPositions.length > 0
+          ? '—'
           : positionState.status === 'idle' || positionState.status === 'loading'
-          ? '…'
+          ? '—'
           : positionState.status === 'ready'
             ? String(positionState.positions.length)
               : positionState.status === 'partial' && positionState.positions.length > 0
@@ -254,6 +287,7 @@ function PortfolioWallet() {
         </section>
 
         <EarnPositionCard protocol={protocol} loading={fxSaveLoading} prices={priceSnapshot.prices} />
+        <RecentActivityPreview walletAddress={wallet.address as Address} />
       </div>
 
       <aside className={styles.secondaryColumn}>
@@ -277,8 +311,10 @@ function PortfolioWallet() {
         </div>
 
         <PortfolioNetworkTabs value={network} onChange={setNetwork} />
-        <PortfolioAssets snapshot={liveAssets.data} loading={liveLoading} status={liveAssets.status} onRetry={() => void liveAssets.refresh()} network={network} />
-        {!liveAssets.data && <WalletBalancesCard balances={protocol.balances} loading={loading || liveLoading} prices={priceSnapshot.prices} completeAllowed={liveAssets.status === 'ready'} />}
+        <PortfolioAssets snapshot={liveAssets.data} loading={liveLoading} refreshing={liveAssets.isFetching} onRetry={() => void liveAssets.refresh()} network={network} />
+        {!liveAssets.data && <WalletBalancesCard balances={protocol.balances} loading={loading || liveLoading} refreshing={refreshing} prices={priceSnapshot.prices} completeAllowed={liveAssets.status === 'ready'} onRefresh={() => {
+          void Promise.allSettled([liveAssets.refresh(), walletBalances.refresh(), loadProtocol(), positionState.refresh()]);
+        }} />}
       </aside>
     </div>
   );
@@ -287,22 +323,13 @@ function PortfolioWallet() {
 function DisconnectedPortfolio({ authenticated }: { authenticated: boolean }) {
   return (
     <div id="overview" className={`${styles.overview} ${styles.disconnectedOverview}`}>
-      <div className={styles.primaryColumn}>
-        <Card glow elevation={2} className={`${styles.valueCard} ${styles.disconnectedValueCard} relative overflow-hidden p-5`}>
-          <div className={styles.valueMain}>
-            <div>
-              <p className={`${styles.valueAmount} text-display text-[38px] font-semibold leading-none tabular-nums`}>—</p>
-            </div>
-            <ConnectWalletButton className="button button-primary glass-press flex min-h-11 w-full max-w-[190px] items-center justify-center gap-2 rounded-xl px-3 py-2 text-[12px] font-semibold">
-              {authenticated ? 'Choose wallet' : 'Connect wallet'}
-            </ConnectWalletButton>
-          </div>
-        </Card>
-
+      <div className={`${styles.primaryColumn} col-span-full`}>
+        <ConnectWalletButton className="button button-primary glass-press flex min-h-11 w-full max-w-[320px] self-center items-center justify-center gap-2 rounded-xl px-4 py-3 text-[13px] font-semibold">
+          {authenticated ? 'Choose wallet' : 'Connect wallet'}
+        </ConnectWalletButton>
         <QuickActions />
         <MarketOverview />
       </div>
-
     </div>
   );
 }
@@ -316,8 +343,8 @@ function EarnPositionCard({ protocol, loading, prices }: { protocol: ProtocolSna
       <SectionTitle right={<Link href="/earn" className="glass-press flex min-h-11 items-center gap-1 px-1 text-[11px] font-semibold text-mint">Open Earn <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" /></Link>}><span id="portfolio-earn-heading">Earn position</span></SectionTitle>
       <Card className={styles.portfolioEarnCard}>
         {loading ? <div role="status" aria-label="Loading fxSAVE position" className={styles.portfolioEarnSkeleton}><span className="skeleton h-5 w-28 rounded" /><span className="skeleton h-8 w-44 rounded" /><span className="skeleton h-3 w-32 rounded" /></div> : <>
-          <div className={styles.portfolioEarnTopline}><div><p className="text-[13px] text-mut">fxSAVE</p><strong className="text-display text-[24px] font-semibold tabular-nums">{protocol.fxSaveShares ?? '0'} fxSAVE</strong></div><PiggyBank className="h-6 w-6 text-mint" aria-hidden="true" /></div>
-          <div className={styles.portfolioEarnMetrics}><span><small>Value</small><strong>{usd === null ? '—' : formatUsd(usd)}</strong></span><span><small>Underlying</small><strong>{protocol.fxSaveAssets ?? '—'} fxUSD</strong></span></div>
+          <div className={styles.portfolioEarnTopline}><div><p className="text-[13px] text-mut">fxSAVE</p><strong className="text-display text-[24px] font-semibold tabular-nums"><ValueOrSkeleton value={protocol.fxSaveShares ?? '—'} width="lg" label="Loading fxSAVE balance" />{' '}fxSAVE</strong></div><PiggyBank className="h-6 w-6 text-mint" aria-hidden="true" /></div>
+          <div className={styles.portfolioEarnMetrics}><span><small>Value</small><strong><ValueOrSkeleton value={usd === null ? '—' : formatUsd(usd)} width="md" label="fxSAVE value unavailable" /></strong></span><span><small>Underlying</small><strong><ValueOrSkeleton value={protocol.fxSaveAssets ?? '—'} width="lg" label="Loading fxSAVE underlying balance" />{' '}fxUSD base-pool shares</strong></span></div>
           <div role="group" className={styles.portfolioEarnActions} aria-label="fxSAVE actions"><Link href="/earn?mode=deposit" className="glass-press">Deposit</Link><Link href="/earn?mode=withdraw" className="glass-press">Withdraw</Link><Link href="/earn?mode=claim" className="glass-press">Claim</Link></div>
         </>}
       </Card>
@@ -329,22 +356,25 @@ function SupportedValueCard({
   walletAddress,
   protocol,
   valuation,
+  displayTotalUsd,
+  displayTotalIsPartial,
   loading,
-  fxSaveLoading,
   refreshing,
   onRefresh,
   positionValue,
 }: {
   walletAddress: string;
   protocol: ProtocolSnapshot;
-  valuation: WalletValuation;
+  valuation: Pick<WalletValuation, 'assetCount'>;
+  displayTotalUsd: number | null;
+  displayTotalIsPartial: boolean;
   loading: boolean;
-  fxSaveLoading: boolean;
   refreshing: boolean;
   onRefresh: () => void;
   positionValue: string;
 }) {
   const supportedAssetValue = loading && valuation.assetCount === 0 ? '—' : String(valuation.assetCount);
+  const partialTotalLabel = 'Known subtotal only. Other balances or position values may be missing.';
 
   return (
     <Card glow elevation={2} className={`${styles.valueCard} relative overflow-hidden p-5`}>
@@ -352,7 +382,7 @@ function SupportedValueCard({
         <div>
           <div className="mt-2"><AddressChip address={walletAddress} /></div>
         </div>
-        <button type="button" aria-label="Refresh portfolio" onClick={onRefresh} disabled={refreshing} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-xl text-mut hover:text-mint disabled:opacity-50">
+        <button type="button" aria-label="Refresh portfolio balances and positions" title="Refresh balances and positions" onClick={onRefresh} disabled={refreshing} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-xl text-mut hover:text-mint disabled:opacity-50">
           <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
         </button>
       </div>
@@ -360,21 +390,28 @@ function SupportedValueCard({
       <div className={styles.valueMain}>
         <div>
           <p className={`${styles.valueAmount} text-display text-[38px] font-semibold leading-none tabular-nums`}>
-            {loading ? '—' : valuation.totalUsd === null ? '—' : formatUsd(valuation.totalUsd)}
+            <ValueOrSkeleton
+              value={displayTotalUsd === null
+                ? '—'
+                : displayTotalIsPartial
+                  ? <span role="status" aria-label={`${partialTotalLabel} ${formatUsd(displayTotalUsd)}`} title={partialTotalLabel}>{formatUsd(displayTotalUsd)}</span>
+                  : formatUsd(displayTotalUsd)}
+              width="xl"
+              status={loading ? 'loading' : 'unavailable'}
+              label={loading ? 'Loading portfolio value' : 'Portfolio value unavailable because no priced balances are available'}
+            />
           </p>
           <p className={`${styles.valueHint} mt-2 text-[11px] text-mut`} aria-live="polite">
-            {loading
-              ? <span className="skeleton inline-block h-3 w-28 align-middle" aria-label="Loading portfolio value" />
-              : !valuation.complete
-                ? <span className="text-warn">{protocol.status === 'unavailable' ? 'Portfolio value unavailable' : 'Partial value · verify reads'}</span>
-                : `${valuation.assetCount} ${valuation.assetCount === 1 ? 'asset' : 'assets'}`}
+            {valuation.assetCount > 0
+              ? `${valuation.assetCount} ${valuation.assetCount === 1 ? 'asset' : 'assets'}`
+              : null}
           </p>
         </div>
       </div>
 
       <div className={`${styles.valueMetrics} portfolio-value-metrics`}>
         <ValueMetric label="Open positions" value={positionValue} />
-        <ValueMetric label="fxSAVE" value={protocol.fxSaveShares !== null ? `${protocol.fxSaveShares} fxSAVE` : fxSaveLoading ? '…' : '—'} />
+        <ValueMetric label="fxSAVE" value={protocol.fxSaveShares !== null ? `${protocol.fxSaveShares} fxSAVE` : '—'} />
         <ValueMetric label="Assets" value={supportedAssetValue} />
       </div>
     </Card>
@@ -382,7 +419,7 @@ function SupportedValueCard({
 }
 
 function ValueMetric({ label, value }: { label: string; value: string }) {
-  return <span><small>{label}</small><strong>{value}</strong></span>;
+  return <span><small>{label}</small><strong><ValueOrSkeleton value={value} width="sm" label={`Loading ${label.toLowerCase()}`} /></strong></span>;
 }
 
 function QuickActions() {
@@ -424,7 +461,7 @@ function MarketOverview() {
 function ProtocolCard({ icon: Icon, label, value, hint, href, accent = false }: {
   icon: LucideIcon;
   label: string;
-  value: string;
+  value: ReactNode;
   hint: string;
   href: string;
   accent?: boolean;
@@ -434,7 +471,7 @@ function ProtocolCard({ icon: Icon, label, value, hint, href, accent = false }: 
       <span><Icon className="h-5 w-5" aria-hidden="true" /></span>
       <span className="min-w-0 flex-1">
         <small>{label}</small>
-        <strong>{value}</strong>
+        <strong><ValueOrSkeleton value={value} width="md" label={`Loading ${label.toLowerCase()}`} /></strong>
         <em>{hint}</em>
       </span>
       <ChevronRight className="h-4 w-4 shrink-0 text-mut" aria-hidden="true" />
@@ -442,32 +479,39 @@ function ProtocolCard({ icon: Icon, label, value, hint, href, accent = false }: 
   );
 }
 
-function WalletBalancesCard({ balances, loading, prices, completeAllowed }: { balances: WalletBalancesResult | null; loading: boolean; prices: UsdPriceMap; completeAllowed: boolean }) {
+function WalletBalancesCard({ balances, loading, refreshing, prices, completeAllowed, onRefresh }: { balances: WalletBalancesResult | null; loading: boolean; refreshing: boolean; prices: UsdPriceMap; completeAllowed: boolean; onRefresh: () => void }) {
   const nonZero = balances?.balances.filter((balance) => balance.amountWei > 0n) ?? [];
   const valuation = walletValuation(balances, prices, completeAllowed);
-  const assetCountLabel = loading || balances === null
+  const assetCountLabel = loading || balances === null || Boolean(balances.failedTokens.length)
     ? '—'
     : `${nonZero.length} ${nonZero.length === 1 ? 'asset' : 'assets'}`;
+  const displayTotal = valuation.complete ? valuation.totalUsd : valuation.knownSubtotalUsd;
+  const displayPartial = !valuation.complete && valuation.knownSubtotalUsd !== null;
+  const partialLabel = 'Known subtotal only. Other balances may be missing.';
 
   return (
     <section aria-labelledby="wallet-balances-title">
       <SectionTitle><span id="wallet-balances-title">Assets</span></SectionTitle>
       <Card className={`${styles.balanceCard} relative overflow-hidden p-0`}>
-        <div className={`${styles.balanceHeader} flex min-h-[60px] items-center justify-end gap-3 border-b border-[var(--line)] px-4 py-3`}>
+        <div className={`${styles.balanceHeader} flex min-h-[60px] items-center justify-between gap-3 border-b border-[var(--line)] px-4 py-3`}>
+          <button type="button" aria-label="Refresh portfolio balances and positions" title="Refresh balances and positions" onClick={onRefresh} disabled={refreshing} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-xl text-mut hover:text-mint disabled:opacity-50">
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
+          </button>
           <span className="text-right">
-            <strong className="block text-[14px] tabular-nums">{loading ? '—' : valuation.complete ? formatUsd(valuation.totalUsd) : '—'}</strong>
-            <span className="text-[9px] text-mut">{assetCountLabel}</span>
+            <strong className="block text-[14px] tabular-nums"><ValueOrSkeleton value={displayTotal === null ? '—' : displayPartial ? <span role="status" title={partialLabel} aria-label={`${partialLabel} ${formatUsd(displayTotal)}`}>{formatUsd(displayTotal)}</span> : formatUsd(displayTotal)} width="md" status={loading ? 'loading' : 'unavailable'} label={loading ? 'Loading wallet value' : 'Wallet value unavailable because no priced balances are available'} /></strong>
+            <span className="text-[11px] text-mut"><ValueOrSkeleton value={assetCountLabel} width="sm" status={loading ? 'loading' : 'unavailable'} label={loading ? 'Loading asset count' : 'Asset count unavailable'}/></span>
           </span>
         </div>
 
         {loading && <div className="m-4 h-24 animate-pulse rounded-xl bg-[var(--surface-2)]" role="status" aria-label="Loading wallet balances" />}
-        {!loading && !balances && <div className="m-4 rounded-xl border border-[var(--line)] bg-[var(--warn-dim)] p-4 text-[12px] text-warn" role="status" aria-live="polite"><p>Wallet balances are unavailable.</p><p className="mt-1 text-mut">Retry the wallet read before relying on the total.</p></div>}
-        {!loading && balances && nonZero.length === 0 && (
+        {!loading && !balances && <span className="sr-only" role="status" aria-live="polite">Wallet balance reads are unavailable. Use the refresh button to retry.</span>}
+        {!loading && balances && nonZero.length === 0 && balances.failedTokens.length === 0 && (
           <div className="flex items-center gap-3 px-4 py-5">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] text-mut"><Coins className="h-5 w-5" aria-hidden="true" /></span>
-            <span><strong className="block text-[12.5px]">{balances.failedTokens.length > 0 ? 'Some asset balances are unavailable' : 'No supported assets found'}</strong>{balances.failedTokens.length === 0 ? <span className="mt-1 block text-[11px] text-mut">Receive a supported token to see it here.</span> : <span className="mt-1 block text-[11px] text-mut">The visible list is partial until the failed reads recover.</span>}</span>
+            <span><strong className="block text-[12.5px]">No supported assets found</strong><span className="mt-1 block text-[11px] text-mut">Receive a supported token to see it here.</span></span>
           </div>
         )}
+        {!loading && balances && balances.failedTokens.length > 0 && nonZero.length === 0 && <span className="sr-only" role="status" aria-live="polite">Some wallet balance reads are unavailable. Use the refresh button to retry.</span>}
         {!loading && nonZero.length > 0 && (
           <div className={`${styles.balanceList} divide-y divide-[var(--line)] px-4`}>
             {nonZero.map((balance) => {
@@ -489,12 +533,12 @@ function WalletBalanceRow({ balance, price }: { balance: WalletTokenBalance; pri
         <TokenIcon symbol={balance.key} size={32} />
         <div className="min-w-0">
           <p className="truncate text-[13px] font-semibold">{label}</p>
-          <p className="truncate text-[10px] text-mut">{balance.address.slice(0, 6)}…{balance.address.slice(-4)}</p>
+          <p className="truncate text-[11px] text-mut">{balance.address.slice(0, 6)}…{balance.address.slice(-4)}</p>
         </div>
       </div>
       <div className="shrink-0 text-right">
         <p className="font-mono text-[12.5px] text-hi">{formatWalletAmount(balance)}</p>
-        <p className="mt-0.5 text-[10.5px] text-mut">{formatUsd(usdValueForUnits(balance.amountWei, balance.decimals, price))}</p>
+        <p className="mt-0.5 text-[10.5px] text-mut"><ValueOrSkeleton value={formatUsd(usdValueForUnits(balance.amountWei, balance.decimals, price))} width="sm" label="Asset value unavailable" /></p>
       </div>
     </div>
   );
@@ -521,12 +565,14 @@ type ProtocolSnapshot = FxSaveSnapshot & { balances: WalletBalancesResult | null
 type WalletValuation = {
   complete: boolean;
   totalUsd: number | null;
+  knownSubtotalUsd: number | null;
+  knownAssetCount: number;
   assetCount: number;
   reason: string;
 };
 
 function walletValuation(balances: WalletBalancesResult | null, prices: UsdPriceMap, completeAllowed = true): WalletValuation {
-  if (!balances) return { complete: false, totalUsd: null, assetCount: 0, reason: '' };
+  if (!balances) return { complete: false, totalUsd: null, knownSubtotalUsd: null, knownAssetCount: 0, assetCount: 0, reason: '' };
   const nonZero = balances.balances.filter((balance) => balance.amountWei > 0n);
   const values = nonZero.map((balance) => {
     const key = priceKeyForSymbol(balance.key);
@@ -539,22 +585,28 @@ function walletValuation(balances: WalletBalancesResult | null, prices: UsdPrice
   if (missingCount > 0) {
     return {
       complete: false,
-      totalUsd: pricedValues.length > 0 ? pricedValues.reduce((total, value) => total + value, 0) : null,
+      totalUsd: null,
+      knownSubtotalUsd: pricedValues.length > 0 ? pricedValues.reduce((total, value) => total + value, 0) : null,
+      knownAssetCount: pricedValues.length,
       assetCount: nonZero.length,
-      reason: `${missingCount} ${missingCount === 1 ? 'asset is' : 'assets are'} missing a verified value.`,
+      reason: '',
     };
   }
   if (!completeAllowed) {
     return {
       complete: false,
-      totalUsd: values.length > 0 ? values.reduce<number>((total, value) => total + (value ?? 0), 0) : null,
+      totalUsd: null,
+      knownSubtotalUsd: pricedValues.length > 0 ? pricedValues.reduce((total, value) => total + value, 0) : null,
+      knownAssetCount: pricedValues.length,
       assetCount: nonZero.length,
-      reason: 'Loading expanded wallet assets.',
+      reason: '',
     };
   }
   return {
     complete: true,
     totalUsd: values.reduce<number>((total, value) => total + (value ?? 0), 0),
+    knownSubtotalUsd: values.reduce<number>((total, value) => total + (value ?? 0), 0),
+    knownAssetCount: pricedValues.length,
     assetCount: nonZero.length,
     reason: '',
   };
@@ -580,7 +632,7 @@ function fxSaveLabel(protocol: ProtocolSnapshot, prices: UsdPriceMap): string {
   const units = protocol.fxSaveShares !== null
     ? `${protocol.fxSaveShares} fxSAVE`
     : protocol.fxSaveAssets !== null
-      ? `${protocol.fxSaveAssets} fxSAVE`
+      ? `${protocol.fxSaveAssets} fxUSD base-pool shares`
       : null;
   if (units === null) return '—';
   const usdValue = fxSaveUsdValue('assetsWei', protocol.fxSaveAssets, prices);

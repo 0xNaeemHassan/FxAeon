@@ -16,18 +16,14 @@ import { readFile, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, extname, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { E2E_BUILD_ENV } from '../../../scripts/e2e_build_env.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const ROOT = join(__dirname, '..');
 const DIST = join(ROOT, 'dist');
 const PORT = Number(process.env.PORT || 4321);
 
-const BUILD_ENV = {
-  NEXT_PUBLIC_PRIVY_APP_ID: '',
-  NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL: '',
-  NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL: '',
-  NEXT_PUBLIC_TELEGRAM_APP_URL: 'https://t.me/FxAeonBot',
-};
+const BUILD_ENV = E2E_BUILD_ENV;
 
 function buildIfNeeded() {
   if (existsSync(join(DIST, 'index.html')) && process.env.E2E_BUILD !== '1') return;

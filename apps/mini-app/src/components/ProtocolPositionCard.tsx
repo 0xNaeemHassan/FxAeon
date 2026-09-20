@@ -11,10 +11,11 @@ import {
   type PositionGroupFailure,
   type UiPosition,
 } from '@/app/trade/fxUi';
-import { useUsdPrices } from '@/components/PriceProvider';
+import { useLiveMarketQuote, useUsdPrices } from '@/components/PriceProvider';
+import { MissingValue } from '@/components/MissingValue';
 import TokenIcon from '@/components/TokenIcon';
-import { priceKeyForSymbol } from '@/lib/prices';
-import { calculatePositionUsdValuation, formatUsdCents } from '@/lib/positionValuation';
+import { formatUsdPrice, priceKeyForSymbol } from '@/lib/prices';
+import { calculatePositionUsdValuation, debtCollateralRatioPercent, formatUsdCents } from '@/lib/positionValuation';
 
 function Skeleton({ className = '' }: { className?: string }) {
   return <div aria-hidden="true" className={`skeleton ${className}`} />;
@@ -36,26 +37,59 @@ function positionValuation(position: UiPosition, prices: ReturnType<typeof useUs
 function PositionBody({
   position,
   compact,
+  interactive,
 }: {
   position: UiPosition;
   compact: boolean;
+  interactive: boolean;
 }) {
-  const { prices } = useUsdPrices();
+  const { prices, status: pricesStatus } = useUsdPrices();
+  const { quote: liveQuote, isFresh: hasFreshLiveQuote } = useLiveMarketQuote(position.market);
   const collateral = formatAmount(position.info.rawColls, positionTokenDecimals(position, 'collateral'));
   const debt = formatAmount(position.info.rawDebts, positionTokenDecimals(position, 'debt'));
-  const valuation = positionValuation(position, prices);
-  const missingPrice = '—';
-  const netEquity = valuation.netEquityUsdCents === null ? '—' : formatUsdCents(valuation.netEquityUsdCents);
-  const collateralUsd = valuation.collateralUsdCents === null ? missingPrice : formatUsdCents(valuation.collateralUsdCents);
-  const debtUsd = valuation.debtUsdCents === null ? missingPrice : formatUsdCents(valuation.debtUsdCents);
+  const collateralKey = priceKeyForSymbol(position.info.rawCollsToken);
+  const debtKey = priceKeyForSymbol(position.info.rawDebtsToken);
+  const pricesAreCurrent = pricesStatus !== 'stale' && pricesStatus !== 'unavailable';
+  // Preserve a known $0 for zero raw balances while withholding non-zero USD
+  // values when the quote snapshot is stale or unavailable.
+  const valuation = positionValuation(position, pricesAreCurrent ? prices : {});
+  const missingStatus = pricesAreCurrent ? 'loading' as const : 'unavailable' as const;
+  const netEquity = valuation.netEquityUsdCents === null
+    ? <MissingValue width="lg" status={missingStatus} />
+    : `≈ ${formatUsdCents(valuation.netEquityUsdCents)}`;
+  const collateralUsd = valuation.collateralUsdCents === null
+    ? <MissingValue width="md" status={missingStatus} />
+    : `≈ ${formatUsdCents(valuation.collateralUsdCents)}`;
+  const debtUsd = valuation.debtUsdCents === null
+    ? <MissingValue width="md" status={missingStatus} />
+    : `≈ ${formatUsdCents(valuation.debtUsdCents)}`;
+  const marketKey = position.market === 'ETH' ? 'ETH' : 'WBTC';
+  const marketPrice = hasFreshLiveQuote
+    ? liveQuote?.price
+    : pricesAreCurrent ? prices[marketKey] : undefined;
+  const marketPriceDisplay = marketPrice === undefined || !Number.isFinite(marketPrice)
+    ? <MissingValue width="lg" status={missingStatus} />
+    : formatUsdPrice(marketPrice);
+  const debtCollateralRatio = debtCollateralRatioPercent({
+    collateralRaw: position.info.rawColls,
+    collateralDecimals: positionTokenDecimals(position, 'collateral'),
+    collateralPrice: !pricesAreCurrent || !collateralKey ? undefined : prices[collateralKey],
+    debtRaw: position.info.rawDebts,
+    debtDecimals: positionTokenDecimals(position, 'debt'),
+    debtPrice: !pricesAreCurrent || !debtKey ? undefined : prices[debtKey],
+  });
   const leverageInfo = positionDisplayLeverage(position);
   const leverage = leverageInfo.value !== null
     ? `${leverageInfo.value.toFixed(2).replace(/\.00$/, '')}×`
-    : '—';
+    : <MissingValue width="sm" status="loading" />;
+  const debtCollateralDisplay = debtCollateralRatio ?? <MissingValue width="md" status={missingStatus} />;
+  const positionValueTitle = valuation.netEquityUsdCents === null
+    ? pricesAreCurrent ? 'Loading position value' : 'Position value unavailable until prices refresh'
+    : 'Collateral value minus debt';
 
   return (
     <>
-      <div className="flex min-w-0 flex-wrap items-start gap-x-3 gap-y-2">
+      <div className="flex min-w-0 items-start gap-x-3">
         <TokenIcon symbol={position.market === 'ETH' ? 'ETH' : 'WBTC'} size={compact ? 34 : 40} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -63,30 +97,18 @@ function PositionBody({
           </div>
           <p className="mt-1 text-[12px] text-mut">#{position.info.positionId} · {leverage} {leverageInfo.label}</p>
         </div>
-        <div className="ml-auto min-w-0 max-w-full shrink basis-[88px] text-right" title={valuation.netEquityUsdCents === null ? missingPrice : 'Estimated collateral value less debt value; display-only'}>
-          <span className="block text-[11px] text-mut">Est. net equity</span>
-          <span className="mt-0.5 block break-words text-[14px] font-semibold tabular-nums">{netEquity}</span>
-          {valuation.netEquityUsdCents === null && <span className="block text-[10px] text-mut">{missingPrice}</span>}
-        </div>
-        <ArrowUpRight className="h-4 w-4 shrink-0 text-[var(--mut-2)]" aria-hidden="true" />
+        {interactive && <ArrowUpRight className="h-4 w-4 shrink-0 text-[var(--mut-2)]" aria-hidden="true" />}
       </div>
-      {compact ? (
-        <div className="mt-2.5 grid grid-cols-2 gap-3 border-t border-[var(--line)] pt-2">
-          <div className="min-w-0"><span className="text-[12px] text-mut">Collateral</span><p className="mt-0.5 break-words text-[13px] font-semibold">{collateral} {position.info.rawCollsToken}</p><p className="mt-0.5 text-[11px] text-mut">{collateralUsd}</p></div>
-          <div className="min-w-0"><span className="text-[12px] text-mut">Debt</span><p className="mt-0.5 break-words text-[13px] font-semibold">{debt} {position.info.rawDebtsToken}</p><p className="mt-0.5 text-[11px] text-mut">{debtUsd}</p></div>
-        </div>
-      ) : <div className="mt-3 grid grid-cols-2 gap-2 sm:gap-3">
-        <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2.5">
-          <span className="text-[12px] text-mut">Collateral value</span>
-          <p className="mt-1 break-words text-[13px] font-semibold">{collateral} {position.info.rawCollsToken}</p>
-          <p className="mt-0.5 text-[12px] text-mut">{collateralUsd}</p>
-        </div>
-        <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2.5">
-          <span className="text-[12px] text-mut">Debt value</span>
-          <p className="mt-1 break-words text-[13px] font-semibold">{debt} {position.info.rawDebtsToken}</p>
-          <p className="mt-0.5 text-[12px] text-mut">{debtUsd}</p>
-        </div>
-      </div>}
+      <div className={`${compact ? 'mt-2.5 pt-2' : 'mt-3 pt-3'} flex items-end justify-between gap-3 border-t border-[var(--line)]`} title={positionValueTitle}>
+        <span className="text-[12px] text-mut">Position value</span>
+        <span className={`${compact ? 'text-[16px]' : 'text-[18px]'} min-w-0 shrink break-words text-right font-semibold tabular-nums`}>{netEquity}</span>
+      </div>
+      <div className={`${compact ? 'mt-2.5 pt-2' : 'mt-3 pt-3'} grid grid-cols-2 gap-x-4 gap-y-3 border-t border-[var(--line)]`}>
+        <div className="min-w-0"><span className="text-[12px] text-mut">Collateral</span><p className="mt-0.5 break-words text-[13px] font-semibold">{collateral} {position.info.rawCollsToken}</p><p className="mt-0.5 break-words text-[12px] tabular-nums text-mut">{collateralUsd}</p></div>
+        <div className="min-w-0"><span className="text-[12px] text-mut">Debt</span><p className="mt-0.5 break-words text-[13px] font-semibold">{debt} {position.info.rawDebtsToken}</p><p className="mt-0.5 break-words text-[12px] tabular-nums text-mut">{debtUsd}</p></div>
+        <div className="min-w-0"><span className="text-[12px] text-mut">Market price</span><p className="mt-0.5 break-words text-[13px] font-semibold tabular-nums">{marketPriceDisplay}</p></div>
+        <div className="min-w-0" title="Debt value divided by collateral value"><span className="text-[12px] text-mut">Debt / collateral</span><p className="mt-0.5 break-words text-[13px] font-semibold tabular-nums">{debtCollateralDisplay}</p></div>
+      </div>
     </>
   );
 }
@@ -110,8 +132,8 @@ export function ProtocolPositionCard({
   onNavigate?: () => void;
   className?: string;
 }) {
-  const classes = `astryx-card ${href || onSelect ? 'glass-press' : ''} block w-full rounded-2xl border p-3.5 text-left transition ${selected ? 'border-[var(--mint)] bg-[var(--surface-2)]' : 'border-[var(--line)]'} ${highlighted ? 'ring-2 ring-[var(--success)] ring-offset-2 ring-offset-[var(--bg)]' : ''} ${className}`;
-  const body = <PositionBody position={position} compact={compact} />;
+  const classes = `astryx-card ${href || onSelect ? 'glass-press' : ''} block min-w-0 w-full rounded-2xl border p-3.5 text-left transition ${selected ? 'border-[var(--mint)] bg-[var(--surface-2)]' : 'border-[var(--line)]'} ${highlighted ? 'ring-2 ring-[var(--success)] ring-offset-2 ring-offset-[var(--bg)]' : ''} ${className}`;
+  const body = <PositionBody position={position} compact={compact} interactive={Boolean(href || onSelect)} />;
 
   if (href) {
     return <Link href={href} onClick={onNavigate} className={classes} data-position-key={positionKey(position)}>{body}</Link>;

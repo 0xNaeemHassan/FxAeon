@@ -3,11 +3,12 @@ import { expect, test, assertNoBackendRequests } from '../fixtures/test';
 test.describe('product copy and session visibility', () => {
   test.use({ telegram: false });
 
-  test('root opens the concise Portfolio workspace', async ({ page, requests }) => {
+  test('root identifies the Portfolio app and its canonical domain', async ({ page, requests }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await expect(page).toHaveURL(/\/portfolio\/?$/);
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page).toHaveTitle('Portfolio · FxAeon');
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', /^https:\/\/fxaeon\.com\/?$/);
     await expect(page.getByRole('heading', { name: 'Portfolio', exact: true })).toBeVisible();
-    await expect(page.getByText('Connect wallet', { exact: true }).last()).toBeVisible();
     assertNoBackendRequests(requests);
   });
 
@@ -35,14 +36,14 @@ test.describe('product copy and session visibility', () => {
       },
     });
 
-    test('connected settings preserve wallet controls without a false session card', async ({ page, requests }) => {
+    test('connected settings preserve wallet controls and expose a reachable session exit', async ({ page, requests }) => {
       await page.goto('/settings', { waitUntil: 'domcontentloaded' });
       const address = page.getByRole('button', { name: 'Copy wallet address 0x930f…98b9', exact: true });
       await expect(address).toBeVisible();
       await expect(address).toHaveAttribute('title', '0x930f0000000000000000000000000000000098b9');
       await expect(page.getByRole('button', { name: 'Reconnect wallet', exact: true })).toBeVisible();
-      await expect(page.getByText('Session', { exact: true })).toHaveCount(0);
-      await expect(page.getByRole('button', { name: /sign out|log out/i })).toHaveCount(0);
+      await expect(page.getByText('Session', { exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
       assertNoBackendRequests(requests);
     });
   });

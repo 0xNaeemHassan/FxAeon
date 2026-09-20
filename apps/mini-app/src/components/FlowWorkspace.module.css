@@ -1,6 +1,6 @@
 .workspace {
   width: 100%;
-  max-width: 920px;
+  max-width: 1120px;
   margin-inline: auto;
   display: flex;
   flex-direction: column;
@@ -307,7 +307,15 @@
   .recipientSection > div:first-child > button { min-height: 44px; padding-inline: 4px; font-size: 10px; }
   .recipientSection > div:last-child { min-height: 48px; gap: 2px; border-radius: 12px; padding-inline: 6px; }
   .recipientSection > div:last-child > span { display: none; }
-  .recipientSection > div:last-child > span:last-child { display: block; max-width: 100%; text-align: right; }
+  .recipientSection > div:last-child > span:last-child {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .recipientSection > div:last-child > button { min-height: 40px; padding-inline: 4px; font-size: 10px; }
   .advancedAddressGrid { grid-template-columns: 1fr; }
   .advancedAddressGrid > label:last-child { grid-column: auto; }
@@ -328,6 +336,24 @@
 .earnWorkspace,
 .borrowWorkspace { min-width: 0; }
 
+.earnHeading { margin: 0; color: var(--text); font-size: 28px; font-weight: 700; letter-spacing: -.03em; line-height: 1.1; }
+.borrowHeading { margin: 0; color: var(--text); font-size: 28px; font-weight: 700; letter-spacing: -.03em; line-height: 1.1; }
+
+.earnFlowGrid {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.earnContextColumn,
+.earnActionColumn { min-width: 0; }
+
+.earnContextColumn { display: flex; flex-direction: column; gap: 12px; }
+.earnActionColumn { display: flex; min-width: 0; flex-direction: column; gap: 12px; }
+.advancedDetails { border-color: var(--line); background: var(--input); }
+.advancedDetails summary { min-height: 44px; padding-inline: 4px; color: var(--mut); }
+
 /* Keep paired financial inputs aligned and compact without sacrificing touch size. */
 .borrowAmountGrid {
   display: grid;
@@ -339,6 +365,10 @@
 .borrowAmountGrid > * { min-width: 0; }
 .borrowWorkspace .borrowAmountGrid { grid-column: 1 / -1; }
 .disconnectedBorrowFields .borrowAmountGrid { grid-column: 1 / -1; }
+.borrowCollateralField { min-width: 0; }
+.borrowMarketSwitch { min-width: 0; }
+.borrowWorkspace .disconnectedBorrowFields .borrowMarketSwitch { grid-column: 1 / -1; }
+.borrowWorkspace .disconnectedBorrowFields .borrowCollateralField { grid-column: 1 / -1; }
 .optionalWithdrawSettings { min-width: 0; }
 
 @media (max-width: 640px) {
@@ -408,6 +438,37 @@
   .earnWorkspace .focusCard :global(.field-control) { min-height: 50px !important; }
   .earnWorkspace .focusCard :global(.amount-control) { min-height: 72px !important; }
   .earnWorkspace .focusCard :global(.range-control) { min-height: 46px !important; }
+  /* Earn is a single savings rail. Keep the route heading, network tabs, APY,
+     and action card aligned instead of stretching the route across the app. */
+  .earnWorkspace { max-width: 560px; margin-inline: auto; }
+  .borrowWorkspace { max-width: 560px; margin-inline: auto; }
+  .earnFlowGrid {
+    display: flex;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .earnContextColumn,
+  .earnActionColumn { min-width: 0; }
+  .earnContextColumn,
+  .earnActionColumn,
+  .earnFlowGridDisconnected .earnContextColumn,
+  .earnFlowGridDisconnected .earnActionColumn { width: 100%; }
+  .earnActionColumn { position: static; }
+  .earnFlowGridDisconnected {
+    display: flex;
+    align-items: stretch;
+  }
+  .earnFlowGridDisconnected .earnContextColumn { width: 100%; }
+  .earnFlowGridDisconnected .earnContextColumn:empty { display: none; }
+  .earnFlowGridDisconnected .earnActionColumn { width: 100%; }
+  .borrowWorkspace > .focusCard {
+    width: 100%;
+    max-width: 560px;
+    align-self: center;
+  }
+  .borrowWorkspace > .summaryCard,
+  .borrowWorkspace > :global([role='status']) { width: 100%; max-width: 560px; align-self: center; }
 }
 
 @media (min-width: 641px) and (max-width: 839px) {
@@ -427,6 +488,20 @@
 }
 
 @media (max-width: 640px) {
+  .earnHeading,
+  .borrowHeading {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
   .earnWorkspace,
   .borrowWorkspace { gap: 8px; }
 
@@ -573,7 +648,9 @@
     gap: 10px;
   }
 
-  .moveCard .moveFormFields > details { display: none; }
+  /* Keep the expert disclosure reachable on phones; canonical users see only
+     its compact summary until they deliberately open it. */
+  .moveCard .moveFormFields > details { display: block; }
   .moveCard .moveFormFields > .moveAmountHero,
   .moveCard .moveFormFields > .recipientSection {
     grid-column: auto;
@@ -621,20 +698,14 @@
    fxUSD/fxSAVE never collapses to an ellipsis. Amount and recipient remain
    paired beneath it, preserving the first review action above the nav. */
 @media (max-width: 359px) {
+  /* Keep the narrowest canonical ticket in a predictable two-row grid. The
+     earlier compact rules place the asset/custom controls above the paired
+     amount and recipient fields; resetting to a column here made those
+     fields stack again and pushed the review trigger below the phone fold. */
   .moveCard .moveFormFields {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
   }
-  .moveCard .moveFormFields > details { display: none; }
-  .moveCard .moveFormFields > .moveAmountHero,
-  .moveCard .moveFormFields > .recipientSection { grid-column: auto; grid-row: auto; }
-  .moveCard .moveFormFields > div:first-child {
-    grid-column: 1 / -1;
-    grid-row: 1;
-  }
-  .moveCard .moveFormFields > .moveAmountHero,
-  .moveCard .moveFormFields > .recipientSection {
-    grid-row: 2;
-  }
+  .moveCard .moveFormFields > details { display: block; }
 }

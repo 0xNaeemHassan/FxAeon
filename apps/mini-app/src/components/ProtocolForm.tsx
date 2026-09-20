@@ -6,6 +6,7 @@ import { ChevronDown, Info, Search } from 'lucide-react';
 import TokenIcon from '@/components/TokenIcon';
 import { useUsdPrices } from '@/components/PriceProvider';
 import { useWalletBalances } from '@/components/WalletDataProvider';
+import { ValueOrSkeleton } from '@/components/MissingValue';
 import { haptic } from '@/lib/telegram';
 import { calculateFractionDecimal, compareExactDecimals, decimalInputError, formatExactDecimal, positiveDecimal } from '@/lib/amount';
 import { formatUsdCents } from '@/lib/positionValuation';
@@ -158,7 +159,20 @@ export function SlippageField({
 }) {
   const inputId = useId();
   const errorId = `${inputId}-error`;
+  const helpId = `${inputId}-help`;
   const [touched, setTouched] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const pointerTypeRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!showHelp) return;
+    const onDocumentKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setShowHelp(false);
+    };
+    document.addEventListener('keydown', onDocumentKeyDown);
+    return () => document.removeEventListener('keydown', onDocumentKeyDown);
+  }, [showHelp]);
   const numeric = Number(value);
   const error = value
     ? (!Number.isFinite(numeric) || numeric <= 0 || numeric > max
@@ -170,7 +184,39 @@ export function SlippageField({
 
   return (
     <div>
-      <FieldLabel htmlFor={inputId} hint={`Max ${max}%`}>Slippage</FieldLabel>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <label htmlFor={inputId} className="text-[12px] font-medium text-mut">Slippage</label>
+        <span className="flex items-center gap-1 text-[11px] text-[var(--mut-2)]">
+          <span>Max {max}%</span>
+          <span
+            className={styles.slippageHelp}
+            onPointerEnter={(event) => { if (event.pointerType !== 'touch') setShowHelp(true); }}
+            onPointerLeave={(event) => { if (event.pointerType !== 'touch') setShowHelp(false); }}
+            onFocus={() => { if (pointerTypeRef.current !== 'touch') setShowHelp(true); }}
+            onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setShowHelp(false); }}
+          >
+            <button
+              type="button"
+              className={`${styles.slippageHelpButton} glass-press`}
+              aria-label="About slippage tolerance"
+              aria-describedby={showHelp ? helpId : undefined}
+              aria-expanded={showHelp}
+              onPointerDown={(event) => { pointerTypeRef.current = event.pointerType; }}
+              onClick={(event) => {
+                const clickPointerType = 'pointerType' in event.nativeEvent
+                  ? event.nativeEvent.pointerType
+                  : undefined;
+                const isTouch = clickPointerType === 'touch' || pointerTypeRef.current === 'touch';
+                setShowHelp((visible) => isTouch ? !visible : true);
+                pointerTypeRef.current = null;
+              }}
+            >
+              <Info aria-hidden="true" className="h-4 w-4" />
+            </button>
+            {showHelp && <span id={helpId} role="tooltip" className={styles.slippageHelpPopup}>The transaction can fail if adverse price movement exceeds this tolerance.</span>}
+          </span>
+        </span>
+      </div>
       <div className={`${styles.formField} field-control flex min-h-[52px] items-center gap-2 px-4 ${error ? 'field-error' : ''}`}>
         <input
           id={inputId}
@@ -210,6 +256,11 @@ export function AmountField({
   maxDecimals = 18,
   placeholder = '0.00',
   constraintError,
+  /** A route-aware spendable maximum. Use this for native assets so gas and
+   * any native transaction value are reserved before a 100% shortcut. */
+  maxAmount,
+  onMax,
+  maxPending = false,
   tokenSelector,
 }: {
   value: string;
@@ -233,6 +284,10 @@ export function AmountField({
   maxDecimals?: number;
   placeholder?: string;
   constraintError?: string | null;
+  maxAmount?: string | null;
+  /** Resolve a route-aware maximum (for example native ETH after gas). */
+  onMax?: () => void | Promise<void>;
+  maxPending?: boolean;
   tokenSelector?: ReactNode;
 }) {
   const inputId = useId();
@@ -260,6 +315,13 @@ export function AmountField({
 
   const availableBalance = balanceState?.status === 'ready' ? balanceState.amount ?? null : balance;
   const hasValidBalance = Boolean(availableBalance && positiveDecimal(availableBalance, maxDecimals));
+  const spendableBalance = maxAmount === null ? null : maxAmount ?? availableBalance;
+  const hasValidSpendableBalance = Boolean(spendableBalance && positiveDecimal(spendableBalance, maxDecimals));
+  const balancePlaceholderStatus = balanceState?.status === 'unavailable' || balanceState?.status === 'disconnected'
+    ? 'unavailable'
+    : 'loading';
+  const showBalanceMeta = balanceState?.status !== 'disconnected'
+    && (balance !== undefined || balanceState !== undefined || allowAll);
   const insufficientBalance = Boolean(
     balanceState?.status === 'ready'
       && availableBalance
@@ -293,31 +355,32 @@ export function AmountField({
       </div>
       {showUsdValue && usdPrice && (
         <div className={`${styles.amountUsdMeta} mt-2 flex items-center justify-between gap-3 px-1 text-[11px] text-mut`} aria-live="polite">
-          <span>{usdValue === null ? 'Enter an amount for USD value' : `≈ ${formatUsd(usdValue)}`}</span>
+          <span><ValueOrSkeleton value={usdValue === null ? '—' : `≈ ${formatUsd(usdValue)}`} width="md" label="Loading USD value" /></span>
           {showUnitPrice && <span>{formatUsdPrice(usdPrice)} / {displayTokenSymbol(symbol)}</span>}
         </div>
       )}
-      {(balance !== undefined || balanceState !== undefined || allowAll) && (
+      {showBalanceMeta && (
         <div id={balanceId} className={`${styles.amountBalanceMeta} mt-2 flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] text-mut`}>
           <div className="flex min-w-0 items-center gap-1 truncate">
             {(balance !== undefined || balanceState !== undefined) && (
               <span className="truncate" title={balanceState?.reason ?? (availableBalance ?? 'Balance pending')}>
                 Available: <span className="font-semibold text-[var(--text)]">
-                  {balanceState?.status === 'loading'
-                    ? '—'
-                    : balanceState?.status === 'disconnected'
+                  <ValueOrSkeleton
+                    value={balanceState && balanceState.status !== 'ready'
                       ? '—'
-                    : balanceState?.status === 'unavailable'
-                      ? '—'
-                      : availableBalance
+                      : availableBalance !== undefined && availableBalance !== null && availableBalance !== ''
                         ? `${formatExactDecimal(availableBalance, 4)} ${displayTokenSymbol(symbol)}`
                         : '—'}
+                    width="md"
+                    status={balancePlaceholderStatus}
+                    label={balanceState?.reason ?? (balancePlaceholderStatus === 'unavailable' ? 'Balance unavailable' : 'Loading balance')}
+                  />
                 </span>
               </span>
             )}
           </div>
           <div className="flex items-center gap-1">
-            {showPercentages && hasValidBalance && (compact ? [] : [25, 50, 75]).map((pct) => (
+            {showPercentages && hasValidBalance && [25, 50, 75].map((pct) => (
               <button
                 key={pct}
                 type="button"
@@ -344,18 +407,27 @@ export function AmountField({
               >
                 MAX
               </button>
-            ) : showMax && hasValidBalance ? (
+            ) : showMax && (hasValidSpendableBalance || (maxAmount === null && hasValidBalance)) ? (
               <button
                 type="button"
                 onClick={() => {
                   haptic('selection');
-                  const fraction = calculateFractionDecimal(availableBalance, 100, maxDecimals);
+                  if (maxAmount === null) {
+                    void onMax?.();
+                    return;
+                  }
+                  const fraction = spendableBalance
+                    ? calculateFractionDecimal(spendableBalance, 100, maxDecimals)
+                    : null;
                   if (fraction) onChange(fraction);
                 }}
-                disabled={disabled || !hydrated}
+                disabled={disabled || !hydrated || maxPending || (maxAmount === null && !onMax)}
+                aria-busy={maxPending || undefined}
+                aria-label={maxAmount === null ? (maxPending ? 'Checking gas reserve' : 'Calculate 100% after gas reserve') : 'Use 100% of available balance'}
+                title={maxAmount === null ? (maxPending ? 'Checking gas reserve' : 'Gas reserve is calculated before using 100%') : undefined}
                 className="fraction-button fraction-button-active min-h-11 min-w-11 px-2.5 py-0.5 text-[10.5px] font-bold text-mint"
               >
-                MAX
+                100%
               </button>
             ) : null}
           </div>
@@ -363,7 +435,7 @@ export function AmountField({
       )}
       {insufficientBalance && (
         <p role="status" aria-live="polite" className="mt-1.5 px-1 text-[11px] leading-relaxed text-danger">
-          Amount exceeds your available balance. Review is still available, but this action cannot be funded as entered.
+          Amount exceeds your available balance. Lower the amount to continue.
         </p>
       )}
       {error && (
@@ -394,11 +466,13 @@ export function TokenSelect<T extends string>({
 }) {
   const selectId = useId();
   const labelId = `${selectId}-label`;
+  const dialogTitleId = `${selectId}-dialog-title`;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const { prices, status: priceStatus, refresh: refreshPrices } = useUsdPrices();
   const pickerBalances = balances;
   const pickerStatus = balanceStatus;
+  const showBalanceColumn = pickerStatus !== 'disconnected' && Boolean(pickerBalances || pickerStatus);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -533,14 +607,13 @@ export function TokenSelect<T extends string>({
             id={`${selectId}-menu`}
             role="dialog"
             aria-modal="true"
-            aria-labelledby={labelId}
+            aria-labelledby={dialogTitleId}
             className={styles.tokenPickerDialog}
             onMouseDown={(event) => event.stopPropagation()}
           >
             <div className={styles.tokenPickerHeader}>
               <div>
-                <p className={styles.tokenPickerTitle}>{label}</p>
-                <p className={styles.tokenPickerSubtitle}>Choose an asset</p>
+                <p id={dialogTitleId} className={styles.tokenPickerTitle}>{label}</p>
               </div>
               <button type="button" aria-label="Close asset picker" onClick={closePicker} className={`${styles.tokenPickerClose} glass-press`}>×</button>
             </div>
@@ -553,6 +626,12 @@ export function TokenSelect<T extends string>({
                   type="search"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'ArrowDown' && filteredOptions.length > 0) {
+                      event.preventDefault();
+                      optionRefs.current[0]?.focus();
+                    }
+                  }}
                   placeholder="Search assets"
                   className={styles.tokenPickerSearchInput}
                 />
@@ -572,9 +651,9 @@ export function TokenSelect<T extends string>({
                     type="button"
                     role="option"
                     aria-selected={active}
-                      aria-label={`${tokenSymbol(option)}${active ? ' selected' : ''}`}
-                    aria-describedby={(pickerBalances || pickerStatus) ? `${balanceId} ${balanceUsdId}` : undefined}
-                    tabIndex={active ? 0 : -1}
+                    aria-label={`${tokenSymbol(option)} ${tokenName(option)} (${tokenPresentation(option).role})${active ? ' selected' : ''}`}
+                    aria-describedby={showBalanceColumn ? `${balanceId} ${balanceUsdId}` : undefined}
+                    tabIndex={(filteredOptions.includes(value) ? active : index === 0) ? 0 : -1}
                     onClick={() => choose(option)}
                     onKeyDown={(event) => {
                       if (event.key === 'ArrowDown') { event.preventDefault(); moveFocus(index, 'next'); }
@@ -588,9 +667,9 @@ export function TokenSelect<T extends string>({
                     <TokenIcon symbol={option} size={30} />
                     <span className={styles.tokenPickerRowCopy}>
                       <span className={styles.tokenPickerSymbol}>{tokenSymbol(option)}</span>
-                      <span className={styles.tokenPickerName}>{tokenName(option)} · {tokenPresentation(option).role}</span>
+                      <span className={styles.tokenPickerName}>{tokenName(option)}</span>
                     </span>
-                    {(pickerBalances || pickerStatus) && (
+                    {showBalanceColumn && (
                       <span className={styles.tokenPickerValue}>
                         <span id={balanceId} className={styles.tokenPickerBalance} title={balance?.amount ? `${balance.amount} ${displayTokenSymbol(option)}` : balance?.reason}>
                           {balance?.status === 'ready' && <span className="sr-only">Available: </span>}{optionBalanceLabel(balance, option)}
@@ -725,7 +804,7 @@ export function LeverageField({
             }}
             aria-invalid={invalid}
             aria-describedby={invalid ? errorId : undefined}
-            className="field-control min-h-[52px] min-w-0 flex-1 px-4 text-[20px] font-semibold outline-none"
+            className={`${styles.leverageInput} field-control min-h-[52px] min-w-0 flex-1 px-4 text-[20px] font-semibold outline-none`}
           />
           <span className="text-display text-[22px] font-semibold text-mint" aria-hidden="true">×</span>
         </div>
@@ -757,12 +836,13 @@ export function LeverageField({
 function displayTokenSymbol(symbol: string): string { return tokenSymbol(symbol); }
 function displayTokenName(symbol: string): string { return tokenName(symbol); }
 
-function optionBalanceLabel(balance: TokenBalanceView | undefined, symbol: string): string {
+function optionBalanceLabel(balance: TokenBalanceView | undefined, symbol: string): ReactNode {
   const display = displayTokenSymbol(symbol);
-  if (balance?.status === 'disconnected') return '—';
-  if (!balance || balance.status === 'unavailable') return '—';
-  if (balance.status === 'loading') return '—';
-  if (balance.amount === undefined) return '—';
+  if (balance?.status === 'disconnected') return <ValueOrSkeleton value="—" width="sm" status="unavailable" label={balance.reason ?? 'Balance unavailable'} />;
+  if (!balance) return <ValueOrSkeleton value="—" width="sm" label="Loading balance" />;
+  if (balance.status === 'unavailable') return <ValueOrSkeleton value="—" width="sm" status="unavailable" label={balance.reason ?? 'Balance unavailable'} />;
+  if (balance.status === 'loading') return <ValueOrSkeleton value="—" width="sm" label="Loading balance" />;
+  if (balance.amount === undefined) return <ValueOrSkeleton value="—" width="sm" label="Loading balance" />;
   return `${formatExactDecimal(balance.amount, 4)} ${display}`;
 }
 

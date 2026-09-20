@@ -8,7 +8,16 @@ export interface UsdPriceSnapshot {
   prices: UsdPriceMap;
   status: PriceStatus;
   updatedAt: number | null;
+  /** Validation time for each quote; updatedAt remains the oldest quote for legacy consumers. */
+  updatedAts?: Partial<Record<FxTokenKey, number>>;
 }
+
+export type UsdPriceUpdate = {
+  prices: UsdPriceMap;
+  updatedAt: number | null;
+  updatedAts: Partial<Record<FxTokenKey, number>>;
+};
+export type UsdPriceProgressCallback = (snapshot: UsdPriceUpdate) => void;
 
 type LlamaCoin = {
   price?: unknown;
@@ -47,12 +56,14 @@ export const USD_PRICE_ENDPOINT = `https://coins.llama.fi/prices/current/${[
 export function parseUsdPriceResponse(payload: unknown, nowSeconds = Math.floor(Date.now() / 1000)): {
   prices: UsdPriceMap;
   updatedAt: number | null;
+  updatedAts: Partial<Record<FxTokenKey, number>>;
 } {
   if (!payload || typeof payload !== 'object') throw new Error('Price response is not an object');
   const coins = (payload as LlamaResponse).coins;
   if (!coins || typeof coins !== 'object') throw new Error('Price response has no coins');
 
   const prices: UsdPriceMap = {};
+  const updatedAts: Partial<Record<FxTokenKey, number>> = {};
   let oldestTimestamp = Infinity;
   for (const key of PRICE_KEYS) {
     const coin = coins[coinId(key)];
@@ -63,6 +74,7 @@ export function parseUsdPriceResponse(payload: unknown, nowSeconds = Math.floor(
     if (!validTimestamp(timestamp, nowSeconds)) continue;
     if (!Number.isFinite(confidence) || confidence < MIN_CONFIDENCE || confidence > 1) continue;
     prices[key] = price;
+    updatedAts[key] = timestamp * 1000;
     oldestTimestamp = Math.min(oldestTimestamp, timestamp);
   }
 
@@ -70,28 +82,22 @@ export function parseUsdPriceResponse(payload: unknown, nowSeconds = Math.floor(
   // not erase a fresh ETH price; consumers still require every held asset
   // needed for a total, and must never substitute a stablecoin's peg.
   if (Object.keys(prices).length === 0) throw new Error('Price response has no validated prices');
-  return { prices, updatedAt: oldestTimestamp * 1000 };
+  return { prices, updatedAt: oldestTimestamp * 1000, updatedAts };
 }
 
 function priceAddress(key: FxTokenKey): string {
   return (key === 'ETH' ? ETH_PRICE_ADDRESS : FX_TOKENS[key].address).toLowerCase();
 }
 
-export function coinGeckoTokenPricesEndpoint(keys: readonly FxTokenKey[]): string {
-  // CoinGecko accepts comma-separated contract addresses. One batched request
-  // is materially more reliable than making every browser spend a rate-limit
-  // slot per missing asset, especially inside a shared mobile carrier NAT.
-  const addresses = [...new Set(keys.map(priceAddress))];
+export function coinGeckoTokenPriceEndpoint(key: FxTokenKey): string {
+  // The keyless endpoint permits one contract per request. Authenticated
+  // plans support different limits; their batch allowance does not apply here.
   const query = new URLSearchParams({
-    contract_addresses: addresses.join(','),
+    contract_addresses: priceAddress(key),
     vs_currencies: 'usd',
     include_last_updated_at: 'true',
   });
   return `https://api.coingecko.com/api/v3/simple/token_price/ethereum?${query}`;
-}
-
-export function coinGeckoTokenPriceEndpoint(key: FxTokenKey): string {
-  return coinGeckoTokenPricesEndpoint([key]);
 }
 
 export function parseCoinGeckoTokenPriceResponse(payload: unknown, key: FxTokenKey, nowSeconds = Math.floor(Date.now() / 1000)): { price: number; timestamp: number } | null {
@@ -106,11 +112,12 @@ export function parseCoinGeckoTokenPriceResponse(payload: unknown, key: FxTokenK
 export function createUsdPriceFetcher() {
   const fallbackCache = new Map<string, { checkedAt: number; value: { price: number; timestamp: number } | null }>();
   let providerBackoffUntil = 0;
-  return async (request: typeof fetch = fetch, signal?: AbortSignal): Promise<{ prices: UsdPriceMap; updatedAt: number | null }> => {
+  return async (request: typeof fetch = fetch, signal?: AbortSignal, onProgress?: UsdPriceProgressCallback): Promise<UsdPriceUpdate> => {
     const prices: UsdPriceMap = {};
+    const updatedAts: Partial<Record<FxTokenKey, number>> = {};
     let oldestTimestamp = Infinity;
-    const requestJson = async (url: string) => {
-      const timeout = AbortSignal.timeout(8_000);
+    const requestJson = async (url: string, timeoutMs = 8_000) => {
+      const timeout = AbortSignal.timeout(timeoutMs);
       return request(url, { method: 'GET', headers: { Accept: 'application/json' }, cache: 'no-store',
         signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
     };
@@ -119,7 +126,13 @@ export function createUsdPriceFetcher() {
       if (response.ok) {
         const primary = parseUsdPriceResponse(await response.json());
         Object.assign(prices, primary.prices);
+        Object.assign(updatedAts, primary.updatedAts);
         oldestTimestamp = primary.updatedAt! / 1000;
+        // Publish independently validated primary quotes immediately. The
+        // optional CoinGecko request below can remain slow without hiding
+        // these useful values from the provider.
+        signal?.throwIfAborted();
+        onProgress?.({ prices: { ...prices }, updatedAt: oldestTimestamp * 1000, updatedAts: { ...updatedAts } });
       }
     } catch {
       // A partial or failed primary feed does not make a different token's
@@ -132,36 +145,57 @@ export function createUsdPriceFetcher() {
       const cached = fallbackCache.get(coinId(key));
       return !cached || now - cached.checkedAt >= FALLBACK_CACHE_MS;
     });
-    if (due.length && now >= providerBackoffUntil) {
-      let payload: unknown = null;
+    const fallbackDeadline = now + 8_000;
+    const requestedAddresses = new Set<string>();
+    for (const key of due) {
+      if (Date.now() >= providerBackoffUntil && Date.now() < fallbackDeadline) {
+        // ETH and WETH share one quote and one cache entry.
+        const address = priceAddress(key);
+        if (requestedAddresses.has(address)) continue;
+        requestedAddresses.add(address);
+      } else break;
+      let value: { price: number; timestamp: number } | null = null;
+      let stop = false;
       try {
-        const response = await requestJson(coinGeckoTokenPricesEndpoint(due));
+        const response = await requestJson(coinGeckoTokenPriceEndpoint(key), Math.max(1, fallbackDeadline - Date.now()));
         if (response.status === 429) {
           const retryAfter = response.headers.get('retry-after');
           const seconds = retryAfter ? Number(retryAfter) : NaN;
           const retryMs = Number.isFinite(seconds) ? seconds * 1000 : retryAfter ? Date.parse(retryAfter) - now : 0;
           providerBackoffUntil = now + Math.max(120_000, Number.isFinite(retryMs) ? retryMs : 0);
+          stop = true;
+        } else if (!response.ok) {
+          // A service/authentication failure applies to the provider, not
+          // just this token. Do not fan out more failing requests.
+          providerBackoffUntil = Date.now() + FALLBACK_CACHE_MS;
+          stop = true;
         }
-        if (response.ok) payload = await response.json();
-      } catch { /* Preserve the partial snapshot when this optional feed fails. */ }
-      signal?.throwIfAborted();
-      for (const key of due) {
-        fallbackCache.set(coinId(key), {
-          checkedAt: now,
-          value: parseCoinGeckoTokenPriceResponse(payload, key),
-        });
+        if (response.ok) value = parseCoinGeckoTokenPriceResponse(await response.json(), key);
+      } catch {
+        providerBackoffUntil = Date.now() + FALLBACK_CACHE_MS;
+        stop = true;
       }
+      signal?.throwIfAborted();
+      fallbackCache.set(coinId(key), { checkedAt: Date.now(), value });
+      if (value) {
+        prices[key] = value.price;
+        updatedAts[key] = value.timestamp * 1000;
+        oldestTimestamp = Math.min(oldestTimestamp, value.timestamp);
+        onProgress?.({ prices: { ...prices }, updatedAt: oldestTimestamp * 1000, updatedAts: { ...updatedAts } });
+      }
+      if (stop) break;
     }
     for (const key of missing) {
       const cached = fallbackCache.get(coinId(key));
       if (cached?.value && validTimestamp(cached.value.timestamp, Math.floor(Date.now() / 1000))) {
         prices[key] = cached.value.price;
+        updatedAts[key] = cached.value.timestamp * 1000;
         oldestTimestamp = Math.min(oldestTimestamp, cached.value.timestamp);
       }
     }
     signal?.throwIfAborted();
     if (Object.keys(prices).length === 0) throw new Error('Price services have no validated prices');
-    return { prices, updatedAt: oldestTimestamp * 1000 };
+    return { prices: { ...prices }, updatedAt: oldestTimestamp * 1000, updatedAts: { ...updatedAts } };
   };
 }
 
@@ -175,21 +209,29 @@ export const fetchUsdPrices = createUsdPriceFetcher();
 export function parseUsdPriceCache(
   payload: unknown,
   nowMs = Date.now(),
-): { prices: UsdPriceMap; updatedAt: number } | null {
+): { prices: UsdPriceMap; updatedAt: number; updatedAts?: Partial<Record<FxTokenKey, number>> } | null {
   if (!payload || typeof payload !== 'object') return null;
-  const candidate = payload as { prices?: unknown; updatedAt?: unknown };
+  const candidate = payload as { prices?: unknown; updatedAt?: unknown; updatedAts?: unknown };
   const updatedAt = Number(candidate.updatedAt);
+  const rawUpdatedAts = candidate.updatedAts;
+  const hasPerQuoteTimes = Boolean(rawUpdatedAts && typeof rawUpdatedAts === 'object' && !Array.isArray(rawUpdatedAts));
   if (!Number.isFinite(updatedAt) || updatedAt <= 0) return null;
-  if (updatedAt - nowMs > 120_000 || nowMs - updatedAt > USD_PRICE_CACHE_MAX_AGE_MS) return null;
+  if (!hasPerQuoteTimes && (updatedAt - nowMs > 120_000 || nowMs - updatedAt > USD_PRICE_CACHE_MAX_AGE_MS)) return null;
   if (!candidate.prices || typeof candidate.prices !== 'object') return null;
 
   const prices: UsdPriceMap = {};
+  const updatedAts: Partial<Record<FxTokenKey, number>> = {};
   for (const key of PRICE_KEYS) {
     const value = Number((candidate.prices as Partial<Record<FxTokenKey, unknown>>)[key]);
-    if (Number.isFinite(value) && value > 0) prices[key] = value;
+    if (!Number.isFinite(value) || value <= 0) continue;
+    const perQuote = hasPerQuoteTimes ? Number((rawUpdatedAts as Partial<Record<FxTokenKey, unknown>>)[key]) : updatedAt;
+    if (!Number.isFinite(perQuote) || perQuote <= 0 || perQuote - nowMs > 120_000 || nowMs - perQuote > USD_PRICE_CACHE_MAX_AGE_MS) continue;
+    prices[key] = value;
+    updatedAts[key] = perQuote;
   }
   if (Object.keys(prices).length === 0) return null;
-  return { prices, updatedAt };
+  const oldestUpdatedAt = Math.min(...Object.values(updatedAts));
+  return { prices, updatedAt: Number.isFinite(oldestUpdatedAt) ? oldestUpdatedAt : updatedAt, ...(hasPerQuoteTimes ? { updatedAts } : {}) };
 }
 
 export function priceKeyForSymbol(symbol: string): FxTokenKey | null {

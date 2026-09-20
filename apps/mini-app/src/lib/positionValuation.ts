@@ -46,6 +46,39 @@ function usdCentsRationalForUnits(raw: bigint, decimals: number, price: number |
   return { numerator, denominator };
 }
 
+function formatPercentRational(numerator: bigint, denominator: bigint): string {
+  // Keep two decimal places of the percentage, rounding only at display time.
+  const scaled = (numerator * 10000n + denominator / 2n) / denominator;
+  const whole = scaled / 100n;
+  const fraction = (scaled % 100n).toString().padStart(2, '0').replace(/0+$/, '');
+  return `${whole}${fraction ? `.${fraction}` : ''}%`;
+}
+
+/** Estimate debt as a percentage of collateral using exact USD rationals. */
+export function debtCollateralRatioPercent({
+  collateralRaw,
+  collateralDecimals,
+  collateralPrice,
+  debtRaw,
+  debtDecimals,
+  debtPrice,
+}: {
+  collateralRaw: bigint;
+  collateralDecimals: number;
+  collateralPrice: number | undefined;
+  debtRaw: bigint;
+  debtDecimals: number;
+  debtPrice: number | undefined;
+}): string | null {
+  const collateral = usdCentsRationalForUnits(collateralRaw, collateralDecimals, collateralPrice);
+  const debt = usdCentsRationalForUnits(debtRaw, debtDecimals, debtPrice);
+  if (!collateral || !debt || collateral.numerator <= 0n || debt.numerator < 0n) return null;
+  return `≈ ${formatPercentRational(
+    debt.numerator * collateral.denominator,
+    collateral.numerator * debt.denominator,
+  )}`;
+}
+
 function roundRational(numerator: bigint, denominator: bigint): bigint {
   if (numerator < 0n) return -roundRational(-numerator, denominator);
   return (numerator + denominator / 2n) / denominator;

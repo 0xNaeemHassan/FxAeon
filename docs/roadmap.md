@@ -1,10 +1,11 @@
 # Roadmap and release posture
 
-This document describes the current implementation. FxAeon is one static application with first-class web and Telegram launch surfaces: the root opens Portfolio directly, Privy or the connected browser wallet owns signing, the pinned official f(x) SDK supplies protocol reads and unsigned plans, Alchemy RPC provides browser read infrastructure, and Ethereum/Base remain the source of truth. There is no app landing page.
+This document describes the current implementation. FxAeon is one static application with first-class web and Telegram launch surfaces: the public web root introduces the product, the web app workspace opens Portfolio at `/portfolio`, Privy or the connected browser wallet owns signing, the pinned official f(x) SDK supplies protocol reads and unsigned plans, Alchemy RPC provides browser read infrastructure, and Ethereum/Base remain the source of truth.
 
 ## Non-negotiable product invariants
 
-- No API server, backend, database, PostgreSQL, Redis, Worker, Function, indexer, subgraph, oracle, delegated signer, session signer, or automated execution path.
+- No FxAeon-operated application API server, backend database, PostgreSQL, Redis, Worker, indexer, subgraph, oracle, delegated signer, session signer, or automated execution path. The browser may read permitted external infrastructure such as Alchemy RPC/Data APIs, the pinned f(x) SDK's protocol endpoints, and independently validated display-price feeds. A deployment may expose only the optional read-only `/api/gas` Pages Function; it has no wallet or protocol-state authority.
+- Positions, Borrow, and fxSAVE use Ethereum as their financial source of truth. Move supports the `fxUSD` and `fxSAVE` bridge routes between Ethereum and Base; Base is not a position or fxSAVE ledger.
 - Only the 15 methods in [`sdk-scope.md`](sdk-scope.md) are product capabilities.
 - Every write is planned from current inputs, validated against SDK calldata, simulated when the provider supports the ordered call, and explicitly approved in the user's wallet one step at a time.
 - Wallet, chain, and form changes invalidate a prepared review. Receipts, bridge GUIDs, and canonical SDK rereads—not local storage—establish state.
@@ -18,13 +19,13 @@ This document describes the current implementation. FxAeon is one static applica
 | Runtime feature flags | Not used | Static build-time configuration is sufficient and flags are not security controls. |
 | Web Worker | Not used | No measured main-thread blocker justifies moving wallet or protocol lifecycle across a Worker boundary. |
 | Service Worker caching | Removed from the active product | Financial state must remain online and chain-authoritative; a one-time legacy `/sw.js` unregister remains only as stale-client cleanup. |
-| Route prefetch | Narrow, in-memory only | Trade may warm one exact route for a faster Review surface; it expires quickly, is never persisted, and the final route is rebuilt, simulated, and validated before signing. |
-| USD display pricing | Read-only, independently validated | DefiLlama supplies current token prices; one bounded, batched CoinGecko contract-price fallback with adaptive rate-limit retry/backoff fills missing quotes. The merged market header has no source badge or duplicate spot/chart quote; CoinGecko also supplies separately validated ETH/BTC chart history. Missing quotes never become an assumed peg or erase other validated prices. All display feeds remain isolated from SDK planning, policy, calldata, simulation, signing, and chain-authoritative state. |
+| Route prefetch | Narrow, in-memory only | Trade may warm one exact route for faster inline action facts; it expires quickly, is never persisted, and the final route is rebuilt, simulated, and validated before signing. |
+| USD display pricing | Read-only, independently validated | DefiLlama supplies current token prices; bounded single-contract CoinGecko fallback requests with adaptive rate-limit retry/backoff fill missing quotes. The merged market header has no source badge or duplicate spot/chart quote; CoinGecko also supplies separately validated ETH/BTC chart history. Missing quotes never become an assumed peg or erase other validated prices. All display feeds remain isolated from SDK planning, policy, calldata, simulation, signing, and chain-authoritative state. |
 | Lighthouse upload | Not used | Release evidence comes from browser tests, bundle budgets, dependency audits, and static build checks without a telemetry service. |
 
 Transitive `ioredis` and `workerd` entries may remain in the frozen dependency graph through third-party browser/development tooling. They are not imported by the app, have no configured endpoints, and do not create Redis or Worker production services.
 
-## Current measured release snapshot
+## Historical measured release snapshot — 3 September 2026
 
 These are measurements from the local release gate, not universal performance claims. Re-run them on the pinned Node 22 CI environment for each release baseline.
 
@@ -44,10 +45,12 @@ These are measurements from the local release gate, not universal performance cl
 4. Add a new SDK capability only through a reviewed scope-lock change and a matching matrix entry, tests, review UI, recovery behavior, and documentation.
 
 The interaction contract is deliberately compact: disconnected users can edit
-each product form, the primary action connects the wallet in place, and the
-same draft continues through live preview and in-card review. Product routes
-keep their final action rail above the fixed navigation without page scrolling.
-The documentation route and an expanded mobile Trade chart are the intentional
-scrollable exceptions.
+each product form, the primary action opens wallet connection only, and a
+connected form may show debounced read-only action facts inline. The primary
+action rebuilds and simulates the route immediately before the wallet prompt;
+material changes return updated details and require another explicit action.
+Product routes keep their final action rail above the fixed navigation without
+page scrolling. The documentation route and an expanded mobile Trade chart are
+the intentional scrollable exceptions.
 
 The next promotion checks are the protected Alchemy workflow for the release commit and broader real-device coverage across ordinary mobile browsers and Telegram.

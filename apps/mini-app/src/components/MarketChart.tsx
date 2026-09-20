@@ -11,6 +11,7 @@ import { haptic } from '@/lib/telegram';
 import { subscribeToForegroundResume } from '@/lib/foreground';
 import { createCoalescedReadCache } from '@/lib/coalescedRead';
 import { Segmented } from '@/components/ProtocolForm';
+import { MissingValue, ValueOrSkeleton } from '@/components/MissingValue';
 import styles from '@/components/trade-surfaces.module.css';
 
 type HistoryState = { status: 'loading' | 'ready' | 'unavailable'; snapshot: MarketHistorySnapshot | null };
@@ -142,12 +143,12 @@ export function TradeMarketChart({ market, onMarketChange }: { market: MarketSym
   return <section className={`${styles.marketChart} market-chart-panel`} data-mobile-expanded={expanded} aria-label={`${market} market chart`}>
     <header className="market-chart-header">
       <div className="flex min-w-0 items-center gap-3"><span className="market-chart-token"><TokenIcon symbol={market === 'BTC' ? 'WBTC' : 'ETH'} size={34} /></span><div className="min-w-0"><span className="micro-label text-[11px] text-mut">Market</span><h2 className="truncate text-[18px] font-semibold">{market} / USD</h2></div></div>
-      <div className="shrink-0 text-right"><p className="text-display text-[24px] font-semibold tabular-nums">{formatUsdPrice(price)}</p><p className={`mt-1 inline-flex items-center gap-1 text-[11px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}>{change === undefined ? '—' : <><span aria-hidden="true">{positive ? '↗' : '↘'}</span>{positive ? '+' : ''}{change.toFixed(2)}% 24h</>}</p></div>
+      <div className="shrink-0 text-right"><p className="text-display text-[24px] font-semibold tabular-nums"><ValueOrSkeleton value={formatUsdPrice(price)} width="lg" label="Market price loading" /></p><p className={`mt-1 inline-flex items-center gap-1 text-[11px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}><ValueOrSkeleton value={change === undefined ? '—' : <><span aria-hidden="true">{positive ? '↗' : '↘'}</span>{positive ? '+' : ''}{change.toFixed(2)}% 24h</>} width="md" label="24 hour change loading" /></p></div>
     </header>
     <div className="market-chart-instrument-meta">
-      <dl className="market-chart-stats"><div><dt>24h high</dt><dd>{formatUsdPrice(high)}</dd></div><div><dt>24h low</dt><dd>{formatUsdPrice(low)}</dd></div></dl>
+      <dl className="market-chart-stats"><div><dt>24h high</dt><dd><ValueOrSkeleton value={formatUsdPrice(high)} width="lg" label="24 hour high loading" /></dd></div><div><dt>24h low</dt><dd><ValueOrSkeleton value={formatUsdPrice(low)} width="lg" label="24 hour low loading" /></dd></div></dl>
     </div>
-    {onMarketChange && <div className="market-chart-market-switch"><Segmented value={market} onChange={onMarketChange} ariaLabel="Market" options={[{ value: 'ETH', label: 'ETH market', sub: 'Ethereum', ariaLabel: 'ETH', icon: <TokenIcon symbol="ETH" size={20} /> }, { value: 'BTC', label: 'BTC market', sub: 'Wrapped BTC', ariaLabel: 'BTC', icon: <TokenIcon symbol="WBTC" size={20} /> }]} /></div>}
+    {onMarketChange && <div className="market-chart-market-switch"><Segmented value={market} onChange={onMarketChange} ariaLabel="Market" options={[{ value: 'ETH', label: 'ETH', sub: 'Ethereum', ariaLabel: 'ETH', icon: <TokenIcon symbol="ETH" size={20} /> }, { value: 'BTC', label: 'BTC', sub: 'Wrapped BTC', ariaLabel: 'BTC', icon: <TokenIcon symbol="WBTC" size={20} /> }]} /></div>}
     <button type="button" className="market-chart-toggle" aria-expanded={expanded} aria-controls={chartId} aria-disabled={isMobile === null || undefined} disabled={isMobile === null} onClick={() => { setMobileExpanded((value) => !value); haptic('selection'); }}><BarChart3 className="h-4 w-4" aria-hidden="true" /><span>{expanded ? 'Hide chart' : 'Show chart'}</span><ChevronDown className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`} aria-hidden="true" /></button>
     <div id={chartId} className="market-chart-content" hidden={!expanded}><div className="market-chart-frame">
       {history.status === 'loading' && <ChartSkeleton />}
@@ -164,7 +165,7 @@ export function MarketMiniCard({ market }: { market: MarketSymbol }) {
   const price = live.isFresh ? live.quote?.price : prices[market === 'ETH' ? 'ETH' : 'WBTC'] ?? history.snapshot?.currentPrice;
   const change = live.isFresh ? live.quote?.percentChange24h : history.snapshot?.percentChange;
   const positive = change !== undefined && change >= 0;
-  return <div className={`${styles.marketMiniCard} portfolio-market-card`} aria-label={`${market} market overview`}><div className="flex items-center justify-between gap-2"><span className="flex items-center gap-2"><TokenIcon symbol={market === 'BTC' ? 'WBTC' : 'ETH'} size={28} /><strong className="text-[13px]">{market}</strong></span><span className={`text-[10.5px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}>{change === undefined ? '—' : `${positive ? '+' : ''}${change.toFixed(2)}%`}</span></div><p className="mt-3 text-display text-[20px] font-semibold tabular-nums">{formatUsdPrice(price)}</p><div className="market-chart-compact mt-2 h-[54px]">{history.status === 'ready' && history.snapshot ? <Sparkline snapshot={history.snapshot} /> : <span className="text-[11px] text-mut">—</span>}</div></div>;
+  return <div className={`${styles.marketMiniCard} portfolio-market-card`} aria-label={`${market} market overview`}><div className="flex items-center justify-between gap-2"><span className="flex items-center gap-2"><TokenIcon symbol={market === 'BTC' ? 'WBTC' : 'ETH'} size={28} /><strong className="text-[13px]">{market}</strong></span><span className={`text-[10.5px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}><ValueOrSkeleton value={change === undefined ? '—' : `${positive ? '+' : ''}${change.toFixed(2)}%`} width="md" label="24 hour change loading" /></span></div><p className="mt-3 text-display text-[20px] font-semibold tabular-nums"><ValueOrSkeleton value={formatUsdPrice(price)} width="lg" label="Market price loading" /></p><div className="market-chart-compact mt-2 h-[54px]">{history.status === 'ready' && history.snapshot ? <Sparkline snapshot={history.snapshot} /> : history.status === 'loading' ? <div role="status" aria-label="Loading market history" className="market-chart-skeleton h-full rounded-md" /> : <div role="status" aria-label="Market history unavailable" className="flex h-full items-center justify-center"><MissingValue width="xl" status="unavailable" label="Market history unavailable" /></div>}</div></div>;
 }
 
 function LazyCandlestickChart({ snapshot }: { snapshot: MarketCandleSnapshot }) {
@@ -229,4 +230,4 @@ function Sparkline({ snapshot }: { snapshot: MarketHistorySnapshot }) {
   return <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full" role="img" aria-label={`${snapshot.market} 24 hour trend`}><polyline points={coordinates} fill="none" stroke={snapshot.percentChange >= 0 ? 'var(--success)' : 'var(--danger)'} strokeWidth="3" vectorEffect="non-scaling-stroke" /><title id={id}>{snapshot.market} trend</title></svg>;
 }
 
-function ChartSkeleton() { return <div role="status" aria-label="Loading market chart" className="market-chart-skeleton h-[220px]"><span /></div>; }
+function ChartSkeleton() { return <div role="status" aria-label="Loading market chart" className="market-chart-skeleton h-[220px]" />; }

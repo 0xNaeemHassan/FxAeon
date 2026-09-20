@@ -53,6 +53,8 @@ test('native Cloudflare deployment is gated without Wrangler credentials', () =>
   assert.match(wait, /GITHUB_TOKEN:\s*\$\{\{\s*github\.token\s*\}\}/);
   assert.match(wait, /GITHUB_REPOSITORY:\s*\$\{\{\s*github\.repository\s*\}\}/);
   assert.match(wait, /GITHUB_SHA:\s*\$\{\{\s*github\.sha\s*\}\}/);
+  assert.match(wait, /CLOUDFLARE_CHECK_NAME:\s*["']?Cloudflare Pages: fxaeon["']?/);
+  assert.match(wait, /CLOUDFLARE_PAGES_PROJECT:\s*fxaeon/);
   assert.doesNotMatch(workflow, /CLOUDFLARE_(?:API_TOKEN|ACCOUNT_ID)/);
   assert.doesNotMatch(productionEnvValidator, /CLOUDFLARE_(?:API_TOKEN|ACCOUNT_ID)/);
 });
@@ -62,5 +64,11 @@ test('the published Cloudflare bundle is checked for the protected public wallet
   assert.match(verification, /run: node scripts\/verify_live_public_config\.mjs/);
   assert.match(verification, /EXPECTED_PUBLIC_PRIVY_APP_ID:\s*\$\{\{\s*secrets\.NEXT_PUBLIC_PRIVY_APP_ID\s*\}\}/);
   assert.match(verification, /GITHUB_SHA:\s*\$\{\{\s*github\.sha\s*\}\}/);
-  assert.match(verification, /LIVE_APP_URL:\s*https:\/\/fxaeon\.pages\.dev/);
+  assert.match(verification, /LIVE_APP_URL:\s*https:\/\/fxaeon\.com/);
+  assert.match(workflow, /TELEGRAM_WEB_APP_URL:\s*https:\/\/fxaeon\.com\//);
+});
+
+test('production validation keeps the local development Privy application out', () => {
+  assert.match(productionEnvValidator, /cmu5tz4f000lp0cl5qtd87sro/);
+  assert.match(productionEnvValidator, /local-development application/);
 });

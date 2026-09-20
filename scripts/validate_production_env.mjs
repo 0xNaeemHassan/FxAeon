@@ -62,6 +62,11 @@ function assertTelegramBotToken() {
 try {
   const privyAppId = requireValue('NEXT_PUBLIC_PRIVY_APP_ID');
   if (/\s/.test(privyAppId)) throw new Error('NEXT_PUBLIC_PRIVY_APP_ID cannot contain whitespace');
+  // This public ID is reserved for local development and must never be
+  // embedded in the production financial bundle.
+  if (privyAppId === 'cmu5tz4f000lp0cl5qtd87sro') {
+    throw new Error('NEXT_PUBLIC_PRIVY_APP_ID is the local-development application; use the protected production Privy application ID');
+  }
 
   assertAlchemyRpc('NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL', 'eth-mainnet.g.alchemy.com');
   assertAlchemyRpc('NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL', 'base-mainnet.g.alchemy.com');

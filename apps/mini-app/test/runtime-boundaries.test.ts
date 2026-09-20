@@ -59,7 +59,7 @@ function receipt(blockNumber: bigint, blockHash: Hex = BLOCK_HASH): TransactionR
   } as TransactionReceipt;
 }
 
-test('confirmation gate rechecks inclusion and waits for three confirmations', async () => {
+test('confirmation gate rechecks inclusion and supports an explicit deeper confirmation depth', async () => {
   const heads = [10n, 11n, 12n];
   let receiptReads = 0;
   const progress: number[] = [];
@@ -70,6 +70,7 @@ test('confirmation gate rechecks inclusion and waits for three confirmations', a
     },
     hash: HASH,
     receipt: receipt(10n),
+    confirmations: 3,
     pollMs: 0,
     timeoutMs: 100,
     onProgress: (value) => progress.push(value),
@@ -117,6 +118,22 @@ test('position discovery requires canonical ownerOf for every indexed ID', async
   assert.equal(reads, 2);
 });
 
+test('confirmation gate accepts the canonical receipt block by default', async () => {
+  let receiptReads = 0;
+  const result = await waitForConfirmations({
+    client: {
+      getTransactionReceipt: async () => { receiptReads += 1; return receipt(10n); },
+      getBlockNumber: async () => 10n,
+    },
+    hash: HASH,
+    receipt: receipt(10n),
+    timeoutMs: 100,
+    pollMs: 0,
+  });
+  assert.equal(result.blockNumber, 10n);
+  assert.equal(receiptReads, 1);
+});
+
 test('position discovery drops an indexer-retained NFT after canonical accounting reaches zero', async () => {
   const info = { positionId: 8, rawColls: 10n, rawDebts: 20n } as PositionInfo;
   let calls = 0;
@@ -140,19 +157,19 @@ test('application read facade bounds a stalled SDK/indexer promise', async () =>
   await assert.rejects(withReadDeadline(new Promise<never>(() => undefined), 10), /read deadline exceeded/);
 });
 
-test('confirmation depth cannot be lowered below the production minimum', async () => {
+test('confirmation depth rejects zero but permits the one-confirmation minimum', async () => {
   await assert.rejects(
     waitForConfirmations({
       client: { getTransactionReceipt: async () => receipt(10n), getBlockNumber: async () => 12n },
       hash: HASH,
       receipt: receipt(10n),
-      confirmations: 2,
+      confirmations: 0,
     }),
-    /between 3 and 64/,
+    /between 1 and 64/,
   );
 });
 
-test('route lifecycle waits for three confirmations before signing the dependent step', async () => {
+test('route lifecycle waits for an explicit deeper confirmation depth before signing the dependent step', async () => {
   clearPendingHashJournalForTests();
   let receiptCalls = 0;
   let headIndex = 0;
@@ -188,7 +205,7 @@ test('route lifecycle waits for three confirmations before signing the dependent
       onStatus: (status) => steps.push(status),
       onStep: (step) => steps.push(`step:${step.index}:${step.status}`),
     },
-    options: { simulate: false, pollMs: 0, waitForNextBlock: false },
+    options: { simulate: false, pollMs: 0, confirmations: 3, waitForNextBlock: false },
   });
   assert.equal(result.status, 'confirmed');
   assert.deepEqual(result.steps.map((step) => step.status), ['confirmed', 'confirmed']);

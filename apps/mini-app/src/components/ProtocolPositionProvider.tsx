@@ -81,10 +81,12 @@ export default function ProtocolPositionProvider({ children, enabled = true }: {
   const wallet = usePrivyWallet();
   const address = wallet.ready && wallet.authenticated ? wallet.address?.toLowerCase() ?? null : null;
 
-  // A keyed session removes the prior account's snapshot and in-flight forms
-  // synchronously, before effects run for the next wallet. No frame may pair
-  // one wallet's address with another wallet's positions or balances.
-  return <ProtocolPositionSession key={`${address ?? 'disconnected'}:${enabled ? 'on' : 'off'}`} address={address} enabled={enabled}>{children}</ProtocolPositionSession>;
+  // Keep the session mounted across wallet hydration. A keyed remount here
+  // also remounts product forms, which discards an explicitly entered trade
+  // amount while the first wallet connection publishes its address. The
+  // session masks its stale snapshot synchronously and its guarded effect
+  // invalidates in-flight reads for the next wallet.
+  return <ProtocolPositionSession address={address} enabled={enabled}>{children}</ProtocolPositionSession>;
 }
 
 function ProtocolPositionSession({ address, enabled, children }: { address: string | null; enabled: boolean; children: ReactNode }) {
@@ -177,6 +179,7 @@ function ProtocolPositionSession({ address, enabled, children }: { address: stri
     if (generation !== sessionGeneration.current) return false;
     // Do not hold the confirmed transaction screen open while the index catches up.
     void refreshConfirmedPositions();
+    void fullRefreshRef.current?.(address);
     return true;
   }, [address, persistHints, refreshConfirmedPositions]);
 
@@ -279,6 +282,22 @@ function ProtocolPositionSession({ address, enabled, children }: { address: stri
 
   useEffect(() => {
     const guard = readGuardRef.current;
+    // The provider stays mounted so product forms keep their explicit input,
+    // but every wallet-scoped reader still gets a complete session boundary.
+    // In particular, do not let a same-address reconnect reuse an old pending
+    // read or receipt hint after the disconnected session was torn down.
+    guard.invalidate();
+    sessionActive.current = false;
+    sessionGeneration.current += 1;
+    hintRead.current = null;
+    hintSequence.current += 1;
+    hintRecords.current = [];
+    closedPositionKeysRef.current = new Set<string>();
+    pendingLoadRef.current = null;
+    lastRealtimeBlock.current = null;
+    commit(emptySnapshot(enabled ? address : null));
+    setPendingPositions([]);
+    setCheckingConfirmedPositions(false);
     if (!enabled) return undefined;
     guard.activate();
     sessionActive.current = true;
@@ -302,7 +321,7 @@ function ProtocolPositionSession({ address, enabled, children }: { address: stri
       window.clearInterval(timer);
       unsubscribeResume();
     };
-  }, [address, enabled, loadAddress, refreshConfirmedPositions]);
+  }, [address, commit, enabled, loadAddress, refreshConfirmedPositions]);
 
   const refresh = useCallback(async () => {
     if (!enabled || !address) return EMPTY_RESULT;
@@ -310,10 +329,25 @@ function ProtocolPositionSession({ address, enabled, children }: { address: stri
     return loadAddress(address);
   }, [address, enabled, loadAddress, refreshConfirmedPositions]);
 
-  const value = useMemo<ProtocolPositionContextValue>(() => ({ ...snapshot, refresh,
-    pendingPositions: pendingPositions.filter((hint) => !snapshot.positions.some((position) => positionKey(position) === confirmedPositionHintKey(hint))),
-    checkingConfirmedPositions, refreshConfirmedPositions, trackConfirmedPosition, reconcileClosedPosition,
-  }), [refresh, snapshot, pendingPositions, checkingConfirmedPositions, refreshConfirmedPositions, trackConfirmedPosition, reconcileClosedPosition]);
+  // Effects run after render, so hide the previous wallet's verified rows for
+  // the transition frame without remounting children that own user input.
+  const visibleSnapshot = useMemo(() => (
+    enabled && address && snapshot.walletAddress?.toLowerCase() === address.toLowerCase()
+      ? snapshot
+      : emptySnapshot(enabled && address ? address : null)
+  ), [address, enabled, snapshot]);
+  const visiblePendingPositions = useMemo(() => (
+    enabled && address
+      ? pendingPositions.filter((hint) => hint.walletAddress.toLowerCase() === address.toLowerCase())
+      : []
+  ), [address, enabled, pendingPositions]);
+  const visibleCheckingConfirmedPositions = enabled && address
+    && snapshot.walletAddress?.toLowerCase() === address.toLowerCase()
+    ? checkingConfirmedPositions : false;
+  const value = useMemo<ProtocolPositionContextValue>(() => ({ ...visibleSnapshot, refresh,
+    pendingPositions: visiblePendingPositions.filter((hint) => !visibleSnapshot.positions.some((position) => positionKey(position) === confirmedPositionHintKey(hint))),
+    checkingConfirmedPositions: visibleCheckingConfirmedPositions, refreshConfirmedPositions, trackConfirmedPosition, reconcileClosedPosition,
+  }), [refresh, visibleSnapshot, visiblePendingPositions, visibleCheckingConfirmedPositions, refreshConfirmedPositions, trackConfirmedPosition, reconcileClosedPosition]);
   return <ProtocolPositionContext.Provider value={value}>{children}</ProtocolPositionContext.Provider>;
 }
 

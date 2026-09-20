@@ -14,7 +14,7 @@ overrides:
   fast-uri@<3.1.5: 3.1.5
   tsx>esbuild: 0.28.1
   form-data@>=4.0.0 <4.0.6: '>=4.0.6'
-  hono: 4.12.34
+  hono: 4.13.5
   js-yaml@>=4.0.0 <4.3.1: 4.3.1
   nanoid@<3.3.18: 3.3.18
   next>sharp: 0.35.4
@@ -57,6 +57,8 @@ importers:
       wrangler:
         specifier: 4.125.0
         version: 4.125.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+
+  apps/landing: {}
 
   apps/mini-app:
     dependencies:
@@ -2719,8 +2721,8 @@ packages:
   help-me@5.0.0:
     resolution: {integrity: sha512-7xgomUX6ADmcYzFik0HzAxh/73YlKR9bmFzf51CZwR+b6YtzU2m0u49hQCqV6SvlqIqsaxovfwdvbnsw3b/zpg==}
 
-  hono@4.12.34:
-    resolution: {integrity: sha512-GqXJqY/xJkJmuloTrnV1ZEXG3fqte+VjkUqoRNZXcrUidiUOP4fMSIHHY4tsqZBK++kVyWmt/AAfSUuy57/eSA==}
+  hono@4.13.5:
+    resolution: {integrity: sha512-O6+/eCYRkzzzy0rPWwKLiGBR1nFuUPZynnwjxN1MBA62NNqbT0wQEzQyK2gSO5yDIDB336sXQleAhOHrzlYyKw==}
     engines: {node: '>=16.9.0'}
 
   https-proxy-agent@5.0.1:
@@ -8252,7 +8254,7 @@ snapshots:
 
   help-me@5.0.0: {}
 
-  hono@4.12.34: {}
+  hono@4.13.5: {}
 
   https-proxy-agent@5.0.1(supports-color@10.2.2):
     dependencies:
@@ -8862,7 +8864,7 @@ snapshots:
   porto@0.2.35(@tanstack/react-query@5.102.8(react@19.2.7))(@types/react@19.2.18)(@wagmi/core@2.22.1(@tanstack/query-core@5.102.8)(@types/react@19.2.18)(react@19.2.7)(typescript@5.9.3)(use-sync-external-store@1.6.0(react@19.2.7))(viem@2.53.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@3.25.76)))(react@19.2.7)(typescript@5.9.3)(use-sync-external-store@1.6.0(react@19.2.7))(viem@2.53.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@3.25.76))(wagmi@2.19.5(@tanstack/query-core@5.102.8)(@tanstack/react-query@5.102.8(react@19.2.7))(@types/react@19.2.18)(bufferutil@4.1.0)(debug@4.4.3(supports-color@10.2.2))(ioredis@5.11.1(supports-color@10.2.2))(react@19.2.7)(supports-color@7.2.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(viem@2.53.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@3.25.76))(zod@3.25.76)):
     dependencies:
       '@wagmi/core': 2.22.1(@tanstack/query-core@5.102.8)(@types/react@19.2.18)(react@19.2.7)(typescript@5.9.3)(use-sync-external-store@1.6.0(react@19.2.7))(viem@2.53.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@3.25.76))
-      hono: 4.12.34
+      hono: 4.13.5
       idb-keyval: 6.2.5
       mipd: 0.0.7(typescript@5.9.3)
       ox: 0.9.17(typescript@5.9.3)(zod@4.4.3)

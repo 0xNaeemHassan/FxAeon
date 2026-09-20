@@ -212,6 +212,25 @@ for (const file of sourceFiles) {
   }
 }
 
+// The optional gas oracle is the sole Pages Function exception. It is a fixed,
+// read-only Ethereum price proxy; it cannot become a general backend or signer.
+const functionsDirectory = join(root, 'functions');
+const functionFiles = await walk(functionsDirectory).catch(() => []);
+const allowedFunction = join(functionsDirectory, 'api', 'gas.ts');
+for (const file of functionFiles) {
+  if (file !== allowedFunction) fail(`unsupported Pages Function: ${relative(root, file)}`);
+  const source = await readFile(file, 'utf8');
+  for (const [label, pattern] of [
+    ['function private-key authority', /PRIVATE_KEY|privateKey|sign(?:er|ature)|walletClient|sendTransaction/i],
+    ['function arbitrary proxy', /fetch(?:Impl)?\([^)]*(?:request\.url|searchParams\.get|target|endpoint)/is],
+  ]) {
+    if (pattern.test(source)) fail(`${label} remains in ${relative(root, file)}`);
+  }
+  if (!source.includes('ETHERSCAN_API_KEY') || !source.includes('ETHEREUM_CHAIN_ID')) {
+    fail(`the gas Pages Function must use its fixed secret binding and chain: ${relative(root, file)}`);
+  }
+}
+
 const workflowDirectory = join(root, '.github', 'workflows');
 const workflowFiles = (await walk(workflowDirectory)).filter((file) => /\.ya?ml$/.test(file));
 for (const file of workflowFiles) {
@@ -223,4 +242,4 @@ for (const file of workflowFiles) {
   }
 }
 
-console.log(`FxAeon scope verified: ${expectedMethods.length} official methods, ${allowedRoutes.size} routes, no backend authority.`);
+console.log(`FxAeon scope verified: ${expectedMethods.length} official methods, ${allowedRoutes.size} routes, no app-layer backend authority; optional fixed read-only gas oracle is bounded.`);

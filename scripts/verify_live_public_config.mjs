@@ -1,4 +1,8 @@
-const DEFAULT_APP_URL = 'https://fxaeon.pages.dev/';
+const DEFAULT_APP_URL = 'https://fxaeon.com/';
+// The financial app now owns the public root and opens Portfolio there. Keep
+// the explicit route probe so this gate checks the wallet bundle itself.
+const WALLET_CONFIG_PROBE_PATH = '/portfolio';
+const ALLOWED_APP_HOSTS = new Set(['fxaeon.com', 'fxaeon.pages.dev']);
 const DEFAULT_ATTEMPTS = 18;
 const DEFAULT_INTERVAL_MS = 10_000;
 
@@ -62,14 +66,15 @@ const attempts = positiveInteger('LIVE_CONFIG_ATTEMPTS', DEFAULT_ATTEMPTS);
 const intervalMs = positiveInteger('LIVE_CONFIG_INTERVAL_MS', DEFAULT_INTERVAL_MS);
 
 const parsedUrl = new URL(appUrl);
-if (parsedUrl.protocol !== 'https:' || parsedUrl.hostname !== 'fxaeon.pages.dev') {
-  throw new Error('LIVE_APP_URL must be https://fxaeon.pages.dev');
+if (parsedUrl.protocol !== 'https:' || !ALLOWED_APP_HOSTS.has(parsedUrl.hostname)) {
+  throw new Error('LIVE_APP_URL must use https://fxaeon.com (or the fxaeon.pages.dev Pages preview origin)');
 }
+const walletConfigUrl = new URL(WALLET_CONFIG_PROBE_PATH, parsedUrl);
 
 let lastError;
 for (let attempt = 1; attempt <= attempts; attempt += 1) {
   try {
-    if (await deploymentContains(parsedUrl, expectedPrivyAppId, revision)) {
+    if (await deploymentContains(walletConfigUrl, expectedPrivyAppId, revision)) {
       console.log('Live FxAeon bundle contains the expected public wallet configuration.');
       process.exit(0);
     }

@@ -6,9 +6,10 @@ import { createServer } from "node:net";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const port = parsePort(process.env.ANVIL_PORT ?? "8547", "ANVIL_PORT");
-// The product runner requires three confirmations. Interval mining keeps
-// receipt finality deterministic for every fork suite, including browser
-// flows that cannot issue a second manual mine after each wallet request.
+// The product runner requires one canonical confirmation by default; callers
+// may request deeper confirmation depth. Interval mining keeps receipt
+// finality deterministic for every fork suite, including browser flows that
+// cannot issue a second manual mine after each wallet request.
 const blockTime = parseBlockTime(process.env.ANVIL_BLOCK_TIME ?? "1");
 const rpcUrl = `http://127.0.0.1:${port}`;
 const suite = parseSuite(process.argv.slice(2));
@@ -172,6 +173,7 @@ function validateProtocolManifest() {
   }
   const positions = Array.isArray(manifest?.positions) ? manifest.positions : [];
   const closedPositions = Array.isArray(manifest?.closedPositions) ? manifest.closedPositions : [];
+  const externalPosition = manifest?.externalPosition;
   const scenarios = new Set(positions.map((position) => `${position?.market}:${position?.side}`));
   const expectedScenarios = ["ETH:long", "ETH:short", "BTC:long", "BTC:short"];
   const positionEvidenceValid = positions.length === 4 && positions.every((position) => (
@@ -202,6 +204,26 @@ function validateProtocolManifest() {
       ))
     ))
   );
+  const externalEvidenceValid = suite !== "browser" || (
+    externalPosition
+    && externalPosition.market === "ETH"
+    && externalPosition.side === "long"
+    && /^0x[0-9a-f]{40}$/i.test(externalPosition.pool ?? "")
+    && Number.isSafeInteger(externalPosition.positionId)
+    && externalPosition.positionId > 0
+    && /^0x[0-9a-f]{40}$/i.test(externalPosition.createdBy ?? "")
+    && /^0x[0-9a-f]{40}$/i.test(externalPosition.transferredTo ?? "")
+    && /^0x[0-9a-f]{40}$/i.test(externalPosition.transferredBackTo ?? "")
+    && /^0x[0-9a-f]{40}$/i.test(externalPosition.finalOwner ?? "")
+    && BigInt(externalPosition.rawCollateral ?? "0") > 0n
+    && BigInt(externalPosition.rawDebt ?? "0") > 0n
+    && Array.isArray(externalPosition.transactions)
+    && externalPosition.transactions.length > 0
+    && externalPosition.transactions.every((transaction) => (
+      /^0x[0-9a-f]{64}$/i.test(transaction?.hash ?? "")
+      && BigInt(transaction?.blockNumber ?? "0") > 0n
+    ))
+  );
   if (
     manifest?.proof !== "fxaeon-real-fx-position-fork"
     || manifest?.chainId !== 1
@@ -213,6 +235,10 @@ function validateProtocolManifest() {
     || (suite === "browser" && manifest?.assertions?.submittedExplorerBeforeConfirmation !== true)
     || (suite === "browser" && manifest?.assertions?.confirmedPositionBeforeIndexer !== true)
     || (suite === "browser" && manifest?.assertions?.restoredConfirmedPosition !== true)
+    || (suite === "browser" && manifest?.assertions?.directWalletDiscoveryWithIndexerLagVerified !== true)
+    || (suite === "browser" && manifest?.assertions?.externalPositionWithoutJournalVerified !== true)
+    || (suite === "browser" && manifest?.assertions?.ownershipTransferIsolationVerified !== true)
+    || (suite === "browser" && manifest?.assertions?.canonicalPositionParityVerified !== true)
     || (suite === "browser" && manifest?.assertions?.browserDriven !== true)
     || (suite === "browser" && manifest?.assertions?.directCloseActionVerified !== true)
     || (suite === "browser" && manifest?.assertions?.everySupportedPositionClosed !== true)
@@ -220,6 +246,7 @@ function validateProtocolManifest() {
     || expectedScenarios.some((scenario) => !scenarios.has(scenario))
     || !positionEvidenceValid
     || !closedEvidenceValid
+    || !externalEvidenceValid
   ) {
     throw new Error("protocol proof manifest is incomplete or failed its release-evidence schema");
   }

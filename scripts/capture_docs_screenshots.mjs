@@ -15,6 +15,10 @@ const captures = [];
 const discoveryErrors = [];
 const interceptedGroups = new Set();
 const pageErrors = [];
+const consoleErrors = [];
+const externalRequestFailures = [];
+const pageIds = new WeakMap();
+let nextPageId = 0;
 const graphPrefix = '/api/public/project_cmgz5g9sl0065xhp2aqd9c6sv/subgraphs/';
 const expectedPools = {
   'ETH:long': ['0x6ecfa38fee8a5277b91efda204c235814f0122e8', 'fx-v2-wsteth/3.0.0'],
@@ -81,7 +85,20 @@ async function createCaptureContext({ viewport, theme }) {
     reducedMotion: 'reduce',
     serviceWorkers: 'block',
   });
-  context.on('page', (page) => page.on('pageerror', (error) => pageErrors.push(error.message)));
+  context.on('page', (page) => {
+    const pageId = `page-${++nextPageId}`;
+    pageIds.set(page, pageId);
+    page.on('pageerror', (error) => pageErrors.push({ pageId, url: page.url(), message: error.message }));
+    page.on('console', (message) => {
+      if (message.type() === 'error') consoleErrors.push({ pageId, url: page.url(), message: message.text(), location: message.location() });
+    });
+    page.on('requestfailed', (request) => {
+      const url = new URL(request.url());
+      if (url.hostname === 'api.coingecko.com' && url.pathname === '/api/v3/simple/token_price/ethereum') {
+        externalRequestFailures.push({ pageId, url: request.url(), method: request.method(), error: request.failure()?.errorText ?? 'unknown' });
+      }
+    });
+  });
 
   if (positionManifest) {
     // Reuse either a screenshot build or the browser acceptance build while
@@ -241,29 +258,124 @@ function assertCaptureViewport(state, stage) {
 }
 
 async function waitForStandardLogin(page) {
-  // Login's SSR/hydration fallback is itself a visible <main>. Wait for the
-  // actual browser-wallet screen, not merely the generic page landmark.
-  await page.locator('main.auth-shell').waitFor({ state: 'visible', timeout: 30_000 });
-  await page.getByRole('heading', { name: 'Connect your wallet', exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
-  const connect = page.getByRole('button', { name: 'Connect browser wallet', exact: true });
-  await playwright.expect(connect).toBeVisible({ timeout: 30_000 });
-  await playwright.expect(connect).toBeEnabled({ timeout: 30_000 });
+  // The configured Privy flow and the unconfigured browser-wallet fallback
+  // have different semantic headings and controls. Wait for a usable login
+  // screen in either mode; never treat the dynamic loading <main> as ready.
+  await page.locator('main').last().waitFor({ state: 'visible', timeout: 30_000 });
+  await page.waitForFunction(() => {
+    const main = [...document.querySelectorAll('main')].find((candidate) => {
+      const rect = candidate.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0 && getComputedStyle(candidate).visibility !== 'hidden';
+    });
+    if (!main || main.querySelector('[role="alert"]')) return false;
+    const heading = main.querySelector('h1')?.textContent?.trim();
+    const usableButton = (name) => [...main.querySelectorAll('button')].some((button) => {
+      const rect = button.getBoundingClientRect();
+      return button.textContent?.trim() === name && !button.disabled
+        && rect.width > 0 && rect.height > 0 && getComputedStyle(button).visibility !== 'hidden';
+    });
+    if (heading === 'Sign in to FxAeon') {
+      return usableButton('Connect an existing wallet') && usableButton('Continue with email');
+    }
+    return heading === 'Connect your wallet' && usableButton('Connect browser wallet');
+  }, null, { timeout: 30_000 });
+  const privyHeading = page.getByRole('heading', { name: 'Sign in to FxAeon', exact: true });
+  if (await privyHeading.isVisible()) {
+    await playwright.expect(page.getByRole('button', { name: 'Connect an existing wallet', exact: true })).toBeEnabled();
+    await playwright.expect(page.getByRole('button', { name: 'Continue with email', exact: true })).toBeEnabled();
+  } else {
+    await playwright.expect(page.getByRole('heading', { name: 'Connect your wallet', exact: true })).toBeVisible();
+    const connect = page.getByRole('button', { name: 'Connect browser wallet', exact: true });
+    await playwright.expect(connect).toBeVisible();
+    await playwright.expect(connect).toBeEnabled();
+  }
   await page.locator('.loading-line').waitFor({ state: 'hidden', timeout: 30_000 });
 }
 
+function classifyConsoleErrors() {
+  const blockedFallbacks = consoleErrors.filter(({ message }) => (
+    message.includes('https://api.coingecko.com/api/v3/simple/token_price/ethereum')
+    && message.includes('blocked by CORS policy')
+  ));
+  const externalFailuresByPage = new Map();
+  for (const failure of externalRequestFailures) {
+    externalFailuresByPage.set(failure.pageId, (externalFailuresByPage.get(failure.pageId) ?? 0) + 1);
+  }
+  const known = new Set(blockedFallbacks);
+  for (const error of consoleErrors) {
+    if (!error.message.includes('Failed to load resource: net::ERR_FAILED')) continue;
+    const count = externalFailuresByPage.get(error.pageId) ?? 0;
+    const alreadyMatched = consoleErrors.filter((candidate) => (
+      candidate.pageId === error.pageId
+      && known.has(candidate)
+      && candidate.message.includes('Failed to load resource: net::ERR_FAILED')
+    )).length;
+    if (count > alreadyMatched) known.add(error);
+  }
+  return {
+    knownExternalFallbackErrors: consoleErrors.filter((error) => known.has(error)),
+    unclassifiedErrors: consoleErrors.filter((error) => !known.has(error)),
+  };
+}
+
+function assertNoCaptureErrors() {
+  const { unclassifiedErrors } = classifyConsoleErrors();
+  if (discoveryErrors.length || pageErrors.length || unclassifiedErrors.length) {
+    throw new Error(`capture rejected: ${JSON.stringify({ discoveryErrors, pageErrors, unclassifiedConsoleErrors: unclassifiedErrors })}`);
+  }
+}
+
+async function hideNextDevIndicatorAfterCleanCheck(page) {
+  // The dev-only Next toolbar is not product UI. Hide its portal only after
+  // all observed routes pass pageerror and unclassified-console-error gates.
+  assertNoCaptureErrors();
+  if (!await page.locator('nextjs-portal').count()) return;
+  await page.addStyleTag({ content: 'nextjs-portal { display: none !important; }' });
+  await page.waitForFunction(() => {
+    const portal = document.querySelector('nextjs-portal');
+    return !portal || getComputedStyle(portal).display === 'none';
+  });
+}
+
 async function capture(page, file, route, prepare) {
-  const response = await page.goto(`${baseUrl}${route}`, { waitUntil: 'domcontentloaded' });
+  // A source Next dev server can keep DOMContentLoaded pending while compiling
+  // route chunks. We validate the rendered main, wallet state, data, images,
+  // and fonts below, so commit is the safe navigation boundary here.
+  const response = await page.goto(`${baseUrl}${route}`, { waitUntil: 'commit' });
   if (!response?.ok()) throw new Error(`capture route ${route} did not return a successful response`);
   await page.locator('main').last().waitFor({ state: 'visible' });
   await prepare?.(page);
   // Lazy wallet/settings modules can still be hydrating after the page
   // landmark appears. Do not publish an empty placeholder as a finished UI.
   await playwright.expect(page.locator('.loading-line')).toHaveCount(0, { timeout: 30_000 });
+  if (route !== '/login') {
+    // AppShell can paint before the shared wallet provider settles. Require
+    // the actual header control so a blank wallet skeleton never enters docs.
+    await playwright.expect(page.locator('.app-topbar [aria-label="Connect wallet"], .app-topbar [aria-label="Open wallet profile"]')).toHaveCount(1, { timeout: 30_000 });
+  }
+  if (route === '/' || route === '/portfolio') {
+    // The wallet provider can settle after the page landmark and loading line;
+    // never publish the transient portfolio shell as the standard frame.
+    await playwright.expect(page.locator('[aria-label="Loading portfolio"]')).toHaveCount(0, { timeout: 30_000 });
+  }
   if (route === '/settings') {
     await playwright.expect(page.getByText('Wallet', { exact: true })).toBeVisible();
     await playwright.expect(page.locator('.skeleton')).toHaveCount(0, { timeout: 30_000 });
   }
-  await page.waitForFunction(() => !document.querySelector('[aria-label="Loading market chart"]'), null, { timeout: 60_000 });
+  await page.waitForFunction(() => [...document.querySelectorAll('[aria-label="Loading market chart"]')].every((element) => {
+    const rect = element.getBoundingClientRect();
+    const style = window.getComputedStyle(element);
+    return style.display === 'none' || style.visibility === 'hidden' || rect.width === 0 || rect.height === 0;
+  }), null, { timeout: 60_000 });
+  if (route === '/' || route === '/portfolio') {
+    // Portfolio trend cards can expose their settled prices before the live
+    // chart request paints. Wait for both SVG polylines before publishing a
+    // standard frame so a transient dash is not mistaken for chart data.
+    await page.waitForFunction(() => {
+      const trends = [...document.querySelectorAll('svg[aria-label$="24 hour trend"] polyline')];
+      return trends.length >= 2 && trends.every((trend) => Boolean(trend.getAttribute('points')?.trim()));
+    }, null, { timeout: 60_000 });
+  }
   await page.waitForFunction(() => [...document.images]
     .filter((image) => {
       const rect = image.getBoundingClientRect();
@@ -279,7 +391,26 @@ async function capture(page, file, route, prepare) {
     })
     .every((image) => image.complete && image.naturalWidth > 0), null, { timeout: 15_000 });
   await page.evaluate(() => document.fonts.ready);
-  if (discoveryErrors.length || pageErrors.length) throw new Error(`capture rejected: ${[...discoveryErrors, ...pageErrors].join('; ')}`);
+  assertNoCaptureErrors();
+  if (route === '/trade' && (page.viewportSize()?.width ?? 0) > 839) {
+    // Do not publish the grid-only first paint. Require actual colored candle
+    // strokes in the plot canvas, not just a loaded chart shell or axes.
+    await page.waitForFunction(() => {
+      const chart = document.querySelector('.market-chart-panel[data-mobile-expanded="true"]');
+      const canvas = chart?.querySelector('.market-chart-graphic canvas');
+      const context = canvas?.getContext('2d');
+      if (!canvas || !context || canvas.width < 100 || canvas.height < 60) return false;
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      let coloredCandlePixels = 0;
+      for (let index = 0; index < pixels.length; index += 4) {
+        const red = pixels[index]; const green = pixels[index + 1]; const blue = pixels[index + 2];
+        if ((red > green * 1.3 && red > blue * 1.2 && red > 80)
+          || (green > red * 1.3 && green > blue * 1.1 && green > 80)) coloredCandlePixels += 1;
+        if (coloredCandlePixels >= 20) return true;
+      }
+      return false;
+    }, null, { timeout: 60_000 });
+  }
   if (positionManifest && interceptedGroups.size !== 4) throw new Error('all four exact SDK discovery requests must be observed before capture');
   if (marketDataMode === 'fixture' || positionManifest) {
     await page.evaluate(({ illustrative, fork }) => {
@@ -294,6 +425,7 @@ async function capture(page, file, route, prepare) {
   const session = await page.context().newCDPSession(page);
   try {
     if (captureProfile === 'standard' && route === '/login') await waitForStandardLogin(page);
+    await hideNextDevIndicatorAfterCleanCheck(page);
     await page.evaluate(async () => {
       // Preparation can leave an offscreen editable focused. Remove that
       // selection/focus anchor before the screenshot changes caret styling.
@@ -309,10 +441,10 @@ async function capture(page, file, route, prepare) {
     const after = await readCaptureViewport(page, session);
     assertCaptureViewport(after, 'after screenshot');
     if (captureProfile === 'standard' && route === '/login') {
-      await playwright.expect(page.getByRole('heading', { name: 'Connect your wallet', exact: true })).toBeVisible();
-      await playwright.expect(page.getByRole('button', { name: 'Connect browser wallet', exact: true })).toBeVisible();
+      await waitForStandardLogin(page);
       await playwright.expect(page.locator('.loading-line')).toHaveCount(0);
     }
+    assertNoCaptureErrors();
     for (const key of ['topbar', 'rail']) {
       if (JSON.stringify(before[key]) !== JSON.stringify(after[key])) throw new Error(`capture chrome shifted during screenshot: ${key}`);
     }
@@ -364,7 +496,7 @@ async function main() {
         const context = await createCaptureContext({ viewport, theme });
         const page = await context.newPage();
         for (const route of routes) {
-          const name = route === '/' ? 'welcome' : route.slice(1);
+          const name = route === '/' ? 'home' : route.slice(1);
           await capture(page, `audit-${name}-${theme}-${viewport.width}.png`, route, route === '/login' ? waitForStandardLogin : undefined);
         }
         await context.close();
@@ -375,7 +507,7 @@ async function main() {
   if (captureProfile === 'positions') {
     const desktopContext = await createCaptureContext({ viewport: { width: 1180, height: 900 }, theme: 'official' });
     const desktopPage = await desktopContext.newPage();
-    await capture(desktopPage, 'fxaeon-portfolio-positions.png', '/portfolio', waitForPopulatedPortfolio);
+    await capture(desktopPage, 'fxaeon-portfolio-positions.png', '/', waitForPopulatedPortfolio);
     await capture(desktopPage, 'fxaeon-positions.png', '/positions', waitForPopulatedPositions);
     await capture(desktopPage, 'fxaeon-trade-connected.png', '/trade', async (current) => {
       await waitForPopulatedTrade(current);
@@ -431,6 +563,12 @@ try {
     profile: captureProfile,
     capturedAt: new Date().toISOString(),
     marketData: marketDataMode === 'fixture' ? 'illustrative-display-fixture-visibly-labelled' : 'external-display-data-unmodified',
+    pageErrors,
+    consoleErrors,
+    knownExternalFallbackErrors: classifyConsoleErrors().knownExternalFallbackErrors,
+    externalRequestFailures,
+    unclassifiedConsoleErrors: classifyConsoleErrors().unclassifiedErrors,
+    devIndicator: 'nextjs-portal-hidden-after-zero-page-and-unclassified-console-errors',
     positionDiscovery: positionManifest ? 'exact-four-sdk-owner-id-queries-only' : 'not-intercepted',
     positionFixtureExecutionSurface: positionManifest?.executionSurface ?? 'unspecified',
     observedDiscoveryGroups: [...interceptedGroups].sort(),

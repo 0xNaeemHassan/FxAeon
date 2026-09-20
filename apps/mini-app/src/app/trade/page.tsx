@@ -9,18 +9,19 @@ import { TradeMarketChart } from '@/components/MarketChart';
 import {
   ProtocolPositionCard,
   ProtocolPositionNotice,
-  ProtocolPositionSkeleton,
 } from '@/components/ProtocolPositionCard';
 import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
 import { ConfirmedPositionCards } from '@/components/ConfirmedPositionCards';
 import { deriveConfirmedPositionHint } from '@/lib/confirmedPositions';
 import { confirmedPositionHintKey } from '@/lib/confirmedPositionStorage';
 import { AmountField, LeverageField, Segmented, SlippageField, TokenSelect, tokenBalanceFor, useWalletTokenBalances, type TokenBalanceView } from '@/components/ProtocolForm';
-import { MAX_FX_SLIPPAGE_PERCENT, clampLeverage, getEthereumClient, leverageBoundsFor, planIncreasePosition, prepareLeverageReview, readLeverageBounds, readSignatureRequiredDraft, restoreSignatureRequiredDraft, signatureDraftIdFromSearch, type LeverageBounds, type PlannedRoute, type TransactionExecutionResult } from '@/lib/fx';
+import { MAX_FX_SLIPPAGE_PERCENT, clampLeverage, estimatePlannedRouteCost, getEthereumClient, leverageBoundsFor, planIncreasePosition, prepareLeverageReview, readLeverageBounds, readSignatureRequiredDraft, restoreSignatureRequiredDraft, signatureDraftIdFromSearch, type LeverageBounds, type PlannedRoute, type TransactionExecutionResult } from '@/lib/fx';
+import { calculateNativeMax } from '@/lib/fx/nativeMax';
 import { RoutePrefetchStore, type RoutePrefetchDescriptor } from '@/lib/fx/routePrefetch';
 import { usePrivyWallet } from '@/lib/wallet';
 import styles from '@/components/trade-surfaces.module.css';
 import { positiveDecimal } from '@/lib/amount';
+import { formatUnits } from 'viem';
 import { DEFAULT_SLIPPAGE_PERCENT, readSlippagePercent } from '@/lib/settings';
 import { readTradeDeepLinkContext, resetTransactionAmounts, type TradeDeepLinkContext } from '@/lib/transactionState';
 import {
@@ -59,6 +60,9 @@ export default function TradePage() {
   const [highlightedPositionKey, setHighlightedPositionKey] = useState('');
   const [reviewRevision, setReviewRevision] = useState(0);
   const [resumeReview, setResumeReview] = useState(0);
+  const [nativeMaxAmount, setNativeMaxAmount] = useState<string | null>(null);
+  const [nativeMaxPending, setNativeMaxPending] = useState(false);
+  const [nativeMaxError, setNativeMaxError] = useState<string | null>(null);
   const [reviewStage, setReviewStage] = useState<ActionReviewStage>('input');
   const prefetchStoreRef = useRef<RoutePrefetchStore | null>(null);
   const prefetchSessionRef = useRef(createPrefetchSessionId());
@@ -75,6 +79,13 @@ export default function TradePage() {
   const currentTicketRef = useRef('');
   const prefetchedTicketRef = useRef('');
   const restoredDraftRef = useRef(false);
+  const nativeMaxRequestRef = useRef(0);
+  const nativeMaxMountedRef = useRef(true);
+
+  useEffect(() => () => {
+    nativeMaxMountedRef.current = false;
+    nativeMaxRequestRef.current += 1;
+  }, []);
 
   // Keep the unsigned snapshot primitive-only so History can restore the
   // editable ticket without ever persisting a quote, calldata, or route.
@@ -97,6 +108,8 @@ export default function TradePage() {
     setToken(nextToken);
     setAmount(defaults.amount);
     setLeverage(defaults.leverage);
+    setNativeMaxAmount(null);
+    setNativeMaxError(null);
     setReviewStage('input');
     prefetchStoreRef.current?.invalidate();
     prefetchDescriptorRef.current = null;
@@ -115,18 +128,22 @@ export default function TradePage() {
   const changeToken = useCallback((nextToken: UiToken) => {
     resetTradeContext(market, side, nextToken);
   }, [market, resetTradeContext, side]);
-  currentTicketRef.current = JSON.stringify([wallet.address, wallet.chainId, market, side, token, amount, leverage, slippage, leverageBounds.min, leverageBounds.max]);
+  currentTicketRef.current = JSON.stringify([wallet.address, wallet.chainId, walletBalances.balances.ETH?.amount ?? '', market, side, token, amount, leverage, slippage, leverageBounds.min, leverageBounds.max]);
 
   useEffect(() => {
     const context = `${wallet.address?.toLowerCase() ?? ''}:${wallet.chainId ?? ''}`;
     const previous = previousWalletContextRef.current;
     const currentAddress = wallet.address?.toLowerCase() ?? null;
+    const previousAddress = previous?.split(':')[0] ?? '';
     const walletChanged = Boolean(lastConnectedWalletRef.current)
       && lastConnectedWalletRef.current !== currentAddress;
     const chainChanged = wallet.chainId !== undefined
       && lastConnectedChainRef.current !== undefined
       && lastConnectedChainRef.current !== wallet.chainId;
-    if (previous !== null && previous !== context && (walletChanged || chainChanged)) {
+    // A disconnected review rail owns the first wallet connection. Preserve
+    // its editable ticket while the address/chain arrive in separate React
+    // updates; identity changes after an established session still reset it.
+    if (previous !== null && previous !== context && previousAddress && (walletChanged || chainChanged)) {
       const explicit = explicitDeepLinkRef.current;
       const market = explicit?.market ?? 'ETH';
       const side = explicit?.side ?? 'long';
@@ -228,6 +245,7 @@ export default function TradePage() {
   }, []);
 
   const tokenOptions = positionInputTokenOptions(market);
+  const sideLabel = side === 'long' ? 'Long' : 'Short';
   const validAmount = positiveDecimal(amount, tokenDecimals(token));
   const selectedTokenBalance: TokenBalanceView | undefined = wallet.address
     ? tokenBalanceFor(walletBalances.balances, token) ?? (walletBalances.status === 'loading'
@@ -267,6 +285,88 @@ export default function TradePage() {
   }, [highlightedPositionKey]);
 
   const slippageValue = Number(slippage);
+
+  const resolveNativeMax = useCallback(async () => {
+    if (token !== 'ETH' || !wallet.address || wallet.chainId !== 1 || nativeMaxPending) return;
+    const balance = tokenBalanceFor(walletBalances.balances, 'ETH');
+    if (!balance || balance.status !== 'ready' || !balance.amount) return;
+    const balanceWei = parseAmount(balance.amount, 'ETH');
+    if (!balanceWei) return;
+    const ticket = currentTicketRef.current;
+    const request = nativeMaxRequestRef.current + 1;
+    nativeMaxRequestRef.current = request;
+    const isCurrent = () => nativeMaxMountedRef.current
+      && nativeMaxRequestRef.current === request
+      && currentTicketRef.current === ticket;
+    setNativeMaxPending(true);
+    setNativeMaxError(null);
+    try {
+      // Gas can vary with calldata and amount. Rebuild the real candidate
+      // route, then subtract only execution overhead from the wallet balance;
+      // the route's native value is the ETH being deposited and must remain in
+      // the spendable amount. A one wei probe is not authoritative and can be
+      // rejected by the SDK's minimum amount checks.
+      const entered = parseAmount(amount, 'ETH');
+      const spendable = await calculateNativeMax({
+        balanceWei,
+        initialCandidateWei: entered ?? undefined,
+        buildRoutes: (candidate) => planIncreasePosition({
+          market,
+          type: side,
+          positionId: 0,
+          userAddress: wallet.address!,
+          leverage,
+          inputTokenAddress: tokenAddress('ETH'),
+          amount: candidate,
+          slippage: slippageValue,
+        }),
+        estimateRoutes: (routes) => Promise.all(routes.map((route) => estimatePlannedRouteCost(route))),
+        isCurrent,
+      });
+      if (!isCurrent()) return;
+      const formatted = formatUnits(spendable, 18);
+      setNativeMaxAmount(formatted);
+      setAmount(formatted);
+    } catch {
+      if (!isCurrent()) return;
+      setNativeMaxAmount(null);
+      setNativeMaxError('100% is unavailable until current gas is verified. Enter an amount manually or retry.');
+    } finally {
+      if (isCurrent()) setNativeMaxPending(false);
+    }
+  }, [amount, leverage, market, nativeMaxPending, side, slippageValue, token, wallet.address, wallet.chainId, walletBalances.balances]);
+
+  useEffect(() => {
+    setNativeMaxAmount(null);
+    setNativeMaxError(null);
+  }, [wallet.address, wallet.chainId, walletBalances.balances.ETH?.amount]);
+
+  // Any ticket edit invalidates a pending reserve calculation immediately.
+  // The request itself may still finish, but its generation and ticket checks
+  // prevent it from writing into the newer form.
+  useEffect(() => {
+    nativeMaxRequestRef.current += 1;
+    setNativeMaxPending(false);
+    setNativeMaxError(null);
+  }, [amount, leverage, market, side, slippage, token, wallet.address, wallet.chainId]);
+
+  const changeLeverage = useCallback((value: number) => {
+    setLeverage(value);
+    setNativeMaxAmount(null);
+    setNativeMaxError(null);
+  }, []);
+
+  const changeSlippage = useCallback((value: string) => {
+    setSlippage(value);
+    setNativeMaxAmount(null);
+    setNativeMaxError(null);
+  }, []);
+
+  const changeAmount = useCallback((value: string) => {
+    setAmount(value);
+    setNativeMaxAmount(null);
+    setNativeMaxError(null);
+  }, []);
 
   // Keep one short-lived route warm while the ticket is valid. This is a
   // display/review optimization only: ActionReview still rebuilds, simulates,
@@ -366,7 +466,11 @@ export default function TradePage() {
         slippage: slippageValue,
         }),
       });
-      setLeverageBounds(prepared.bounds);
+      setLeverageBounds((current) => current.min === prepared.bounds.min
+        && current.max === prepared.bounds.max
+        && current.source === prepared.bounds.source
+        ? current
+        : prepared.bounds);
       if (prepared.adjusted) {
         setLeverage(prepared.leverage);
         throw new RangeError(`Pool leverage limits changed to ${prepared.bounds.min.toFixed(1)}x-${prepared.bounds.max.toFixed(1)}x. The target was updated; review it again.`);
@@ -376,6 +480,11 @@ export default function TradePage() {
   }, [leverage, leverageBounds, market, side, slippageValue, token, validAmount, wallet.address]);
 
   const marketPositions = positionState.positions.filter((position) => position.market === market);
+  const marketHasPendingPosition = positionState.pendingPositions.some((hint) => hint.market === market);
+  const showPositionSection = Boolean(wallet.address && (
+    marketPositions.length > 0 || marketHasPendingPosition
+      || positionState.status === 'partial' || positionState.status === 'unavailable'
+  ));
   const highlightedPosition = marketPositions.find((position) => positionKey(position) === highlightedPositionKey);
   const previewPositions = highlightedPosition
     ? [highlightedPosition, ...marketPositions.filter((position) => positionKey(position) !== highlightedPositionKey).slice(-1)]
@@ -396,8 +505,8 @@ export default function TradePage() {
       <div className={styles.tradeRoot}>
       <div className={`${styles.tradeWorkspace} trade-workspace`}>
         <header className={`${styles.tradePageHeading} trade-page-heading`}>
-          <div><p className={styles.pageEyebrow}>f(x) leveraged markets</p><h1 className="text-display mt-1.5 text-[30px] font-semibold leading-tight">Trade</h1></div>
-          <Link href="/positions" className="glass-press inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 text-[12px] font-semibold text-mut hover:text-mint"><Layers2 className="h-4 w-4" aria-hidden="true" />Positions</Link>
+          <div><h1 className="text-display text-[30px] font-semibold leading-tight">Trade</h1></div>
+          <Link href="/positions" className={`${styles.positionsShortcut} glass-press inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 text-[12px] font-semibold text-mut hover:text-mint`}><Layers2 className="h-4 w-4" aria-hidden="true" />Positions</Link>
         </header>
 
         <div className={styles.tradeLayout}>
@@ -414,8 +523,8 @@ export default function TradePage() {
               surface="content"
               planBuilder={planBuilder}
               prefetchedPlan={prefetchedPlan}
-              label={`Review ${market} ${side === 'long' ? 'Long' : 'Short'}`}
-              operationLabel={`Open ${market} ${side}`}
+              label={`Open ${market} ${sideLabel}`}
+              operationLabel={`Open ${market} ${sideLabel}`}
               onStageChange={setReviewStage}
               draftState={draftState}
               draftActionKey={draftActionKey}
@@ -425,20 +534,18 @@ export default function TradePage() {
                 <>
                   <div className={`${styles.ticketHeader} flex items-start justify-between gap-3`}>
                     <div>
-                      <p className={styles.ticketKicker}>New position</p>
-                      <h2 className="mt-1 text-[18px] font-semibold">{market} {side === 'long' ? 'Long' : 'Short'}</h2>
+                      <h2 className="text-[18px] font-semibold">Open position</h2>
                     </div>
-                    <span className={`rounded-lg px-2.5 py-1 text-[12px] font-semibold ${side === 'long' ? 'bg-[var(--success-dim)] text-success' : 'bg-[var(--danger-dim)] text-danger'}`}>{side === 'long' ? 'Long' : 'Short'}</span>
                   </div>
 
                   <div className={styles.sideControl}><Segmented tone="sides" value={side} onChange={changeSide} ariaLabel="Position side" options={[{ value: 'long', label: 'Long', sub: 'Price rises' }, { value: 'short', label: 'Short', sub: 'Price falls' }]} /></div>
 
                   <div className={styles.fieldStack}>
-                    <AmountField compact label="Amount" symbol={token} value={amount} onChange={setAmount} maxDecimals={tokenDecimals(token)} showMax={token !== 'ETH'} showUnitPrice={false} balanceState={selectedTokenBalance} tokenSelector={<TokenSelect compact label="Input asset" value={token} options={tokenOptions} onChange={changeToken} balances={wallet.address ? walletBalances.balances : undefined} balanceStatus={wallet.address ? (walletBalances.status !== 'idle' ? walletBalances.status : undefined) : 'disconnected'} />} />
-                    <LeverageField label={side === 'short' ? 'Target LSD leverage' : 'Target leverage'} value={leverage} onChange={setLeverage} min={leverageBounds.min} max={leverageBounds.max} error={leverageError} compact />
+                    <AmountField compact label="Amount" symbol={token} value={amount} onChange={changeAmount} maxDecimals={tokenDecimals(token)} showMax showUnitPrice={false} constraintError={token === 'ETH' ? nativeMaxError : undefined} maxAmount={token === 'ETH' ? nativeMaxAmount : undefined} onMax={token === 'ETH' ? resolveNativeMax : undefined} maxPending={token === 'ETH' && nativeMaxPending} balanceState={selectedTokenBalance} tokenSelector={<TokenSelect compact label="Input asset" value={token} options={tokenOptions} onChange={changeToken} balances={wallet.address ? walletBalances.balances : undefined} balanceStatus={wallet.address ? (walletBalances.status !== 'idle' ? walletBalances.status : undefined) : 'disconnected'} />} />
+                    <LeverageField label="Target leverage" value={leverage} onChange={changeLeverage} min={leverageBounds.min} max={leverageBounds.max} error={leverageError} compact />
                     <details className={`${styles.advancedDetails} group rounded-xl border border-[var(--line)] px-3`}>
                       <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-[13px] font-semibold [&::-webkit-details-marker]:hidden">Advanced <span aria-hidden="true" className="text-mut transition-transform group-open:rotate-180">⌄</span></summary>
-                      <div className="border-t border-[var(--line)] py-3"><SlippageField value={slippage} onChange={setSlippage} max={MAX_FX_SLIPPAGE_PERCENT} /></div>
+                      <div className="border-t border-[var(--line)] py-3"><SlippageField value={slippage} onChange={changeSlippage} max={MAX_FX_SLIPPAGE_PERCENT} /></div>
                     </details>
                   </div>
                 </>
@@ -449,7 +556,7 @@ export default function TradePage() {
         </div>
         </div>
 
-        {wallet.address && (
+        {showPositionSection && (
           <section aria-labelledby="trade-open-positions-title" className="flex flex-col gap-2.5">
             <div className="flex items-center justify-between gap-3">
               <h2 id="trade-open-positions-title" className="text-[15px] font-semibold">Your positions</h2>
@@ -457,7 +564,7 @@ export default function TradePage() {
             </div>
             <ProtocolPositionNotice status={positionState.status} failedGroups={positionState.failedGroups} hasPositions={positionState.positions.length + positionState.pendingPositions.length > 0} refreshing={positionState.refreshing} onRefresh={() => void positionState.refresh()} compact />
             <ConfirmedPositionCards market={market} />
-            {positionState.status === 'loading' && !positionState.positions.length && !positionState.pendingPositions.length ? <ProtocolPositionSkeleton compact /> : marketPositions.length > 0 ? (
+            {marketPositions.length > 0 && (
               <div className="flex flex-col gap-2">
                 {previewPositions.map((position) => {
                   const key = positionKey(position);
@@ -474,13 +581,7 @@ export default function TradePage() {
                   );
                 })}
               </div>
-            ) : positionState.status === 'ready' && !positionState.pendingPositions.some((hint) => hint.market === market) ? (
-              <Link href="/positions" className="trade-positions-link glass-press">
-                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--mint-dim)] text-mint"><Layers2 className="h-5 w-5" aria-hidden="true" /></span>
-                <span className="min-w-0 flex-1"><strong className="block text-[13px]">No open {market} positions</strong><small className="mt-1 block text-[12px] text-mut">Your position details will appear here after a trade is confirmed.</small></span>
-                <ChevronRight className="h-4 w-4 text-mut" aria-hidden="true" />
-              </Link>
-            ) : null}
+            )}
           </section>
         )}
       </div>

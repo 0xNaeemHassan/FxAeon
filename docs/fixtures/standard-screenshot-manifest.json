@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "proof": "fxaeon-documentation-captures",
-  "capturedAt": "2026-09-02T21:24:39.148Z",
+  "capturedAt": "2026-09-13T10:58:48.314Z",
   "profile": "standard",
   "marketData": "external-display-data-unmodified",
   "assertions": {
@@ -16,7 +16,8 @@
         "width": 1440,
         "height": 900
       },
-      "sha256": "c507e6ed5bfdcdc4f63f5f1ee68a02b7f346faeeedae5d2cd3d359983c1008be"
+      "sha256": "3eff015c0d2a20ad4410e94228277580831860268d401f6c7a04dbd561ca00b3",
+      "capturedAt": "2026-09-13T13:44:59.2515906Z"
     },
     {
       "file": "fxaeon-trade.png",
@@ -25,7 +26,8 @@
         "width": 1440,
         "height": 900
       },
-      "sha256": "288853e3c2ce3bd54a1b38de3564332bbc177caff00945bc7f456814b166905e"
+      "sha256": "84fdaa82c85233c64f31e551731ee735c9b3505bb411bf06ba9550029ac69d2d",
+      "capturedAt": "2026-09-13T14:53:01.213Z"
     },
     {
       "file": "fxaeon-token-picker.png",
@@ -34,7 +36,7 @@
         "width": 1440,
         "height": 900
       },
-      "sha256": "5c2dbb9b289263298c5537135d6595df49bbb17bc06da1067da4682d0c82ec37"
+      "sha256": "5eaf5a232e7ffb2d843134a8149e3c3c61732a4f6623816a34e004fef2bdcd62"
     },
     {
       "file": "fxaeon-bridge.png",
@@ -43,7 +45,7 @@
         "width": 1440,
         "height": 900
       },
-      "sha256": "444600908a4026888d49c68443fb71da6739f255db3ebf1c614093e79dbff797"
+      "sha256": "38f55c11c2922e4f867b1a66cf607a7e43642b3cdb5770cd6f9c03823dc571af"
     },
     {
       "file": "fxaeon-login.png",
@@ -52,7 +54,7 @@
         "width": 1440,
         "height": 900
       },
-      "sha256": "5f8ab4a0008bd7db3ef71d482ee03846ff1ef0e62052dabe6ced1b379893da97"
+      "sha256": "49f3df602fab1bd6504ef45d6ae5cc733c49e14d02f00b2a41299c90a2a1f9e5"
     },
     {
       "file": "fxaeon-portfolio.png",
@@ -61,7 +63,16 @@
         "width": 1440,
         "height": 900
       },
-      "sha256": "78be4f68278c554033862d26adecba2f245b73cc9acc7d260b93ce6de14c7351"
+      "sha256": "5b583fac9a23f25503dd619482b86e31c25fcb972c33c57810e5841a8349bf84"
+    },
+    {
+      "file": "fxaeon-docs.png",
+      "route": "/docs",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "sha256": "ef147089243fe9206dbb6c948033baed844c19a7213e444215cfe85ec5dc7ac9"
     },
     {
       "file": "fxaeon-trade-mobile.png",
@@ -70,7 +81,8 @@
         "width": 390,
         "height": 844
       },
-      "sha256": "b1dbe26cf2dbb87878d684e3dfa6c9f9d0c22b47a525c0306046a9d4c95c3d24"
+      "sha256": "3cb01a4975272896f71a7ce39b77fe7c5e97e1ff8be917159872f09605f67b9a",
+      "capturedAt": "2026-09-13T14:52:20.868Z"
     },
     {
       "file": "fxaeon-portfolio-mobile.png",
@@ -79,7 +91,7 @@
         "width": 390,
         "height": 844
       },
-      "sha256": "9cead9cb32a44370456026e4a43b7b783d1f8e031a5e04321816721359b1496a"
+      "sha256": "a73277adec66563680abfa6f181ca3729d938a183dfb64bf2da79aaae7f68211"
     }
   ]
 }

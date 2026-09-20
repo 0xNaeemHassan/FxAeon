@@ -82,13 +82,13 @@ function statusCopy(view: RecoveryViewModel): {
 }
 
 function statusSummary(view: RecoveryViewModel): string {
-  if (view.status === 'confirmed' && view.record.bridge) return 'Confirmed on source. Destination delivery is tracked below.';
-  if (view.status === 'confirmed') return 'Receipt and mined transaction verified on-chain.';
-  if (view.status === 'failed') return 'The transaction reverted on-chain. No later step is resumed automatically.';
+  if (view.status === 'confirmed' && view.record.bridge) return 'Source confirmed after 1 confirmation. Destination delivery is tracked below.';
+  if (view.status === 'confirmed') return 'Confirmed on-chain after 1 confirmation.';
+  if (view.status === 'failed') return 'Transaction reverted on-chain. No later step is resumed automatically.';
   if (view.verification === 'not-found') return 'No receipt yet. The transaction may still be pending.';
-  if (view.verification === 'confirming') return 'Receipt included, but three confirmations are not available yet. Do not submit this action again.';
-  if (view.verification === 'rpc-error') return 'The network could not be checked. Nothing was marked failed.';
-  return 'The available chain data did not match the saved transaction details, so it remains unverified.';
+  if (view.verification === 'confirming') return 'Receipt included. Waiting for 1 confirmation. Do not submit this action again.';
+  if (view.verification === 'rpc-error') return 'Network check unavailable. Nothing was marked failed.';
+  return 'Chain data did not match the saved transaction details, so it remains unverified.';
 }
 
 function DraftItem({ draft, onCancel }: { draft: SignatureRequiredDraft; onCancel: (id: string) => void }) {
@@ -110,11 +110,11 @@ function DraftItem({ draft, onCancel }: { draft: SignatureRequiredDraft; onCance
             </span>
           </div>
           <p className="mt-2 break-words text-[11.5px] leading-relaxed text-mut">
-            {cancelled ? 'This local review was cancelled and cannot be signed.' : 'A fresh review is required before the wallet can be asked to sign.'}
+            {cancelled ? 'This local draft was dismissed and can no longer be signed.' : 'A fresh review is required before the wallet can be asked to sign.'}
           </p>
           <div className="mt-2.5 flex items-center justify-end gap-2">
             {!cancelled && <Link href={signatureDraftResumePath(draft)} className="inline-flex min-h-11 items-center rounded-lg px-2 text-[10.5px] font-semibold text-mint hover:bg-[var(--mint-dim)]">Resume review</Link>}
-            {!cancelled && <button type="button" onClick={() => onCancel(draft.id)} className="inline-flex min-h-11 items-center rounded-lg px-2 text-[10.5px] font-semibold text-mut hover:bg-[var(--surface-2)]">Cancel</button>}
+            {!cancelled && <button type="button" onClick={() => onCancel(draft.id)} className="inline-flex min-h-11 items-center rounded-lg px-2 text-[10.5px] font-semibold text-mut hover:bg-[var(--surface-2)]">Dismiss draft</button>}
           </div>
           <p className="mt-1 border-t border-[var(--line)] pt-2 text-[10px] text-[var(--mut-2)]">Stored on this device and scoped to this wallet.</p>
         </div>
@@ -159,7 +159,7 @@ function RecoveryItem({ view, trackBridge, autoTrackBridge }: { view: RecoveryVi
             </a>
           </div>
           <details className="mt-1 border-t border-[var(--line)] pt-1">
-            <summary className="flex min-h-11 cursor-pointer items-center text-[11px] font-semibold text-mut">Recovery details</summary>
+            <summary className="flex min-h-11 cursor-pointer items-center text-[11px] font-semibold text-mut">Details</summary>
             <div className="pb-2 text-[10.5px] leading-relaxed text-mut">
               <p>{view.message}</p>
               {view.receiptBlockNumber !== undefined && <p className="mt-1">Block {view.receiptBlockNumber.toString()}</p>}
@@ -303,7 +303,7 @@ export default function PendingTransactionRecovery({ walletAddress, embedded = f
           </ul>
         )}
         {!loading && (views.length > 0 || drafts.length > 0) && (
-          <p className="mt-3 px-1 text-[11px] leading-relaxed text-mut">History is read-only. A saved transaction is never resent, and signing always rebuilds and simulates a fresh route.</p>
+          <p className="mt-3 px-1 text-[11px] leading-relaxed text-mut">Saved on this device for this wallet.</p>
         )}
         <Button
           variant="ghost"

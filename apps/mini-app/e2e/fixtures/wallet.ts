@@ -4,6 +4,15 @@ export interface BrowserWalletShimOptions {
   /** Start with an exposed account, or require eth_requestAccounts on connect. */
   initiallyConnected?: boolean;
   chainId?: string;
+  /** Deterministic switch behavior for network-selector browser regressions. */
+  switchChain?: {
+    /** Hold a switch request open long enough for pending UI assertions. */
+    delayMs?: number;
+    /** Hold the request until the test calls `window.__wallet.releaseSwitch()`. */
+    manual?: boolean;
+    /** Consume one outcome per switch request; omitted entries succeed. */
+    outcomes?: ('success' | 'reject' | 'noop')[];
+  };
 }
 
 export function browserWalletInitScript(_opts: BrowserWalletShimOptions = {}): (o: BrowserWalletShimOptions) => void {
@@ -11,6 +20,8 @@ export function browserWalletInitScript(_opts: BrowserWalletShimOptions = {}): (
     let address = o.address ?? '0x930f0000000000000000000000000000000098b9';
     let connected = o.initiallyConnected ?? false;
     let chainId = o.chainId ?? '0x1';
+    let switchAttempt = 0;
+    const pendingSwitches: Array<() => void> = [];
     const listeners = new Map<string, Set<(...args: unknown[]) => void>>();
     const requests: Array<{ method: string; params?: unknown[] }> = [];
     const emit = (event: string, ...args: unknown[]) => listeners.get(event)?.forEach((listener) => listener(...args));
@@ -28,6 +39,17 @@ export function browserWalletInitScript(_opts: BrowserWalletShimOptions = {}): (
         if (method === 'wallet_switchEthereumChain') {
           const next = (params?.[0] as { chainId?: unknown } | undefined)?.chainId;
           if (typeof next !== 'string') throw new Error('missing chain id');
+          const switchOptions = o.switchChain;
+          const delayMs = Math.max(0, switchOptions?.delayMs ?? 0);
+          if (delayMs > 0) await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+          if (switchOptions?.manual) await new Promise<void>((resolve) => pendingSwitches.push(resolve));
+          const outcome = switchOptions?.outcomes?.[switchAttempt++] ?? 'success';
+          if (outcome === 'reject') {
+            const error = new Error('User rejected the network switch.') as Error & { code?: number };
+            error.code = 4001;
+            throw error;
+          }
+          if (outcome === 'noop') return null;
           chainId = next;
           emit('chainChanged', chainId);
           return null;
@@ -53,6 +75,7 @@ export function browserWalletInitScript(_opts: BrowserWalletShimOptions = {}): (
         }
         emit('accountsChanged', connected ? [address] : []);
       },
+      releaseSwitch() { pendingSwitches.shift()?.(); },
     };
   };
 }

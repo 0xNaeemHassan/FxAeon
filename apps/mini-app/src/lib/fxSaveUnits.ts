@@ -9,9 +9,9 @@ import { usdValueForDecimal, usdValueForUnits, type UsdPriceMap } from './prices
 export const FX_SAVE_UNITS = {
   balanceWei: { priceKey: 'fxSAVE', label: 'fxSAVE' },
   totalSupplyWei: { priceKey: 'fxSAVE', label: 'fxSAVE' },
-  assetsWei: { priceKey: 'fxUSDBasePool', label: 'fxUSD pool token' },
-  totalAssetsWei: { priceKey: 'fxUSDBasePool', label: 'fxUSD pool token' },
-  pendingSharesWei: { priceKey: 'fxUSDBasePool', label: 'fxUSD pool token' },
+  assetsWei: { priceKey: 'fxUSDBasePool', label: 'fxUSD base-pool shares' },
+  totalAssetsWei: { priceKey: 'fxUSDBasePool', label: 'fxUSD base-pool shares' },
+  pendingSharesWei: { priceKey: 'fxUSDBasePool', label: 'fxUSD base-pool shares' },
 } as const;
 
 /**

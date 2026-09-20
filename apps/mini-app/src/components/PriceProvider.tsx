@@ -10,12 +10,14 @@ import {
 } from '@/lib/liveMarket';
 import type { MarketSymbol } from '@/lib/marketData';
 import { liveMarketStore } from '@/lib/liveMarketStore';
+import { priceDemandRegistry } from '@/lib/priceDemand';
 import {
   fetchUsdPrices,
   parseUsdPriceCache,
   USD_PRICE_CACHE_KEY,
   USD_PRICE_ASSET_COUNT,
   type UsdPriceSnapshot,
+  type UsdPriceUpdate,
 } from '@/lib/prices';
 
 const REFRESH_INTERVAL_MS = 30_000;
@@ -44,7 +46,7 @@ function readCachedSnapshot(): UsdPriceSnapshot | null {
   }
 }
 
-function writeCachedSnapshot(snapshot: Pick<UsdPriceSnapshot, 'prices' | 'updatedAt'>): void {
+function writeCachedSnapshot(snapshot: Pick<UsdPriceSnapshot, 'prices' | 'updatedAt' | 'updatedAts'>): void {
   try {
     window.localStorage.setItem(USD_PRICE_CACHE_KEY, JSON.stringify(snapshot));
   } catch {
@@ -53,9 +55,9 @@ function writeCachedSnapshot(snapshot: Pick<UsdPriceSnapshot, 'prices' | 'update
   }
 }
 
-async function fetchWithRetry(signal?: AbortSignal) {
+async function fetchWithRetry(signal?: AbortSignal, onProgress?: (snapshot: UsdPriceUpdate) => void) {
   try {
-    return await fetchUsdPrices(fetch, signal);
+    return await fetchUsdPrices(fetch, signal, onProgress);
   } catch (firstFailure) {
     if (signal?.aborted) throw firstFailure;
     await new Promise<void>((resolve, reject) => {
@@ -64,7 +66,7 @@ async function fetchWithRetry(signal?: AbortSignal) {
       signal?.addEventListener('abort', abort, { once: true });
       if (signal?.aborted) abort();
     });
-    return fetchUsdPrices(fetch, signal);
+    return fetchUsdPrices(fetch, signal, onProgress);
   }
 }
 
@@ -72,17 +74,25 @@ export default function PriceProvider({ children }: { children: React.ReactNode 
   const [snapshot, setSnapshot] = useState<UsdPriceSnapshot>(EMPTY_SNAPSHOT);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [foreground, setForeground] = useState(false);
+  const priceDemandActive = useSyncExternalStore(priceDemandRegistry.subscribe, priceDemandRegistry.isActive, () => false);
   const snapshotRef = useRef(snapshot);
   snapshotRef.current = snapshot;
   const refreshing = useRef<{ signal?: AbortSignal } | null>(null);
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
-    if ((refreshing.current && !refreshing.current.signal?.aborted) || signal?.aborted) return;
+    if (!priceDemandActive || (refreshing.current && !refreshing.current.signal?.aborted) || signal?.aborted) return;
     const request = { signal };
     refreshing.current = request;
     setIsRefreshing(true);
     try {
-      const next = await fetchWithRetry(signal);
+      const applyProgress = (next: UsdPriceUpdate) => {
+        if (signal?.aborted || refreshing.current !== request) return;
+        const status = Object.keys(next.prices).length === USD_PRICE_ASSET_COUNT ? 'ready' : 'partial';
+        const snapshot = { ...next, prices: { ...next.prices }, updatedAts: { ...next.updatedAts }, status } as UsdPriceSnapshot;
+        writeCachedSnapshot(snapshot);
+        setSnapshot(snapshot);
+      };
+      const next = await fetchWithRetry(signal, applyProgress);
       if (signal?.aborted) return;
       writeCachedSnapshot(next);
       setSnapshot({ ...next, status: Object.keys(next.prices).length === USD_PRICE_ASSET_COUNT ? 'ready' : 'partial' });
@@ -98,9 +108,10 @@ export default function PriceProvider({ children }: { children: React.ReactNode 
         setIsRefreshing(false);
       }
     }
-  }, []);
+  }, [priceDemandActive]);
 
   useEffect(() => {
+    if (!priceDemandActive) return undefined;
     let controller: AbortController | null = null;
     const cached = readCachedSnapshot();
     if (cached) setSnapshot(cached);
@@ -122,10 +133,10 @@ export default function PriceProvider({ children }: { children: React.ReactNode 
       window.removeEventListener('online', onVisibility);
       window.removeEventListener('offline', onVisibility);
     };
-  }, [refresh]);
+  }, [priceDemandActive, refresh]);
 
   useEffect(() => {
-    if (!foreground) return undefined;
+    if (!priceDemandActive || !foreground) return undefined;
     const controller = new AbortController();
     const delay = snapshot.status === 'unavailable'
       ? UNAVAILABLE_RETRY_MS
@@ -136,13 +147,13 @@ export default function PriceProvider({ children }: { children: React.ReactNode 
       if (document.visibilityState === 'visible' && navigator.onLine !== false) void refresh(controller.signal);
     }, delay);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [foreground, refresh, snapshot.status, snapshot.updatedAt]);
+  }, [foreground, priceDemandActive, refresh, snapshot.status, snapshot.updatedAt]);
 
   // One public Coinbase socket serves both instruments. It is foreground-only
   // so a Telegram WebView or background browser tab never holds a live stream
   // open. The validated HTTP snapshot remains the anchor and fallback.
   useEffect(() => {
-    const active = () => document.visibilityState === 'visible' && navigator.onLine !== false;
+    const active = () => priceDemandActive && document.visibilityState === 'visible' && navigator.onLine !== false;
     const onQuote = (quote: LiveQuote) => {
       liveMarketStore.acceptQuote(quote);
     };
@@ -166,7 +177,7 @@ export default function PriceProvider({ children }: { children: React.ReactNode 
       window.removeEventListener('offline', sync);
       liveController.stop();
     };
-  }, []);
+  }, [priceDemandActive]);
 
   const retry = useCallback(async () => { await refresh(); }, [refresh]);
   const value = useMemo(() => ({ ...snapshot, refreshing: isRefreshing, refresh: retry }), [isRefreshing, retry, snapshot]);

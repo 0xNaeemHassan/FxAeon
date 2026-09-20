@@ -85,7 +85,7 @@ function ErrorFallback({
 }) {
   const showTechnicalDetails = process.env.NODE_ENV !== 'production';
   return (
-    <main className="app-shell mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-[430px] items-center px-5 py-10">
+    <main className="app-shell mx-auto flex min-h-[var(--tg-viewport-height,var(--tg-viewport-stable-height,100dvh))] w-full max-w-[430px] items-center px-5 py-10 pb-[calc(env(safe-area-inset-bottom,0px)+2.5rem)]">
       <section className="glass anim-scale-in w-full rounded-lg p-6 text-center">
         <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-lg border border-[rgba(255,107,118,0.22)] bg-[var(--danger-dim)]">
           <AlertTriangle className="h-9 w-9 text-danger" strokeWidth={1.7} aria-hidden="true" />

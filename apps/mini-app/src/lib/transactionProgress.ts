@@ -28,7 +28,7 @@ export function transactionStepProgress(step: TransactionStepResult | undefined)
   if (step?.receipt?.status === 'reverted') return { state: 'reverted', label: 'Reverted' };
   if (step?.status === 'confirmed' && step.receipt?.status === 'success') return { state: 'confirmed', label: 'Confirmed' };
   if (step?.status === 'included') return { state: 'included', label: 'Included · awaiting confirmations' };
-  if (step?.status === 'confirming') return { state: 'confirming', label: `${step.confirmations ?? 0}/${step.requiredConfirmations ?? 3} confirmations` };
+  if (step?.status === 'confirming') return { state: 'confirming', label: `${step.confirmations ?? 0}/${step.requiredConfirmations ?? 1} confirmations` };
   if (step?.status === 'failed') {
     return step.receipt
       ? { state: 'unverified', label: 'Verification incomplete' }
@@ -46,7 +46,7 @@ export function confirmedUpdateCopy(operation: OfficialFxMethod | undefined, rea
       label: 'Confirmed on source',
       body: reading
         ? 'Checking source state. Destination delivery is tracked separately.'
-        : 'Waiting for the next source block. Destination delivery is tracked separately.',
+        : 'Source receipt confirmed. Destination delivery is tracked separately.',
     };
   }
   const position = operation !== undefined && [
@@ -57,6 +57,6 @@ export function confirmedUpdateCopy(operation: OfficialFxMethod | undefined, rea
     label: `Confirmed · updating ${subject}`,
     body: reading
       ? `Verifying updated ${subject}. No further signature is needed.`
-      : `Waiting for the next block before reading updated ${subject}.`,
+      : `Receipt confirmed. Updating ${subject}.`,
   };
 }

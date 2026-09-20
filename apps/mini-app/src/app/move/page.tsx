@@ -1,15 +1,17 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeftRight } from 'lucide-react';
-import type { Address } from 'viem';
+import { AlertTriangle, ArrowLeftRight } from 'lucide-react';
+import { formatUnits, type Address } from 'viem';
 import { AppShell, Card } from '@/components/ui';
 import { ActionReview, type ActionReviewStage } from '@/components/ActionReview';
-import { AmountField, TokenSelect } from '@/components/ProtocolForm';
+import { AmountField, TokenSelect, type TokenBalanceView } from '@/components/ProtocolForm';
 import { useMoveBalances } from '@/components/WalletDataProvider';
 import {
   assertAddress,
   assertBridgeActionTarget,
+  advancedBridgePolicy,
+  assertChecksummedAddress,
   assertPublicClientChain,
   bridgeDeliveryLowerBound,
   getBridgeApprovalAllowance,
@@ -21,6 +23,7 @@ import {
   resolveBridgeTokenAddress,
   requireRpcUrl,
   restoreSignatureRequiredDraftFromSearch,
+  validateAdvancedBridgeContracts,
   type FxChainId,
 } from '@/lib/fx';
 import { usePrivyWallet } from '@/lib/wallet';
@@ -28,6 +31,7 @@ import { parseAmount } from '@/app/trade/fxUi';
 import { resetTransactionAmounts } from '@/lib/transactionState';
 import { ChainIcon } from '@/components/TokenIcon';
 import styles from '@/components/FlowWorkspace.module.css';
+import moveStyles from './Move.module.css';
 
 const ERC20_BALANCE_ABI = [{
   type: 'function',
@@ -36,11 +40,26 @@ const ERC20_BALANCE_ABI = [{
   inputs: [{ name: 'account', type: 'address' }],
   outputs: [{ name: '', type: 'uint256' }],
 }] as const;
+const ERC20_DECIMALS_ABI = [{
+  type: 'function',
+  name: 'decimals',
+  stateMutability: 'view',
+  inputs: [],
+  outputs: [{ name: '', type: 'uint8' }],
+}] as const;
+const OFT_TOKEN_ABI = [{
+  type: 'function',
+  name: 'token',
+  stateMutability: 'view',
+  inputs: [],
+  outputs: [{ name: '', type: 'address' }],
+}] as const;
 
 type Direction = 'ethereum_to_base' | 'base_to_ethereum';
 type BridgeAsset = 'fxUSD' | 'fxSAVE';
 // Kept in draft compatibility so old signature-required links remain safe;
-// the user-facing bridge is intentionally canonical-only.
+// the user-facing bridge starts with canonical routes and exposes Advanced OFT
+// only after the explicit expert disclosure is opened.
 type BridgeMode = 'canonical' | 'advanced';
 
 const MOVE_DRAFT_ACTION_KEYS = {
@@ -101,13 +120,18 @@ function draftBoolean(value: unknown, fallback = false): boolean {
 export default function MovePage() {
   const wallet = usePrivyWallet();
   const [direction, setDirection] = useState<Direction>('ethereum_to_base');
+  const [mode, setMode] = useState<BridgeMode>('canonical');
   const [token, setToken] = useState<BridgeAsset>('fxUSD');
   const [amount, setAmount] = useState('');
+  const [sourceOft, setSourceOft] = useState('');
+  const [destinationOft, setDestinationOft] = useState('');
+  const [approvalToken, setApprovalToken] = useState('');
   const [recipientInput, setRecipientInput] = useState('');
   const [customRecipient, setCustomRecipient] = useState(false);
   const [reviewRevision, setReviewRevision] = useState(0);
   const [resumeReview, setResumeReview] = useState(0);
   const [reviewStage, setReviewStage] = useState<ActionReviewStage>('input');
+  const [advancedBalance, setAdvancedBalance] = useState<TokenBalanceView | undefined>(undefined);
   const previousWalletContextRef = useRef<string | null>(null);
   // A review-rail connection is part of the current move action. Do not
   // clear its amount/recipient while the first wallet is hydrating; changes
@@ -128,17 +152,22 @@ export default function MovePage() {
   const destinationChainId: FxChainId = direction === 'ethereum_to_base' ? 8453 : 1;
   const sourceName = sourceChainId === 1 ? 'Ethereum' : 'Base';
   const destinationName = destinationChainId === 1 ? 'Ethereum' : 'Base';
+  // Canonical and advanced OFTs share the SDK's 18-decimal amount model. The
+  // token key is only used for the canonical picker and display formatting.
   const amountWei = parseAmount(amount, 'fxUSD');
+  const advanced = mode === 'advanced';
   const recipientValue = customRecipient ? recipientInput.trim() : wallet.address || '';
-  const mode: BridgeMode = 'canonical';
   const draftState = useMemo(() => ({
     direction,
     mode,
     token,
     amount,
+    sourceOft,
+    destinationOft,
+    approvalToken,
     recipientInput,
     customRecipient,
-  }), [amount, customRecipient, direction, mode, recipientInput, token]);
+  }), [amount, approvalToken, customRecipient, destinationOft, direction, mode, recipientInput, sourceOft, token]);
   const draftActionKey = moveDraftActionKey(direction, mode, token);
   const draftRestoreRef = useRef<string | null>(null);
   const contextAppliedRef = useRef(false);
@@ -172,10 +201,12 @@ export default function MovePage() {
         || (state.mode !== undefined && restoredMode !== candidate.mode)
         || (state.token !== undefined && restoredToken !== candidate.token)) continue;
       setDirection(candidate.direction);
-      // Advanced drafts are restored into the canonical editor; custom
-      // contract routing is no longer exposed by the product.
+      setMode(restoredMode);
       setToken(candidate.token);
       setAmount(draftString(state.amount));
+      setSourceOft(draftString(state.sourceOft));
+      setDestinationOft(draftString(state.destinationOft));
+      setApprovalToken(draftString(state.approvalToken));
       setRecipientInput(draftString(state.recipientInput));
       setCustomRecipient(draftBoolean(state.customRecipient));
       setReviewStage('input');
@@ -198,6 +229,9 @@ export default function MovePage() {
     const defaults = resetTransactionAmounts();
     setToken(nextToken);
     setAmount(defaults.amount);
+    setSourceOft('');
+    setDestinationOft('');
+    setApprovalToken('');
     setRecipientInput('');
     setCustomRecipient(false);
     setReviewStage('input');
@@ -213,6 +247,12 @@ export default function MovePage() {
   const changeToken = useCallback((nextToken: BridgeAsset) => {
     resetBridgeContext(nextToken);
   }, [resetBridgeContext]);
+
+  const changeMode = useCallback((nextMode: BridgeMode) => {
+    if (nextMode === mode) return;
+    setMode(nextMode);
+    resetBridgeContext();
+  }, [mode, resetBridgeContext]);
 
   const changeRecipientMode = useCallback(() => {
     const next = !customRecipient;
@@ -237,13 +277,51 @@ export default function MovePage() {
     if (wallet.chainId !== undefined) lastConnectedChainRef.current = wallet.chainId;
   }, [resetBridgeContext, wallet.address, wallet.chainId]);
 
-  const balanceQuery = useMoveBalances({ address: wallet.address, chainId: sourceChainId, enabled: true });
-  const moveBalances = balanceQuery.data?.balances;
-  const moveBalanceStatusForPicker = wallet.address
+  const balanceQuery = useMoveBalances({ address: wallet.address, chainId: sourceChainId, enabled: !advanced });
+  const moveBalances = !advanced ? balanceQuery.data?.balances : undefined;
+  const moveBalanceStatusForPicker = !advanced && wallet.address
     ? (balanceQuery.status === 'idle' ? 'loading' : balanceQuery.status)
     : undefined;
-  const moveBalanceState = moveBalances?.[token]
+  const moveBalanceState = advanced ? advancedBalance : moveBalances?.[token]
     ?? (moveBalanceStatusForPicker ? { status: moveBalanceStatusForPicker } : undefined);
+
+  // Custom OFTs do not have a canonical asset identity for the shared wallet
+  // cache. Read the validated source OFT's underlying token directly, scoped
+  // to this wallet and source chain, and keep stale responses from replacing
+  // a newer address/session.
+  const advancedBalanceRevision = useRef(0);
+  useEffect(() => {
+    const revision = advancedBalanceRevision.current + 1;
+    advancedBalanceRevision.current = revision;
+    if (!advanced || !wallet.address || !sourceOft.trim()) {
+      setAdvancedBalance(undefined);
+      return;
+    }
+    let reviewedOft: Address;
+    try {
+      reviewedOft = assertChecksummedAddress(sourceOft, 'source OFT');
+    } catch (cause) {
+      setAdvancedBalance({ status: 'unavailable', reason: cause instanceof Error ? cause.message : String(cause) });
+      return;
+    }
+    setAdvancedBalance({ status: 'loading', reason: 'Reading the source OFT balance.' });
+    void (async () => {
+      try {
+        const client = getPublicClient(sourceChainId);
+        await assertPublicClientChain(client, sourceChainId);
+        const localToken = assertAddress(String(await client.readContract({ address: reviewedOft, abi: OFT_TOKEN_ABI, functionName: 'token' })), 'source OFT underlying token');
+        const decimals = await client.readContract({ address: localToken, abi: ERC20_DECIMALS_ABI, functionName: 'decimals' });
+        if (Number(decimals) !== 18) throw new Error('source OFT underlying token must expose exactly 18 decimals');
+        const balance = await client.readContract({ address: localToken, abi: ERC20_BALANCE_ABI, functionName: 'balanceOf', args: [wallet.address as Address] });
+        if (typeof balance !== 'bigint' || balance < 0n) throw new Error('source OFT underlying balance returned malformed data');
+        if (advancedBalanceRevision.current !== revision) return;
+        setAdvancedBalance({ status: 'ready', amount: formatUnits(balance, 18) });
+      } catch (cause) {
+        if (advancedBalanceRevision.current !== revision) return;
+        setAdvancedBalance({ status: 'unavailable', reason: cause instanceof Error ? cause.message : String(cause) });
+      }
+    })();
+  }, [advanced, sourceChainId, sourceOft, wallet.address]);
 
   const planBuilder = useMemo(() => {
     if (!wallet.address || !amountWei) return null;
@@ -256,15 +334,59 @@ export default function MovePage() {
         assertPublicClientChain(getPublicClient(destinationChainId), destinationChainId),
       ]));
       const sdk = getFxReadFacade();
-      const sourceOftAddress = resolveBridgeTokenAddress(token, sourceChainId);
-      const sourceTokenAddress = sourceChainId === 1 ? resolveBridgeApprovalTokenAddress(token, sourceChainId) : sourceOftAddress;
-      const destinationOftAddress = resolveBridgeTokenAddress(token, destinationChainId);
-      const destinationTokenAddress = destinationChainId === 1
-        ? resolveBridgeApprovalTokenAddress(token, destinationChainId)
-        : destinationOftAddress;
-      const approvalTokenAddress = sourceChainId === 1 ? resolveBridgeApprovalTokenAddress(token, sourceChainId) : undefined;
-      const sourceApprovalRequired = sourceChainId === 1;
-      const destinationApprovalRequired = false;
+      let sourceToken: string = token;
+      let sourceOftAddress: `0x${string}`;
+      let sourceTokenAddress: `0x${string}`;
+      let destinationOftAddress: `0x${string}`;
+      let destinationTokenAddress: `0x${string}`;
+      let approvalTokenAddress: `0x${string}` | undefined;
+      let sourceApprovalRequired = sourceChainId === 1;
+      let destinationApprovalRequired = false;
+      let customPolicy: ReturnType<typeof advancedBridgePolicy> | undefined;
+
+      if (advanced) {
+        // Advanced inputs stay explicit and checksummed all the way through
+        // review. They are never normalized into an arbitrary executable
+        // route; metadata, peers, quoteSend, and the final send target are
+        // checked before ActionReview can open a wallet prompt.
+        const reviewedSourceOft = assertChecksummedAddress(sourceOft, 'source OFT');
+        const reviewedDestinationOft = assertChecksummedAddress(destinationOft, 'destination OFT');
+        const reviewedApprovalToken = approvalToken.trim()
+          ? assertChecksummedAddress(approvalToken, 'Ethereum underlying approval token')
+          : undefined;
+        const metadata = await validateAdvancedBridgeContracts({
+          sourceClient: getPublicClient(sourceChainId),
+          destinationClient: getPublicClient(destinationChainId),
+          sourceOftAddress: reviewedSourceOft,
+          destinationOftAddress: reviewedDestinationOft,
+          ethereumApprovalTokenAddress: reviewedApprovalToken,
+          sourceChainId,
+          destinationChainId,
+        });
+        sourceToken = reviewedSourceOft;
+        sourceOftAddress = reviewedSourceOft;
+        destinationOftAddress = reviewedDestinationOft;
+        sourceTokenAddress = metadata.sourceTokenAddress;
+        destinationTokenAddress = metadata.destinationTokenAddress;
+        sourceApprovalRequired = metadata.sourceApprovalRequired;
+        destinationApprovalRequired = metadata.destinationApprovalRequired;
+        approvalTokenAddress = metadata.sourceApprovalRequired ? reviewedApprovalToken : undefined;
+        customPolicy = advancedBridgePolicy({
+          walletAddress: signer,
+          chainId: sourceChainId,
+          sourceOftAddress: reviewedSourceOft,
+          ethereumApprovalTokenAddress: approvalTokenAddress,
+          approvalRequired: metadata.sourceApprovalRequired,
+        });
+      } else {
+        sourceOftAddress = resolveBridgeTokenAddress(token, sourceChainId);
+        sourceTokenAddress = sourceChainId === 1 ? resolveBridgeApprovalTokenAddress(token, sourceChainId) : sourceOftAddress;
+        destinationOftAddress = resolveBridgeTokenAddress(token, destinationChainId);
+        destinationTokenAddress = destinationChainId === 1
+          ? resolveBridgeApprovalTokenAddress(token, destinationChainId)
+          : destinationOftAddress;
+        approvalTokenAddress = sourceChainId === 1 ? resolveBridgeApprovalTokenAddress(token, sourceChainId) : undefined;
+      }
 
       // Capture a destination-chain block before the source route can reach a
       // wallet prompt. Delivery is later correlated by LayerZero GUID and
@@ -272,8 +394,14 @@ export default function MovePage() {
       // as proof.
       const destinationBaselineBlock = await getPublicClient(destinationChainId).getBlockNumber();
 
-      const sourceToken = token;
       const quote = await sdk.getBridgeQuote({ sourceChainId, destChainId: destinationChainId, token: sourceToken, amount: amountWei, recipient, sourceRpcUrl: requireRpcUrl(sourceChainId) });
+      if (advanced) {
+        // A source quote alone cannot prove the destination OFT is its
+        // configured counterpart. The validator already checks peers; this
+        // reverse quote confirms the destination contract exposes the same
+        // official quoteSend capability on the live destination RPC.
+        await sdk.getBridgeQuote({ sourceChainId: destinationChainId, destChainId: sourceChainId, token: destinationOftAddress, amount: amountWei, recipient, sourceRpcUrl: requireRpcUrl(destinationChainId) });
+      }
       // Build once without an approval so the exact SDK bridge destination is
       // known, then read the allowance for that exact spender. The final route
       // adds one exact approval only when it is still needed.
@@ -282,7 +410,7 @@ export default function MovePage() {
       const approvalAllowance = sourceChainId === 1 && sourceApprovalRequired
         ? await getBridgeApprovalAllowance({ client: getPublicClient(sourceChainId), tokenAddress: approvalTokenAddress!, owner: signer, spender: reviewedSourceOft.to })
         : undefined;
-      const route = await planBridgeRoute({ sourceChainId, destChainId: destinationChainId, token: sourceToken, amount: amountWei, recipient, refundAddress: signer, walletAddress: signer, sourceRpcUrl: requireRpcUrl(sourceChainId), includeApproval: true, approvalAllowance, approvalTokenAddress, destinationOftAddress, destinationBaselineBlock });
+      const route = await planBridgeRoute({ sourceChainId, destChainId: destinationChainId, token: sourceToken, amount: amountWei, recipient, refundAddress: signer, walletAddress: signer, sourceRpcUrl: requireRpcUrl(sourceChainId), includeApproval: advanced ? sourceApprovalRequired : true, approvalAllowance, approvalTokenAddress, destinationOftAddress, destinationBaselineBlock });
       assertBridgeActionTarget(route, reviewedSourceOft.to);
       reviewedBridgeRef.current = {
         sourceChainId,
@@ -295,10 +423,11 @@ export default function MovePage() {
       };
       return {
         ...route,
+        policy: customPolicy ? { ...customPolicy, maxValueWei: (route.quote as { nativeFee: bigint }).nativeFee } : route.policy,
         quote: {
           ...(route.quote as { nativeFee: bigint; lzTokenFee: bigint }),
           requestedQuote: quote,
-          bridgeToken: token,
+          bridgeToken: advanced ? 'Advanced OFT' : token,
           bridgeAmount: amountWei,
           deliveryLowerBound: lowerBound,
           sourceOftAddress: reviewedSourceOft.to,
@@ -313,7 +442,7 @@ export default function MovePage() {
         },
       };
     };
-  }, [amountWei, destinationChainId, recipientValue, sourceChainId, token, wallet.address]);
+  }, [advanced, amountWei, approvalToken, destinationChainId, destinationOft, recipientValue, sourceChainId, sourceOft, token, wallet.address]);
 
   const rereadBridgeState = useCallback(async () => {
     const reviewed = reviewedBridgeRef.current;
@@ -332,11 +461,11 @@ export default function MovePage() {
   }, [wallet.address]);
 
   return (
-    <AppShell title="Move">
-      <div className={`${styles.workspace} ${styles.moveWorkspace}`}>
+    <AppShell>
+      <div className={`${styles.workspace} ${styles.moveWorkspace} ${moveStyles.moveWorkspace}`}>
         <Card
           data-flow-stage={reviewStage}
-          className={`${styles.focusCard} ${styles.moveCard} p-5`}
+          className={`${styles.focusCard} ${styles.moveCard} ${moveStyles.moveCard} p-5`}
         >
           <ActionReview
             key={reviewRevision}
@@ -344,13 +473,8 @@ export default function MovePage() {
             editor={<>
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className={`${styles.eyebrow} ${styles.moveEyebrow}`}>Cross-chain transfer</p>
-              <h2 className="mt-1 text-[22px] font-semibold tracking-[-.03em]">Bridge</h2>
-              <p className={`${styles.supportCopy} ${styles.moveSupportCopy}`}>{sourceName} to {destinationName}</p>
+              <h1 className="text-[22px] font-semibold tracking-[-.03em]">Move</h1>
             </div>
-            <span className="rounded-lg bg-[var(--mint-dim)] px-2.5 py-1 text-[11px] font-semibold text-mint">
-              {token}
-            </span>
           </div>
 
           <div className={`mt-5 ${styles.networkFlow} ${styles.moveNetworkFlow}`}>
@@ -367,14 +491,16 @@ export default function MovePage() {
           </div>
 
           <div className="my-4 hairline" />
-          <div className={styles.moveFormFields}>
-            <TokenSelect label="Asset" value={token} options={['fxUSD', 'fxSAVE'] as const} onChange={changeToken} balances={moveBalances} balanceStatus={wallet.address ? moveBalanceStatusForPicker : 'disconnected'} />
+          <div className={`${styles.moveFormFields} ${moveStyles.moveFormFields}`}>
+            {!advanced && (
+              <TokenSelect label="Asset" value={token} options={['fxUSD', 'fxSAVE'] as const} onChange={changeToken} balances={moveBalances} balanceStatus={wallet.address ? moveBalanceStatusForPicker : 'disconnected'} />
+            )}
 
-            <div className={`${styles.amountHero} ${styles.moveAmountHero}`}>
+            <div className={`${styles.amountHero} ${styles.moveAmountHero} ${moveStyles.moveAmountHero}`}>
               <AmountField
                 label="Amount"
-                hint={`From ${sourceName}`}
-                symbol={token}
+                hint={`Available on ${sourceName}`}
+                symbol={advanced ? 'OFT' : token}
                 value={amount}
                 onChange={setAmount}
                 maxDecimals={18}
@@ -390,7 +516,7 @@ export default function MovePage() {
                   onClick={changeRecipientMode}
                   className="min-h-11 rounded-lg px-2 text-[11px] font-semibold text-mint"
                 >
-                  {customRecipient ? 'Use connected wallet' : 'Change'}
+                  {customRecipient ? 'Use connected wallet' : 'Use another wallet'}
                 </button>
               </div>
               {customRecipient ? (
@@ -402,28 +528,46 @@ export default function MovePage() {
                 />
               ) : (
                 <div className="flex min-h-[56px] items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--input)] px-3">
-                  <span className="text-[12px] text-mut">{wallet.address ? 'Connected wallet' : 'Connect wallet in Review'}</span>
+                  <span className="text-[12px] text-mut">{wallet.address ? 'Your wallet' : 'Connect wallet'}</span>
                   {wallet.address ? (
                     <span className="font-mono text-[12px] font-semibold">
                       {`${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)}`}
                     </span>
-                  ) : <span className="text-right text-[11px] font-semibold text-mut">Connect in review</span>}
+                  ) : null}
                 </div>
               )}
             </div>
 
-            <BridgePreview
-              sourceName={sourceName}
-              destinationName={destinationName}
-              amount={amount}
-              token={token}
-              amountValid={Boolean(amountWei)}
-            />
+            <details
+              open={advanced}
+              onToggle={(event) => changeMode(event.currentTarget.open ? 'advanced' : 'canonical')}
+              className={`${styles.advancedPanel} ${moveStyles.expertDisclosure}`}
+            >
+              <summary className={`${moveStyles.expertSummary} group flex cursor-pointer list-none items-center justify-between gap-3 px-3 text-[12px] font-semibold text-mut [&::-webkit-details-marker]:hidden`}>
+                <span>Custom contracts</span>
+                <span aria-hidden="true" className="text-[15px] leading-none text-[var(--mut-2)] transition-transform group-open:rotate-180">⌄</span>
+              </summary>
+              <div className="border-t border-[var(--line)] p-3">
+                <AdvancedAddressFields
+                  sourceName={sourceName}
+                  destinationName={destinationName}
+                  sourceChainId={sourceChainId}
+                  sourceOft={sourceOft}
+                  destinationOft={destinationOft}
+                  approvalToken={approvalToken}
+                  onSourceOftChange={setSourceOft}
+                  onDestinationOftChange={setDestinationOft}
+                  onApprovalTokenChange={setApprovalToken}
+                />
+                <AdvancedRiskSummary />
+              </div>
+            </details>
+
           </div>
             </>}
             planBuilder={planBuilder}
-            label={`Review move to ${destinationName}`}
-            operationLabel={`Move ${token} to ${destinationName}`}
+            label={`Send ${advanced ? 'custom token' : token} to ${destinationName}`}
+            operationLabel={`Send ${advanced ? 'custom token' : token} to ${destinationName}`}
             draftActionKey={draftActionKey}
             draftState={draftState}
             resumeReview={resumeReview}
@@ -432,7 +576,7 @@ export default function MovePage() {
               try {
                 await rereadBridgeState();
               } finally {
-                await balanceQuery.refresh();
+                if (!advanced) await balanceQuery.refresh();
               }
             }}
           />
@@ -442,37 +586,60 @@ export default function MovePage() {
   );
 }
 
-function BridgePreview({ sourceName, destinationName, amount, token, amountValid }: { sourceName: string; destinationName: string; amount: string; token: BridgeAsset; amountValid: boolean }) {
-  const enteredAmount = amount.trim();
+function AdvancedAddressFields({
+  sourceName,
+  destinationName,
+  sourceChainId,
+  sourceOft,
+  destinationOft,
+  approvalToken,
+  onSourceOftChange,
+  onDestinationOftChange,
+  onApprovalTokenChange,
+}: {
+  sourceName: string;
+  destinationName: string;
+  sourceChainId: FxChainId;
+  sourceOft: string;
+  destinationOft: string;
+  approvalToken: string;
+  onSourceOftChange: (value: string) => void;
+  onDestinationOftChange: (value: string) => void;
+  onApprovalTokenChange: (value: string) => void;
+}) {
   return (
-    <section className={styles.bridgePreview} aria-label="Bridge route preview">
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-[11px] font-semibold uppercase tracking-[.08em] text-mut">Route preview</span>
-        <span className="text-[11px] text-[var(--mut-2)]">Canonical bridge</span>
-      </div>
-      <div className={styles.bridgePreviewGrid}>
-        <PreviewMetric label="Send amount" value={amountValid ? `${enteredAmount} ${token}` : enteredAmount ? 'Enter a valid amount' : '—'} />
-        <PreviewMetric label="Network fee" value="Shown after review" />
-        <PreviewMetric label="Route" value={`${sourceName} → ${destinationName}`} />
-      </div>
-      {amountValid ? (
-        <p className="text-[10.5px] leading-relaxed text-[var(--mut-2)]" role="status">
-          The verified destination amount and minimum received appear after review.
-        </p>
-      ) : !enteredAmount ? (
-        <p className="text-[10.5px] leading-relaxed text-[var(--mut-2)]" role="status">
-          Enter an amount to preview the bridge route.
-        </p>
-      ) : null}
-    </section>
+    <div className={styles.advancedAddressGrid}>
+      <AddressField label={`${sourceName} OFT`} value={sourceOft} onChange={onSourceOftChange} placeholder="0x… contract address" />
+      <AddressField label={`${destinationName} OFT`} value={destinationOft} onChange={onDestinationOftChange} placeholder="0x… contract address" />
+      {sourceChainId === 1 && (
+        <AddressField
+          label="Ethereum approval token"
+          hint="Only for adapter routes"
+          value={approvalToken}
+          onChange={onApprovalTokenChange}
+          placeholder="0x… token address"
+        />
+      )}
+    </div>
   );
 }
 
-function PreviewMetric({ label, value }: { label: string; value: string }) {
+function AdvancedRiskSummary() {
   return (
-    <div className="min-w-0 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-2.5 py-2">
-      <span className="block truncate text-[10px] text-mut">{label}</span>
-      <span className="mt-0.5 block truncate text-[11px] font-semibold">{value}</span>
+    <div className={`${moveStyles.expertRisk} mt-3 rounded-xl border border-[rgba(255,194,102,.28)] bg-[var(--warn-dim)] p-3 text-[11.5px] leading-relaxed text-warn`}>
+      <div className="flex gap-2.5">
+        <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+        <p>Custom contracts are checked live before signing. Both networks must have deployed 18-decimal metadata, matching cross-chain peers, quote support, and the exact send target.</p>
+      </div>
+      <details className="mt-2 border-t border-[rgba(255,194,102,.18)] pt-1">
+        <summary className="flex min-h-11 cursor-pointer items-center text-[11px] font-semibold">What gets checked</summary>
+        <ul className="space-y-1 pb-1 pl-4 text-mut">
+          <li>Checksummed, deployed contracts with 18-decimal token metadata</li>
+          <li>Matching, non-zero cross-chain peers in both directions</li>
+          <li>Exact send target and approval token when required</li>
+          <li>Source confirmation and destination delivery remain separate</li>
+        </ul>
+      </details>
     </div>
   );
 }

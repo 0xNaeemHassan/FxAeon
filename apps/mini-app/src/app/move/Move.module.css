@@ -1,0 +1,63 @@
+.moveWorkspace {
+  width: 100%;
+  max-width: 600px;
+  margin-inline: auto;
+}
+
+.moveCard {
+  width: 100%;
+  min-width: 0;
+}
+
+.moveCard .moveAmountHero {
+  padding: 0;
+  background: transparent;
+}
+
+/* Keep the primary bridge controls in one readable column. The shared flow
+ * stylesheet pairs fields for wider workspaces, which makes this simple
+ * transfer ticket feel oversized on desktop. */
+.moveCard .moveFormFields {
+  display: flex !important;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.moveCard .moveFormFields > details {
+  grid-column: auto;
+  grid-row: auto;
+}
+
+.expertDisclosure {
+  min-width: 0;
+}
+
+.expertSummary {
+  min-height: 44px;
+  border-radius: 12px;
+}
+
+.expertRisk {
+  min-width: 0;
+}
+
+@media (min-width: 840px) {
+  .moveCard {
+    padding: 20px !important;
+  }
+
+  .expertSummary {
+    min-height: 48px;
+  }
+}
+
+@media (max-width: 640px) {
+  .moveWorkspace {
+    max-width: 100%;
+  }
+
+  .moveCard .moveFormFields {
+    gap: 10px;
+  }
+}

@@ -31,12 +31,22 @@ import {
   positionDebtDecimals,
   positionInputTokenOptions,
   positionOutputTokenOptions,
+  positionTargetLeverage,
   tokenAddress,
   tokenDecimals,
+  type UiPosition,
   type UiToken,
 } from '@/app/trade/fxUi';
 
 type PositionAction = 'increase' | 'reduce' | 'close' | 'leverage';
+
+function tokenForPositionAction(position: UiPosition | undefined, action: PositionAction): UiToken {
+  if (!position) return 'ETH';
+  const options = action === 'reduce' || action === 'close'
+    ? positionOutputTokenOptions(position.market, position.side)
+    : positionInputTokenOptions(position.market);
+  return options[0] ?? 'ETH';
+}
 
 export default function PositionsPage() {
   const wallet = usePrivyWallet();
@@ -92,15 +102,17 @@ export default function PositionsPage() {
   }, []);
 
   const selectPosition = useCallback((key: string) => {
+    const position = positions.find((item) => positionKey(item) === key);
     setSelectedKey(key);
-    resetTransactionContext();
+    resetTransactionContext('increase', tokenForPositionAction(position, 'increase'));
     haptic('selection');
     window.requestAnimationFrame(() => managerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-  }, [resetTransactionContext]);
+  }, [positions, resetTransactionContext]);
 
   const changeAction = useCallback((nextAction: PositionAction) => {
-    resetTransactionContext(nextAction);
-  }, [resetTransactionContext]);
+    const position = positions.find((item) => positionKey(item) === selectedKey);
+    resetTransactionContext(nextAction, tokenForPositionAction(position, nextAction));
+  }, [positions, resetTransactionContext, selectedKey]);
 
   const changeToken = useCallback((nextToken: UiToken) => {
     setToken(nextToken);
@@ -142,18 +154,19 @@ export default function PositionsPage() {
     if (typeof window === 'undefined' || !positions.length) return;
     const params = new URLSearchParams(window.location.search);
     const key = params.get('position');
-    if (!key || !positions.some((position) => positionKey(position) === key)) return;
+    const linkedPosition = positions.find((position) => positionKey(position) === key);
+    if (!key || !linkedPosition) return;
     const requestedAction = params.get('action');
     const nextAction: PositionAction = requestedAction === 'close' || requestedAction === 'reduce' || requestedAction === 'leverage'
       ? requestedAction
       : 'increase';
-    const deepLinkKey = `${key}:${nextAction}`;
+    const deepLinkKey = `${wallet.address?.toLowerCase() ?? ''}:${wallet.chainId ?? ''}:${key}:${nextAction}`;
     if (handledDeepLinkRef.current === deepLinkKey) return;
     handledDeepLinkRef.current = deepLinkKey;
     setSelectedKey(key);
-    resetTransactionContext(nextAction);
+    resetTransactionContext(nextAction, tokenForPositionAction(linkedPosition, nextAction));
     window.requestAnimationFrame(() => managerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-  }, [positions, resetTransactionContext]);
+  }, [positions, resetTransactionContext, wallet.address, wallet.chainId]);
 
   const selected = positions.find((position) => positionKey(position) === selectedKey);
   const selectedStale = selected ? positionIsStale(selected, positionState.failedGroups) : false;
@@ -171,12 +184,11 @@ export default function PositionsPage() {
   useEffect(() => {
     if (!selected) return;
     setToken((current) => marketTokens.includes(current) ? current : marketTokens[0]);
-    const sdkLeverage = selected.side === 'short' ? selected.info.lsdLeverage : selected.info.currentLeverage;
     // This is an editable target, not the measured position metric. Seed a
     // readable target and pass that exact displayed value into the review.
-    const targetLeverage = Number(Math.max(0.1, sdkLeverage).toFixed(2));
-    setLeverage(clampLeverage(targetLeverage, leverageBounds));
-  }, [leverageBounds, marketTokens, selected]);
+    const targetLeverage = positionTargetLeverage(selected);
+    if (targetLeverage !== null) setLeverage(clampLeverage(targetLeverage, leverageBounds));
+  }, [action, leverageBounds, marketTokens, selected]);
 
   // A selected position normally seeds a fresh leverage target from the
   // canonical read. Let a validated History draft override that seed once,
@@ -311,7 +323,11 @@ export default function PositionsPage() {
           readBounds: () => readLeverageBounds(selected.market, selected.side),
           buildPlan: () => planIncreasePosition({ ...common, leverage, inputTokenAddress: tokenAddress(token), amount: amountWei }),
         });
-        setLeverageBounds(prepared.bounds);
+        setLeverageBounds((current) => current.min === prepared.bounds.min
+          && current.max === prepared.bounds.max
+          && current.source === prepared.bounds.source
+          ? current
+          : prepared.bounds);
         if (prepared.adjusted) {
           setLeverage(prepared.leverage);
           throw new RangeError(`Pool leverage limits changed to ${prepared.bounds.min.toFixed(1)}x-${prepared.bounds.max.toFixed(1)}x. The target was updated; review it again.`);
@@ -340,7 +356,11 @@ export default function PositionsPage() {
         readBounds: () => readLeverageBounds(selected.market, selected.side),
         buildPlan: () => planAdjustPositionLeverage({ ...common, leverage }),
       });
-      setLeverageBounds(prepared.bounds);
+      setLeverageBounds((current) => current.min === prepared.bounds.min
+        && current.max === prepared.bounds.max
+        && current.source === prepared.bounds.source
+        ? current
+        : prepared.bounds);
       if (prepared.adjusted) {
         setLeverage(prepared.leverage);
         throw new RangeError(`Pool leverage limits changed to ${prepared.bounds.min.toFixed(1)}x-${prepared.bounds.max.toFixed(1)}x. The target was updated; review it again.`);
@@ -351,25 +371,21 @@ export default function PositionsPage() {
 
   const openManager = (key: string, nextAction: PositionAction) => {
     const position = positions.find((item) => positionKey(item) === key);
-    const nextToken = position
-      ? (nextAction === 'reduce' || nextAction === 'close'
-        ? positionOutputTokenOptions(position.market, position.side)[0]
-        : positionInputTokenOptions(position.market)[0])
-      : 'ETH';
     setSelectedKey(key);
-    resetTransactionContext(nextAction, nextToken);
+    resetTransactionContext(nextAction, tokenForPositionAction(position, nextAction));
     haptic(nextAction === 'close' ? 'warning' : 'selection');
     window.requestAnimationFrame(() => managerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   };
 
-  const reviewLabel = action === 'close' ? 'Review close' : `Review ${action}`;
+  const reviewLabel = action === 'close' ? 'Close position' : action === 'increase' ? 'Add to position' : action === 'reduce' ? 'Reduce position' : 'Adjust position leverage';
+  const selectedLabel = selected ? `${selected.market} ${selected.side} position` : 'position';
   const operationLabel = action === 'close'
-    ? `Close ${selected?.market} ${selected?.side} position`
+    ? `Close ${selectedLabel}`
     : action === 'increase'
-      ? `Add to ${selected?.market} position`
+      ? `Add to ${selectedLabel}`
         : action === 'reduce'
-          ? `Reduce ${selected?.market} position`
-          : `Adjust ${selected?.market} position leverage`;
+          ? `Reduce ${selectedLabel}`
+          : `Adjust ${selectedLabel} leverage`;
   const draftActionKey = selected
     ? `position:${selected.info.positionId}:${action === 'close' ? 'close' : 'manage'}`
     : undefined;
@@ -378,16 +394,17 @@ export default function PositionsPage() {
     : undefined;
 
   return (
-    <AppShell title="Positions">
-      <div className={`${styles.positionsRoot} ${styles.positionsCompactRoot}`}>
+    <AppShell>
+      <div className={`${styles.positionsRoot} ${styles.positionsCompactRoot} ${!wallet.address ? styles.positionsDisconnectedRoot : ''}`}>
       <div className={styles.positionsWorkspace}>
+        <h1 className={styles.positionsHeading}>Positions</h1>
         <nav className="grid grid-cols-2 rounded-xl border border-[var(--line)] bg-[var(--input)] p-1" aria-label="Trade views">
           <Link href="/trade" className="glass-press flex min-h-11 items-center justify-center rounded-lg px-3 text-[13px] font-semibold text-mut">New position</Link>
           <span aria-current="page" className="flex min-h-11 items-center justify-center rounded-lg bg-[var(--mint-dim)] px-3 text-[13px] font-semibold text-[var(--text)]">Positions</span>
         </nav>
         {!wallet.address ? (
           <WalletConnectCTA compact ready={wallet.ready} authenticated={wallet.authenticated} body="Choose or connect a wallet to see and manage your open positions." />
-        ) : (
+        ) : positions.length > 0 || positionState.pendingPositions.length > 0 ? (
           <ProtocolPositionNotice
             status={positionState.status}
             failedGroups={positionState.failedGroups}
@@ -395,7 +412,7 @@ export default function PositionsPage() {
             refreshing={positionState.refreshing}
             onRefresh={() => void positionState.refresh()}
           />
-        )}
+        ) : null}
         <ConfirmedPositionCards />
         {wallet.address && positionState.status === 'loading' && !positions.length && !positionState.pendingPositions.length ? (
           <div className="flex flex-col gap-3"><ProtocolPositionSkeleton /><ProtocolPositionSkeleton /></div>
@@ -409,8 +426,8 @@ export default function PositionsPage() {
           <div className={styles.positionManagerGrid}>
             <section className={styles.positionsColumn} aria-labelledby="open-positions-heading">
               <div className={styles.positionSectionHeader}>
-                <div><p className={styles.ticketKicker}>Your portfolio</p><h2 id="open-positions-heading">Open positions</h2></div>
-                <span>{positions.length} shown</span>
+                <div><h2 id="open-positions-heading">Open positions</h2></div>
+                <span>{positions.length} open</span>
               </div>
               <div className={styles.positionList} aria-label="Open positions">
                 {positions.map((position) => {
@@ -424,9 +441,10 @@ export default function PositionsPage() {
                         selected={isSelected}
                         onSelect={() => selectPosition(key)}
                       />
-                      <div className={`${styles.positionQuickActions} ${position.side === 'long' ? styles.positionQuickActionsWithBorrow : ''}`} aria-label={`Actions for ${position.market} ${position.side} position ${position.info.positionId}`}>
+                      <div role="group" className={`${styles.positionQuickActions} ${position.side === 'long' ? styles.positionQuickActionsWithBorrow : ''}`} aria-label={`Actions for ${position.market} ${position.side} position ${position.info.positionId}`}>
                         <button type="button" onClick={() => openManager(key, isSelected ? action : 'increase')} className="glass-press">Manage</button>
                         {position.side === 'long' && <Link href={`/borrow?market=${position.market}&position=${position.info.positionId}`} className="glass-press">Borrow</Link>}
+                        <button type="button" onClick={() => openManager(key, 'leverage')} className="glass-press">Leverage</button>
                         <button type="button" onClick={() => openManager(key, 'close')} className="glass-press"><X aria-hidden="true" /> Close</button>
                       </div>
                     </div>
@@ -436,7 +454,7 @@ export default function PositionsPage() {
             </section>
 
             <section ref={managerRef} className={styles.positionManageColumn} aria-labelledby="manage-position-heading">
-              {selected && <div className={styles.manageHeading}><div><p className={styles.ticketKicker}>Selected position</p><h2 id="manage-position-heading">{selected.market} {selected.side} · #{selected.info.positionId}</h2></div>{selected.side === 'long' && <Link href={`/borrow?market=${selected.market}&position=${selected.info.positionId}`} className="glass-press inline-flex min-h-11 items-center gap-2 rounded-xl px-2 text-[12px] font-semibold text-mint">Borrow against <span aria-hidden="true">→</span></Link>}</div>}
+              {selected && <div className={styles.manageHeading}><div><h2 id="manage-position-heading">{selected.market} {selected.side} · #{selected.info.positionId}</h2></div>{selected.side === 'long' && <Link href={`/borrow?market=${selected.market}&position=${selected.info.positionId}`} className="glass-press inline-flex min-h-11 items-center gap-2 rounded-xl px-2 text-[12px] font-semibold text-mint">Borrow against <span aria-hidden="true">→</span></Link>}</div>}
               {selectedStale && <span role="status" aria-label="Refreshing selected position" className="skeleton block h-8 rounded-xl" />}
 
               <Card className={`${styles.actionPanel} ${styles.positionActionCard}`}>
@@ -455,10 +473,10 @@ export default function PositionsPage() {
                   decisionBefore={decisionBefore}
                   editor={(
                     <div className={styles.positionEditor}>
-                      {action === 'increase' && <div className={styles.fieldStack}><Header icon={ArrowUpRight} title="Increase exposure" body="Add collateral and choose the target leverage for this position." /><TokenSelect label="Input asset" value={token} options={marketTokens} onChange={changeToken} {...tokenBalanceProps} /><AmountField label="Amount to add" symbol={token} value={amount} onChange={setAmount} maxDecimals={tokenDecimals(token)} balanceState={selectedTokenBalance} /><LeverageField label={selected?.side === 'short' ? 'Target LSD leverage' : 'Target leverage'} value={leverage} onChange={setLeverage} min={leverageBounds.min} max={leverageBounds.max} error={leverageError} /></div>}
+                      {action === 'increase' && <div className={styles.fieldStack}><Header icon={ArrowUpRight} title="Increase exposure" body="Add collateral and choose the target leverage for this position." /><TokenSelect label="Input asset" value={token} options={marketTokens} onChange={changeToken} {...tokenBalanceProps} /><AmountField label="Amount to add" symbol={token} value={amount} onChange={setAmount} maxDecimals={tokenDecimals(token)} balanceState={selectedTokenBalance} /><LeverageField label="Target leverage" value={leverage} onChange={setLeverage} min={leverageBounds.min} max={leverageBounds.max} error={leverageError} /></div>}
                       {action === 'reduce' && <div className={styles.fieldStack}><Header icon={ArrowDownRight} title="Reduce exposure" body="Choose how much of this position to reduce and what asset to receive." /><RangeField label="Position reduction" value={fraction} onChange={setFraction} min={1} max={99} step={1} suffix="%" /><div className="grid grid-cols-3 gap-2">{[25, 50, 75].map((value) => <button key={value} type="button" aria-pressed={fraction === value} onClick={() => setFraction(value)} className={`min-h-11 rounded-xl text-[11px] font-semibold ${fraction === value ? 'bg-[var(--mint-dim)] text-mint' : 'bg-[rgba(255,255,255,.035)] text-mut'}`}>{value}%</button>)}</div><TokenSelect label="Receive asset" value={token} options={marketTokens} onChange={changeToken} {...tokenBalanceProps} /></div>}
-                      {action === 'close' && <div className={styles.fieldStack}><Header icon={X} title="Close the full position" body="Close 100% of this position and choose the asset returned to your wallet." /><div className={styles.closeNotice}><strong>Full close</strong><span>All remaining collateral and debt</span><small>The review will show the route, limits, approvals, and exact transaction count before your wallet opens.</small></div><TokenSelect label="Receive asset" value={token} options={marketTokens} onChange={changeToken} {...tokenBalanceProps} /></div>}
-                      {action === 'leverage' && <div className={styles.fieldStack}><Header icon={Gauge} title="Adjust leverage" body="Set the target leverage for this position." /><LeverageField label={selected?.side === 'short' ? 'Target LSD leverage' : 'Target leverage'} value={leverage} onChange={setLeverage} min={leverageBounds.min} max={leverageBounds.max} error={leverageError} /></div>}
+                      {action === 'close' && <div className={styles.fieldStack}><Header icon={X} title="Close the full position" body="Close 100% of this position and choose the asset returned to your wallet." /><div className={styles.closeNotice}><strong>Full close</strong><span>All remaining collateral and debt</span><small>Action details show the route, limits, approvals, and exact transaction count before your wallet opens.</small></div><TokenSelect label="Receive asset" value={token} options={marketTokens} onChange={changeToken} {...tokenBalanceProps} /></div>}
+                      {action === 'leverage' && <div className={styles.fieldStack}><Header icon={Gauge} title="Adjust leverage" body="Set the target leverage for this position." /><LeverageField label="Target leverage" value={leverage} onChange={setLeverage} min={leverageBounds.min} max={leverageBounds.max} error={leverageError} /></div>}
                       <details className={`${styles.advancedDetails} group mt-4 rounded-xl border border-[var(--line)] px-3`}><summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-[13px] font-semibold [&::-webkit-details-marker]:hidden">Advanced <span aria-hidden="true" className="text-mut transition-transform group-open:rotate-180">⌄</span></summary><div className="border-t border-[var(--line)] py-3"><SlippageField value={slippage} onChange={setSlippage} max={MAX_FX_SLIPPAGE_PERCENT} /></div></details>
                     </div>
                   )}

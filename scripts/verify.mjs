@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { E2E_BUILD_ENV } from './e2e_build_env.mjs';
 
 /**
  * Release verification runner.
@@ -15,13 +16,13 @@ const pnpm = process.env.npm_execpath && existsSync(process.env.npm_execpath)
   ? { command: process.execPath, prefix: [process.env.npm_execpath] }
   : { command: process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', prefix: [] };
 
-function run(command, args, label) {
+function run(command, args, label, envOverrides = {}) {
   return new Promise((resolve) => {
     const child = spawn(command, args, {
       cwd: root,
       stdio: 'inherit',
       windowsHide: true,
-      env: process.env,
+      env: { ...process.env, ...envOverrides },
     });
     child.once('error', (error) => {
       console.error(`[verify] ${label} could not start: ${error.message}`);
@@ -38,8 +39,8 @@ function run(command, args, label) {
   });
 }
 
-function pnpmRun(args, label) {
-  return run(pnpm.command, [...pnpm.prefix, ...args], label);
+function pnpmRun(args, label, envOverrides) {
+  return run(pnpm.command, [...pnpm.prefix, ...args], label, envOverrides);
 }
 
 async function runGroup(checks, group) {
@@ -57,6 +58,8 @@ const scope = await pnpmRun(['verify:scope'], 'scope verification');
 if (scope !== 0) process.exit(scope);
 const architecture = await pnpmRun(['verify:architecture'], 'architecture verification');
 if (architecture !== 0) process.exit(architecture);
+const landingBuild = await pnpmRun(['build:landing'], 'standalone landing build');
+if (landingBuild !== 0) process.exit(landingBuild);
 
 // Lightweight checks can overlap. Run the complete test glob once in a single
 // tsx process: it includes the Anvil-contract skips and seeded chaos campaign,
@@ -66,8 +69,13 @@ const quickChecks = await runGroup([
   { args: ['test:anvil:contract'], label: 'Anvil harness contract' },
   { args: ['test:deploy-workflow'], label: 'Deployment workflow contract' },
   { args: ['test:telegram:contract'], label: 'Telegram deployment contract' },
+  { args: ['test:live-public-config:contract'], label: 'Live public configuration contract' },
+  { args: ['test:architecture:contract'], label: 'Architecture import contract' },
+  { args: ['test:landing'], label: 'Standalone landing contract' },
+  { args: ['exec', 'node', '--test', 'scripts/verify_frontend_secrets.test.mjs', 'scripts/launch_readiness.test.mjs'], label: 'Launch readiness contracts' },
+  { args: ['exec', 'node', 'scripts/verify_frontend_secrets.mjs'], label: 'Frontend secret scan' },
   {
-    args: ['audit', '--prod', '--audit-level=high', '--ignore-registry-errors'],
+    args: ['audit', '--prod', '--audit-level=high'],
     label: 'dependency audit',
   },
 ], 'parallel lightweight checks');
@@ -77,13 +85,15 @@ if (!quickChecks || tests !== 0) {
   process.exit(1);
 }
 
-const build = await pnpmRun(['build'], 'production build');
+const build = await pnpmRun(['build'], 'production build', E2E_BUILD_ENV);
 if (build !== 0) process.exit(build);
 
 const builtChecks = await Promise.all([
+  run(process.execPath, ['scripts/verify_frontend_secrets.mjs', '--built'], 'Built frontend secret scan'),
   pnpmRun(['typecheck'], 'typecheck'),
   pnpmRun(['check:bundle'], 'bundle check'),
   run(process.execPath, ['scripts/run_built_e2e.mjs'], 'built-route E2E'),
+  pnpmRun(['test:landing:browser'], 'standalone landing browser checks'),
 ]);
 const builtFailures = builtChecks.filter((code) => code !== 0);
 if (builtFailures.length) {

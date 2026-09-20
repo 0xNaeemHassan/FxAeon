@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Coins, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
-import { AppShell, Button, Card, EmptyState, LoadingRegion, Skeleton } from '@/components/ui';
+import { AppShell, Button, Card, EmptyState } from '@/components/ui';
 import { ActionReview, type ActionReviewStage } from '@/components/ActionReview';
 import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
 import { ProtocolPositionNotice } from '@/components/ProtocolPositionCard';
@@ -39,6 +39,7 @@ import styles from '@/components/FlowWorkspace.module.css';
 import { calculatePositionUsdValuation, formatUsdCents } from '@/lib/positionValuation';
 import { priceKeyForSymbol } from '@/lib/prices';
 import { resetTransactionAmounts } from '@/lib/transactionState';
+import { ValueOrSkeleton } from '@/components/MissingValue';
 
 type BorrowMode = 'mint' | 'manage';
 
@@ -430,11 +431,10 @@ export default function BorrowPage() {
     <div className="flex flex-col gap-4">
       <FormHeader
         title={selected ? `Borrow against position #${selected.info.positionId}` : 'Open a collateral position'}
-        body={selected
-          ? 'Choose what to add to this existing Trade position.'
-          : 'Choose your starting collateral and how much fxUSD to receive.'}
+        body={selected ? 'Add collateral, borrow more fxUSD, or do both.' : 'Choose starting collateral and the fxUSD debt to open.'}
       />
-      <TokenSelect label="Collateral asset" value={token} options={collateralTokens} onChange={changeToken} balances={balanceSnapshot.status === 'idle' ? undefined : balanceSnapshot.balances} balanceStatus={balanceStatus} />
+      {initialRead && <span role="status" aria-live="polite" className="sr-only">Loading positions</span>}
+      <div className={styles.borrowCollateralField}><TokenSelect label="Collateral asset" value={token} options={collateralTokens} onChange={changeToken} balances={balanceSnapshot.status === 'idle' ? undefined : balanceSnapshot.balances} balanceStatus={balanceStatus} /></div>
       <div className={styles.borrowAmountGrid}>
         <AmountField
           label={selected ? 'Collateral to add' : 'Starting collateral'}
@@ -447,7 +447,7 @@ export default function BorrowPage() {
           balanceState={balanceStateFor(token)}
         />
         <AmountField
-          label={selected ? 'Additional fxUSD to borrow' : 'fxUSD to receive'}
+          label={selected ? 'Additional fxUSD to borrow' : 'fxUSD to borrow'}
           symbol="fxUSD"
           value={mint}
           onChange={setMint}
@@ -457,13 +457,13 @@ export default function BorrowPage() {
         />
       </div>
       <InfoNote>{selected
-        ? 'Enter collateral to make the position safer, fxUSD to borrow more, or both. Borrowed fxUSD is sent to your wallet and added to this position’s debt.'
-        : 'FxAeon opens one collateralized long position and sends the borrowed fxUSD to your wallet. The review shows the resulting collateral and debt before you sign.'}</InfoNote>
+        ? 'Enter collateral to make the position safer, fxUSD to borrow more, or both. The amount borrowed is added to your debt. The protocol deducts its borrowing fee from the fxUSD you receive.'
+          : 'FxAeon opens one collateralized long position. The amount borrowed is added to your debt. The protocol deducts its borrowing fee from the fxUSD you receive. The action details show the resulting collateral and debt before you sign.'}</InfoNote>
     </div>
   ) : (
     <div className="flex flex-col gap-4">
       <FormHeader title="Manage debt" body="Repay fxUSD, withdraw collateral, or do both." />
-      {!selected && sharedPositions.status === 'loading' && <span role="status" aria-label="Reading collateral position" className="skeleton block h-7 rounded-xl" />}
+      {!selected && sharedPositions.status === 'loading' && <span role="status" aria-label="Reading collateral position" className="text-[12px] text-mut">Loading positions…</span>}
       {!selected && sharedPositions.status !== 'loading' && <p role="status" className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3 text-[12px] text-mut">Choose a position to manage debt, or switch to Borrow fxUSD to open one.</p>}
       <TokenSelect label="Receive collateral as" value={token} options={withdrawalTokens} onChange={changeToken} balances={balanceSnapshot.status === 'idle' ? undefined : balanceSnapshot.balances} balanceStatus={balanceStatus} />
       <div className={styles.borrowAmountGrid}>
@@ -488,28 +488,22 @@ export default function BorrowPage() {
           placeholder="0.00"
         />
       </div>
-      <InfoNote>Enter the fxUSD to repay, the collateral to receive, or both. The review shows the resulting position before you sign; withdrawing collateral can reduce its safety margin.</InfoNote>
+      <InfoNote>Enter the fxUSD to repay, the collateral to receive, or both. The action details show the resulting position before you sign; withdrawing collateral can reduce its safety margin.</InfoNote>
     </div>
   );
 
   return (
-    <AppShell title="Borrow" subtitle="Create or manage a long collateral position and borrow fxUSD.">
+    <AppShell>
       <div className={`${styles.workspace} ${styles.borrowWorkspace}`}>
+        <h1 className={styles.borrowHeading}>Borrow</h1>
         <ConfirmedPositionCards />
         <nav className={`grid grid-cols-2 ${styles.productSwitch}`} aria-label="Savings and borrowing">
           <Link href="/earn" className="glass-press flex min-h-11 items-center justify-center rounded-lg px-3 text-[13px] font-semibold text-mut">fxSAVE</Link>
           <span aria-current="page" className="flex min-h-11 items-center justify-center rounded-lg bg-[var(--mint-dim)] px-3 text-[13px] font-semibold text-[var(--text)]">Borrow fxUSD</span>
         </nav>
-        {wallet.address && initialRead && (
-          <LoadingRegion label="Reading borrowing positions" className="flex flex-col gap-3.5">
-            <Skeleton className="h-11" />
-            <Skeleton className="h-14" />
-            <Skeleton className="h-72" />
-          </LoadingRegion>
-        )}
         {wallet.address && !initialRead && positionReadUnavailable && (
           <div role="alert" aria-live="polite" className="flex flex-col gap-3.5 rounded-2xl border border-[var(--line)] bg-[var(--warn-dim)] p-5">
-            <div><p className="font-semibold text-warn">Borrowing positions are unavailable.</p><p className="mt-1 text-[12px] leading-relaxed text-mut">No current collateral or debt state was verified. Retry before reviewing a borrowing action.</p></div>
+            <div><p className="font-semibold text-warn">Borrowing positions are unavailable.</p><p className="mt-1 text-[12px] leading-relaxed text-mut">No current collateral or debt state was verified. Retry before continuing.</p></div>
             <Button aria-label="Retry borrowing positions" onClick={() => void refreshPositions()}><RefreshCw className="h-4 w-4" aria-hidden="true" /> Retry position read</Button>
           </div>
         )}
@@ -558,9 +552,7 @@ export default function BorrowPage() {
                 />
                 {selected ? (
                   <PositionSummary position={selected} />
-                ) : (
-                  <p className="px-1 text-[12px] text-mut">A new {market} collateral position will be created.</p>
-                )}
+                ) : null}
               </>
             )}
 
@@ -588,8 +580,8 @@ export default function BorrowPage() {
                   surface="content"
                   planBuilder={planBuilder}
                   label={mode === 'mint'
-                    ? selected ? 'Review position update' : 'Review new position'
-                    : 'Review changes'}
+                    ? selected ? 'Update collateral position' : 'Open collateral position'
+                    : 'Manage debt'}
                   operationLabel={mode === 'mint'
                     ? selected ? 'Update collateral position' : 'Open collateral position'
                     : manageOperationLabel}
@@ -647,27 +639,24 @@ function DisconnectedBorrowForm({
     <div className={`${styles.disconnectedBorrowForm} flex flex-col gap-4`}>
       {mode === 'mint' ? (
         <div className={`${styles.disconnectedBorrowFields} flex flex-col gap-4`}>
-          <FormHeader title="Open a collateral position" body="Choose your starting collateral and how much fxUSD to receive." />
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-2,var(--input))] p-1">
+          <FormHeader title="Open a collateral position" body="Choose starting collateral and the fxUSD debt to open." />
+          <div className={`${styles.borrowMarketSwitch} rounded-2xl border border-[var(--line)] bg-[var(--surface-2,var(--input))] p-1`}>
             <Segmented value={market} onChange={onMarketChange} ariaLabel="Collateral market" options={[{ value: 'ETH', label: 'ETH' }, { value: 'BTC', label: 'BTC' }]} />
           </div>
-          <TokenSelect label="Collateral asset" value={token} options={tokens} onChange={onTokenChange} balanceStatus="disconnected" />
+          <div className={styles.borrowCollateralField}><TokenSelect label="Collateral asset" value={token} options={tokens} onChange={onTokenChange} balanceStatus="disconnected" /></div>
           <div className={styles.borrowAmountGrid}>
           <AmountField label="Starting collateral" symbol={token} value={deposit} onChange={onDepositChange} allowZero maxDecimals={tokenDecimals(token)} placeholder="0.00" balanceState={disconnectedBalance} />
-            <AmountField label="fxUSD to receive" symbol="fxUSD" value={mint} onChange={onMintChange} allowZero maxDecimals={18} placeholder="0.00" />
+            <AmountField label="fxUSD to borrow" symbol="fxUSD" value={mint} onChange={onMintChange} allowZero maxDecimals={18} placeholder="0.00" />
           </div>
-          <InfoNote>Connect a wallet to load balances and prepare the exact collateral and debt route.</InfoNote>
         </div>
       ) : (
         <div className={`${styles.disconnectedBorrowFields} flex flex-col gap-4`}>
           <FormHeader title="Manage debt" body="Repay fxUSD, withdraw collateral, or do both." />
-          <p className="rounded-xl bg-[var(--warn-dim)] px-3 py-2 text-[11px] leading-relaxed text-warn">Connect a wallet to load a collateral position.</p>
-          <TokenSelect label="Receive collateral as" value={token} options={tokens} onChange={onTokenChange} balanceStatus="disconnected" />
+          <div className={styles.borrowCollateralField}><TokenSelect label="Receive collateral as" value={token} options={tokens} onChange={onTokenChange} balanceStatus="disconnected" /></div>
           <div className={styles.borrowAmountGrid}>
             <AmountField label="Repay amount" symbol="fxUSD" value={repay} onChange={onRepayChange} allowAll allowZero maxDecimals={18} placeholder="0.00" balanceState={disconnectedBalance} />
             <AmountField label="Collateral to withdraw" symbol={token} value={withdraw} onChange={onWithdrawChange} allowZero maxDecimals={tokenDecimals(token)} placeholder="0.00" />
           </div>
-          <InfoNote>Connect a wallet to verify the selected position and prepare its repay or withdrawal route.</InfoNote>
         </div>
       )}
     </div>
@@ -721,7 +710,7 @@ function PositionSummary({ position }: { position: UiPosition }) {
   const missingPrice = '—';
   const collateralUsd = valuation.collateralUsdCents === null ? missingPrice : formatUsdCents(valuation.collateralUsdCents);
   const debtUsd = valuation.debtUsdCents === null ? missingPrice : formatUsdCents(valuation.debtUsdCents);
-  const netEquity = valuation.netEquityUsdCents === null ? missingPrice : formatUsdCents(valuation.netEquityUsdCents);
+  const netEquity = valuation.netEquityUsdCents === null ? missingPrice : `≈ ${formatUsdCents(valuation.netEquityUsdCents)}`;
   return (
     <Card className={`${styles.summaryCard} p-5`}>
       <div className="flex items-start justify-between gap-3">
@@ -732,11 +721,18 @@ function PositionSummary({ position }: { position: UiPosition }) {
         <span className="rounded-lg bg-[var(--mint-dim)] px-2 py-1 text-[11px] font-semibold text-mint">Long</span>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-2">
-        <Metric label="Est. net equity" value={netEquity} />
-        <Metric label="Collateral value" value={`${formatPositionCollateral(position)} · ${collateralUsd}`} />
-        <Metric label="Debt value" value={`${formatPositionDebt(position)} · ${debtUsd}`} />
+        <Metric label="Position value" value={netEquity} title="Approximate collateral value minus debt" prominent />
+        <Metric
+          label="Collateral value"
+          value={<>{formatPositionCollateral(position)} · <ValueOrSkeleton value={collateralUsd} width="sm" label="Collateral value loading" /></>}
+          title={`${formatPositionCollateral(position)} · ${collateralUsd}`}
+        />
+        <Metric
+          label="Debt value"
+          value={<>{formatPositionDebt(position)} · <ValueOrSkeleton value={debtUsd} width="sm" label="Debt value loading" /></>}
+          title={`${formatPositionDebt(position)} · ${debtUsd}`}
+        />
       </div>
-      <p className="mt-3 text-[11px] leading-relaxed text-mut">Display estimate: collateral USD minus debt USD, not a close quote or liquidation value.</p>
     </Card>
   );
 }
@@ -750,11 +746,13 @@ function FormHeader({ title, body }: { title: string; body: string }) {
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({ label, value, title, prominent = false }: { label: string; value: ReactNode; title?: string; prominent?: boolean }) {
   return (
     <div className={`${styles.metric} p-3`}>
-      <span className="block text-[11px] text-mut">{label}</span>
-      <span className="mt-1 block truncate text-[13px] font-semibold tabular-nums" title={value}>{value}</span>
+      <span className="block text-[12px] text-mut">{label}</span>
+      <span className={`mt-1 block truncate font-semibold tabular-nums ${prominent ? 'text-[16px]' : 'text-[13px]'}`} title={title ?? (typeof value === 'string' ? value : undefined)}>
+        <ValueOrSkeleton value={value} width={prominent ? 'lg' : 'md'} />
+      </span>
     </div>
   );
 }

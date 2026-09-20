@@ -17,8 +17,9 @@ test.describe('Earn entry and honest unavailable state', () => {
   test('mobile withdrawal keeps the method switch and consequence copy visible', async ({ page, requests }) => {
     await page.setViewportSize({ width: 390, height: 500 });
     await page.goto('/earn', { waitUntil: 'domcontentloaded' });
-    await page.getByRole('radio', { name: 'Withdraw', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Withdraw', exact: true })).toBeVisible();
+    const withdraw = page.getByRole('radio', { name: 'Withdraw', exact: true });
+    await withdraw.click();
+    await expect(withdraw).toHaveAttribute('aria-checked', 'true');
     await expect(page.getByRole('switch', { name: /Withdraw instantly/ })).toBeVisible();
     await expect(page.getByText(/cooldown|fee|queue/i).first()).toBeVisible();
     await expect(page.getByLabel('fxSAVE to withdraw in fxSAVE')).toBeVisible();

@@ -67,6 +67,15 @@ function hexQuantity(value: bigint): Hex {
   return `0x${value.toString(16)}` as Hex;
 }
 
+function normalizeForkBlock(value: string | number): bigint {
+  if (typeof value === "number") {
+    assert.ok(Number.isSafeInteger(value) && value >= 0, "Anvil metadata fork block number must be a safe integer");
+    return BigInt(value);
+  }
+  assert.match(value, /^(?:0x[0-9a-f]+|[0-9]+)$/i, "Anvil metadata fork block number must be hexadecimal or decimal");
+  return BigInt(value);
+}
+
 function chaosRandom(seed: number): () => number {
   let state = (seed >>> 0) || 0x51f15e;
   return () => {
@@ -338,11 +347,16 @@ test("protocol proof: official SDK opens coexisting ETH/BTC long and short posit
     { market: "BTC", side: "long" },
     { market: "BTC", side: "short" },
   ];
-  const forkBlock = BigInt(await rpc<string>("eth_blockNumber"));
+  const forkHead = BigInt(await rpc<string>("eth_blockNumber"));
+  const metadata = await rpc<{ forkedNetwork?: { forkBlockNumber?: string | number } }>("anvil_metadata");
+  const forkBaseRaw = metadata.forkedNetwork?.forkBlockNumber;
+  assert.ok(forkBaseRaw !== undefined, "Anvil metadata must expose the original fork block");
+  const forkBlock = normalizeForkBlock(forkBaseRaw);
   const requestedForkBlock = process.env.ANVIL_FORK_BLOCK?.trim();
   if (requestedForkBlock) {
-    assert.equal(forkBlock, BigInt(requestedForkBlock), "Anvil did not start from the requested pinned fork block");
+    assert.equal(forkBlock, BigInt(requestedForkBlock), "Anvil metadata does not match the requested pinned fork block");
   }
+  assert.ok(forkHead >= forkBlock, "Anvil head must not precede its configured fork block");
   const snapshot = await rpc<string>("evm_snapshot");
   let manifest: unknown;
 

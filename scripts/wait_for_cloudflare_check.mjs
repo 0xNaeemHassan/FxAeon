@@ -1,4 +1,10 @@
-const CHECK_NAME = 'Cloudflare Pages: fxaeon';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+// The financial workflow supplies this explicitly so a separate landing
+// project check cannot accidentally authorize the financial release.
+const CHECK_NAME = process.env.CLOUDFLARE_CHECK_NAME?.trim() || 'Cloudflare Pages: fxaeon';
+const PROJECT_NAME = process.env.CLOUDFLARE_PAGES_PROJECT?.trim() || 'fxaeon';
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 const DEFAULT_INTERVAL_MS = 15 * 1000;
 const TERMINAL_FAILURES = new Set([
@@ -23,15 +29,7 @@ function positiveNumber(name, fallback) {
   return value;
 }
 
-const token = required('GITHUB_TOKEN');
-const repository = required('GITHUB_REPOSITORY');
-const sha = required('GITHUB_SHA');
-const timeoutMs = positiveNumber('CLOUDFLARE_CHECK_TIMEOUT_MS', DEFAULT_TIMEOUT_MS);
-const intervalMs = positiveNumber('CLOUDFLARE_CHECK_INTERVAL_MS', DEFAULT_INTERVAL_MS);
-const endpoint = `https://api.github.com/repos/${repository}/commits/${encodeURIComponent(sha)}/check-runs?per_page=100`;
-const startedAt = Date.now();
-
-async function readCheckRuns() {
+async function readCheckRuns({ token, endpoint, timeoutMs, startedAt }) {
   const remainingMs = timeoutMs - (Date.now() - startedAt);
   if (remainingMs <= 0) throw new Error(`Timed out after ${timeoutMs}ms waiting for ${CHECK_NAME}.`);
   const response = await fetch(endpoint, {
@@ -48,7 +46,20 @@ async function readCheckRuns() {
   return Array.isArray(payload.check_runs) ? payload.check_runs : [];
 }
 
-function newestRun(runs) {
+export function isTargetCloudflareRun(run) {
+  if (run?.name !== CHECK_NAME || typeof run?.details_url !== 'string') return false;
+  try {
+    const detailsUrl = new URL(run.details_url);
+    const projectMarker = `/pages/view/${encodeURIComponent(PROJECT_NAME)}/`;
+    return detailsUrl.protocol === 'https:'
+      && detailsUrl.hostname === 'dash.cloudflare.com'
+      && detailsUrl.pathname.includes(projectMarker);
+  } catch {
+    return false;
+  }
+}
+
+export function newestRun(runs) {
   return [...runs].sort((left, right) => {
     const leftAt = Date.parse(left.completed_at ?? left.started_at ?? left.created_at ?? '') || 0;
     const rightAt = Date.parse(right.completed_at ?? right.started_at ?? right.created_at ?? '') || 0;
@@ -60,19 +71,32 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-while (true) {
-  const run = newestRun((await readCheckRuns()).filter((candidate) => candidate.name === CHECK_NAME));
-  if (run?.status === 'completed') {
-    if (run.conclusion === 'success') {
-      console.log(`${CHECK_NAME} succeeded for ${sha}.`);
-      break;
+async function main() {
+  const token = required('GITHUB_TOKEN');
+  const repository = required('GITHUB_REPOSITORY');
+  const sha = required('GITHUB_SHA');
+  const timeoutMs = positiveNumber('CLOUDFLARE_CHECK_TIMEOUT_MS', DEFAULT_TIMEOUT_MS);
+  const intervalMs = positiveNumber('CLOUDFLARE_CHECK_INTERVAL_MS', DEFAULT_INTERVAL_MS);
+  const endpoint = `https://api.github.com/repos/${repository}/commits/${encodeURIComponent(sha)}/check-runs?per_page=100`;
+  const startedAt = Date.now();
+  while (true) {
+    const run = newestRun((await readCheckRuns({ token, endpoint, timeoutMs, startedAt })).filter(isTargetCloudflareRun));
+    if (run?.status === 'completed') {
+      if (run.conclusion === 'success') {
+        console.log(`${CHECK_NAME} succeeded for ${sha}.`);
+        break;
+      }
+      const conclusion = run.conclusion ?? 'unknown';
+      if (TERMINAL_FAILURES.has(conclusion)) throw new Error(`${CHECK_NAME} finished with conclusion ${conclusion}.`);
+      throw new Error(`${CHECK_NAME} finished without success (conclusion ${conclusion}).`);
     }
-    const conclusion = run.conclusion ?? 'unknown';
-    if (TERMINAL_FAILURES.has(conclusion)) throw new Error(`${CHECK_NAME} finished with conclusion ${conclusion}.`);
-    throw new Error(`${CHECK_NAME} finished without success (conclusion ${conclusion}).`);
+    if (run) console.log(`${CHECK_NAME} is ${run.status}; waiting for the native deployment.`);
+    else console.log(`Waiting for ${CHECK_NAME} to appear for ${sha}.`);
+    if (Date.now() - startedAt >= timeoutMs) throw new Error(`Timed out after ${timeoutMs}ms waiting for ${CHECK_NAME}.`);
+    await sleep(Math.min(intervalMs, timeoutMs - (Date.now() - startedAt)));
   }
-  if (run) console.log(`${CHECK_NAME} is ${run.status}; waiting for the native deployment.`);
-  else console.log(`Waiting for ${CHECK_NAME} to appear for ${sha}.`);
-  if (Date.now() - startedAt >= timeoutMs) throw new Error(`Timed out after ${timeoutMs}ms waiting for ${CHECK_NAME}.`);
-  await sleep(Math.min(intervalMs, timeoutMs - (Date.now() - startedAt)));
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  await main();
 }

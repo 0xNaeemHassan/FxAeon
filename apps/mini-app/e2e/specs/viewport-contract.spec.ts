@@ -1,5 +1,5 @@
 import { expect, test, assertNoBackendRequests } from "../fixtures/test";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 const ROUTES = [
   "/",
@@ -54,32 +54,83 @@ async function assertViewportGeometry(page: Page, route: string, viewport: { wid
   expect(geometry.documentWidth, `${route} must not overflow horizontally at ${viewport.width}x${viewport.height}`).toBeLessThanOrEqual(geometry.viewportWidth + 1);
 }
 
-async function assertEnabledCtas(page: Page, route: string, viewport: { width: number; height: number }) {
-  const ctas = page.locator(".button-primary:visible:not([disabled])");
-  const count = await ctas.count();
-  for (let index = 0; index < count; index += 1) {
-    let cta = ctas.nth(index);
-    await expect(cta, `${route} CTA ${index + 1} must be visible at ${viewport.width}x${viewport.height}`).toBeVisible();
+async function assertEnabledCtas(page: Page, route: string, viewport: { width: number; height: number }, options: { includeDisabled?: boolean } = {}) {
+  const includeDisabled = options.includeDisabled ?? false;
+  const ctaSelector = includeDisabled ? ".button-primary:visible" : ".button-primary:visible:not([disabled])";
+  const ctas = page.locator(ctaSelector);
+  const identities = await ctas.evaluateAll((elements) => elements.map((element, index) => ({
+    index,
+    text: (element.textContent ?? '').replace(/\s+/g, ' ').trim(),
+    ariaLabel: element.getAttribute('aria-label'),
+  })));
+
+  // Keep the initially enabled action in the contract even if wallet hydration
+  // temporarily disables/remounts it. Match by its accessible text and its
+  // occurrence among matching actions instead of a stale positional locator.
+  for (const identity of identities) {
+    const exactText = identity.text ? new RegExp(`^\\s*${identity.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`) : null;
+    const matching = exactText
+      ? page.locator('.button-primary:visible').filter({ hasText: exactText })
+      : page.locator(`.button-primary:visible[aria-label="${(identity.ariaLabel ?? '').replace(/"/g, '\\\\"')}"]`);
+    const occurrence = identity.text
+      ? identities.slice(0, identity.index).filter((candidate) => candidate.text === identity.text).length
+      : 0;
+    const action = matching.nth(occurrence);
+    if (!includeDisabled) {
+      await expect.poll(async () => {
+        if (await matching.count() <= occurrence) return false;
+        return action.evaluate((element) => !element.hasAttribute('disabled') && element.getAttribute('aria-disabled') !== 'true');
+      }, { timeout: 15_000, message: `${route} CTA ${identity.index + 1} must remain available after wallet hydration` }).toBe(true);
+    }
+
+    let cta = action;
+    await expect(cta, `${route} CTA ${identity.index + 1} must be visible at ${viewport.width}x${viewport.height}`).toBeVisible({ timeout: 3_000 });
     // Hydration and wallet-read state can replace the action rail between the
     // visibility assertion and the scroll. Re-resolve the locator at the
     // action point so a harmless React remount is not treated as geometry loss.
-    await page.locator(".button-primary:visible:not([disabled])").nth(index).scrollIntoViewIfNeeded();
-    cta = page.locator(".button-primary:visible:not([disabled])").nth(index);
-    let box = await cta.boundingBox();
-    for (let attempt = 0; !box && attempt < 25; attempt += 1) {
+    let scrollError: unknown;
+    let sample: { y: number; bottom: number; width: number; height: number; viewportBottom: number; mobileNavTop: number | null } | undefined;
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      try {
+        await cta.scrollIntoViewIfNeeded({ timeout: 3_000 });
+        sample = await cta.evaluate((element) => {
+          const rect = element.getBoundingClientRect();
+          const mobileNav = document.querySelector<HTMLElement>('nav.mobile-tabbar[aria-label="Primary navigation"]');
+          const mobileNavRect = mobileNav && getComputedStyle(mobileNav).display !== 'none'
+            ? mobileNav.getBoundingClientRect()
+            : null;
+          return {
+            y: rect.y,
+            bottom: rect.bottom,
+            width: rect.width,
+            height: rect.height,
+            viewportBottom: window.innerHeight,
+            mobileNavTop: mobileNavRect?.top ?? null,
+          };
+        });
+        scrollError = undefined;
+        if (sample.y >= -1 && sample.bottom <= sample.viewportBottom + 1
+          && (sample.mobileNavTop === null || sample.bottom <= sample.mobileNavTop + 1)) break;
+      } catch (error) {
+        if (!/not attached to the DOM|detached/i.test(String(error))) throw error;
+        scrollError = error;
+      }
       await page.waitForTimeout(100);
-      box = await cta.boundingBox();
     }
-    expect(box, `${route} CTA ${index + 1} geometry at ${viewport.width}x${viewport.height}`).not.toBeNull();
-    expect(box!.y, `${route} CTA ${index + 1} must be inside the viewport`).toBeGreaterThanOrEqual(-1);
-    expect(box!.y + box!.height, `${route} CTA ${index + 1} must be inside the viewport`).toBeLessThanOrEqual(viewport.height + 1);
+    if (scrollError) throw scrollError;
+    if (!sample) throw new Error(`${route} CTA ${identity.index + 1} did not produce a stable geometry sample`);
+    cta = matching.nth(occurrence);
+    expect(sample.width, `${route} CTA ${identity.index + 1} must have visible geometry`).toBeGreaterThan(0);
+    expect(sample.height, `${route} CTA ${identity.index + 1} must have visible geometry`).toBeGreaterThan(0);
+    expect(sample.y, `${route} CTA ${identity.index + 1} must be inside the viewport`).toBeGreaterThanOrEqual(-1);
+    expect(sample.bottom, `${route} CTA ${identity.index + 1} must be inside the viewport`).toBeLessThanOrEqual(viewport.height + 1);
 
     await expect.poll(() => cta.evaluate((element) => {
       const rect = element.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) return false;
       const topmost = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
       return topmost === element || Boolean(topmost && element.contains(topmost));
-    }), { timeout: 5_000, message: `${route} CTA ${index + 1} must not be obscured at ${viewport.width}x${viewport.height}` }).toBe(true);
+    }), { timeout: 5_000, message: `${route} CTA ${identity.index + 1} must not be obscured at ${viewport.width}x${viewport.height}` }).toBe(true);
 
     const mobileNav = page.locator('nav.mobile-tabbar[aria-label="Primary navigation"]:visible');
     if (await mobileNav.count()) {
@@ -89,7 +140,7 @@ async function assertEnabledCtas(page: Page, route: string, viewport: { width: n
         navBox = await mobileNav.boundingBox();
       }
       expect(navBox).not.toBeNull();
-      expect(box!.y + box!.height, `${route} CTA ${index + 1} must clear primary nav`).toBeLessThanOrEqual(navBox!.y + 1);
+      expect(sample.y + sample.height, `${route} CTA ${identity.index + 1} must clear primary nav`).toBeLessThanOrEqual(navBox!.y + 1);
     }
   }
 }
@@ -106,6 +157,11 @@ test.describe("single-viewport route contract", () => {
       for (const route of ROUTES) {
         await page.goto(route, { waitUntil: "domcontentloaded" });
         await expect(page.locator("main:visible"), `${route} main at ${viewport.width}px`).toBeVisible();
+
+        const topbar = page.locator(".app-topbar");
+        if (CTA_ROUTES.has(route) && await topbar.count()) {
+          await expect(topbar.getByRole("button", { name: "Connect wallet", exact: true }), `${route} disconnected wallet must finish hydration before CTA geometry`).toBeVisible({ timeout: 15_000 });
+        }
 
         // Let client hydration and the optional market context settle before
         // asserting its deliberate absence in this compact route contract.
@@ -165,12 +221,12 @@ test.describe("single-viewport route contract", () => {
     const required = [
       page.getByRole("link", { name: "Positions", exact: true }),
       page.getByText("ETH / USD", { exact: true }),
-      page.locator('.market-chart-header').getByText(/% 24h$|^—$/).first(),
+      page.locator('.market-chart-header').getByText(/% 24h$/).or(page.locator('.market-chart-header [aria-label="24 hour change loading"]')).first(),
       page.getByRole("radio", { name: "ETH", exact: true }),
       page.getByRole("radio", { name: "BTC", exact: true }),
       page.getByRole("button", { name: "Show chart", exact: true }),
-      page.getByText("New position", { exact: true }),
-      page.getByText("ETH Long", { exact: true }),
+      page.getByText("Open position", { exact: true }),
+      page.getByRole("radio", { name: "Long", exact: true }),
       page.getByText("Price rises", { exact: true }),
       page.getByText("Price falls", { exact: true }),
       page.getByLabel("Amount in ETH"),
@@ -186,6 +242,7 @@ test.describe("single-viewport route contract", () => {
     const navBox = await nav.evaluate((element) => element.getBoundingClientRect().toJSON());
     expect(navBox.width).toBeGreaterThan(0);
     expect(navBox.height).toBeGreaterThan(0);
+    await expect(page.getByRole("radio", { name: "Long", exact: true })).toBeChecked();
     for (const item of required) {
       await expect(item).toBeVisible();
       await item.scrollIntoViewIfNeeded();
@@ -201,6 +258,130 @@ test.describe("single-viewport route contract", () => {
     await assertEnabledCtas(page, "/trade", viewport);
   });
 
+  test("279px Trade keeps the page header, market switch, side switch, and action usable", async ({ page }) => {
+    const viewport = { width: 279, height: 650 } as const;
+    await page.setViewportSize(viewport);
+    await page.goto("/trade", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("main:visible")).toBeVisible();
+
+    const topbar = page.locator(".app-topbar");
+    await expect(topbar).toBeVisible();
+    await expect(topbar.getByRole("button", { name: "Connect wallet", exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(topbar).toHaveCSS("display", "flex");
+    await expect(topbar).toHaveCSS("flex-wrap", "nowrap");
+    const headerGeometry = await topbar.evaluate((element) => {
+      const brand = element.querySelector(":scope > a")?.getBoundingClientRect();
+      const actions = element.querySelector(":scope > .app-topbar-actions")?.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return {
+        flexWrap: style.flexWrap,
+        width: element.getBoundingClientRect().width,
+        scrollWidth: element.scrollWidth,
+        brand,
+        actions,
+      };
+    });
+    expect(headerGeometry.flexWrap, "App top bar must remain one row at 279px").toBe("nowrap");
+    expect(headerGeometry.scrollWidth, "App top bar must not clip its controls").toBeLessThanOrEqual(headerGeometry.width + 1);
+    expect(headerGeometry.brand).not.toBeNull();
+    expect(headerGeometry.actions).not.toBeNull();
+    expect(Math.min(headerGeometry.brand!.bottom, headerGeometry.actions!.bottom)
+      - Math.max(headerGeometry.brand!.top, headerGeometry.actions!.top),
+    "App brand and controls must share one row").toBeGreaterThan(0);
+    const topbarActions = topbar.locator(".app-topbar-actions");
+    await expect(topbarActions).toBeVisible();
+    const topbarActionGeometry = await topbarActions.evaluate((element) => ({
+      width: element.getBoundingClientRect().width,
+      scrollWidth: element.scrollWidth,
+    }));
+    expect(topbarActionGeometry.scrollWidth, "App top bar actions must not overflow at 279px").toBeLessThanOrEqual(topbarActionGeometry.width + 1);
+
+    const topbarControls = [
+      topbar.getByRole("button", { name: /Choose a network|Change network|Switch to / }).first(),
+      topbar.getByRole("button", { name: /Switch to (?:official|dark|light) theme/ }).first(),
+      topbar.getByRole("button", { name: "Connect wallet", exact: true }).first(),
+    ];
+    for (const control of topbarControls) {
+      await expect(control, "App top bar control must be visible at 279px").toBeVisible({ timeout: 15_000 });
+      await expect(control, "App top bar control must be enabled at 279px").toBeEnabled();
+      const geometry = await control.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        const topmost = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        return {
+          left: rect.left,
+          right: rect.right,
+          top: rect.top,
+          bottom: rect.bottom,
+          width: rect.width,
+          height: rect.height,
+          receivesPointer: topmost === element || Boolean(topmost && element.contains(topmost)),
+          tabIndex: (element as HTMLElement).tabIndex,
+        };
+      });
+      expect(geometry.left).toBeGreaterThanOrEqual(-1);
+      expect(geometry.right).toBeLessThanOrEqual(viewport.width + 1);
+      expect(geometry.top).toBeGreaterThanOrEqual(-1);
+      expect(geometry.bottom).toBeLessThanOrEqual(viewport.height + 1);
+      expect(geometry.width).toBeGreaterThanOrEqual(44);
+      expect(geometry.height).toBeGreaterThanOrEqual(44);
+      expect(geometry.receivesPointer).toBe(true);
+      expect(geometry.tabIndex).toBeGreaterThanOrEqual(0);
+      await control.focus();
+      await expect(control).toBeFocused();
+    }
+
+    const assertControls = async (group: Locator, label: string) => {
+      await expect(group, `${label} control group must be visible`).toBeVisible();
+      const controls = group.getByRole("radio");
+      await expect(controls, `${label} controls must remain available`).toHaveCount(2);
+      for (const control of await controls.all()) {
+        await control.scrollIntoViewIfNeeded();
+        const geometry = await control.evaluate((element) => {
+          const rect = element.getBoundingClientRect();
+          const topmost = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+          return {
+            left: rect.left,
+            right: rect.right,
+            top: rect.top,
+            bottom: rect.bottom,
+            width: rect.width,
+            height: rect.height,
+            viewportWidth: window.innerWidth,
+            viewportHeight: window.innerHeight,
+            receivesPointer: topmost === element || Boolean(topmost && element.contains(topmost)),
+          };
+        });
+        expect(geometry.left, `${label} control must fit horizontally`).toBeGreaterThanOrEqual(-1);
+        expect(geometry.right, `${label} control must fit horizontally`).toBeLessThanOrEqual(geometry.viewportWidth + 1);
+        expect(geometry.top, `${label} control must be reachable`).toBeGreaterThanOrEqual(-1);
+        expect(geometry.bottom, `${label} control must be reachable`).toBeLessThanOrEqual(geometry.viewportHeight + 1);
+        expect(geometry.width, `${label} control needs a 44px hit target`).toBeGreaterThanOrEqual(44);
+        expect(geometry.height, `${label} control needs a 44px hit target`).toBeGreaterThanOrEqual(44);
+        expect(geometry.receivesPointer, `${label} control must receive pointer input`).toBe(true);
+      }
+    };
+
+    await assertControls(page.getByRole("radiogroup", { name: "Market", exact: true }), "Market");
+    await assertControls(page.getByRole("radiogroup", { name: "Position side", exact: true }), "Position side");
+
+    const action = page.getByRole("button", { name: "Connect wallet", exact: true }).last();
+    await expect(action).toBeVisible();
+    await action.scrollIntoViewIfNeeded();
+    const actionGeometry = await action.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const topmost = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height, receivesPointer: topmost === element || Boolean(topmost && element.contains(topmost)) };
+    });
+    expect(actionGeometry.left).toBeGreaterThanOrEqual(-1);
+    expect(actionGeometry.right).toBeLessThanOrEqual(viewport.width + 1);
+    expect(actionGeometry.top).toBeGreaterThanOrEqual(-1);
+    expect(actionGeometry.bottom).toBeLessThanOrEqual(viewport.height + 1);
+    expect(actionGeometry.width).toBeGreaterThanOrEqual(44);
+    expect(actionGeometry.height).toBeGreaterThanOrEqual(44);
+    expect(actionGeometry.receivesPointer).toBe(true);
+    await assertViewportGeometry(page, "/trade", viewport);
+  });
+
   test("320px Move and Borrow keep amount fields editable", async ({ page }) => {
     const viewport = { width: 320, height: 568 } as const;
     await page.setViewportSize(viewport);
@@ -212,11 +393,11 @@ test.describe("single-viewport route contract", () => {
 
     await page.goto("/borrow", { waitUntil: "domcontentloaded" });
     const collateral = page.getByLabel("Starting collateral in ETH");
-    const debt = page.getByLabel("fxUSD to receive in fxUSD");
+    const debt = page.getByLabel("fxUSD to borrow in fxUSD");
     await expect(collateral).toBeVisible();
     await expect(debt).toBeVisible();
     await expect.poll(() => page.locator('input[aria-label="Starting collateral in ETH"]:visible').first().evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(120);
-    await expect.poll(() => page.locator('input[aria-label="fxUSD to receive in fxUSD"]:visible').first().evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(120);
+    await expect.poll(() => page.locator('input[aria-label="fxUSD to borrow in fxUSD"]:visible').first().evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(120);
     await assertViewportGeometry(page, "/borrow", viewport);
   });
 
@@ -243,12 +424,13 @@ test.describe("single-viewport route contract", () => {
         for (const route of ["/portfolio", "/trade", "/positions", "/borrow", "/earn", "/move", "/more", "/settings", "/history", "/qr"] as const) {
           await page.goto(route, { waitUntil: "domcontentloaded" });
           await expect(page.locator("main:visible"), `${route} connected main at ${viewport.width}px`).toBeVisible();
+          await expect(page.getByRole("button", { name: "Open wallet profile", exact: true }), `${route} connected wallet must finish hydration before CTA geometry`).toBeVisible({ timeout: 15_000 });
           // Connected feeds settle asynchronously; let the initial review
           // transition finish before sampling CTA geometry so a transient
           // enabled button cannot disappear mid-assertion.
           await page.waitForTimeout(500);
           await assertViewportGeometry(page, route, viewport);
-          await assertEnabledCtas(page, route, viewport);
+          await assertEnabledCtas(page, route, viewport, { includeDisabled: true });
         }
       }
       assertNoBackendRequests(requests);
