@@ -12,6 +12,8 @@ const PRODUCTION_WEB_APP_URL = 'https://fxaeon.com/';
 const ALLOWED_WEB_APP_HOSTS = new Set(['fxaeon.com', 'fxaeon.pages.dev']);
 const TELEGRAM_API_ROOT = 'https://api.telegram.org';
 const REQUEST_TIMEOUT_MS = 15_000;
+const MENU_READBACK_ATTEMPTS = 3;
+const MENU_READBACK_DELAY_MS = 500;
 
 export function validatedWebAppUrl(value = process.env.TELEGRAM_WEB_APP_URL ?? PRODUCTION_WEB_APP_URL) {
   let url;
@@ -88,6 +90,28 @@ function matches(expected, actual) {
     && expectedKeys.every((key) => Object.hasOwn(actual, key) && matches(expected[key], actual[key]));
 }
 
+function matchesMenuButtonUrl(expected, actual) {
+  if (typeof actual?.web_app?.url !== 'string') return false;
+  try {
+    return validatedWebAppUrl(actual.web_app.url) === expected.web_app.url;
+  } catch {
+    return false;
+  }
+}
+
+function matchesMenuButton(expected, actual) {
+  return actual?.type === expected.type
+    && actual?.text === expected.text
+    && matchesMenuButtonUrl(expected, actual);
+}
+
+function menuButtonMismatchSummary(expected, actual) {
+  const type = ['commands', 'default', 'web_app'].includes(actual?.type) ? actual.type : 'other';
+  const text = actual?.text === expected.text ? 'match' : 'mismatch';
+  const webAppUrl = matchesMenuButtonUrl(expected, actual) ? 'match' : 'mismatch';
+  return ` (type=${type}, text=${text}, web-app-url=${webAppUrl})`;
+}
+
 export async function syncTelegramBot({
   token = requiredToken(),
   webAppUrl = validatedWebAppUrl(),
@@ -102,12 +126,22 @@ export async function syncTelegramBot({
   };
   const requestOptions = { fetchImpl, timeoutMs };
   const request = (method, payload) => callBotApi(token, method, payload, requestOptions);
-  const verify = async (writeMethod, writePayload, readMethod, expected) => {
+  const verify = async (writeMethod, writePayload, readMethod, expected, {
+    compare = matches,
+    attempts = 1,
+    retryDelayMs = 0,
+    mismatchSummary = () => '',
+  } = {}) => {
     await request(writeMethod, writePayload);
-    const actual = await request(readMethod, {});
-    if (!matches(expected, actual)) {
-      throw new Error(`Telegram Bot API ${readMethod} readback mismatch`);
+    let actual;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      actual = await request(readMethod, {});
+      if (compare(expected, actual)) return;
+      if (attempt + 1 < attempts && retryDelayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+      }
     }
+    throw new Error(`Telegram Bot API ${readMethod} readback mismatch${mismatchSummary(expected, actual)}`);
   };
 
   await verify('setMyName', { name: metadata.name }, 'getMyName', { name: metadata.name });
@@ -123,7 +157,12 @@ export async function syncTelegramBot({
     text: 'Open FxAeon',
     web_app: { url: validatedMenuUrl },
   };
-  await verify('setChatMenuButton', { menu_button: menuButton }, 'getChatMenuButton', menuButton);
+  await verify('setChatMenuButton', { menu_button: menuButton }, 'getChatMenuButton', menuButton, {
+    compare: matchesMenuButton,
+    attempts: MENU_READBACK_ATTEMPTS,
+    retryDelayMs: MENU_READBACK_DELAY_MS,
+    mismatchSummary: menuButtonMismatchSummary,
+  });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

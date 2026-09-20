@@ -390,6 +390,18 @@ try {
     shortDesktopTitleBounds.y >= shortDesktopHeaderBounds.y + shortDesktopHeaderBounds.height + 16,
     `Hero title overlaps the header at 1536x647: header=${JSON.stringify(shortDesktopHeaderBounds)}, title=${JSON.stringify(shortDesktopTitleBounds)}`,
   );
+  const [shortDesktopFrameBounds, shortDesktopSculptureBounds] = await Promise.all([
+    page.locator('.hero-frame').boundingBox(),
+    page.locator('.hero-sculpture').boundingBox(),
+  ]);
+  assert.ok(shortDesktopFrameBounds && shortDesktopSculptureBounds, 'Short desktop hero artwork must be measurable');
+  assert.ok(
+    shortDesktopSculptureBounds.x >= shortDesktopFrameBounds.x + 8
+      && shortDesktopSculptureBounds.y >= shortDesktopFrameBounds.y + 8
+      && shortDesktopSculptureBounds.x + shortDesktopSculptureBounds.width <= shortDesktopFrameBounds.x + shortDesktopFrameBounds.width - 8
+      && shortDesktopSculptureBounds.y + shortDesktopSculptureBounds.height <= shortDesktopFrameBounds.y + shortDesktopFrameBounds.height - 8,
+    `Hero sculpture should fit within the artwork frame at 1536x647: frame=${JSON.stringify(shortDesktopFrameBounds)}, sculpture=${JSON.stringify(shortDesktopSculptureBounds)}`,
+  );
   await page.setViewportSize({ width: 1440, height: 650 });
   await page.goto(origin, { waitUntil: 'networkidle' });
   const launchBounds = await page.locator('.hero a[href="https://fxaeon.com/"]').boundingBox();
