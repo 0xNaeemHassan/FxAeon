@@ -183,7 +183,16 @@ if (!scriptDirective || scriptDirective.includes("'unsafe-inline'")) {
 if (!scriptDirective.split(/\s+/).includes('https://auth.privy.io')) {
   fail('the production script-src policy must allow Privy’s Telegram login bridge');
 }
+const frameSources = staticHeaders.match(/frame-src\s+([^;]+)/)?.[1].split(/\s+/) ?? [];
+const childSources = staticHeaders.match(/child-src\s+([^;]+)/)?.[1].split(/\s+/) ?? [];
+const configuredPrivyOrigin = 'https://privy.fxaeon.com';
+if (!frameSources.includes(configuredPrivyOrigin) || !childSources.includes(configuredPrivyOrigin)) {
+  fail(`the production CSP policy must allow the configured Privy custom frame origin (${configuredPrivyOrigin})`);
+}
 const connectSources = staticHeaders.match(/connect-src\s+([^;]+)/)?.[1].split(/\s+/) ?? [];
+if (!connectSources.includes(configuredPrivyOrigin)) {
+  fail(`the production CSP policy must allow the configured Privy custom API origin (${configuredPrivyOrigin})`);
+}
 if (connectSources.includes('https:') || connectSources.includes('wss:')) {
   fail('connect-src contains a broad scheme source instead of reviewed hosts');
 }
