@@ -120,27 +120,15 @@ async function boundedText(response: Response, maxBytes: number): Promise<string
   if (contentLength !== null && /^\d+$/.test(contentLength) && Number(contentLength) > maxBytes) {
     throw new Error("upstream response too large");
   }
-  if (!response.body) return "";
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let bytes = 0;
-  let text = "";
-  try {
-    while (true) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      bytes += chunk.value.byteLength;
-      if (bytes > maxBytes) {
-        await reader.cancel();
-        throw new Error("upstream response too large");
-      }
-      text += decoder.decode(chunk.value, { stream: true });
-    }
-    text += decoder.decode();
-    return text;
-  } finally {
-    reader.releaseLock();
+  // Pages' upstream Response streams are not guaranteed to expose the same
+  // reader lifecycle as browser streams. Read the small, fixed oracle payload
+  // through the portable Response.text() contract and enforce the byte bound
+  // after decoding as a second line of defence when Content-Length is absent.
+  const text = await response.text();
+  if (new TextEncoder().encode(text).byteLength > maxBytes) {
+    throw new Error("upstream response too large");
   }
+  return text;
 }
 
 function timeoutError(): Error {
