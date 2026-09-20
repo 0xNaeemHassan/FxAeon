@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createWalletDemandRegistry, isWalletProfileOpenForRoute, walletDemandForPathname } from '../src/lib/walletDemand';
+import { createPriceDemandRegistry } from '../src/lib/priceDemand';
 
-test('portfolio is the only route that starts expanded cross-chain asset discovery', () => {
-  assert.deepEqual(walletDemandForPathname('/portfolio'), {
-    enabled: true, expandedAssets: true, chainPulse: true, positions: true,
-  });
+test('portfolio routes, including the canonical root, start expanded cross-chain asset discovery', () => {
+  for (const pathname of ['/', '/portfolio']) {
+    assert.deepEqual(walletDemandForPathname(pathname), {
+      enabled: true, expandedAssets: true, chainPulse: true, positions: true,
+    });
+  }
   assert.deepEqual(walletDemandForPathname('/portfolio/details'), {
     enabled: true, expandedAssets: true, chainPulse: true, positions: true,
   });
@@ -28,7 +31,7 @@ test('exact wallet consumers do not start expanded assets, pulse, or positions',
 });
 
 test('informational routes keep wallet feeds disabled', () => {
-  for (const pathname of ['/', '/activity', '/settings', '/docs', '/qr']) {
+  for (const pathname of ['/activity', '/settings', '/docs', '/qr']) {
     assert.deepEqual(walletDemandForPathname(pathname), {
       enabled: false, expandedAssets: false, chainPulse: false, positions: false,
     });
@@ -94,4 +97,21 @@ test('route changes remove route-owned demand while preserving active consumer d
   assert.deepEqual(registry.getDemand(), {
     enabled: false, expandedAssets: false, chainPulse: false, positions: false,
   });
+});
+
+test('price demand starts only while a product or wallet-profile consumer is mounted', () => {
+  const registry = createPriceDemandRegistry();
+  let notifications = 0;
+  const unsubscribe = registry.subscribe(() => { notifications += 1; });
+  assert.equal(registry.isActive(), false);
+  const firstRelease = registry.acquire();
+  const secondRelease = registry.acquire();
+  assert.equal(registry.isActive(), true);
+  firstRelease();
+  assert.equal(registry.isActive(), true);
+  secondRelease();
+  assert.equal(registry.isActive(), false);
+  secondRelease();
+  assert.equal(notifications, 4);
+  unsubscribe();
 });

@@ -8,7 +8,7 @@ const fourTokens = 4_000_000_000_000_000_000n;
 test('SDK assets and queued redemption fields are base-pool shares, not fxUSD or fxSAVE', () => {
   for (const field of ['assetsWei', 'totalAssetsWei', 'pendingSharesWei'] as const) {
     assert.equal(FX_SAVE_UNITS[field].priceKey, 'fxUSDBasePool');
-    assert.equal(FX_SAVE_UNITS[field].label, 'fxUSD pool token');
+    assert.equal(FX_SAVE_UNITS[field].label, 'fxUSD base-pool shares');
     assert.equal(fxSaveUsdValue(field, fourTokens, prices), 5);
   }
 });

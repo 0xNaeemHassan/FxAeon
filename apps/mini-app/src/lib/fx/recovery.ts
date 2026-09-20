@@ -238,11 +238,11 @@ export async function reconcileWalletJournal(params: {
       if (view.verification !== "receipt") return view;
       const head = await client.getBlockNumber({ cacheTime: 0 });
       const confirmations = head >= receipt.blockNumber ? head - receipt.blockNumber + 1n : 0n;
-      if (confirmations < 3n) {
+      if (confirmations < 1n) {
         return pendingView(
           record,
           "confirming",
-          `Receipt included at block ${receipt.blockNumber.toString()}; waiting for ${confirmations.toString()}/3 confirmations.`,
+          `Receipt included at block ${receipt.blockNumber.toString()}; waiting for ${confirmations.toString()}/1 confirmation.`,
         );
       }
       // Re-check at the finality boundary. A receipt can be replaced while

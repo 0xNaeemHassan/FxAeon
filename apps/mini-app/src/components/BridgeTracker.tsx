@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { getEidByChainId } from '@aladdindao/fx-sdk';
 import { type Address, type Hex } from 'viem';
 import { CheckCircle2, Clock3, ExternalLink, LoaderCircle, Network, RefreshCw, XCircle } from 'lucide-react';
@@ -16,6 +16,7 @@ import {
 } from '@/lib/fx/bridgeDelivery';
 import { haptic, openExternalLink } from '@/lib/telegram';
 import { isForegroundOnline, subscribeToForegroundResume } from '@/lib/foreground';
+import { ValueOrSkeleton } from '@/components/MissingValue';
 
 export type BridgeStepStatus = 'pending' | 'source_confirmed' | 'destination_verified' | 'failed';
 
@@ -162,7 +163,7 @@ export function BridgeTracker({
             throw new Error('source bridge receipt hash does not match the submitted transaction');
           }
           if (typeof receipt.blockNumber !== 'bigint' || receipt.blockNumber < 0n) {
-            throw new Error('source bridge receipt has no canonical block number');
+            throw new Error('The source receipt is missing block information.');
           }
           if (receipt.status !== 'success') throw new Error('source bridge receipt is not successful');
           sourceMessage = findSourceOftSent(receipt.logs as unknown as readonly BridgeEventLog[], {
@@ -179,7 +180,7 @@ export function BridgeTracker({
         await assertPublicClientChain(destinationClient, destinationChainId);
         const latestBlock = await destinationClient.getBlockNumber();
         if (latestBlock < destinationBaselineBlock) {
-          throw new Error('destination chain head is behind the reviewed baseline block');
+          throw new Error('The destination chain is still catching up.');
         }
         const getLogs = destinationClient.getLogs as unknown as GetLogs;
         const scan = await scanDestinationOftReceivedInChunks({
@@ -212,13 +213,13 @@ export function BridgeTracker({
         }
         const received = scan.match;
         if (typeof received.blockNumber !== 'bigint' || received.blockNumber < destinationBaselineBlock) {
-          throw new Error('destination OFTReceived event has no canonical reviewed block number');
+          throw new Error('The destination delivery is missing block information.');
         }
         if (typeof received.blockHash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(received.blockHash)) {
-          throw new Error('destination OFTReceived event has no canonical block hash');
+          throw new Error('The destination delivery is missing block identity.');
         }
         if (typeof received.transactionHash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(received.transactionHash)) {
-          throw new Error('destination OFTReceived event has no canonical transaction hash');
+          throw new Error('The destination delivery is missing transaction information.');
         }
         // Keep rescanning the candidate block until it is deep enough. If a
         // reorg removes or replaces the event, the exact-block proof below
@@ -247,7 +248,7 @@ export function BridgeTracker({
         });
         if (canonical.blockHash?.toLowerCase() !== received.blockHash.toLowerCase()
           || canonical.transactionHash?.toLowerCase() !== received.transactionHash.toLowerCase()) {
-          throw new Error('destination delivery event changed during confirmation; checking the canonical chain again');
+          throw new Error('The destination delivery changed while confirming. Checking again.');
         }
         if (!cancelled) {
           setDetectedDestinationTxHash(received.transactionHash ?? null);
@@ -286,13 +287,13 @@ export function BridgeTracker({
   const layerzeroScan = sourceTxHash ? `https://layerzeroscan.com/tx/${sourceTxHash}` : null;
 
   return (
-    <section aria-label="Bridge status" aria-live="polite" aria-atomic="false" className={`flex flex-col rounded-xl border border-[var(--line-strong)] bg-[rgba(18,18,29,0.7)] p-4 ${className}`}>
+    <section aria-label="Bridge status" aria-live="polite" aria-atomic="false" className={`flex flex-col rounded-xl border border-[var(--line-strong)] bg-[var(--surface-2)] p-4 ${className}`}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-[var(--mint-dim)] text-mint"><Network aria-hidden="true" className="h-4 w-4" /></span>
           <div>
             <h4 className="text-[13px] font-semibold">Bridge delivery</h4>
-            <p className="text-[10px] text-mut">{amount ? `${amount} ${token} · ` : ''}{sourceChain} → {destinationChain}</p>
+            <p className="text-[10px] text-mut">{amount ? <><ValueOrSkeleton value={amount} width="sm" label="Bridge amount loading" /> {token} · </> : null}{sourceChain} → {destinationChain}</p>
           </div>
         </div>
         <span className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10.5px] font-semibold ${delivered ? 'bg-[var(--success-dim)] text-success' : failed ? 'bg-[var(--danger-dim)] text-danger' : sourceDone ? 'bg-[var(--warn-dim)] text-warn' : 'bg-[var(--mint-dim)] text-mint'}`}>
@@ -310,7 +311,7 @@ export function BridgeTracker({
         <TimelineRow
           state={failed ? 'failed' : sourceDone ? 'done' : submitted ? 'active' : 'pending'}
           title="Confirmed on source"
-          body={failed ? 'The source receipt shows a revert.' : sourceDone ? sourceEventFound ? 'Source receipt and bridge message confirmed.' : 'Source receipt confirmed. Checking the bridge message.' : submitted ? 'Waiting for the source-chain receipt.' : 'Starts after submission.'}
+          body={failed ? 'The source receipt shows a revert.' : sourceDone ? sourceEventFound ? 'Source receipt confirmed; bridge message found.' : 'Source receipt confirmed. Checking the bridge message.' : submitted ? 'Waiting for the source-chain receipt.' : 'Starts after submission.'}
         />
         <TimelineRow
           state={delivered ? 'done' : sourceDone ? 'active' : 'pending'}
@@ -321,7 +322,7 @@ export function BridgeTracker({
         <TimelineRow
           state={delivered ? 'done' : 'pending'}
           title="Received"
-          body={delivered ? `${amount ? `${amount} ${token}` : token} was verified at the recipient on ${destinationChain}.` : 'Not verified on the destination yet.'}
+          body={delivered ? <>{amount ? <><ValueOrSkeleton value={amount} width="sm" label="Bridge amount loading" /> {token}</> : token} was verified at the recipient on {destinationChain}.</> : 'Not verified on the destination yet.'}
           action={destinationExplorer ? { label: 'Explorer', onClick: () => { openExternalLink(destinationExplorer); } } : undefined}
         />
       </div>
@@ -361,7 +362,7 @@ function TimelineRow({
 }: {
   state: 'done' | 'active' | 'pending' | 'failed';
   title: string;
-  body: string;
+  body: ReactNode;
   action?: { label: string; onClick: () => void };
 }) {
   const icon = state === 'done'

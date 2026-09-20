@@ -1,13 +1,26 @@
 {
   "schemaVersion": 1,
   "proof": "fxaeon-documentation-captures",
-  "capturedAt": "2026-09-02T21:24:39.148Z",
+  "capturedAt": "2026-09-20T05:56:32.365Z",
   "profile": "standard",
   "marketData": "external-display-data-unmodified",
+  "routeIsolation": "fresh-page-and-browser-context-per-capture",
+  "devIndicator": "nextjs-portal-hidden-after-zero-page-and-unclassified-console-errors",
+  "runtimeErrorCounts": {
+    "pageErrors": 0,
+    "consoleErrors": 0,
+    "knownExternalFallbackErrors": 0,
+    "unclassifiedConsoleErrors": 0,
+    "discoveryErrors": 0
+  },
   "assertions": {
     "allFramesAtDocumentOrigin": true,
-    "loginReadyWithoutLoadingSplash": true
+    "loginReadyWithoutLoadingSplash": true,
+    "desktopTradeChartRenderedCandles": true,
+    "freshBrowserContextPerFrame": true,
+    "zeroPageAndConsoleErrors": true
   },
+  "scope": "Rendered documentation states with live external display data; no wallet transaction was submitted.",
   "captures": [
     {
       "file": "fxaeon-web.png",
@@ -16,7 +29,8 @@
         "width": 1440,
         "height": 900
       },
-      "sha256": "c507e6ed5bfdcdc4f63f5f1ee68a02b7f346faeeedae5d2cd3d359983c1008be"
+      "sha256": "970fcc886e96d730cebe0ebdd9e24887b7580aae96b1bed4eee5816f89328ed7",
+      "capturedAt": "2026-09-20T05:55:37.893Z"
     },
     {
       "file": "fxaeon-trade.png",
@@ -25,7 +39,8 @@
         "width": 1440,
         "height": 900
       },
-      "sha256": "288853e3c2ce3bd54a1b38de3564332bbc177caff00945bc7f456814b166905e"
+      "sha256": "f697019d394f7c2e39ef8f74423c9db2292a85575af16c5bf0c0bc466efcd85b",
+      "capturedAt": "2026-09-20T05:55:42.871Z"
     },
     {
       "file": "fxaeon-token-picker.png",
@@ -34,7 +49,8 @@
         "width": 1440,
         "height": 900
       },
-      "sha256": "5c2dbb9b289263298c5537135d6595df49bbb17bc06da1067da4682d0c82ec37"
+      "sha256": "53367ec0b8f0ace8b1904d4e0d4363e8f2bf644cfc170c46672949e5074e86d6",
+      "capturedAt": "2026-09-20T05:55:48.962Z"
     },
     {
       "file": "fxaeon-bridge.png",
@@ -43,7 +59,8 @@
         "width": 1440,
         "height": 900
       },
-      "sha256": "444600908a4026888d49c68443fb71da6739f255db3ebf1c614093e79dbff797"
+      "sha256": "b97aeaa15881ad5ced0536d35a24df5bc885ee880610e996f2e27da5ae5a39f1",
+      "capturedAt": "2026-09-20T05:55:53.927Z"
     },
     {
       "file": "fxaeon-login.png",
@@ -52,7 +69,8 @@
         "width": 1440,
         "height": 900
       },
-      "sha256": "5f8ab4a0008bd7db3ef71d482ee03846ff1ef0e62052dabe6ced1b379893da97"
+      "sha256": "3f9ca3292f74b33026f7d415e56e58a244162a7e2a6a87e0a00f8c7f6ab18315",
+      "capturedAt": "2026-09-20T05:55:57.296Z"
     },
     {
       "file": "fxaeon-portfolio.png",
@@ -61,7 +79,18 @@
         "width": 1440,
         "height": 900
       },
-      "sha256": "78be4f68278c554033862d26adecba2f245b73cc9acc7d260b93ce6de14c7351"
+      "sha256": "1ba2399d1d1abfe0e106aa90070754999670ccbf5ea63dd551c59248f889a2fe",
+      "capturedAt": "2026-09-20T05:56:02.034Z"
+    },
+    {
+      "file": "fxaeon-docs.png",
+      "route": "/docs",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "sha256": "3291e8e8ec794e342fae5808cd63a0cb45c5b9f38bd34d48f32af5600328f583",
+      "capturedAt": "2026-09-20T05:56:18.803Z"
     },
     {
       "file": "fxaeon-trade-mobile.png",
@@ -70,7 +99,8 @@
         "width": 390,
         "height": 844
       },
-      "sha256": "b1dbe26cf2dbb87878d684e3dfa6c9f9d0c22b47a525c0306046a9d4c95c3d24"
+      "sha256": "3ecbd86183faad0b5a2d6015cac35a7b3366b5e680562c645c9e1fec4588a56a",
+      "capturedAt": "2026-09-20T05:56:24.369Z"
     },
     {
       "file": "fxaeon-portfolio-mobile.png",
@@ -79,7 +109,8 @@
         "width": 390,
         "height": 844
       },
-      "sha256": "9cead9cb32a44370456026e4a43b7b783d1f8e031a5e04321816721359b1496a"
+      "sha256": "b73f9bc22df825e9989be9597366285fceccb29d200893df85de51c4556b3fda",
+      "capturedAt": "2026-09-20T05:56:32.356Z"
     }
   ]
 }

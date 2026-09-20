@@ -1,18 +1,19 @@
 import { formatUnits, parseUnits, type Address } from 'viem';
 import { tokens as sdkTokens } from '@aladdindao/fx-sdk';
-import type { PositionInfo, TokenSymbol } from '@aladdindao/fx-sdk';
+import type { PositionInfo } from '@aladdindao/fx-sdk';
 import { assertConfiguredPublicClientChain, assertPublicClientChain, getEthereumClient, getFxReadFacade, type FxPublicClient } from '@/lib/fx';
 import { withReadDeadline } from '@/lib/fx/readFacade';
 import { positionPoolAddress } from '@/lib/fx/policy';
+import { discoverDirectWalletPositionIds, readDirectWalletPositionCount } from './directPositionDiscovery';
+import { FX_READ_DEADLINE_MS } from '@/lib/fx/readFacade';
+import { readCanonicalPositionContext, readCanonicalPositionInfo } from './canonicalPositionReader';
 
 export type UiMarket = 'ETH' | 'BTC';
 export type UiSide = 'long' | 'short';
 export type UiToken = 'ETH' | 'WETH' | 'stETH' | 'wstETH' | 'WBTC' | 'USDC' | 'USDT' | 'fxUSD';
 export type SaveToken = 'usdc' | 'fxUSD' | 'fxUSDBasePool';
 
-export const FXUSD_ADDRESS = sdkTokens.fxUSD as Address;
 export const FXSAVE_ADDRESS = '0x7743e50F534a7f9F1791DdE7dCD89F7783Eefc39' as Address;
-export const FXUSD_BASE_POOL_ADDRESS = sdkTokens.fxUSDBasePool as Address;
 
 export const TOKEN_META: Record<UiToken | 'fxSAVE' | 'fxUSDBasePool', { address: Address; decimals: number }> = {
   ETH: { address: sdkTokens.eth as Address, decimals: 18 },
@@ -144,7 +145,13 @@ export function unavailablePositionResult(reason: unknown): PositionReadResult {
 /** Short routes use the SDK's LSD exposure, not collateral/debt leverage. */
 export function positionDisplayLeverage(position: UiPosition): { value: number | null; label: string } {
   const value = position.side === 'short' ? position.info.lsdLeverage : position.info.currentLeverage;
-  return { value: Number.isFinite(value) && value >= 0 ? value : null, label: position.side === 'short' ? 'LSD leverage' : 'leverage' };
+  return { value: Number.isFinite(value) && value >= 0 ? value : null, label: 'leverage' };
+}
+
+/** Seed the editable target from the measured position leverage. */
+export function positionTargetLeverage(position: UiPosition): number | null {
+  const display = positionDisplayLeverage(position).value;
+  return display === null ? null : Number(Math.max(0.1, display).toFixed(2));
 }
 
 /** Scope asynchronous refreshes to one mounted wallet session. */
@@ -265,15 +272,118 @@ export async function verifyPositionGroupOwnership(params: {
   return verified;
 }
 
+/**
+ * Reconcile the SDK's fast indexer result with the wallet's canonical NFT
+ * balance. Indexer omissions and ownership races fall through to a bounded
+ * ownerOf scan; an incomplete scan rejects the group so callers never render
+ * a false empty wallet. Only the IDs found by that scan are hydrated through
+ * the pinned SDK-compatible canonical reader.
+ */
+export async function readPositionGroupWithDirectFallback(params: {
+  client: FxPublicClient;
+  sdk: Pick<ReturnType<typeof getFxReadFacade>, 'getPositions'>;
+  walletAddress: Address;
+  group: PositionGroup;
+  /** Test hook; production reserves most of the shared refresh deadline. */
+  indexerTimeoutMs?: number;
+}): Promise<PositionInfo[]> {
+  const deadlineAt = Date.now() + FX_READ_DEADLINE_MS;
+  // A zero balance is authoritative and avoids an indexer request entirely.
+  // This matters for disconnected/empty pools and keeps the fast path cheap.
+  const expectedCount = await readDirectWalletPositionCount({
+    client: params.client,
+    walletAddress: params.walletAddress,
+    group: params.group,
+    deadlineAt,
+  });
+  if (expectedCount === 0n) return [];
+
+  let indexed: PositionInfo[] = [];
+  try {
+    indexed = await withReadDeadline(params.sdk.getPositions({
+        userAddress: params.walletAddress,
+        market: params.group.market,
+        type: params.group.side,
+      }), Math.min(params.indexerTimeoutMs ?? 3_000, Math.max(1, deadlineAt - Date.now())));
+  } catch {
+    // A failed indexer query is precisely the case the direct wallet path is
+    // intended to cover. The canonical balance/read below remains authoritative.
+  }
+
+  let verified: PositionInfo[] = [];
+  try {
+    verified = await withReadDeadline(verifyPositionGroupOwnership({
+      client: params.client,
+      walletAddress: params.walletAddress,
+      group: params.group,
+      positions: indexed,
+    }), Math.max(1, deadlineAt - Date.now()));
+  } catch {
+    // Ownership mismatch or an incomplete canonical check invalidates the
+    // indexer set and forces a complete direct reconciliation.
+    verified = [];
+  }
+
+  const discovery = await discoverDirectWalletPositionIds({
+    client: params.client,
+    walletAddress: params.walletAddress,
+    group: params.group,
+    verifiedIndexerIds: verified.map((info) => info.positionId),
+    expectedCount,
+    deadlineAt,
+  });
+  if (!discovery.usedScan) {
+    const finalCount = await readDirectWalletPositionCount({
+      client: params.client,
+      walletAddress: params.walletAddress,
+      group: params.group,
+      deadlineAt,
+    });
+    if (finalCount !== expectedCount) throw new Error('position NFT ownership changed during indexer verification');
+    const byId = new Map(verified.map((info) => [info.positionId, info]));
+    return discovery.ids.map((positionId) => byId.get(positionId)).filter((info): info is PositionInfo => info !== undefined);
+  }
+
+  // Hydrate every scanned ID, including IDs also present in the indexer. The
+  // quote/rate context is shared per pool and reads are concurrency-limited so
+  // a large wallet cannot create an unbounded RPC burst.
+  const context = await withReadDeadline(readCanonicalPositionContext({
+    client: params.client,
+    group: params.group,
+  }), Math.max(1, deadlineAt - Date.now()));
+  const hydrated: PositionInfo[] = [];
+  for (let start = 0; start < discovery.ids.length; start += 8) {
+    const batch = discovery.ids.slice(start, start + 8);
+    hydrated.push(...await withReadDeadline(Promise.all(batch.map((positionId) => readCanonicalPositionInfo({
+      client: params.client,
+      group: params.group,
+      positionId,
+      context,
+    }))), Math.max(1, deadlineAt - Date.now())));
+  }
+  const finalVerified = await withReadDeadline(verifyPositionGroupOwnership({
+    client: params.client,
+    walletAddress: params.walletAddress,
+    group: params.group,
+    positions: hydrated,
+  }), Math.max(1, deadlineAt - Date.now()));
+  const finalCount = await readDirectWalletPositionCount({
+    client: params.client,
+    walletAddress: params.walletAddress,
+    group: params.group,
+    deadlineAt,
+  });
+  if (finalCount !== expectedCount) throw new Error('position NFT ownership changed during direct discovery');
+  return finalVerified;
+}
+
 export async function readAllPositionsDetailed(walletAddress: string): Promise<PositionReadResult> {
   await withReadDeadline(assertConfiguredPublicClientChain(1));
   const sdk = getFxReadFacade();
   const client = getEthereumClient();
-  return settlePositionGroups((group) => sdk.getPositions({
-    userAddress: walletAddress,
-    market: group.market,
-    type: group.side,
-  }), (group, positions) => verifyPositionGroupOwnership({ client, walletAddress, group, positions }));
+  return settlePositionGroups(
+    (group) => readPositionGroupWithDirectFallback({ client, sdk, walletAddress: walletAddress as Address, group }),
+  );
 }
 
 /**
@@ -398,8 +508,4 @@ export async function getSdkReductionAmountWei(params: {
     wstEthRateWei = await client.readContract({ address: tokenAddress('wstETH'), abi: WSTETH_RATE_ABI, functionName: 'stEthPerToken' });
   }
   return calculateSdkReductionAmountWei({ ...params, wstEthRateWei });
-}
-
-export function sdkTokenSymbol(token: UiToken): TokenSymbol {
-  return token === 'ETH' ? 'ETH' : token === 'fxUSD' ? 'FXUSD' : token as TokenSymbol;
 }

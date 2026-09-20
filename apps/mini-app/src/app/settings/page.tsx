@@ -89,9 +89,10 @@ export default function SettingsPage() {
             <span className="flex items-center gap-1.5"><Sliders className="h-3.5 w-3.5" aria-hidden="true" /> {t('settings.maxSlippage')}</span>
           </h2>
           <div className={`${styles.utilityCard} p-4`}>
-            <p className="text-[13px] leading-relaxed text-mut">Choose the largest change in output you will accept when a route uses slippage protection.</p>
+            <p id="settings-slippage-help" className="text-[13px] leading-relaxed text-mut">Set the maximum output change you&apos;ll accept when a trade executes.</p>
             <ChoiceGrid
               ariaLabel={t('settings.maxSlippage')}
+              ariaDescribedBy="settings-slippage-help"
               value={settings.slippageBps}
               options={SLIPPAGE_PRESETS.map((bps) => ({ value: bps, label: `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 1)}%` }))}
               onChange={(value) => update('slippageBps', value)}
@@ -105,6 +106,11 @@ export default function SettingsPage() {
           <Button onClick={save}>
             {saved ? <><Check className="h-4 w-4" aria-hidden="true" /> {t('common.saved')}</> : t('common.save')}
           </Button>
+          {saved && (
+            <p role="status" aria-live="polite" aria-atomic="true" className="mt-2 text-center text-[11px] leading-relaxed text-success">
+              {t('common.saved')}
+            </p>
+          )}
           {saveError && <p role="alert" className="mt-2 text-center text-[11px] leading-relaxed text-danger">{saveError}</p>}
         </div>
 
@@ -120,19 +126,21 @@ export default function SettingsPage() {
 
 function ChoiceGrid<T extends string | number>({
   ariaLabel,
+  ariaDescribedBy,
   value,
   options,
   columns = 'grid-cols-4',
   onChange,
 }: {
   ariaLabel: string;
+  ariaDescribedBy?: string;
   value: T;
   options: Array<{ value: T; label: string }>;
   columns?: string;
   onChange: (value: T) => void;
 }) {
   return (
-    <div className={`grid ${columns} gap-2`} role="radiogroup" aria-label={ariaLabel}>
+    <div className={`grid ${columns} gap-2`} role="radiogroup" aria-label={ariaLabel} aria-describedby={ariaDescribedBy}>
       {options.map((option) => {
         const active = value === option.value;
         return (

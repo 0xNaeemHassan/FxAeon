@@ -59,11 +59,11 @@ function PrivyWalletControls() {
     }
   }, [authenticated, connect, createWallet]);
 
-  const handleConnect = useCallback(async () => {
+  const handleConnect = useCallback(async (external = false) => {
     setBusy('connect');
     setError('');
     try {
-      await connect();
+      await connect({ external });
     } catch (cause) {
       setError(userSafeError(cause, 'Wallet connection was cancelled.'));
       haptic('error');
@@ -158,7 +158,7 @@ function PrivyWalletControls() {
           <p className="mt-0.5 text-[12.5px] leading-relaxed text-mut">
             Use another EVM wallet with FxAeon.
           </p>
-          <Button variant="ghost" onClick={() => void handleConnect()} loading={busy === 'connect'} className="mt-3">
+          <Button variant="ghost" onClick={() => void handleConnect(true)} loading={busy === 'connect'} className="mt-3">
             Connect external wallet
           </Button>
         </span>
@@ -215,17 +215,10 @@ function BrowserWalletControls() {
   if (!wallet.ready) return <div role="status" aria-live="polite"><Card className="h-24 animate-pulse"><span className="sr-only">Loading wallet provider</span></Card></div>;
   if (!wallet.authenticated || !wallet.selectedWallet) {
     return (
-      <Card className="flex flex-col gap-3">
-        <div className="flex items-start gap-3">
-          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)]"><Wallet className="h-[18px] w-[18px] text-mint" strokeWidth={2} aria-hidden="true" /></span>
-          <div className="min-w-0 flex-1">
-            <p className="text-[14px] font-medium">Connect a browser wallet</p>
-            <p className="mt-0.5 text-[12.5px] leading-relaxed text-mut">Use any EVM wallet extension. Your wallet keeps control of your private key.</p>
-          </div>
-        </div>
+      <div className="flex flex-col gap-2">
         <Button onClick={connect} loading={busy}>Connect wallet</Button>
         {error && <p role="alert" className="rounded-xl border border-[var(--danger-dim)] bg-[var(--danger-dim)] px-3 py-2.5 text-[12px] leading-relaxed text-danger">{error}</p>}
-      </Card>
+      </div>
     );
   }
   return (

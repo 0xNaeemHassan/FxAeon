@@ -84,11 +84,11 @@ test('an on-chain revert stays separate from an unverified receipt', () => {
   assert.deepEqual(transactionStepProgress(step({ status: 'failed', receipt: receipt('reverted') })), { state: 'reverted', label: 'Reverted' });
 });
 
-test('receipt-confirmed position progress distinguishes the following block from the state read', () => {
+test('receipt-confirmed position progress distinguishes confirmation from the state read', () => {
   const waiting = confirmedUpdateCopy('increasePosition', false);
   const reading = confirmedUpdateCopy('increasePosition', true);
   assert.equal(waiting.label, 'Confirmed · updating position');
-  assert.match(waiting.body, /Waiting for the next block/);
+  assert.match(waiting.body, /Receipt confirmed\. Updating position/);
   assert.equal(reading.label, waiting.label);
   assert.match(reading.body, /Verifying updated position/);
   assert.equal(confirmedUpdateCopy('depositFxSave', true).label, 'Confirmed · updating balances');

@@ -7,6 +7,7 @@ import {
   newlyVerifiedPositions,
   POSITION_GROUPS,
   positionDisplayLeverage,
+  positionTargetLeverage,
   positionIsStale,
   settlePositionGroups,
   unavailablePositionResult,
@@ -195,9 +196,17 @@ test('chain-level read failure marks every retained pool as last verified', () =
 test('position leverage uses side-specific SDK semantics and rejects invalid values', () => {
   const info = position(1, { currentLeverage: 1.5, lsdLeverage: 0.5 });
   assert.deepEqual(positionDisplayLeverage({ market: 'ETH', side: 'long', info }), { value: 1.5, label: 'leverage' });
-  assert.deepEqual(positionDisplayLeverage({ market: 'ETH', side: 'short', info }), { value: 0.5, label: 'LSD leverage' });
+  assert.deepEqual(positionDisplayLeverage({ market: 'ETH', side: 'short', info }), { value: 0.5, label: 'leverage' });
   assert.equal(positionDisplayLeverage({ market: 'BTC', side: 'short', info: { ...info, lsdLeverage: NaN } }).value, null);
   assert.equal(positionDisplayLeverage({ market: 'BTC', side: 'long', info: { ...info, currentLeverage: -1 } }).value, null);
+});
+
+test('editable leverage target preserves the displayed precision when reopening a selected position', () => {
+  const info = position(1, { currentLeverage: 2.03, lsdLeverage: 0.5 });
+  assert.equal(positionTargetLeverage({ market: 'ETH', side: 'long', info }), 2.03);
+  assert.equal(positionTargetLeverage({ market: 'ETH', side: 'short', info }), 0.5);
+  assert.equal(positionTargetLeverage({ market: 'ETH', side: 'long', info: { ...info, currentLeverage: 0 } }), 0.1);
+  assert.equal(positionTargetLeverage({ market: 'ETH', side: 'long', info: { ...info, currentLeverage: NaN } }), null);
 });
 
 test('late and superseded position reads cannot update a wallet session', async () => {

@@ -19,9 +19,33 @@
   box-shadow: 0 0 0 3px var(--mint-dim);
 }
 
+/* The financial wrapper owns the focus ring. Remove the browser's second
+ * inner outline while keeping a clear keyboard indicator on the wrapper. */
+.formField :global(input:focus-visible),
+.amountField :global(input:focus-visible),
+.rangeField :global(input:focus-visible) {
+  outline: none;
+  outline-offset: 0;
+}
+
+@media (forced-colors: active) {
+  .formField:focus-within,
+  .amountField:focus-within,
+  .rangeField:focus-within {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}
+
 .compactAmountField { min-width: 0; }
 .amountUsdMeta,
 .amountBalanceMeta { min-width: 0; }
+
+.slippageHelp { position: relative; display: inline-flex; flex: 0 0 24px; align-items: center; justify-content: center; }
+.slippageHelpButton { display: inline-flex; width: 44px; height: 44px; margin: -10px; align-items: center; justify-content: center; border-radius: 999px; color: var(--mut-2); }
+.slippageHelpButton:hover,
+.slippageHelpButton:focus-visible { color: var(--mint); background: var(--mint-dim); }
+.slippageHelpPopup { position: absolute; right: -4px; bottom: calc(100% + 8px); z-index: 20; width: max-content; max-width: min(280px, calc(100vw - 32px)); padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface-2); color: var(--text); font-size: 12px; font-weight: 500; line-height: 1.4; box-shadow: var(--elevation-2); }
 
 /* Trade keeps the numeric leverage input and its slider in one compact row.
  * Both controls remain full-size targets; only the decorative end labels are
@@ -30,6 +54,10 @@
 .compactRangeField > div:first-child { min-width: 0; }
 .compactRangeField > div:last-child { margin-top: 0 !important; border-top: 0 !important; padding-top: 0 !important; }
 .compactRangeField > div:last-child > div { display: none; }
+
+.leverageInput { appearance: textfield; -moz-appearance: textfield; }
+.leverageInput::-webkit-inner-spin-button,
+.leverageInput::-webkit-outer-spin-button { margin: 0; -webkit-appearance: none; }
 
 .compactTokenSelect { display: inline-flex; min-width: 0; }
 .compactTokenSelect > button {
@@ -107,7 +135,7 @@
   background: var(--input);
   padding: 0 12px;
 }
-.tokenPickerSearch:focus-within { border-color: var(--mint); }
+.tokenPickerSearch:focus-within { border-color: var(--mint); box-shadow: 0 0 0 3px var(--mint-dim); }
 .tokenPickerSearchInput {
   min-height: 48px;
   min-width: 0;
@@ -117,6 +145,7 @@
   font-size: 16px;
   outline: none;
 }
+.tokenPickerSearch .tokenPickerSearchInput:focus-visible { outline: none; outline-offset: 0; }
 
 .tokenPickerList {
   min-height: 0;
@@ -174,6 +203,15 @@
   .tokenPickerRow { transition: none; }
 }
 
+@media (forced-colors: active) {
+  .tokenPickerSearch:focus-within {
+    border-color: Highlight;
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+    box-shadow: none;
+  }
+}
+
 .marketChart { min-width: 0; }
 .marketMiniCard {
   border-radius: 20px;
@@ -193,6 +231,8 @@
   gap: 14px;
 }
 
+.positionsHeading { margin: 0; color: var(--text); font-size: 28px; font-weight: 700; letter-spacing: -.03em; line-height: 1.1; }
+
 .tradePageHeading {
   align-items: center;
   margin-bottom: 0;
@@ -203,12 +243,7 @@
   letter-spacing: -0.055em;
 }
 
-.pageEyebrow {
-  color: var(--mut);
-  font-size: 13px;
-  letter-spacing: 0;
-  text-transform: none;
-}
+.positionsShortcut { flex: 0 0 auto; white-space: nowrap; }
 
 .positionActions { border: 0; background: transparent; padding: 0; }
 .positionActions :global(.segmented) {
@@ -358,8 +393,8 @@
 .positionListItem { overflow: hidden; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); }
 .positionListItem :global([data-position-key]) { border: 0; border-radius: 0; background: transparent; }
 .positionListItem :global([data-position-key][aria-pressed='true']) { box-shadow: inset 3px 0 0 var(--mint); }
-.positionQuickActions { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; border-top: 1px solid var(--line); background: var(--line); }
-.positionQuickActionsWithBorrow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.positionQuickActions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; border-top: 1px solid var(--line); background: var(--line); }
+.positionQuickActionsWithBorrow { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .positionQuickActions button { display: flex; min-height: 44px; align-items: center; justify-content: center; gap: 6px; background: var(--surface-2); color: var(--mut); font-size: 12px; font-weight: 700; }
 .positionQuickActions a { display: flex; min-height: 44px; align-items: center; justify-content: center; gap: 6px; background: var(--surface-2); color: var(--mut); font-size: 12px; font-weight: 700; }
 .positionQuickActions button:hover { color: var(--text); }
@@ -409,10 +444,13 @@
 .positionsRoot :global(.button-ghost) { border-radius: 999px; background: var(--surface-2); }
 
 @media (min-width: 840px) {
-  .tradeLayout { grid-template-columns: minmax(0, 1fr) minmax(340px, 0.86fr); align-items: start; }
+  .tradeLayout { grid-template-columns: minmax(0, 1fr) minmax(360px, 420px); align-items: start; gap: 24px; }
+  .ticketColumn { max-width: 420px; }
   .marketColumn :global(.market-chart-panel) { position: sticky; top: 24px; }
-  .positionManagerGrid { grid-template-columns: minmax(0, .92fr) minmax(380px, 1.08fr); align-items: start; gap: 24px; }
+  .positionManagerGrid { grid-template-columns: minmax(0, 1fr) minmax(380px, 420px); align-items: start; gap: 24px; }
+  .positionManageColumn { max-width: 420px; }
   .positionManageColumn { position: sticky; top: 24px; }
+  .positionsDisconnectedRoot .positionsWorkspace { max-width: 560px; margin-inline: auto; }
 }
 
 /* Compact tablets keep the chart and ticket side by side while retaining the
@@ -432,13 +470,21 @@
 }
 
 @media (max-width: 640px) {
+  .positionsHeading {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
   .tradeWorkspace,
   .positionsWorkspace { gap: 10px; }
-  /* Positions has its own focused route. Keep the connected Trade ticket
-   * single-frame on phones instead of repeating the full list below it. */
-  .tradeWorkspace > :global(section[aria-labelledby='trade-open-positions-title']) { display: none; }
-  .tradePageHeading .pageEyebrow { display: none; }
-  .tradePageHeading h1 { margin-top: 0; }
   .tradePositionActions a { font-size: 10.5px; }
 
   /* The market header remains the single price authority, but uses a short
@@ -466,12 +512,16 @@
     padding: 4px 6px;
   }
   .marketColumn :global(.market-chart-market-switch .segmented-option) { min-height: 44px; }
+  .marketColumn :global(.market-chart-market-switch .segmented-option > span:last-child) { display: none; }
+  .marketColumn :global(.market-chart-market-switch .segmented-option > span:first-child) { gap: 5px; white-space: nowrap; }
+  .marketColumn :global(.market-chart-market-switch .segmented-option .market-option-icon svg) { width: 18px; height: 18px; }
   .marketColumn :global(.market-chart-market-switch .segmented) { padding: 2px; }
   .marketColumn :global(.market-chart-toggle) {
     min-height: 48px;
     border-bottom: 0;
     padding-inline: 10px;
     font-size: 11px;
+    white-space: nowrap;
   }
   .marketColumn :global(.market-chart-content) { grid-column: 1 / -1; }
 
@@ -501,6 +551,7 @@
   .tradeTicket :global(.reviewTrigger) .button,
   .tradeTicket :global(.reviewTrigger) .primaryAction { width: 100%; }
   .ticketHeader {
+    grid-column: 1 / -1;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
@@ -511,7 +562,8 @@
   .ticketHeader > span { padding: 3px 6px; font-size: 10px; }
   .ticketKicker { font-size: 10px; }
   .sideControl :global(.segmented-option) { min-height: 44px; padding-block: 3px; font-size: 12px; }
-  .sideControl :global(.segmented-option) > span:last-child { margin-top: 0; font-size: 10px; }
+  .sideControl { grid-column: 1 / -1; }
+  .sideControl :global(.segmented-option) > span:last-child { margin-top: 1px; font-size: 11px; line-height: 1.1; white-space: nowrap; }
   .fieldStack {
     grid-column: 1 / -1;
     display: grid;
@@ -519,7 +571,7 @@
     gap: 6px;
   }
   .fieldStack > :first-child { grid-column: 1 / -1; }
-  .fieldStack > :nth-child(2) { min-width: 0; }
+  .fieldStack > :nth-child(2) { grid-column: 1 / -1; min-width: 0; }
   .fieldStack > :nth-child(3) { grid-column: 1 / -1; align-self: end; }
   .compactAmountField {
     display: grid;
@@ -529,22 +581,54 @@
   .compactAmountField > :first-child,
   .compactAmountField > .amountField { grid-column: 1 / -1; }
   .compactAmountField > :first-child { margin-bottom: 3px; }
-  .compactAmountField .amountUsdMeta,
-  .compactAmountField .amountBalanceMeta {
+  .compactAmountField .amountUsdMeta {
     margin-top: 3px;
     min-height: 14px;
+    font-size: 12px;
     flex-wrap: nowrap;
     gap: 3px;
     overflow: hidden;
     white-space: nowrap;
   }
-  .compactAmountField .amountBalanceMeta { justify-content: flex-end; }
-  .compactAmountField .amountBalanceMeta > :first-child { justify-content: flex-end; }
+  /* Keep the verified balance readable on phones and give the four percentage
+   * targets their own full-width row. Sharing one narrow row clipped the
+   * balance and hid the 25% target when the wallet returned a live value. */
+  .compactAmountField .amountBalanceMeta {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 4px;
+    margin-top: 3px;
+    min-height: 14px;
+    font-size: 12px;
+    overflow: visible;
+    white-space: normal;
+  }
+  .compactAmountField .amountBalanceMeta > :first-child {
+    width: 100%;
+    min-width: 0;
+    justify-content: flex-start;
+  }
+  .compactAmountField .amountBalanceMeta > :last-child {
+    display: flex;
+    width: 100%;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    gap: 4px;
+  }
+  .compactAmountField .amountBalanceMeta :global(.fraction-button) {
+    flex: 0 0 44px;
+    min-width: 44px;
+    font-size: 12px;
+  }
   .tradeRoot :global(.amount-control) { min-height: 52px; padding-inline: 10px; }
   .tradeRoot :global(.amount-control) input { font-size: 24px; }
   .tradeRoot .compactTokenSelect > button { min-height: 44px; max-width: 126px; padding: 5px 8px; }
   .tradeRoot :global(.range-control) { padding: 8px; }
-  .tradeRoot .compactRangeField { grid-template-columns: minmax(70px, .72fr) minmax(90px, 1fr); gap: 7px; padding: 5px; }
+  .tradeRoot .compactRangeField { grid-template-columns: 80px minmax(0, 1fr); gap: 8px; padding: 5px; }
+  .tradeRoot .compactRangeField > div:first-child { min-width: 0; }
+  .tradeRoot .compactRangeField > div:last-child { min-width: 0; }
+  .tradeRoot .compactRangeField > div:last-child > div { display: none; }
   .tradeRoot .compactRangeField :global(.field-control) { min-height: 44px; padding-inline: 9px; font-size: 17px; }
   .tradeRoot :global(.range-control) .lever { margin-top: 2px; }
   .advancedDetails summary { min-height: 42px; }
@@ -588,7 +672,7 @@
   .marketColumn :global(.market-chart-header p:last-child) { margin-top: 0; font-size: 10px; }
   .marketColumn :global(.market-chart-market-switch .segmented-option) { min-height: 44px; }
   .marketColumn :global(.market-chart-market-switch .market-option-icon svg) { width: 16px; height: 16px; }
-  .marketColumn :global(.market-chart-market-switch .segmented-option span) { font-size: 10px; }
+  .marketColumn :global(.market-chart-market-switch .segmented-option span) { font-size: 12px; }
   .marketColumn :global(.market-chart-toggle) { min-height: 46px; }
 }
 
@@ -603,16 +687,18 @@
   .tradeRoot .tradePageHeading > a { min-height: 44px; padding-block: 2px; }
   .tradeRoot .marketColumn { gap: 4px; }
   .tradeRoot .marketColumn :global(.market-chart-header) { padding-block: 3px; }
-  .tradeRoot .marketColumn :global(.market-chart-token) { width: 24px; height: 24px; }
-  .tradeRoot .marketColumn :global(.market-chart-header h2) { font-size: 13px; }
-  .tradeRoot .marketColumn :global(.market-chart-header .text-display) { font-size: 16px; }
+  .tradeRoot .marketColumn :global(.market-chart-token) { width: 28px; height: 28px; }
+  .tradeRoot .marketColumn :global(.market-chart-header h2) { font-size: 14px; }
+  .tradeRoot .marketColumn :global(.market-chart-header .text-display) { font-size: 18px; }
   .tradeRoot .marketColumn :global(.market-chart-market-switch .segmented-option) { min-height: 44px; }
-  .tradeRoot .marketColumn :global(.market-chart-market-switch .segmented-option span) { font-size: 9px; }
-  .tradeRoot .marketColumn :global(.market-chart-toggle) { min-height: 44px; padding-inline: 7px; font-size: 10px; }
+  .tradeRoot .marketColumn :global(.market-chart-market-switch .segmented-option span) { font-size: 12px; }
+  .tradeRoot .marketColumn :global(.market-chart-market-switch .segmented-option > span:last-child) { display: none; }
+  .tradeRoot .marketColumn :global(.market-chart-market-switch .segmented-option > span:first-child) { gap: 4px; }
+  .tradeRoot .marketColumn :global(.market-chart-toggle) { min-height: 44px; padding-inline: 7px; font-size: 11px; }
   .tradeRoot .tradeTicket { gap: 3px; padding: 6px 8px; }
   .tradeRoot .ticketHeader h2 { font-size: 14px; }
   .tradeRoot .sideControl :global(.segmented-option) { min-height: 44px; font-size: 11px; }
-  .tradeRoot .sideControl :global(.segmented-option > span:last-child) { font-size: 9px; }
+  .tradeRoot .sideControl :global(.segmented-option > span:last-child) { font-size: 11px; }
   .tradeRoot .fieldStack { grid-template-columns: minmax(0, 1.1fr) minmax(82px, .9fr); gap: 4px; }
   .tradeRoot .fieldStack > :first-child { grid-column: 1; }
   .tradeRoot .fieldStack > :nth-child(2) { grid-column: 2; }
@@ -623,10 +709,10 @@
   .tradeRoot .compactAmountField { display: flex; flex-wrap: wrap; gap: 2px 4px; }
   .tradeRoot .compactAmountField > :first-child,
   .tradeRoot .compactAmountField > .amountField { width: 100%; }
-  .tradeRoot .compactAmountField .amountUsdMeta,
-  .tradeRoot .compactAmountField .amountBalanceMeta { min-height: 11px; margin-top: 0; font-size: 9px; }
+  .tradeRoot .compactAmountField .amountUsdMeta { min-height: 11px; margin-top: 0; font-size: 12px; }
+  .tradeRoot .compactAmountField .amountBalanceMeta { width: 100%; min-height: 11px; margin-top: 0; font-size: 12px; }
   .tradeRoot :global(.range-control) { padding: 5px; }
-  .tradeRoot .compactRangeField { display: grid; grid-template-columns: minmax(68px, .72fr) minmax(92px, 1fr); gap: 6px; padding: 2px; }
+  .tradeRoot .compactRangeField { display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: 6px; padding: 2px; }
   .tradeRoot .compactRangeField > div:first-child { display: flex; min-width: 0; align-items: center; gap: 4px; }
   .tradeRoot .compactRangeField > div:last-child { display: block; }
   .tradeRoot .compactRangeField :global(.field-control) { min-height: 46px; padding-inline: 7px; font-size: 16px; }
@@ -639,7 +725,7 @@
      ticket can scroll, while both numeric inputs keep usable widths. */
   .tradeRoot .fieldStack { display: flex; flex-direction: column; gap: 8px; }
   .tradeRoot .fieldStack > :nth-child(3) { align-self: stretch; }
-  .tradeRoot .compactRangeField { width: 100%; grid-template-columns: minmax(0, 1fr) minmax(92px, .72fr); }
+  .tradeRoot .compactRangeField { width: 100%; grid-template-columns: 80px minmax(0, 1fr); }
   .tradeRoot .compactRangeField input[type='range'] { min-width: 0; width: 100%; }
   .tradeRoot .compactTokenSelect > button { max-width: none; width: auto; }
 }
@@ -654,10 +740,8 @@
 @media (max-width: 640px) {
   .positionsCompactRoot .positionsWorkspace { gap: 8px; }
   .positionsCompactRoot .positionManagerGrid { gap: 10px; }
-  /* Put the active manager before the list on phones. The first position's
-     controls and its primary action are immediately usable; the list remains
-     available below for switching positions. */
-  .positionsCompactRoot .positionManageColumn { order: -1; }
+  /* Keep the wallet's positions first. Explicit management actions and deep
+     links scroll to the editor without replacing the initial portfolio view. */
   .positionsCompactRoot .positionSectionHeader { margin-bottom: 7px; }
   .positionsCompactRoot .positionList { gap: 6px; }
   .positionsCompactRoot .positionListItem { border-radius: 16px; }
@@ -691,4 +775,13 @@
   .positionsCompactRoot :global(.amount-control) input { font-size: 22px; }
   .positionsCompactRoot .closeNotice { padding: 9px; }
   .positionsCompactRoot .closeNotice small { font-size: 10px; line-height: 1.3; }
+  .positionsCompactRoot .positionQuickActions button,
+  .positionsCompactRoot .positionQuickActions a {
+    min-width: 0;
+    gap: 3px;
+    padding-inline: 2px;
+    font-size: 10px;
+    white-space: nowrap;
+  }
+  .positionsCompactRoot .positionQuickActions svg { width: 12px; height: 12px; }
 }

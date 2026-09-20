@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Clock3, RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ChevronDown, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
-import { AppShell, Button, Card, LoadingRegion, Skeleton } from '@/components/ui';
+import { AppShell, Button, Card } from '@/components/ui';
 import { ActionReview, type ActionReviewStage } from '@/components/ActionReview';
 import { AmountField, InfoNote, Segmented, SlippageField, ToggleRow, TokenSelect, useWalletTokenBalances, type TokenBalanceMap } from '@/components/ProtocolForm';
 import { useUsdPrices } from '@/components/PriceProvider';
@@ -30,6 +30,7 @@ import { fetchFxSaveApy, type FxSaveApyResponse } from '@/lib/fxSaveApy';
 import { formatAmount, parseAmount, type SaveToken } from '@/app/trade/fxUi';
 import { tokenSymbol } from '@/lib/fx/tokenPresentation';
 import styles from '@/components/FlowWorkspace.module.css';
+import { ValueOrSkeleton } from '@/components/MissingValue';
 
 type EarnMode = 'deposit' | 'withdraw' | 'claim';
 
@@ -130,10 +131,6 @@ export default function EarnPage() {
   const saveBalanceStatus = wallet.address
     ? (balanceSnapshot.status === 'idle' ? 'loading' : balanceSnapshot.status)
     : undefined;
-  const saveBalanceState = wallet.address
-    ? saveBalances?.[token] ?? { status: saveBalanceStatus ?? 'loading' as const }
-    : undefined;
-
   const resetEarnContext = useCallback((nextMode: EarnMode = 'deposit', nextToken: SaveToken = 'fxUSD') => {
     const defaults = resetTransactionAmounts();
     setMode(nextMode);
@@ -288,11 +285,12 @@ export default function EarnPage() {
         if (result[0].status === 'fulfilled') {
           setConfig(result[0].value);
           setError('');
+          setReadWarnings([]);
         } else {
-          setError(userSafeError(result[0].reason, ''));
+          setError('');
+          setReadWarnings(['vault configuration']);
         }
         setData(null);
-        setReadWarnings([]);
         return;
       }
       const [nextConfig, balance, redeemStatus, claimable] = await Promise.allSettled([
@@ -313,12 +311,19 @@ export default function EarnPage() {
       setConfig(nextConfigValue);
       setData(nextData);
       const warnings: string[] = [];
+      if (nextConfig.status === 'rejected') warnings.push('vault configuration');
+      if (balance.status === 'rejected') warnings.push('balance');
+      if (redeemStatus.status === 'rejected') warnings.push('redemption status');
+      if (claimable.status === 'rejected') warnings.push('claim status');
       setReadWarnings(warnings);
-      if (nextData.balance || nextData.redeemStatus || nextData.claimable) setError('');
-      else setError('');
+      setError('');
     } catch (cause) {
       if (!readGuard.current.isCurrent(request)) return;
       setError(userSafeError(cause, ''));
+      // A failed chain guard means none of the account-scoped reads are
+      // current. Keep any previous snapshot visible for context, but prevent
+      // every planner from treating it as authorization for a new action.
+      setReadWarnings(['vault configuration', 'balance', 'redemption status', 'claim status']);
     } finally {
       readGuard.current.finish(request);
       if (readGuard.current.isCurrent(request)) setLoading(false);
@@ -355,11 +360,13 @@ export default function EarnPage() {
 
   const planBuilder = useMemo(() => {
     if (!wallet.address) return null;
+    if (readWarnings.includes('vault configuration')) return null;
     if (mode === 'claim') {
-      if (!claimAvailability(walletData?.claimable).canReview) return null;
+      if (readWarnings.includes('claim status') || !claimAvailability(walletData?.claimable).canReview) return null;
       return () => planRedeem({ userAddress: wallet.address! });
     }
     if (mode === 'deposit') {
+      if (readWarnings.includes('balance')) return null;
       const amountWei = parseAmount(amount, token === 'usdc' ? 'USDC' : token === 'fxUSDBasePool' ? 'fxUSDBasePool' : 'fxUSD');
       if (!amountWei) return null;
       const slippageValue = Number(slippage);
@@ -374,7 +381,7 @@ export default function EarnPage() {
     const sharesWei = shares.toLowerCase() === 'all'
       ? walletData?.balance?.balanceWei ?? null
       : parseAmount(shares, 'fxSAVE');
-    if (!sharesWei || !walletData?.balance || sharesWei > walletData.balance.balanceWei) return null;
+    if (readWarnings.includes('balance') || !sharesWei || !walletData?.balance || sharesWei > walletData.balance.balanceWei) return null;
     const slippageValue = Number(slippage);
     if (instant && token !== 'fxUSDBasePool' && (!Number.isFinite(slippageValue) || slippageValue <= 0 || slippageValue > MAX_FX_SLIPPAGE_PERCENT)) return null;
     return () => planWithdrawFxSave({
@@ -384,17 +391,22 @@ export default function EarnPage() {
       instant: token === 'fxUSDBasePool' ? false : instant,
       slippage: instant && token !== 'fxUSDBasePool' ? slippageValue : undefined,
     });
-  }, [amount, instant, mode, shares, slippage, token, wallet.address, walletData]);
+  }, [amount, instant, mode, readWarnings, shares, slippage, token, wallet.address, walletData]);
 
   return (
-    <AppShell title="Earn" subtitle="Deposit, withdraw, and claim fxSAVE.">
+    <AppShell>
       <div className={`${styles.workspace} ${styles.earnWorkspace}`}>
+        <h1 className={styles.earnHeading}>Earn</h1>
         <nav className={`grid grid-cols-2 ${styles.productSwitch}`} aria-label="Savings and borrowing">
           <span aria-current="page" className="flex min-h-11 items-center justify-center rounded-lg bg-[var(--mint-dim)] px-3 text-[13px] font-semibold text-[var(--text)]">fxSAVE</span>
           <Link href="/borrow" className="glass-press flex min-h-11 items-center justify-center rounded-lg px-3 text-[13px] font-semibold text-mut">Borrow fxUSD</Link>
         </nav>
         {!wallet.address ? (
-          <>
+          <div className={`${styles.earnFlowGrid} ${styles.earnFlowGridDisconnected}`}>
+            <div className={styles.earnContextColumn}>
+              {config && <VaultDetails config={config} />}
+            </div>
+            <div className={styles.earnActionColumn}>
             <FxSaveApyCard value={fxSaveApy} status={fxSaveApyStatus} />
             <div className="rounded-2xl bg-[var(--surface-2,var(--input))] p-1">
               <Segmented
@@ -409,7 +421,7 @@ export default function EarnPage() {
               />
             </div>
             <Card data-flow-stage={reviewStage} className={`${styles.focusCard} ${styles.disconnectedEarnCard} p-5`}>
-              {reviewStage === 'input' && <DisconnectedEarnForm
+              {reviewStage === 'input' && <EarnActionEditor
                 mode={mode}
                 token={token}
                 onTokenChange={changeToken}
@@ -426,35 +438,38 @@ export default function EarnPage() {
               <ActionReview
                 planBuilder={planBuilder}
                 disabled={false}
-                label={mode === 'claim' ? 'Review claim' : mode === 'withdraw' ? 'Review withdrawal' : 'Review deposit'}
-                operationLabel={mode === 'claim' ? 'Claim fxSAVE redemption' : mode === 'withdraw' ? 'Withdraw fxSAVE' : 'Deposit into fxSAVE'}
+                label={mode === 'claim' ? 'Claim fxSAVE' : mode === 'withdraw' ? 'Withdraw fxSAVE' : 'Deposit into fxSAVE'}
+                operationLabel={mode === 'claim' ? 'Claim fxSAVE' : mode === 'withdraw' ? 'Withdraw fxSAVE' : 'Deposit into fxSAVE'}
                 draftActionKey={mode === 'claim' ? 'earn:claim' : mode === 'withdraw' ? 'earn:withdraw' : 'earn:deposit'}
                 draftResumePath="/earn"
                 draftState={draftState}
                 resumeReview={resumeReview}
                 onStageChange={setReviewStage}
-              />
+            />
             </Card>
-            {config && <VaultDetails config={config} />}
-          </>
+            </div>
+          </div>
         ) : loading && !walletData ? (
-          <LoadingRegion label="Reading fxSAVE state" className="flex flex-col gap-3.5">
-            <Skeleton className="h-44" />
-            <Skeleton className="h-11" />
-            <Skeleton className="h-64" />
-          </LoadingRegion>
+          <div role="status" aria-live="polite" className="flex min-h-16 items-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-4 py-3 text-[12px] text-mut">
+            <RefreshCw aria-hidden="true" className="h-4 w-4 animate-spin text-mint" />
+            Reading fxSAVE data…
+          </div>
         ) : error && !walletData ? (
           <div role="alert" aria-live="polite" className="flex flex-col gap-3 rounded-2xl border border-[var(--line)] bg-[var(--warn-dim)] p-5">
-            <div><p className="font-semibold text-warn">fxSAVE data is unavailable.</p><p className="mt-1 text-[12px] leading-relaxed text-mut">Your last verified savings state is not available yet. Retry the fxSAVE read before reviewing an action.</p></div>
-            <Button aria-label="Retry fxSAVE state" onClick={() => void load()}><RefreshCw className="h-4 w-4" aria-hidden="true" /> Retry fxSAVE data</Button>
+            <div><p className="font-semibold text-warn">fxSAVE data is unavailable.</p><p className="mt-1 text-[12px] leading-relaxed text-mut">Retry before continuing.</p></div>
+            <Button aria-label="Retry fxSAVE read" onClick={() => void load()}><RefreshCw className="h-4 w-4" aria-hidden="true" /> Retry fxSAVE read</Button>
           </div>
         ) : walletData ? (
-          <>
+          <div className={styles.earnFlowGrid}>
+            <div className={styles.earnContextColumn}>
             {(readWarnings.length > 0 || error) && (
-              <div role="status" aria-label="Partial fxSAVE state" aria-live="polite" className="rounded-xl border border-[var(--line)] bg-[var(--warn-dim)] px-3 py-2 text-[12px] text-warn">Some fxSAVE data could not be refreshed. Verified values remain visible; retry before signing.</div>
+              <div role="status" aria-label="Partial fxSAVE state" aria-live="polite" className="rounded-xl border border-[var(--line)] bg-[var(--warn-dim)] px-3 py-2 text-[12px] text-warn">Some fxSAVE data is unavailable. Verified values remain visible; retry before signing.</div>
             )}
             <SavingsSummary data={walletData} loading={loading} onRefresh={() => load(true)} fxSaveApy={fxSaveApy} fxSaveApyStatus={fxSaveApyStatus} />
+            {config && <VaultDetails config={config} />}
+            </div>
 
+            <div className={styles.earnActionColumn}>
             <div className="rounded-2xl bg-[var(--surface-2,var(--input))] p-1">
               <Segmented
                 value={mode}
@@ -469,74 +484,30 @@ export default function EarnPage() {
             </div>
 
             <Card data-flow-stage={reviewStage} className={`${styles.focusCard} ${reviewStage === 'input' ? '' : styles.reviewInlineCard} p-5`}>
-              {reviewStage === 'input' && <>
-              {mode === 'deposit' && (
-                <div className="flex flex-col gap-4">
-                  <FormHeader title="Deposit" body="Choose an asset and amount." />
-                  <TokenPicker label="Asset" value={token} onChange={changeToken} balances={saveBalances} balanceStatus={wallet.address ? saveBalanceStatus : 'disconnected'} />
-                  <AmountField
-                    label="Deposit amount"
-                    symbol={labelToken(token)}
-                    value={amount}
-                    onChange={setAmount}
-                    maxDecimals={token === 'usdc' ? 6 : 18}
-                    balanceState={saveBalanceState}
-                  />
-                  {token !== 'fxUSDBasePool' && (
-                    <SlippageField value={slippage} onChange={setSlippage} max={MAX_FX_SLIPPAGE_PERCENT} />
-                  )}
-                </div>
-              )}
-
-              {mode === 'withdraw' && (
-                <div className="flex flex-col gap-4">
-                  <FormHeader title="Withdraw" body="Choose what to receive and how to redeem." />
-                  <TokenPicker label="Receive" value={token} onChange={changeToken} balances={saveBalances} balanceStatus={wallet.address ? saveBalanceStatus : 'disconnected'} />
-                  <AmountField
-                    label="fxSAVE to withdraw"
-                    symbol="fxSAVE"
-                    value={shares}
-                    onChange={setShares}
-                    balance={walletData.balance ? formatAmount(walletData.balance.balanceWei) : undefined}
-                    allowAll
-                    maxDecimals={18}
-                  />
-                  {token !== 'fxUSDBasePool' && (
-                    <div className={styles.optionalWithdrawSettings}>
-                      <ToggleRow
-                      checked={instant}
-                      onChange={setInstant}
-                      title="Withdraw instantly"
-                      body={instant
-                        ? config
-                          ? `${formatRatio(config.instantRedeemFeeRatio)} fee · receive without a cooldown`
-                          : 'Receive without a cooldown; the withdrawal fee is shown in review.'
-                        : config
-                          ? `No instant fee · claim after ${formatCooldown(config.cooldownPeriodSeconds)}`
-                          : 'No instant fee; claim after the cooldown.'}
-                      />
-                    </div>
-                  )}
-                  {token !== 'fxUSDBasePool' && instant && (
-                    <div className={styles.optionalWithdrawSettings}>
-                      <SlippageField value={slippage} onChange={setSlippage} max={MAX_FX_SLIPPAGE_PERCENT} />
-                    </div>
-                  )}
-                  {token === 'fxUSDBasePool' && (
-                    <InfoNote>fxUSD withdrawals use a queue and are not instant.</InfoNote>
-                  )}
-                </div>
-              )}
-
-              {mode === 'claim' && <ClaimState data={walletData} />}
-              </>}
+              {reviewStage === 'input' && <EarnActionEditor
+                mode={mode}
+                token={token}
+                onTokenChange={changeToken}
+                amount={amount}
+                onAmountChange={setAmount}
+                shares={shares}
+                onSharesChange={setShares}
+                instant={instant}
+                onInstantChange={setInstant}
+                slippage={slippage}
+                onSlippageChange={setSlippage}
+                config={config}
+                walletData={walletData}
+                balances={saveBalances}
+                balanceStatus={saveBalanceStatus}
+              />}
 
             <ActionReview
               key={reviewRevision}
               planBuilder={planBuilder}
               disabled={mode === 'claim' && !claimAvailability(walletData.claimable).canReview}
-              label={mode === 'claim' ? 'Review claim' : mode === 'withdraw' ? 'Review withdrawal' : 'Review deposit'}
-              operationLabel={mode === 'claim' ? 'Claim fxSAVE redemption' : mode === 'withdraw' ? 'Withdraw fxSAVE' : 'Deposit into fxSAVE'}
+              label={mode === 'claim' ? 'Claim fxSAVE' : mode === 'withdraw' ? 'Withdraw fxSAVE' : 'Deposit into fxSAVE'}
+              operationLabel={mode === 'claim' ? 'Claim fxSAVE' : mode === 'withdraw' ? 'Withdraw fxSAVE' : 'Deposit into fxSAVE'}
               draftActionKey={mode === 'claim' ? 'earn:claim' : mode === 'withdraw' ? 'earn:withdraw' : 'earn:deposit'}
               draftResumePath="/earn"
               draftState={draftState}
@@ -546,9 +517,8 @@ export default function EarnPage() {
               }}
             />
             </Card>
-
-            {config && <VaultDetails config={config} />}
-          </>
+            </div>
+          </div>
         ) : null}
       </div>
     </AppShell>
@@ -564,7 +534,7 @@ type SaveData = {
 };
 
 function SavingsSummary({ data, loading, onRefresh, fxSaveApy, fxSaveApyStatus }: { data: SaveData; loading: boolean; onRefresh: () => Promise<void>; fxSaveApy: FxSaveApyResponse | null; fxSaveApyStatus: 'loading' | 'ready' | 'unavailable' }) {
-  const { prices } = useUsdPrices();
+  const { prices, status: pricesStatus } = useUsdPrices();
   const assetsWei = data.balance
     ? normalizedFxSaveAssetsWei(data.balance.balanceWei, data.balance.assetsWei)
     : undefined;
@@ -576,6 +546,8 @@ function SavingsSummary({ data, loading, onRefresh, fxSaveApy, fxSaveApyStatus }
   const ready = hasPending && claimState.status === 'ready';
   const status = claimState.status === 'unavailable' && !data.redeemStatus ? '—' : ready ? 'Ready to claim' : hasPending ? 'Pending' : data.balance && data.balance.balanceWei > 0n ? 'Active' : data.balance ? 'No balance' : '—';
   const statusTone = ready ? 'bg-[var(--success-dim)] text-success' : hasPending ? 'bg-[var(--warn-dim)] text-warn' : 'bg-[var(--mint-dim)] text-mint';
+  const balanceValue = data.balance ? formatDisplayAmount(data.balance.balanceWei) : '—';
+  const pendingValue = formatDisplayAmount(pendingShares);
 
   return (
     <Card className={`${styles.summaryCard} p-5`}>
@@ -583,12 +555,12 @@ function SavingsSummary({ data, loading, onRefresh, fxSaveApy, fxSaveApyStatus }
         <div className="min-w-0">
           <p className={styles.eyebrow}>Your fxSAVE</p>
           <h2 className="text-display mt-2 break-words text-[30px] font-semibold tabular-nums tracking-[-.03em]">
-            {data.balance ? `${formatDisplayAmount(data.balance.balanceWei)} fxSAVE` : '—'}
+            <ValueOrSkeleton value={balanceValue} width="xl" label="fxSAVE balance loading" />{data.balance && balanceValue !== '—' ? ' fxSAVE' : null}
           </h2>
           {hasAssets && (
             <p className="mt-1 text-[12px] text-mut tabular-nums">
               {assetsUsd === null
-                ? '—'
+                ? <ValueOrSkeleton value="—" width="lg" status={pricesStatus === 'unavailable' ? 'unavailable' : 'loading'} label={pricesStatus === 'unavailable' ? 'fxSAVE value unavailable' : 'fxSAVE value loading'} />
                 : `${formatUsd(assetsUsd)} estimated value`}
             </p>
           )}
@@ -615,17 +587,19 @@ function SavingsSummary({ data, loading, onRefresh, fxSaveApy, fxSaveApyStatus }
           <p className="text-[12px] font-semibold">Pending redemption</p>
           <p className="mt-0.5 break-words text-[11px] leading-relaxed text-mut tabular-nums">
             {hasPending
-              ? `${formatDisplayAmount(pendingShares)} fxSAVE${ready ? ' · available now' : formatRedeemableAt(data.claimable?.redeemableAt ?? data.redeemStatus?.redeemableAt ?? null)}`
-              : data.claimable || data.redeemStatus ? 'None' : '—'}
+              ? <><ValueOrSkeleton value={pendingValue} width="sm" label="Pending redemption loading" /> fxSAVE{ready ? ' · available now' : formatRedeemableAt(data.claimable?.redeemableAt ?? data.redeemStatus?.redeemableAt ?? null)}</>
+              : data.claimable || data.redeemStatus ? 'None' : <ValueOrSkeleton value="—" width="sm" label="Pending redemption loading" />}
           </p>
         </div>
-        <span className={`shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold ${statusTone}`}>{status}</span>
+        <span className={`shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold ${statusTone}`}>
+          <ValueOrSkeleton value={status} width="sm" status={status === '—' ? 'unavailable' : 'loading'} label="fxSAVE status unavailable" />
+        </span>
       </div>
     </Card>
   );
 }
 
-function DisconnectedEarnForm({
+function EarnActionEditor({
   mode,
   token,
   onTokenChange,
@@ -638,6 +612,9 @@ function DisconnectedEarnForm({
   slippage,
   onSlippageChange,
   config,
+  walletData,
+  balances,
+  balanceStatus,
 }: {
   mode: EarnMode;
   token: SaveToken;
@@ -651,35 +628,32 @@ function DisconnectedEarnForm({
   slippage: string;
   onSlippageChange: (slippage: string) => void;
   config: SaveConfig | null;
+  walletData?: SaveData | null;
+  balances?: TokenBalanceMap;
+  balanceStatus?: 'loading' | 'ready' | 'unavailable' | 'disconnected';
 }) {
   const disconnectedBalance = { status: 'disconnected' as const };
+  const amountBalance = walletData ? balances?.[token] ?? { status: balanceStatus ?? 'loading' as const } : disconnectedBalance;
+  const sharesBalance = walletData?.balance ? formatAmount(walletData.balance.balanceWei) : undefined;
   return (
     <div className="flex flex-col gap-4">
       {mode === 'deposit' && (
         <div className="flex flex-col gap-4">
-          <FormHeader title="Deposit" body="Choose an asset and amount." />
-          <TokenPicker label="Asset" value={token} onChange={onTokenChange} balanceStatus="disconnected" />
-          <AmountField label="Deposit amount" symbol={labelToken(token)} value={amount} onChange={onAmountChange} maxDecimals={token === 'usdc' ? 6 : 18} balanceState={disconnectedBalance} />
-          {token !== 'fxUSDBasePool' && <SlippageField value={slippage} onChange={onSlippageChange} max={MAX_FX_SLIPPAGE_PERCENT} />}
+          <TokenPicker label="Asset" value={token} onChange={onTokenChange} balances={balances} balanceStatus={walletData ? balanceStatus : 'disconnected'} />
+          <AmountField label="Deposit amount" symbol={labelToken(token)} value={amount} onChange={onAmountChange} maxDecimals={token === 'usdc' ? 6 : 18} balanceState={amountBalance} />
+          {token !== 'fxUSDBasePool' && <details className={`${styles.advancedDetails} group rounded-xl border border-[var(--line)] px-3`}><summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-[13px] font-semibold [&::-webkit-details-marker]:hidden">Advanced <span aria-hidden="true" className="text-mut transition-transform group-open:rotate-180">⌄</span></summary><div className="border-t border-[var(--line)] py-3"><SlippageField value={slippage} onChange={onSlippageChange} max={MAX_FX_SLIPPAGE_PERCENT} /></div></details>}
         </div>
       )}
       {mode === 'withdraw' && (
         <div className="flex flex-col gap-4">
-          <FormHeader title="Withdraw" body="Choose what to receive and how to redeem." />
-          <TokenPicker label="Receive" value={token} onChange={onTokenChange} balanceStatus="disconnected" />
-          <AmountField label="fxSAVE to withdraw" symbol="fxSAVE" value={shares} onChange={onSharesChange} allowAll maxDecimals={18} balanceState={disconnectedBalance} />
-          {token !== 'fxUSDBasePool' && <div className={styles.optionalWithdrawSettings}><ToggleRow checked={instant} onChange={onInstantChange} title="Withdraw instantly" body={instant ? config ? `${formatRatio(config.instantRedeemFeeRatio)} fee · receive without a cooldown` : 'Receive without a cooldown; the withdrawal fee is shown in review.' : config ? `No instant fee · claim after ${formatCooldown(config.cooldownPeriodSeconds)}` : 'No instant fee; claim after the cooldown.'} /></div>}
-          {token !== 'fxUSDBasePool' && instant && <div className={styles.optionalWithdrawSettings}><SlippageField value={slippage} onChange={onSlippageChange} max={MAX_FX_SLIPPAGE_PERCENT} /></div>}
+          <TokenPicker label="Receive" value={token} onChange={onTokenChange} balances={balances} balanceStatus={walletData ? balanceStatus : 'disconnected'} />
+          <AmountField label="fxSAVE to withdraw" symbol="fxSAVE" value={shares} onChange={onSharesChange} balance={sharesBalance} allowAll maxDecimals={18} balanceState={walletData ? undefined : disconnectedBalance} />
+          {token !== 'fxUSDBasePool' && <div className={styles.optionalWithdrawSettings}><ToggleRow checked={instant} onChange={onInstantChange} title="Withdraw instantly" body={instant ? config ? `${formatRatio(config.instantRedeemFeeRatio)} fee · receive without a cooldown` : 'Receive without a cooldown; fee shown in review.' : config ? `No instant fee · claim after ${formatCooldown(config.cooldownPeriodSeconds)}` : 'No instant fee; claim after the cooldown.'} /></div>}
+          {token !== 'fxUSDBasePool' && instant && <div className={styles.optionalWithdrawSettings}><details className={`${styles.advancedDetails} group rounded-xl border border-[var(--line)] px-3`}><summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-[13px] font-semibold [&::-webkit-details-marker]:hidden">Advanced <span aria-hidden="true" className="text-mut transition-transform group-open:rotate-180">⌄</span></summary><div className="border-t border-[var(--line)] py-3"><SlippageField value={slippage} onChange={onSlippageChange} max={MAX_FX_SLIPPAGE_PERCENT} /></div></details></div>}
           {token === 'fxUSDBasePool' && <InfoNote>Base-pool share withdrawals use a queue and are not instant.</InfoNote>}
         </div>
       )}
-      {mode === 'claim' && (
-        <div className="flex flex-col items-center px-2 py-3 text-center">
-          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--mint-dim)] text-mint"><Clock3 aria-hidden="true" className="h-5 w-5" /></span>
-          <h2 className="text-display mt-3 text-[19px] font-semibold">Connect to check claims</h2>
-          <p className="mt-1.5 max-w-[300px] text-[12px] leading-relaxed text-mut">Your wallet’s pending redemption and claim preview appear here after connection.</p>
-        </div>
-      )}
+      {mode === 'claim' && walletData && <ClaimState data={walletData} />}
     </div>
   );
 }
@@ -690,9 +664,15 @@ function FxSaveApyCard({ value, status }: { value: FxSaveApyResponse | null; sta
     <Card className="flex min-h-14 items-center justify-between gap-3 border-[color-mix(in_srgb,var(--mint)_24%,var(--line))] px-4 py-3">
       <div className="min-w-0">
         <p className="text-[12px] font-semibold">fxSAVE APY</p>
-        <p className="mt-0.5 text-[11px] text-mut">Current vault rate</p>
       </div>
-      <span className="shrink-0 text-[17px] font-semibold tabular-nums text-mint" aria-label={`fxSAVE APY ${display}`}>{display}</span>
+      <span className="shrink-0 text-[17px] font-semibold tabular-nums text-mint">
+        <ValueOrSkeleton
+          value={display}
+          width="sm"
+          status={status === 'unavailable' ? 'unavailable' : 'loading'}
+          label={status === 'unavailable' ? 'fxSAVE APY unavailable' : 'fxSAVE APY loading'}
+        />
+      </span>
     </Card>
   );
 }
@@ -702,26 +682,23 @@ function ClaimState({ data }: { data: SaveData }) {
   if (state.status === 'unavailable') {
     return (
       <div role="status" aria-live="polite" className="flex flex-col items-center gap-2 px-2 py-3 text-center">
-        <strong className="text-[13px] text-warn">Claim status is unavailable.</strong>
-        <span className="text-[11px] text-mut">Retry the fxSAVE read before attempting a claim.</span>
+        <strong className="text-[13px] text-warn">Claim status unavailable.</strong>
+        <span className="text-[11px] text-mut">Retry before claiming.</span>
       </div>
     );
   }
   const ready = state.status === 'ready';
   const title = ready ? 'Ready to claim' : state.status === 'cooldown' ? 'Cooldown in progress' : 'No pending redemption';
-  const body = ready ? 'Review the current claim preview, then confirm in your wallet.' : state.message;
+  const body = ready ? 'Check the current claim details, then confirm in your wallet.' : state.message;
 
   return (
     <div className="flex flex-col items-center px-2 py-3 text-center">
-      <span className={`flex h-12 w-12 items-center justify-center rounded-xl ${ready ? 'bg-[var(--success-dim)] text-success' : 'bg-[var(--mint-dim)] text-mint'}`}>
-        <Clock3 aria-hidden="true" className="h-5 w-5" />
-      </span>
-      <h2 className="text-display mt-3 text-[19px] font-semibold">{title}</h2>
-      <p className="mt-1.5 max-w-[300px] text-[12px] leading-relaxed text-mut">{body}</p>
+      <h2 className="text-display text-[19px] font-semibold">{title}</h2>
+      <p className="mt-1 max-w-[300px] text-[12px] leading-relaxed text-mut">{body}</p>
       {data.claimable?.previewReceive && (
         <div className="mt-4 grid w-full grid-cols-2 gap-2 text-left">
-          <Metric label="fxUSD preview" value={`${formatDisplayAmount(data.claimable.previewReceive.amountYieldOutWei)} fxUSD`} />
-          <Metric label="USDC preview" value={`${formatDisplayAmount(data.claimable.previewReceive.amountStableOutWei, 6)} USDC`} />
+          <Metric label="fxUSD preview" value={<><ValueOrSkeleton value={formatDisplayAmount(data.claimable.previewReceive.amountYieldOutWei)} width="sm" label="fxUSD preview loading" /> fxUSD</>} />
+          <Metric label="USDC preview" value={<><ValueOrSkeleton value={formatDisplayAmount(data.claimable.previewReceive.amountStableOutWei, 6)} width="sm" label="USDC preview loading" /> USDC</>} />
         </div>
       )}
     </div>
@@ -752,20 +729,13 @@ function TokenPicker({ label, value, onChange, balances, balanceStatus }: { labe
   return <TokenSelect label={label} value={value} options={['fxUSD', 'usdc', 'fxUSDBasePool'] as const} onChange={onChange} balances={balances} balanceStatus={balanceStatus} />;
 }
 
-function FormHeader({ title, body }: { title: string; body: string }) {
-  return (
-    <div className={styles.formHeader}>
-      <h2 className={styles.sectionTitle}>{title}</h2>
-      <p className={`mt-1 ${styles.supportCopy}`}>{body}</p>
-    </div>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className={`${styles.metric} min-w-0 p-2.5 sm:p-3`}>
       <span className="block text-[10px] leading-tight text-mut sm:text-[11px]">{label}</span>
-      <span className="mt-1 block break-words text-[12px] font-semibold tabular-nums sm:text-[13px]" title={value}>{value}</span>
+      <span className="mt-1 block break-words text-[12px] font-semibold tabular-nums sm:text-[13px]" title={typeof value === 'string' ? value : undefined}>
+        <ValueOrSkeleton value={value} width="md" />
+      </span>
     </div>
   );
 }

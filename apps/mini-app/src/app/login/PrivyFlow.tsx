@@ -9,17 +9,16 @@
  * There is no raw private-key field and no delegated/session signer step.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Lock, Mail, Plus, Send, Wallet } from 'lucide-react';
+import { Check, Lock, Mail, Plus, Wallet } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import {
   useConnectWallet,
   useCreateWallet,
   useLogin,
-  useLoginWithTelegram,
   usePrivy,
   useWallets,
 } from '@privy-io/react-auth';
-import { getInitData, haptic, isTelegramLaunchContext } from '@/lib/telegram';
+import { haptic } from '@/lib/telegram';
 import { AddressChip, Button, Card, FullScreenSpinner } from '@/components/ui';
 import FxLogo from '@/components/FxLogo';
 import { usePrivyWallet } from '@/lib/wallet';
@@ -39,13 +38,11 @@ function PrivyLoginFlow() {
   const { ready, authenticated } = usePrivy();
   const { wallets } = useWallets();
   const { address: selectedAddress } = usePrivyWallet();
-  const { login: loginWithTelegram } = useLoginWithTelegram();
   const { createWallet } = useCreateWallet();
   const { connectWallet } = useConnectWallet();
   const [phase, setPhase] = useState<Phase>('intro');
   const [error, setError] = useState('');
   const phaseHeadingRef = useRef<HTMLHeadingElement>(null);
-  const telegramContext = isTelegramLaunchContext();
 
   const embeddedWallet = useMemo(
     () => wallets.find((wallet) => wallet.walletClientType === 'privy' || wallet.walletClientType === 'privy-v2'),
@@ -72,42 +69,6 @@ function PrivyLoginFlow() {
     setPhase('error');
   }, []);
 
-  const startTelegramLogin = useCallback(async () => {
-    setError('');
-    if (authenticated) {
-      setPhase(walletAddress ? 'done' : 'choose');
-      return;
-    }
-    setPhase('authenticating');
-    try {
-      // In Telegram, Privy consumes the signed launch payload restored by the
-      // provider. An empty launch payload cannot authenticate a user safely.
-      if (telegramContext && !getInitData()) {
-        throw new Error('Reopen FxAeon from the Telegram bot menu so the signed launch data is available.');
-      }
-      if (telegramContext) {
-        // Privy consumes the signed Telegram launch payload at provider mount.
-        // Do not open the Telegram login popup inside the Telegram WebView:
-        // it cannot reliably post its result back to this document.
-        return;
-      }
-      await loginWithTelegram();
-    } catch (cause) {
-      fail(cause, 'Telegram sign-in failed. Close and reopen the Mini App, then try again.');
-    }
-  }, [authenticated, fail, loginWithTelegram, telegramContext, walletAddress]);
-
-  useEffect(() => {
-    if (phase !== 'authenticating' || authenticated || !telegramContext || !getInitData()) return;
-    const timer = window.setTimeout(() => {
-      fail(
-        new Error('Automatic Telegram sign-in did not complete.'),
-        'Automatic Telegram sign-in did not complete. Reopen the app from the bot menu or use another sign-in option.'
-      );
-    }, 15_000);
-    return () => window.clearTimeout(timer);
-  }, [authenticated, fail, phase, telegramContext]);
-
   const { login: openPrivyLogin } = useLogin({
     onComplete: () => setPhase(walletAddress ? 'done' : 'choose'),
     onError: (cause) => {
@@ -131,7 +92,10 @@ function PrivyLoginFlow() {
     if (authenticated) {
       connectWallet();
     } else {
-      openPrivyLogin({ loginMethods: ['wallet'] });
+      // Let Privy show every method enabled for the app. This keeps the
+      // wallet entry usable for email and future Telegram dashboard enablement
+      // without advertising a currently disabled provider-specific button.
+      openPrivyLogin();
     }
   }, [authenticated, connectWallet, openPrivyLogin]);
 
@@ -171,7 +135,7 @@ function PrivyLoginFlow() {
               Every transaction still requires your wallet approval. FxAeon never receives your private key.
             </p>
           </Card>
-          <Button onClick={() => router.push('/portfolio')}>
+          <Button onClick={() => router.push('/')}>
             Continue
           </Button>
         </div>
@@ -232,7 +196,7 @@ function PrivyLoginFlow() {
   return (
     <main className={`${styles.loginPanel} mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col justify-center px-6 py-10`}>
       <div className="flex flex-col">
-        <div className={`${styles.loginCard} glass mx-auto w-full max-w-sm p-6`}>
+        <div className={`${styles.loginCard} glass mx-auto w-full p-6`}>
           <div className="flex flex-col items-center text-center">
             <span className="flex h-16 w-16 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface-2)]">
               <FxLogo size={48} />
@@ -243,19 +207,10 @@ function PrivyLoginFlow() {
             {t('loginCard.signIn')}
           </h1>
           <p className="mt-2 text-center text-[14px] leading-relaxed text-mut">
-            {telegramContext
-              ? 'Continue with Telegram, a wallet you already use, or email.'
-              : 'Continue with a wallet, email, or Telegram.'}
+            Continue with a wallet or email.
           </p>
           <div className={`${styles.loginActions} mt-6`}>
-            {telegramContext && (
-              <Button onClick={startTelegramLogin} loading={busy}>
-                {!busy && <Send className="h-[18px] w-[18px]" strokeWidth={2} />}
-                {t('loginCard.telegram')}
-              </Button>
-            )}
-            {telegramContext && <p className="pt-1 text-center text-[13px] font-medium text-mut">Other ways to continue</p>}
-            <Button variant={telegramContext ? 'ghost' : 'primary'} onClick={startExternalWallet} disabled={busy}>
+            <Button variant="primary" onClick={startExternalWallet} disabled={busy}>
               <Wallet className="h-[18px] w-[18px]" strokeWidth={2} />
               {t('loginCard.wallet')}
             </Button>
@@ -263,15 +218,6 @@ function PrivyLoginFlow() {
               <Mail className="h-[18px] w-[18px]" strokeWidth={2} />
               {t('loginCard.email')}
             </Button>
-            {!telegramContext && (
-              <>
-                <p className="pt-1 text-center text-[13px] font-medium text-mut">Another way to continue</p>
-                <Button variant="ghost" onClick={startTelegramLogin} loading={busy}>
-                  {!busy && <Send className="h-[18px] w-[18px] text-mint" strokeWidth={2} />}
-                  {t('loginCard.telegram')}
-                </Button>
-              </>
-            )}
           </div>
           {phase === 'error' && (
             <Card className={`${styles.loginCard} mt-4 border-[rgba(255,194,75,0.35)]`}>

@@ -53,6 +53,11 @@ const STORAGE_KEY = "fxaeon:signature-drafts:v1";
 const MAX_DRAFTS = 32;
 const MAX_FORM_STATE_KEYS = 48;
 const MAX_FORM_STATE_BYTES = 4_096;
+// Numeric fields are UI values (for example leverage), never token amounts or
+// calldata. Keep them finite, bounded, and precise enough for the controls we
+// restore while retaining amount strings at their original decimal precision.
+const MAX_FORM_STATE_NUMBER = 1_000_000_000;
+const MAX_FORM_STATE_DECIMAL_PLACES = 6;
 const FORBIDDEN_FORM_STATE_KEY = /(calldata|transaction|nonce|quote|signature|private|secret|seed|route|request|hash)/i;
 let memoryDrafts: SignatureRequiredDraft[] = [];
 let storageUnavailable = false;
@@ -82,7 +87,11 @@ function normalizeFormState(value: unknown): SignatureDraftState | undefined {
       if (item.length > 42 && /^0x[0-9a-f]+$/i.test(item)) return undefined;
       normalized[key] = item;
     } else if (typeof item === "number") {
-      if (!Number.isFinite(item) || !Number.isSafeInteger(item)) return undefined;
+      if (!Number.isFinite(item) || Math.abs(item) > MAX_FORM_STATE_NUMBER) return undefined;
+      // JSON numbers do not preserve arbitrary precision. Six decimal places
+      // covers the numeric UI controls while rejecting values that would be
+      // silently rounded when a draft is persisted and restored.
+      if (Number(item.toFixed(MAX_FORM_STATE_DECIMAL_PLACES)) !== item) return undefined;
       normalized[key] = item;
     } else if (typeof item === "boolean" || item === null) {
       normalized[key] = item;

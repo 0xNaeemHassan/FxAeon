@@ -8,6 +8,7 @@ import { usePrivyWallet } from '@/lib/wallet';
 
 type ConnectWalletButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'onClick' | 'type'> & {
   children: ReactNode;
+  loadingLabel?: ReactNode;
   onConnectStart?: () => void;
   onConnected?: () => void | Promise<void>;
   onConnectError?: () => void;
@@ -16,18 +17,65 @@ type ConnectWalletButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'c
 };
 
 /** Opens the configured wallet selector over the current route. */
-export default function ConnectWalletButton({ children, className = '', disabled, onConnectStart, onConnected, onConnectError, resumeIfConnected = false, ...props }: ConnectWalletButtonProps) {
+export default function ConnectWalletButton({ children, loadingLabel = 'Opening wallet…', className = '', disabled, onConnectStart, onConnected, onConnectError, resumeIfConnected = false, ...props }: ConnectWalletButtonProps) {
   const wallet = usePrivyWallet();
-  const { connect: connectWallet, ready, authenticated, address } = wallet;
+  const { connect: connectWallet, ready, authenticated, address, connectionVersion } = wallet;
   const [connecting, setConnecting] = useState(false);
   const [queued, setQueued] = useState(false);
   const [error, setError] = useState('');
   const connectingRef = useRef(false);
   const queuedRef = useRef(false);
+  const walletAddressRef = useRef(address);
+  const connectionVersionRef = useRef(connectionVersion);
+  const connectionRequestRef = useRef(0);
+  const mountedRef = useRef(false);
+  const pendingAddressRef = useRef<{ requestId: number; baselineAddress?: string; baselineVersion: number; resolve: () => void; reject: (cause: Error) => void } | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  useEffect(() => {
+    walletAddressRef.current = address;
+    const pending = pendingAddressRef.current;
+    if (pending && address && pending.requestId === connectionRequestRef.current && (!pending.baselineAddress || address.toLowerCase() !== pending.baselineAddress.toLowerCase())) {
+      pendingAddressRef.current = null;
+      pending.resolve();
+    }
+  }, [address]);
+
+  useEffect(() => {
+    connectionVersionRef.current = connectionVersion;
+    const pending = pendingAddressRef.current;
+    if (pending && walletAddressRef.current && connectionVersion > pending.baselineVersion && pending.requestId === connectionRequestRef.current) {
+      pendingAddressRef.current = null;
+      pending.resolve();
+    }
+  }, [connectionVersion]);
+
+  useEffect(() => () => {
+    connectionRequestRef.current += 1;
+    pendingAddressRef.current?.reject(new Error('Wallet connection was cancelled.'));
+    pendingAddressRef.current = null;
+    connectingRef.current = false;
+    queuedRef.current = false;
+  }, []);
+
+  const waitForWalletAddress = useCallback((requestId: number, baselineAddress: string | undefined, baselineVersion: number) => {
+    if (requestId !== connectionRequestRef.current) return Promise.reject(new Error('Wallet connection was cancelled.'));
+    if (connectionVersionRef.current > baselineVersion || (walletAddressRef.current && (!baselineAddress || walletAddressRef.current.toLowerCase() !== baselineAddress.toLowerCase()))) return Promise.resolve();
+    return new Promise<void>((resolve, reject) => {
+      pendingAddressRef.current = { requestId, baselineAddress, baselineVersion, resolve, reject };
+    });
+  }, []);
 
   const connectNow = useCallback(async () => {
     if (connectingRef.current) return;
     connectingRef.current = true;
+    const requestId = ++connectionRequestRef.current;
+    const baselineAddress = walletAddressRef.current;
+    const baselineVersion = connectionVersionRef.current;
     queuedRef.current = false;
     setQueued(false);
     setConnecting(true);
@@ -38,7 +86,9 @@ export default function ConnectWalletButton({ children, className = '', disabled
       // the selector again would be a surprising second prompt and strands
       // action rails that are waiting to resume.
       if (resumeIfConnected && authenticated && address) {
+        if (!mountedRef.current || requestId !== connectionRequestRef.current) return;
         await onConnected?.();
+        if (!mountedRef.current || requestId !== connectionRequestRef.current) return;
         haptic('success');
         return;
       }
@@ -47,18 +97,28 @@ export default function ConnectWalletButton({ children, className = '', disabled
       // Telegram-specific message when it is not available. Keep the CTA
       // route-stable; normal browsers retain explicit EIP-1193 discovery.
       await connectWallet();
+      // Privy can resolve its selector before React publishes the selected
+      // wallet. Do not advance an action rail or caller callback until an
+      // address is observable in the shared wallet state.
+      if (onConnected) await waitForWalletAddress(requestId, baselineAddress, baselineVersion);
+      if (!mountedRef.current || requestId !== connectionRequestRef.current) return;
       await onConnected?.();
+      if (!mountedRef.current || requestId !== connectionRequestRef.current) return;
       haptic('success');
     } catch (cause) {
+      if (!mountedRef.current || requestId !== connectionRequestRef.current) return;
       onConnectError?.();
       const message = userSafeError(cause, 'Wallet connection was cancelled.');
       setError(message);
       haptic('error');
     } finally {
-      connectingRef.current = false;
-      setConnecting(false);
+      if (pendingAddressRef.current?.requestId === requestId) pendingAddressRef.current = null;
+      if (mountedRef.current && requestId === connectionRequestRef.current) {
+        connectingRef.current = false;
+        setConnecting(false);
+      }
     }
-  }, [address, authenticated, connectWallet, onConnectError, onConnected, resumeIfConnected]);
+  }, [address, authenticated, connectWallet, onConnectError, onConnected, resumeIfConnected, waitForWalletAddress]);
 
   // Provider hydration is intentionally asynchronous (Privy and browser
   // EIP-6963 discovery both settle after the shell can render). A click made
@@ -95,7 +155,7 @@ export default function ConnectWalletButton({ children, className = '', disabled
         onClick={() => void connect()}
       >
         {opening && <LoaderCircle aria-hidden="true" className="h-4 w-4 shrink-0 animate-spin" />}
-        {opening ? 'Opening wallet…' : children}
+        {opening ? loadingLabel : children}
       </button>
       {error && <span role="alert" className="wallet-connect-toast">{error}</span>}
     </>

@@ -63,29 +63,47 @@ test.describe('cohesive responsive design', () => {
       await expect(shell).toBeVisible();
       await expect(content).toBeVisible();
       await expect(page.locator('.market-strip')).toHaveCount(0);
-      const geometry = await page.evaluate(() => {
-        const root = document.documentElement;
-        const body = document.body;
-        const shell = document.querySelector<HTMLElement>('.app-shell-tabs');
-        const main = document.querySelector<HTMLElement>('.app-content-tabs');
-        if (!main || !shell) throw new Error('working route content is missing');
-        const style = getComputedStyle(main);
-        const shellRect = shell.getBoundingClientRect();
-        const mobileNav = document.querySelector<HTMLElement>('.mobile-tabbar');
-        const mobileNavRect = mobileNav && getComputedStyle(mobileNav).display !== 'none'
-          ? mobileNav.getBoundingClientRect()
-          : null;
-        return {
-          pageOverflow: root.scrollHeight - root.clientHeight,
-          bodyOverflow: body.scrollHeight - body.clientHeight,
-          contentOverflow: main.scrollHeight - main.clientHeight,
-          overflowY: style.overflowY,
-          bottomPadding: Number.parseFloat(style.paddingBottom),
-          shellBottom: shellRect.bottom,
-          viewportBottom: window.innerHeight,
-          mobileNavTop: mobileNavRect?.top ?? null,
-        };
-      });
+      await expect.poll(() => page.evaluate(() => Boolean(document.querySelector('.app-shell-tabs') && document.querySelector('.app-content-tabs'))), {
+        timeout: 5_000,
+        message: 'working route shell/content must remain mounted after hydration',
+      }).toBe(true);
+      let geometry: {
+        pageOverflow: number; bodyOverflow: number; contentOverflow: number; overflowY: string;
+        bottomPadding: number; shellBottom: number; viewportBottom: number; mobileNavTop: number | null;
+      } | undefined;
+      let geometryError: unknown;
+      for (let attempt = 0; !geometry && attempt < 25; attempt += 1) {
+        try {
+          geometry = await page.evaluate(() => {
+            const root = document.documentElement;
+            const body = document.body;
+            const shell = document.querySelector<HTMLElement>('.app-shell-tabs');
+            const main = document.querySelector<HTMLElement>('.app-content-tabs');
+            if (!main || !shell) throw new Error('working route content is missing');
+            const style = getComputedStyle(main);
+            const shellRect = shell.getBoundingClientRect();
+            const mobileNav = document.querySelector<HTMLElement>('.mobile-tabbar');
+            const mobileNavRect = mobileNav && getComputedStyle(mobileNav).display !== 'none'
+              ? mobileNav.getBoundingClientRect()
+              : null;
+            return {
+              pageOverflow: root.scrollHeight - root.clientHeight,
+              bodyOverflow: body.scrollHeight - body.clientHeight,
+              contentOverflow: main.scrollHeight - main.clientHeight,
+              overflowY: style.overflowY,
+              bottomPadding: Number.parseFloat(style.paddingBottom),
+              shellBottom: shellRect.bottom,
+              viewportBottom: window.innerHeight,
+              mobileNavTop: mobileNavRect?.top ?? null,
+            };
+          });
+        } catch (error) {
+          if (!/working route content is missing|not attached to the DOM|detached/i.test(String(error))) throw error;
+          geometryError = error;
+          await page.waitForTimeout(100);
+        }
+      }
+      if (!geometry) throw geometryError ?? new Error('working route content did not stabilize');
       expect(geometry.pageOverflow, `page must not scroll at ${width}px`).toBeLessThanOrEqual(1);
       expect(geometry.bodyOverflow, `body must not scroll at ${width}px`).toBeLessThanOrEqual(1);
       expect(geometry.shellBottom, `shell must fit at ${width}px`).toBeLessThanOrEqual(geometry.viewportBottom + 1);
@@ -133,14 +151,22 @@ test.describe('cohesive responsive design', () => {
     await expect(page).toHaveURL(/\/docs\/?$/);
     const nav = page.getByRole('navigation', { name: 'Documentation sections' });
     const search = nav.getByRole('searchbox', { name: 'Search docs' });
+    const contents = nav.locator('details');
+    if (!(await contents.evaluate((element) => (element as HTMLDetailsElement).open))) {
+      await contents.locator('summary').click();
+    }
+    await expect(contents).toHaveJSProperty('open', true);
     await expect(nav.getByRole('link')).toHaveCount(13);
     await search.fill('slippage');
     await expect(nav.getByRole('link')).toHaveCount(1);
-    await expect(nav.getByText('1 section', { exact: true })).toBeVisible();
+    // The compact summary announces the filtered count.
+    await expect(nav.getByText('1 section', { exact: true })).toHaveCount(1);
     // Search filters the index, never the underlying article or anchors.
     await expect(page.getByRole('heading', { name: 'Getting started', exact: true })).toBeAttached();
     await search.press('Tab');
     await expect(nav.getByRole('button', { name: 'Clear', exact: true })).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(contents.locator('summary')).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(nav.getByRole('link', { name: 'Fees & slippage', exact: true })).toBeFocused();
     await page.keyboard.press('Enter');
@@ -154,7 +180,7 @@ test.describe('cohesive responsive design', () => {
     }).toBe(true);
     await search.fill('no-matching-section');
     await expect(nav.getByRole('link')).toHaveCount(0);
-    await expect(nav.getByText('No sections found', { exact: true })).toBeVisible();
+    await expect(nav.getByText('No matches', { exact: true })).toBeVisible();
     await nav.getByRole('button', { name: 'Clear', exact: true }).click();
     await expect(nav.getByRole('link')).toHaveCount(13);
     await page.reload({ waitUntil: 'domcontentloaded' });

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { calculatePositionUsdValuation, formatUsdCents } from '../src/lib/positionValuation';
+import { calculatePositionUsdValuation, debtCollateralRatioPercent, formatUsdCents } from '../src/lib/positionValuation';
 
 const WAD = 10n ** 18n;
 
@@ -92,4 +92,97 @@ test('zero raw legs remain exactly zero when their price is unavailable', () => 
   assert.equal(zeroDebt.collateralUsdCents, 100n);
   assert.equal(zeroDebt.debtUsdCents, 0n);
   assert.equal(zeroDebt.netEquityUsdCents, 100n);
+});
+
+test('debt to collateral ratio preserves exact display prices across edge cases', () => {
+  const shortPoolRatio = debtCollateralRatioPercent({
+    collateralRaw: 3n * WAD,
+    collateralDecimals: 18,
+    collateralPrice: 1,
+    debtRaw: WAD,
+    debtDecimals: 18,
+    debtPrice: 2,
+  });
+  assert.equal(shortPoolRatio, '≈ 66.67%');
+
+  assert.equal(debtCollateralRatioPercent({
+    collateralRaw: WAD,
+    collateralDecimals: 18,
+    collateralPrice: 1,
+    debtRaw: 0n,
+    debtDecimals: 18,
+    debtPrice: undefined,
+  }), '≈ 0%');
+
+  assert.equal(debtCollateralRatioPercent({
+    collateralRaw: WAD,
+    collateralDecimals: 18,
+    collateralPrice: undefined,
+    debtRaw: WAD,
+    debtDecimals: 18,
+    debtPrice: 1,
+  }), null);
+  assert.equal(debtCollateralRatioPercent({
+    collateralRaw: WAD,
+    collateralDecimals: 18,
+    collateralPrice: 0,
+    debtRaw: WAD,
+    debtDecimals: 18,
+    debtPrice: 1,
+  }), null);
+  assert.equal(debtCollateralRatioPercent({
+    collateralRaw: 0n,
+    collateralDecimals: 18,
+    collateralPrice: 1,
+    debtRaw: WAD,
+    debtDecimals: 18,
+    debtPrice: 1,
+  }), null);
+
+  const tiny = debtCollateralRatioPercent({
+    collateralRaw: WAD,
+    collateralDecimals: 18,
+    collateralPrice: 1,
+    debtRaw: 1n,
+    debtDecimals: 18,
+    debtPrice: 1,
+  });
+  assert.equal(tiny, '≈ 0%');
+
+  const subCent = debtCollateralRatioPercent({
+    collateralRaw: 2n,
+    collateralDecimals: 18,
+    collateralPrice: 1,
+    debtRaw: 1n,
+    debtDecimals: 18,
+    debtPrice: 1,
+  });
+  assert.equal(subCent, '≈ 50%');
+
+  assert.equal(debtCollateralRatioPercent({
+    collateralRaw: -1n,
+    collateralDecimals: 18,
+    collateralPrice: 1,
+    debtRaw: WAD,
+    debtDecimals: 18,
+    debtPrice: 1,
+  }), null);
+  assert.equal(debtCollateralRatioPercent({
+    collateralRaw: WAD,
+    collateralDecimals: 256,
+    collateralPrice: 1,
+    debtRaw: WAD,
+    debtDecimals: 18,
+    debtPrice: 1,
+  }), null);
+
+  const large = debtCollateralRatioPercent({
+    collateralRaw: 3n * (10n ** 80n),
+    collateralDecimals: 18,
+    collateralPrice: 1,
+    debtRaw: 10n ** 80n,
+    debtDecimals: 18,
+    debtPrice: 1,
+  });
+  assert.equal(large, '≈ 33.33%');
 });

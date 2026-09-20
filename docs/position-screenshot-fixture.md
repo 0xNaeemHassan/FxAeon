@@ -2,29 +2,47 @@
 
 FxAeon's populated position screenshots come from real f(x) protocol state on
 a disposable Ethereum Anvil fork: one ETH long, ETH short, BTC long, and BTC
-short. The preferred path is `pnpm test:anvil:browser`, which opens those
-positions through the application's review and confirmation controls before
-capturing them. Its separate browser proof verifies execution and receipts.
+short. The four promoted screenshots were captured by the successful browser
+gate on 20 September 2026 at block `25965421`; the capture report and hashes
+are recorded in [`position-screenshot-manifest.json`](fixtures/position-screenshot-manifest.json).
+The execution proof is `artifacts/anvil/browser-proof.json`. The screenshots
+show fork state, not production balances.
+
+The manifest maps the landing desktop frame `portfolio-preview.png` to the
+all-four-position `fxaeon-positions.png` capture and `portfolio-mobile.png` to
+`fxaeon-positions-mobile.png`; it records and validates both alias hashes.
+
+The preferred execution path is `pnpm test:anvil:browser`, which opens those
+positions through the application's guarded action details, final
+rebuild/simulation, and wallet confirmation controls before capturing them. Its
+browser proof verifies execution, receipts, all four direct closes, and snapshot
+restoration.
 
 The standalone `pnpm docs:screenshots:positions` command instead invokes the
-same production SDK wrapper and transaction runner in Node. Its captures
-prove rendered fork state, not browser transaction execution. The checked-in
-manifest identifies which path produced the images.
+same production SDK wrapper and transaction runner in Node. It can generate
+captures that prove rendered fork state, not browser transaction execution.
+The manifest records which path produced each promoted capture; the current
+manifest identifies the browser gate.
 
-The fork-local blocks do not exist in Goldsky's public index. During Playwright
-capture only, FxAeon intercepts the SDK's four exact owner/position-ID discovery
-queries and returns the IDs minted by the fixture. The capture rejects an
-unexpected query, owner, duplicate group, or changed pool/subgraph mapping.
-The SDK then reads the position and pool accounting state from contracts on
-the local fork; fixture creation independently verifies NFT ownership and
-nonzero collateral/debt. Product code, SDK position objects, contract balances,
-and transaction results are not mocked.
+The fork-local blocks do not exist in Goldsky's public index. For the protected
+browser proof, the harness preloads actual historical `ownerOf` storage slots
+for all four pools through read-only multicall batches of 128 before the browser
+build and asserts `forkOwnerStoragePreloaded: true`. This avoids a cold-fork
+storage timeout in the direct discovery fallback; it is functional test setup,
+not a cold-provider performance benchmark or fabricated position data. The
+application still performs its real `balanceOf`, index, owner, and accounting
+checks. The SDK reads position and pool accounting state from contracts on the
+local fork; fixture creation independently verifies NFT ownership and nonzero
+collateral/debt. Product code, SDK position objects, contract balances, and
+transaction results are not mocked.
 
-Prices and CoinGecko history are unmodified external display data by default.
-They are observed at capture time, not necessarily at the fork's historical
-block, and never serve as oracle, execution-price, PnL, or return evidence.
-If a provider is unavailable, its honest unavailable state remains visible.
-The image includes a small local-fork provenance caption.
+The promoted browser captures use illustrative display prices and chart history
+so an external chart outage cannot prevent capture. Each image visibly
+identifies this fixture mode. Position ownership, accounting, and transaction
+execution still come from the local fork. Illustrative prices are never oracle,
+execution-price, PnL, or return evidence. The standalone capture command
+defaults to unmodified external display data; those observations are taken at
+capture time, not the fork's historical block.
 
 The lower-level capture helper can also reuse positions opened by the browser
 acceptance test. Before that test restores its snapshot, it supplies the same
@@ -47,8 +65,9 @@ pnpm --dir apps/mini-app exec playwright install chromium
 pnpm test:anvil:browser
 ```
 
-Inspect `artifacts/anvil/browser-proof.json` and the images plus capture report
-under `artifacts/anvil/browser/docs/` before promoting them into `docs/assets/`.
+Inspect `artifacts/anvil/browser-proof.json`, the capture report under
+`artifacts/anvil/browser/docs/`, and the committed manifest before promoting
+images into `docs/assets/` or `apps/landing/assets/`.
 For the standalone Node-runner fixture:
 
 ```powershell
@@ -84,13 +103,14 @@ The command writes:
 - `docs/assets/fxaeon-positions-mobile.png`
 - `docs/fixtures/position-screenshot-manifest.json`
 
-The standalone command's retained manifest contains the public pool addresses, fork-minted position
-IDs, fixture assertions, and a separate browser capture report. The report
-records the exact rendered position keys, viewport, image SHA-256 hashes,
-market-data mode, and observed discovery groups. It proves those documented
-states rendered; it does not prove browser transaction execution. Fixture
-assertions are written only after contract checks pass. Browser capture claims
-are added only after the capture completes and the node snapshot is restored.
+The retained manifest contains the public pool addresses, fork-minted position
+IDs, fixture assertions, and capture report. The report records the execution
+surface, exact rendered position keys, viewport, image SHA-256 hashes,
+market-data mode, and observed discovery groups. When the manifest records
+`executionSurface` as `browser`, the screenshot report is linked to the separate browser proof; the
+manifest alone proves which UI states rendered, not transaction execution.
+Fixture assertions are written only after contract checks pass. Browser capture
+claims are added only after capture completes and the node snapshot is restored.
 
 Outputs are staged in a unique temporary directory. Publishing happens only
 after all four screenshots validate and snapshot restoration succeeds, so a

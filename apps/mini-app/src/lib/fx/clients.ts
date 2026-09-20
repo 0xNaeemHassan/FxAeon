@@ -1,7 +1,10 @@
 import {
   createPublicClient,
   http,
+  type Address,
+  type Hex,
 } from "viem";
+import { publicActionsL2 } from "viem/op-stack";
 import { base, mainnet } from "viem/chains";
 import { BASE_CHAIN_ID, ETHEREUM_CHAIN_ID, requireRpcUrl } from "./config";
 import type { FxChainId } from "./types";
@@ -9,6 +12,24 @@ import type { FxPublicClient } from "./types";
 
 let ethereumClient: FxPublicClient | undefined;
 let baseClient: FxPublicClient | undefined;
+
+const L1_BLOCK_ADDRESS = "0x4200000000000000000000000000000000000015" as Address;
+const L1_BLOCK_OPERATOR_ABI = [
+  {
+    type: "function",
+    name: "operatorFeeScalar",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint32" }],
+  },
+  {
+    type: "function",
+    name: "operatorFeeConstant",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint64" }],
+  },
+] as const;
 
 /**
  * Prove the remote endpoint's chain identity with eth_chainId. A viem `chain`
@@ -60,10 +81,36 @@ export function getPublicClient(chainId: FxChainId): FxPublicClient {
 
   if (!baseClient) {
     const rpcUrl = requireRpcUrl(BASE_CHAIN_ID);
-    baseClient = createPublicClient({
+    const client = createPublicClient({
       chain: base,
       transport: http(rpcUrl),
-    }) as unknown as FxPublicClient;
+    }).extend(publicActionsL2()) as unknown as FxPublicClient;
+    // viem's convenience action intentionally converts any operator predeploy
+    // read failure to 0n (it treats the error as a pre-Isthmus chain). That is
+    // unsafe for a cost certificate: a provider outage must remain partial.
+    // Probe bytecode first, then read both parameters strictly so only an
+    // absent predeploy is represented as a genuine zero fee.
+    client.estimateOperatorFee = async (args: {
+      account?: Address;
+      to: Address;
+      data?: Hex;
+      value?: bigint;
+      maxFeePerGas?: bigint;
+      maxPriorityFeePerGas?: bigint;
+    }): Promise<bigint> => {
+      const bytecode = await client.getBytecode({ address: L1_BLOCK_ADDRESS });
+      if (bytecode === undefined) throw new Error("could not verify the Base L1Block predeploy");
+      if (!bytecode || bytecode === "0x") return 0n;
+      const [scalar, constant] = await Promise.all([
+        client.readContract({ address: L1_BLOCK_ADDRESS, abi: L1_BLOCK_OPERATOR_ABI, functionName: "operatorFeeScalar" }),
+        client.readContract({ address: L1_BLOCK_ADDRESS, abi: L1_BLOCK_OPERATOR_ABI, functionName: "operatorFeeConstant" }),
+      ]);
+      const estimateGas = client.estimateGas;
+      if (!estimateGas) throw new Error("Base RPC client does not expose estimateGas");
+      const gasUsed = await estimateGas(args);
+      return (gasUsed * BigInt(scalar)) / 1_000_000n + BigInt(constant);
+    };
+    baseClient = client;
   }
   return baseClient;
 }

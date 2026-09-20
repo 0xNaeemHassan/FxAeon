@@ -5,18 +5,37 @@ import './globals.css';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { TelegramProvider } from '@/components/TelegramProvider';
 import WalletProviderBoundary from '@/components/WalletProviderBoundary';
-import PriceProvider from '@/components/PriceProvider';
+import RoutePriceProvider from '@/components/RoutePriceProvider';
 import { LocaleProvider } from '@/lib/i18n';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 const themeInitializer = `(()=>{try{const v=localStorage.getItem('fxaeon_theme_id_v2');const t=v==='official'||v==='dark'||v==='light'?v:localStorage.getItem('fxaeon_theme_id')==='light'?'light':'official';const r=document.documentElement;r.dataset.theme=t;r.style.colorScheme=t==='light'?'light':'dark';}catch{}})();`;
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://fxaeon.com'),
   title: {
     default: 'FxAeon',
     template: '%s · FxAeon',
   },
-  description: 'Trade, borrow, earn, and bridge with f(x) Protocol from the web or Telegram.',
+  description: 'Trade, borrow, earn, and bridge with the f(x) SDK from the web or Telegram.',
+  openGraph: {
+    type: 'website',
+    siteName: 'FxAeon',
+    title: 'FxAeon · Your DeFi. All in one place.',
+    description: 'Trade, borrow, earn, and bridge with the f(x) SDK from the web or Telegram.',
+    images: [{
+      url: '/landing/fxaeon-banner.png',
+      width: 2172,
+      height: 724,
+      alt: 'FxAeon — Your DeFi. All in one place.',
+    }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'FxAeon · Your DeFi. All in one place.',
+    description: 'Trade, borrow, earn, and bridge with the f(x) SDK from the web or Telegram.',
+    images: ['/landing/fxaeon-banner.png'],
+  },
   applicationName: 'FxAeon',
   formatDetection: { telephone: false, email: false, address: false },
   appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'FxAeon' },
@@ -53,11 +72,11 @@ export default function RootLayout({
       <body className={inter.className}>
         <ErrorBoundary>
           <LocaleProvider>
-            <PriceProvider>
+            <RoutePriceProvider>
               <WalletProviderBoundary>
                 <TelegramProvider>{children}</TelegramProvider>
               </WalletProviderBoundary>
-            </PriceProvider>
+            </RoutePriceProvider>
           </LocaleProvider>
         </ErrorBoundary>
       </body>

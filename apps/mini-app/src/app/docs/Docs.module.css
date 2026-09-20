@@ -16,16 +16,39 @@
 
 .docsNav {
   position: sticky;
-  top: 24px;
+  top: 12px;
   display: flex;
   flex-direction: column;
   gap: 3px;
   /* The app content is its own viewport on desktop. Keep the rail inside
      that viewport so every section remains reachable without moving the
      article out from under the shell chrome. */
-  max-height: calc(100dvh - 160px);
+  max-height: calc(var(--tg-viewport-height, 100dvh) - 132px);
   overflow: hidden;
 }
+
+.contentsDisclosure {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+}
+.contentsSummary {
+  display: none;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+.contentsSummary::-webkit-details-marker { display: none; }
+.contentsCount { color: var(--mut-2); font-size: 11px; font-weight: 500; }
 
 .searchLabel {
   margin-bottom: 5px;
@@ -60,7 +83,8 @@
 .clearSearch {
   position: absolute;
   right: 7px;
-  min-height: 32px;
+  min-height: 44px;
+  min-width: 44px;
   padding: 5px 8px;
   border-radius: 8px;
   color: var(--mint);
@@ -70,15 +94,9 @@
 
 .clearSearch:hover { background: var(--mint-dim); }
 
-.navLabel {
-  margin-bottom: 8px;
-  padding-inline: 10px;
-  color: var(--mut);
-  font-size: 12px;
-  font-weight: 700;
-}
-
 .navLink {
+  display: flex;
+  align-items: center;
   min-height: 44px;
   padding: 9px 10px;
   border-left: 2px solid transparent;
@@ -107,7 +125,6 @@
   background: color-mix(in srgb, var(--mut-2) 70%, transparent);
 }
 .navLinks::-webkit-scrollbar-track { background: transparent; }
-.resultCount { margin: 8px 10px 0; color: var(--mut-2); font-size: 11px; }
 .emptySearch { margin: 4px 10px 0; color: var(--mut); font-size: 11px; line-height: 1.45; }
 
 .navLink:hover,
@@ -123,33 +140,17 @@
 }
 
 .docsIntro {
-  margin-bottom: 32px;
-  padding: clamp(20px, 4vw, 32px);
-  border: 1px solid var(--line);
-  border-radius: 24px;
-  background: color-mix(in srgb, var(--surface) 94%, var(--mint) 6%);
+  margin-bottom: 18px;
+  padding: 4px 0 0;
 }
 
-.kicker {
-  color: var(--mint);
-  font-size: 12px;
-  font-weight: 700;
-}
-
+.docsIntro h1,
 .docsIntro h2 {
   margin-top: 8px;
-  font-size: clamp(28px, 5vw, 42px);
+  font-size: clamp(25px, 4vw, 34px);
   font-weight: 750;
   line-height: 1.05;
   letter-spacing: -.045em;
-}
-
-.introCopy {
-  max-width: 60ch;
-  margin-top: 14px;
-  color: var(--mut);
-  font-size: 14px;
-  line-height: 1.65;
 }
 
 .section {
@@ -198,23 +199,6 @@
 .callout p { margin-top: 0; }
 .callout strong { color: var(--mint); }
 
-.factGrid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 16px;
-}
-
-.fact {
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--surface-2);
-}
-
-.fact strong { display: block; font-size: 13px; }
-.fact span { display: block; margin-top: 4px; color: var(--mut); font-size: 12px; line-height: 1.45; }
-
 .docsFooter {
   padding-block: 24px 40px;
   color: var(--mut-2);
@@ -222,27 +206,60 @@
   line-height: 1.55;
 }
 
+.footerLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 8px;
+}
+
+.footerLinks a {
+  display: inline-flex;
+  min-height: 44px;
+  min-width: 44px;
+  align-items: center;
+  justify-content: center;
+}
+
 @media (max-width: 760px) {
   .docsLayout { display: block; }
   .docsNav {
-    position: sticky;
-    top: 8px;
-    z-index: 2;
-    display: block;
+    position: relative;
+    top: auto;
+    z-index: auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
     gap: 0;
-    margin-bottom: 20px;
+    margin-bottom: 12px;
     padding: 4px;
     max-height: none;
-    overflow-x: auto;
-    overflow-y: visible;
+    overflow: visible;
     border: 1px solid var(--line);
     border-radius: 16px;
     background: color-mix(in srgb, var(--surface) 96%, transparent);
     backdrop-filter: blur(12px);
   }
-  .searchLabel { display: block; padding: 4px 8px 2px; }
-  .searchRow { margin: 0 4px 5px; }
-  .navLabel { display: none; }
+  .searchLabel {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .searchRow { grid-column: 1; margin: 0 4px 4px; }
+  .contentsDisclosure { grid-column: 2; }
+  .contentsDisclosure { display: block; overflow: visible; }
+  .contentsDisclosure[open] { grid-column: 1 / -1; }
+  .contentsSummary { display: flex; }
+  .contentsDisclosure > .navLinks,
+  .contentsDisclosure > .emptySearch { margin-top: 0; }
+  .contentsDisclosure:not([open]) > .navLinks,
+  .contentsDisclosure:not([open]) > .emptySearch { display: none; }
   .navLinks {
     display: flex;
     flex: 0 0 auto;
@@ -250,7 +267,7 @@
     gap: 4px;
     overflow-x: auto;
     overflow-y: visible;
-    padding: 0 4px 4px;
+    padding: 4px 4px 2px;
   }
   .navLink {
     min-height: 44px;
@@ -262,12 +279,8 @@
   }
   .navLink:hover,
   .navLink:focus-visible { border: 0; }
-  .resultCount { margin: 0 8px 3px; }
-  .emptySearch { margin: 0 8px 4px; }
-  .section { scroll-margin-top: 152px; }
-  .docsIntro { margin-bottom: 20px; }
-}
-
-@media (max-width: 460px) {
-  .factGrid { grid-template-columns: 1fr; }
+  .emptySearch { margin: 3px 8px 4px; }
+  .section { scroll-margin-top: 24px; }
+  .docsIntro { margin-bottom: 10px; }
+  .docsIntro h1 { margin-top: 0; font-size: 24px; }
 }

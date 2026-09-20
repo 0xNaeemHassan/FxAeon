@@ -63,7 +63,7 @@ export interface ConfirmedPositionReadDependencies {
 /** A lagging RPC cannot disprove an otherwise valid receipt-derived hint. */
 export class ConfirmedPositionNotReadyError extends Error {
   constructor() {
-    super('The block following the confirmed position transaction is not yet observable; retry verification.');
+    super('The canonical receipt block is not yet observable; retry verification.');
     this.name = 'ConfirmedPositionNotReadyError';
   }
 }
@@ -227,9 +227,10 @@ export function deriveConfirmedPositionHint(params: {
 
 /**
  * A stored hint proves nothing until its successful receipt, original mint,
- * current ownership, and at least one following block are rechecked. RPC
- * failures and a not-yet-observable following block reject so callers retain
- * the retry hint; an invalid, reorged, or no-longer-owned hint returns false.
+ * current ownership are rechecked. RPC failures and a not-yet-observable
+ * receipt block reject so callers retain the retry hint; an invalid, reorged,
+ * or no-longer-owned hint returns false. The owner read may run in the same
+ * block as the receipt; it remains the canonical source for ownership.
  */
 export async function verifyConfirmedPositionHint(
   hint: ConfirmedPositionHint,
@@ -245,7 +246,7 @@ export async function verifyConfirmedPositionHint(
     client.getTransactionReceipt({ hash: parsed.transactionHash }),
   ]);
   if (receipt.status !== 'success') return false;
-  if (typeof head !== 'bigint' || head <= BigInt(parsed.blockNumber)) throw new ConfirmedPositionNotReadyError();
+  if (typeof head !== 'bigint' || head < BigInt(parsed.blockNumber)) throw new ConfirmedPositionNotReadyError();
   const actionAddress = actionDestination(parsed.operation, parsed.walletAddress);
   if (!actionAddress) return false;
   if (!sameAddress(receipt.transactionHash, parsed.transactionHash)

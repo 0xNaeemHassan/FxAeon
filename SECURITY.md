@@ -10,7 +10,8 @@ Maintainers will acknowledge a valid report, coordinate a fix and disclosure win
 
 ## Security boundaries
 
-- FxAeon has no backend, webhook, database, Redis, worker, queue, or delegated signer.
+- FxAeon has no application backend, webhook, database, Redis, worker, queue, or delegated signer. A deployment may expose only the optional read-only `/api/gas` Pages Function, which has no wallet or protocol-state authority.
+- Positions, Borrow, and fxSAVE financial state is Ethereum-authoritative; Move is the supported `fxUSD`/`fxSAVE` bridge between Ethereum and Base.
 - Privy is the wallet custody and explicit signing boundary. FxAeon never accepts or stores a private key.
 - The official f(x) SDK is the only protocol planner. The client validates transaction targets, selectors, sender, chain, value, approvals, nonce, and order before every visible wallet prompt.
 - A rejected, reverted, timed-out, or nonce-drifted step stops the route; later steps are not submitted automatically.

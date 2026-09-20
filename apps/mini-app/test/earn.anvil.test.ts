@@ -49,6 +49,15 @@ const client = rpcUrl
   ? createPublicClient({ chain: mainnet, transport: http(rpcUrl, { timeout: 120_000 }) }) as unknown as FxPublicClient
   : undefined;
 
+function normalizeForkBlock(value: string | number): bigint {
+  if (typeof value === "number") {
+    assert.ok(Number.isSafeInteger(value) && value >= 0, "Anvil metadata fork block number must be a safe integer");
+    return BigInt(value);
+  }
+  assert.match(value, /^(?:0x[0-9a-f]+|[0-9]+)$/i, "Anvil metadata fork block number must be hexadecimal or decimal");
+  return BigInt(value);
+}
+
 const ERC20_ABI = parseAbi([
   "function balanceOf(address owner) view returns (uint256)",
   "function allowance(address owner,address spender) view returns (uint256)",
@@ -308,10 +317,15 @@ test("earn proof: official fxSAVE deposit, redemption, cooldown, and claim on An
   const wallet = (await rpc<Address[]>("eth_accounts"))[0];
   assert.ok(wallet, "Anvil must expose an unlocked disposable wallet");
   await rpc("anvil_setBalance", [wallet, quantity(5n * 10n ** 18n)]);
-  const forkBlock = BigInt(await rpc<string>("eth_blockNumber"));
+  const forkHead = BigInt(await rpc<string>("eth_blockNumber"));
+  const metadata = await rpc<{ forkedNetwork?: { forkBlockNumber?: string | number } }>("anvil_metadata");
+  const forkBaseRaw = metadata.forkedNetwork?.forkBlockNumber;
+  assert.ok(forkBaseRaw !== undefined, "Anvil metadata must expose the original fork block");
+  const forkBlock = normalizeForkBlock(forkBaseRaw);
   if (process.env.ANVIL_FORK_BLOCK?.trim()) {
-    assert.equal(forkBlock, BigInt(process.env.ANVIL_FORK_BLOCK), "fork block is not pinned");
+    assert.equal(forkBlock, BigInt(process.env.ANVIL_FORK_BLOCK), "Anvil metadata does not match the requested pinned fork block");
   }
+  assert.ok(forkHead >= forkBlock, "Anvil head must not precede its configured fork block");
   const snapshot = await rpc<string>("evm_snapshot");
   const forkHeader = await rpc<{ timestamp: string }>("eth_getBlockByNumber", [quantity(forkBlock), false]);
   const forkTimestamp = Number(BigInt(forkHeader.timestamp));

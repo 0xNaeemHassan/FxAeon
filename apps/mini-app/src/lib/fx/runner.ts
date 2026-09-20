@@ -154,8 +154,9 @@ export class TransactionReorgError extends Error {
 }
 
 /**
- * A receipt is only an inclusion proof. Re-read it while the chain advances
- * and require three canonical confirmations before a route can continue.
+ * A receipt is only an inclusion proof. Re-read it at the canonical receipt
+ * block and require one successful confirmation by default before a route can
+ * continue. Callers may request a deeper confirmation depth when needed.
  * Re-reading the receipt also catches a provider changing the block identity
  * during a reorg instead of silently treating the old receipt as final.
  */
@@ -168,9 +169,9 @@ export async function waitForConfirmations(params: {
   pollMs?: number;
   onProgress?: (confirmations: number) => void;
 }): Promise<TransactionReceipt> {
-  const required = params.confirmations ?? 3;
-  if (!Number.isSafeInteger(required) || required < 3 || required > 64) {
-    throw new RangeError("confirmation depth must be an integer between 3 and 64");
+  const required = params.confirmations ?? 1;
+  if (!Number.isSafeInteger(required) || required < 1 || required > 64) {
+    throw new RangeError("confirmation depth must be an integer between 1 and 64");
   }
   const timeoutMs = params.timeoutMs ?? 180_000;
   const pollMs = params.pollMs ?? 2_000;
@@ -198,7 +199,7 @@ export async function waitForConfirmations(params: {
     if (latest.status !== "success") {
       throw new TransactionReorgError("transaction receipt status changed while waiting for confirmations");
     }
-    const head = await params.client.getBlockNumber();
+    const head = await params.client.getBlockNumber({ cacheTime: 0 });
     if (typeof head !== "bigint") throw new Error("RPC returned an invalid block number during confirmation");
     const observed = head >= originalBlock ? Number(head - originalBlock + 1n) : 0;
     params.onProgress?.(observed);
@@ -334,9 +335,9 @@ export async function runTransactionRoute(params: {
   const options = params.options ?? {};
   if (
     options.confirmations !== undefined
-    && (!Number.isSafeInteger(options.confirmations) || options.confirmations < 3 || options.confirmations > 64)
+    && (!Number.isSafeInteger(options.confirmations) || options.confirmations < 1 || options.confirmations > 64)
   ) {
-    throw new RangeError("confirmation depth must be an integer between 3 and 64");
+    throw new RangeError("confirmation depth must be an integer between 1 and 64");
   }
   validateRoute(route, policy);
   const client = params.publicClient ?? getPublicClient(route.chainId);
@@ -380,10 +381,11 @@ export async function runTransactionRoute(params: {
       const steps: TransactionStepResult[] = [];
 
       /**
-       * Refresh protocol state only after at least one submitted transaction
-       * has a receipt and the following block boundary has been observed.
-       * This applies to partially completed routes too: an approval may have
-       * succeeded before the user rejects, or the protocol action reverts.
+       * Refresh protocol state after at least one submitted transaction has a
+       * canonical receipt. A following block is an explicit opt-in for callers
+       * that need extra indexer settling time. This applies to partially
+       * completed routes too: an approval may have succeeded before the user
+       * rejects, or the protocol action reverts.
        */
       const runPostConfirmRead = async (
         result: TransactionExecutionResult,
@@ -398,8 +400,8 @@ export async function runTransactionRoute(params: {
           .find((candidate) => candidate.receipt)?.receipt;
         if (!latestReceipt) return;
 
-        let postConfirmReadSafe = options.waitForNextBlock === false;
-        if (options.waitForNextBlock !== false) {
+        let postConfirmReadSafe = options.waitForNextBlock !== true;
+        if (options.waitForNextBlock === true) {
           try {
             await waitForNextBlock({
               client,
@@ -410,8 +412,8 @@ export async function runTransactionRoute(params: {
             postConfirmReadSafe = true;
           } catch (error) {
             // A mined transaction cannot be undone. Keep that truth visible,
-            // but never present a state read as fresh until a later block is
-            // independently observed.
+            // but do not present an optional delayed state read as fresh when
+            // its requested block boundary was unavailable.
             notifyStatus(
               refreshStatus,
               `receipt confirmed; post-confirm block wait unavailable: ${error instanceof Error ? error.message : String(error)}`,
@@ -515,7 +517,8 @@ export async function runTransactionRoute(params: {
           // Once the submitted hash has a receipt, the chain may already have
           // mutated even if a later sender/destination/calldata verification
           // fails. Preserve that receipt on the failed step so the shared
-          // failure path waits for the next block and rereads official state.
+          // failure path rereads official state at the canonical receipt
+          // boundary (or after an explicitly requested extra block).
           step.receipt = receipt;
           if (
             receipt.from.toLowerCase() !== transaction.from.toLowerCase()
@@ -549,7 +552,7 @@ export async function runTransactionRoute(params: {
           step.includedBlockNumber = receipt.blockNumber;
           step.includedBlockHash = receipt.blockHash;
           step.confirmations = 1;
-          step.requiredConfirmations = options.confirmations ?? 3;
+          step.requiredConfirmations = options.confirmations ?? 1;
           notifyStep(step);
           notifyStatus("included", `${label}: ${hash}`);
           const confirmedReceipt = await waitForConfirmations({
@@ -565,14 +568,14 @@ export async function runTransactionRoute(params: {
               notifyStep(step);
               notifyStatus(
                 "confirming",
-                `${label}: ${confirmations}/${options.confirmations ?? 3} confirmations`,
+                `${label}: ${confirmations}/${options.confirmations ?? 1} confirmations`,
               );
             },
           });
           step.receipt = confirmedReceipt;
           updatePendingHashRecord(pendingRecord, "confirmed");
           step.status = "confirmed";
-          step.confirmations = Math.max(step.confirmations ?? 1, options.confirmations ?? 3);
+          step.confirmations = Math.max(step.confirmations ?? 1, options.confirmations ?? 1);
           notifyStep(step);
           notifyStatus("confirmed", `${label}: ${hash}`);
         } catch (error) {

@@ -323,7 +323,7 @@ test('restored hints enforce exact schema, safe integers, canonical pool pairing
   assert.equal(parseConfirmedPositionHint(missingField, WALLET), null);
 });
 
-test('verification requires the following block, original successful receipt and current owner, never SDK data', async () => {
+test('verification requires the canonical receipt, original successful receipt and current owner, never SDK data', async () => {
   const source = fixture();
   const hint = hintFrom(source);
   const good = dependencies(source);
@@ -358,15 +358,15 @@ test('chain and RPC failures cannot become a verified discovery hint or SDK read
   await assert.rejects(verifyConfirmedPositionHint(hintFrom(source), WALLET, failed.deps), /RPC unavailable/);
 });
 
-test('a not-yet-observable following block is retryable rather than disproving the confirmed hint', async () => {
+test('a not-yet-observable receipt block is retryable rather than disproving the confirmed hint', async () => {
   const source = fixture();
   const hint = hintFrom(source);
-  for (const head of [99n, 100n]) {
+  for (const head of [99n]) {
     const pending = dependencies(source, { head });
     await assert.rejects(verifyConfirmedPositionHint(hint, WALLET, pending.deps), ConfirmedPositionNotReadyError);
     assert.equal(pending.calls.some(({ method }) => method === 'owner' || method === 'sdk'), false);
   }
-  assert.equal(await verifyConfirmedPositionHint(hint, WALLET, dependencies(source, { head: 101n }).deps), true, 'the same retained hint becomes verifiable after the following block');
+  assert.equal(await verifyConfirmedPositionHint(hint, WALLET, dependencies(source, { head: 100n }).deps), true, 'the same retained hint becomes verifiable at the receipt block');
 });
 
 test('targeted hydration calls only the official affected group and returns only its receipt-proven ID', async () => {
@@ -409,9 +409,9 @@ test('indexing-pending, duplicate, zeroed, negative, wrong-market, and malformed
   ]) {
     assert.equal(await readConfirmedPosition(hint, WALLET, dependencies(source, { positions }).deps), null);
   }
-  const noBlock = dependencies(source, { head: 100n });
+  const noBlock = dependencies(source, { head: 99n });
   await assert.rejects(readConfirmedPosition(hint, WALLET, noBlock.deps), ConfirmedPositionNotReadyError);
-  assert.equal(noBlock.calls.some(({ method }) => method === 'sdk'), false, 'no financial read before the following block');
+  assert.equal(noBlock.calls.some(({ method }) => method === 'sdk'), false, 'no financial read before the receipt block');
 });
 
 test('an NFT transferred while the SDK is pending cannot hydrate the former owner portfolio', async () => {

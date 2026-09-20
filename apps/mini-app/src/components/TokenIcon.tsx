@@ -2,17 +2,13 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { useState } from 'react';
-
 /**
- * Token / asset logos used across the Mini App.
+ * Token and network marks used across the Mini App.
  *
- * Prefer maintained AladdinDAO/SmolDapp token assets (with a resilient local
- * fallback) for the assets the product actually touches:
- *   ETH, wstETH, WBTC, BTC, FXN, fxUSD, fxSAVE, FRAX (governance token, prev. FXS).
- *
- * For tokens without a dedicated mark we fall back to a clean gradient circle
- * with the first 1-3 letters of the symbol.
+ * Supported marks are vendored from the maintained sources listed in
+ * docs/brand-assets.md. Keeping them under public/ makes the picker stable
+ * when a wallet opens offline or an asset CDN is slow. Unknown symbols retain
+ * the small initials fallback below; it is never used for a supported mark.
  */
 
 export type TokenSymbol =
@@ -37,170 +33,55 @@ interface TokenIconProps {
 
 const common = 'rounded-full object-contain';
 
+const LOCAL_TOKEN_LOGOS: Record<string, string> = {
+  ETH: '/token-icons/eth.png',
+  WETH: '/token-icons/weth.png',
+  STETH: '/token-icons/steth.png',
+  WSTETH: '/token-icons/wsteth.png',
+  WBTC: '/token-icons/wbtc.png',
+  BTC: '/token-icons/wbtc.png',
+  FRAX: '/token-icons/frax.png',
+  FXN: '/token-icons/fxn.png',
+  FXUSD: '/token-icons/fxusd.svg',
+  FXSAVE: '/token-icons/fxsave.svg',
+  USDC: '/token-icons/usdc.png',
+  USDT: '/token-icons/usdt.png',
+};
+
 export function TokenIcon({ symbol, size = 44, className = '' }: TokenIconProps) {
-  const s = symbol.toUpperCase();
+  const normalised = symbol.toUpperCase();
+  const localLogo = LOCAL_TOKEN_LOGOS[normalised];
   const style = { width: size, height: size };
-  const [remoteFailed, setRemoteFailed] = useState(false);
 
-  // SmolDapp's tokenAssets CDN is the maintained AladdinDAO asset source. It
-  // keeps logos current without shipping a second icon library in the app;
-  // the inline marks below remain a resilient offline/error fallback.
-  const officialLogo = OFFICIAL_TOKEN_LOGOS[s];
-  if (officialLogo && !remoteFailed) {
-    return <img src={officialLogo} style={style} className={`${common} ${className}`} alt={`${symbol} logo`} width={size} height={size} loading="lazy" decoding="async" onError={() => setRemoteFailed(true)} />;
+  if (localLogo) {
+    return <img src={localLogo} style={style} className={`${common} ${className}`} role="img" aria-label={`${symbol} logo`} alt="" width={size} height={size} decoding="async" />;
   }
 
-  // Ethereum diamond
-  if (s === 'ETH' || s === 'WETH') {
-    return (
-      <svg viewBox="0 0 32 32" style={style} className={`${common} ${className}`} role="img" aria-label={`${symbol} logo`}>
-        <circle cx="16" cy="16" r="16" fill="#627EEA" />
-        <path d="M16 6l-7 11.5 7 3 7-3L16 6z" fill="white" fillOpacity="0.9" />
-        <path d="M9 17.5L16 29l7-11.5-7 3-7-3z" fill="white" fillOpacity="0.6" />
-      </svg>
-    );
-  }
-
-  // Lido staked ETH (wstETH / stETH) — stylised Lido gradient circle
-  if (s === 'WSTETH' || s === 'STETH') {
-    return (
-      <svg viewBox="0 0 32 32" style={style} className={`${common} ${className}`} role="img" aria-label={`${symbol} logo`}>
-        <defs>
-          <linearGradient id="wstethGrad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#00A3FF" />
-            <stop offset="100%" stopColor="#F0F" />
-          </linearGradient>
-        </defs>
-        <circle cx="16" cy="16" r="16" fill="url(#wstethGrad)" />
-        <text x="16" y="20" textAnchor="middle" fill="white" fontSize="10" fontWeight="700" fontFamily="sans-serif">st</text>
-      </svg>
-    );
-  }
-
-  // Bitcoin
-  if (s === 'WBTC' || s === 'BTC') {
-    return (
-      <svg viewBox="0 0 32 32" style={style} className={`${common} ${className}`} role="img" aria-label={`${symbol} logo`}>
-        <circle cx="16" cy="16" r="16" fill="#F7931A" />
-        <path
-          d="M22.6 14.5c.3-2-1.2-3.1-3.3-3.8l.7-2.7-1.6-.4-.6 2.6c-.4-.1-.9-.2-1.3-.3l.7-2.6-1.6-.4-.7 2.7c-.3-.1-.7-.2-1-.2l.2-2.8-1.4-.2-.6 2.4s-.6-.2-.7-.2l-.1-2.6-1.5-.2-.3 2.6c-1.8-.5-3.3-.4-4.2 1.1-.7 1.2-.4 2.7.6 3.5-.4.2-.8.6-1 1.1-.5 1.5.1 3 1.9 3.6l-1.1 4.3 1.6.4.6-2.6c.4.1.9.2 1.3.3l-.6 2.6 1.6.4.7-2.7c.3.1.6.2 1 .2l-.2 2.8 1.4.2.6-2.4c.8.1 1.5.2 2.2.1 1.8-.2 3-1.3 3.3-3.1.3-1.5-.4-2.6-1.6-3.1.6-.3 1.1-.9 1.3-1.7zm-3.1 3.6c-.2 1.1-1.4 1.6-2.7 1.3-.4-.1-.7-.2-1.1-.3l.7-2.8c.4.1.8.2 1.2.3 1.3.3 2.1.8 1.9 1.5zm-1.3-3.6c-.2.9-1.2 1.4-2.3 1.2-.3-.1-.6-.1-.9-.2l.6-2.5c.3.1.6.1.9.2 1.1.3 1.9.7 1.7 1.3z"
-          fill="white"
-        />
-      </svg>
-    );
-  }
-
-  // f(x) Protocol FXN — violet stylised F
-  if (s === 'FXN') {
-    return (
-      <svg viewBox="0 0 32 32" style={style} className={`${common} ${className}`} role="img" aria-label={`${symbol} logo`}>
-        <circle cx="16" cy="16" r="16" fill="#7C5CFF" />
-        <g stroke="white" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M13 9v14" />
-          <path d="M13 9c0-2 1.5-3 4-3h5" />
-          <path d="M13 16h7" />
-        </g>
-      </svg>
-    );
-  }
-
-  // fxUSD — stablecoin with f(x) violet accent
-  if (s === 'FXUSD') {
-    return (
-      <svg viewBox="0 0 32 32" style={style} className={`${common} ${className}`} role="img" aria-label={`${symbol} logo`}>
-        <circle cx="16" cy="16" r="16" fill="#0A0A12" stroke="#7C5CFF" strokeWidth="1.5" />
-        <text x="16" y="20" textAnchor="middle" fill="#7C5CFF" fontSize="11" fontWeight="700" fontFamily="sans-serif">fx$</text>
-      </svg>
-    );
-  }
-
-  // fxSAVE — savings pool, same family as fxUSD with a leaf/save hint
-  if (s === 'FXSAVE') {
-    return (
-      <svg viewBox="0 0 32 32" style={style} className={`${common} ${className}`} role="img" aria-label={`${symbol} logo`}>
-        <circle cx="16" cy="16" r="16" fill="#0A0A12" stroke="#00D68F" strokeWidth="1.5" />
-        <path d="M16 8c-4 4-4 10 0 14 4-4 4-10 0-14z" fill="#00D68F" />
-      </svg>
-    );
-  }
-
-  // FRAX governance token (prev. FXS) — Fraxtal orange/red F
-  if (s === 'FRAX') {
-    return (
-      <svg viewBox="0 0 32 32" style={style} className={`${common} ${className}`} role="img" aria-label={`${symbol} logo`}>
-        <circle cx="16" cy="16" r="16" fill="#E84142" />
-        <g stroke="white" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M13 9v14" />
-          <path d="M13 9c0-2 1.5-3 4-3h5" />
-          <path d="M13 16h7" />
-        </g>
-      </svg>
-    );
-  }
-
-  // USDC
-  if (s === 'USDC') {
-    return (
-      <svg viewBox="0 0 32 32" style={style} className={`${common} ${className}`} role="img" aria-label={`${symbol} logo`}>
-        <circle cx="16" cy="16" r="16" fill="#2775CA" />
-        <path d="M16 8c4.4 0 8 3.6 8 8s-3.6 8-8 8-8-3.6-8-8 3.6-8 8-8z" fill="none" stroke="white" strokeWidth="1.2" />
-        <text x="16" y="21" textAnchor="middle" fill="white" fontSize="10" fontWeight="700" fontFamily="sans-serif">$</text>
-      </svg>
-    );
-  }
-
-  // USDT
-  if (s === 'USDT') {
-    return (
-      <svg viewBox="0 0 32 32" style={style} className={`${common} ${className}`} role="img" aria-label={`${symbol} logo`}>
-        <circle cx="16" cy="16" r="16" fill="#26A17B" />
-        <text x="16" y="21" textAnchor="middle" fill="white" fontSize="10" fontWeight="700" fontFamily="sans-serif">T</text>
-      </svg>
-    );
-  }
-
-  // Generic fallback: gradient circle with initials
   const initials = symbol.replace(/[^a-zA-Z]/g, '').slice(0, 2).toUpperCase() || symbol.slice(0, 2).toUpperCase();
+  const gradientId = `fallback-${normalised.replace(/[^A-Z0-9_-]/g, '-') || 'token'}`;
   return (
     <svg viewBox="0 0 32 32" style={style} className={`${common} ${className}`} role="img" aria-label={`${symbol} logo`}>
       <defs>
-        <linearGradient id={`fallback-${symbol}`} x1="0" y1="0" x2="1" y2="1">
+        <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stopColor="var(--mint, #7C5CFF)" />
           <stop offset="100%" stopColor="var(--cyan, #00D68F)" />
         </linearGradient>
       </defs>
-      <circle cx="16" cy="16" r="16" fill={`url(#fallback-${symbol})`} />
+      <circle cx="16" cy="16" r="16" fill={`url(#${gradientId})`} />
       <text x="16" y="20" textAnchor="middle" fill="white" fontSize="10" fontWeight="700" fontFamily="sans-serif">{initials}</text>
     </svg>
   );
 }
 
-const OFFICIAL_TOKEN_LOGOS: Record<string, string> = {
-  ETH: 'https://assets.smold.app/api/token/1/0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee/logo-32.png',
-  WETH: 'https://assets.smold.app/api/token/1/0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2/logo-32.png',
-  STETH: 'https://assets.smold.app/api/token/1/0xae7ab96520de3a18e5e111b5eaab095312d7fe84/logo-32.png',
-  WSTETH: 'https://assets.smold.app/api/token/1/0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0/logo-32.png',
-  WBTC: 'https://assets.smold.app/api/token/1/0x2260fac5e5542a773aa44fbcfedf7c193bc2c599/logo-32.png',
-  BTC: 'https://assets.smold.app/api/token/1/0x2260fac5e5542a773aa44fbcfedf7c193bc2c599/logo-32.png',
-  USDC: 'https://assets.smold.app/api/token/1/0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48/logo-32.png',
-  USDT: 'https://assets.smold.app/api/token/1/0xdac17f958d2ee523a2206206994597c13d831ec7/logo-32.png',
-  FXUSD: 'https://raw.githubusercontent.com/AladdinDAO/aladdin-assets/main/images/branding/fxusd.svg',
-  FXSAVE: 'https://raw.githubusercontent.com/AladdinDAO/aladdin-assets/main/images/branding/fxSave.svg',
-  FXN: 'https://assets.smold.app/api/token/1/0x365accfca291e7d3914637abf1f7635db165bb09/logo-32.png',
+const LOCAL_CHAIN_LOGOS: Record<1 | 8453, string> = {
+  1: '/chain-icons/ethereum.png',
+  8453: '/chain-icons/base.png',
 };
 
 export function ChainIcon({ chainId, size = 28, className = '' }: { chainId: 1 | 8453; size?: number; className?: string }) {
-  const [remoteFailed, setRemoteFailed] = useState(false);
   const style = { width: size, height: size };
-  const url = chainId === 1
-    ? 'https://assets.smold.app/api/chain/1/logo-32.png'
-    : 'https://assets.smold.app/api/chain/8453/logo-32.png';
-  if (!remoteFailed) return <img src={url} style={style} className={`${common} ${className}`} alt={chainId === 1 ? 'Ethereum logo' : 'Base logo'} width={size} height={size} loading="lazy" decoding="async" onError={() => setRemoteFailed(true)} />;
-  return (
-    <span style={style} className={`${common} inline-flex items-center justify-center bg-[var(--surface-3)] text-[10px] font-bold text-mint ${className}`} aria-label={chainId === 1 ? 'Ethereum' : 'Base'}>
-      {chainId === 1 ? 'Ξ' : 'B'}
-    </span>
-  );
+  const label = chainId === 1 ? 'Ethereum logo' : 'Base logo';
+  return <img src={LOCAL_CHAIN_LOGOS[chainId]} style={style} className={`${common} ${className}`} role="img" aria-label={label} alt="" width={size} height={size} decoding="async" />;
 }
 
 export default TokenIcon;

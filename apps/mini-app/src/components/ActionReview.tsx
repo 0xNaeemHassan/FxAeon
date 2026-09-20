@@ -8,11 +8,11 @@ import {
   CircleAlert,
   Clock3,
   LoaderCircle,
-  ShieldCheck,
 } from 'lucide-react';
 import { decodeFunctionData, formatEther, formatUnits } from 'viem';
 import {
   FX_TOKENS,
+  formatRouteGasCost,
   prepareRoutesForReview,
   runTransactionRoute,
   routesMatchForSigning,
@@ -23,12 +23,15 @@ import {
   type TransactionExecutionResult,
   type TransactionStepResult,
 } from '@/lib/fx';
+import { useRouteGasCost } from '@/lib/fx';
+import type { UseGasCostResult } from '@/lib/fx/useGasCost';
 import { cancelSignatureRequiredDraft, removeSignatureRequiredDraft, saveSignatureRequiredDraft, type SignatureDraftState } from '@/lib/fx';
 import { usePrivyWallet } from '@/lib/wallet';
 import { useInvalidateWalletData } from '@/components/WalletDataProvider';
 import { createRouteWalletRefresh } from '@/lib/walletDataRefresh';
 import { haptic } from '@/lib/telegram';
 import { Button, Card } from '@/components/ui';
+import { ValueOrSkeleton } from '@/components/MissingValue';
 import ConnectWalletButton from '@/components/ConnectWalletButton';
 import { userSafeError } from '@/lib/errors';
 import { confirmedUpdateCopy, hasTransactionHash, transactionStepProgress } from '@/lib/transactionProgress';
@@ -55,7 +58,7 @@ export interface ActionReviewProps {
   prefetchedPlan?: () => Promise<PlannedRoute | readonly PlannedRoute[] | null>;
   label?: string;
   disabled?: boolean;
-  /** Runs after verified receipts and the required following-block boundary. */
+  /** Runs after verified receipts and confirmation; state reads may still be settling. */
   onComplete?: (result: TransactionExecutionResult, confirmedRoute: PlannedRoute) => void | Promise<void>;
   operationLabel?: string;
   /** Uses an explicit destructive treatment for irreversible full exits. */
@@ -88,6 +91,13 @@ export interface ActionReviewProps {
   surface?: 'card' | 'content';
   /** Verified current values for an existing position or account context. */
   decisionBefore?: ReviewFact[];
+  /** Optional authoritative cost facts supplied by the gas/cost estimator. */
+  executionCost?: {
+    estimatedGas?: string;
+    gasFee?: string;
+    protocolFee?: string;
+    totalCost?: string;
+  };
 }
 
 type Stage = ActionReviewStage;
@@ -150,6 +160,7 @@ function primaryReviewFacts(route: PlannedRoute): ReviewFact[] {
         if (intent.requestedLeverage !== undefined) addFact(facts, 'Target leverage', `${intent.requestedLeverage}×`);
         if (intent.slippagePercent !== undefined) addFact(facts, 'Slippage', `${intent.slippagePercent}%`);
         addFact(facts, 'Position', intent.positionId === 0 ? 'New position' : `#${intent.positionId}`);
+        addFact(facts, 'Risk', 'New leverage can increase liquidation exposure');
         break;
       case 'position-reduce':
         addFact(facts, 'Position', `#${intent.positionId}`);
@@ -160,16 +171,19 @@ function primaryReviewFacts(route: PlannedRoute): ReviewFact[] {
         addFact(facts, 'Position', `#${intent.positionId}`);
         if (intent.requestedLeverage !== undefined) addFact(facts, 'Target leverage', `${intent.requestedLeverage}×`);
         if (intent.slippagePercent !== undefined) addFact(facts, 'Slippage', `${intent.slippagePercent}%`);
+        addFact(facts, 'Risk', 'Changing leverage can alter liquidation exposure');
         break;
       case 'deposit-and-mint':
         addFact(facts, 'Deposit', formatTokenAmount(intent.depositAmount, intent.depositTokenAddress));
-        addFact(facts, 'Mint', formatTokenAmount(intent.mintAmount, FX_TOKENS.fxUSD.address));
+        addFact(facts, 'Borrow', formatTokenAmount(intent.mintAmount, FX_TOKENS.fxUSD.address));
         addFact(facts, 'Position', intent.positionId === 0 ? 'New position' : `#${intent.positionId}`);
+        addFact(facts, 'Risk', intent.mintAmount > 0n ? 'Added debt can increase liquidation exposure' : 'Collateral change affects the liquidation buffer');
         break;
       case 'repay-and-withdraw':
         addFact(facts, 'Repay', formatTokenAmount(intent.minimumRepayAmount, intent.repayTokenAddress));
         addFact(facts, 'Withdraw', formatTokenAmount(intent.withdrawAmount, intent.withdrawTokenAddress));
         addFact(facts, 'Position', `#${intent.positionId}`);
+        addFact(facts, 'Risk', intent.withdrawAmount > 0n ? 'Withdrawal can reduce the liquidation buffer' : 'Repayment should reduce debt after confirmation');
         break;
       case 'fxsave-deposit':
         addFact(facts, 'Deposit', formatTokenAmount(intent.amount, intent.tokenInAddress));
@@ -203,10 +217,28 @@ function primaryReviewFacts(route: PlannedRoute): ReviewFact[] {
       addFact(facts, 'Minimum received', `${trimDecimal(formatUnits(route.quote.minAmountLD, 18))} ${route.quote.bridgeToken ?? 'tokens'}`);
     }
     if (route.quote.recipient) addFact(facts, 'Recipient', route.quote.recipient);
-    addFact(facts, 'Network fee', `${trimDecimal(formatEther(route.quote.nativeFee))} ETH`);
+    addFact(facts, 'Bridge fee', `${trimDecimal(formatEther(route.quote.nativeFee))} ETH`);
   }
 
   return facts;
+}
+
+function routeFacts(route: PlannedRoute, gasCost: Pick<UseGasCostResult, 'estimate' | 'estimateIsCurrent'>, executionCost?: ActionReviewProps['executionCost']): ReviewFact[] {
+  const facts = primaryReviewFacts(route);
+  const currentGasCost = gasCost.estimateIsCurrent && gasCost.estimate
+    ? formatRouteGasCost(gasCost.estimate)
+    : undefined;
+  if (currentGasCost?.gasFee) addFact(facts, 'Gas fee', currentGasCost.gasFee);
+  if (currentGasCost?.totalCost) addFact(facts, 'Total cost', currentGasCost.totalCost);
+  if (executionCost?.gasFee) addFact(facts, 'Gas fee', executionCost.gasFee);
+  if (executionCost?.protocolFee) addFact(facts, 'Protocol fee', executionCost.protocolFee);
+  if (executionCost?.totalCost) addFact(facts, 'Total cost', executionCost.totalCost);
+  return facts;
+}
+
+function actionButtonLabel(label: string, operationLabel?: string): string {
+  const value = operationLabel ?? label;
+  return /^review\s+/i.test(value) ? value.replace(/^review\s+/i, '') : value;
 }
 
 const APPROVE_ABI = [{
@@ -245,7 +277,7 @@ function approvalSummary(transaction: PlannedTransaction, approval: NonNullable<
 }
 
 function stepTitle(transaction: PlannedTransaction): string {
-  if (transaction.kind !== 'approval') return 'Confirm action';
+  if (transaction.kind !== 'approval') return 'Action';
   return transaction.type === 'approvePosition' ? 'Approve position' : `Approve ${tokenForAddress(transaction.to)?.key ?? 'token'}`;
 }
 
@@ -257,6 +289,7 @@ function statusPresentation(params: {
   stepCount: number;
   operation?: PlannedRoute['operation'];
   refreshing?: boolean;
+  networkSwitching?: boolean;
 }): { label: string; body: string; className: string; icon: ReactNode } {
   const confirmed = params.stepResults.filter((step) => transactionStepProgress(step).state === 'confirmed').length;
   const uncertain = params.stepResults.find((step) => ['unknown', 'unverified'].includes(transactionStepProgress(step).state));
@@ -270,21 +303,29 @@ function statusPresentation(params: {
   }
   if (params.status === 'planning') {
     return {
-      label: params.stage === 'executing' ? 'Preparing wallet request' : 'Preparing review',
-      body: params.stage === 'executing' ? 'Rechecking the reviewed route before signing.' : 'Building a fresh route from current on-chain state.',
+      label: params.stage === 'executing' ? 'Preparing wallet request' : 'Preparing transaction',
+      body: params.stage === 'executing' ? 'Verifying the latest route.' : 'Building the route.',
       className: 'text-mint',
       icon: <LoaderCircle className="h-4 w-4 animate-spin" />,
     };
   }
   if (params.status === 'reviewing') {
     return params.stage === 'review'
-      ? { label: 'Ready to confirm', body: 'Checks passed. Review the amounts, limits, and transaction steps.', className: 'text-success', icon: <CheckCircle2 className="h-4 w-4" /> }
-      : { label: 'Checking transaction', body: 'Simulating the ordered route against current chain state.', className: 'text-mint', icon: <LoaderCircle className="h-4 w-4 animate-spin" /> };
+      ? { label: 'Ready to sign', body: 'Review the amount, limits, approvals, and risk above.', className: 'text-success', icon: <CheckCircle2 className="h-4 w-4" /> }
+      : { label: 'Checking transaction', body: 'Verifying the route.', className: 'text-mint', icon: <LoaderCircle className="h-4 w-4 animate-spin" /> };
   }
   if (params.status === 'awaiting-user') {
+    if (params.networkSwitching) {
+      return {
+        label: 'Switching network',
+        body: 'Your wallet is switching to the transaction network. Signing opens after the switch is verified.',
+        className: 'text-warn',
+        icon: <LoaderCircle className="h-4 w-4 animate-spin" />,
+      };
+    }
     return {
       label: 'Wallet approval',
-      body: params.detail ? `${params.detail.replace(/^transaction/i, 'Transaction')}. Review it in your wallet.` : 'Review and approve the transaction in your wallet.',
+      body: params.detail ? `${params.detail.replace(/^transaction/i, 'Transaction')}. Review it in your wallet.` : 'Review the transaction in your wallet, then approve it.',
       className: 'text-warn',
       icon: <Clock3 className="h-4 w-4" />,
     };
@@ -300,10 +341,10 @@ function statusPresentation(params: {
   if (params.status === 'included' || params.status === 'confirming') {
     const active = params.stepResults.find((step) => step.status === 'included' || step.status === 'confirming');
     const count = active?.confirmations ?? 0;
-    const required = active?.requiredConfirmations ?? 3;
+    const required = active?.requiredConfirmations ?? 1;
     return {
       label: params.status === 'included' ? 'Included' : `Confirming · ${count}/${required}`,
-      body: `The transaction is in a canonical block. FxAeon is rechecking its block identity until ${required} confirmations; later route steps remain paused.`,
+      body: `Waiting for ${required} confirmation${required === 1 ? '' : 's'} before the next step.`,
       className: 'text-mint',
       icon: <LoaderCircle className="h-4 w-4 animate-spin" />,
     };
@@ -314,11 +355,11 @@ function statusPresentation(params: {
       : { ...confirmedUpdateCopy(params.operation, params.refreshing ?? false), className: 'text-success', icon: <CheckCircle2 className="h-4 w-4" /> };
   }
   if (params.status === 'partial' || (params.status === 'failed' && confirmed > 0)) {
-    return { label: 'Partially completed', body: 'An earlier step confirmed before the route stopped.', className: 'text-warn', icon: <AlertTriangle className="h-4 w-4" /> };
+    return { label: 'Partially completed', body: 'An earlier step confirmed before the action stopped.', className: 'text-warn', icon: <AlertTriangle className="h-4 w-4" /> };
   }
   return {
-    label: 'Route stopped',
-    body: userSafeError(params.detail, 'The route could not continue. Review it again before signing.'),
+    label: 'Action stopped',
+    body: userSafeError(params.detail, 'The action could not continue. Check it again before signing.'),
     className: 'text-danger',
     icon: <CircleAlert className="h-4 w-4" />,
   };
@@ -340,6 +381,7 @@ export function ActionReview({
   editor,
   surface = 'card',
   decisionBefore,
+  executionCost,
 }: ActionReviewProps) {
   const wallet = usePrivyWallet();
   const invalidateWalletData = useInvalidateWalletData();
@@ -356,8 +398,13 @@ export function ActionReview({
   const [refreshing, setRefreshing] = useState(false);
   const [reviewTitle, setReviewTitle] = useState<string | null>(null);
   const [reviewNotice, setReviewNotice] = useState<string | null>(null);
-  const [reviewContext, setReviewContext] = useState<{ walletAddress: string; chainId?: number } | null>(null);
+  const [networkSwitching, setNetworkSwitching] = useState(false);
+  const [reviewContext, setReviewContext] = useState<{ walletAddress: string; chainId?: number; connectionVersion: number } | null>(null);
   const [resumeAfterConnect, setResumeAfterConnect] = useState(false);
+  const [previewRoutes, setPreviewRoutes] = useState<PlannedRoute[]>([]);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewRetry, setPreviewRetry] = useState(0);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const previousPlanBuilder = useRef<ActionPlanBuilder | null>(planBuilder);
@@ -372,11 +419,15 @@ export function ActionReview({
   // account, and component changes invalidate the generation so late SDK/RPC
   // responses can never repopulate a newer wallet session.
   const generationRef = useRef(0);
+  const previewGenerationRef = useRef(0);
+  const previewRouteRef = useRef<PlannedRoute | null>(null);
+  const previewSeedRef = useRef<{ route: PlannedRoute; walletAddress: string; chainId?: number; connectionVersion: number } | null>(null);
   const mountedRef = useRef(true);
   const liveWalletRef = useRef({
     authenticated: wallet.authenticated,
     address: wallet.address,
     chainId: wallet.chainId,
+    connectionVersion: wallet.connectionVersion,
   });
   const onStageChangeRef = useRef(onStageChange);
   onStageChangeRef.current = onStageChange;
@@ -385,9 +436,12 @@ export function ActionReview({
     mountedRef.current && generationRef.current === generation
   ), []);
 
-  useEffect(() => () => {
-    mountedRef.current = false;
-    generationRef.current += 1;
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      generationRef.current += 1;
+    };
   }, []);
 
   // Keep the owning product card synchronized without depending on callback
@@ -399,11 +453,125 @@ export function ActionReview({
     authenticated: wallet.authenticated,
     address: wallet.address,
     chainId: wallet.chainId,
+    connectionVersion: wallet.connectionVersion,
   };
 
   const route = (stage === 'executing' || stage === 'result') && executionRoute
     ? executionRoute
     : routes[selectedRoute];
+  const previewRoute = stage === 'input' ? previewRoutes[selectedRoute] ?? previewRoutes[0] : undefined;
+  const activeRoute = stage === 'input' ? previewRoute : route;
+  const gasCost = useRouteGasCost(activeRoute, { enabled: Boolean(activeRoute && stage !== 'planning') });
+
+  // Prepare a read-only, debounced route while the editor remains mounted.
+  // This supplies useful facts before the primary action, but it never changes
+  // stage or opens a wallet. The generation and wallet checks discard late
+  // results after input, account, network, or component changes.
+  useEffect(() => {
+    previewGenerationRef.current += 1;
+    const previewGeneration = previewGenerationRef.current;
+    const previewWalletAddress = wallet.address?.toLowerCase();
+    const previewChainId = wallet.chainId;
+    const previewConnectionVersion = wallet.connectionVersion;
+    let cancelled = false;
+    let running = false;
+    let timer: number | undefined;
+
+    const seededPreview = previewSeedRef.current;
+    const preserveSeed = stage === 'input' && Boolean(
+      seededPreview
+      && seededPreview.walletAddress === previewWalletAddress
+      && seededPreview.chainId === previewChainId
+      && seededPreview.connectionVersion === previewConnectionVersion,
+    );
+    previewSeedRef.current = null;
+    previewRouteRef.current = preserveSeed ? seededPreview!.route : null;
+    setPreviewRoutes(preserveSeed ? [seededPreview!.route] : []);
+    setPreviewError(null);
+
+    const isVisibleAndOnline = () => (
+      (typeof document === 'undefined' || document.visibilityState === 'visible')
+      && (typeof navigator === 'undefined' || navigator.onLine !== false)
+    );
+    const isCurrentPreview = () => {
+      const liveWallet = liveWalletRef.current;
+      return !cancelled
+        && mountedRef.current
+        && previewGenerationRef.current === previewGeneration
+        && stage === 'input'
+        && liveWallet.authenticated
+        && liveWallet.address?.toLowerCase() === previewWalletAddress
+        && liveWallet.chainId === previewChainId
+        && liveWallet.connectionVersion === previewConnectionVersion;
+    };
+    const schedule = (delay: number) => {
+      if (cancelled) return;
+      if (timer !== undefined) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        timer = undefined;
+        if (isVisibleAndOnline()) void load();
+        else schedule(15_000);
+      }, delay);
+    };
+    const load = async () => {
+      if (running || !isCurrentPreview()) return;
+      if (!isVisibleAndOnline()) {
+        schedule(15_000);
+        return;
+      }
+      running = true;
+      setPreviewLoading(true);
+      setPreviewError(null);
+      try {
+        const prefetched = await prefetchedPlan?.();
+        if (!isCurrentPreview()) return;
+        const planned = asRoutes(prefetched ?? await planBuilder!());
+        if (!isCurrentPreview()) return;
+        const { viable } = await prepareRoutesForReview(planned, previewWalletAddress!);
+        if (!isCurrentPreview()) return;
+        if (!viable.length) throw new Error('No executable route was returned.');
+        setPreviewRoutes(viable);
+        previewRouteRef.current = viable[0] ?? null;
+      } catch {
+        if (isCurrentPreview()) {
+          setPreviewRoutes([]);
+          previewRouteRef.current = null;
+          setPreviewError('We could not update the action details. Try again.');
+        }
+      } finally {
+        running = false;
+        if (isCurrentPreview()) {
+          setPreviewLoading(false);
+          schedule(15_000);
+        }
+      }
+    };
+
+    if (stage !== 'input' || !planBuilder || disabled || !wallet.ready || !wallet.authenticated || !previewWalletAddress) {
+      setPreviewLoading(false);
+      return undefined;
+    }
+    schedule(preserveSeed ? 15_000 : 350);
+    const refreshWhenActive = () => {
+      if (!isCurrentPreview() || running || !isVisibleAndOnline()) return;
+      if (timer !== undefined) window.clearTimeout(timer);
+      timer = undefined;
+      void load();
+    };
+    document.addEventListener('visibilitychange', refreshWhenActive);
+    window.addEventListener('online', refreshWhenActive);
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', refreshWhenActive);
+      window.removeEventListener('online', refreshWhenActive);
+      if (previewGenerationRef.current === previewGeneration) previewGenerationRef.current += 1;
+    };
+  }, [disabled, planBuilder, prefetchedPlan, previewRetry, stage, wallet.address, wallet.authenticated, wallet.chainId, wallet.connectionVersion, wallet.ready]);
+
+  useEffect(() => {
+    previewRouteRef.current = previewRoutes[selectedRoute] ?? previewRoutes[0] ?? null;
+  }, [previewRoutes, selectedRoute]);
 
   useEffect(() => {
     if (stage === 'review' || stage === 'result') {
@@ -417,15 +585,22 @@ export function ActionReview({
   useEffect(() => {
     if (stage !== 'review' || !route || !wallet.authenticated || !wallet.address) return;
     const resumePath = draftResumePath ?? `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    const draft = saveSignatureRequiredDraft({
-      walletAddress: route.walletAddress,
-      chainId: route.chainId,
-      operation: route.operation,
-      actionKey: draftActionKey ?? signatureDraftActionKey(route),
-      resumePath,
-      formState: draftState,
-    });
-    signatureDraftIdRef.current = draft.id;
+    try {
+      const draft = saveSignatureRequiredDraft({
+        walletAddress: route.walletAddress,
+        chainId: route.chainId,
+        operation: route.operation,
+        actionKey: draftActionKey ?? signatureDraftActionKey(route),
+        resumePath,
+        formState: draftState,
+      });
+      signatureDraftIdRef.current = draft.id;
+    } catch {
+      // A local storage/draft schema problem must not crash an otherwise
+      // simulated review. The route remains fresh and signing-safe; only the
+      // optional reload hint is unavailable.
+      signatureDraftIdRef.current = null;
+    }
   }, [draftActionKey, draftResumePath, draftState, route, stage, wallet.address, wallet.authenticated]);
 
   const reset = useCallback(() => {
@@ -436,6 +611,7 @@ export function ActionReview({
       signatureDraftIdRef.current = null;
     }
     setStage('input');
+    setNetworkSwitching(false);
     setRoutes([]);
     setSelectedRoute(0);
     setError(null);
@@ -449,6 +625,7 @@ export function ActionReview({
     setReviewContext(null);
     setResumeAfterConnect(false);
     refreshedRouteRef.current = null;
+    previewSeedRef.current = null;
     setStatus('planning');
     setStatusDetail('');
     window.requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
@@ -482,10 +659,14 @@ export function ActionReview({
     setReviewNotice(null);
     setReviewContext(null);
     refreshedRouteRef.current = null;
+    previewSeedRef.current = null;
     setResumeAfterConnect(false);
-    setStatus('failed');
+    setStatus('planning');
     setStatusDetail('');
     setLoading(false);
+    setRefreshing(false);
+    setNetworkSwitching(false);
+    busyRef.current = false;
     setError(message);
   }, []);
 
@@ -495,7 +676,7 @@ export function ActionReview({
     if (previousPlanBuilder.current !== planBuilder) {
       previousPlanBuilder.current = planBuilder;
       if (stage === 'review') {
-        invalidatePreparedRoute('The inputs changed. Review the action again before signing.');
+        invalidatePreparedRoute('The inputs changed. Check the action again before signing.');
       }
     }
   }, [invalidatePreparedRoute, planBuilder, stage]);
@@ -510,12 +691,15 @@ export function ActionReview({
     // network must not retain a review prepared for Ethereum/Base.
     const chainChanged = reviewContext.chainId !== undefined
       && wallet.chainId !== reviewContext.chainId;
-    if (walletChanged || chainChanged) {
+    const connectionChanged = wallet.connectionVersion !== reviewContext.connectionVersion;
+    if (walletChanged || chainChanged || connectionChanged) {
       invalidatePreparedRoute(walletChanged
-        ? 'The selected wallet changed. Review the action again before signing.'
-        : 'The wallet network changed. Review the action again before signing.');
+        ? 'The selected wallet changed. Check the action again before signing.'
+        : chainChanged
+          ? 'The wallet network changed. Check the action again before signing.'
+          : 'The wallet connection changed. Check the action again before signing.');
     }
-  }, [invalidatePreparedRoute, reviewContext, stage, wallet.address, wallet.authenticated, wallet.chainId]);
+  }, [invalidatePreparedRoute, reviewContext, stage, wallet.address, wallet.authenticated, wallet.chainId, wallet.connectionVersion]);
 
   const review = useCallback(async () => {
     if (!planBuilder || disabled || loading || busyRef.current || stage !== 'input') return;
@@ -527,6 +711,7 @@ export function ActionReview({
     generationRef.current = generation;
     const reviewWalletAddress = wallet.address.toLowerCase();
     const reviewChainId = wallet.chainId;
+    const reviewConnectionVersion = wallet.connectionVersion;
     const assertReviewSession = () => {
       if (!isCurrentGeneration(generation)) return false;
       const liveWallet = liveWalletRef.current;
@@ -535,6 +720,9 @@ export function ActionReview({
       }
       if (reviewChainId !== undefined && liveWallet.chainId !== reviewChainId) {
         throw new Error('The wallet network changed while preparing the review.');
+      }
+      if (liveWallet.connectionVersion !== reviewConnectionVersion) {
+        throw new Error('The selected wallet connection changed while preparing the review.');
       }
       return true;
     };
@@ -550,7 +738,7 @@ export function ActionReview({
       const planned = asRoutes(prefetched ?? await planBuilder());
       if (!assertReviewSession()) return;
       setStatus('reviewing');
-      setStatusDetail('Checking the ordered transactions against current chain state.');
+      setStatusDetail('Verifying the route.');
       const walletAddress = reviewWalletAddress;
       // Alternatives are independent; checking them concurrently removes one
       // RPC round trip per extra route from the review's critical path.
@@ -570,9 +758,9 @@ export function ActionReview({
       // visible above the review card, but later form edits must never rename
       // an already reviewed route.
       setReviewTitle(operationLabel ?? viable[0].operation);
-      setReviewContext({ walletAddress, chainId: wallet.chainId });
+      setReviewContext({ walletAddress, chainId: wallet.chainId, connectionVersion: wallet.connectionVersion });
       setStatus('reviewing');
-      setStatusDetail('Checks passed. Review the amounts, limits, and transaction steps.');
+      setStatusDetail('Route ready.');
       setStage('review');
       haptic('selection');
     } catch (cause) {
@@ -582,27 +770,12 @@ export function ActionReview({
       setError(userSafeError(cause, 'The transaction could not be prepared. Check the inputs and network, then try again.'));
       haptic('error');
     } finally {
-      busyRef.current = false;
-      if (isCurrentGeneration(generation)) setLoading(false);
+      if (isCurrentGeneration(generation)) {
+        busyRef.current = false;
+        setLoading(false);
+      }
     }
-  }, [disabled, isCurrentGeneration, loading, operationLabel, planBuilder, prefetchedPlan, stage, wallet.address, wallet.authenticated, wallet.chainId]);
-
-  // The action rail doubles as wallet entry. Resume only after the selected
-  // wallet has reached React state and the wallet-scoped plan is available.
-  useEffect(() => {
-    if (!resumeAfterConnect || stage !== 'input' || loading || !wallet.authenticated || !wallet.address) return;
-    if (disabled) {
-      setResumeAfterConnect(false);
-      return;
-    }
-    // A connection can invalidate balance-dependent form data for one render.
-    // Keep the explicit user intent until the current product exposes its
-    // planner; otherwise the first click would connect successfully and then
-    // strand the user at an idle review rail.
-    if (!planBuilder) return;
-    setResumeAfterConnect(false);
-    void review();
-  }, [disabled, loading, planBuilder, resumeAfterConnect, review, stage, wallet.address, wallet.authenticated]);
+  }, [disabled, isCurrentGeneration, loading, operationLabel, planBuilder, prefetchedPlan, stage, wallet.address, wallet.authenticated, wallet.chainId, wallet.connectionVersion]);
 
   // History restores editable primitives only. Once the route owner has
   // applied those values and exposes its planner, immediately reopen the
@@ -621,20 +794,47 @@ export function ActionReview({
     void review();
   }, [disabled, loading, planBuilder, resumeReview, review, stage, wallet.address, wallet.authenticated]);
 
-  const execute = useCallback(async () => {
-    if (!route || loading || busyRef.current || stage !== 'review' || status === 'failed' || stepResults.some(hasTransactionHash)) return;
+  const execute = useCallback(async (inputRoute?: PlannedRoute) => {
+    const startingRoute = inputRoute ?? route;
+    const directFromInput = stage === 'input' && Boolean(inputRoute);
+    if (!startingRoute || loading || busyRef.current || (!directFromInput && stage !== 'review') || (!directFromInput && status === 'failed') || stepResults.some(hasTransactionHash)) return;
     const generation = generationRef.current + 1;
     generationRef.current = generation;
-    const executionWalletAddress = route.walletAddress.toLowerCase();
+    const executionWalletAddress = startingRoute.walletAddress.toLowerCase();
+    const executionConnectionVersion = wallet.connectionVersion;
     const isCurrentExecution = () => {
       if (!isCurrentGeneration(generation)) return false;
       const liveWallet = liveWalletRef.current;
-      return liveWallet.authenticated && liveWallet.address?.toLowerCase() === executionWalletAddress;
+      return liveWallet.authenticated
+        && liveWallet.address?.toLowerCase() === executionWalletAddress
+        && liveWallet.connectionVersion === executionConnectionVersion;
     };
     busyRef.current = true;
     setLoading(true);
     setError(null);
+    // Bind direct execution to the wallet session immediately, before the
+    // confirm-time rebuild. Deliberate network switching remains valid during
+    // execution, while account/reconnect changes invalidate this context.
+    setReviewContext({ walletAddress: executionWalletAddress, connectionVersion: executionConnectionVersion });
+    if (!signatureDraftIdRef.current) {
+      try {
+        const draft = saveSignatureRequiredDraft({
+          walletAddress: startingRoute.walletAddress,
+          chainId: startingRoute.chainId,
+          operation: startingRoute.operation,
+          actionKey: draftActionKey ?? signatureDraftActionKey(startingRoute),
+          resumePath: draftResumePath ?? `${window.location.pathname}${window.location.search}${window.location.hash}`,
+          formState: draftState,
+        });
+        signatureDraftIdRef.current = draft.id;
+      } catch {
+        signatureDraftIdRef.current = null;
+      }
+    }
     setStage('executing');
+    // Keep the signed route visible while the confirm-time rebuild is pending;
+    // a deferred planner must never blank the action card.
+    setExecutionRoute(startingRoute);
     setStatus('planning');
     setStatusDetail('Refreshing the selected route before signing.');
     setStepResults([]);
@@ -642,47 +842,56 @@ export function ActionReview({
     setRefreshing(false);
     // Scope refreshes to the captured review, never the currently selected wallet.
     const refreshWallet = createRouteWalletRefresh(invalidateWalletData);
-    let currentRoute = route;
+    let currentRoute = startingRoute;
+    let postConfirmReadStarted = false;
     try {
       const recentRefresh = refreshedRouteRef.current;
       const canReuseRecentRefresh = recentRefresh
         && Date.now() - recentRefresh.at <= REFRESHED_ROUTE_REUSE_MS
-        && routesMatchForSigning(route, recentRefresh.route);
+        && routesMatchForSigning(startingRoute, recentRefresh.route);
 
       if (!canReuseRecentRefresh) {
-        if (!planBuilder) throw new Error('The transaction inputs are no longer available. Review the action again.');
+        if (!planBuilder) throw new Error('The transaction inputs are no longer available. Check them again.');
         const rebuilt = asRoutes(await planBuilder());
         if (!isCurrentExecution()) throw new Error('The selected wallet changed while refreshing the route.');
         const liveWallet = liveWalletRef.current;
-        if (!liveWallet.authenticated || liveWallet.address?.toLowerCase() !== route.walletAddress.toLowerCase()) {
+        if (!liveWallet.authenticated || liveWallet.address?.toLowerCase() !== startingRoute.walletAddress.toLowerCase()) {
           throw new Error('The selected wallet changed while refreshing the route.');
         }
-        currentRoute = selectRefreshedRoute(route, rebuilt, selectedRoute);
-        if (currentRoute.walletAddress.toLowerCase() !== route.walletAddress.toLowerCase()) {
+        currentRoute = selectRefreshedRoute(startingRoute, rebuilt, selectedRoute);
+        if (currentRoute.walletAddress.toLowerCase() !== startingRoute.walletAddress.toLowerCase()) {
           throw new Error('The selected wallet changed while refreshing the route.');
         }
-        if (currentRoute.chainId !== route.chainId || currentRoute.operation !== route.operation) {
-          throw new Error('The refreshed route changed network or operation. Review the action again.');
+        if (currentRoute.chainId !== startingRoute.chainId || currentRoute.operation !== startingRoute.operation) {
+          throw new Error('The refreshed transaction changed network or operation. Check it again.');
         }
 
-        if (!routesMatchForSigning(route, currentRoute)) {
+        if (!routesMatchForSigning(startingRoute, currentRoute)) {
           setStatus('reviewing');
           setStatusDetail('Checking the refreshed transaction against current chain state.');
-          const { viable, failures } = await prepareRoutesForReview([currentRoute], route.walletAddress);
+          const { viable, failures } = await prepareRoutesForReview([currentRoute], startingRoute.walletAddress);
           if (!isCurrentExecution()) throw new Error('The selected wallet changed while checking the refreshed route.');
           if (!viable.length) {
             throw new Error(`The refreshed transaction could not be simulated: ${failures.join('; ')}`);
           }
           const refreshedRoute = viable[0];
           refreshedRouteRef.current = { route: refreshedRoute, at: Date.now() };
-          setRoutes([refreshedRoute]);
+          previewSeedRef.current = {
+            route: refreshedRoute,
+            walletAddress: startingRoute.walletAddress.toLowerCase(),
+            chainId: startingRoute.chainId,
+            connectionVersion: executionConnectionVersion,
+          };
+          setPreviewRoutes([refreshedRoute]);
+          previewRouteRef.current = refreshedRoute;
+          setRoutes([]);
           setSelectedRoute(0);
           setExecutionRoute(null);
-          setReviewNotice('Quote updated—review again.');
-          setStatus('reviewing');
-          setStatusDetail('The current route passed simulation. Review its updated amounts and transaction details.');
-          setStage('review');
-          haptic('selection');
+          setReviewNotice('Details changed. Check the updated action before continuing.');
+          setStatus('planning');
+          setStatusDetail('');
+          setError(null);
+          setStage('input');
           return;
         }
       }
@@ -694,10 +903,22 @@ export function ActionReview({
       const execution = await runTransactionRoute({
         route: currentRoute,
         callbacks: {
-          ensureChain: (chainId) => wallet.switchChain(chainId),
+          ensureChain: async (chainId) => {
+            if (!isCurrentExecution()) throw new Error('The selected wallet changed before the network switch.');
+            setNetworkSwitching(true);
+            try {
+              await wallet.switchChain(chainId);
+              if (!isCurrentExecution()) throw new Error('The selected wallet changed during the network switch.');
+            } finally {
+              if (isCurrentExecution()) setNetworkSwitching(false);
+            }
+          },
           requestSignature: async (request) => {
             const liveWallet = liveWalletRef.current;
-            if (!liveWallet.authenticated || liveWallet.address?.toLowerCase() !== request.from.toLowerCase()) {
+            if (!isCurrentExecution()
+              || !liveWallet.authenticated
+              || liveWallet.address?.toLowerCase() !== request.from.toLowerCase()
+              || liveWallet.connectionVersion !== executionConnectionVersion) {
               throw new Error('The selected wallet changed before signing.');
             }
             const signed = await wallet.sendTransaction({
@@ -709,10 +930,10 @@ export function ActionReview({
               nonce: request.nonce,
             }, {
               action: `${reviewTitle ?? currentRoute.operation} · ${request.to}`,
-              description: `Review this transaction on ${chainName(request.chainId)}.`,
-              buttonText: 'Review transaction',
+              description: `Check this transaction on ${chainName(request.chainId)} before approving it.`,
+              buttonText: 'Confirm transaction',
             });
-            if (signatureDraftIdRef.current) {
+            if (isCurrentExecution() && signatureDraftIdRef.current) {
               removeSignatureRequiredDraft(signatureDraftIdRef.current);
               signatureDraftIdRef.current = null;
             }
@@ -731,17 +952,33 @@ export function ActionReview({
             setStepResults(next);
           },
           // The runner invokes this only after a receipt and the required
-          // confirmation depth have both been observed. Keeping the page refresh
-          // inside that boundary prevents stale reads from being presented as
-          // the result of a completed financial action.
+          // confirmation depth have both been observed. Publish the receipt
+          // result before the optional state refresh so the user sees the
+          // confirmed action immediately while the read runs in the background.
           postConfirmRead: async (confirmedRoute, execution) => {
             if (!isCurrentExecution()) return;
+            postConfirmReadStarted = true;
+            setResult(execution);
+            setStage('result');
             setRefreshing(true);
             try {
+              // These reads have independent cache boundaries. Start both
+              // immediately so a slow wallet refresh cannot delay the
+              // receipt-bound position hint or other completion bookkeeping.
+              // Each task is scoped before it starts; the owning callbacks
+              // retain their own account/session guards for late results.
+              const refreshPromise = Promise.resolve().then(() => {
+                if (!isCurrentExecution()) return;
+                return refreshWallet(confirmedRoute, execution);
+              });
+              const completePromise = Promise.resolve().then(() => {
+                if (!isCurrentExecution()) return;
+                return onComplete?.(execution, confirmedRoute);
+              });
+              const outcomes = await Promise.allSettled([refreshPromise, completePromise]);
               if (!isCurrentExecution()) return;
-              await refreshWallet(confirmedRoute, execution);
-              if (!isCurrentExecution()) return;
-              await onComplete?.(execution, confirmedRoute);
+              const rejected = outcomes.find((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');
+              if (rejected) throw rejected.reason;
             } finally {
               if (isCurrentExecution()) setRefreshing(false);
             }
@@ -749,10 +986,10 @@ export function ActionReview({
         },
       });
       if (!isCurrentExecution()) return;
-      // A finality/confirmation timeout can skip postConfirmRead despite inclusion.
-      // Mark wallet data stale for gas/approvals/reverts without moving the
-      // protocol onComplete callback outside its authoritative read boundary.
-      await refreshWallet(currentRoute, execution);
+      // A finality/confirmation timeout can skip postConfirmRead despite
+      // inclusion. Mark wallet data stale for gas/approvals/reverts without
+      // duplicating the refresh already running behind the result view.
+      if (!postConfirmReadStarted) await refreshWallet(currentRoute, execution);
       if (!isCurrentExecution()) return;
       setResult(execution);
       setStage('result');
@@ -782,7 +1019,21 @@ export function ActionReview({
           signatureDraftIdRef.current = null;
         }
         setError(message);
-        setStage('review');
+        if (directFromInput) {
+          previewSeedRef.current = {
+            route: startingRoute,
+            walletAddress: executionWalletAddress,
+            chainId: startingRoute.chainId,
+            connectionVersion: executionConnectionVersion,
+          };
+          setPreviewRoutes([startingRoute]);
+          previewRouteRef.current = startingRoute;
+          setExecutionRoute(null);
+          setStatus('planning');
+          setStage('input');
+        } else {
+          setStage('review');
+        }
       }
       setStatus('failed');
       // A failed or stale route must be explicitly reviewed again. This is
@@ -790,13 +1041,25 @@ export function ActionReview({
       // converter path, leverage, or transformed reduction amount.
       haptic(submittedSteps.some(hasTransactionHash) ? 'warning' : 'error');
     } finally {
-      busyRef.current = false;
       if (isCurrentGeneration(generation)) {
+        busyRef.current = false;
         setRefreshing(false);
         setLoading(false);
       }
     }
-  }, [invalidateWalletData, isCurrentGeneration, loading, onComplete, planBuilder, reviewTitle, route, selectedRoute, stage, status, stepResults, wallet]);
+  }, [draftActionKey, draftResumePath, draftState, invalidateWalletData, isCurrentGeneration, loading, onComplete, planBuilder, reviewTitle, route, selectedRoute, stage, status, stepResults, wallet]);
+
+  // A connect click leaves the editor and its read-only preview in place. It
+  // never opens the legacy review surface or requests a signature; the user
+  // must click the action again after the wallet is connected.
+  useEffect(() => {
+    if (!resumeAfterConnect || stage !== 'input' || !wallet.authenticated || !wallet.address) return;
+    if (disabled) {
+      setResumeAfterConnect(false);
+      return;
+    }
+    setResumeAfterConnect(false);
+  }, [disabled, resumeAfterConnect, stage, wallet.address, wallet.authenticated]);
 
   const routeSummaries = useMemo(() => routes.map((candidate) => {
     const routeType = candidate.details?.routeType ?? 'Route';
@@ -807,12 +1070,33 @@ export function ActionReview({
   if (stage === 'input') {
     const progress = statusPresentation({ stage, status, detail: statusDetail, stepResults, stepCount: 0 });
     const disconnected = !wallet.authenticated || !wallet.address;
+    const previewAction = previewRoute ? actionButtonLabel(label, operationLabel) : null;
     const trigger = (
       <div className={`${styles.reviewTrigger} reviewTrigger flex flex-col gap-2.5`}>
+        {previewRoute && <InlinePreviewSummary
+          route={previewRoute}
+          alternatives={previewRoutes}
+          selectedRoute={selectedRoute}
+          onSelect={(index) => {
+            setSelectedRoute(index);
+            setReviewNotice(null);
+          }}
+          decisionBefore={decisionBefore}
+          gasCost={gasCost}
+          executionCost={executionCost}
+          updating={previewLoading || gasCost.status === 'refreshing'}
+        />}
+        {previewError && (
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-[rgba(255,194,102,.24)] bg-[var(--warn-dim)] px-3 py-2 text-[12px]">
+            <span className="text-warn">{previewError}</span>
+            <Button variant="outline" className="shrink-0 px-2.5 py-1.5 text-[11px]" onClick={() => setPreviewRetry((value) => value + 1)} disabled={previewLoading}>Try again</Button>
+          </div>
+        )}
+        {reviewNotice && <p role="status" className="rounded-xl border border-[rgba(255,194,102,.24)] bg-[var(--warn-dim)] px-3 py-2 text-[12px] font-semibold text-warn">{reviewNotice}</p>}
         {error && <InlineError message={error} />}
         {disconnected ? (
           <ConnectWalletButton
-            className={`button button-primary glass-press ${styles.primaryAction} flex w-full items-center justify-center gap-2`}
+            className={`button button-primary glass-press ${styles.primaryAction} flex w-full items-center justify-center`}
             // ConnectWalletButton queues while the provider hydrates; only
             // the action's own disabled state should block that intent.
             disabled={disabled}
@@ -820,11 +1104,11 @@ export function ActionReview({
             onConnectStart={() => { setError(null); setResumeAfterConnect(true); }}
             onConnectError={() => setResumeAfterConnect(false)}
           >
-            <ShieldCheck aria-hidden="true" className="h-4 w-4" /> Connect wallet
+            Connect wallet
           </ConnectWalletButton>
         ) : (
-          <Button ref={triggerRef} variant={destructive ? 'danger' : 'primary'} className={styles.primaryAction} disabled={!planBuilder || disabled || !wallet.ready} loading={loading} onClick={() => void review()}>
-            <ShieldCheck aria-hidden="true" className="h-4 w-4" /> {label}
+          <Button ref={triggerRef} variant={destructive ? 'danger' : 'primary'} className={styles.primaryAction} disabled={!planBuilder || !previewRoute || previewLoading || disabled || !wallet.ready} loading={loading || previewLoading} onClick={() => void execute(previewRoute ?? undefined)}>
+            {previewAction ?? (previewLoading ? 'Updating quote' : actionButtonLabel(label, operationLabel))}
           </Button>
         )}
         {loading && <StatusNotice {...progress} />}
@@ -838,13 +1122,13 @@ export function ActionReview({
 
   if (stage === 'planning') {
     return (
-      <ReviewSurface surface={surface} className={`${styles.reviewCard} ${styles.reviewInlineCard} p-5`}>
+      <ReviewSurface surface={surface} className={`${styles.reviewCard} ${styles.reviewInlineCard} p-4 sm:p-5`}>
           <div className="flex min-h-56 flex-col items-center justify-center text-center" role="status" aria-live="polite">
             <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--mint-dim)] text-mint">
               <LoaderCircle className="h-6 w-6 animate-spin" aria-hidden="true" />
             </span>
-            <h3 data-review-focus tabIndex={-1} className="text-display mt-4 text-[21px] font-semibold outline-none">Preparing your review</h3>
-            <p className="mt-2 max-w-[320px] text-[12px] leading-relaxed text-mut">Building a fresh route and checking every transaction against the current chain state.</p>
+            <h3 data-review-focus tabIndex={-1} className="text-display mt-4 text-[21px] font-semibold outline-none">Preparing transaction</h3>
+            <p className="mt-2 max-w-[320px] text-[12px] leading-relaxed text-mut">Building and checking the route.</p>
           </div>
       </ReviewSurface>
     );
@@ -869,7 +1153,7 @@ export function ActionReview({
         ? 'bg-[var(--warn-dim)] text-warn'
         : 'bg-[var(--danger-dim)] text-danger';
     return (
-      <ReviewSurface surface={surface} className={`${styles.reviewCard} ${styles.reviewInlineCard} anim-scale-in p-5`}>
+      <ReviewSurface surface={surface} className={`${styles.reviewCard} ${styles.reviewInlineCard} anim-scale-in p-4 sm:p-5`}>
         <div className="flex flex-col items-center text-center">
           <span className={`flex h-12 w-12 items-center justify-center rounded-xl ${tone}`}>
             <ResultIcon className="h-6 w-6" aria-hidden="true" />
@@ -908,7 +1192,7 @@ export function ActionReview({
               destinationBaselineBlock={bridgeQuote.destinationBaselineBlock}
             />
           )}
-          <Button variant="ghost" aria-label="Done" className={`${styles.primaryAction} mt-4`} onClick={reset}>{bridge ? 'Back to Move' : result.status === 'confirmed' ? 'Back to action' : 'Review again'}</Button>
+          <Button variant="ghost" aria-label="Done" className={`${styles.primaryAction} mt-4`} onClick={reset}>{bridge ? 'Back to Move' : result.status === 'confirmed' ? 'Back to action' : 'Try again'}</Button>
         </div>
       </ReviewSurface>
     );
@@ -917,24 +1201,43 @@ export function ActionReview({
   if (!route) return null;
   const stepCount = route.transactions.length;
   const approvalCount = route.transactions.filter((transaction) => transaction.kind === 'approval').length;
-  const facts = primaryReviewFacts(route);
-  const progress = statusPresentation({ stage, status, detail: statusDetail, stepResults, stepCount, operation: route.operation, refreshing });
+  const facts = routeFacts(route, gasCost, executionCost);
+  const gasEstimateStatus = gasCost.estimate?.status === 'partial'
+    ? 'Partial route estimate'
+    : gasCost.estimate?.status === 'unavailable'
+      ? 'Unavailable; wallet will show final gas'
+    : gasCost.estimateIsCurrent
+      ? 'Current for reviewed route'
+      : gasCost.status === 'refreshing'
+        ? 'Refreshing for reviewed route'
+        : 'Unavailable; wallet will show final gas';
+  addFact(facts, 'Gas quote', gasEstimateStatus);
+  const approvals = route.transactions
+    .map((transaction) => {
+      const approval = approvalFacts(transaction);
+      if (!approval) return null;
+      const amount = approval.valueLabel === 'Position NFT ID' ? `#${approval.value.toString()}` : formatTokenAmount(approval.value, transaction.to);
+      return `${amount} → ${compactAddress(approval.spender)}`;
+    })
+    .filter((value): value is string => Boolean(value));
+  const progress = statusPresentation({ stage, status, detail: statusDetail, stepResults, stepCount, operation: route.operation, refreshing, networkSwitching });
   const showExecutionProgress = stage === 'executing' || stepResults.some(hasTransactionHash);
+  const wrongNetwork = wallet.chainId !== undefined && wallet.chainId !== route.chainId;
+  const unsupportedNetwork = wallet.chainId === undefined;
   return (
-    <ReviewSurface surface={surface} className={`${styles.reviewCard} ${styles.reviewInlineCard} anim-scale-in p-5`}>
+    <ReviewSurface surface={surface} className={`${styles.reviewCard} ${styles.reviewInlineCard} anim-scale-in p-4 sm:p-5`}>
       <button
         type="button"
         disabled={loading}
         onClick={reset}
-        className="mb-4 inline-flex min-h-11 items-center gap-1.5 rounded-xl pr-3 text-[12px] font-semibold text-mut disabled:opacity-50"
+        className="mb-3 inline-flex min-h-11 items-center gap-1.5 rounded-xl pr-3 text-[12px] font-semibold text-mut disabled:opacity-50"
       >
         <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Edit
       </button>
 
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start gap-3">
         <div>
-          <p className={styles.eyebrow}>Transaction review</p>
-          <h3 ref={headingRef} data-review-focus tabIndex={-1} className="text-display mt-2 text-[24px] font-semibold leading-tight outline-none">
+          <h3 ref={headingRef} data-review-focus tabIndex={-1} className="text-display text-[24px] font-semibold leading-tight outline-none">
             {reviewTitle ?? route.operation}
           </h3>
           <p className="mt-1 text-[12px] text-mut">
@@ -942,7 +1245,6 @@ export function ActionReview({
             {approvalCount > 0 ? ` · ${approvalCount} approval${approvalCount === 1 ? '' : 's'}` : ''}
           </p>
         </div>
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)] text-mint"><ShieldCheck className="h-5 w-5" aria-hidden="true" /></span>
       </div>
 
       {showExecutionProgress && (
@@ -955,7 +1257,7 @@ export function ActionReview({
       )}
 
       {routes.length > 1 && (
-        <div className="mt-4 flex flex-col gap-2" role="radiogroup" aria-label="Route options">
+        <div className="mt-3 flex flex-col gap-2" role="radiogroup" aria-label="Route options">
           <p className="text-[12px] font-medium text-mut">Choose route</p>
           {routes.map((candidate, index) => (
             <button
@@ -997,19 +1299,27 @@ export function ActionReview({
         </div>
       )}
 
-      <div className="my-5 hairline" />
+      <div className="my-4 hairline" />
       <div className={styles.reviewFacts}>
         <ReviewRow label="Network" value={chainName(route.chainId)} />
         <ReviewRow label="Wallet" value={compactAddress(route.walletAddress)} title={route.walletAddress} />
         {facts.map((fact) => <ReviewRow key={`${fact.label}-${fact.value}`} label={fact.label} value={fact.value} title={fact.title} />)}
+        {approvals.length > 0 && <ReviewRow label="Approvals" value={approvals.join('; ')} />}
      </div>
+
+      {wrongNetwork && <p role="status" className="mt-2 rounded-xl border border-[rgba(255,194,102,.24)] bg-[var(--warn-dim)] px-3 py-2 text-[11.5px] leading-relaxed text-warn">Wallet is on {chainName(wallet.chainId!)}. Confirmation will switch to {chainName(route.chainId)} before signing.</p>}
+      {unsupportedNetwork && <p role="status" className="mt-2 rounded-xl border border-[rgba(255,194,102,.24)] bg-[var(--warn-dim)] px-3 py-2 text-[11.5px] leading-relaxed text-warn">Wallet network is unavailable or unsupported. Confirmation will request {chainName(route.chainId)} before signing.</p>}
 
       <DecisionContext route={route} facts={facts} beforeFacts={decisionBefore} />
 
      <AdvancedReviewDetails route={route} />
 
-      <section className="mt-4 flex flex-col gap-2" aria-labelledby="transaction-steps-heading">
-        <p id="transaction-steps-heading" className="text-[12px] font-medium text-mut">{stage === 'executing' ? 'Transaction steps' : 'What you will approve'}</p>
+      <details className="group mt-3 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.02)] px-3" open={stage === 'executing' || showExecutionProgress}>
+        <summary id="transaction-steps-heading" className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-[12px] font-semibold text-mut">
+          <span>{stage === 'executing' ? 'Transaction progress' : `Steps · ${stepCount}`}</span>
+          <span className="text-[11px] font-normal text-[var(--mut-2)] group-open:hidden">View steps</span>
+        </summary>
+        <section className="flex flex-col gap-2 border-t border-[var(--line)] py-3" aria-labelledby="transaction-steps-heading">
         {route.transactions.map((transaction, index) => {
           const approval = approvalFacts(transaction);
           const progress = stepProgress(stepResults[index]);
@@ -1020,29 +1330,29 @@ export function ActionReview({
               <span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${progress.className}`}>{progress.icon}{progress.label}</span>
             </div>
             {approval && <p className="mt-1 text-[11px] text-mut">{approvalSummary(transaction, approval)} to <span className="font-mono">{compactAddress(approval.spender)}</span></p>}
-            {transaction.value > 0n && <p className="mt-1 text-[11px] text-mut">Network value: {trimDecimal(formatEther(transaction.value))} ETH</p>}
+            {transaction.value > 0n && <p className="mt-1 text-[11px] text-mut">Value sent: {trimDecimal(formatEther(transaction.value))} ETH <span className="text-[var(--mut-2)]">(native transaction value; gas is separate)</span></p>}
             {transaction.kind !== 'approval' && <p className="mt-1 text-[11px] text-mut">Contract <span className="font-mono">{compactAddress(transaction.to)}</span></p>}
-            <details className="mt-2 border-t border-[var(--line)] pt-1">
-              <summary className="flex min-h-11 cursor-pointer items-center text-[11px] font-semibold text-mint">Transaction details</summary>
+            <div className="mt-2 border-t border-[var(--line)] pt-2">
               <ReviewRow label="Contract" value={transaction.to} />
               <ReviewRow label="Nonce" value={transaction.nonce === undefined ? 'Checked before signing' : String(transaction.nonce)} />
               {approval && <ReviewRow label="Approval spender" value={approval.spender} />}
               {approval && <ReviewRow label={approval.valueLabel} value={approval.value.toString()} />}
               <p className="mt-1 font-mono text-[10px] text-mut">Selector: {transaction.data.slice(0, 10)}</p>
               <p className="mt-1 break-all font-mono text-[9px] leading-relaxed text-[var(--mut-2)]">{transaction.data}</p>
-            </details>
+            </div>
           </div>
           );
         })}
-      </section>
+        </section>
+      </details>
 
       {!showExecutionProgress && <div className="mt-4"><StatusNotice {...progress} /></div>}
       {reviewNotice && <p role="status" className="mt-3 rounded-xl border border-[rgba(255,194,102,.24)] bg-[var(--warn-dim)] px-3 py-2 text-[12px] font-semibold text-warn">{reviewNotice}</p>}
       {error && <div className="mt-3"><InlineError message={error} /></div>}
       {stage === 'review' && (
         <div className={styles.reviewInlineActions}>
-          <Button variant={destructive ? 'danger' : 'primary'} disabled={loading || status === 'failed'} loading={loading} className={`${styles.primaryAction} mt-4`} onClick={() => void execute()}>
-            <ShieldCheck aria-hidden="true" className="h-4 w-4" /> {stepCount === 1 ? 'Confirm in wallet' : `Confirm ${stepCount} transactions`}
+          <Button variant={destructive ? 'danger' : 'primary'} disabled={loading || status === 'failed'} loading={loading} className={styles.primaryAction} onClick={() => void execute()}>
+            {stepCount === 1 ? 'Confirm in wallet' : `Confirm ${stepCount} transactions`}
           </Button>
         </div>
       )}
@@ -1055,8 +1365,82 @@ function ReviewSurface({ surface, className, children }: { surface: 'card' | 'co
   return <Card className={className}>{children}</Card>;
 }
 
-function ReviewRow({ label, value, title }: { label: string; value: string; title?: string }) {
-  return <div className="flex items-start justify-between gap-4 text-[12px]"><span className="text-mut">{label}</span><span title={title ?? value} className="max-w-[62%] break-all text-right font-semibold tabular-nums">{value}</span></div>;
+function InlinePreviewSummary({
+  route,
+  alternatives = [],
+  selectedRoute = 0,
+  onSelect,
+  decisionBefore,
+  gasCost,
+  executionCost,
+  updating,
+}: {
+  route: PlannedRoute;
+  alternatives?: PlannedRoute[];
+  selectedRoute?: number;
+  onSelect?: (index: number) => void;
+  decisionBefore?: ReviewFact[];
+  gasCost: Pick<UseGasCostResult, 'estimate' | 'estimateIsCurrent'>;
+  executionCost?: ActionReviewProps['executionCost'];
+  updating: boolean;
+}) {
+  const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const facts = routeFacts(route, gasCost, executionCost);
+  const approvals = route.transactions
+    .map((transaction) => {
+      const approval = approvalFacts(transaction);
+      if (!approval) return null;
+      const token = tokenForAddress(transaction.to)?.key ?? 'token';
+      return `${token} ${approval.valueLabel === 'Position NFT ID' ? `#${approval.value.toString()}` : formatTokenAmount(approval.value, transaction.to)} → ${compactAddress(approval.spender)}`;
+    })
+    .filter((value): value is string => Boolean(value));
+  return (
+    <section className="rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.025)] px-3 py-3" aria-label="Review details">
+      {updating && <p role="status" className="mb-2 text-[11px] font-medium text-mut">Updating quote</p>}
+      {alternatives.length > 1 && onSelect && (
+        <div className="mb-2.5 flex flex-wrap gap-1.5" role="radiogroup" aria-label="Transaction options">
+          {alternatives.map((candidate, index) => {
+            const routeType = candidate.details?.routeType ?? `Option ${index + 1}`;
+            const isSelected = index === selectedRoute;
+            return <button
+              key={`${routeType}-${index}`}
+              ref={(element) => { optionRefs.current[index] = element; }}
+              type="button"
+              role="radio"
+              aria-checked={isSelected}
+              tabIndex={isSelected ? 0 : -1}
+              disabled={updating}
+              className={`min-h-11 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold ${isSelected ? 'border-mint bg-[var(--mint-dim)] text-mint' : 'border-[var(--line)] text-mut'}`}
+              onClick={() => onSelect(index)}
+              onKeyDown={(event) => {
+                if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+                event.preventDefault();
+                const next = event.key === 'Home'
+                  ? 0
+                  : event.key === 'End'
+                    ? alternatives.length - 1
+                    : (index + (event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1) + alternatives.length) % alternatives.length;
+                onSelect(next);
+                window.requestAnimationFrame(() => optionRefs.current[next]?.focus());
+              }}
+            >{routeType}</button>;
+          })}
+        </div>
+      )}
+      <div className="flex flex-col gap-2">
+        <ReviewRow label="Network" value={chainName(route.chainId)} />
+        {facts.map((fact) => <ReviewRow key={`${fact.label}-${fact.value}`} label={fact.label} value={fact.value} title={fact.title} />)}
+        {approvals.length > 0 && <ReviewRow label="Approvals" value={approvals.join('; ')} />}
+      </div>
+      <DecisionContext route={route} facts={facts} beforeFacts={decisionBefore} />
+      <AdvancedReviewDetails route={route} />
+    </section>
+  );
+}
+
+function ReviewRow({ label, value, title }: { label: string; value: ReactNode; title?: string }) {
+  const valueTitle = title ?? (typeof value === 'string' ? value : undefined);
+  return <div className="flex items-start justify-between gap-4 text-[12px]"><span className="text-mut">{label}</span><span title={valueTitle} className="max-w-[62%] break-all text-right font-semibold tabular-nums"><ValueOrSkeleton value={value} width="md" label={`Loading ${label.toLowerCase()}`} /></span></div>;
 }
 
 function AdvancedReviewDetails({ route }: { route: PlannedRoute }) {
@@ -1069,6 +1453,7 @@ function AdvancedReviewDetails({ route }: { route: PlannedRoute }) {
       || route.details?.economicLimits?.length
       || route.details?.conversionPaths?.length
       || route.policy?.reviewedAction?.expectedActionDataFingerprint
+      || route.transactions.length > 0
       || bridgeQuote,
   );
   if (!hasDetails) return null;
@@ -1086,6 +1471,19 @@ function AdvancedReviewDetails({ route }: { route: PlannedRoute }) {
         {route.details?.economicLimits?.map((limit, index) => <ReviewRow key={`limit-${index}`} label={limit.label} value={`${limit.value} raw units`} />)}
         {route.details?.conversionPaths?.map((path, index) => <ReviewRow key={`path-${index}`} label={`${path.label} fingerprint`} value={path.fingerprint} />)}
         {route.policy?.reviewedAction?.expectedActionDataFingerprint && <ReviewRow label="Action fingerprint" value={route.policy.reviewedAction.expectedActionDataFingerprint} />}
+        {route.transactions.map((transaction, index) => {
+          const approval = approvalFacts(transaction);
+          return (
+            <div key={`transaction-${index}`} className="border-t border-[var(--line)] pt-2 first:border-t-0 first:pt-0">
+              <p className="mb-1 text-[11px] font-semibold text-[var(--text)]">{stepTitle(transaction)} {index + 1}</p>
+              <ReviewRow label="Contract" value={transaction.to} />
+              {approval && <ReviewRow label="Approval spender" value={approval.spender} />}
+              {approval && <ReviewRow label={approval.valueLabel} value={approval.value.toString()} />}
+              <ReviewRow label="Selector" value={transaction.data.slice(0, 10)} />
+              <ReviewRow label="Calldata" value={transaction.data} />
+            </div>
+          );
+        })}
         {bridgeQuote && (
           <>
             {bridgeQuote.sourceOftAddress && <ReviewRow label="Source OFT" value={bridgeQuote.sourceOftAddress} />}
@@ -1141,9 +1539,21 @@ function isBridgeQuote(value: unknown): value is BridgeReviewQuote {
 }
 function DecisionContext({ route, facts, beforeFacts }: { route: PlannedRoute; facts: ReviewFact[]; beforeFacts?: ReviewFact[] }) {
   const intent = route.policy?.reviewedAction;
-  const before = intent && 'positionId' in intent ? (intent.positionId === 0 ? 'No existing position is being changed.' : `Existing position #${intent.positionId} is the source context.`) : 'The current source state is checked again before signing.';
-  const after = intent?.kind === 'position-reduce' && intent.isClosePosition ? 'The selected position will be closed if every reviewed step succeeds.' : intent?.kind === 'position-reduce' ? 'The selected position will be reduced; the verified minimum output is shown in the review facts.' : intent?.kind === 'position-increase' ? 'The selected leverage action will open or increase a position using the reviewed amount and limits.' : intent?.kind === 'deposit-and-mint' ? 'Collateral and fxUSD debt will change together; reviewed values are shown when returned by the SDK.' : intent?.kind === 'repay-and-withdraw' ? 'Repayment and collateral withdrawal will be applied together; the reviewed minimums are shown below.' : 'The reviewed route shows the verified amounts and limits that will change.';
+  const source = intent && 'positionId' in intent
+    ? (intent.positionId === 0 ? 'New position' : `Position #${intent.positionId}`)
+    : null;
+  const outcome = intent?.kind === 'position-reduce' && intent.isClosePosition
+    ? 'Close position'
+    : intent?.kind === 'position-reduce'
+      ? 'Reduce position'
+      : intent?.kind === 'position-increase'
+        ? 'Open or increase position'
+        : intent?.kind === 'deposit-and-mint'
+          ? 'Change collateral and fxUSD debt'
+          : intent?.kind === 'repay-and-withdraw'
+            ? 'Repay debt and withdraw collateral'
+            : null;
   const hasResultFacts = facts.some((fact) => /^Estimated|^Minimum|^Execution/.test(fact.label));
   const afterFacts = facts.filter((fact) => /^Estimated/.test(fact.label));
-  return <section aria-label="What changes" className="mt-4 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3"><p className="text-[12px] font-semibold">What changes</p><p className="mt-2 text-[11px] leading-relaxed text-mut"><strong className="text-[var(--text)]">Before:</strong> {before}</p>{beforeFacts && beforeFacts.length > 0 && <div className="mt-2 grid gap-1">{beforeFacts.map((fact) => <ReviewRow key={`before-${fact.label}`} label={fact.label} value={fact.value} title={fact.title} />)}</div>}<p className="mt-2 text-[11px] leading-relaxed text-mut"><strong className="text-[var(--text)]">After confirmation:</strong> {after}</p>{afterFacts.length > 0 && <div className="mt-2 grid gap-1">{afterFacts.map((fact) => <ReviewRow key={`after-${fact.label}`} label={fact.label.replace(/^Estimated\s*/, '')} value={fact.value} title={fact.title} />)}</div>}{!hasResultFacts && <p className="mt-2 text-[11px] leading-relaxed text-warn">This route did not return a verified collateral/debt or execution estimate. No risk metric is inferred.</p>}</section>;
+  return <details aria-label="What changes" className="group mt-4 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-3"><summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-[12px] font-semibold"><span>What changes</span><span className="text-[11px] font-normal text-[var(--mut-2)] group-open:hidden">Verified state and outcome</span></summary><div className="border-t border-[var(--line)] py-3">{source && <p className="text-[11px] leading-relaxed text-mut"><strong className="text-[var(--text)]">Source:</strong> {source}</p>}{beforeFacts && beforeFacts.length > 0 && <div className="mt-2 grid gap-1">{beforeFacts.map((fact) => <ReviewRow key={`before-${fact.label}`} label={fact.label} value={fact.value} title={fact.title} />)}</div>}{outcome && <p className="mt-2 text-[11px] leading-relaxed text-mut"><strong className="text-[var(--text)]">Outcome:</strong> {outcome}</p>}{afterFacts.length > 0 && <div className="mt-2 grid gap-1">{afterFacts.map((fact) => <ReviewRow key={`after-${fact.label}`} label={fact.label.replace(/^Estimated\s*/, '')} value={fact.value} title={fact.title} />)}</div>}{!hasResultFacts && <p className="mt-2 text-[11px] leading-relaxed text-warn">No verified collateral, debt, or execution estimate was returned. No risk metric is inferred.</p>}</div></details>;
 }

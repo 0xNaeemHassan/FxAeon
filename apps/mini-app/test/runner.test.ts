@@ -137,7 +137,7 @@ test.after(() => {
   if (globalThis.navigator) Object.defineProperty(globalThis.navigator, "locks", { value: nativeLocks, configurable: true });
 });
 
-test("runner signs SDK steps in order, waits every receipt, then performs post-read after another block", async () => {
+test("runner signs SDK steps in order, waits every receipt, then performs post-read after an explicit extra block", async () => {
   const events: string[] = [];
   const seenBlocks: bigint[] = [];
   const cb = callbacks([HASH_1, HASH_2]);
@@ -163,7 +163,7 @@ test("runner signs SDK steps in order, waits every receipt, then performs post-r
         seenBlocks.push(13n);
       },
     },
-    options: { simulate: false, pollMs: 0, receiptTimeoutMs: 100 },
+    options: { simulate: false, pollMs: 0, receiptTimeoutMs: 100, confirmations: 3, waitForNextBlock: true },
   });
 
   assert.equal(result.status, "confirmed");
@@ -171,6 +171,29 @@ test("runner signs SDK steps in order, waits every receipt, then performs post-r
   assert.ok(events.some((event) => event.startsWith("confirmed:All route steps")));
   assert.deepEqual(seenBlocks, [13n]);
   assert.deepEqual(readPendingHashes(), []);
+});
+
+test("runner performs the default post-confirm read at the receipt block", async () => {
+  const events: string[] = [];
+  const result = await runTransactionRoute({
+    route: route(1),
+    policy: TEST_POLICY,
+    publicClient: client({
+      pendingNonces: [4],
+      receipts: [{ status: "success", blockNumber: 10n }],
+      blocks: [10n],
+    }),
+    callbacks: {
+      requestSignature: async () => HASH_1,
+      onStatus: (status) => events.push(status),
+      postConfirmRead: async () => { events.push("post-read"); },
+    },
+    options: { simulate: false, pollMs: 0, receiptTimeoutMs: 100 },
+  });
+
+  assert.equal(result.status, "confirmed");
+  assert.ok(events.indexOf("confirmed") >= 0);
+  assert.ok(events.indexOf("post-read") > events.indexOf("confirmed"));
 });
 
 test("runner journals bridge verification facts only on the submitted bridge action", async () => {
@@ -529,7 +552,7 @@ test("simulation fails closed when the RPC omits an ordered route result", async
   assert.match(result.error ?? "", /returned 1 results for 2 transactions/);
 });
 
-test("post-confirm reads are skipped when the required next block is unavailable", async () => {
+test("an explicitly requested post-confirm block wait can skip a read when unavailable", async () => {
   let postReads = 0;
   const result = await runTransactionRoute({
     route: route(1),
@@ -543,8 +566,8 @@ test("post-confirm reads are skipped when the required next block is unavailable
       requestSignature: async () => HASH_1,
       postConfirmRead: async () => { postReads += 1; },
     },
-    options: { simulate: false, pollMs: 0, receiptTimeoutMs: 2 },
+    options: { simulate: false, pollMs: 0, receiptTimeoutMs: 2, waitForNextBlock: true },
   });
-  assert.equal(result.status, "failed");
+  assert.equal(result.status, "confirmed");
   assert.equal(postReads, 0);
 });

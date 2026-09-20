@@ -76,7 +76,6 @@
 .activityRow { min-height: 72px !important; border-bottom-color: var(--line) !important; padding-block: 14px !important; }
 .activityLink { min-height: 52px !important; border-top-color: var(--line) !important; padding-inline: 20px !important; color: var(--mint) !important; }
 .activitySection { display: flex; flex-direction: column; gap: 14px; }
-.activityEmpty { color: var(--mut); }
 
 .portfolioPositionItem { display: flex; min-width: 0; flex-direction: column; gap: 6px; }
 .portfolioPositionItem :global([data-position-key]) { border-radius: 16px 16px 10px 10px; }
@@ -98,7 +97,7 @@
 .portfolioEarnMetrics small { color: var(--mut); font-size: 11px; }
 .portfolioEarnMetrics strong { overflow-wrap: anywhere; font-size: 13px; font-weight: 650; }
 .portfolioEarnActions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-top: 14px; }
-.portfolioEarnActions a { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 11px; color: var(--mut); font-size: 11px; font-weight: 650; }
+.portfolioEarnActions a { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 11px; color: var(--mut); font-size: 11px; font-weight: 650; }
 .portfolioEarnActions a:hover { border-color: color-mix(in srgb, var(--mint) 44%, var(--line)); color: var(--text); }
 .portfolioEarnActions a:first-child { border-color: color-mix(in srgb, var(--mint) 34%, var(--line)); color: var(--mint); background: var(--mint-dim); }
 .portfolioEarnSkeleton { display: grid; gap: 9px; min-height: 126px; }
@@ -108,6 +107,8 @@
   .workspace:global(.portfolio-dashboard) .portfolioEarnSection { grid-column: 1 / -1; }
   .workspace:global(.portfolio-dashboard) .portfolioPositionsSection > :global(.flex.flex-col) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .workspace:global(.portfolio-dashboard) .portfolioPositionsSection > :global(.flex.flex-col) > :first-child { grid-column: 1 / -1; }
+  .workspace:global(.portfolio-dashboard) .actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: visible; }
+  .workspace:global(.portfolio-dashboard) .action { min-width: 0; flex: none; }
 }
 
 @media (max-width: 600px) {
@@ -126,6 +127,7 @@
 .walletSection { margin-top: 22px; }
 .walletSection h3 { margin: 4px 0 0; font-size: 16px; }
 .walletAssets, .walletLinks { border-top: 1px solid var(--line); }
+.walletDisconnect { border-top: 1px solid var(--line); padding-top: 12px; }
 .walletAssetRow { min-height: 72px !important; border-bottom-color: var(--line) !important; }
 .walletAssetRow p:first-child { font-size: 14px !important; }
 .walletAssetRow p:last-child { color: var(--mut) !important; }
@@ -139,33 +141,6 @@
 @media (min-width: 900px) {
   .overview { grid-template-columns: minmax(0, 1.12fr) minmax(320px, .88fr); align-items: start; }
   .secondaryColumn { position: sticky; top: 24px; }
-
-  /* Desktop dashboards scan best as a compact two-column canvas. Keep the
-     value card authoritative across the row, pair quick actions with markets,
-     and lay position cards beside one another when they are present. */
-  .workspace:global(.portfolio-dashboard) .primaryColumn {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-content: start;
-    gap: 12px;
-  }
-  .workspace:global(.portfolio-dashboard) .primaryColumn > .valueCard,
-  .workspace:global(.portfolio-dashboard) .primaryColumn > :global(.section-heading),
-  .workspace:global(.portfolio-dashboard) .primaryColumn > .protocolCard,
-  .workspace:global(.portfolio-dashboard) .primaryColumn > :global(.flex.flex-col) { grid-column: 1 / -1; }
-  .workspace:global(.portfolio-dashboard) .primaryColumn > section[aria-labelledby='portfolio-actions-title'] { grid-column: 1; }
-  .workspace:global(.portfolio-dashboard) .primaryColumn > section[aria-labelledby='market-overview-title'] { grid-column: 2; }
-  .workspace:global(.portfolio-dashboard) .primaryColumn > .section[aria-labelledby='recent-activity-title'] { grid-column: 1 / -1; grid-row: 1; }
-  .workspace:global(.portfolio-dashboard) .primaryColumn > section[aria-labelledby='portfolio-positions-heading'] { grid-column: 1 / -1; grid-row: 3; }
-  .workspace:global(.portfolio-dashboard) .primaryColumn > section[aria-labelledby='portfolio-actions-title'],
-  .workspace:global(.portfolio-dashboard) .primaryColumn > section[aria-labelledby='market-overview-title'] { grid-row: 4; }
-  .workspace:global(.portfolio-dashboard) .primaryColumn > .portfolioEarnSection { grid-column: 1 / -1; grid-row: 5; }
-  .workspace:global(.portfolio-dashboard) .primaryColumn > :global(.flex.flex-col) {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-  }
-  .workspace:global(.portfolio-dashboard) .primaryColumn > :global(.flex.flex-col) > :first-child { grid-column: 1 / -1; }
 }
 
 @media (max-width: 600px) {
@@ -185,6 +160,7 @@
   .workspace:global(.portfolio-dashboard) .overview:not(.disconnectedOverview) > .primaryColumn > section[aria-labelledby='portfolio-actions-title'] { order: 2; }
   .workspace:global(.portfolio-dashboard) .overview:not(.disconnectedOverview) > .primaryColumn > section[aria-labelledby='market-overview-title'] { order: 3; }
   .workspace:global(.portfolio-dashboard) .overview:not(.disconnectedOverview) > .primaryColumn > .portfolioEarnSection { order: 4; }
+  .workspace:global(.portfolio-dashboard) .overview:not(.disconnectedOverview) > .primaryColumn > .section[aria-labelledby='recent-activity-title'] { order: 5; }
 
 }
 
@@ -230,11 +206,9 @@
   .workspace:global(.portfolio-dashboard) .section-heading { margin-bottom: 4px; }
   .workspace:global(.portfolio-dashboard) .valueCard { padding: 12px !important; border-radius: 16px; }
   .workspace:global(.portfolio-dashboard) .valueMain { margin-top: 10px; }
-  .workspace:global(.portfolio-dashboard) .disconnectedValueCard .valueMain { align-items: center; flex-direction: row; }
-  .workspace:global(.portfolio-dashboard) .disconnectedValueCard .valueMain > :last-child { width: auto; max-width: 132px; flex: 0 0 132px; }
   .workspace:global(.portfolio-dashboard) .valueMetrics { margin-top: 10px; padding-top: 8px; }
   .workspace:global(.portfolio-dashboard) .actions { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
-  .workspace:global(.portfolio-dashboard) .action { min-height: 54px; flex-direction: column; justify-content: center; gap: 3px; padding: 6px 2px; border-radius: 11px; font-size: 10px; }
+  .workspace:global(.portfolio-dashboard) .action { min-height: 54px; flex-direction: column; justify-content: center; gap: 3px; padding: 6px 2px; border-radius: 11px; font-size: 12px; }
   .workspace:global(.portfolio-dashboard) .action span { width: 27px; height: 27px; border-radius: 8px; }
   .workspace:global(.portfolio-dashboard) .protocolTools { flex-direction: row; gap: 6px; }
   .workspace:global(.portfolio-dashboard) .protocolTools > * { min-width: 0; }
@@ -242,7 +216,7 @@
   .workspace:global(.portfolio-dashboard) .protocolCard > span:first-child { width: 28px; height: 28px; border-radius: 9px; }
   .workspace:global(.portfolio-dashboard) .protocolCard strong { font-size: 12px; }
   .workspace:global(.portfolio-dashboard) .protocolCard small,
-  .workspace:global(.portfolio-dashboard) .protocolCard em { font-size: 9px; }
+  .workspace:global(.portfolio-dashboard) .protocolCard em { font-size: 11px; }
   .workspace:global(.portfolio-dashboard) .balanceHeader { padding: 9px 11px; }
   .workspace:global(.portfolio-dashboard) .balanceRow { min-height: 54px !important; padding-block: 7px !important; }
 
@@ -261,7 +235,7 @@
   .workspace:global(.portfolio-dashboard) .overview:not(.disconnectedOverview) > .primaryColumn > .valueCard .valueMetrics { margin-top: 8px; padding-top: 7px; }
   .workspace:global(.portfolio-dashboard) .overview:not(.disconnectedOverview) > .primaryColumn > .valueCard .valueAmount { font-size: 32px; }
   .workspace:global(.portfolio-dashboard) .overview:not(.disconnectedOverview) > .primaryColumn > section[aria-labelledby='portfolio-actions-title'] .actions { gap: 4px; }
-  .workspace:global(.portfolio-dashboard) .overview:not(.disconnectedOverview) > .primaryColumn > section[aria-labelledby='portfolio-actions-title'] .action { min-height: 48px; padding: 5px 2px; font-size: 9px; }
+  .workspace:global(.portfolio-dashboard) .overview:not(.disconnectedOverview) > .primaryColumn > section[aria-labelledby='portfolio-actions-title'] .action { min-height: 48px; padding: 5px 2px; font-size: 12px; }
   .workspace:global(.portfolio-dashboard) .overview:not(.disconnectedOverview) > .primaryColumn > section[aria-labelledby='portfolio-actions-title'] .action span { width: 24px; height: 24px; }
   .workspace:global(.portfolio-dashboard) .overview:not(.disconnectedOverview) > .primaryColumn > section[aria-labelledby='market-overview-title'] .market { gap: 4px; }
   .workspace:global(.portfolio-dashboard) .overview:not(.disconnectedOverview) .market > * { padding: 8px !important; border-radius: 13px !important; }
@@ -300,9 +274,24 @@
    vertical list below the fold when the desktop shell can show the command
    center and wallet assets together. */
 @media (min-width: 840px) {
-  .workspace:global(.portfolio-dashboard) .overview:not(.disconnectedOverview) > .primaryColumn > :global(.section-heading),
-  .workspace:global(.portfolio-dashboard) .overview:not(.disconnectedOverview) > .secondaryColumn > :global(section[aria-labelledby='recent-activity-title']),
-  .workspace:global(.portfolio-dashboard) .overview:not(.disconnectedOverview) > .secondaryColumn > :global(section[aria-labelledby='wallet-balances-title']) { display: none; }
+  /* A disconnected portfolio has no secondary directory to populate. Keep
+     its command center bounded and centered instead of inheriting a blank
+     two-column wallet layout. */
+  .workspace:global(.portfolio-dashboard):has(.disconnectedOverview) > .heading,
+  .workspace:global(.portfolio-dashboard):has(.disconnectedOverview) > .tabs {
+    width: 100%;
+    max-width: 760px;
+    margin-inline: auto;
+  }
+  .workspace:global(.portfolio-dashboard) .disconnectedOverview {
+    grid-template-columns: minmax(0, 760px);
+    justify-content: center;
+  }
+  .workspace:global(.portfolio-dashboard) .disconnectedOverview > .primaryColumn {
+    width: 100%;
+    max-width: 760px;
+    margin-inline: auto;
+  }
 
   /* When disconnected, the side directory is placeholder content rather
      than a task. Keep the command center (connect, actions, and markets) in
@@ -315,8 +304,9 @@
 
 @media (max-width: 359px) {
   .workspace:global(.portfolio-dashboard) .disconnectedOverview .primaryColumn > .section-heading { display: none; }
-  .workspace:global(.portfolio-dashboard) .disconnectedValueCard .valueMain > :last-child { max-width: 116px; flex-basis: 116px; }
-  .workspace:global(.portfolio-dashboard) .action { min-height: 48px; font-size: 9px; }
+  /* Keep action labels legible and controls comfortably tappable in the
+     smallest supported Telegram viewport. */
+  .workspace:global(.portfolio-dashboard) .action { min-height: 44px; font-size: 12px; }
   .workspace:global(.portfolio-dashboard) .action span { width: 24px; height: 24px; }
   /* At the smallest Telegram viewport the primary value/position surface and
      navigation already own the fold. Secondary protocol cards remain
@@ -338,14 +328,62 @@
   .workspace:global(.portfolio-dashboard) .valueAmount { font-size: 32px; }
   .workspace:global(.portfolio-dashboard) .valueHint { margin-top: 4px; font-size: 10px; line-height: 1.25; }
   .workspace:global(.portfolio-dashboard) .valueMetrics { margin-top: 8px; padding-top: 7px; }
-  .workspace:global(.portfolio-dashboard) .valueMetrics small { font-size: 10px; }
+  .workspace:global(.portfolio-dashboard) .valueMetrics small { font-size: 11px; }
   .workspace:global(.portfolio-dashboard) .valueMetrics strong { font-size: 12px; }
-  .workspace:global(.portfolio-dashboard) .disconnectedValueCard .valueMain > :last-child { max-width: 112px; flex-basis: 112px; }
-  .workspace:global(.portfolio-dashboard) .disconnectedValueCard .valueHint { max-width: 128px; }
   /* Keep the market pair in the compact command center at every phone
      height. The cards are intentionally dense so ETH and BTC remain visible
      without introducing a second page scroll before the tab bar. */
   .workspace:global(.portfolio-dashboard) .overview:not(.disconnectedOverview) > .primaryColumn > section[aria-labelledby='market-overview-title'] { display: block; }
   .workspace:global(.portfolio-dashboard) .protocolCard { min-height: 60px; padding: 7px !important; }
   .workspace:global(.portfolio-dashboard) .protocolCard > span:first-child { width: 26px; height: 26px; }
+}
+
+/* Final surface guardrails: account data can contain long hashes and protocol
+   amounts, so every compact module must be allowed to shrink without pushing
+   the shell wider than the viewport. */
+.workspace,
+.overview,
+.primaryColumn,
+.secondaryColumn,
+.section,
+.valueCard,
+.balanceCard,
+.activityCard,
+.protocolCard,
+.portfolioEarnCard,
+.walletSheet { min-width: 0; }
+
+.valueTopline > :first-child,
+.valueMetrics > span,
+.protocolCard > span:nth-child(2),
+.balanceRow > div,
+.activityRow > div { min-width: 0; }
+
+.valueMetrics > span { flex: 1 1 0; }
+.valueMetrics strong,
+.valueHint,
+.protocolCard strong,
+.protocolCard em,
+.balanceRow p,
+.activityRow p { overflow-wrap: anywhere; }
+.valueMetrics strong { display: block; font-variant-numeric: tabular-nums; }
+
+.tabs,
+.actions { overscroll-behavior-inline: contain; }
+.action strong { min-width: 0; overflow-wrap: anywhere; text-align: center; }
+.portfolioPositionActions { flex-wrap: wrap; }
+.portfolioPositionActions a,
+.portfolioEarnActions a { min-width: 0; min-height: 44px; overflow-wrap: anywhere; padding-inline: 8px; text-align: center; }
+.walletSheet { overscroll-behavior: contain; }
+
+@media (max-width: 600px) {
+  .valueTopline { gap: 8px; }
+  .valueTopline > :first-child { flex: 1 1 auto; }
+  .tabs > * { flex: 0 0 auto; }
+  .valueAmount { max-width: 100%; overflow-wrap: anywhere; }
+  .valueMetrics { gap: 8px; }
+  .valueMetrics > span { padding-right: 4px; }
+  .portfolioPositionActions { padding-inline: 4px; }
+  .portfolioPositionActions a { flex: 1 1 92px; }
+  .portfolioEarnActions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }

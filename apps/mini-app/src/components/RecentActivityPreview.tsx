@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { CheckCircle2, ChevronRight, CircleAlert, Clock3, History, RefreshCw, XCircle, type LucideIcon } from 'lucide-react';
+import { CheckCircle2, ChevronRight, CircleAlert, Clock3, RefreshCw, XCircle, type LucideIcon } from 'lucide-react';
 import type { Address } from 'viem';
 import { Card, SectionTitle } from '@/components/ui';
 import {
@@ -43,7 +43,7 @@ export default function RecentActivityPreview({ walletAddress }: { walletAddress
       await refreshWallet(reconciled, walletAddress, isCurrent);
       if (!isCurrent()) return;
       if (reconciled.length === 0) {
-        setSnapshot({ identity, items: [], loading: false, error: 'Saved history exists on this device, but its chain status could not be reconciled. Retry when RPC access is available.' });
+        setSnapshot({ identity, items: [], loading: false, error: 'Saved history is on this device, but transaction status is unavailable. Retry when network access is available.' });
         return;
       }
       setSnapshot({ identity, items: [...reconciled].reverse().slice(0, 3), loading: false, error: '' });
@@ -76,24 +76,19 @@ export default function RecentActivityPreview({ walletAddress }: { walletAddress
         ) : loadError ? (
           <div className="flex items-center gap-3 px-4 py-5" role="status" aria-live="polite">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--warn-dim)] text-warn"><CircleAlert className="h-5 w-5" aria-hidden="true" /></span>
-            <span className="min-w-0 flex-1 text-[11px] leading-relaxed text-warn">Receipt status is unavailable. Retry before relying on this history.</span>
+            <span className="min-w-0 flex-1 text-[11px] leading-relaxed text-warn">Transaction status is unavailable. Retry before relying on this history.</span>
             <button type="button" aria-label="Retry recent history" onClick={() => { haptic('light'); void load(); }} className="glass-press flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-mut"><RefreshCw className="h-4 w-4" aria-hidden="true" /></button>
           </div>
         ) : items.length ? (
           <>
             {items.some((item) => item.verification === 'rpc-error') && (
-              <div role="status" aria-live="polite" className="mx-3 mt-3 flex items-center gap-2 rounded-lg bg-[var(--warn-dim)] px-3 py-2"><span className="min-w-0 flex-1 text-[11px] text-warn">Some receipt details are unavailable.</span><button type="button" aria-label="Retry receipt details" onClick={() => { haptic('light'); void load(); }} className="glass-press flex min-h-9 min-w-9 items-center justify-center rounded-lg text-warn"><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /></button></div>
+              <div role="status" aria-live="polite" className="mx-3 mt-3 flex items-center gap-2 rounded-lg bg-[var(--warn-dim)] px-3 py-2"><span className="min-w-0 flex-1 text-[11px] text-warn">Some transaction details are unavailable. Retry before relying on this history.</span><button type="button" aria-label="Retry receipt details" onClick={() => { haptic('light'); void load(); }} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-lg text-warn"><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /></button></div>
             )}
             <ul className={`${styles.activityList} divide-y divide-[var(--line)] px-3`}>
               {items.map((item) => <ActivityRow key={item.record.id} item={item} />)}
             </ul>
           </>
-        ) : (
-          <div className={`${styles.activityEmpty} flex items-center gap-3 px-4 py-5`}>
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] text-mut"><History className="h-5 w-5" aria-hidden="true" /></span>
-            <span><strong className="block text-[12.5px]">No recent FxAeon history</strong><span className="mt-1 block text-[11px] text-mut">Transactions submitted on this device will appear here.</span></span>
-          </div>
-        )}
+        ) : null}
         <Link href="/history" className={`${styles.activityLink} glass-press flex min-h-12 items-center justify-between border-t border-[var(--line)] px-4 text-[12px] font-semibold text-mint`}>
           Open full history <ChevronRight className="h-4 w-4" aria-hidden="true" />
         </Link>

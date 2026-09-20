@@ -1,11 +1,9 @@
 <div align="center">
-  <img src="brand/fxaeon-wordmark.svg" alt="FxAeon" width="720" />
-
-  <h3>A focused, self-custodial interface for f(x) Protocol.</h3>
+  <img src="docs/assets/social/fxaeon-x-banner-2172x724.png" alt="FxAeon" width="720" />
 
   <p>
-    Trade positions, mint fxUSD, manage fxSAVE, and bridge across Ethereum and Base<br />
-    from the web or Telegram—without handing control of your wallet to an application server.
+    Trade positions, borrow fxUSD, manage fxSAVE on Ethereum, and move supported assets between Ethereum and Base<br />
+    from the web or Telegram.
   </p>
 
   <p>
@@ -17,15 +15,9 @@
   </p>
 
   <p>
-    <img src="https://img.shields.io/badge/Next.js-15-000000?logo=next.js" alt="Next.js 15" />
-    <img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript&logoColor=white" alt="TypeScript 5.9" />
-    <img src="https://img.shields.io/badge/Node.js-22-339933?logo=node.js&logoColor=white" alt="Node.js 22" />
-    <img src="https://img.shields.io/badge/pnpm-11.19-f69220?logo=pnpm&logoColor=white" alt="pnpm 11.19" />
-    <img src="https://img.shields.io/badge/chains-Ethereum%20%7C%20Base-627eea" alt="Ethereum and Base" />
-  </p>
-
-  <p>
-    <a href="https://fxaeon.pages.dev/"><img src="https://img.shields.io/badge/Launch_FxAeon-Open_the_production_app-315efb?style=for-the-badge" alt="Launch FxAeon production app" /></a>
+    <a href="https://fxaeon.com/">Open FxAeon app</a> ·
+    <a href="https://fxaeon.xyz/">FxAeon home</a> ·
+    <a href="docs/README.md">Docs</a>
   </p>
 
   <p>
@@ -43,8 +35,6 @@
 
 ## Product
 
-FxAeon turns the official f(x) SDK into a focused, reviewable product surface for both ordinary browsers and Telegram Mini Apps. The same static application, wallet boundary, SDK adapter, and transaction policy run in both environments, with a violet-black dark theme, lavender actions, and a read-only in-app `/docs` guide.
-
 <img src="docs/assets/fxaeon-portfolio.png" alt="FxAeon Portfolio application" width="100%" />
 
 <table>
@@ -55,7 +45,7 @@ FxAeon turns the official f(x) SDK into a focused, reviewable product surface fo
     </td>
     <td width="50%" align="center">
       <img src="docs/assets/fxaeon-trade.png" alt="FxAeon trading form" width="100%" />
-      <br /><strong>Unobstructed trading workspace</strong>
+      <br /><strong>Trade</strong>
     </td>
   </tr>
   <tr>
@@ -71,7 +61,7 @@ FxAeon turns the official f(x) SDK into a focused, reviewable product surface fo
   <tr>
     <td width="50%" align="center">
       <img src="docs/assets/fxaeon-token-picker.png" alt="FxAeon searchable input-asset picker" width="100%" />
-      <br /><strong>Polished token selection</strong>
+      <br /><strong>Token selection</strong>
     </td>
     <td width="50%" align="center">
       <img src="docs/assets/fxaeon-login.png" alt="FxAeon browser wallet connection screen" width="100%" />
@@ -80,8 +70,8 @@ FxAeon turns the official f(x) SDK into a focused, reviewable product surface fo
   </tr>
   <tr>
     <td width="50%" align="center">
-      <img src="docs/assets/fxaeon-portfolio-positions.png" alt="FxAeon portfolio with four verified positions on a disposable Ethereum fork" width="100%" />
-      <br /><strong>Portfolio · verified fork positions</strong>
+      <img src="docs/assets/fxaeon-portfolio-positions.png" alt="FxAeon portfolio showing fork-backed ETH long and short positions" width="100%" />
+      <br /><strong>Portfolio · browser fork capture</strong>
     </td>
     <td width="50%" align="center">
       <img src="docs/assets/fxaeon-positions.png" alt="Real ETH and BTC long and short positions opened through FxAeon on a disposable Ethereum fork" width="100%" />
@@ -90,35 +80,33 @@ FxAeon turns the official f(x) SDK into a focused, reviewable product surface fo
   </tr>
 </table>
 
-Populated views show positions opened through FxAeon's review and confirmation flow on a disposable Ethereum fork—not production funds. Display prices are unmodified external observations. [Mobile positions](docs/assets/fxaeon-positions-mobile.png) · [Connected Trade](docs/assets/fxaeon-trade-connected.png) · [Capture provenance](docs/position-screenshot-fixture.md).
+The nine standard UI captures were refreshed on 20 September 2026 using live external display data; their [manifest](docs/fixtures/standard-screenshot-manifest.json) records routes, viewports, hashes, and zero page, console, fallback, or discovery errors. They document rendered app states and do not prove wallet transactions. The four populated position screenshots are separate browser-fork evidence from block `25965421`; their [manifest](docs/fixtures/position-screenshot-manifest.json) records fork-backed positions and visibly labelled illustrative prices/charts. They show fork state, not production balances or real market prices. See [capture provenance](docs/position-screenshot-fixture.md). [Mobile positions](docs/assets/fxaeon-positions-mobile.png) · [Connected Trade](docs/assets/fxaeon-trade-connected.png).
 
-### A complete, deliberately scoped protocol interface
+### Capabilities
 
 | Capability | What FxAeon provides |
 | --- | --- |
-| Positions | Read ETH/BTC long and short positions; open, increase, reduce, close, and adjust leverage from a responsive master-detail workspace with a direct Close action on every position |
-| Borrow | Deposit collateral and mint fxUSD; repay debt and withdraw collateral |
-| fxSAVE | Read balances/configuration, deposit assets, queue or execute redemptions, and claim completed withdrawals; verified zero-share balances remain exact zero |
+| Positions | Read ETH/BTC long and short positions on Ethereum; open, increase, reduce, close, and adjust leverage from a responsive master-detail workspace with a direct Close action on every position |
+| Borrow | Deposit collateral and mint fxUSD on Ethereum; repay debt and withdraw collateral |
+| fxSAVE | Read Ethereum balances/configuration, deposit assets, queue or execute redemptions, and claim completed withdrawals; verified zero-share balances remain exact zero |
 | Bridge | Quote and build Ethereum ↔ Base LayerZero routes with source-receipt and destination-GUID verification |
 | Market price context | Timestamp- and confidence-validated current asset prices across forms, pickers, Portfolio, Earn, positions, and the wallet profile, plus validated ETH/BTC market history for charts; display-only and never an execution input |
-| Wallet profile | Privy embedded wallets or browser-injected EVM wallets, supported-asset balances, live USD totals, dedicated History, and in-place connect/disconnect/account switching—without a custody server |
-| Shared wallet data | Wagmi and TanStack Query keep balances consistent across Portfolio, token pickers, and Move, with account-scoped caching and receipt-backed refreshes |
+| Wallet profile | Privy embedded wallets or browser-injected EVM wallets, supported-asset balances with per-asset USD values, dedicated History, and in-place connect/disconnect/account switching—without a custody server |
+| Shared wallet data | Wagmi and TanStack Query keep balances consistent across Portfolio, token pickers, and Move, with account-scoped caching and receipt-backed refreshes; Portfolio shows a known USD subtotal for incomplete reads and a full total only when valuation is complete |
 | Recovery | Reload-safe pending transaction and bridge journals in a dedicated History view, always revalidated against chain data |
 | Interface | Mobile-first controls, searchable token pickers with available quantities and their USD worth, a real leverage slider, and official, neutral-dark, and light themes |
 
-The immutable public surface contains exactly 15 SDK methods. [`fx-scope.lock.json`](fx-scope.lock.json) and the scope verifier prevent protocol internals, unsupported routes, or backend authority from silently entering the product.
+The public SDK surface is limited to 15 methods. [`fx-scope.lock.json`](fx-scope.lock.json) and the scope verifier enforce that boundary.
 
 Token and network marks use maintained AladdinDAO/SmolDapp assets (with local SVG fallbacks), so fxUSD, fxSAVE, ETH, WETH, stETH, wstETH, USDC, USDT, BTC, Ethereum, and Base remain recognizable even when an asset host is unavailable.
 
-### Why the design matters
+### Key boundaries
 
-- **Web and Telegram parity.** Users can launch the full app in a modern browser or inside Telegram; Telegram is an enhanced host, not a requirement.
-- **Self-custodial execution.** Privy or the connected external wallet remains the only signing authority. FxAeon never accepts a private key.
-- **Official planning path.** Protocol reads and unsigned transaction plans come from the pinned <code>@aladdindao/fx-sdk</code> package.
-- **Chain-authoritative state.** Ethereum, Base, receipts, and matching LayerZero events establish financial truth—not a database or browser cache.
-- **Price context without price authority.** DefiLlama supplies the primary validated current-price snapshot; missing token quotes are requested through one bounded, batched CoinGecko contract-price fallback with adaptive rate-limit retry/backoff. Each token is validated independently, quotes older than 15 minutes are rejected, and no stablecoin peg is substituted. Compact market context has no source badge or duplicate spot/chart price. CoinGecko separately supplies validated ETH/BTC history for the 1D/7D/30D charts. Invalid data is rejected; a failed refresh retains the last validated snapshot with an explicit retrying/stale state. These display feeds remain isolated from SDK planning, validation, simulation, and signing.
-- **Inspectable transaction review sheet.** Targets, selectors, values, approvals, chains, nonces, route order, amounts, limits, and applicable fees are shown and validated before wallet confirmation.
-- **Static delivery.** The production artifact is a deterministic Cloudflare Pages export with no application server, Worker, queue, or privileged runtime.
+- **Wallet control.** Privy or the connected external wallet is the signing authority; FxAeon never accepts a private key.
+- **Protocol scope.** Reads and unsigned plans use the pinned <code>@aladdindao/fx-sdk</code>. Ethereum is authoritative for positions, Borrow, and fxSAVE; Ethereum/Base receipts and LayerZero events establish bridge state.
+- **Price context.** Validated DefiLlama and CoinGecko data supports display values and charts. It is isolated from planning, simulation, and signing.
+- **Action review.** Connected inputs can show read-only details. The primary action rebuilds, validates, and simulates against current state before opening the wallet; material changes require another explicit action.
+- **Hosting.** The app is a static Cloudflare Pages export. An optional read-only `/api/gas` function cannot sign or establish protocol state.
 
 ## Security by construction
 
@@ -128,10 +116,10 @@ Every write follows the same guarded lifecycle:
 2. bind it to the selected sender and supported network;
 3. validate destinations, selectors, calldata shape, value, approvals, nonce, and order;
 4. simulate the ordered calls when supported;
-5. show a human-readable and raw transaction review sheet;
-6. request a visible wallet confirmation for each step;
+5. show human-readable and raw transaction details before the wallet prompt;
+6. request a visible wallet confirmation for each step only after the explicit action;
 7. wait for a successful, fingerprint-matching receipt before continuing;
-8. wait for three confirmations, then reread the receipt and authoritative protocol state.
+8. wait for one canonical confirmation by default, then reread the receipt and authoritative protocol state; deeper confirmation depth is explicit.
 
 A rejection, revert, timeout, provider inconsistency, or nonce drift stops the route. Bridge source confirmation is never presented as destination delivery.
 
@@ -157,7 +145,7 @@ flowchart LR
 
 | Layer | Responsibility |
 | --- | --- |
-| Interface | Responsive web/Telegram navigation, forms, review sheets, in-place wallet controls, recovery, and accessible states |
+| Interface | Responsive web/Telegram navigation, forms, inline action details, in-place wallet controls, recovery, and accessible states |
 | Wallet boundary | Authentication, wallet selection, chain switching, and explicit transaction prompts |
 | SDK façade | The exact 15-method official capability contract |
 | Policy and runner | Plan binding, validation, simulation, serialization, receipts, and authoritative refresh |
@@ -184,7 +172,7 @@ cp apps/mini-app/.env.example apps/mini-app/.env.local
 pnpm dev
 ```
 
-Open <http://localhost:3000> in a browser. The root route opens Portfolio directly—there is no intervening landing page. Wallet connection, account switching, and disconnect happen in place from the app shell and wallet panel; `/login` remains an explicit standalone setup screen. Telegram is optional for local development; use a Telegram test launch only when validating host-specific viewport, theme, haptic, or seamless-login behavior.
+Open <http://localhost:3000> in a browser. The financial app opens Portfolio at `/`; `/portfolio` remains a compatibility alias. Wallet connection, account switching, and disconnect happen in place from the app shell and wallet panel; `/login` remains an explicit standalone setup screen. The independent marketing site is served from `apps/landing` when needed. Telegram is optional for local development; use a Telegram test launch only when validating host-specific viewport, theme, haptic, or seamless-login behavior.
 
 ### Public build configuration
 
@@ -198,7 +186,7 @@ Open <http://localhost:3000> in a browser. The root route opens Portfolio direct
 
 Every `NEXT_PUBLIC_*` value is embedded in the browser bundle. Never place a private key, Telegram bot token, Privy secret, authorization key, or unrestricted provider credential in client configuration. Without Privy, FxAeon connects directly to the wallet extension through EIP-1193; signing still happens in that wallet and no fallback server is involved.
 
-Cloudflare Pages must receive the same public build variables as the verified release build; GitHub Actions secrets are not implicitly inherited by a native Pages Git build. The deployment workflow checks the live public Privy configuration after Pages publishes, then synchronizes the Telegram bot profile and Mini App menu with the protected `TELEGRAM_BOT_TOKEN`. The bot token is never shipped to the browser.
+Cloudflare Pages must receive the same public build variables as the release build; GitHub Actions secrets are not implicitly inherited by a native Pages Git build. The deployment workflow checks the live public Privy configuration after Pages publishes, then synchronizes the Telegram bot profile and Mini App menu with the protected `TELEGRAM_BOT_TOKEN`. The bot token is never shipped to the browser.
 
 See [`SETUP.md`](SETUP.md) for provider restrictions, protected deployment variables, fork-test configuration, and Cloudflare Pages deployment.
 
@@ -234,15 +222,34 @@ pnpm test:e2e     # browser and Telegram-sized static-artifact coverage
 
 Anvil uses disposable local accounts and snapshots. The default proof funds an unlocked account with fork-only USDC impersonation, opens coexisting ETH/BTC long and short positions through the official SDK, then deposits additional collateral and borrows real fxUSD against the existing ETH long. It verifies that the same position ID is preserved, debt increases, and the borrowed fxUSD reaches the wallet. It then reverts the snapshot and emits `artifacts/anvil/protocol-proof.json`. Its upstream provider URL is supplied only to the Anvil parent process and is never committed, printed, forwarded to the test child, or written to the proof artifact.
 
-The manual **Protected Anvil mainnet fork** workflow runs four gates: the Node four-position proof, the fxSAVE Earn lifecycle proof, 64 snapshot/revert plus 64 dummy ordered-route stress iterations, and real position opening plus full closing through the mobile browser UI. The browser gate checks review-before-signing, immediate approval/action explorer links, receipt-verified positions before indexing, reload recovery, direct close actions, receive-token balances, zeroed pool accounting after every close, and shared position views across Trade, Positions, Portfolio, Earn, and Move. It captures the populated interface, proves the honestly empty state after closing all four positions, then restores the snapshot.
+The manual **Protected Anvil mainnet fork** workflow runs four gates: the Node four-position proof, the fxSAVE Earn lifecycle proof, 64 snapshot/revert plus 64 dummy ordered-route stress iterations, and real position opening plus full closing through the mobile browser UI. The browser gate checks inline action facts, final rebuild/simulation before signing, immediate approval/action explorer links, receipt-verified positions before indexing, reload recovery, direct close actions, receive-token balances, zeroed pool accounting after every close, and shared position views across Trade, Positions, Portfolio, Earn, and Move. It captures the populated interface, proves the honestly empty state after closing all four positions, then restores the snapshot.
 
 The protected workflow uses the Ethereum Alchemy URL stored in the GitHub environment. A dispatch input or protected `ANVIL_FORK_BLOCK` repository variable can pin the release block. The badge follows the latest completed manual run on `main`: all four gates must pass for this workflow revision to be green. An older green run without the Earn or enhanced browser checks does not prove those paths. See [testing and proof artifacts](docs/testing.md) and [screenshot provenance](docs/position-screenshot-fixture.md).
+
+The final browser proof manifest records the four-position open/borrow/close
+lifecycle at fork block `25965421` and restored snapshot. The promoted position
+screenshots use visibly labelled illustrative display data; the separate
+node-runner command is available for rendering fork state without browser
+transaction execution.
+
+Final verification passed on PR `#193` head
+`064229b6fb6640f9d16087ab48da13e85b05f356`: all six CI checks passed, including
+Client CI's full `pnpm verify` with exit code `0` and built-browser E2E. Test-only
+hardening of stale-preview scheduling passed focused checks `3/3` and
+the full browser suite `109/109` in 5.8 minutes
+(`%TEMP%/fxaeon-final-109-e2e-identity.log`). Full and production dependency
+audits report zero known vulnerabilities. Two pre-existing high-severity
+development-dependency findings were resolved by updating `js-yaml` to `4.3.2`
+and Miniflare's nested `sharp` to `0.35.4`. Final lint passed with zero warnings.
+
+Separately, the all-suite protocol, Earn, and stress run passed `4/4` tests
+with no skips in `%TEMP%/fxaeon-final-all-fork.log`; the browser-fork proof
+passed and restored its snapshot. Native host behavior remains unverified.
 
 ## Repository structure
 
 ```text
 apps/mini-app/       Next.js web and Telegram application
-brand/               Repository and product identity assets
 docs/                Architecture, SDK scope, security, testing, and roadmap
 patches/             Reviewed SDK and dependency compatibility patches
 scripts/             Scope, environment, CSP, bundle, and fork verification
@@ -259,6 +266,7 @@ fx-scope.lock.json   Immutable public SDK capability contract
 | [`docs/sdk-scope.md`](docs/sdk-scope.md) | Exact official SDK capability contract |
 | [`docs/security.md`](docs/security.md) | Threats, controls, supply chain, and residual trust |
 | [`docs/testing.md`](docs/testing.md) | Release gates, fork testing, and acceptance matrix |
+| [`docs/brand-assets.md`](docs/brand-assets.md) | Approved supplied brand masters, theme guidance, and export rules |
 | [`docs/post-transaction-ux.md`](docs/post-transaction-ux.md) | Jumper/LI.FI, Uniswap, and Aave code study; post-signing behavior and verification |
 | [`docs/roadmap.md`](docs/roadmap.md) | Release posture and deliberately deferred work |
 | [`SECURITY.md`](SECURITY.md) | Private vulnerability reporting |

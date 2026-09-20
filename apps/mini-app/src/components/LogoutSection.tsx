@@ -1,23 +1,23 @@
 'use client';
 
 /**
- * Logout control for the single global Privy session.
+ * Logout control for the single app wallet session.
  *
- * This component must not create a nested provider. A nested Privy context can
- * leave the settings screen signed into a different client session than the
- * protocol pages.
+ * This component must use the shared wallet adapter. A nested Privy context
+ * can leave the settings screen signed into a different client session than
+ * the protocol pages, and would bypass the browser fallback's disconnect
+ * marker.
  */
 import { useCallback, useState } from 'react';
 import { LogOut } from 'lucide-react';
-import { useLogout } from '@privy-io/react-auth';
 import { haptic } from '@/lib/telegram';
-import { privyConfigured } from '@/lib/privyConfig';
 import { Button, Card, SectionTitle } from '@/components/ui';
 import { useLocale } from '@/lib/i18n';
 import { userSafeError } from '@/lib/errors';
+import { usePrivyWallet } from '@/lib/wallet';
 
-function PrivyLogoutControls() {
-  const { logout } = useLogout();
+function LogoutControls() {
+  const { disconnect } = usePrivyWallet();
   const { t } = useLocale();
   const [loggingOut, setLoggingOut] = useState(false);
   const [error, setError] = useState('');
@@ -26,14 +26,15 @@ function PrivyLogoutControls() {
     setLoggingOut(true);
     setError('');
     try {
-      await logout();
+      await disconnect();
       haptic('success');
     } catch (e) {
       setError(userSafeError(e, 'Logout could not be completed. Try again.'));
+      haptic('error');
     } finally {
       setLoggingOut(false);
     }
-  }, [logout]);
+  }, [disconnect]);
 
   return (
     <>
@@ -58,6 +59,9 @@ function PrivyLogoutControls() {
           </span>
         </div>
       </Card>
+      <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {loggingOut ? 'Signing out…' : ''}
+      </p>
       {error && (
         <Card className="mt-2 border-[rgba(255,90,95,0.35)]">
           <p role="alert" className="text-[13px] text-danger">{error}</p>
@@ -68,8 +72,5 @@ function PrivyLogoutControls() {
 }
 
 export default function LogoutSection() {
-  if (!privyConfigured()) {
-    return null;
-  }
-  return <PrivyLogoutControls />;
+  return <LogoutControls />;
 }

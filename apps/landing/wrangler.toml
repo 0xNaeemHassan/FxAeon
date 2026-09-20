@@ -1,0 +1,6 @@
+# Separate Cloudflare Pages project for the public marketing site.
+# The financial application is deployed by the root project configuration;
+# never point this project at apps/mini-app/dist.
+name = "fxaeon-landing"
+compatibility_date = "2026-06-09"
+pages_build_output_dir = "dist"

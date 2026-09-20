@@ -21,19 +21,36 @@ test.describe('shared shell spacing', () => {
         await expect(topbar).toBeVisible();
         if (await header.count() === 0) continue;
 
-        const geometry = await header.evaluate((element) => {
-          const topbar = document.querySelector<HTMLElement>('.app-topbar');
-          if (!topbar) throw new Error('top bar is missing');
-          const topbarRect = topbar.getBoundingClientRect();
-          const headerRect = element.getBoundingClientRect();
-          const hidden = headerRect.width <= 1 && headerRect.height <= 1;
-          return {
-            gap: headerRect.top - topbarRect.bottom,
-            topbarBottom: topbarRect.bottom,
-            headerTop: headerRect.top,
-            hidden,
-          };
-        });
+        let geometry: { gap: number; topbarBottom: number; headerTop: number; hidden: boolean } | undefined;
+        let geometryError: unknown;
+        for (let attempt = 0; !geometry && attempt < 25; attempt += 1) {
+          try {
+            const currentHeader = page.locator('.page-header:visible, .trade-page-heading:visible, .portfolio-page-heading:visible').first();
+            await expect(page.locator('.app-topbar')).toBeVisible();
+            if (await currentHeader.count() === 0) {
+              await page.waitForTimeout(100);
+              continue;
+            }
+            geometry = await currentHeader.evaluate((element) => {
+              const topbar = document.querySelector<HTMLElement>('.app-topbar');
+              if (!topbar) throw new Error('top bar is missing');
+              const topbarRect = topbar.getBoundingClientRect();
+              const headerRect = element.getBoundingClientRect();
+              const hidden = headerRect.width <= 1 && headerRect.height <= 1;
+              return {
+                gap: headerRect.top - topbarRect.bottom,
+                topbarBottom: topbarRect.bottom,
+                headerTop: headerRect.top,
+                hidden,
+              };
+            });
+          } catch (error) {
+            if (!/top bar is missing|not attached to the DOM|detached/i.test(String(error))) throw error;
+            geometryError = error;
+            await page.waitForTimeout(100);
+          }
+        }
+        if (!geometry) throw geometryError ?? new Error('shell/header geometry did not stabilize');
 
         // Product route headings are intentionally visually hidden on phones;
         // keep their accessible text without reserving layout space.

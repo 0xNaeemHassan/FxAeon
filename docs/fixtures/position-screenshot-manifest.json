@@ -1,32 +1,16 @@
 {
   "schemaVersion": 1,
   "proof": "fxaeon-position-screenshot-fixture",
-  "executionSurface": "browser",
-  "sourceCommand": "pnpm test:anvil:browser",
-  "sourceProofSha256": "3804ceaae0bc229e80cc17f757f67a763f4a6fe209b0f2856aa1d553e58ba013",
   "chainId": 1,
-  "forkBlock": 25893155,
+  "forkBlock": 25965421,
+  "executionSurface": "browser",
   "assertions": {
     "scenarioCount": 4,
     "browserDriven": true,
-    "coexistingInSingleSnapshot": true,
     "ownershipVerified": true,
     "nonzeroCollateralAndDebtVerified": true,
-    "delayedIndexDiscoveryVerified": true,
-    "snapshotRevertedAfterProof": true,
-    "readSurfaces": [
-      "trade",
-      "positions",
-      "portfolio",
-      "earn",
-      "move"
-    ],
-    "productionSdkExecution": true,
-    "indexerDiscoveryOnlyIsIntercepted": true,
-    "positionStateReadFromFork": true,
-    "availableTokenBalancesVerified": true,
-    "postConfirmationBalanceRefreshVerified": true,
-    "positionUsdLabelsVerified": true
+    "everySupportedPositionClosed": true,
+    "snapshotRestored": true
   },
   "positions": [
     {
@@ -34,51 +18,167 @@
       "side": "long",
       "pool": "0x6Ecfa38FeE8a5277B91eFdA204c235814F0122E8",
       "graphSubgraph": "fx-v2-wsteth/3.0.0",
-      "positionId": 2004
+      "positionId": 2015
     },
     {
       "market": "ETH",
       "side": "short",
       "pool": "0x25707b9e6690B52C60aE6744d711cf9C1dFC1876",
       "graphSubgraph": "fx-v2-wsteth-short/v0.1.0",
-      "positionId": 173
+      "positionId": 174
     },
     {
       "market": "BTC",
       "side": "long",
       "pool": "0xAB709e26Fa6B0A30c119D8c55B887DeD24952473",
       "graphSubgraph": "fx-v2-wbtc/3.0.0",
-      "positionId": 914
+      "positionId": 918
     },
     {
       "market": "BTC",
       "side": "short",
       "pool": "0xA0cC8162c523998856D59065fAa254F87D20A5b0",
       "graphSubgraph": "fx-v2-wbtc-short/v2.0.0",
-      "positionId": 107
+      "positionId": 108
     }
   ],
-  "browserCapture": {
+  "capture": {
+    "schemaVersion": 1,
     "profile": "positions",
-    "capturedAt": "2026-09-03T01:27:44.031Z",
-    "marketData": "external-display-data-unmodified",
+    "capturedAt": "2026-09-20T03:14:22.670Z",
+    "marketData": "illustrative-display-fixture-visibly-labelled",
     "positionDiscovery": "exact-four-sdk-owner-id-queries-only",
-    "assertions": {
-      "allFramesAtDocumentOrigin": true
-    },
+    "positionFixtureExecutionSurface": "browser",
+    "observedDiscoveryGroups": [
+      "BTC:long",
+      "BTC:short",
+      "ETH:long",
+      "ETH:short"
+    ],
+    "discoveryErrors": [],
     "captures": [
       {
         "file": "fxaeon-portfolio-positions.png",
-        "route": "/portfolio",
+        "route": "/",
         "viewport": {
           "width": 1180,
           "height": 900
         },
         "renderedPositionKeys": [
-          "ETH:long:2004",
-          "ETH:short:173"
+          "ETH:long:2015",
+          "ETH:short:174"
         ],
-        "sha256": "6f05345c139180ae51be9f82a9d8a7e732ebbd277acfe8f58294bd6a6e1b0555"
+        "scrollEvidence": {
+          "before": {
+            "window": {
+              "x": 0,
+              "y": 0
+            },
+            "document": {
+              "x": 0,
+              "y": 0
+            },
+            "body": {
+              "x": 0,
+              "y": 0
+            },
+            "containers": [
+              {
+                "selector": ".app-shell",
+                "x": 0,
+                "y": 0
+              },
+              {
+                "selector": ".app-workspace",
+                "x": 0,
+                "y": 0
+              },
+              {
+                "selector": ".app-content",
+                "x": 0,
+                "y": 0
+              }
+            ],
+            "visual": {
+              "x": 0,
+              "y": 0
+            },
+            "viewport": {
+              "width": 1180,
+              "height": 900
+            },
+            "topbar": {
+              "top": 20,
+              "right": 1148,
+              "bottom": 72,
+              "left": 32
+            },
+            "rail": null,
+            "browserLayout": {
+              "x": 0,
+              "y": 0
+            },
+            "browserVisual": {
+              "x": 0,
+              "y": 0
+            }
+          },
+          "after": {
+            "window": {
+              "x": 0,
+              "y": 0
+            },
+            "document": {
+              "x": 0,
+              "y": 0
+            },
+            "body": {
+              "x": 0,
+              "y": 0
+            },
+            "containers": [
+              {
+                "selector": ".app-shell",
+                "x": 0,
+                "y": 0
+              },
+              {
+                "selector": ".app-workspace",
+                "x": 0,
+                "y": 0
+              },
+              {
+                "selector": ".app-content",
+                "x": 0,
+                "y": 0
+              }
+            ],
+            "visual": {
+              "x": 0,
+              "y": 0
+            },
+            "viewport": {
+              "width": 1180,
+              "height": 900
+            },
+            "topbar": {
+              "top": 20,
+              "right": 1148,
+              "bottom": 72,
+              "left": 32
+            },
+            "rail": null,
+            "browserLayout": {
+              "x": 0,
+              "y": 0
+            },
+            "browserVisual": {
+              "x": 0,
+              "y": 0
+            }
+          }
+        },
+        "sha256": "a204b4279637692fb851d298460ad649c89b72ea6e47be8b0f2e66e7d28ec596"
       },
       {
         "file": "fxaeon-positions.png",
@@ -88,12 +188,122 @@
           "height": 900
         },
         "renderedPositionKeys": [
-          "BTC:long:914",
-          "BTC:short:107",
-          "ETH:long:2004",
-          "ETH:short:173"
+          "BTC:long:918",
+          "BTC:short:108",
+          "ETH:long:2015",
+          "ETH:short:174"
         ],
-        "sha256": "fc055aa796684919ec11c9134a4f2e3e0bf340ce179ee51fb619bd36b668d622"
+        "scrollEvidence": {
+          "before": {
+            "window": {
+              "x": 0,
+              "y": 0
+            },
+            "document": {
+              "x": 0,
+              "y": 0
+            },
+            "body": {
+              "x": 0,
+              "y": 0
+            },
+            "containers": [
+              {
+                "selector": ".app-shell",
+                "x": 0,
+                "y": 0
+              },
+              {
+                "selector": ".app-workspace",
+                "x": 0,
+                "y": 0
+              },
+              {
+                "selector": ".app-content",
+                "x": 0,
+                "y": 0
+              }
+            ],
+            "visual": {
+              "x": 0,
+              "y": 0
+            },
+            "viewport": {
+              "width": 1180,
+              "height": 900
+            },
+            "topbar": {
+              "top": 20,
+              "right": 1148,
+              "bottom": 72,
+              "left": 32
+            },
+            "rail": null,
+            "browserLayout": {
+              "x": 0,
+              "y": 0
+            },
+            "browserVisual": {
+              "x": 0,
+              "y": 0
+            }
+          },
+          "after": {
+            "window": {
+              "x": 0,
+              "y": 0
+            },
+            "document": {
+              "x": 0,
+              "y": 0
+            },
+            "body": {
+              "x": 0,
+              "y": 0
+            },
+            "containers": [
+              {
+                "selector": ".app-shell",
+                "x": 0,
+                "y": 0
+              },
+              {
+                "selector": ".app-workspace",
+                "x": 0,
+                "y": 0
+              },
+              {
+                "selector": ".app-content",
+                "x": 0,
+                "y": 0
+              }
+            ],
+            "visual": {
+              "x": 0,
+              "y": 0
+            },
+            "viewport": {
+              "width": 1180,
+              "height": 900
+            },
+            "topbar": {
+              "top": 20,
+              "right": 1148,
+              "bottom": 72,
+              "left": 32
+            },
+            "rail": null,
+            "browserLayout": {
+              "x": 0,
+              "y": 0
+            },
+            "browserVisual": {
+              "x": 0,
+              "y": 0
+            }
+          }
+        },
+        "sha256": "8d276ec29f941b82f2a6955d284907b19116fc8bcf94d6f004223d1b26c2997f"
       },
       {
         "file": "fxaeon-trade-connected.png",
@@ -103,10 +313,120 @@
           "height": 900
         },
         "renderedPositionKeys": [
-          "ETH:long:2004",
-          "ETH:short:173"
+          "ETH:long:2015",
+          "ETH:short:174"
         ],
-        "sha256": "a510c88614d992eb3f54dd0b7330573a5539ebf76e03d022a85d6eb3d1d501f5"
+        "scrollEvidence": {
+          "before": {
+            "window": {
+              "x": 0,
+              "y": 0
+            },
+            "document": {
+              "x": 0,
+              "y": 0
+            },
+            "body": {
+              "x": 0,
+              "y": 0
+            },
+            "containers": [
+              {
+                "selector": ".app-shell",
+                "x": 0,
+                "y": 0
+              },
+              {
+                "selector": ".app-workspace",
+                "x": 0,
+                "y": 0
+              },
+              {
+                "selector": ".app-content",
+                "x": 0,
+                "y": 0
+              }
+            ],
+            "visual": {
+              "x": 0,
+              "y": 0
+            },
+            "viewport": {
+              "width": 1180,
+              "height": 900
+            },
+            "topbar": {
+              "top": 20,
+              "right": 1148,
+              "bottom": 72,
+              "left": 32
+            },
+            "rail": null,
+            "browserLayout": {
+              "x": 0,
+              "y": 0
+            },
+            "browserVisual": {
+              "x": 0,
+              "y": 0
+            }
+          },
+          "after": {
+            "window": {
+              "x": 0,
+              "y": 0
+            },
+            "document": {
+              "x": 0,
+              "y": 0
+            },
+            "body": {
+              "x": 0,
+              "y": 0
+            },
+            "containers": [
+              {
+                "selector": ".app-shell",
+                "x": 0,
+                "y": 0
+              },
+              {
+                "selector": ".app-workspace",
+                "x": 0,
+                "y": 0
+              },
+              {
+                "selector": ".app-content",
+                "x": 0,
+                "y": 0
+              }
+            ],
+            "visual": {
+              "x": 0,
+              "y": 0
+            },
+            "viewport": {
+              "width": 1180,
+              "height": 900
+            },
+            "topbar": {
+              "top": 20,
+              "right": 1148,
+              "bottom": 72,
+              "left": 32
+            },
+            "rail": null,
+            "browserLayout": {
+              "x": 0,
+              "y": 0
+            },
+            "browserVisual": {
+              "x": 0,
+              "y": 0
+            }
+          }
+        },
+        "sha256": "df1f3bd979eee8634d7e90a5f214cc0cd419c0c13b9b3e47e72c40b91e563b2b"
       },
       {
         "file": "fxaeon-positions-mobile.png",
@@ -116,14 +436,138 @@
           "height": 844
         },
         "renderedPositionKeys": [
-          "BTC:long:914",
-          "BTC:short:107",
-          "ETH:long:2004",
-          "ETH:short:173"
+          "BTC:long:918",
+          "BTC:short:108",
+          "ETH:long:2015",
+          "ETH:short:174"
         ],
-        "sha256": "03900a3fb441450f72149b23d906163ec097a931ceda69e46a2d5d889ea6fa2b"
+        "scrollEvidence": {
+          "before": {
+            "window": {
+              "x": 0,
+              "y": 0
+            },
+            "document": {
+              "x": 0,
+              "y": 0
+            },
+            "body": {
+              "x": 0,
+              "y": 0
+            },
+            "containers": [
+              {
+                "selector": ".app-shell",
+                "x": 0,
+                "y": 0
+              },
+              {
+                "selector": ".app-workspace",
+                "x": 0,
+                "y": 0
+              },
+              {
+                "selector": ".app-content",
+                "x": 0,
+                "y": 0
+              }
+            ],
+            "visual": {
+              "x": 0,
+              "y": 0
+            },
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "topbar": {
+              "top": 8,
+              "right": 374,
+              "bottom": 56,
+              "left": 16
+            },
+            "rail": null,
+            "browserLayout": {
+              "x": 0,
+              "y": 0
+            },
+            "browserVisual": {
+              "x": 0,
+              "y": 0
+            }
+          },
+          "after": {
+            "window": {
+              "x": 0,
+              "y": 0
+            },
+            "document": {
+              "x": 0,
+              "y": 0
+            },
+            "body": {
+              "x": 0,
+              "y": 0
+            },
+            "containers": [
+              {
+                "selector": ".app-shell",
+                "x": 0,
+                "y": 0
+              },
+              {
+                "selector": ".app-workspace",
+                "x": 0,
+                "y": 0
+              },
+              {
+                "selector": ".app-content",
+                "x": 0,
+                "y": 0
+              }
+            ],
+            "visual": {
+              "x": 0,
+              "y": 0
+            },
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "topbar": {
+              "top": 8,
+              "right": 374,
+              "bottom": 56,
+              "left": 16
+            },
+            "rail": null,
+            "browserLayout": {
+              "x": 0,
+              "y": 0
+            },
+            "browserVisual": {
+              "x": 0,
+              "y": 0
+            }
+          }
+        },
+        "sha256": "7ef699264f6239432ec733c0bc98cb589e29b455b40a3fbfd32c7d748ddf106b"
+      }
+    ],
+    "scope": "Rendered documentation states, not browser transaction-execution proof.",
+    "snapshotRestored": true,
+    "proofArtifact": "artifacts/anvil/browser-proof.json",
+    "landingAssetAliases": [
+      {
+        "target": "apps/landing/assets/portfolio-preview.png",
+        "sourceCapture": "fxaeon-positions.png",
+        "sha256": "8d276ec29f941b82f2a6955d284907b19116fc8bcf94d6f004223d1b26c2997f"
+      },
+      {
+        "target": "apps/landing/assets/portfolio-mobile.png",
+        "sourceCapture": "fxaeon-positions-mobile.png",
+        "sha256": "7ef699264f6239432ec733c0bc98cb589e29b455b40a3fbfd32c7d748ddf106b"
       }
     ]
-  },
-  "scope": "Positions were opened through the app's review and confirmation flow on a disposable Ethereum fork. The documentation captures then reused those positions with a read-only wallet. External display prices were not modified. No production funds were used."
+  }
 }

@@ -14,7 +14,8 @@ FxAeon is a funds-adjacent static client. Keep the implementation small, auditab
 
 ```text
 apps/mini-app/       Static web/Telegram app, SDK adapter, wallet runner, tests
-brand/               Product marks and brand assets
+apps/landing/        Independent static marketing site for fxaeon.xyz
+docs/brand-assets.md  Product, landing, and social theme guide
 docs/                Current architecture, scope, security, testing, and roadmap
 patches/             Audited patch for the pinned official f(x) SDK package
 scripts/              Scope, environment, build, and release verification scripts

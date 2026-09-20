@@ -138,7 +138,7 @@ export interface TransactionStepResult {
   status: "submitted" | "included" | "confirming" | "confirmed" | "failed";
   /** Number of canonical confirmations observed for an included receipt. */
   confirmations?: number;
-  /** Finality target shown in progress UI (production default: three). */
+  /** Confirmation target shown in progress UI (production default: one). */
   requiredConfirmations?: number;
   /** Receipt identity used to detect a reorg while waiting for finality. */
   includedBlockNumber?: bigint;
@@ -166,7 +166,40 @@ export type FxPublicClient = Pick<
   PublicClient,
   "simulateCalls" | "getTransactionCount" | "getTransactionReceipt" | "getTransaction" | "getBlockNumber" | "getChainId" | "getBalance" | "readContract"
   | "getBytecode" | "getLogs"
-> & { chain?: { id?: number } };
+> & {
+  chain?: { id?: number };
+  /** Optional fee actions used by the route gas estimator. Existing read-only
+   * test clients may omit these and receive an explicit unavailable estimate. */
+  estimateGas?: (args: {
+    account?: Address;
+    to: Address;
+    data?: Hex;
+    value?: bigint;
+  }) => Promise<bigint>;
+  estimateFeesPerGas?: () => Promise<{
+    maxFeePerGas?: bigint;
+    maxPriorityFeePerGas?: bigint;
+    gasPrice?: bigint;
+  }>;
+  getGasPrice?: () => Promise<bigint>;
+  /** OP Stack fee components, available on the configured Base client. */
+  estimateL1Fee?: (args: {
+    account?: Address;
+    to: Address;
+    data?: Hex;
+    value?: bigint;
+    maxFeePerGas?: bigint;
+    maxPriorityFeePerGas?: bigint;
+  }) => Promise<bigint>;
+  estimateOperatorFee?: (args: {
+    account?: Address;
+    to: Address;
+    data?: Hex;
+    value?: bigint;
+    maxFeePerGas?: bigint;
+    maxPriorityFeePerGas?: bigint;
+  }) => Promise<bigint>;
+};
 
 /**
  * The façade deliberately exposes only the 15 official methods. Keeping this
@@ -338,7 +371,7 @@ export interface TransactionRunnerCallbacks {
   /** Called before/after each state transition for UI progress. */
   onStep?: (step: TransactionStepResult) => void;
   onStatus?: (status: PlanStatus, detail?: string) => void;
-  /** Reread SDK/chain state after the receipt and one-block boundary. */
+  /** Reread SDK/chain state after the canonical receipt confirmation. */
   postConfirmRead?: (route: PlannedRoute, result: TransactionExecutionResult) => Promise<void>;
 }
 
@@ -347,9 +380,9 @@ export interface TransactionRunnerOptions {
   receiptTimeoutMs?: number;
   /** Poll interval for receipt and block confirmation. */
   pollMs?: number;
-  /** Canonical confirmations required before the next route step. */
+  /** Canonical confirmations required before the next route step (default: one). */
   confirmations?: number;
-  /** Wait for one additional block after the final transaction. */
+  /** Optionally wait for one additional block before the final state read. */
   waitForNextBlock?: boolean;
   /** Disable only for deterministic unit tests; production must leave true. */
   simulate?: boolean;

@@ -32,6 +32,8 @@ export interface TgWebApp {
   platform: string;
   colorScheme: 'light' | 'dark';
   themeParams: TgThemeParams;
+  /** Current viewport height; this can shrink while the keyboard is open. */
+  viewportHeight?: number;
   viewportStableHeight: number;
   isExpanded: boolean;
   ready: () => void;
@@ -263,7 +265,7 @@ export function applyThemeParams(): boolean {
 }
 
 /**
- * Keep `--tg-viewport-stable-height` in sync so fixed/full-height layouts
+ * Keep dynamic/stable viewport variables in sync so fixed/full-height layouts
  * don't jump when the Telegram keyboard or header collapses the viewport.
  * Returns an unsubscribe function.
  */
@@ -271,16 +273,31 @@ export function bindViewportHeight(): () => void {
   const tg = getWebApp();
   const root = document.documentElement;
   const set = () => {
-    const h = tg?.viewportStableHeight;
-    root.style.setProperty(
-      '--tg-viewport-stable-height',
-      h ? `${h}px` : '100dvh'
-    );
+    // Telegram exposes both values: viewportHeight follows transient chrome
+    // and the software keyboard, while viewportStableHeight is the settled
+    // viewport for persistent layout. visualViewport covers browser keyboard
+    // resize when no Telegram bridge is present and during its late load.
+    const viewport = typeof window !== 'undefined' ? window.visualViewport : undefined;
+    // A pinch zoom changes visualViewport.height without changing the layout
+    // viewport. Only use it at the normal scale, where a keyboard resize is
+    // the meaningful signal; otherwise keep the layout viewport dimensions so
+    // zoom never traps or clips the shell.
+    const visualHeight = viewport && Math.abs(viewport.scale - 1) < 0.01 ? viewport.height : undefined;
+    const dynamicHeight = tg?.viewportHeight || visualHeight || window.innerHeight;
+    const stableHeight = tg?.viewportStableHeight || dynamicHeight;
+    root.style.setProperty('--tg-viewport-height', `${Math.max(1, Math.round(dynamicHeight))}px`);
+    root.style.setProperty('--tg-viewport-stable-height', `${Math.max(1, Math.round(stableHeight))}px`);
   };
   set();
-  if (!tg) return () => {};
-  tg.onEvent('viewportChanged', set);
-  return () => tg.offEvent('viewportChanged', set);
+  const visualViewport = typeof window !== 'undefined' ? window.visualViewport : undefined;
+  window.addEventListener('resize', set);
+  visualViewport?.addEventListener('resize', set);
+  tg?.onEvent('viewportChanged', set);
+  return () => {
+    window.removeEventListener('resize', set);
+    visualViewport?.removeEventListener('resize', set);
+    tg?.offEvent('viewportChanged', set);
+  };
 }
 
 /** Native BackButton: show + wire a handler. Returns cleanup. */
