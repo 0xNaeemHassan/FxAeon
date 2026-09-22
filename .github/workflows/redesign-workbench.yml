@@ -1,0 +1,47 @@
+name: Redesign workbench
+
+on:
+  push:
+    branches: [feat/unified-product-redesign]
+    paths: ['.workbench/**']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: redesign-workbench
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.repository == '0xNaeemHassan/FxAeon' && github.ref == 'refs/heads/feat/unified-product-redesign'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+      - name: Apply reviewed, source-hash-checked presentation patch
+        run: |
+          python3 .workbench/apply.py
+          git diff --check
+          git diff --stat
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/mini-app
+          if ! git diff --cached --quiet; then
+            git commit -m 'feat(ui): apply reviewed shared product presentation'
+            git push origin HEAD:refs/heads/feat/unified-product-redesign
+          fi
+      - uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck the application
+        run: pnpm --dir apps/mini-app typecheck

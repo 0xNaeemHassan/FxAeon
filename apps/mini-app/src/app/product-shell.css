@@ -1,0 +1,47 @@
+/* Shared product geometry, layered after the official theme. No colors,
+   supported assets, provider behavior or transaction policy are redefined. */
+[data-product-ui='v2'] { --product-radius: 22px; --product-gap: 18px; }
+[data-product-ui='v2'] .app-topbar { min-height: 72px; padding-block: 12px; align-items: center; gap: 14px; }
+[data-product-ui='v2'] .app-topbar-actions { display: flex; align-items: center; gap: 8px; }
+[data-product-ui='v2'] .brand-wordmark { font-size: 24px; letter-spacing: -.045em; }
+[data-product-ui='v2'] .wallet-control-label { display: inline !important; font-size: 12px; white-space: nowrap; }
+[data-product-ui='v2'] .ui-card { border-radius: var(--product-radius); box-shadow: none; }
+[data-product-ui='v2'] .button { border-radius: 14px; min-height: 48px; }
+[data-product-ui='v2'] .button-primary { box-shadow: none; }
+[data-product-ui='v2'] .page-header { margin-bottom: 18px; }
+[data-product-ui='v2'] .page-header h1 { font-size: 28px; letter-spacing: -.035em; line-height: 1.2; }
+[data-product-ui='v2'] .app-content { scroll-padding-bottom: 140px; }
+[data-product-ui='v2'] .app-content :where(button, a, input, select, summary):focus-visible { outline: 2px solid var(--mint); outline-offset: 3px; }
+[data-product-ui='v2'] .tabbar { box-shadow: none; }
+[data-product-ui='v2'] .nav-item-active { box-shadow: none; }
+[data-product-ui='v2'] .segmented { box-shadow: none; }
+[data-product-ui='v2'] .segmented-option { box-shadow: none; }
+[data-product-ui='v2'] [data-flow-stage] { min-width: 0; }
+[data-product-ui='v2'] .reviewTrigger { min-width: 0; }
+[data-product-ui='v2'] [data-trade-ticket] { min-width: 0; align-self: start; }
+@media (max-width: 760px) {
+  [data-product-ui='v2'] .app-topbar { gap: 8px; }
+  [data-product-ui='v2'] .app-topbar-actions { gap: 5px; }
+  [data-product-ui='v2'] .app-topbar-actions > button,
+  [data-product-ui='v2'] .network-selector { min-height: 44px; }
+  [data-product-ui='v2'] [data-trade-layout] { display: flex !important; flex-direction: column !important; height: auto !important; max-height: none !important; gap: 16px; align-items: stretch; }
+  [data-product-ui='v2'] [data-trade-market],
+  [data-product-ui='v2'] [data-trade-ticket] { flex: 0 0 auto !important; width: 100%; min-height: 0; height: auto; max-height: none; overflow: visible; position: static; }
+  [data-product-ui='v2'] .trade-ticket { height: auto !important; max-height: none !important; overflow: visible; }
+}
+@media (max-width: 420px) {
+  [data-product-ui='v2'] .brand-wordmark { font-size: 21px; }
+  [data-product-ui='v2'] .app-topbar > a { gap: 6px; }
+  [data-product-ui='v2'] .app-topbar > a > svg { width: 26px; height: 26px; }
+  [data-product-ui='v2'] .app-topbar-actions > button { padding-inline: 8px; border-radius: 12px; }
+  [data-product-ui='v2'] .app-topbar-actions > button[aria-label='Open wallet profile'] > svg { display: none; }
+}
+@media (max-width: 350px) {
+  [data-product-ui='v2'] .brand-wordmark { font-size: 18px; }
+  [data-product-ui='v2'] .app-topbar > a > svg { width: 23px; }
+  [data-product-ui='v2'] .app-topbar-actions { gap: 3px; }
+  [data-product-ui='v2'] .wallet-control-label { font-size: 11px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-product-ui='v2'] :where(.glass-press, .button, .nav-item) { transition: none; }
+}
