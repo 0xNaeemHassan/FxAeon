@@ -1,0 +1,27 @@
+function SupportedValueCard({ displayTotalUsd, displayTotalIsPartial, loading, refreshing, onRefresh,
+  walletValue, positionEquity, walletComplete, positionsComplete, assetCount,
+}: {
+  displayTotalUsd: number | null; displayTotalIsPartial: boolean; loading: boolean; refreshing: boolean; onRefresh: () => void;
+  walletValue: number | null; positionEquity: number | null; walletComplete: boolean; positionsComplete: boolean; assetCount: number;
+}) {
+  return <ProductSurface className={presentation.valueCard}>
+    <div className={presentation.valueTop}><span>Portfolio value</span><div>
+      {displayTotalIsPartial && <span className={presentation.partial} role="status">Partial value</span>}
+      <button type="button" aria-label="Refresh portfolio balances and positions" title="Refresh balances and positions" disabled={refreshing} onClick={onRefresh}>
+        <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} aria-hidden="true" />
+      </button>
+    </div></div>
+    <p className={presentation.valueNumber} data-portfolio-value><ValueOrSkeleton value={displayTotalUsd === null ? '—' : formatUsd(displayTotalUsd)} width="xl"
+      status={loading ? 'loading' : 'unavailable'} label={loading ? 'Loading portfolio value' : 'Portfolio value unavailable'} /></p>
+    <p className={presentation.valueCaption}>{displayTotalIsPartial ? 'Known value only. Some balances or prices are unavailable.'
+      : displayTotalUsd === null ? loading ? 'Checking your portfolio' : 'Value unavailable. Known quantities remain visible.' : `${assetCount} ${assetCount === 1 ? 'wallet asset' : 'wallet assets'}`}</p>
+    <Disclosure title="Value breakdown">
+      <MetricRows rows={[
+        { label: walletComplete ? 'Wallet assets' : 'Known wallet assets', value: formatUsd(walletValue) },
+        { label: positionsComplete ? 'Position equity' : 'Known position equity', value: formatUsd(positionEquity) },
+      ]} />
+      <p className={presentation.helper}>Wallet assets include fxSAVE holdings. Position equity is collateral value minus debt. Pending bridge deliveries and withdrawal claims are not included.</p>
+    </Disclosure>
+  </ProductSurface>;
+}
+
