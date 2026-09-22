@@ -5,15 +5,16 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useEnsAddress, useEnsName } from 'wagmi';
 import type { Address } from 'viem';
-import { History, ChevronRight, ExternalLink, LogOut, RefreshCw, Settings, Wallet, X, type LucideIcon } from 'lucide-react';
-import { AssetNetworkIcon, AssetQuantity, networkLabel } from '@/components/PortfolioAssets';
+import { ArrowDownToLine, History, Layers2, ExternalLink, LogOut, RefreshCw, Settings, Wallet, X } from 'lucide-react';
+import { AssetRowContent, AssetQuantity, networkLabel } from '@/components/AssetPresentation';
+import { ActionRow } from '@/components/ProductUI';
+import presentation from '@/components/WalletProfile.module.css';
 import { AddressChip } from '@/components/ui';
 import { useWalletAssets, useWalletBalances } from '@/components/WalletDataProvider';
 import { useUsdPrices } from '@/components/PriceProvider';
 import {
   ProtocolPositionCard,
   ProtocolPositionNotice,
-  ProtocolPositionSkeleton,
 } from '@/components/ProtocolPositionCard';
 import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
 import { useWalletDemand, useWalletProfileSession } from '@/components/WalletDemandProvider';
@@ -173,120 +174,71 @@ export default function WalletProfile() {
     );
   }
 
-  return (
-    <>
-      <button
-        ref={openerRef}
-        type="button"
-        aria-label="Open wallet profile"
-        onClick={() => { setOpenWallet(walletIdentity); haptic('light'); }}
-        className={`${styles.walletTrigger} glass-press flex items-center gap-2 text-[12px] font-semibold`}
-      >
-        <Wallet className="h-[18px] w-[18px] text-mint" aria-hidden="true" />
-        <span className="wallet-control-label">{wallet.address.slice(0, 5)}…{wallet.address.slice(-4)}</span>
-      </button>
-      {open && typeof document !== 'undefined' && createPortal(
-        <div className={`${styles.walletBackdrop} wallet-profile-backdrop`} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpenWallet(null); }}>
-          <aside ref={dialogRef} role="dialog" aria-modal="true" aria-label={profileDialogName} className={`${styles.walletSheet} wallet-profile-sheet`} onMouseDown={(event) => event.stopPropagation()}>
-            <header className={`${styles.walletHeader} wallet-profile-header`}>
-              <div>
-                <h2 title={wallet.address} className="text-display mt-1 text-[22px] font-semibold">{walletHeading}</h2>
-              </div>
-              <button ref={closeRef} type="button" aria-label="Close wallet profile" onClick={() => setOpenWallet(null)} className={`${styles.walletIconAction} glass-press`}><X className="h-5 w-5" aria-hidden="true" /></button>
-            </header>
-
-            <div className={`${styles.walletSummary} wallet-profile-summary`}>
-              <div className={styles.walletSummaryValue}>
-                <p>Wallet value</p>
-                <strong><ValueOrSkeleton value={!knownWalletValue.hasKnownValue || knownWalletValue.totalUsd === null ? '—' : walletValueIsPartial ? <span role="status" title="Known subtotal only. Other balances may be missing." aria-label={`Known subtotal only. Other balances may be missing. ${formatUsd(knownWalletValue.totalUsd)}`}>{formatUsd(knownWalletValue.totalUsd)}</span> : formatUsd(knownWalletValue.totalUsd)} width="xl" status={walletValueLoading ? 'loading' : 'unavailable'} label={walletValueLoading ? 'Loading wallet value' : 'Wallet value unavailable because no priced balances are available'} /></strong>
-                <small><ValueOrSkeleton value={walletAssetCountLabel} width="sm" status={walletValueLoading ? 'loading' : 'unavailable'} label={walletValueLoading ? 'Loading asset count' : 'Asset count unavailable'} /></small>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-2">
-                  <AddressChip address={wallet.address} />
-                  <span className="shrink-0 text-[11px] font-medium text-mut">{networkLabel(wallet.chainId ?? 1)}</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <a
-                    href={`${walletExplorer}/address/${wallet.address}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label={`View wallet on ${walletExplorerName}`}
-                    onClick={(event) => {
-                      if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && openExternalLink(`${walletExplorer}/address/${wallet.address}`)) event.preventDefault();
-                    }}
-                    title={`View wallet on ${walletExplorerName}`}
-                    className={`${styles.walletIconAction} glass-press`}
-                  >
-                    <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                  </a>
-                  <button type="button" onClick={() => void Promise.allSettled([walletAssets.refresh(), walletBalances.refresh(), refreshPositions()])} disabled={refreshingBalances || positionState.refreshing} aria-label="Refresh balances and positions" title="Refresh balances and positions" className={`${styles.walletIconAction} glass-press`}><RefreshCw className={`h-4 w-4 ${refreshingBalances || positionState.refreshing ? 'animate-spin' : ''}`} aria-hidden="true" /></button>
-                </div>
-              </div>
-            </div>
-
-            <section className={`${styles.walletSection} ${styles.walletAssets} wallet-profile-assets`} aria-labelledby="wallet-profile-balances-title">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div><h3 id="wallet-profile-balances-title" className="text-[15px] font-semibold">Balances</h3></div>
-              </div>
-              {loading && !displayAssets && <div className="h-28 animate-pulse rounded-xl bg-[var(--surface-2)]" />}
-              {refreshingBalances && displayAssets && <div role="status" aria-label="Refreshing asset balances" className="skeleton h-3 w-44 rounded" />}
-              {!loading && !displayAssets && <p role="status" aria-live="polite" className="p-3 text-[12px] text-mut"><ValueOrSkeleton value="—" status="unavailable" label="Balance data unavailable" /></p>}
-              {!loading && displayAssets && walletSnapshotValuation.complete && nonZero.length === 0 && <p className="rounded-xl border border-[var(--line)] p-3 text-[12px] text-mut">No token balances detected.</p>}
-              {nonZero.map((asset) => <WalletAssetRow key={asset.id} asset={asset} />)}
-            </section>
-
-            <section className={`${styles.walletSection} wallet-profile-assets`} aria-labelledby="wallet-profile-positions-title">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div><h3 id="wallet-profile-positions-title" className="text-[15px] font-semibold">Open positions</h3></div>
-                <Link href="/positions" onClick={() => setOpenWallet(null)} className="glass-press inline-flex min-h-11 items-center gap-1 px-1 text-[11px] font-semibold text-mint">{positionState.positions.length > 2 ? `View all ${positionState.positions.length}` : positionState.positions.length > 0 ? 'Manage' : 'View positions'} <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" /></Link>
-              </div>
-              <div className="flex flex-col gap-2">
-                <ProtocolPositionNotice status={positionState.status} failedGroups={positionState.failedGroups} hasPositions={positionState.positions.length + positionState.pendingPositions.length > 0} refreshing={positionState.refreshing} onRefresh={() => void refreshPositions()} compact />
-                <ConfirmedPositionCards />
-                {positionState.status === 'loading' && !positionState.positions.length && !positionState.pendingPositions.length ? <ProtocolPositionSkeleton compact /> : positionState.positions.length > 0 ? (
-                  positionState.positions.slice(0, 2).map((position) => <ProtocolPositionCard key={`${position.market}:${position.side}:${position.info.positionId}`} position={position} compact href="/positions" onNavigate={() => setOpenWallet(null)} />)
-                ) : positionState.status === 'ready' && !positionState.pendingPositions.length ? <p className="rounded-xl border border-[var(--line)] p-3 text-[12px] text-mut">No open positions.</p> : null}
+  return <>
+    <button ref={openerRef} type="button" aria-label="Open wallet profile" onClick={() => { setOpenWallet(walletIdentity); haptic('light'); }}
+      className={`${styles.walletTrigger} glass-press flex items-center gap-2 text-[12px] font-semibold`}>
+      <Wallet size={18} className="text-mint" aria-hidden="true" /><span className="wallet-control-label">{compactAddress(wallet.address)}</span>
+    </button>
+    {open && typeof document !== 'undefined' && createPortal(
+      <div className={`${styles.walletBackdrop} wallet-profile-backdrop`} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpenWallet(null); }}>
+        <aside ref={dialogRef} role="dialog" aria-modal="true" aria-label={profileDialogName} className={`${presentation.sheet} wallet-profile-sheet`} onMouseDown={(event) => event.stopPropagation()}>
+          <header className={`${presentation.header} wallet-profile-header`}>
+            <span className={presentation.handle} aria-hidden="true" />
+            <div className={presentation.identity}><h2 title={wallet.address}>{walletHeading}</h2><AddressChip address={wallet.address} /></div>
+            <button ref={closeRef} type="button" aria-label="Close wallet profile" onClick={() => setOpenWallet(null)} className={presentation.iconButton}><X size={22} aria-hidden="true" /></button>
+          </header>
+          <div className={presentation.body}>
+            <section className={`${presentation.summary} wallet-profile-summary`} aria-labelledby="wallet-value-heading">
+              <div className={presentation.valueTop}><span id="wallet-value-heading">Wallet assets</span><div>
+                {walletValueIsPartial && <span className={presentation.partial}>Partial value</span>}
+                <button type="button" disabled={refreshingBalances || priceSnapshot.refreshing || positionState.refreshing} aria-label="Refresh balances and positions" title="Refresh balances and positions"
+                  className={presentation.iconButton} onClick={() => void Promise.allSettled([priceSnapshot.refresh(), walletAssets.refresh(), walletBalances.refresh(), refreshPositions()])}>
+                  <RefreshCw size={18} className={refreshingBalances || priceSnapshot.refreshing ? 'animate-spin' : ''} aria-hidden="true" />
+                </button>
+              </div></div>
+              <strong className={presentation.total}><ValueOrSkeleton value={!knownWalletValue.hasKnownValue || knownWalletValue.totalUsd === null ? '—' : formatUsd(knownWalletValue.totalUsd)} width="xl"
+                status={walletValueLoading ? 'loading' : 'unavailable'} label={walletValueLoading ? 'Loading wallet value' : 'Wallet value unavailable'} /></strong>
+              <p className={presentation.valueNote}>{walletValueIsPartial ? 'Known value only. Some balances or prices are unavailable.'
+                : !knownWalletValue.hasKnownValue ? walletValueLoading ? 'Calculating wallet value' : 'Prices unavailable. Token quantities remain visible.' : walletAssetCountLabel}</p>
+              <div className={presentation.actions}>
+                <Link href="/qr" onClick={() => setOpenWallet(null)} className={presentation.primaryAction}><ArrowDownToLine size={18} aria-hidden="true" />Receive</Link>
+                <Link href="/portfolio" onClick={() => setOpenWallet(null)}>View portfolio</Link>
               </div>
             </section>
-
-            <nav className={`${styles.walletSection} ${styles.walletLinks} wallet-profile-links`} aria-label="Wallet profile actions">
-              <ProfileLink href="/history" icon={History} label="History" body="Recent transactions on this device" onNavigate={() => setOpenWallet(null)} />
-              <ProfileLink href="/settings" icon={Settings} label="Wallet settings" body="Change wallet, slippage, or sign out" onNavigate={() => setOpenWallet(null)} />
+            <section className={`${presentation.assets} wallet-profile-assets`} aria-labelledby="wallet-profile-balances-title">
+              <div className={presentation.sectionHeading}><h3 id="wallet-profile-balances-title">Assets</h3><span>All networks</span></div>
+              {loading && !displayAssets && <div role="status" className="skeleton h-20 w-full rounded-xl" aria-label="Loading assets" />}
+              {!loading && !displayAssets && <p role="status" className={presentation.helper}>Balances could not be loaded. Refresh to try again.</p>}
+              {!loading && displayAssets && walletSnapshotValuation.complete && nonZero.length === 0 && <p className={presentation.helper}>No token balances detected.</p>}
+              <ul className={presentation.assetList}>{nonZero.map((asset) => <li key={asset.id}>
+                <details className={presentation.assetDetails}><summary aria-label={`View exact ${tokenSymbol(asset.symbol)} quantity on ${networkLabel(asset.chainId)}`}>
+                  <AssetRowContent asset={asset} loading={walletValueLoading} />
+                </summary><div className={presentation.exactQuantity}><span>Exact quantity</span><AssetQuantity asset={asset} /></div></details>
+              </li>)}</ul>
+            </section>
+            <section className={presentation.positions} aria-labelledby="wallet-profile-positions-title">
+              <ActionRow icon={Layers2} title="Positions" href="/positions" onClick={() => setOpenWallet(null)} value={positionState.status === 'ready' ? `${positionState.positions.length} open` : positionState.status === 'loading' ? 'Checking…' : 'Unavailable'} />
+              <h3 id="wallet-profile-positions-title" className="sr-only">Open positions</h3>
+              <ProtocolPositionNotice status={positionState.status} failedGroups={positionState.failedGroups} hasPositions={positionState.positions.length + positionState.pendingPositions.length > 0}
+                refreshing={positionState.refreshing} onRefresh={() => void refreshPositions()} compact />
+              <ConfirmedPositionCards />
+              {positionState.positions.slice(0, 2).map((position) => <ProtocolPositionCard key={`${position.market}:${position.side}:${position.info.positionId}`} position={position} compact href="/positions" onNavigate={() => setOpenWallet(null)} />)}
+            </section>
+            <nav className={`${presentation.links} wallet-profile-links`} aria-label="Wallet profile actions">
+              <ActionRow icon={History} title="History" description="Activity on this device" href="/history" onClick={() => setOpenWallet(null)} />
+              <ActionRow icon={Settings} title="Settings" href="/settings" onClick={() => setOpenWallet(null)} />
             </nav>
-
-            <div className={`${styles.walletSection} ${styles.walletDisconnect}`}>
-              <button type="button" onClick={() => void disconnect()} disabled={disconnecting} className="button glass-press flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-[rgba(255,90,95,0.28)] bg-[rgba(255,90,95,0.1)] px-4 text-[13px] font-semibold text-danger disabled:opacity-60">
-                <LogOut className="h-4 w-4" aria-hidden="true" />
-                {disconnecting ? 'Disconnecting…' : 'Disconnect wallet'}
-              </button>
-              {disconnectError && <p role="alert" className="mt-2 rounded-xl bg-[var(--danger-dim)] p-3 text-[12px] text-danger">{disconnectError}</p>}
+            <a className={presentation.explorer} href={`${walletExplorer}/address/${wallet.address}`} target="_blank" rel="noopener noreferrer"
+              onClick={(event) => { if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && openExternalLink(`${walletExplorer}/address/${wallet.address}`)) event.preventDefault(); }}>
+              View on {walletExplorerName}<ExternalLink size={16} aria-hidden="true" />
+            </a>
+            <div className={presentation.disconnect}>
+              <button type="button" onClick={() => void disconnect()} disabled={disconnecting}><LogOut size={18} aria-hidden="true" />{disconnecting ? 'Disconnecting…' : 'Disconnect wallet'}</button>
+              {disconnectError && <p role="alert" className={presentation.error}>{disconnectError}</p>}
             </div>
-          </aside>
-        </div>,
-        document.body,
-      )}
-    </>
-  );
-}
-
-function WalletAssetRow({ asset }: { asset: import('@/lib/walletAssets').WalletAsset }) {
-  const label = tokenSymbol(asset.symbol);
-  return (
-    <div className={`${styles.walletAssetRow} flex items-center gap-3 border-b border-[var(--line)] py-3 last:border-b-0`}>
-      <AssetNetworkIcon asset={asset} size={34} />
-      <div className="min-w-0 flex-1"><p className="text-[14px] font-semibold">{label}<span className="sr-only"> on {networkLabel(asset.chainId)}</span></p><p className="mt-0.5 truncate text-[11px] text-mut"><AssetQuantity asset={asset} /></p></div>
-      <div className="text-right"><p className="text-[14px] font-semibold tabular-nums"><ValueOrSkeleton value={asset.usdValue === null ? '—' : formatUsd(asset.usdValue)} status={asset.usdValue === null ? 'unavailable' : undefined} label="Value unavailable" /></p><p className="mt-0.5 text-[10.5px] text-mut"><ValueOrSkeleton value={asset.priceStatus === 'fresh' && asset.priceUsd !== null ? formatUsd(asset.priceUsd) : '—'} status="unavailable" label="Price unavailable" /></p></div>
-    </div>
-  );
-}
-
-function ProfileLink({ href, icon: Icon, label, body, onNavigate }: { href: string; icon: LucideIcon; label: string; body: string; onNavigate: () => void }) {
-  return (
-    <Link href={href} onClick={onNavigate} className={`${styles.walletLink} glass-press flex items-center gap-3 border-b border-[var(--line)] px-1 last:border-b-0`}>
-      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--mint-dim)] text-mint"><Icon className="h-[18px] w-[18px]" aria-hidden="true" /></span>
-      <span className="min-w-0 flex-1"><strong className="block text-[13px]">{label}</strong><span className="mt-0.5 block truncate text-[11px] text-mut">{body}</span></span>
-      <ChevronRight className="h-4 w-4 text-mut" aria-hidden="true" />
-    </Link>
-  );
+          </div>
+        </aside>
+      </div>, document.body,
+    )}
+  </>;
 }
