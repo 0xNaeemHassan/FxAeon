@@ -1,0 +1,47 @@
+name: Redesign local bundle
+
+on:
+  push:
+    branches: [feat/unified-product-redesign]
+    paths: ['.github/workflows/redesign-local-bundle.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    if: github.repository == '0xNaeemHassan/FxAeon' && github.ref == 'refs/heads/feat/unified-product-redesign'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Export tracked source without Git credentials
+        run: |
+          git archive --format=tar.gz --output="$RUNNER_TEMP/fxaeon-source.tar.gz" HEAD
+          git rev-parse HEAD > "$RUNNER_TEMP/source-revision.txt"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: redesign-source
+          path: |
+            ${{ runner.temp }}/fxaeon-source.tar.gz
+            ${{ runner.temp }}/source-revision.txt
+          retention-days: 1
+          compression-level: 0
+      - name: Package installed public dependencies for isolated checks
+        run: tar -czf "$RUNNER_TEMP/fxaeon-dependencies.tar.gz" node_modules apps/mini-app/node_modules
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: redesign-dependencies
+          path: ${{ runner.temp }}/fxaeon-dependencies.tar.gz
+          retention-days: 1
+          compression-level: 0
