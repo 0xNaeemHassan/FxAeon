@@ -1,0 +1,54 @@
+  const claimState = claimAvailability(walletData?.claimable);
+  const reviewLabel = mode === 'claim' ? 'Review claim' : mode === 'withdraw' ? 'Review withdrawal' : 'Review deposit';
+  const operationLabel = mode === 'claim' ? 'Claim withdrawal' : mode === 'withdraw' ? 'Withdraw fxSAVE' : 'Deposit into fxSAVE';
+
+  return (
+    <AppShell>
+      <div className={presentation.workspace}>
+        <PageHeading title="Earn" />
+        <ProductNav current="save" />
+        <ProductSurface className={presentation.panel} data-flow-stage={reviewStage}>
+          <ActionReview
+            key={reviewRevision}
+            surface="content"
+            planBuilder={planBuilder}
+            disabled={mode === 'claim' && Boolean(wallet.address) && !claimState.canReview}
+            label={reviewLabel}
+            operationLabel={operationLabel}
+            draftActionKey={mode === 'claim' ? 'earn:claim' : mode === 'withdraw' ? 'earn:withdraw' : 'earn:deposit'}
+            draftResumePath="/earn"
+            draftState={draftState}
+            resumeReview={resumeReview}
+            onStageChange={setReviewStage}
+            onComplete={async () => { await Promise.all([load(true), balanceSnapshot.refresh()]); }}
+            editor={<>
+              {mode !== 'claim' ? <>
+                <SavingsSummary data={walletData} loading={loading} connected={Boolean(wallet.address)} onRefresh={() => load(true)}
+                  readWarnings={readWarnings} fxSaveApy={fxSaveApy} fxSaveApyStatus={fxSaveApyStatus} onClaim={() => changeMode('claim')} />
+                <div className={presentation.actionTabs}>
+                  <Segmented value={mode} onChange={changeMode} ariaLabel="fxSAVE action" options={[
+                    { value: 'deposit', label: 'Deposit' }, { value: 'withdraw', label: 'Withdraw' },
+                  ]} />
+                </div>
+              </> : <div className={presentation.claimHeading}>
+                <button type="button" onClick={() => changeMode('withdraw')} className={presentation.back}><ArrowLeft size={17} aria-hidden="true" />Back to fxSAVE</button>
+                <h2>Withdrawal</h2>
+              </div>}
+              {(readWarnings.length > 0 || error) && <StatusNotice tone="warning" title="Some fxSAVE data is unavailable"
+                action={<button type="button" disabled={loading} onClick={() => void load(true)}>Retry</button>}>
+                Verified values remain visible. Retry before signing.
+              </StatusNotice>}
+              {loading && !walletData && wallet.address && <span role="status" className="sr-only">Reading fxSAVE data</span>}
+              <EarnActionEditor mode={mode} token={token} onTokenChange={changeToken} amount={amount} onAmountChange={setAmount}
+                shares={shares} onSharesChange={setShares} instant={instant} onInstantChange={setInstant}
+                slippage={slippage} onSlippageChange={setSlippage} config={config} walletData={walletData}
+                balances={saveBalances} balanceStatus={saveBalanceStatus} balanceUnavailable={readWarnings.includes('balance')} />
+            </>}
+          />
+        </ProductSurface>
+        {reviewStage === 'input' && <VaultDetails config={config} />}
+      </div>
+    </AppShell>
+  );
+}
+
