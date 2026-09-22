@@ -1,0 +1,65 @@
+/* A restrained, shared product language. Colors come exclusively from the
+   active FxAeon theme; this file never introduces another brand palette. */
+.surface { min-width: 0; border: 1px solid var(--line); border-radius: 24px; background: var(--surface); padding: 20px; }
+.heading { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.heading > div { display: flex; min-width: 0; align-items: center; gap: 10px; }
+.heading h1 { margin: 0; font-size: 28px; font-weight: 650; line-height: 1.2; letter-spacing: -.04em; }
+.iconButton { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; flex: 0 0 44px; border-radius: 12px; color: var(--mut); }
+.iconButton:hover { background: var(--surface-2); color: var(--text); }
+.productNav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+.productNav a { position: relative; display: flex; min-width: 0; min-height: 48px; align-items: center; justify-content: center; padding: 10px 8px; color: var(--mut); font-size: 14px; font-weight: 600; }
+.productNav a[aria-current='page'] { color: var(--text); }
+.productNav a[aria-current='page']::after { content: ''; position: absolute; right: 12px; left: 12px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--mint); }
+.metrics { display: flex; min-width: 0; flex-direction: column; gap: 12px; margin: 0; }
+.metrics > div { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); align-items: start; gap: 16px; font-size: 13px; line-height: 1.5; }
+.metrics dt { color: var(--mut); }
+.metrics dd { min-width: 0; margin: 0; text-align: right; font-weight: 550; font-variant-numeric: tabular-nums; overflow-wrap: break-word; }
+.metrics dd small { display: block; margin-top: 3px; color: var(--mut); font-size: 12px; font-weight: 400; }
+.metrics .emphasizedMetric dd { font-size: 16px; font-weight: 650; }
+.notice { display: flex; min-width: 0; align-items: flex-start; gap: 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-2); padding: 12px; color: var(--mut); font-size: 12px; line-height: 1.55; }
+.notice > svg { flex: 0 0 18px; margin-top: 1px; color: var(--mint); }
+.notice > div { min-width: 0; flex: 1; }
+.notice strong { display: block; color: var(--text); font-size: 13px; font-weight: 600; }
+.notice[data-tone='warning'] { background: var(--warn-dim); }
+.notice[data-tone='warning'] > svg, .notice[data-tone='warning'] strong { color: var(--warn); }
+.notice[data-tone='danger'] { background: var(--danger-dim); }
+.notice[data-tone='danger'] > svg, .notice[data-tone='danger'] strong { color: var(--danger); }
+.notice[data-tone='success'] { background: var(--success-dim); }
+.notice[data-tone='success'] > svg, .notice[data-tone='success'] strong { color: var(--success); }
+.noticeAction { flex: 0 0 auto; align-self: center; color: var(--mint); font-weight: 600; }
+.noticeAction > button, .noticeAction > a { display: inline-flex; align-items: center; min-height: 44px; padding-inline: 8px; }
+.disclosure { min-width: 0; border-top: 1px solid var(--line); }
+.disclosure > summary { display: flex; min-width: 0; min-height: 48px; align-items: center; gap: 10px; list-style: none; cursor: pointer; font-size: 13px; color: var(--mut); }
+.disclosure > summary::-webkit-details-marker { display: none; }
+.disclosure > summary > svg { margin-left: auto; flex: 0 0 17px; transition: transform 150ms ease; }
+.disclosure[open] > summary > svg { transform: rotate(180deg); }
+.disclosureHint { margin-left: auto; font-size: 12px; text-align: right; }
+.disclosureHint + svg { margin-left: 0 !important; }
+.disclosureBody { min-width: 0; padding: 4px 0 16px; }
+.choices { display: flex; min-width: 0; flex-direction: column; gap: 8px; padding: 0; margin: 0; border: 0; }
+.choices legend { margin-bottom: 10px; padding: 0; color: var(--text); font-size: 13px; font-weight: 550; }
+.choice { position: relative; display: flex; min-width: 0; align-items: center; gap: 12px; min-height: 68px; border: 1px solid var(--line); border-radius: 14px; padding: 12px; cursor: pointer; background: var(--input); }
+.choice > input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.choice > span:first-of-type { min-width: 0; flex: 1; }
+.choice strong { display: block; font-size: 13px; font-weight: 600; }
+.choice small { display: block; margin-top: 3px; font-size: 12px; line-height: 1.5; color: var(--mut); }
+.choice[data-selected='true'] { border-color: var(--mint); background: var(--mint-dim); }
+.choice:focus-within { outline: 2px solid var(--mint); outline-offset: 3px; }
+.choice[data-disabled='true'] { opacity: .55; cursor: not-allowed; }
+.radioMark { display: grid; flex: 0 0 20px; width: 20px; height: 20px; place-items: center; border: 1px solid var(--mut-2); border-radius: 50%; }
+.choice[data-selected='true'] .radioMark { border-color: var(--mint); color: var(--mint); }
+.group { min-width: 0; }
+.group > h2 { margin: 0 2px 10px; color: var(--mut); font-size: 13px; font-weight: 600; letter-spacing: 0; }
+.rowGroup { overflow: hidden; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); }
+.actionRow { display: flex; min-width: 0; min-height: 58px; width: 100%; align-items: center; gap: 14px; padding: 13px 16px; text-align: left; color: var(--text); background: transparent; border: 0; }
+.actionRow + .actionRow { border-top: 1px solid var(--line); }
+.actionRow:hover { background: var(--surface-2); }
+.actionRow:disabled { opacity: .5; cursor: not-allowed; }
+.rowIcon { color: var(--mint); flex: 0 0 20px; }
+.rowCopy { min-width: 0; flex: 1; }
+.rowCopy strong { display: block; font-size: 14px; font-weight: 550; line-height: 1.45; }
+.rowCopy small { display: block; margin-top: 3px; color: var(--mut); font-size: 12px; line-height: 1.45; }
+.rowValue { color: var(--mut); font-size: 12px; text-align: right; }
+.actionRow > svg:last-child { flex-shrink: 0; color: var(--mut); }
+@media (max-width: 380px) { .surface { padding: 16px; border-radius: 20px; } .metrics > div { gap: 10px; } .actionRow { gap: 10px; padding-inline: 13px; } .notice { flex-wrap: wrap; } .noticeAction { margin-left: auto; } }
+@media (prefers-reduced-motion: reduce) { .disclosure > summary > svg { transition: none; } }
