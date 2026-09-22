@@ -1,0 +1,32 @@
+function PositionSelect({ value, positions, onChange }: { value: string; positions: UiPosition[]; onChange: (value: string) => void }) {
+  return <label className={presentation.positionSelect}>
+    <span>Collateral position</span>
+    <select value={value} onChange={(event) => onChange(event.target.value)}>
+      {positions.map((position) => <option key={positionKey(position)} value={positionKey(position)}>
+        {position.market} position #{position.info.positionId} · {formatPositionDebt(position)} debt
+      </option>)}
+    </select>
+  </label>;
+}
+function PositionSummary({ position }: { position: UiPosition }) {
+  const snapshot = useUsdPrices();
+  const prices = freshDisplayPrices(snapshot);
+  const collateralKey = priceKeyForSymbol(position.info.rawCollsToken);
+  const debtKey = priceKeyForSymbol(position.info.rawDebtsToken);
+  const valuation = calculatePositionUsdValuation({ collateralRaw: position.info.rawColls, collateralDecimals: positionCollateralDecimals(position),
+    collateralPrice: collateralKey ? prices[collateralKey] : undefined, debtRaw: position.info.rawDebts, debtDecimals: positionDebtDecimals(position), debtPrice: debtKey ? prices[debtKey] : undefined });
+  const ltv = valuation.collateralUsdCents !== null && valuation.collateralUsdCents > 0n && valuation.debtUsdCents !== null
+    ? `${(Number(valuation.debtUsdCents * 1000n / valuation.collateralUsdCents) / 10).toFixed(1)}%` : '—';
+  return <div className={presentation.positionSummary}>
+    <div className={presentation.positionIdentity}><TokenIcon symbol={position.market === 'BTC' ? 'WBTC' : 'ETH'} size={34} />
+      <div><h2>{position.market} position #{position.info.positionId}</h2><p>Ethereum</p></div></div>
+    <MetricRows label="Current collateral position" rows={[
+      { label: 'Collateral', value: formatPositionCollateral(position), detail: valuation.collateralUsdCents !== null ? `≈ ${formatUsdCents(valuation.collateralUsdCents)}` : 'Value unavailable' },
+      { label: 'Debt', value: formatPositionDebt(position), detail: valuation.debtUsdCents !== null ? `≈ ${formatUsdCents(valuation.debtUsdCents)}` : 'Value unavailable' },
+      { label: 'Net position value', value: <ValueOrSkeleton value={valuation.netEquityUsdCents !== null ? formatUsdCents(valuation.netEquityUsdCents) : '—'} status={snapshot.status === 'loading' ? 'loading' : 'unavailable'} />, emphasis: true },
+      { label: 'Loan-to-value', value: ltv },
+    ]} />
+  </div>;
+}
+function formatPositionCollateral(position: UiPosition): string { return `${formatAmount(position.info.rawColls, positionCollateralDecimals(position))} ${position.info.rawCollsToken}`; }
+function formatPositionDebt(position: UiPosition): string { return `${formatAmount(position.info.rawDebts, positionDebtDecimals(position))} ${position.info.rawDebtsToken}`; }

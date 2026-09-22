@@ -1,0 +1,22 @@
+.workspace { min-width: 0; width: min(100%, 640px); margin-inline: auto; display: flex; flex-direction: column; gap: 16px; }
+.workspace > header, .workspace > nav { margin-bottom: 0; }
+.viewTabs { margin-top: 2px; }
+.action { padding: 22px; }
+.editor { display: flex; min-width: 0; flex-direction: column; gap: 18px; }
+.formTitle { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -.025em; }
+.helper { margin: 0; color: var(--mut); font-size: 12px; line-height: 1.65; }
+.combined { min-height: 44px; color: var(--mint); font-size: 12px; text-align: left; }
+.position { display: flex; flex-direction: column; gap: 18px; }
+.positionSummary { display: flex; flex-direction: column; gap: 20px; }
+.positionIdentity { display: flex; min-width: 0; align-items: center; gap: 12px; }
+.positionIdentity h2 { margin: 0; font-size: 19px; font-weight: 600; }
+.positionIdentity p { margin: 3px 0 0; color: var(--mut); font-size: 12px; }
+.management { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.management > button { min-width: 0; min-height: 46px; border: 1px solid var(--line); border-radius: 12px; padding: 10px; color: var(--mut); background: var(--input); font-size: 12px; line-height: 1.45; }
+.management > button:hover, .management > button[aria-pressed='true'] { color: var(--text); border-color: var(--mint); background: var(--mint-dim); }
+.management > button:disabled { opacity: .5; cursor: not-allowed; }
+.positionSelect { display: flex; min-width: 0; flex-direction: column; gap: 8px; color: var(--mut); font-size: 12px; }
+.positionSelect select { width: 100%; min-height: 48px; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--input); color: var(--text); font-size: 16px; }
+.empty { display: flex; flex-direction: column; gap: 12px; }
+.empty h2 { margin: 0; font-size: 19px; font-weight: 600; }
+@media (max-width: 380px) { .action { padding: 16px; } .workspace { gap: 14px; } }
