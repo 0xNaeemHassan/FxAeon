@@ -30,7 +30,9 @@ export function MissingValue({
       aria-label={accessibleLabel}
       className={`missing-value missing-value-${width}${unavailable ? ' missing-value-unavailable' : ''} ${className}`.trim()}
     >
-      <span className="missing-value-bar" aria-hidden="true" />
+      {unavailable
+        ? <span aria-hidden="true">—</span>
+        : <span className="missing-value-bar" aria-hidden="true" />}
     </span>
   );
 }

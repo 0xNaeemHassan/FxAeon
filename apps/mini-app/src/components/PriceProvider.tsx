@@ -15,14 +15,12 @@ import {
   fetchUsdPrices,
   parseUsdPriceCache,
   USD_PRICE_CACHE_KEY,
-  USD_PRICE_ASSET_COUNT,
   type UsdPriceSnapshot,
   type UsdPriceUpdate,
 } from '@/lib/prices';
 
-const REFRESH_INTERVAL_MS = 30_000;
-const PARTIAL_RETRY_MS = 12_000;
-const UNAVAILABLE_RETRY_MS = 6_000;
+import { mergeUsdPriceUpdate, startPriceRefreshLoop } from '@/lib/priceRefresh';
+
 type PriceContextValue = UsdPriceSnapshot & {
   refreshing: boolean;
   refresh: () => Promise<void>;
@@ -87,21 +85,21 @@ export default function PriceProvider({ children }: { children: React.ReactNode 
     try {
       const applyProgress = (next: UsdPriceUpdate) => {
         if (signal?.aborted || refreshing.current !== request) return;
-        const status = Object.keys(next.prices).length === USD_PRICE_ASSET_COUNT ? 'ready' : 'partial';
-        const snapshot = { ...next, prices: { ...next.prices }, updatedAts: { ...next.updatedAts }, status } as UsdPriceSnapshot;
-        writeCachedSnapshot(snapshot);
-        setSnapshot(snapshot);
+        const merged = mergeUsdPriceUpdate(snapshotRef.current, next);
+        snapshotRef.current = merged;
+        writeCachedSnapshot(merged);
+        setSnapshot(merged);
       };
       const next = await fetchWithRetry(signal, applyProgress);
-      if (signal?.aborted) return;
-      writeCachedSnapshot(next);
-      setSnapshot({ ...next, status: Object.keys(next.prices).length === USD_PRICE_ASSET_COUNT ? 'ready' : 'partial' });
+      applyProgress(next);
     } catch (cause) {
-      if (signal?.aborted || (cause instanceof DOMException && cause.name === 'AbortError')) return;
-      setSnapshot((current) => ({
-        ...current,
-        status: Object.keys(current.prices).length > 0 ? 'stale' : 'unavailable',
-      }));
+      if (signal?.aborted || refreshing.current !== request || (cause instanceof DOMException && cause.name === 'AbortError')) return;
+      const failed: UsdPriceSnapshot = {
+        ...snapshotRef.current,
+        status: Object.keys(snapshotRef.current.prices).length > 0 ? 'stale' : 'unavailable',
+      };
+      snapshotRef.current = failed;
+      setSnapshot(failed);
     } finally {
       if (refreshing.current === request) {
         refreshing.current = null;
@@ -114,7 +112,10 @@ export default function PriceProvider({ children }: { children: React.ReactNode 
     if (!priceDemandActive) return undefined;
     let controller: AbortController | null = null;
     const cached = readCachedSnapshot();
-    if (cached) setSnapshot(cached);
+    if (cached && Object.keys(snapshotRef.current.prices).length === 0) {
+      snapshotRef.current = cached;
+      setSnapshot(cached);
+    }
     const onVisibility = () => {
       controller?.abort();
       controller = null;
@@ -137,17 +138,15 @@ export default function PriceProvider({ children }: { children: React.ReactNode 
 
   useEffect(() => {
     if (!priceDemandActive || !foreground) return undefined;
-    const controller = new AbortController();
-    const delay = snapshot.status === 'unavailable'
-      ? UNAVAILABLE_RETRY_MS
-      : snapshot.status === 'partial' || snapshot.status === 'stale'
-        ? PARTIAL_RETRY_MS
-        : REFRESH_INTERVAL_MS;
-    const timer = window.setTimeout(() => {
-      if (document.visibilityState === 'visible' && navigator.onLine !== false) void refresh(controller.signal);
-    }, delay);
-    return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [foreground, priceDemandActive, refresh, snapshot.status, snapshot.updatedAt]);
+    return startPriceRefreshLoop({
+      refresh,
+      getStatus: () => snapshotRef.current.status,
+      isActive: () => document.visibilityState === 'visible' && navigator.onLine !== false,
+      schedule: (callback, delay) => window.setTimeout(callback, delay),
+      cancel: (timer) => window.clearTimeout(timer),
+    });
+    // Quote progress must not dispose the request publishing that progress.
+  }, [foreground, priceDemandActive, refresh]);
 
   // One public Coinbase socket serves both instruments. It is foreground-only
   // so a Telegram WebView or background browser tab never holds a live stream
