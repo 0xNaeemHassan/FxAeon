@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ArrowLeftRight } from 'lucide-react';
 import { formatUnits, type Address } from 'viem';
 import { AppShell, Card } from '@/components/ui';
+import { PageHeading } from '@/components/ProductUI';
 import { ActionReview, type ActionReviewStage } from '@/components/ActionReview';
 import { AmountField, TokenSelect, type TokenBalanceView } from '@/components/ProtocolForm';
 import { useMoveBalances } from '@/components/WalletDataProvider';
@@ -463,6 +464,7 @@ export default function MovePage() {
   return (
     <AppShell>
       <div className={`${styles.workspace} ${styles.moveWorkspace} ${moveStyles.moveWorkspace}`}>
+        <PageHeading title="Move" />
         <Card
           data-flow-stage={reviewStage}
           className={`${styles.focusCard} ${styles.moveCard} ${moveStyles.moveCard} p-5`}
@@ -471,13 +473,7 @@ export default function MovePage() {
             key={reviewRevision}
             surface="content"
             editor={<>
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h1 className="text-[22px] font-semibold tracking-[-.03em]">Move</h1>
-            </div>
-          </div>
-
-          <div className={`mt-5 ${styles.networkFlow} ${styles.moveNetworkFlow}`}>
+          <div className={`${styles.networkFlow} ${styles.moveNetworkFlow}`}>
             <NetworkField label="From" name={sourceName} chainId={sourceChainId} />
             <button
               type="button"
@@ -492,25 +488,22 @@ export default function MovePage() {
 
           <div className="my-4 hairline" />
           <div className={`${styles.moveFormFields} ${moveStyles.moveFormFields}`}>
-            {!advanced && (
-              <TokenSelect label="Asset" value={token} options={['fxUSD', 'fxSAVE'] as const} onChange={changeToken} balances={moveBalances} balanceStatus={wallet.address ? moveBalanceStatusForPicker : 'disconnected'} />
-            )}
-
             <div className={`${styles.amountHero} ${styles.moveAmountHero} ${moveStyles.moveAmountHero}`}>
               <AmountField
                 label="Amount"
-                hint={`Available on ${sourceName}`}
                 symbol={advanced ? 'OFT' : token}
                 value={amount}
                 onChange={setAmount}
                 maxDecimals={18}
                 balanceState={moveBalanceState}
+                showUnitPrice={false}
+                tokenSelector={!advanced ? <TokenSelect compact label="Asset" value={token} options={['fxUSD', 'fxSAVE'] as const} onChange={changeToken} balances={moveBalances} balanceStatus={wallet.address ? moveBalanceStatusForPicker : 'disconnected'} /> : undefined}
               />
             </div>
 
             <div className={styles.recipientSection}>
               <div className="mb-2 flex items-center justify-between gap-3">
-                <span className="text-[12px] font-medium text-mut">Recipient</span>
+                <span className="text-[12px] font-medium text-mut">Recipient on {destinationName}</span>
                 <button
                   type="button"
                   onClick={changeRecipientMode}

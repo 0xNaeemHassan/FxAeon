@@ -1,16 +1,16 @@
 'use client';
 
 import { createPortal } from 'react-dom';
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, Info, Search } from 'lucide-react';
 import TokenIcon from '@/components/TokenIcon';
 import { useUsdPrices } from '@/components/PriceProvider';
 import { useWalletBalances } from '@/components/WalletDataProvider';
 import { ValueOrSkeleton } from '@/components/MissingValue';
 import { haptic } from '@/lib/telegram';
-import { calculateFractionDecimal, compareExactDecimals, decimalInputError, formatExactDecimal, positiveDecimal } from '@/lib/amount';
+import { formatExactDecimal } from '@/lib/amount';
 import { formatUsdCents } from '@/lib/positionValuation';
-import { formatUsd, formatUsdPrice, priceKeyForSymbol, usdValueForDecimal, type UsdPriceMap } from '@/lib/prices';
+import { priceKeyForSymbol, type UsdPriceMap } from '@/lib/prices';
 import styles from '@/components/trade-surfaces.module.css';
 import { tokenName, tokenPresentation, tokenSymbol } from '@/lib/fx/tokenPresentation';
 import {
@@ -243,216 +243,8 @@ export function SlippageField({
   );
 }
 
-export function AmountField({
-  value,
-  onChange,
-  symbol,
-  label,
-  hint,
-  balance,
-  balanceState,
-  allowAll = false,
-  allowZero = false,
-  showPercentages = true,
-  showMax = true,
-  showUsdValue = true,
-  showUnitPrice = true,
-  compact = false,
-  disabled = false,
-  maxDecimals = 18,
-  placeholder = '0.00',
-  constraintError,
-  /** A route-aware spendable maximum. Use this for native assets so gas and
-   * any native transaction value are reserved before a 100% shortcut. */
-  maxAmount,
-  onMax,
-  maxPending = false,
-  tokenSelector,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  symbol: string;
-  label: string;
-  hint?: string;
-  balance?: string | null;
-  balanceState?: TokenBalanceView;
-  allowAll?: boolean;
-  allowZero?: boolean;
-  showPercentages?: boolean;
-  showMax?: boolean;
-  /** Hide the secondary token-price readout when a parent owns the market surface. */
-  showUsdValue?: boolean;
-  /** Keep the entered amount's USD worth while omitting the per-unit quote. */
-  showUnitPrice?: boolean;
-  /** Put value and balance metadata on one compact line in dense tickets. */
-  compact?: boolean;
-  disabled?: boolean;
-  maxDecimals?: number;
-  placeholder?: string;
-  constraintError?: string | null;
-  maxAmount?: string | null;
-  /** Resolve a route-aware maximum (for example native ETH after gas). */
-  onMax?: () => void | Promise<void>;
-  maxPending?: boolean;
-  tokenSelector?: ReactNode;
-}) {
-  const inputId = useId();
-  const hintId = `${inputId}-hint`;
-  const errorId = `${inputId}-error`;
-  const balanceId = `${inputId}-balance`;
-  const [touched, setTouched] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
-  useEffect(() => {
-    setHydrated(true);
-  }, []);
-  const { prices } = useUsdPrices();
-  const priceKey = priceKeyForSymbol(symbol);
-  const usdPrice = priceKey ? prices[priceKey] : undefined;
-  const usdValue = usdValueForDecimal(value, usdPrice);
-  const inputError = decimalInputError(value, maxDecimals, { allowAll, allowZero });
-  const error = inputError ?? constraintError ?? (touched && !value && !allowZero ? 'Enter an amount.' : null);
-  const describedBy = [hint ? hintId : null, balance !== undefined || balanceState !== undefined ? balanceId : null, error ? errorId : null].filter(Boolean).join(' ') || undefined;
-  const normalise = (raw: string) => {
-    if (allowAll && raw.toLowerCase() === 'all') return 'all';
-    // Keep malformed pasted text visible and invalid. Stripping an exponent or
-    // symbol can silently turn `1e6` into the very different value `16`.
-    return raw.replace(',', '.').slice(0, 100);
-  };
-
-  const availableBalance = balanceState?.status === 'ready' ? balanceState.amount ?? null : balance;
-  const hasValidBalance = Boolean(availableBalance && positiveDecimal(availableBalance, maxDecimals));
-  const spendableBalance = maxAmount === null ? null : maxAmount ?? availableBalance;
-  const hasValidSpendableBalance = Boolean(spendableBalance && positiveDecimal(spendableBalance, maxDecimals));
-  const balancePlaceholderStatus = balanceState?.status === 'unavailable' || balanceState?.status === 'disconnected'
-    ? 'unavailable'
-    : 'loading';
-  const showBalanceMeta = balanceState?.status !== 'disconnected'
-    && (balance !== undefined || balanceState !== undefined || allowAll);
-  const insufficientBalance = Boolean(
-    balanceState?.status === 'ready'
-      && availableBalance
-      && value
-      && compareExactDecimals(value, availableBalance, maxDecimals) === 1,
-  );
-
-  return (
-    <div className={compact ? styles.compactAmountField : undefined}>
-      <FieldLabel hint={hint} hintId={hintId} htmlFor={inputId}>{label}</FieldLabel>
-      <div className={`${styles.amountField} amount-control group flex min-h-[76px] items-center gap-3 px-4 ${error ? 'field-error' : ''}`}>
-        <input
-          id={inputId}
-          value={value}
-          onChange={(event) => onChange(normalise(event.target.value))}
-          onBlur={() => setTouched(true)}
-          disabled={disabled || !hydrated}
-          inputMode="decimal"
-          autoComplete="off"
-          placeholder={placeholder}
-          aria-label={`${label} in ${symbol}`}
-          aria-describedby={describedBy}
-          aria-errormessage={error ? errorId : undefined}
-          aria-invalid={Boolean(error)}
-          required={!allowZero}
-          style={{ '--amount-entry-length': Math.max(value.length, 10) } as CSSProperties}
-          className={`${styles.amountInput} min-h-11 min-w-0 flex-1 bg-transparent font-semibold text-[var(--text)] outline-none placeholder:text-[var(--mut-2)]`}
-        />
-        {tokenSelector ?? <span className="token-pill flex shrink-0 items-center gap-2 px-2.5 py-2 text-[12px] font-semibold">
-          <TokenIcon symbol={symbol} size={22} /> {symbol}
-        </span>}
-      </div>
-      {showUsdValue && usdPrice && (
-        <div className={`${styles.amountUsdMeta} mt-2 flex items-center justify-between gap-3 px-1 text-[11px] text-mut`} aria-live="polite">
-          <span><ValueOrSkeleton value={usdValue === null ? '—' : `≈ ${formatUsd(usdValue)}`} width="md" label="Loading USD value" /></span>
-          {showUnitPrice && <span>{formatUsdPrice(usdPrice)} / {displayTokenSymbol(symbol)}</span>}
-        </div>
-      )}
-      {showBalanceMeta && (
-        <div id={balanceId} className={`${styles.amountBalanceMeta} mt-2 flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] text-mut`}>
-          <div className="flex min-w-0 items-center gap-1 truncate">
-            {(balance !== undefined || balanceState !== undefined) && (
-              <span className="truncate" title={balanceState?.reason ?? (availableBalance ?? 'Balance pending')}>
-                Available: <span className="font-semibold text-[var(--text)]">
-                  <ValueOrSkeleton
-                    value={balanceState && balanceState.status !== 'ready'
-                      ? '—'
-                      : availableBalance !== undefined && availableBalance !== null && availableBalance !== ''
-                        ? `${formatExactDecimal(availableBalance, 4)} ${displayTokenSymbol(symbol)}`
-                        : '—'}
-                    width="md"
-                    status={balancePlaceholderStatus}
-                    label={balanceState?.reason ?? (balancePlaceholderStatus === 'unavailable' ? 'Balance unavailable' : 'Loading balance')}
-                  />
-                </span>
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-1">
-            {showPercentages && hasValidBalance && [25, 50, 75].map((pct) => (
-              <button
-                key={pct}
-                type="button"
-                onClick={() => {
-                  haptic('selection');
-                  const fraction = calculateFractionDecimal(availableBalance, pct, maxDecimals);
-                  if (fraction) onChange(fraction);
-                }}
-                disabled={disabled || !hydrated}
-                className="fraction-button min-h-11 min-w-11 px-2 py-0.5 text-[10.5px] font-semibold text-mut"
-              >
-                {pct}%
-              </button>
-            ))}
-            {showMax && allowAll ? (
-              <button
-                type="button"
-                onClick={() => {
-                  haptic('selection');
-                  onChange('all');
-                }}
-                disabled={disabled || !hydrated}
-                className="fraction-button fraction-button-active min-h-11 min-w-11 px-2.5 py-0.5 text-[10.5px] font-bold text-mint"
-              >
-                MAX
-              </button>
-            ) : showMax && (hasValidSpendableBalance || (maxAmount === null && hasValidBalance)) ? (
-              <button
-                type="button"
-                onClick={() => {
-                  haptic('selection');
-                  if (maxAmount === null) {
-                    void onMax?.();
-                    return;
-                  }
-                  const fraction = spendableBalance
-                    ? calculateFractionDecimal(spendableBalance, 100, maxDecimals)
-                    : null;
-                  if (fraction) onChange(fraction);
-                }}
-                disabled={disabled || !hydrated || maxPending || (maxAmount === null && !onMax)}
-                aria-busy={maxPending || undefined}
-                aria-label={maxAmount === null ? (maxPending ? 'Checking gas reserve' : 'Calculate 100% after gas reserve') : 'Use 100% of available balance'}
-                title={maxAmount === null ? (maxPending ? 'Checking gas reserve' : 'Gas reserve is calculated before using 100%') : undefined}
-                className="fraction-button fraction-button-active min-h-11 min-w-11 px-2.5 py-0.5 text-[10.5px] font-bold text-mint"
-              >
-                100%
-              </button>
-            ) : null}
-          </div>
-        </div>
-      )}
-      {insufficientBalance && (
-        <p role="status" aria-live="polite" className="mt-1.5 px-1 text-[11px] leading-relaxed text-danger">
-          Amount exceeds your available balance. Lower the amount to continue.
-        </p>
-      )}
-      {error && (
-        <p id={errorId} role="alert" className="mt-1.5 px-1 text-[11px] leading-relaxed text-danger">
-          {error}
-        </p>
-      )}
-    </div>
-  );
-}
+export { AmountField } from './AmountField';
+export type { AmountFieldProps } from './AmountField';
 
 export function TokenSelect<T extends string>({
   value,

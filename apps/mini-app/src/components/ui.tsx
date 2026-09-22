@@ -4,7 +4,7 @@
  * FxAeon shared UI kit — every screen composes these so the app feels like
  * one product instead of disconnected pages.
  */
-import { forwardRef, ReactNode, useEffect, useRef, useState, type ButtonHTMLAttributes, type MouseEventHandler } from 'react';
+import { forwardRef, ReactNode, useEffect, useRef, useState, type ButtonHTMLAttributes, type HTMLAttributes, type MouseEventHandler } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -75,6 +75,7 @@ export function AppShell({
 
   return (
     <div
+      data-product-ui="v2"
       data-shell-tabs={tabs ? 'true' : 'false'}
       className={`app-shell mx-auto w-full ${tabs ? 'app-shell-tabs' : 'app-shell-no-tabs pb-[calc(env(safe-area-inset-bottom,0px)+1rem)]'}`}
     >
@@ -89,8 +90,8 @@ export function AppShell({
             <DesktopNavigation />
             <span className="app-topbar-actions">
               <NetworkSelector />
-              <ThemeToggle />
               <WalletProfile />
+              <ThemeToggle />
             </span>
           </header>
         )}
@@ -180,21 +181,9 @@ function DesktopNavigation() {
 
 /* ------------------------------------------------------------------ atoms */
 
-export function Card({
-  children,
-  className = '',
-  glow = false,
-  elevation = 1,
-}: {
-  children: ReactNode;
-  className?: string;
-  glow?: boolean;
-  elevation?: 1 | 2 | 3;
-}) {
+export function Card({ children, className = '', glow = false, elevation = 1, ...props }: HTMLAttributes<HTMLDivElement> & { glow?: boolean; elevation?: 1 | 2 | 3 }) {
   const elevationClass = elevation === 2 || elevation === 3 ? 'astryx-card-elevated' : 'astryx-card';
-  return (
-    <div className={`ui-card ${elevationClass} p-5 ${glow ? 'card-glow' : ''} ${className}`}>{children}</div>
-  );
+  return <div {...props} className={`ui-card ${elevationClass} p-5 ${glow ? 'card-glow' : ''} ${className}`}>{children}</div>;
 }
 
 function buttonClasses(variant: 'primary' | 'ghost' | 'danger' | 'outline' | 'glass', className = ''): string {
