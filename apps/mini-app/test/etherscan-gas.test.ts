@@ -25,12 +25,103 @@ test.afterEach(() => {
 });
 
 test('missing server key returns 503 without contacting Etherscan', async () => {
-  const response = await onRequestGet({
-    request: new Request('https://fxaeon.pages.dev/api/gas'),
-    env: {},
-  });
+  const warnings: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...values: unknown[]) => { warnings.push(values.join(' ')); };
+  let response: Response;
+  try {
+    response = await onRequestGet({
+      request: new Request('https://fxaeon.pages.dev/api/gas'),
+      env: {},
+    });
+  } finally { console.warn = originalWarn; }
   assert.equal(response.status, 503);
   assert.deepEqual(await response.json(), { error: 'gas oracle unavailable' });
+  assert.deepEqual(warnings, ['[gas-oracle] binding_missing']);
+});
+
+test('server diagnostics classify upstream failures without logging secrets or payloads', async () => {
+  const secret = 'never-log-this-server-key';
+  const warnings: string[] = [];
+  const originalWarn = console.warn;
+  const originalFetch = globalThis.fetch;
+  console.warn = (...values: unknown[]) => { warnings.push(values.join(' ')); };
+  try {
+    globalThis.fetch = (async () => new Response(JSON.stringify({
+      status: '0', message: `Invalid API Key ${secret}`, result: `${secret} private-upstream-detail`,
+    }), { status: 200 })) as typeof fetch;
+    let response = await onRequestGet({
+      request: new Request('https://fxaeon.pages.dev/api/gas'), env: { ETHERSCAN_API_KEY: secret },
+    });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: 'gas oracle unavailable' });
+
+    resetGasOracleCacheForTests();
+    globalThis.fetch = (async () => new Response('forbidden', { status: 403 })) as typeof fetch;
+    response = await onRequestGet({
+      request: new Request('https://fxaeon.pages.dev/api/gas'), env: { ETHERSCAN_API_KEY: secret },
+    });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: 'gas oracle unavailable' });
+
+    resetGasOracleCacheForTests();
+    globalThis.fetch = (async () => { throw new Error(`${secret} ${ETHERSCAN_API_URL}?apikey=${secret}`); }) as typeof fetch;
+    response = await onRequestGet({
+      request: new Request('https://fxaeon.pages.dev/api/gas'), env: { ETHERSCAN_API_KEY: secret },
+    });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: 'gas oracle unavailable' });
+  } finally {
+    console.warn = originalWarn;
+    globalThis.fetch = originalFetch;
+  }
+  assert.deepEqual(warnings, ['[gas-oracle] upstream_auth_failed', '[gas-oracle] upstream_auth_failed', '[gas-oracle] upstream_fetch_failed']);
+  assert.equal(warnings.join(' ').includes(secret), false);
+  assert.equal(warnings.join(' ').includes(ETHERSCAN_API_URL), false);
+});
+
+test('repeated upstream failures are rate-limited to one warning per backoff window', async () => {
+  const warnings: string[] = [];
+  const originalWarn = console.warn;
+  const originalFetch = globalThis.fetch;
+  console.warn = (...values: unknown[]) => { warnings.push(values.join(' ')); };
+  globalThis.fetch = (async () => { throw new Error('connection failed'); }) as typeof fetch;
+  try {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const response = await onRequestGet({
+        request: new Request('https://fxaeon.pages.dev/api/gas'), env: { ETHERSCAN_API_KEY: 'server-key' },
+      });
+      assert.equal(response.status, 503);
+    }
+  } finally {
+    console.warn = originalWarn;
+    globalThis.fetch = originalFetch;
+  }
+  assert.deepEqual(warnings, ['[gas-oracle] upstream_fetch_failed']);
+});
+
+test('upstream redirects are rejected without following their Location header', async () => {
+  const warnings: string[] = [];
+  const originalWarn = console.warn;
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  console.warn = (...values: unknown[]) => { warnings.push(values.join(' ')); };
+  globalThis.fetch = (async () => {
+    calls += 1;
+    return new Response(null, { status: 302, headers: { location: 'https://example.invalid/redirect' } });
+  }) as typeof fetch;
+  try {
+    const response = await onRequestGet({
+      request: new Request('https://fxaeon.pages.dev/api/gas'), env: { ETHERSCAN_API_KEY: 'server-key' },
+    });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: 'gas oracle unavailable' });
+  } finally {
+    console.warn = originalWarn;
+    globalThis.fetch = originalFetch;
+  }
+  assert.equal(calls, 1);
+  assert.deepEqual(warnings, ['[gas-oracle] upstream_http_failed']);
 });
 
 test('query parameters are rejected and cannot alter upstream parameters', async () => {
@@ -48,10 +139,14 @@ test('query parameters are rejected and cannot alter upstream parameters', async
 
 test('parses the fixed Ethereum gas oracle and never returns the secret', async () => {
   let seenUrl = '';
+  let seenRedirect: RequestRedirect | undefined;
+  let seenThis: unknown = 'not-called';
   const snapshot = await fetchEtherscanGasOracle('server-key', {
     cache: false,
-    fetchImpl: async (input) => {
+    fetchImpl: async function (this: unknown, input, init) {
+      seenThis = this;
       seenUrl = String(input);
+      seenRedirect = init?.redirect;
       return upstreamResponse({ LastBlock: '234', ProposeGasPrice: '0.496840168' });
     },
     now: () => 1234,
@@ -62,6 +157,8 @@ test('parses the fixed Ethereum gas oracle and never returns the secret', async 
   assert.equal(url.searchParams.get('module'), 'gastracker');
   assert.equal(url.searchParams.get('action'), 'gasoracle');
   assert.equal(url.searchParams.get('apikey'), 'server-key');
+  assert.equal(seenRedirect, 'manual');
+  assert.equal(seenThis, undefined, 'the injected fetch must be invoked unbound for Workerd');
   assert.deepEqual(snapshot, {
     source: 'etherscan',
     chainId: 1,
