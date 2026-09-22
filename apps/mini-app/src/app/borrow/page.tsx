@@ -1,14 +1,19 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Coins, RefreshCw } from 'lucide-react';
-import Link from 'next/link';
-import { AppShell, Button, Card, EmptyState } from '@/components/ui';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AppShell } from '@/components/ui';
+import { formatUnits } from 'viem';
+import TokenIcon from '@/components/TokenIcon';
+import ConnectWalletButton from '@/components/ConnectWalletButton';
+import { MetricRows, PageHeading, ProductNav, ProductSurface, StatusNotice } from '@/components/ProductUI';
+import { freshDisplayPrices } from '@/lib/displayPrices';
+import { calculateNativeMax } from '@/lib/fx/nativeMax';
+import { estimatePlannedRouteCost } from '@/lib/fx';
 import { ActionReview, type ActionReviewStage } from '@/components/ActionReview';
 import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
 import { ProtocolPositionNotice } from '@/components/ProtocolPositionCard';
 import { ConfirmedPositionCards } from '@/components/ConfirmedPositionCards';
-import { AmountField, InfoNote, Segmented, TokenSelect, useWalletTokenBalances } from '@/components/ProtocolForm';
+import { AmountField, Segmented, TokenSelect, useWalletTokenBalances } from '@/components/ProtocolForm';
 import { useUsdPrices } from '@/components/PriceProvider';
 import {
   planDepositAndMint,
@@ -35,13 +40,14 @@ import {
   type UiPosition,
   type UiToken,
 } from '@/app/trade/fxUi';
-import styles from '@/components/FlowWorkspace.module.css';
+import presentation from '@/components/BorrowWorkspace.module.css';
 import { calculatePositionUsdValuation, formatUsdCents } from '@/lib/positionValuation';
 import { priceKeyForSymbol } from '@/lib/prices';
 import { resetTransactionAmounts } from '@/lib/transactionState';
 import { ValueOrSkeleton } from '@/components/MissingValue';
 
 type BorrowMode = 'mint' | 'manage';
+type ManagementAction = 'none' | 'add' | 'borrow' | 'repay' | 'withdraw' | 'combined';
 
 const BORROW_DRAFT_SCOPES = [
   { mode: 'mint', operation: 'depositAndMint', actionKey: 'borrow:new' },
@@ -117,6 +123,7 @@ export default function BorrowPage() {
   const sharedPositions = useProtocolPositions();
   const trackConfirmedPosition = sharedPositions.trackConfirmedPosition;
   const [mode, setMode] = useState<BorrowMode>('mint');
+  const [managementAction, setManagementAction] = useState<ManagementAction>('none');
   const [market, setMarket] = useState<UiMarket>('ETH');
   const [selectedKey, setSelectedKey] = useState('new');
   const [token, setToken] = useState<UiToken>('ETH');
@@ -205,15 +212,21 @@ export default function BorrowPage() {
   }, [market, resetTransactionContext]);
 
   const changeMarket = useCallback((nextMarket: UiMarket) => {
+    setManagementAction('none');
     setMarket(nextMarket);
     setSelectedKey('new');
     resetTransactionContext(collateralTokensForMarket(nextMarket)[0]);
   }, [resetTransactionContext]);
 
   const changePosition = useCallback((nextKey: string) => {
+    const next = positions.find((position) => positionKey(position) === nextKey);
+    if (!next) return;
+    setManagementAction('none');
+    setMode('manage');
+    setMarket(next.market);
     setSelectedKey(nextKey);
-    resetTransactionContext(collateralTokensForMarket(market)[0]);
-  }, [market, resetTransactionContext]);
+    resetTransactionContext(collateralTokensForMarket(next.market)[0]);
+  }, [positions, resetTransactionContext]);
 
   const changeToken = useCallback((nextToken: UiToken) => {
     resetTransactionContext(nextToken);
@@ -229,6 +242,7 @@ export default function BorrowPage() {
       && lastConnectedChainRef.current !== undefined
       && lastConnectedChainRef.current !== wallet.chainId;
     if (previous !== null && previous !== context && (walletChanged || chainChanged)) {
+      setManagementAction('none');
       setMode('mint');
       setMarket('ETH');
       setSelectedKey('new');
@@ -293,6 +307,7 @@ export default function BorrowPage() {
       : restoredTokens[0];
     restoredDraftRef.current = attemptKey;
     setMode(restoredMode);
+    setManagementAction('combined');
     setMarket(restoredMarket);
     setSelectedKey(restoredPositionKey);
     setToken(restoredToken);
@@ -331,6 +346,7 @@ export default function BorrowPage() {
     ));
     if (!requested) return;
     setMode('mint');
+    setManagementAction('combined');
     setMarket(requested.market);
     setSelectedKey(positionKey(requested));
     resetTransactionContext(collateralTokensForMarket(requested.market)[0]);
@@ -338,14 +354,9 @@ export default function BorrowPage() {
 
   useEffect(() => {
     setSelectedKey((current) => {
-      if (mode === 'mint') {
-        return current === 'new' || positions.some((position) => positionKey(position) === current) ? current : 'new';
-      }
-      return positions.some((position) => positionKey(position) === current)
-        ? current
-        : positions[0]
-          ? positionKey(positions[0])
-          : '';
+      // Never retarget already-entered amounts when a selected position vanishes.
+      if (mode === 'mint') return current || 'new';
+      return current && current !== 'new' ? current : positions[0] ? positionKey(positions[0]) : '';
     });
   }, [mode, positions]);
 
@@ -357,13 +368,50 @@ export default function BorrowPage() {
     if (!activeTokenOptions.includes(token)) setToken(activeTokenOptions[0]);
   }, [activeTokenOptions, token]);
 
+  const [nativeMaxPending, setNativeMaxPending] = useState(false);
+  const [nativeMaxError, setNativeMaxError] = useState<string | null>(null);
+  const maxRequest = useRef(0);
+  const maxMounted = useRef(true);
+  const maxContext = useRef('');
+  const maxContextKey = JSON.stringify([wallet.address, wallet.chainId, market, selectedKey, token, deposit, mint, balanceSnapshot.balances.ETH?.amount]);
+  maxContext.current = maxContextKey;
+  useEffect(() => { maxMounted.current = true; return () => { maxMounted.current = false; maxRequest.current += 1; }; }, []);
+  useEffect(() => { maxRequest.current += 1; setNativeMaxPending(false); setNativeMaxError(null); }, [maxContextKey]);
+  const resolveNativeMax = useCallback(async () => {
+    const balance = balanceSnapshot.balances.ETH;
+    if (token !== 'ETH' || !wallet.address || nativeMaxPending || selectedStale || selectedKey !== 'new' && !selected
+      || balance?.status !== 'ready' || !balance.amount) return;
+    const balanceWei = parseZeroAmount(balance.amount, 'ETH');
+    const debtWei = parseZeroAmount(mint, 'fxUSD');
+    if (!balanceWei || debtWei === null) return;
+    const request = ++maxRequest.current;
+    const context = maxContext.current;
+    const current = () => maxMounted.current && request === maxRequest.current && context === maxContext.current;
+    setNativeMaxPending(true); setNativeMaxError(null);
+    try {
+      const maximum = await calculateNativeMax({ balanceWei, initialCandidateWei: parseZeroAmount(deposit, 'ETH') ?? undefined,
+        buildRoutes: async (amountWei) => {
+          const route = await planDepositAndMint({ market, positionId: selectedKey === 'new' ? 0 : selected!.info.positionId,
+            userAddress: wallet.address!, depositTokenAddress: tokenAddress('ETH'), depositAmount: amountWei, mintAmount: debtWei });
+          return Array.isArray(route) ? route : [route];
+        },
+        estimateRoutes: (routes) => Promise.all(routes.map((route) => estimatePlannedRouteCost(route))), isCurrent: current,
+      });
+      if (!current()) return;
+      setNativeMaxPending(false);
+      setDeposit(formatUnits(maximum, 18));
+    } catch {
+      if (current()) setNativeMaxError('Max is unavailable until current network fees are verified. Retry or enter an amount.');
+    } finally { if (current()) setNativeMaxPending(false); }
+  }, [balanceSnapshot.balances.ETH, deposit, market, mint, nativeMaxPending, selected, selectedKey, selectedStale, token, wallet.address]);
+
   const planBuilder = useMemo(() => {
     if (!wallet.address) return null;
-    if (selectedStale) return null;
+    if (selectedStale || selectedKey !== 'new' && !selected) return null;
     if (mode === 'mint') {
       const depositWei = parseZeroAmount(deposit, token);
       const mintWei = parseZeroAmount(mint, 'fxUSD');
-      if (depositWei === null || mintWei === null || (depositWei === 0n && mintWei === 0n)) return null;
+      if (depositWei === null || mintWei === null || (depositWei === 0n && mintWei === 0n) || selectedKey === 'new' && depositWei === 0n) return null;
       return () => planDepositAndMint({
         market,
         positionId: selectedKey === 'new' ? 0 : selected?.info.positionId ?? 0,
@@ -406,359 +454,124 @@ export default function BorrowPage() {
         ? 'Withdraw collateral'
         : 'Manage debt';
 
-  const actionCardVisible = !wallet.address
-    || initialRead
-    || reviewStage !== 'input'
-    || (!positionReadUnavailable && (mode === 'mint' || positions.length > 0));
-  const actionEditor = !wallet.address ? (
-    <DisconnectedBorrowForm
-      mode={mode}
-      market={market}
-      onMarketChange={changeMarket}
-      token={token}
-      tokens={activeTokenOptions}
-      onTokenChange={changeToken}
-      deposit={deposit}
-      onDepositChange={setDeposit}
-      mint={mint}
-      onMintChange={setMint}
-      repay={repay}
-      onRepayChange={setRepay}
-      withdraw={withdraw}
-      onWithdrawChange={setWithdraw}
-    />
-  ) : mode === 'mint' ? (
-    <div className="flex flex-col gap-4">
-      <FormHeader
-        title={selected ? `Borrow against position #${selected.info.positionId}` : 'Open a collateral position'}
-        body={selected ? 'Add collateral, borrow more fxUSD, or do both.' : 'Choose starting collateral and the fxUSD debt to open.'}
-      />
-      {initialRead && <span role="status" aria-live="polite" className="sr-only">Loading positions</span>}
-      <div className={styles.borrowCollateralField}><TokenSelect label="Collateral asset" value={token} options={collateralTokens} onChange={changeToken} balances={balanceSnapshot.status === 'idle' ? undefined : balanceSnapshot.balances} balanceStatus={balanceStatus} /></div>
-      <div className={styles.borrowAmountGrid}>
-        <AmountField
-          label={selected ? 'Collateral to add' : 'Starting collateral'}
-          symbol={token}
-          value={deposit}
-          onChange={setDeposit}
-          allowZero
-          maxDecimals={tokenDecimals(token)}
-          placeholder="0.00"
-          balanceState={balanceStateFor(token)}
-        />
-        <AmountField
-          label={selected ? 'Additional fxUSD to borrow' : 'fxUSD to borrow'}
-          symbol="fxUSD"
-          value={mint}
-          onChange={setMint}
-          allowZero
-          maxDecimals={18}
-          placeholder="0.00"
-        />
-      </div>
-      <InfoNote>Borrowing fees are deducted from the fxUSD you receive.</InfoNote>
-    </div>
-  ) : (
-    <div className="flex flex-col gap-4">
-      <FormHeader title="Manage debt" body="Repay fxUSD, withdraw collateral, or do both." />
-      {!selected && sharedPositions.status === 'loading' && <span role="status" aria-label="Reading collateral position" className="text-[12px] text-mut">Loading positions…</span>}
-      {!selected && sharedPositions.status !== 'loading' && <p role="status" className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3 text-[12px] text-mut">Choose a position to manage debt, or switch to Borrow fxUSD to open one.</p>}
-      <TokenSelect label="Receive collateral as" value={token} options={withdrawalTokens} onChange={changeToken} balances={balanceSnapshot.status === 'idle' ? undefined : balanceSnapshot.balances} balanceStatus={balanceStatus} />
-      <div className={styles.borrowAmountGrid}>
-        <AmountField
-          label="Repay amount"
-          symbol="fxUSD"
-          value={repay}
-          onChange={setRepay}
-          allowAll
-          allowZero
-          maxDecimals={18}
-          placeholder="0.00"
-          balanceState={balanceStateFor('fxUSD')}
-        />
-        <AmountField
-          label="Collateral to withdraw"
-          symbol={token}
-          value={withdraw}
-          onChange={setWithdraw}
-          allowZero
-          maxDecimals={tokenDecimals(token)}
-          placeholder="0.00"
-        />
-      </div>
-      <InfoNote>Enter the fxUSD to repay, the collateral to receive, or both. The action details show the resulting position before you sign; withdrawing collateral can reduce its safety margin.</InfoNote>
-    </div>
-  );
+  const newPosition = mode === 'mint' && selectedKey === 'new';
+  const view = newPosition ? 'new' : 'positions';
+  const chooseView = (next: 'new' | 'positions') => {
+    setManagementAction('none');
+    if (next === 'new') {
+      setMode('mint'); setSelectedKey('new'); resetTransactionContext(collateralTokensForMarket(market)[0]);
+    } else {
+      const first = selected ?? positions[0];
+      setMode('manage'); setSelectedKey(first ? positionKey(first) : '');
+      if (first) setMarket(first.market);
+      resetTransactionContext(collateralTokensForMarket(first?.market ?? market)[0]);
+    }
+  };
+  const chooseManagement = (action: ManagementAction) => {
+    if (!selected || selectedStale) return;
+    setManagementAction(action);
+    if (action !== 'combined') changeMode(action === 'add' || action === 'borrow' ? 'mint' : 'manage');
+  };
+  const showDeposit = newPosition || mode === 'mint' && (managementAction === 'add' || managementAction === 'combined');
+  const showMint = newPosition || mode === 'mint' && (managementAction === 'borrow' || managementAction === 'combined');
+  const showRepay = mode === 'manage' && (managementAction === 'repay' || managementAction === 'combined');
+  const showWithdraw = mode === 'manage' && (managementAction === 'withdraw' || managementAction === 'combined');
+  const picker = <TokenSelect compact label={mode === 'manage' ? 'Receive collateral as' : 'Collateral asset'} value={token}
+    options={activeTokenOptions} onChange={changeToken} balances={wallet.address ? balanceSnapshot.balances : undefined}
+    balanceStatus={wallet.address ? balanceStatus : 'disconnected'} />;
+  const actionEditor = <div className={presentation.editor}>
+    <h2 className={presentation.formTitle}>{newPosition ? 'Open a collateral position' : mode === 'mint' ? 'Add collateral or borrow' : 'Manage debt'}</h2>
+    {newPosition && <Segmented value={market} onChange={changeMarket} ariaLabel="Collateral market"
+      options={[{ value: 'ETH', label: 'ETH', icon: <TokenIcon symbol="ETH" size={21} /> }, { value: 'BTC', label: 'BTC', icon: <TokenIcon symbol="WBTC" size={21} /> }]} />}
+    {showDeposit && <AmountField label={newPosition ? 'Starting collateral' : 'Collateral to add'} symbol={token} value={deposit}
+      onChange={(value) => { setNativeMaxError(null); setDeposit(value); }} allowZero maxDecimals={tokenDecimals(token)}
+      balanceState={balanceStateFor(token)} tokenSelector={picker}
+      maxAmount={token === 'ETH' ? null : undefined} onMax={token === 'ETH' ? resolveNativeMax : undefined}
+      maxPending={token === 'ETH' && nativeMaxPending} constraintError={token === 'ETH' ? nativeMaxError : undefined} />}
+    {showMint && <AmountField label={newPosition ? 'fxUSD to borrow' : 'Additional fxUSD to borrow'} hint="Debt added" symbol="fxUSD" value={mint}
+      onChange={setMint} allowZero maxDecimals={18} showPercentages={false} showMax={false} />}
+    {showRepay && <AmountField label="Repay amount" symbol="fxUSD" value={repay} onChange={setRepay} allowAll allowZero maxDecimals={18}
+      balanceState={balanceStateFor('fxUSD')} hint={selected ? `Debt: ${formatPositionDebt(selected)}` : undefined} />}
+    {showWithdraw && <AmountField label="Collateral to withdraw" symbol={token} value={withdraw} onChange={setWithdraw}
+      allowZero maxDecimals={tokenDecimals(token)} showMax={false} showPercentages={false} tokenSelector={picker} />}
+    {mode === 'mint' ? <p className={presentation.helper}>Borrowing fees are deducted from the fxUSD you receive. The review shows debt and receipt amounts separately.</p>
+      : <p className={presentation.helper}>The review shows the position changes before you sign. Withdrawing collateral can increase liquidation risk.</p>}
+    {!newPosition && managementAction !== 'combined' && <button type="button" className={presentation.combined} onClick={() => setManagementAction('combined')}>
+      {mode === 'mint' ? 'Add collateral and borrow together' : 'Repay and withdraw together'}
+    </button>}
+  </div>;
+  const showAction = newPosition || Boolean(selected && managementAction !== 'none') || reviewStage !== 'input';
+  const reviewLabel = mode === 'mint' ? 'Review borrowing' : repayRequested && !withdrawalRequested ? 'Review repayment' : 'Review position changes';
 
-  return (
-    <AppShell>
-      <div className={`${styles.workspace} ${styles.borrowWorkspace}`}>
-        <h1 className={styles.borrowHeading}>Borrow</h1>
-        <ConfirmedPositionCards />
-        <nav className={`grid grid-cols-2 ${styles.productSwitch}`} aria-label="Savings and borrowing">
-          <Link href="/earn" className="glass-press flex min-h-11 items-center justify-center rounded-lg px-3 text-[13px] font-semibold text-mut">fxSAVE</Link>
-          <span aria-current="page" className="flex min-h-11 items-center justify-center rounded-lg bg-[var(--mint-dim)] px-3 text-[13px] font-semibold text-[var(--text)]">Borrow fxUSD</span>
-        </nav>
-        {wallet.address && !initialRead && positionReadUnavailable && (
-          <div role="alert" aria-live="polite" className="flex flex-col gap-3.5 rounded-2xl border border-[var(--line)] bg-[var(--warn-dim)] p-5">
-            <div><p className="font-semibold text-warn">Borrowing positions are unavailable.</p><p className="mt-1 text-[12px] leading-relaxed text-mut">No current collateral or debt state was verified. Retry before continuing.</p></div>
-            <Button aria-label="Retry borrowing positions" onClick={() => void refreshPositions()}><RefreshCw className="h-4 w-4" aria-hidden="true" /> Retry position read</Button>
-          </div>
-        )}
-        {(!wallet.address || initialRead || !positionReadUnavailable) && (
-          <>
-            {wallet.address && !initialRead && !positionReadUnavailable && (
-              <ProtocolPositionNotice
-                status={sharedPositions.status}
-                failedGroups={sharedPositions.failedGroups}
-                hasPositions={positions.length > 0}
-                refreshing={sharedPositions.refreshing}
-                onRefresh={() => void refreshPositions()}
-              />
-            )}
-            <div className="rounded-2xl bg-[var(--surface-2,var(--input))] p-1">
-              <Segmented
-                value={mode}
-                onChange={changeMode}
-                ariaLabel="Borrow action"
-                options={[
-                  { value: 'mint', label: 'Borrow or add' },
-                  { value: 'manage', label: 'Repay or withdraw' },
-                ]}
-              />
+  return <AppShell>
+    <div className={presentation.workspace}>
+      <PageHeading title="Earn" />
+      <ProductNav current="borrow" />
+      <ConfirmedPositionCards />
+      {reviewStage === 'input' && <div className={presentation.viewTabs}>
+        <Segmented value={view} onChange={chooseView} ariaLabel="Borrow workspace" options={[
+          { value: 'new', label: 'New position' }, { value: 'positions', label: 'Your positions' },
+        ]} />
+      </div>}
+      {wallet.address && initialRead && <StatusNotice>Reading your collateral positions…</StatusNotice>}
+      {wallet.address && !initialRead && positionReadUnavailable && <StatusNotice title="Borrowing positions are unavailable" tone="warning"
+        action={<button type="button" onClick={() => void refreshPositions()}>Retry</button>}>Retry before continuing.</StatusNotice>}
+      {wallet.address && !initialRead && !positionReadUnavailable && <ProtocolPositionNotice status={sharedPositions.status}
+        failedGroups={sharedPositions.failedGroups} hasPositions={positions.length > 0} refreshing={sharedPositions.refreshing} onRefresh={() => void refreshPositions()} compact />}
+      {view === 'positions' && reviewStage === 'input' && <>
+        {!wallet.address ? <ProductSurface><p className={presentation.helper}>Connect the wallet that holds your collateral position.</p><ConnectWalletButton className="button button-primary mt-4 w-full">Connect wallet</ConnectWalletButton></ProductSurface>
+          : !initialRead && !positionReadUnavailable && positions.length === 0 ? <ProductSurface className={presentation.empty}>
+            <h2>No borrowing positions</h2><p className={presentation.helper}>Open an ETH or BTC collateral position to borrow fxUSD.</p>
+            <button type="button" className="button button-primary" onClick={() => chooseView('new')}>Start borrowing</button>
+          </ProductSurface> : selected ? <ProductSurface className={presentation.position}>
+            {positions.length > 1 && <PositionSelect value={selectedKey} positions={positions} onChange={changePosition} />}
+            <PositionSummary position={selected} />
+            <div className={presentation.management} role="group" aria-label="Manage collateral position">
+              {([{ value: 'add', label: 'Add collateral' }, { value: 'borrow', label: 'Borrow more' }, { value: 'repay', label: 'Repay debt' }, { value: 'withdraw', label: 'Withdraw collateral' }] as const).map((action) =>
+                <button key={action.value} type="button" aria-pressed={managementAction === action.value} disabled={selectedStale || initialRead}
+                  onClick={() => chooseManagement(action.value)}>{action.label}</button>)}
             </div>
-
-            {wallet.address && !initialRead && !positionReadUnavailable && mode === 'mint' && (
-              <>
-                <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-2,var(--input))] p-1">
-                  <Segmented
-                    value={market}
-                    onChange={changeMarket}
-                    ariaLabel="Collateral market"
-                    options={[
-                      { value: 'ETH', label: 'ETH' },
-                      { value: 'BTC', label: 'BTC' },
-                    ]}
-                  />
-                </div>
-                <PositionSelect
-                  value={selectedKey}
-                  positions={marketPositions}
-                  allowNew
-                  newLabel={`New ${market} position`}
-                  onChange={changePosition}
-                />
-                {selected ? (
-                  <PositionSummary position={selected} />
-                ) : null}
-              </>
-            )}
-
-            {wallet.address && !initialRead && !positionReadUnavailable && mode === 'manage' && positions.length === 0 ? (
-              <EmptyState
-                icon={Coins}
-                title="No borrowing positions"
-                body="Create an ETH or BTC collateral position to borrow fxUSD."
-                action={<Button onClick={() => { setSelectedKey('new'); changeMode('mint'); }}>Start borrowing</Button>}
-              />
-            ) : wallet.address && !initialRead && !positionReadUnavailable && mode === 'manage' ? (
-              <>
-                <PositionSelect value={selectedKey} positions={positions} onChange={changePosition} />
-                {selected && <PositionSummary position={selected} />}
-              </>
-            ) : null}
-
-            {actionCardVisible && (
-              <Card
-                data-flow-stage={reviewStage}
-                className={`${styles.focusCard} ${reviewStage === 'input' ? '' : styles.reviewInlineCard} p-5`}
-              >
-                <ActionReview
-                  key={reviewRevision}
-                  surface="content"
-                  planBuilder={planBuilder}
-                  label={mode === 'mint'
-                    ? selected ? 'Update collateral position' : 'Open collateral position'
-                    : 'Manage debt'}
-                  operationLabel={mode === 'mint'
-                    ? selected ? 'Update collateral position' : 'Open collateral position'
-                    : manageOperationLabel}
-                  draftActionKey={draftActionKey}
-                  draftResumePath="/borrow"
-                  draftState={draftState}
-                  resumeReview={resumeReview}
-                  decisionBefore={decisionBefore}
-                  editor={actionEditor}
-                  onStageChange={setReviewStage}
-                  onComplete={refreshAfterAction}
-                />
-              </Card>
-            )}
-          </>
-        )}
-      </div>
-    </AppShell>
-  );
-}
-
-function DisconnectedBorrowForm({
-  mode,
-  market,
-  onMarketChange,
-  token,
-  tokens,
-  onTokenChange,
-  deposit,
-  onDepositChange,
-  mint,
-  onMintChange,
-  repay,
-  onRepayChange,
-  withdraw,
-  onWithdrawChange,
-}: {
-  mode: BorrowMode;
-  market: UiMarket;
-  onMarketChange: (market: UiMarket) => void;
-  token: UiToken;
-  tokens: readonly UiToken[];
-  onTokenChange: (token: UiToken) => void;
-  deposit: string;
-  onDepositChange: (value: string) => void;
-  mint: string;
-  onMintChange: (value: string) => void;
-  repay: string;
-  onRepayChange: (value: string) => void;
-  withdraw: string;
-  onWithdrawChange: (value: string) => void;
-}) {
-  const disconnectedBalance = { status: 'disconnected' as const };
-  return (
-    <div className={`${styles.disconnectedBorrowForm} flex flex-col gap-4`}>
-      {mode === 'mint' ? (
-        <div className={`${styles.disconnectedBorrowFields} flex flex-col gap-4`}>
-          <FormHeader title="Open a collateral position" body="Choose starting collateral and the fxUSD debt to open." />
-          <div className={`${styles.borrowMarketSwitch} rounded-2xl border border-[var(--line)] bg-[var(--surface-2,var(--input))] p-1`}>
-            <Segmented value={market} onChange={onMarketChange} ariaLabel="Collateral market" options={[{ value: 'ETH', label: 'ETH' }, { value: 'BTC', label: 'BTC' }]} />
-          </div>
-          <div className={styles.borrowCollateralField}><TokenSelect label="Collateral asset" value={token} options={tokens} onChange={onTokenChange} balanceStatus="disconnected" /></div>
-          <div className={styles.borrowAmountGrid}>
-          <AmountField label="Starting collateral" symbol={token} value={deposit} onChange={onDepositChange} allowZero maxDecimals={tokenDecimals(token)} placeholder="0.00" balanceState={disconnectedBalance} />
-            <AmountField label="fxUSD to borrow" symbol="fxUSD" value={mint} onChange={onMintChange} allowZero maxDecimals={18} placeholder="0.00" />
-          </div>
-        </div>
-      ) : (
-        <div className={`${styles.disconnectedBorrowFields} flex flex-col gap-4`}>
-          <FormHeader title="Manage debt" body="Repay fxUSD, withdraw collateral, or do both." />
-          <div className={styles.borrowCollateralField}><TokenSelect label="Receive collateral as" value={token} options={tokens} onChange={onTokenChange} balanceStatus="disconnected" /></div>
-          <div className={styles.borrowAmountGrid}>
-            <AmountField label="Repay amount" symbol="fxUSD" value={repay} onChange={onRepayChange} allowAll allowZero maxDecimals={18} placeholder="0.00" balanceState={disconnectedBalance} />
-            <AmountField label="Collateral to withdraw" symbol={token} value={withdraw} onChange={onWithdrawChange} allowZero maxDecimals={tokenDecimals(token)} placeholder="0.00" />
-          </div>
-        </div>
-      )}
+          </ProductSurface> : !initialRead && !positionReadUnavailable ? <StatusNotice title="Choose a current position" tone="warning">The selected position is no longer available. Choose New position to start another one.</StatusNotice> : null}
+      </>}
+      {showAction && <ProductSurface data-flow-stage={reviewStage} className={presentation.action}>
+        <ActionReview key={reviewRevision} surface="content" planBuilder={initialRead || positionReadUnavailable ? null : planBuilder}
+          label={reviewLabel} operationLabel={mode === 'mint' ? selected ? 'Update collateral position' : 'Open collateral position' : manageOperationLabel}
+          draftActionKey={draftActionKey} draftResumePath="/borrow" draftState={draftState} resumeReview={resumeReview}
+          decisionBefore={decisionBefore} editor={actionEditor} onStageChange={setReviewStage} onComplete={refreshAfterAction} />
+      </ProductSurface>}
     </div>
-  );
+  </AppShell>;
 }
 
-function PositionSelect({
-  value,
-  positions,
-  allowNew = false,
-  newLabel = 'New collateral position',
-  onChange,
-}: {
-  value: string;
-  positions: UiPosition[];
-  allowNew?: boolean;
-  newLabel?: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className="block">
-      <span className={`mb-2 block ${styles.eyebrow}`}>Collateral position</span>
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="min-h-[56px] w-full rounded-2xl border border-[var(--line)] bg-[var(--input)] px-4 text-[16px] font-semibold outline-none focus:border-mint"
-      >
-        {allowNew && <option value="new">{newLabel}</option>}
-        {positions.map((position) => (
-          <option key={positionKey(position)} value={positionKey(position)}>
-            Trade position #{position.info.positionId} · {position.market} · {formatPositionCollateral(position)} collateral · {formatPositionDebt(position)} debt
-          </option>
-        ))}
-      </select>
-    </label>
-  );
+function PositionSelect({ value, positions, onChange }: { value: string; positions: UiPosition[]; onChange: (value: string) => void }) {
+  return <label className={presentation.positionSelect}>
+    <span>Collateral position</span>
+    <select value={value} onChange={(event) => onChange(event.target.value)}>
+      {positions.map((position) => <option key={positionKey(position)} value={positionKey(position)}>
+        {position.market} position #{position.info.positionId} · {formatPositionDebt(position)} debt
+      </option>)}
+    </select>
+  </label>;
 }
-
 function PositionSummary({ position }: { position: UiPosition }) {
-  const { prices } = useUsdPrices();
+  const snapshot = useUsdPrices();
+  const prices = freshDisplayPrices(snapshot);
   const collateralKey = priceKeyForSymbol(position.info.rawCollsToken);
   const debtKey = priceKeyForSymbol(position.info.rawDebtsToken);
-  const valuation = calculatePositionUsdValuation({
-    collateralRaw: position.info.rawColls,
-    collateralDecimals: positionCollateralDecimals(position),
-    collateralPrice: collateralKey ? prices[collateralKey] : undefined,
-    debtRaw: position.info.rawDebts,
-    debtDecimals: positionDebtDecimals(position),
-    debtPrice: debtKey ? prices[debtKey] : undefined,
-  });
-  const missingPrice = '—';
-  const collateralUsd = valuation.collateralUsdCents === null ? missingPrice : formatUsdCents(valuation.collateralUsdCents);
-  const debtUsd = valuation.debtUsdCents === null ? missingPrice : formatUsdCents(valuation.debtUsdCents);
-  const netEquity = valuation.netEquityUsdCents === null ? missingPrice : `≈ ${formatUsdCents(valuation.netEquityUsdCents)}`;
-  return (
-    <Card className={`${styles.summaryCard} p-5`}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className={styles.eyebrow}>Position</p>
-          <h2 className="text-display mt-2 text-[19px] font-semibold">{position.market} collateral · #{position.info.positionId}</h2>
-        </div>
-        <span className="rounded-lg bg-[var(--mint-dim)] px-2 py-1 text-[11px] font-semibold text-mint">Long</span>
-      </div>
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <Metric label="Position value" value={netEquity} title="Approximate collateral value minus debt" prominent />
-        <Metric
-          label="Collateral value"
-          value={<>{formatPositionCollateral(position)} · <ValueOrSkeleton value={collateralUsd} width="sm" label="Collateral value loading" /></>}
-          title={`${formatPositionCollateral(position)} · ${collateralUsd}`}
-        />
-        <Metric
-          label="Debt value"
-          value={<>{formatPositionDebt(position)} · <ValueOrSkeleton value={debtUsd} width="sm" label="Debt value loading" /></>}
-          title={`${formatPositionDebt(position)} · ${debtUsd}`}
-        />
-      </div>
-    </Card>
-  );
+  const valuation = calculatePositionUsdValuation({ collateralRaw: position.info.rawColls, collateralDecimals: positionCollateralDecimals(position),
+    collateralPrice: collateralKey ? prices[collateralKey] : undefined, debtRaw: position.info.rawDebts, debtDecimals: positionDebtDecimals(position), debtPrice: debtKey ? prices[debtKey] : undefined });
+  const ltv = valuation.collateralUsdCents !== null && valuation.collateralUsdCents > 0n && valuation.debtUsdCents !== null
+    ? `${(Number(valuation.debtUsdCents * 1000n / valuation.collateralUsdCents) / 10).toFixed(1)}%` : '—';
+  return <div className={presentation.positionSummary}>
+    <div className={presentation.positionIdentity}><TokenIcon symbol={position.market === 'BTC' ? 'WBTC' : 'ETH'} size={34} />
+      <div><h2>{position.market} position #{position.info.positionId}</h2><p>Ethereum</p></div></div>
+    <MetricRows label="Current collateral position" rows={[
+      { label: 'Collateral', value: formatPositionCollateral(position), detail: valuation.collateralUsdCents !== null ? `≈ ${formatUsdCents(valuation.collateralUsdCents)}` : 'Value unavailable' },
+      { label: 'Debt', value: formatPositionDebt(position), detail: valuation.debtUsdCents !== null ? `≈ ${formatUsdCents(valuation.debtUsdCents)}` : 'Value unavailable' },
+      { label: 'Net position value', value: <ValueOrSkeleton value={valuation.netEquityUsdCents !== null ? formatUsdCents(valuation.netEquityUsdCents) : '—'} status={snapshot.status === 'loading' ? 'loading' : 'unavailable'} />, emphasis: true },
+      { label: 'Loan-to-value', value: ltv },
+    ]} />
+  </div>;
 }
-
-function FormHeader({ title, body }: { title: string; body: string }) {
-  return (
-    <div className={styles.formHeader}>
-      <h2 className={styles.sectionTitle}>{title}</h2>
-      <p className={`mt-1 ${styles.supportCopy}`}>{body}</p>
-    </div>
-  );
-}
-
-function Metric({ label, value, title, prominent = false }: { label: string; value: ReactNode; title?: string; prominent?: boolean }) {
-  return (
-    <div className={`${styles.metric} p-3`}>
-      <span className="block text-[12px] text-mut">{label}</span>
-      <span className={`mt-1 block truncate font-semibold tabular-nums ${prominent ? 'text-[16px]' : 'text-[13px]'}`} title={title ?? (typeof value === 'string' ? value : undefined)}>
-        <ValueOrSkeleton value={value} width={prominent ? 'lg' : 'md'} />
-      </span>
-    </div>
-  );
-}
-
-function formatPositionCollateral(position: UiPosition): string {
-  return `${formatAmount(position.info.rawColls, positionCollateralDecimals(position))} ${position.info.rawCollsToken}`;
-}
-
-function formatPositionDebt(position: UiPosition): string {
-  return `${formatAmount(position.info.rawDebts, positionDebtDecimals(position))} ${position.info.rawDebtsToken}`;
-}
+function formatPositionCollateral(position: UiPosition): string { return `${formatAmount(position.info.rawColls, positionCollateralDecimals(position))} ${position.info.rawCollsToken}`; }
+function formatPositionDebt(position: UiPosition): string { return `${formatAmount(position.info.rawDebts, positionDebtDecimals(position))} ${position.info.rawDebtsToken}`; }
