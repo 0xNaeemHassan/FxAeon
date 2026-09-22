@@ -15,7 +15,7 @@
 .valueNote { min-height: 18px; margin: 8px 0 18px; color: var(--mut); font-size: 12px; line-height: 1.5; }
 .actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 20px; }
 .actions > a { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 12px 8px; min-height: 46px; border: 1px solid var(--line); border-radius: 13px; background: var(--input); font-size: 13px; font-weight: 600; }
-.actions .primaryAction { background: var(--mint); color: var(--bg); border-color: transparent; }
+.actions .primaryAction { background: var(--mint); color: var(--on-accent); border-color: transparent; }
 .assets { border-top: 1px solid var(--line); padding-top: 16px; }
 .sectionHeading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .sectionHeading h3 { font-size: 15px; font-weight: 600; margin: 0; }

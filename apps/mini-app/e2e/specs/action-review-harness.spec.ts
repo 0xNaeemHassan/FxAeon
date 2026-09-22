@@ -203,6 +203,23 @@ async function metric(page: import('@playwright/test').Page, key: 'prepare' | 'p
 test.describe('ActionReview isolated orchestration', () => {
   test.beforeAll(async () => { bundle = await buildHarness(); });
 
+  test('explicit review never signs until the separate confirmation action', async ({ page }) => {
+    await openHarness(page);
+    await page.getByRole('button', { name: 'Use explicit review', exact: true }).click();
+    const review = page.getByRole('button', { name: 'Review position', exact: true });
+    await expect(review).toBeEnabled();
+    await review.click();
+    const confirm = page.getByRole('button', { name: 'Confirm in wallet', exact: true });
+    await expect(confirm).toBeVisible();
+    expect(await metric(page, 'runner')).toBe(0);
+    expect(await metric(page, 'send')).toBe(0);
+    await confirm.click();
+    await expect(page.getByRole('heading', { name: 'Confirmed', exact: true })).toBeVisible();
+    expect(await metric(page, 'runner')).toBe(1);
+    expect(await metric(page, 'send')).toBe(1);
+  });
+
+
   test('connect and preview never sign, then one direct primary click runs once', async ({ page }) => {
     await openHarness(page);
     await page.getByRole('button', { name: 'Disconnect', exact: true }).click();

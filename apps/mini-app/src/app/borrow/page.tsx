@@ -133,7 +133,7 @@ export default function BorrowPage() {
   const [withdraw, setWithdraw] = useState('');
   const [reviewRevision, setReviewRevision] = useState(0);
   const [resumeReview, setResumeReview] = useState(0);
-  const [reviewStage, setReviewStage] = useState<ActionReviewStage>('input');
+  const [reviewStage, setReviewStage] = useState<ActionReview reviewBeforeSignStage>('input');
   const deepLinkApplied = useRef(false);
   const previousWalletContextRef = useRef<string | null>(null);
   const lastConnectedWalletRef = useRef<string | null>(null);
@@ -534,7 +534,7 @@ export default function BorrowPage() {
           </ProductSurface> : !initialRead && !positionReadUnavailable ? <StatusNotice title="Choose a current position" tone="warning">The selected position is no longer available. Choose New position to start another one.</StatusNotice> : null}
       </>}
       {showAction && <ProductSurface data-flow-stage={reviewStage} className={presentation.action}>
-        <ActionReview key={reviewRevision} surface="content" planBuilder={initialRead || positionReadUnavailable ? null : planBuilder}
+        <ActionReview reviewBeforeSign key={reviewRevision} surface="content" planBuilder={initialRead || positionReadUnavailable ? null : planBuilder}
           label={reviewLabel} operationLabel={mode === 'mint' ? selected ? 'Update collateral position' : 'Open collateral position' : manageOperationLabel}
           draftActionKey={draftActionKey} draftResumePath="/borrow" draftState={draftState} resumeReview={resumeReview}
           decisionBefore={decisionBefore} editor={actionEditor} onStageChange={setReviewStage} onComplete={refreshAfterAction} />

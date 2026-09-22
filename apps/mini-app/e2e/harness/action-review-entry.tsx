@@ -45,6 +45,7 @@ function Harness() {
   const [, redraw] = useState(0);
   const [version, setVersion] = useState(H.version);
   const [resumeReview, setResumeReview] = useState(0);
+  const [reviewBeforeSign, setReviewBeforeSign] = useState(false);
   // Expose the redraw callback during the first render as well as the effect;
   // the readiness marker is rendered before effects flush, and the reconnect
   // controls must never lose their first state transition in that window.
@@ -61,6 +62,7 @@ function Harness() {
   return <>
     <div data-harness-ready="true" />
     <div role="toolbar">
+      <button type="button" onClick={() => setReviewBeforeSign(true)}>Use explicit review</button>
       <button type="button" onClick={setTerms}>Change terms</button>
       <button type="button" onClick={disconnect}>Disconnect</button>
       <button type="button" onClick={connect}>Reconnect</button>
@@ -79,6 +81,7 @@ function Harness() {
       <button type="button" onClick={() => { H.refreshResolvers.shift()?.(); }}>Resolve wallet refresh</button>
     </div>
     <ActionReview
+      reviewBeforeSign={reviewBeforeSign}
       planBuilder={planBuilder}
       label="Review position"
       operationLabel={`Open position v${version}`}

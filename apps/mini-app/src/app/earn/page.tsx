@@ -107,7 +107,7 @@ export default function EarnPage() {
   const [fxSaveApyStatus, setFxSaveApyStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading');
   const [reviewRevision, setReviewRevision] = useState(0);
   const [resumeReview, setResumeReview] = useState(0);
-  const [reviewStage, setReviewStage] = useState<ActionReviewStage>('input');
+  const [reviewStage, setReviewStage] = useState<ActionReview reviewBeforeSignStage>('input');
   const restoredDraftIdRef = useRef<string | null>(null);
   const contextAppliedRef = useRef(false);
   const previousWalletContextRef = useRef<string | null>(null);
@@ -404,7 +404,7 @@ export default function EarnPage() {
         <PageHeading title="Earn" />
         <ProductNav current="save" />
         <ProductSurface className={presentation.panel} data-flow-stage={reviewStage}>
-          <ActionReview
+          <ActionReview reviewBeforeSign
             key={reviewRevision}
             surface="content"
             planBuilder={planBuilder}

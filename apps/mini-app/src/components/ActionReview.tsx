@@ -86,6 +86,8 @@ export interface ActionReviewProps {
    * editor in the same card without unmounting the action controller.
    */
   editor?: ReactNode;
+  /** Product forms require review before requesting a wallet signature. */
+  reviewBeforeSign?: boolean;
   /** Render the review as a card, or as content inside an existing product card. */
   surface?: 'card' | 'content';
   /** Verified current values for an existing position or account context. */
@@ -420,6 +422,7 @@ export function ActionReview({
   resumeReview = 0,
   editor,
   surface = 'card',
+  reviewBeforeSign = false,
   decisionBefore,
   executionCost,
 }: ActionReviewProps) {
@@ -1124,7 +1127,8 @@ export function ActionReview({
   if (stage === 'input') {
     const progress = statusPresentation({ stage, status, detail: statusDetail, stepResults, stepCount: 0 });
     const disconnected = !wallet.authenticated || !wallet.address;
-    const previewAction = previewRoute ? actionButtonLabel(label, operationLabel) : null;
+    const reviewLabel = /^review\b/i.test(label) ? label : `Review ${actionButtonLabel(label, operationLabel).replace(/^(open|send)\s+/i, '').toLowerCase()}`;
+    const previewAction = previewRoute ? reviewBeforeSign ? reviewLabel : actionButtonLabel(label, operationLabel) : null;
     const trigger = (
       <div className={`${styles.reviewTrigger} reviewTrigger flex flex-col gap-2.5`}>
         {previewRoute && <InlinePreviewSummary
@@ -1159,8 +1163,8 @@ export function ActionReview({
             Connect wallet
           </ConnectWalletButton>
         ) : (
-          <Button ref={triggerRef} variant={destructive ? 'danger' : 'primary'} className={styles.primaryAction} disabled={!planBuilder || !previewRoute || previewLoading || previewIsStale || disabled || !wallet.ready} loading={loading || previewLoading} onClick={() => void execute(previewRoute ?? undefined)}>
-            {previewAction ?? (previewLoading ? 'Updating quote' : actionButtonLabel(label, operationLabel))}
+          <Button ref={triggerRef} variant={destructive ? 'danger' : 'primary'} className={styles.primaryAction} disabled={!planBuilder || !previewRoute || previewLoading || previewIsStale || disabled || !wallet.ready} loading={loading || previewLoading} onClick={() => { if (reviewBeforeSign) void review(); else void execute(previewRoute ?? undefined); }}>
+            {previewAction ?? (previewLoading ? 'Updating quote' : reviewBeforeSign ? reviewLabel : actionButtonLabel(label, operationLabel))}
           </Button>
         )}
         {loading && <StatusNotice {...progress} />}

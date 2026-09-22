@@ -131,7 +131,7 @@ export default function MovePage() {
   const [customRecipient, setCustomRecipient] = useState(false);
   const [reviewRevision, setReviewRevision] = useState(0);
   const [resumeReview, setResumeReview] = useState(0);
-  const [reviewStage, setReviewStage] = useState<ActionReviewStage>('input');
+  const [reviewStage, setReviewStage] = useState<ActionReview reviewBeforeSignStage>('input');
   const [advancedBalance, setAdvancedBalance] = useState<TokenBalanceView | undefined>(undefined);
   const previousWalletContextRef = useRef<string | null>(null);
   // A review-rail connection is part of the current move action. Do not
@@ -469,7 +469,7 @@ export default function MovePage() {
           data-flow-stage={reviewStage}
           className={`${styles.focusCard} ${styles.moveCard} ${moveStyles.moveCard} p-5`}
         >
-          <ActionReview
+          <ActionReview reviewBeforeSign
             key={reviewRevision}
             surface="content"
             editor={<>

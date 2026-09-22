@@ -64,7 +64,7 @@ export default function TradePage() {
   const [nativeMaxAmount, setNativeMaxAmount] = useState<string | null>(null);
   const [nativeMaxPending, setNativeMaxPending] = useState(false);
   const [nativeMaxError, setNativeMaxError] = useState<string | null>(null);
-  const [reviewStage, setReviewStage] = useState<ActionReviewStage>('input');
+  const [reviewStage, setReviewStage] = useState<ActionReview reviewBeforeSignStage>('input');
   const prefetchStoreRef = useRef<RoutePrefetchStore | null>(null);
   const prefetchSessionRef = useRef(createPrefetchSessionId());
   const prefetchDescriptorRef = useRef<RoutePrefetchDescriptor | null>(null);
@@ -519,7 +519,7 @@ export default function TradePage() {
               replaces this content in place, keeping the market context and
               the user's exact draft stable while the wallet is opened. */}
           <Card className={`${styles.tradeTicket} trade-ticket ${reviewStage === 'input' ? '' : styles.tradeTicketReview}`}>
-            <ActionReview
+            <ActionReview reviewBeforeSign
               key={reviewRevision}
               surface="content"
               planBuilder={planBuilder}

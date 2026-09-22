@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { ArrowDownToLine, ArrowLeftRight, CandlestickChart, Coins, ExternalLink, PiggyBank, RefreshCw, Search, X } from 'lucide-react';
-import { AssetIcon, AssetQuantity, AssetRowContent, displayAssetSymbol, networkLabel } from '@/components/AssetPresentation';
+import { AssetQuantity, AssetRowContent, displayAssetSymbol, networkLabel } from '@/components/AssetPresentation';
 export { AssetIcon, AssetNetworkIcon, AssetQuantity, displayAssetSymbol, networkLabel } from '@/components/AssetPresentation';
 import { AddressChip } from '@/components/ui';
 import { ValueOrSkeleton } from '@/components/MissingValue';
