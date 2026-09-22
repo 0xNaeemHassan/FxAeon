@@ -1,0 +1,21 @@
+.workspace { display: flex; flex-direction: column; min-width: 0; width: min(100%, 620px); margin-inline: auto; gap: 24px; }
+.workspace > header { margin-bottom: 0; }
+.section { min-width: 0; scroll-margin-top: 104px; }
+.section > h2 { margin: 0 0 12px; color: var(--mut); font-size: 13px; font-weight: 600; }
+.panel { padding: 20px; }
+.preferenceHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.preferenceHeading h3 { font-size: 16px; font-weight: 600; margin: 0; }
+.preferenceHeading > span { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--mut); }
+.preferenceHeading .saved { color: var(--success); }
+.help { color: var(--mut); font-size: 12px; line-height: 1.6; margin: 10px 0 15px; }
+.scope { color: var(--mut); font-size: 12px; line-height: 1.55; margin: 14px 0 18px; }
+.choices { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.choices button { min-width: 0; min-height: 44px; border: 1px solid var(--line); border-radius: 12px; background: var(--input); color: var(--mut); font-size: 14px; font-variant-numeric: tabular-nums; }
+.choices button[aria-checked='true'] { background: var(--mint-dim); color: var(--text); border-color: var(--mint); }
+.choices button:disabled { opacity: .5; }
+.save { width: 100%; }
+.error { color: var(--danger); font-size: 12px; line-height: 1.6; margin-top: 10px; }
+.walletManagement { margin-top: 12px; }
+.walletManagement :global(.ui-card) { box-shadow: none; background: var(--surface); padding: 14px; border-radius: 14px; }
+.walletManagement :global(.section-heading) { display: none; }
+@media (max-width: 360px) { .panel { padding: 16px; } .workspace { gap: 20px; } }
