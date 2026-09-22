@@ -33,10 +33,16 @@ export function knownFreshPortfolioSubtotal(
     newestSnapshotAsset.set(key, Math.max(newestSnapshotAsset.get(key) ?? 0, asset.balanceUpdatedAt));
   }
   let hasKnownValue = false;
+  let hasUnresolvedPositiveAsset = false;
 
   for (const asset of snapshot?.assets ?? []) {
     const exactBalance = asset.canonicalKey ? exactBalances.get(`${asset.chainId}:${asset.canonicalKey}`) : undefined;
-    if (exactBalance && balanceUpdatedAt !== null && balanceUpdatedAt >= asset.balanceUpdatedAt) continue;
+    // At equal balance timestamps the merged row may carry a fresh quote
+    // absent from the latest partial provider response. Do not discard it.
+    if (exactBalance && balanceUpdatedAt !== null
+      && (balanceUpdatedAt > asset.balanceUpdatedAt
+        || (balanceUpdatedAt === asset.balanceUpdatedAt && exactBalance.amountWei !== asset.balanceWei))) continue;
+    if (asset.balanceWei > 0n) hasUnresolvedPositiveAsset = true;
     const assetKey = asset.canonicalKey ? `${asset.chainId}:${asset.canonicalKey}` : asset.id;
     if (asset.balanceWei > 0n && freshTimestamp(asset.balanceUpdatedAt, now, ASSET_BALANCE_MAX_AGE_MS)) positiveAssets.add(assetKey);
     if (asset.balanceWei <= 0n || asset.usdValue === null || !Number.isFinite(asset.usdValue) || asset.usdValue < 0
@@ -75,6 +81,9 @@ export function knownFreshPortfolioSubtotal(
     && Object.values(snapshot!.networks).every((network) => network.status === 'ready')
     && freshTimestamp(snapshot!.updatedAt, now, ASSET_BALANCE_MAX_AGE_MS);
   if (completeKnownZeroSnapshot) hasKnownValue = true;
+  // A zero balance for an unrelated token is not evidence that an unpriced
+  // positive holding is worth zero. Keep unavailable distinct from empty.
+  hasKnownValue = values.size > 0 || (hasKnownValue && positiveAssets.size === 0 && !hasUnresolvedPositiveAsset);
 
   return {
     totalUsd: values.size > 0 ? [...values.values()].reduce((sum, row) => sum + row.value, 0) : hasKnownValue ? 0 : null,
