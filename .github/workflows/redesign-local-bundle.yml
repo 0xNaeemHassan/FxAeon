@@ -25,7 +25,7 @@ jobs:
           node-version: '22'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Export tracked source without Git credentials
+      - name: Export source without Git credentials
         run: |
           git archive --format=tar.gz --output="$RUNNER_TEMP/fxaeon-source.tar.gz" HEAD
           git rev-parse HEAD > "$RUNNER_TEMP/source-revision.txt"
@@ -37,11 +37,13 @@ jobs:
             ${{ runner.temp }}/source-revision.txt
           retention-days: 1
           compression-level: 0
-      - name: Package installed public dependencies for isolated checks
-        run: tar -czf "$RUNNER_TEMP/fxaeon-dependencies.tar.gz" node_modules apps/mini-app/node_modules
+      - name: Prepare Chromium for the isolated visual checks
+        run: |
+          pnpm --dir apps/mini-app exec playwright install chromium
+          tar -czf "$RUNNER_TEMP/fxaeon-browser.tar.gz" -C "$HOME/.cache" ms-playwright
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: redesign-dependencies
-          path: ${{ runner.temp }}/fxaeon-dependencies.tar.gz
+          name: redesign-browser
+          path: ${{ runner.temp }}/fxaeon-browser.tar.gz
           retention-days: 1
           compression-level: 0
