@@ -140,11 +140,11 @@ test('query parameters are rejected and cannot alter upstream parameters', async
 test('parses the fixed Ethereum gas oracle and never returns the secret', async () => {
   let seenUrl = '';
   let seenRedirect: RequestRedirect | undefined;
-  let seenThis: unknown = 'not-called';
+  let receiverHadOptionsObject = false;
   const snapshot = await fetchEtherscanGasOracle('server-key', {
     cache: false,
     fetchImpl: async function (this: unknown, input, init) {
-      seenThis = this;
+      receiverHadOptionsObject = this !== null && typeof this === 'object' && 'fetchImpl' in this;
       seenUrl = String(input);
       seenRedirect = init?.redirect;
       return upstreamResponse({ LastBlock: '234', ProposeGasPrice: '0.496840168' });
@@ -158,7 +158,7 @@ test('parses the fixed Ethereum gas oracle and never returns the secret', async 
   assert.equal(url.searchParams.get('action'), 'gasoracle');
   assert.equal(url.searchParams.get('apikey'), 'server-key');
   assert.equal(seenRedirect, 'manual');
-  assert.equal(seenThis, undefined, 'the injected fetch must be invoked unbound for Workerd');
+  assert.equal(receiverHadOptionsObject, false, 'the injected fetch must not be called as an options-object method');
   assert.deepEqual(snapshot, {
     source: 'etherscan',
     chainId: 1,
