@@ -1,0 +1,90 @@
+.workspace { width: min(100%, 680px); margin-inline: auto; }
+.card { display: flex; min-width: 0; flex-direction: column; gap: 12px; padding: 18px; }
+
+/* The two Earn-family workspaces stay inside the same dominant decision card. */
+.viewTabs { margin: -6px 0 -2px; }
+.viewTabs :global([role='radiogroup']) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  padding: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+.viewTabs :global([role='radio']) {
+  position: relative;
+  min-width: 0;
+  min-height: 48px;
+  border-radius: 0;
+  padding-inline: 8px;
+  color: var(--mut);
+  background: transparent;
+}
+.viewTabs :global([role='radio'][aria-checked='true']) { color: var(--text); }
+.viewTabs :global([role='radio'][aria-checked='true']::after) {
+  position: absolute;
+  right: 10px;
+  bottom: -1px;
+  left: 10px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--mint);
+  content: '';
+}
+
+.marketTabs :global([role='radiogroup']) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: var(--input);
+}
+.marketTabs :global([role='radio']) { min-width: 0; min-height: 44px; border-radius: 11px; }
+.marketTabs :global([role='radio'][aria-checked='true']) { background: var(--surface-2); }
+
+.editor { display: flex; min-width: 0; flex-direction: column; gap: 12px; }
+.formTitle { margin: 0; font-size: 18px; font-weight: 650; letter-spacing: -.025em; }
+.helper { margin: 0; color: var(--mut); font-size: 12px; line-height: 1.5; }
+.editor > .helper { max-width: 54ch; }
+.card :global([data-amount-field='unified']) { padding: 0; }
+.combined { min-height: 44px; color: var(--mint); font-size: 12px; text-align: left; }
+.position { display: flex; min-width: 0; flex-direction: column; gap: 14px; }
+.positionSummary { display: flex; min-width: 0; flex-direction: column; gap: 14px; }
+.positionIdentity { display: flex; min-width: 0; align-items: center; gap: 12px; }
+.positionIdentity h2 { margin: 0; font-size: 19px; font-weight: 650; }
+.positionIdentity p { margin: 3px 0 0; color: var(--mut); font-size: 12px; }
+.management { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.management > button {
+  min-width: 0;
+  min-height: 46px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 9px;
+  color: var(--mut);
+  background: var(--input);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.management > button:hover, .management > button[aria-pressed='true'] { border-color: var(--mint); color: var(--text); background: var(--mint-dim); }
+.management > button:disabled { cursor: not-allowed; opacity: .5; }
+.positionSelect { display: flex; min-width: 0; flex-direction: column; gap: 8px; color: var(--mut); font-size: 12px; }
+.positionSelect select { width: 100%; min-height: 48px; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--input); color: var(--text); font-size: 16px; }
+.empty { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: 12px; padding: 8px 2px; }
+.empty h2 { margin: 0; font-size: 18px; font-weight: 650; }
+.empty > button { min-height: 44px; }
+.action { min-width: 0; }
+
+@media (max-width: 380px) {
+  .card { gap: 12px; padding: 12px; }
+  .position { gap: 12px; }
+  .positionSummary { gap: 12px; }
+  .management { gap: 6px; }
+  .management > button { padding: 8px 6px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viewTabs :global([role='radio']), .management > button { transition: none; }
+}

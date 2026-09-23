@@ -4,7 +4,7 @@
  * FxAeon shared UI kit — every screen composes these so the app feels like
  * one product instead of disconnected pages.
  */
-import { forwardRef, ReactNode, useEffect, useRef, useState, type ButtonHTMLAttributes, type MouseEventHandler } from 'react';
+import { forwardRef, ReactNode, useEffect, useRef, useState, type ButtonHTMLAttributes, type HTMLAttributes, type MouseEventHandler } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -25,6 +25,7 @@ import WalletProfile from '@/components/WalletProfile';
 import NetworkSelector from '@/components/NetworkSelector';
 import { ValueOrSkeleton } from '@/components/MissingValue';
 import { compactAddress } from '@/lib/addressPresentation';
+import headerWalletControl from '@/components/HeaderWalletControl.module.css';
 
 /* ------------------------------------------------------------------ shell */
 
@@ -75,6 +76,7 @@ export function AppShell({
 
   return (
     <div
+      data-product-ui="v2"
       data-shell-tabs={tabs ? 'true' : 'false'}
       className={`app-shell mx-auto w-full ${tabs ? 'app-shell-tabs' : 'app-shell-no-tabs pb-[calc(env(safe-area-inset-bottom,0px)+1rem)]'}`}
     >
@@ -88,9 +90,11 @@ export function AppShell({
             </Link>
             <DesktopNavigation />
             <span className="app-topbar-actions">
-              <NetworkSelector />
+              <span className={headerWalletControl.control} data-header-wallet-control="true" role="group" aria-label="Wallet and network controls">
+                <NetworkSelector />
+                <WalletProfile />
+              </span>
               <ThemeToggle />
-              <WalletProfile />
             </span>
           </header>
         )}
@@ -180,21 +184,9 @@ function DesktopNavigation() {
 
 /* ------------------------------------------------------------------ atoms */
 
-export function Card({
-  children,
-  className = '',
-  glow = false,
-  elevation = 1,
-}: {
-  children: ReactNode;
-  className?: string;
-  glow?: boolean;
-  elevation?: 1 | 2 | 3;
-}) {
+export function Card({ children, className = '', glow = false, elevation = 1, ...props }: HTMLAttributes<HTMLDivElement> & { glow?: boolean; elevation?: 1 | 2 | 3 }) {
   const elevationClass = elevation === 2 || elevation === 3 ? 'astryx-card-elevated' : 'astryx-card';
-  return (
-    <div className={`ui-card ${elevationClass} p-5 ${glow ? 'card-glow' : ''} ${className}`}>{children}</div>
-  );
+  return <div {...props} className={`ui-card ${elevationClass} p-5 ${glow ? 'card-glow' : ''} ${className}`}>{children}</div>;
 }
 
 function buttonClasses(variant: 'primary' | 'ghost' | 'danger' | 'outline' | 'glass', className = ''): string {

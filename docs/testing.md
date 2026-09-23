@@ -23,6 +23,17 @@ Useful focused checks:
 | `pnpm typecheck` | App and fork-harness TypeScript |
 | `pnpm audit --prod --audit-level=high` | Runtime dependency audit |
 
+Browser checks have separate gates. `pnpm test:e2e` runs the production-export
+routes and interactions. Borrow eligibility, overlay lifecycle, and the
+deterministic UI state lab each use an isolated Playwright config and focused
+commands: `pnpm test:e2e:borrow-harness`, `pnpm test:e2e:overlay`, and
+`pnpm test:e2e:state-lab`. `pnpm verify` runs those harness suites
+sequentially. The state-lab gate compares its approved screenshots on Windows;
+the current reference set contains 17 images. See
+[`browser-test-gates.md`](browser-test-gates.md) for the exact suite map and
+[`ui-state-lab.md`](ui-state-lab.md) for the development-only lab and its
+fixture limits.
+
 For local Playwright runs, Chromium may be installed with:
 
 ```powershell

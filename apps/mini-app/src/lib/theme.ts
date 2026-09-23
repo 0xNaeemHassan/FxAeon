@@ -1,4 +1,6 @@
 /** FxAeon palettes shared by the compact toggle and full appearance control. */
+import { applyTelegramChromeColors } from './telegram';
+
 export type ThemeId = 'official' | 'dark' | 'light';
 
 const THEME_STORAGE_KEY = 'fxaeon_theme_id_v2';
@@ -80,14 +82,7 @@ export function applyTheme(themeId: ThemeId) {
   root.style.colorScheme = themeId === 'light' ? 'light' : 'dark';
   root.setAttribute('data-theme', themeId);
   document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute('content', theme.colors['--bg']);
-  const telegram = (window as unknown as { Telegram?: { WebApp?: { setHeaderColor?: (color: string) => void; setBackgroundColor?: (color: string) => void; setBottomBarColor?: (color: string) => void } } }).Telegram?.WebApp;
-  try {
-    telegram?.setHeaderColor?.(theme.colors['--bg']);
-    telegram?.setBackgroundColor?.(theme.colors['--bg']);
-    telegram?.setBottomBarColor?.(theme.colors['--bg']);
-  } catch {
-    // Older Telegram clients can reject dynamic chrome colors.
-  }
+  applyTelegramChromeColors(theme.colors['--bg']);
   try {
     localStorage.setItem(THEME_STORAGE_KEY, themeId);
     const settings = JSON.parse(localStorage.getItem('fxaeon.settings.v1') || '{}') as Record<string, unknown>;

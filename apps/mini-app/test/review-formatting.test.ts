@@ -3,6 +3,9 @@ import { test } from 'node:test';
 import { positionCollateralTokenAddress, positionDebtTokenAddress, positionPoolAddress } from '../src/lib/fx/policy';
 import { rawQuoteReviewFacts, routeFinancialReviewFacts } from '../src/lib/fx/reviewFormatting';
 import { FX_TOKENS } from '../src/lib/fx/tokens';
+import { factsOutsideConsequenceSummary, primaryReviewFacts, routeFacts } from '../src/components/review/actionReviewPresentation';
+import { consequenceSummary } from '../src/components/review/actionReviewModel';
+import { resultBodyDuringRefresh } from '../src/components/review/executionResult';
 import type { OfficialFxMethod, PlannedRoute, ReviewedActionIntent, RouteDetails } from '../src/lib/fx/types';
 
 const WALLET = '0x1111111111111111111111111111111111111111';
@@ -58,6 +61,62 @@ test('new ETH review formats the actual quoted collateral, debt, and decimal exe
     { label: 'Execution price (unrounded)', value: planned.details!.executionPrice },
     { label: 'Collateral quote (raw units)', value: planned.details!.colls },
     { label: 'Debt quote (raw units)', value: planned.details!.debts },
+  ]);
+});
+
+test('review consequence facts have one visible owner while risk and constraints stay in the summary', () => {
+  const facts = [
+    { label: 'Amount', value: '10 fxUSD' },
+    { label: 'Risk', value: 'Liquidation risk may increase' },
+    { label: 'Slippage', value: '0.5%' },
+    { label: 'Gas fee', value: '0.001 ETH' },
+  ];
+  assert.deepEqual(factsOutsideConsequenceSummary(facts, [facts[0]!]), facts.slice(1));
+});
+
+test('refresh copy never describes partial or failed position actions as confirmed', () => {
+  for (const status of ['partial', 'failed'] as const) {
+    assert.equal(resultBodyDuringRefresh({ status, refreshing: true, positionAction: true, body: 'Partially completed.' }), 'Partially completed.');
+  }
+  assert.equal(resultBodyDuringRefresh({ status: 'confirmed', refreshing: true, positionAction: true, body: 'Confirmed.' }), 'Transaction confirmed. Position details are refreshing.');
+});
+
+test('pure ActionReview presentation builder keeps verified action facts and authoritative costs together', () => {
+  const planned = route(opening(), { colls: '670412512785242112', debts: '1010000000000000000000' });
+  const primary = primaryReviewFacts(planned);
+  assert.deepEqual(primary.slice(0, 2), [
+    { label: 'Amount', value: '1 USDC', title: '1 USDC' },
+    { label: 'Position', value: 'New position' },
+  ]);
+  const facts = routeFacts(planned, { estimate: undefined, estimateIsCurrent: false }, { protocolFee: '0.2 fxUSD' });
+  assert.equal(facts.find((fact) => fact.label === 'Protocol fee')?.value, '0.2 fxUSD');
+  assert.equal(facts.some((fact) => fact.label === 'Estimated debt'), true);
+});
+
+test('bridge review keeps validated source, destination, asset, recipient, receive bound, and fee together', () => {
+  const planned = {
+    operation: 'buildBridgeTx',
+    walletAddress: WALLET,
+    chainId: 1,
+    transactions: [],
+    quote: {
+      nativeFee: 1_000_000_000_000_000n,
+      destinationChainId: 8453,
+      recipient: WALLET,
+      bridgeToken: 'fxUSD',
+      bridgeAmount: 3_000_000_000_000_000_000n,
+      minAmountLD: 2_990_000_000_000_000_000n,
+    },
+  } as unknown as PlannedRoute;
+
+  assert.deepEqual(consequenceSummary(primaryReviewFacts(planned)), [
+    { label: 'Source network', value: 'Ethereum' },
+    { label: 'Destination network', value: 'Base' },
+    { label: 'Asset', value: 'fxUSD' },
+    { label: 'Amount', value: '3 fxUSD', title: '3 fxUSD' },
+    { label: 'Minimum received', value: '2.99 fxUSD', title: '2.99 fxUSD' },
+    { label: 'Recipient', value: WALLET },
+    { label: 'Bridge fee', value: '0.001 ETH', title: '0.001 ETH' },
   ]);
 });
 
@@ -125,6 +184,8 @@ test('borrow quotes use pool accounting, not the deposit input units', () => {
   }));
   assert.equal(facts.find((fact) => fact.label === 'Estimated collateral')?.value, '1 stETH');
   assert.equal(facts.find((fact) => fact.label === 'Estimated debt')?.value, '2 fxUSD');
+  assert.equal(facts.some((fact) => fact.label === 'Receive'), false, 'Do not invent net proceeds when the SDK only quotes debt');
+  assert.equal(primaryReviewFacts(route(intent, { colls: '1000000000000000000', debts: '2000000000000000000' })).find((fact) => fact.label === 'Borrow')?.title, '0.000000000000000001 fxUSD');
   assert.equal(facts.find((fact) => fact.label === 'Minimum converted deposit')?.value, '0.2 wstETH');
   assert.equal(facts.some((fact) => fact.label === 'Execution price'), false, 'An oracle price is not a swap execution price');
 });

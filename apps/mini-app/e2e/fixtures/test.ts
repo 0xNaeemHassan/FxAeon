@@ -150,7 +150,7 @@ export const test = base.extend<{
         // That is an asset host, not an FxAeon application backend; keep the
         // client-first assertion focused on same-origin/unknown API routes.
         const host = new URL(url).hostname;
-        const publicDataHosts = new Set(["assets.smold.app", "api.coingecko.com", "api.g.alchemy.com", "api.exchange.coinbase.com"]);
+        const publicDataHosts = new Set(["assets.smold.app", "api.coingecko.com", "api.g.alchemy.com", "api.exchange.coinbase.com", "api.goldsky.com"]);
         if (/\/api(?:\/|$)/i.test(pathname) && !publicDataHosts.has(host)) observed.backend.push(url);
       } catch {
         // Ignore malformed URLs; Playwright normally supplies absolute URLs.
@@ -161,6 +161,11 @@ export const test = base.extend<{
   page: async ({ page, telegram, browserWallet, marketPrices }, use) => {
     await installTelegram(page, telegram);
     await installMarketPrices(page, marketPrices);
+    // Public protocol indexing is client-side data, not an FxAeon backend.
+    // Keep route tests deterministic and prevent real wallet-history requests.
+    await page.route('https://api.goldsky.com/api/public/**', (route) => route.fulfill({
+      status: 200, contentType: 'application/json', body: JSON.stringify({ data: { positions: [], orders: [] } }),
+    }));
     if (browserWallet !== false) await page.addInitScript(browserWalletInitScript(browserWallet), browserWallet);
     await use(page);
   },

@@ -2,9 +2,6 @@
   width: 100%;
   max-width: 1120px;
   margin-inline: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
 }
 
 .productSwitch {
@@ -212,7 +209,6 @@
 }
 
 @media (max-width: 560px) {
-  .workspace { gap: 12px; }
   .networkFlow {
     grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1fr);
     gap: 6px;
@@ -225,7 +221,7 @@
 }
 
 @media (max-width: 640px) {
-  .workspace { max-width: 100%; gap: 8px; }
+  .workspace { max-width: 100%; }
   .moveCard { padding: 12px !important; border-radius: 18px; }
   .moveCard > :first-child h2 { font-size: 18px; }
   .moveNetworkFlow { margin-top: 8px; }
@@ -549,8 +545,7 @@
   /* Tablet shells have enough width for denser tickets but still retain the
      fixed navigation clearance of the mobile host. */
   .earnWorkspace,
-  .borrowWorkspace,
-  .moveWorkspace { gap: 10px; }
+  .borrowWorkspace { gap: 10px; }
   .borrowWorkspace .focusCard,
   .earnWorkspace .focusCard { padding: 14px !important; }
   .borrowWorkspace .disconnectedBorrowForm,

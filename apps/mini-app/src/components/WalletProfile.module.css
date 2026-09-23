@@ -1,0 +1,42 @@
+.sheet { display: flex; flex-direction: column; width: min(100%, 460px); max-height: min(880px, calc(100dvh - 32px)); min-height: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 24px; background: var(--surface); color: var(--text); box-shadow: var(--elevation-2); }
+.header { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; position: relative; min-width: 0; gap: 12px; padding: 22px 20px 16px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.identity { min-width: 0; }
+.identity h2 { margin: 0 0 6px; font-size: 21px; font-weight: 600; letter-spacing: -.03em; overflow-wrap: anywhere; }
+.identity :global(.address-chip) { background: transparent; padding-left: 0; border: 0; box-shadow: none; }
+.handle { display: none; }
+.iconButton { display: inline-grid; flex: 0 0 auto; min-width: 44px; min-height: 44px; place-items: center; border-radius: 12px; color: var(--mut); }
+.iconButton:hover { color: var(--mint); background: var(--mint-dim); }
+.body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 20px; scrollbar-width: thin; }
+.valueTop { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--mut); font-size: 13px; }
+.valueTop > div { display: flex; align-items: center; gap: 6px; }
+.valueTop .iconButton { margin-right: -9px; }
+.partial { padding: 4px 7px; border-radius: 7px; background: var(--warn-dim); color: var(--warn); font-size: 11px; }
+.total { display: block; font-size: 38px; line-height: 1.15; letter-spacing: -.04em; font-weight: 600; margin: 6px 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.valueNote { min-height: 18px; margin: 8px 0 18px; color: var(--mut); font-size: 12px; line-height: 1.5; }
+.priceState { display: flex; min-height: 44px; align-items: center; justify-content: space-between; gap: 12px; margin: -10px 0 14px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; color: var(--mut); font-size: 11px; }
+.priceState button { min-height: 36px; flex: 0 0 auto; padding: 0 8px; color: var(--mint); font-weight: 600; }
+.actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 20px; }
+.actions > a { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 12px 8px; min-height: 46px; border: 1px solid var(--line); border-radius: 13px; background: var(--input); font-size: 13px; font-weight: 600; }
+.actions .primaryAction { background: var(--mint); color: var(--on-accent); border-color: transparent; }
+.assets { border-top: 1px solid var(--line); padding-top: 16px; }
+.sectionHeading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sectionHeading h3 { font-size: 15px; font-weight: 600; margin: 0; }
+.sectionHeading > span { font-size: 11px; color: var(--mut); }
+.assetList { list-style: none; padding: 0; margin: 8px 0 0; }
+.assetList > li { border-bottom: 1px solid var(--line); }
+.assetList > li:last-child { border-bottom: 0; }
+.assetDetails { display: flex; width: 100%; min-height: 72px; align-items: center; gap: 12px; border: 0; background: transparent; color: inherit; cursor: pointer; padding: 12px 0; border-radius: 9px; text-align: left; }
+.assetDetails:hover { background: var(--mint-dim); }
+.exactQuantity { display: flex; flex-direction: column; gap: 6px; padding: 0 0 14px 46px; }
+.exactQuantity > span:first-child { color: var(--mut); font-size: 11px; }
+.positions { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 12px 0 8px; padding: 4px 0; }
+.positions > [data-position-key] { margin-bottom: 8px; }
+.links :global(a), .positions > :global(a) { padding-inline: 0; }
+.explorer { display: flex; min-height: 48px; align-items: center; justify-content: center; gap: 7px; margin: 8px 0; color: var(--mint); font-size: 12px; }
+.disconnect { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 10px; }
+.disconnect button { display: flex; min-height: 48px; width: 100%; align-items: center; justify-content: center; gap: 9px; color: var(--danger); font-size: 13px; border-radius: 12px; }
+.disconnect button:hover { background: var(--danger-dim); }
+.error { color: var(--danger); font-size: 12px; line-height: 1.5; margin: 8px 0; }
+.helper { color: var(--mut); font-size: 12px; line-height: 1.5; margin: 12px 0; }
+.sheet :where(a, button, summary):focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
+@media (max-width: 600px) { .sheet { width: 100%; max-height: 92dvh; border-radius: 24px 24px 0 0; } .header { padding-top: 30px; padding-inline: 18px; } .body { padding: 16px 18px calc(22px + env(safe-area-inset-bottom, 0px)); } .handle { display: block; position: absolute; top: 10px; left: calc(50% - 18px); width: 36px; height: 4px; border-radius: 3px; background: var(--mut-2); opacity: .65; } }

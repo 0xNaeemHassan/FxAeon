@@ -11,6 +11,10 @@
     "test:chaos": "tsx --test \"test/chaos.test.ts\"",
     "test:anvil": "tsx --test --test-concurrency=1 \"test/anvil.integration.test.ts\" \"test/earn.anvil.test.ts\"",
     "test:e2e": "playwright test",
+    "test:e2e:borrow-harness": "playwright test --config e2e/borrow-harness.config.ts",
+    "test:e2e:overlay": "playwright test --config playwright.overlay.config.ts",
+    "test:e2e:state-lab": "playwright test --config playwright.state-lab.config.ts",
+    "dev:state-lab": "node e2e/ui-state-lab-server.mjs",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:update": "playwright test --update-snapshots",
     "test:e2e:report": "playwright show-report"

@@ -32,10 +32,13 @@ type LlamaResponse = {
 const PRICE_KEYS = Object.keys(FX_TOKENS) as FxTokenKey[];
 export const USD_PRICE_ASSET_COUNT = PRICE_KEYS.length;
 const ETH_PRICE_ADDRESS = FX_TOKENS.WETH.address;
-const MAX_PRICE_AGE_SECONDS = 15 * 60;
+export const USD_PRICE_MAX_AGE_MS = 15 * 60 * 1_000;
+const MAX_PRICE_AGE_SECONDS = USD_PRICE_MAX_AGE_MS / 1_000;
 const MIN_CONFIDENCE = 0.5;
 export const USD_PRICE_CACHE_KEY = 'fxaeon:usd-prices:v1';
-export const USD_PRICE_CACHE_MAX_AGE_MS = 2 * 60 * 1000;
+// Cached and live quotes share the provider's 15-minute freshness window.
+// Keep this export for the refresh merger's existing policy boundary.
+export const USD_PRICE_CACHE_MAX_AGE_MS = USD_PRICE_MAX_AGE_MS;
 const FALLBACK_CACHE_MS = 60_000;
 const FALLBACK_PRIORITY: FxTokenKey[] = ['fxUSD', 'wstETH', 'ETH', 'WBTC', 'FXN', 'USDC', 'USDT', 'stETH', 'WETH', 'fxUSDBasePool', 'fxSAVE'];
 

@@ -28,11 +28,10 @@ export function MissingValue({
     <span
       role="status"
       aria-label={accessibleLabel}
+      title={unavailable ? accessibleLabel : undefined}
       className={`missing-value missing-value-${width}${unavailable ? ' missing-value-unavailable' : ''} ${className}`.trim()}
     >
-      {unavailable
-        ? <span aria-hidden="true">—</span>
-        : <span className="missing-value-bar" aria-hidden="true" />}
+      <span className="missing-value-bar" aria-hidden="true" />
     </span>
   );
 }

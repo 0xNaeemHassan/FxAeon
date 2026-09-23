@@ -1,0 +1,44 @@
+import React from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import BorrowPage from '@/app/borrow/page';
+
+type HarnessState = {
+  wallet: { ready: boolean; authenticated: boolean; address?: string; chainId: number; connectionVersion: number };
+  shared: Record<string, unknown>;
+  plannerCount: number;
+  walletRequestCount: number;
+  reviewAttemptCount: number;
+  rerender?: () => void;
+};
+
+declare global {
+  var __borrowHarness: HarnessState;
+}
+
+const accountA = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const position = {
+  market: 'ETH', side: 'long', stale: false,
+  info: { positionId: 17, rawColls: 2n * 10n ** 18n, rawCollsDecimals: 18, rawCollsToken: 'ETH', rawDebts: 100n * 10n ** 18n, rawDebtsDecimals: 18, rawDebtsToken: 'fxUSD', currentLeverage: 2 },
+};
+const initialState: HarnessState = {
+  wallet: { ready: true, authenticated: true, address: accountA, chainId: 1, connectionVersion: 1 },
+  shared: {
+    walletAddress: accountA, positions: [position], status: 'ready', failedGroups: [], lastVerifiedAt: Date.now(), refreshing: false,
+    refresh: async () => ({ positions: [position], failedGroups: [], successfulGroups: [], status: 'ready', newPositions: [] }),
+    trackConfirmedPosition: async () => true,
+  },
+  plannerCount: 0, walletRequestCount: 0, reviewAttemptCount: 0,
+};
+
+function Harness() {
+  const [, setVersion] = React.useState(0);
+  React.useEffect(() => { globalThis.__borrowHarness.rerender = () => setVersion((value) => value + 1); }, []);
+  return <BorrowPage />;
+}
+
+const root: Root = createRoot(document.getElementById('root')!);
+globalThis.__borrowHarness = { ...initialState, shared: { ...initialState.shared } };
+root.render(<Harness />);
+document.documentElement.dataset.harnessReady = 'true';
+
+export {};

@@ -1,16 +1,17 @@
 'use client';
 
 import { createPortal } from 'react-dom';
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useOverlayDialog } from '@/lib/useOverlayDialog';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, Info, Search } from 'lucide-react';
 import TokenIcon from '@/components/TokenIcon';
 import { useUsdPrices } from '@/components/PriceProvider';
 import { useWalletBalances } from '@/components/WalletDataProvider';
 import { ValueOrSkeleton } from '@/components/MissingValue';
 import { haptic } from '@/lib/telegram';
-import { calculateFractionDecimal, compareExactDecimals, decimalInputError, formatExactDecimal, positiveDecimal } from '@/lib/amount';
+import { formatExactDecimal } from '@/lib/amount';
 import { formatUsdCents } from '@/lib/positionValuation';
-import { formatUsd, formatUsdPrice, priceKeyForSymbol, usdValueForDecimal, type UsdPriceMap } from '@/lib/prices';
+import { priceKeyForSymbol, type UsdPriceMap } from '@/lib/prices';
 import styles from '@/components/trade-surfaces.module.css';
 import { tokenName, tokenPresentation, tokenSymbol } from '@/lib/fx/tokenPresentation';
 import {
@@ -43,8 +44,8 @@ export function useWalletTokenBalances(walletAddress?: string, chainId?: number,
   const address = walletAddress?.trim();
   const query = useWalletBalances({ address, chainId: chainId ?? 0, enabled: Boolean(address) && chainId === 1 });
   const refreshBalances = query.refresh;
-  const refresh = useCallback(async () => {
-    if (address && chainId === 1) await refreshBalances();
+  const refresh = useCallback(async (force = false) => {
+    if (address && chainId === 1) await refreshBalances(force);
   }, [address, chainId, refreshBalances]);
   const balances = useMemo(() => query.data ? balanceMapForResult(query.data) : EMPTY_TOKEN_BALANCES, [query.data]);
 
@@ -243,216 +244,8 @@ export function SlippageField({
   );
 }
 
-export function AmountField({
-  value,
-  onChange,
-  symbol,
-  label,
-  hint,
-  balance,
-  balanceState,
-  allowAll = false,
-  allowZero = false,
-  showPercentages = true,
-  showMax = true,
-  showUsdValue = true,
-  showUnitPrice = true,
-  compact = false,
-  disabled = false,
-  maxDecimals = 18,
-  placeholder = '0.00',
-  constraintError,
-  /** A route-aware spendable maximum. Use this for native assets so gas and
-   * any native transaction value are reserved before a 100% shortcut. */
-  maxAmount,
-  onMax,
-  maxPending = false,
-  tokenSelector,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  symbol: string;
-  label: string;
-  hint?: string;
-  balance?: string | null;
-  balanceState?: TokenBalanceView;
-  allowAll?: boolean;
-  allowZero?: boolean;
-  showPercentages?: boolean;
-  showMax?: boolean;
-  /** Hide the secondary token-price readout when a parent owns the market surface. */
-  showUsdValue?: boolean;
-  /** Keep the entered amount's USD worth while omitting the per-unit quote. */
-  showUnitPrice?: boolean;
-  /** Put value and balance metadata on one compact line in dense tickets. */
-  compact?: boolean;
-  disabled?: boolean;
-  maxDecimals?: number;
-  placeholder?: string;
-  constraintError?: string | null;
-  maxAmount?: string | null;
-  /** Resolve a route-aware maximum (for example native ETH after gas). */
-  onMax?: () => void | Promise<void>;
-  maxPending?: boolean;
-  tokenSelector?: ReactNode;
-}) {
-  const inputId = useId();
-  const hintId = `${inputId}-hint`;
-  const errorId = `${inputId}-error`;
-  const balanceId = `${inputId}-balance`;
-  const [touched, setTouched] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
-  useEffect(() => {
-    setHydrated(true);
-  }, []);
-  const { prices } = useUsdPrices();
-  const priceKey = priceKeyForSymbol(symbol);
-  const usdPrice = priceKey ? prices[priceKey] : undefined;
-  const usdValue = usdValueForDecimal(value, usdPrice);
-  const inputError = decimalInputError(value, maxDecimals, { allowAll, allowZero });
-  const error = inputError ?? constraintError ?? (touched && !value && !allowZero ? 'Enter an amount.' : null);
-  const describedBy = [hint ? hintId : null, balance !== undefined || balanceState !== undefined ? balanceId : null, error ? errorId : null].filter(Boolean).join(' ') || undefined;
-  const normalise = (raw: string) => {
-    if (allowAll && raw.toLowerCase() === 'all') return 'all';
-    // Keep malformed pasted text visible and invalid. Stripping an exponent or
-    // symbol can silently turn `1e6` into the very different value `16`.
-    return raw.replace(',', '.').slice(0, 100);
-  };
-
-  const availableBalance = balanceState?.status === 'ready' ? balanceState.amount ?? null : balance;
-  const hasValidBalance = Boolean(availableBalance && positiveDecimal(availableBalance, maxDecimals));
-  const spendableBalance = maxAmount === null ? null : maxAmount ?? availableBalance;
-  const hasValidSpendableBalance = Boolean(spendableBalance && positiveDecimal(spendableBalance, maxDecimals));
-  const balancePlaceholderStatus = balanceState?.status === 'unavailable' || balanceState?.status === 'disconnected'
-    ? 'unavailable'
-    : 'loading';
-  const showBalanceMeta = balanceState?.status !== 'disconnected'
-    && (balance !== undefined || balanceState !== undefined || allowAll);
-  const insufficientBalance = Boolean(
-    balanceState?.status === 'ready'
-      && availableBalance
-      && value
-      && compareExactDecimals(value, availableBalance, maxDecimals) === 1,
-  );
-
-  return (
-    <div className={compact ? styles.compactAmountField : undefined}>
-      <FieldLabel hint={hint} hintId={hintId} htmlFor={inputId}>{label}</FieldLabel>
-      <div className={`${styles.amountField} amount-control group flex min-h-[76px] items-center gap-3 px-4 ${error ? 'field-error' : ''}`}>
-        <input
-          id={inputId}
-          value={value}
-          onChange={(event) => onChange(normalise(event.target.value))}
-          onBlur={() => setTouched(true)}
-          disabled={disabled || !hydrated}
-          inputMode="decimal"
-          autoComplete="off"
-          placeholder={placeholder}
-          aria-label={`${label} in ${symbol}`}
-          aria-describedby={describedBy}
-          aria-errormessage={error ? errorId : undefined}
-          aria-invalid={Boolean(error)}
-          required={!allowZero}
-          style={{ '--amount-entry-length': Math.max(value.length, 10) } as CSSProperties}
-          className={`${styles.amountInput} min-h-11 min-w-0 flex-1 bg-transparent font-semibold text-[var(--text)] outline-none placeholder:text-[var(--mut-2)]`}
-        />
-        {tokenSelector ?? <span className="token-pill flex shrink-0 items-center gap-2 px-2.5 py-2 text-[12px] font-semibold">
-          <TokenIcon symbol={symbol} size={22} /> {symbol}
-        </span>}
-      </div>
-      {showUsdValue && usdPrice && (
-        <div className={`${styles.amountUsdMeta} mt-2 flex items-center justify-between gap-3 px-1 text-[11px] text-mut`} aria-live="polite">
-          <span><ValueOrSkeleton value={usdValue === null ? '—' : `≈ ${formatUsd(usdValue)}`} width="md" label="Loading USD value" /></span>
-          {showUnitPrice && <span>{formatUsdPrice(usdPrice)} / {displayTokenSymbol(symbol)}</span>}
-        </div>
-      )}
-      {showBalanceMeta && (
-        <div id={balanceId} className={`${styles.amountBalanceMeta} mt-2 flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] text-mut`}>
-          <div className="flex min-w-0 items-center gap-1 truncate">
-            {(balance !== undefined || balanceState !== undefined) && (
-              <span className="truncate" title={balanceState?.reason ?? (availableBalance ?? 'Balance pending')}>
-                Available: <span className="font-semibold text-[var(--text)]">
-                  <ValueOrSkeleton
-                    value={balanceState && balanceState.status !== 'ready'
-                      ? '—'
-                      : availableBalance !== undefined && availableBalance !== null && availableBalance !== ''
-                        ? `${formatExactDecimal(availableBalance, 4)} ${displayTokenSymbol(symbol)}`
-                        : '—'}
-                    width="md"
-                    status={balancePlaceholderStatus}
-                    label={balanceState?.reason ?? (balancePlaceholderStatus === 'unavailable' ? 'Balance unavailable' : 'Loading balance')}
-                  />
-                </span>
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-1">
-            {showPercentages && hasValidBalance && [25, 50, 75].map((pct) => (
-              <button
-                key={pct}
-                type="button"
-                onClick={() => {
-                  haptic('selection');
-                  const fraction = calculateFractionDecimal(availableBalance, pct, maxDecimals);
-                  if (fraction) onChange(fraction);
-                }}
-                disabled={disabled || !hydrated}
-                className="fraction-button min-h-11 min-w-11 px-2 py-0.5 text-[10.5px] font-semibold text-mut"
-              >
-                {pct}%
-              </button>
-            ))}
-            {showMax && allowAll ? (
-              <button
-                type="button"
-                onClick={() => {
-                  haptic('selection');
-                  onChange('all');
-                }}
-                disabled={disabled || !hydrated}
-                className="fraction-button fraction-button-active min-h-11 min-w-11 px-2.5 py-0.5 text-[10.5px] font-bold text-mint"
-              >
-                MAX
-              </button>
-            ) : showMax && (hasValidSpendableBalance || (maxAmount === null && hasValidBalance)) ? (
-              <button
-                type="button"
-                onClick={() => {
-                  haptic('selection');
-                  if (maxAmount === null) {
-                    void onMax?.();
-                    return;
-                  }
-                  const fraction = spendableBalance
-                    ? calculateFractionDecimal(spendableBalance, 100, maxDecimals)
-                    : null;
-                  if (fraction) onChange(fraction);
-                }}
-                disabled={disabled || !hydrated || maxPending || (maxAmount === null && !onMax)}
-                aria-busy={maxPending || undefined}
-                aria-label={maxAmount === null ? (maxPending ? 'Checking gas reserve' : 'Calculate 100% after gas reserve') : 'Use 100% of available balance'}
-                title={maxAmount === null ? (maxPending ? 'Checking gas reserve' : 'Gas reserve is calculated before using 100%') : undefined}
-                className="fraction-button fraction-button-active min-h-11 min-w-11 px-2.5 py-0.5 text-[10.5px] font-bold text-mint"
-              >
-                100%
-              </button>
-            ) : null}
-          </div>
-        </div>
-      )}
-      {insufficientBalance && (
-        <p role="status" aria-live="polite" className="mt-1.5 px-1 text-[11px] leading-relaxed text-danger">
-          Amount exceeds your available balance. Lower the amount to continue.
-        </p>
-      )}
-      {error && (
-        <p id={errorId} role="alert" className="mt-1.5 px-1 text-[11px] leading-relaxed text-danger">
-          {error}
-        </p>
-      )}
-    </div>
-  );
-}
+export { AmountField, AmountFieldView } from './AmountField';
+export type { AmountFieldProps, AmountFieldViewProps } from './AmountField';
 
 export function TokenSelect<T extends string>({
   value,
@@ -481,11 +274,9 @@ export function TokenSelect<T extends string>({
   const pickerStatus = balanceStatus;
   const showBalanceColumn = pickerStatus !== 'disconnected' && Boolean(pickerBalances || pickerStatus);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const dialogRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const closingRef = useRef(false);
-  const restoreFocusRef = useRef(false);
   const filteredOptions = useMemo(() => {
     const normalised = query.trim().toLowerCase();
     if (!normalised) return [...options];
@@ -494,67 +285,21 @@ export function TokenSelect<T extends string>({
 
   const closePicker = () => {
     closingRef.current = true;
-    restoreFocusRef.current = true;
     setQuery('');
     setOpen(false);
   };
+  const overlayRef = useOverlayDialog<HTMLDivElement>({ open, onClose: closePicker, triggerRef });
 
   useEffect(() => {
     if (!open) return;
     closingRef.current = false;
-    restoreFocusRef.current = false;
-    const trigger = triggerRef.current;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
     const selectedIndex = Math.max(0, filteredOptions.indexOf(value));
     window.requestAnimationFrame(() => {
-      if (closingRef.current || !dialogRef.current) return;
+      if (closingRef.current || !overlayRef.current) return;
       if (options.length > 4) searchRef.current?.focus();
       else optionRefs.current[selectedIndex]?.focus();
     });
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        closePicker();
-      } else if (event.key === 'Tab' && dialogRef.current) {
-        const dialog = dialogRef.current;
-        const focusable = getDialogFocusable(dialog);
-        if (!dialog.contains(document.activeElement)) {
-          event.preventDefault();
-          (event.shiftKey ? focusable[focusable.length - 1] : focusable[0])?.focus();
-        } else {
-          trapDialogFocus(event, dialog);
-        }
-      }
-    };
-    const onFocusIn = (event: FocusEvent) => {
-      const dialog = dialogRef.current;
-      if (closingRef.current || !dialog || dialog.contains(event.target as Node)) return;
-      getDialogFocusable(dialog)[0]?.focus();
-    };
-    const onTelegramBack = (event: Event) => {
-      if (!open) return;
-      const detail = (event as CustomEvent<{ consume?: () => void; isConsumed?: () => boolean }>).detail;
-      if (detail?.isConsumed?.()) return;
-      closePicker();
-      detail?.consume?.();
-    };
-    document.addEventListener('keydown', onKeyDown);
-    document.addEventListener('focusin', onFocusIn);
-    window.addEventListener('fxaeon:telegram-back', onTelegramBack);
-    return () => {
-      document.removeEventListener('focusin', onFocusIn);
-      document.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('fxaeon:telegram-back', onTelegramBack);
-      document.body.style.overflow = previousOverflow;
-      if (restoreFocusRef.current) {
-        restoreFocusRef.current = false;
-        closingRef.current = false;
-        trigger?.focus({ preventScroll: true });
-      }
-    };
-    // Picker lifecycle listeners intentionally only follow open/close. Search
-    // and option changes must not restart the initial-focus routine.
+    // Search and option changes must not restart the initial-focus routine.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -610,7 +355,7 @@ export function TokenSelect<T extends string>({
           onMouseDown={(event) => { if (event.target === event.currentTarget) closePicker(); }}
         >
           <div
-            ref={dialogRef}
+            ref={overlayRef}
             id={`${selectId}-menu`}
             role="dialog"
             aria-modal="true"
@@ -781,60 +526,85 @@ export function LeverageField({
   const invalid = Boolean(error);
   const sliderValue = Math.min(max, Math.max(min, Number.isFinite(value) && value > 0 ? value : min));
   const fill = max === min ? 0 : ((sliderValue - min) / (max - min)) * 100;
-  return (
-    <div>
-      <FieldLabel htmlFor={inputId} hint={`${min}× – ${max}×`}>{label}</FieldLabel>
-      <div className={`${styles.rangeField} ${compact ? styles.compactRangeField : ''} range-control p-3 ${invalid ? 'field-error' : ''}`}>
-        <div className="flex items-center gap-3">
-          <input
-            id={inputId}
-            type="number"
-            inputMode="decimal"
-            min={min}
-            max={max}
-            step="0.1"
-            value={Number.isFinite(value) ? value : ''}
-            onChange={(event) => {
-              if (!event.target.value) {
-                onChange(0);
-                return;
-              }
-              const next = Number(event.target.value);
-              // Clamp an over-limit paste/keystroke immediately. Values below
-              // the live minimum remain editable until blur so decimals can be
-              // entered naturally, then the field is normalized below.
-              onChange(Number.isFinite(next) ? Math.min(max, next) : 0);
-            }}
-            onBlur={() => {
-              haptic('selection');
-              if (Number.isFinite(value) && value > 0 && value < min) onChange(min);
-            }}
-            aria-invalid={invalid}
-            aria-describedby={invalid ? errorId : undefined}
-            className={`${styles.leverageInput} field-control min-h-[52px] min-w-0 flex-1 px-4 text-[20px] font-semibold outline-none`}
-          />
-          <span className="text-display text-[22px] font-semibold text-mint" aria-hidden="true">×</span>
-        </div>
-        <div className="mt-2 border-t border-[var(--line)] pt-2">
-          <input
-            id={sliderId}
-            type="range"
-            className="lever"
-            min={min}
-            max={max}
-            step="0.1"
-            value={sliderValue}
-            aria-label={`${label} slider`}
-            aria-valuetext={`${sliderValue.toFixed(1)}×`}
-            onChange={(event) => onChange(Number(event.target.value))}
-            onPointerUp={() => haptic('selection')}
-            style={{ '--fill': `${fill}%` } as React.CSSProperties}
-          />
-          <div className="flex justify-between px-1 text-[10px] font-medium text-mut" aria-hidden="true">
-            <span>{min.toFixed(1)}×</span><span>{max.toFixed(1)}×</span>
-          </div>
-        </div>
+  const numberInput = (
+    <input
+      id={inputId}
+      type="number"
+      inputMode="decimal"
+      min={min}
+      max={max}
+      step="0.1"
+      value={Number.isFinite(value) ? value : ''}
+      onChange={(event) => {
+        if (!event.target.value) {
+          onChange(0);
+          return;
+        }
+        const next = Number(event.target.value);
+        // Clamp an over-limit paste/keystroke immediately. Values below
+        // the live minimum remain editable until blur so decimals can be
+        // entered naturally, then the field is normalized below.
+        onChange(Number.isFinite(next) ? Math.min(max, next) : 0);
+      }}
+      onBlur={() => {
+        haptic('selection');
+        if (Number.isFinite(value) && value > 0 && value < min) onChange(min);
+      }}
+      aria-invalid={invalid}
+      aria-describedby={invalid ? errorId : undefined}
+      className={`${styles.leverageInput} field-control min-h-[52px] min-w-0 flex-1 px-4 text-[20px] font-semibold outline-none`}
+    />
+  );
+  const slider = (
+    <>
+      <input
+        id={sliderId}
+        type="range"
+        className="lever"
+        min={min}
+        max={max}
+        step="0.1"
+        value={sliderValue}
+        aria-label={`${label} slider`}
+        aria-valuetext={`${sliderValue.toFixed(1)}×`}
+        onChange={(event) => onChange(Number(event.target.value))}
+        onPointerUp={() => haptic('selection')}
+        style={{ '--fill': `${fill}%` } as React.CSSProperties}
+      />
+      <div className="flex justify-between px-1 text-[10px] font-medium text-mut" aria-hidden="true">
+        <span>{min.toFixed(1)}×</span><span>{max.toFixed(1)}×</span>
       </div>
+    </>
+  );
+  return (
+    <div className={compact ? styles.tradeCompactLeverage : undefined}>
+      {compact ? (
+        <>
+          <div className={styles.tradeCompactLeverageHeader}>
+            <FieldLabel htmlFor={inputId}>{label}</FieldLabel>
+            <div className={`${styles.rangeField} ${styles.tradeCompactLeverageValue} range-control ${invalid ? 'field-error' : ''}`}>
+              {numberInput}
+              <span className="text-display text-[18px] font-semibold text-mint" aria-hidden="true">×</span>
+            </div>
+          </div>
+          <div className={styles.tradeCompactLeverageSlider}>
+            {slider}
+          </div>
+        </>
+      ) : (
+        <>
+          <FieldLabel htmlFor={inputId} hint={`${min}× – ${max}×`}>{label}</FieldLabel>
+          <div className={`${styles.rangeField} range-control p-3 ${invalid ? 'field-error' : ''}`}>
+            <div className="flex items-center gap-3">
+              {numberInput}
+              <span className="text-display text-[22px] font-semibold text-mint" aria-hidden="true">×</span>
+            </div>
+            <div className="mt-2 border-t border-[var(--line)] pt-2">
+              {slider}
+            </div>
+          </div>
+        </>
+      )}
       {error && <p id={errorId} role="alert" className="mt-1.5 px-1 text-[11px] leading-relaxed text-danger">{error}</p>}
     </div>
   );
@@ -863,25 +633,6 @@ function optionBalanceUsdContent(balance: TokenBalanceView | undefined, symbol: 
   if (cents === null) return null;
   if (cents === 0n && /[1-9]/.test(balance?.amount ?? '')) return '≈ <$0.01';
   return `≈ ${formatUsdCents(cents)}`;
-}
-
-function getDialogFocusable(dialog: HTMLElement): HTMLElement[] {
-  return [...dialog.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')]
-    .filter((element) => !element.hasAttribute('hidden') && element.getAttribute('aria-hidden') !== 'true');
-}
-
-function trapDialogFocus(event: KeyboardEvent, dialog: HTMLElement): void {
-  const focusable = getDialogFocusable(dialog);
-  if (focusable.length === 0) return;
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
-  }
 }
 
 export function ToggleRow({

@@ -34,7 +34,8 @@ test('nonzero ETH without a quote plus an unrelated zero balance is unavailable,
 
 test('expiring the only held-token price cannot turn a correct total into $0', () => {
   assert.equal(knownFreshPortfolioSubtotal(null, balances, now, price, now).totalUsd?.toFixed(2), '1.50');
-  const stale = { ...price, updatedAt: now - 120_001, updatedAts: { ETH: now - 120_001 } };
+  const staleAt = now - 15 * 60_000 - 1;
+  const stale = { ...price, updatedAt: staleAt, updatedAts: { ETH: staleAt } };
   assert.equal(knownFreshPortfolioSubtotal(null, balances, now, stale, now).totalUsd, null);
 });
 
@@ -76,16 +77,27 @@ test('no data is unknown, while an authoritative zero remains zero', () => {
   assert.equal(knownFreshPortfolioSubtotal(null, { balances: [zeroToken], failedTokens: [] }, now, missing, now).totalUsd, 0);
 });
 
-test('partial price progress retains still-fresh ETH and its original timestamp', () => {
+test('partial price progress retains a seven-minute ETH quote and its original timestamp', () => {
   const incoming: UsdPriceUpdate = { prices: { USDC: 1 }, updatedAt: now, updatedAts: { USDC: now } };
-  const current = { ...price, updatedAt: now - 30_000, updatedAts: { ETH: now - 30_000 } };
+  const current = { ...price, updatedAt: now - 7 * 60_000, updatedAts: { ETH: now - 7 * 60_000 } };
   const merged = mergeUsdPriceUpdate(current, incoming, now);
   assert.equal(merged.prices.ETH, 2_500);
   assert.equal(merged.prices.USDC, 1);
-  assert.equal(merged.updatedAts?.ETH, now - 30_000);
-  assert.equal(merged.updatedAt, now - 30_000);
+  assert.equal(merged.updatedAts?.ETH, now - 7 * 60_000);
+  assert.equal(merged.updatedAt, now - 7 * 60_000);
   assert.equal(current.prices.USDC, undefined);
   assert.equal(knownFreshPortfolioSubtotal(null, balances, now, merged, now).totalUsd?.toFixed(2), '1.50');
+});
+
+test('refresh merge keeps seven-minute quotes but drops older tokens independently', () => {
+  const aged = { prices: { ETH: 2_500, FXN: 1 }, updatedAt: now - 7 * 60_000,
+    updatedAts: { ETH: now - 7 * 60_000, FXN: now - 15 * 60_000 - 1 }, status: 'partial' as const };
+  const merged = mergeUsdPriceUpdate(aged, { prices: { USDC: 1 }, updatedAt: now,
+    updatedAts: { USDC: now } }, now);
+  assert.equal(merged.prices.ETH, 2_500);
+  assert.equal(merged.prices.FXN, undefined);
+  assert.equal(merged.prices.USDC, 1);
+  assert.equal(merged.updatedAts?.ETH, now - 7 * 60_000);
 });
 
 test('successive partial quote batches keep the held-asset valuation stable', () => {
@@ -102,7 +114,8 @@ test('an older response cannot overwrite a newer token price', () => {
 });
 
 test('expired, invalid and future prices are not revived during a refresh', () => {
-  const expired = { ...price, updatedAt: now - 120_001, updatedAts: { ETH: now - 120_001 } };
+  const expiredAt = now - 15 * 60_000 - 1;
+  const expired = { ...price, updatedAt: expiredAt, updatedAts: { ETH: expiredAt } };
   const result = mergeUsdPriceUpdate(expired, { prices: { ETH: 0, USDC: Number.NaN, WBTC: 100_000 }, updatedAt: now, updatedAts: { ETH: now, USDC: now, WBTC: now + 30_001 } }, now);
   assert.deepEqual(result.prices, {});
   assert.equal(result.updatedAt, null);

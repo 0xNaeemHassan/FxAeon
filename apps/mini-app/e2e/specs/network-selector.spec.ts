@@ -15,6 +15,26 @@ function selector(page: Page) {
   return page.locator('button.network-selector');
 }
 
+async function expectHeaderToFit(page: Page, width: number): Promise<void> {
+  const header = page.locator('.app-topbar');
+  await expect(header).toBeVisible();
+  expect(await header.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  const box = await header.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.x).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+  const brand = await header.locator(':scope > a').boundingBox();
+  const group = await page.getByRole('group', { name: 'Wallet and network controls' }).boundingBox();
+  expect(brand).not.toBeNull();
+  expect(group).not.toBeNull();
+  expect(Math.abs((brand!.y + brand!.height / 2) - (group!.y + group!.height / 2))).toBeLessThan(5);
+  for (const control of await header.locator('button').all()) {
+    const target = await control.boundingBox();
+    expect(target).not.toBeNull();
+    expect(target!.height).toBeGreaterThanOrEqual(44);
+  }
+}
+
 async function waitForConnectedNetwork(page: Page, network: 'Ethereum' | 'Base'): Promise<void> {
   // Browser-wallet discovery publishes readiness and chain state separately.
   // Wait for the selector's actual connected label before opening its menu so
@@ -39,6 +59,10 @@ test.describe('network selector', () => {
     await page.goto('/portfolio');
     await waitForConnectedNetwork(page, 'Ethereum');
     const button = selector(page);
+    const control = page.getByRole('group', { name: 'Wallet and network controls' });
+    await expect(control).toBeVisible();
+    await expect(control.getByRole('button', { name: 'Open wallet profile' })).toContainText('0x930f…98b9');
+    await expect(button.locator('.network-selector-visual-label')).toHaveText('Ethereum');
     await expect(button).toHaveAttribute('aria-label', 'Change network, current Ethereum');
     await expect(button.locator('img[aria-label="Ethereum logo"]')).toBeVisible();
     await expect(button.locator('.network-selector-label')).toHaveClass(/sr-only/);
@@ -198,6 +222,7 @@ test.describe('network selector on a narrow viewport', () => {
     await page.setViewportSize({ width: 320, height: 568 });
     await page.goto('/portfolio');
     await waitForConnectedNetwork(page, 'Ethereum');
+    await expectHeaderToFit(page, 320);
     const button = selector(page);
     await button.click();
     const menu = page.getByRole('menu', { name: 'Choose wallet network' });
@@ -213,5 +238,51 @@ test.describe('network selector on a narrow viewport', () => {
     await page.keyboard.press('Escape');
     await expect(menu).toBeHidden();
     await expect(button).toBeFocused();
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expectHeaderToFit(page, 390);
+  });
+
+  test('dismisses on browser Back without leaving the current route', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 568 });
+    await page.goto('/portfolio');
+    await waitForConnectedNetwork(page, 'Ethereum');
+    const combinedControl = page.getByRole('group', { name: 'Wallet and network controls' });
+    const combinedBox = await combinedControl.boundingBox();
+    expect(combinedBox).not.toBeNull();
+    expect(combinedBox!.x).toBeGreaterThanOrEqual(0);
+    expect(combinedBox!.x + combinedBox!.width).toBeLessThanOrEqual(320);
+    const button = selector(page);
+    await button.click();
+    const menu = page.getByRole('menu', { name: 'Choose wallet network' });
+    await expect(menu).toBeVisible();
+
+    await page.goBack();
+
+    await expect(menu).toBeHidden();
+    await expect(page).toHaveURL(/\/portfolio$/);
+    await expect(button).toBeFocused();
+  });
+});
+
+test.describe('disconnected header wallet control', () => {
+  test.use({ telegram: false, browserWallet: false });
+
+  test('shows a clear Connect action and keeps network selection available', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 568 });
+    await page.goto('/portfolio');
+    for (const width of [320, 390]) {
+      await page.setViewportSize({ width, height: width === 320 ? 568 : 844 });
+      const control = page.getByRole('group', { name: 'Wallet and network controls' });
+      await expect(control.getByRole('button', { name: 'Connect wallet' })).toBeVisible();
+      await expectHeaderToFit(page, width);
+      const network = selector(page);
+      await expect(network).toHaveAttribute('aria-label', 'Choose a network or connect a wallet');
+      await network.click();
+      const menu = page.getByRole('menu', { name: 'Choose wallet network' });
+      await expect(menu).toBeVisible();
+      await expect(menu.getByRole('menuitemradio', { name: 'Ethereum' })).toBeDisabled();
+      await page.keyboard.press('Escape');
+    }
   });
 });

@@ -1511,40 +1511,6 @@ input[type='range'].lever::-moz-range-thumb {
   .app-topbar > a { gap: 8px; }
   .app-topbar > a > svg { width: 28px; height: 28px; }
   .brand-wordmark { font-size: 20px; }
-  /* The fixed tab bar already names every primary route. Keep mobile action
-     surfaces focused on their first control instead of repeating the route
-     title and subtitle above it. Documentation keeps its heading because it
-     is a reading surface and intentionally remains scrollable. */
-  :where(
-    .app-workspace[data-route='/'],
-    .app-workspace[data-route='/portfolio'],
-    .app-workspace[data-route='/trade'],
-    .app-workspace[data-route='/earn'],
-    .app-workspace[data-route='/borrow'],
-    .app-workspace[data-route='/move'],
-    .app-workspace[data-route='/more'],
-    .app-workspace[data-route='/positions'],
-    .app-workspace[data-route='/activity'],
-    .app-workspace[data-route='/history'],
-    .app-workspace[data-route='/settings'],
-    .app-workspace[data-route='/qr'],
-    .app-workspace[data-route='/login']
-  ) > .app-content > .page-header {
-    /* Keep a route-level h1 in the accessibility tree after the visual
-       heading is removed from the compact mobile fold. The shell and the
-       first product card remain in the same geometry, while screen readers
-       still get a reliable page name and focus target. */
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    clip-path: inset(50%);
-    white-space: nowrap;
-    border: 0;
-  }
   .page-header { margin-bottom: 6px; }
   .page-header h1 { font-size: 24px; line-height: 1.05; }
   .page-subtitle { margin-top: 2px; font-size: 12px; line-height: 1.35; }

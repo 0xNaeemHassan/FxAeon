@@ -68,6 +68,29 @@ async function fetchWithRetry(signal?: AbortSignal, onProgress?: (snapshot: UsdP
   }
 }
 
+type PriceRefreshWork = { signal?: AbortSignal; promise: Promise<void> };
+
+/** One price fetch per provider; callers joining a live refresh await it. */
+export function createPriceRefreshCoordinator(onRefreshing: (refreshing: boolean) => void) {
+  let current: PriceRefreshWork | null = null;
+  return {
+    run(signal: AbortSignal | undefined, task: (isCurrent: () => boolean) => Promise<void>): Promise<void> {
+      if (signal?.aborted) return Promise.resolve();
+      if (current && !current.signal?.aborted) return current.promise;
+      const work: PriceRefreshWork = { signal, promise: Promise.resolve() };
+      current = work;
+      onRefreshing(true);
+      work.promise = Promise.resolve().then(() => task(() => current === work && !signal?.aborted)).finally(() => {
+        if (current === work) {
+          current = null;
+          onRefreshing(false);
+        }
+      });
+      return work.promise;
+    },
+  };
+}
+
 export default function PriceProvider({ children }: { children: React.ReactNode }) {
   const [snapshot, setSnapshot] = useState<UsdPriceSnapshot>(EMPTY_SNAPSHOT);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -75,37 +98,32 @@ export default function PriceProvider({ children }: { children: React.ReactNode 
   const priceDemandActive = useSyncExternalStore(priceDemandRegistry.subscribe, priceDemandRegistry.isActive, () => false);
   const snapshotRef = useRef(snapshot);
   snapshotRef.current = snapshot;
-  const refreshing = useRef<{ signal?: AbortSignal } | null>(null);
+  const refreshCoordinator = useRef<ReturnType<typeof createPriceRefreshCoordinator> | null>(null);
+  if (!refreshCoordinator.current) refreshCoordinator.current = createPriceRefreshCoordinator(setIsRefreshing);
 
-  const refresh = useCallback(async (signal?: AbortSignal) => {
-    if (!priceDemandActive || (refreshing.current && !refreshing.current.signal?.aborted) || signal?.aborted) return;
-    const request = { signal };
-    refreshing.current = request;
-    setIsRefreshing(true);
-    try {
-      const applyProgress = (next: UsdPriceUpdate) => {
-        if (signal?.aborted || refreshing.current !== request) return;
-        const merged = mergeUsdPriceUpdate(snapshotRef.current, next);
-        snapshotRef.current = merged;
-        writeCachedSnapshot(merged);
-        setSnapshot(merged);
-      };
-      const next = await fetchWithRetry(signal, applyProgress);
-      applyProgress(next);
-    } catch (cause) {
-      if (signal?.aborted || refreshing.current !== request || (cause instanceof DOMException && cause.name === 'AbortError')) return;
-      const failed: UsdPriceSnapshot = {
-        ...snapshotRef.current,
-        status: Object.keys(snapshotRef.current.prices).length > 0 ? 'stale' : 'unavailable',
-      };
-      snapshotRef.current = failed;
-      setSnapshot(failed);
-    } finally {
-      if (refreshing.current === request) {
-        refreshing.current = null;
-        setIsRefreshing(false);
+  const refresh = useCallback((signal?: AbortSignal) => {
+    if (!priceDemandActive || signal?.aborted) return Promise.resolve();
+    return refreshCoordinator.current!.run(signal, async (isCurrent) => {
+      try {
+        const applyProgress = (next: UsdPriceUpdate) => {
+          if (!isCurrent()) return;
+          const merged = mergeUsdPriceUpdate(snapshotRef.current, next);
+          snapshotRef.current = merged;
+          writeCachedSnapshot(merged);
+          setSnapshot(merged);
+        };
+        const next = await fetchWithRetry(signal, applyProgress);
+        applyProgress(next);
+      } catch (cause) {
+        if (!isCurrent() || (cause instanceof DOMException && cause.name === 'AbortError')) return;
+        const failed: UsdPriceSnapshot = {
+          ...snapshotRef.current,
+          status: Object.keys(snapshotRef.current.prices).length > 0 ? 'stale' : 'unavailable',
+        };
+        snapshotRef.current = failed;
+        setSnapshot(failed);
       }
-    }
+    });
   }, [priceDemandActive]);
 
   useEffect(() => {

@@ -98,6 +98,9 @@ pnpm test:anvil:browser
 ```
 
 See [testing](docs/testing.md) for the CI gates, browser suite, and fork setup.
+Production browser tests and the isolated Borrow, overlay, and UI state lab
+suites have separate commands; the lab is development-only. See the
+[browser test gates](docs/browser-test-gates.md) and [UI state lab guide](docs/ui-state-lab.md).
 
 ## Documentation
 
@@ -109,6 +112,8 @@ See [testing](docs/testing.md) for the CI gates, browser suite, and fork setup.
 | [Security](docs/security.md) | Threat model and controls |
 | [SDK scope](docs/sdk-scope.md) | Locked protocol capability contract |
 | [Testing](docs/testing.md) | CI, browser, and protected fork checks |
+| [Browser test gates](docs/browser-test-gates.md) | Production browser suite and isolated harness commands |
+| [UI state lab](docs/ui-state-lab.md) | Development-only deterministic component and receipt fixtures |
 | [Deployment](docs/deployment.md) | App and landing Pages projects |
 | [Brand and capture provenance](docs/brand-assets.md) | Marks, themes, and checked-in screenshots |
 

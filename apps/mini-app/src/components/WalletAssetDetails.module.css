@@ -1,0 +1,36 @@
+.backdrop { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: rgb(0 0 0 / 60%); padding: 16px; }
+.modal { display: flex; width: min(100%, 480px); max-height: min(880px, calc(100dvh - 32px)); min-height: 0; flex-direction: column; overflow: hidden; border: 1px solid var(--line); border-radius: 24px; background: var(--surface); color: var(--text); box-shadow: var(--elevation-2); }
+.modalHeader { display: flex; flex: 0 0 auto; min-height: 72px; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); padding: 12px 20px; }
+.modalHeader h2 { min-width: 0; margin: 0; font-size: 20px; font-weight: 650; }
+.modalHeader button { display: grid; flex: 0 0 44px; width: 44px; height: 44px; place-items: center; border-radius: 12px; color: var(--mut); font-size: 28px; }
+.modalBody { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 16px 20px calc(20px + env(safe-area-inset-bottom, 0px)); }
+.details { display: flex; min-width: 0; flex-direction: column; gap: 18px; }
+.hero { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 24px 8px 10px; text-align: center; }
+.hero h3 { margin: 4px 0 0; color: var(--text); font-size: 22px; font-weight: 650; letter-spacing: -.02em; }
+.hero > p { margin: 0; color: var(--mut); font-size: 13px; }
+.holdingValue { margin-top: 10px; color: var(--text); font-size: clamp(34px, 9vw, 48px); font-variant-numeric: tabular-nums; font-weight: 650; letter-spacing: -.055em; line-height: 1.1; }
+.holdingLabel { color: var(--mut); font-size: 12px; }
+.addressPanel { display: grid; gap: 12px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface-2); padding: 18px; }
+.addressPanel h3 { margin: 0; color: var(--mut); font-size: 13px; font-weight: 500; }
+.address { margin: 0; color: var(--text); font-size: 14px; line-height: 1.4; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.address { user-select: all; }
+.copyStatus:empty { display: none; }
+.copyButton { display: inline-flex; min-height: 44px; width: fit-content; align-items: center; gap: 8px; border-radius: 10px; color: var(--mint); font-size: 13px; font-weight: 600; }
+.copyStatus { margin: -6px 0 0; color: var(--mut); font-size: 11px; }
+.facts { display: grid; border-top: 1px solid var(--line); }
+.facts > div { display: flex; min-height: 52px; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.facts dt { color: var(--mut); }
+.facts dd { min-width: 0; margin: 0; color: var(--text); text-align: right; overflow-wrap: anywhere; }
+.chain { display: inline-flex; align-items: center; gap: 8px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.actions a { display: inline-flex; flex: 1 0 42%; min-width: 0; min-height: 48px; align-items: center; justify-content: center; gap: 8px; border: 1px solid color-mix(in srgb, var(--mint) 20%, var(--line)); border-radius: 12px; background: color-mix(in srgb, var(--mint) 10%, var(--surface)); color: var(--mint); padding: 10px; text-align: center; font-size: 12px; font-weight: 600; }
+.actions a:hover { border-color: color-mix(in srgb, var(--mint) 48%, var(--line)); }
+.explorer { display: flex; min-height: 44px; align-items: center; justify-content: center; gap: 7px; border-radius: 11px; color: var(--mut); font-size: 12px; }
+.explorer:hover { background: var(--surface-2); color: var(--text); }
+.details :where(a,button):focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
+@media (max-width: 600px) {
+  .backdrop { align-items: end; padding: 0; }
+  .modal { width: 100%; max-height: 92dvh; border-radius: 24px 24px 0 0; }
+  .modalHeader { padding-top: 20px; }
+  .modalBody { padding-inline: 18px; }
+}

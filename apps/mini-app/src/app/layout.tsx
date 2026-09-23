@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import Script from 'next/script';
 import './globals.css';
+import './product-shell.css';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { TelegramProvider } from '@/components/TelegramProvider';
 import WalletProviderBoundary from '@/components/WalletProviderBoundary';

@@ -1,31 +1,38 @@
 'use client';
 
-/**
- * Settings → Wallet: a client-only, user-controlled wallet panel.
- *
- * This component deliberately contains no API calls, private-key fields,
- * delegation controls, signer policy, or bot execution settings. Privy owns
- * wallet custody and every protocol transaction is approved by the selected
- * wallet at the time it is submitted.
- */
+/** Compact Settings controls for user-managed Privy and browser wallets. */
 import { useCallback, useMemo, useState } from 'react';
-import { KeyRound, Plus, RefreshCw, Wallet } from 'lucide-react';
-import {
-  useCreateWallet,
-  useExportWallet,
-  usePrivy,
-  useWallets,
-} from '@privy-io/react-auth';
+import { ChevronRight, KeyRound, Plus, RefreshCw, Wallet, type LucideIcon } from 'lucide-react';
+import { useCreateWallet, useExportWallet, usePrivy, useWallets } from '@privy-io/react-auth';
 import { haptic } from '@/lib/telegram';
 import { usePrivyWallet, useWalletReadyTimeout } from '@/lib/wallet';
 import { privyConfigured } from '@/lib/privyConfig';
 import { userSafeError } from '@/lib/errors';
-import { AddressChip, Button, Card, SectionTitle } from '@/components/ui';
+import { Button } from '@/components/ui';
+import { compactAddress } from '@/lib/addressPresentation';
+import styles from './WalletSection.module.css';
+
+function ActionRow({ icon: Icon, title, detail, label, onClick, loading = false, disabled = false, variant = 'ghost' }: {
+  icon: LucideIcon;
+  title: string;
+  detail: string;
+  label: string;
+  onClick: () => void;
+  loading?: boolean;
+  disabled?: boolean;
+  variant?: 'primary' | 'ghost';
+}) {
+  return <div className={styles.actionRow}>
+    <span className={styles.icon}><Icon size={18} aria-hidden="true" /></span>
+    <span className={styles.copy}><strong>{title}</strong><small>{detail}</small></span>
+    <Button variant={variant} aria-label={label} className={styles.actionButton} onClick={onClick} loading={loading} disabled={disabled}>{loading ? 'Working' : label.replace(/^(Create|Connect|Export) (?:Privy |external )?wallet$/i, '$1')}</Button>
+  </div>;
+}
 
 function PrivyWalletControls() {
   const { ready, authenticated } = usePrivy();
   const { wallets } = useWallets();
-  const { address, selectedWallet, selectWallet, connect } = usePrivyWallet();
+  const { selectedWallet, selectWallet, connect } = usePrivyWallet();
   const { createWallet } = useCreateWallet();
   const { exportWallet } = useExportWallet();
   const [busy, setBusy] = useState<'none' | 'create' | 'connect' | 'export'>('none');
@@ -34,212 +41,99 @@ function PrivyWalletControls() {
 
   const embedded = useMemo(
     () => wallets.find((wallet) => wallet.walletClientType === 'privy' || wallet.walletClientType === 'privy-v2'),
-    [wallets]
+    [wallets],
   );
   const externalWallets = useMemo(
     () => wallets.filter((wallet) => wallet.type === 'ethereum' && wallet.walletClientType !== 'privy' && wallet.walletClientType !== 'privy-v2'),
-    [wallets]
+    [wallets],
+  );
+  const otherWallets = useMemo(
+    () => wallets.filter((wallet) => wallet.type === 'ethereum' && wallet.address.toLowerCase() !== selectedWallet?.address.toLowerCase()),
+    [selectedWallet?.address, wallets],
   );
 
   const handleCreate = useCallback(async () => {
-    if (!authenticated) {
-      await connect();
-      return;
-    }
-    setBusy('create');
-    setError('');
-    try {
-      await createWallet();
-      haptic('success');
-    } catch (cause) {
-      setError(userSafeError(cause, 'Wallet creation was cancelled.'));
-      haptic('error');
-    } finally {
-      setBusy('none');
-    }
+    if (!authenticated) { await connect(); return; }
+    setBusy('create'); setError('');
+    try { await createWallet(); haptic('success'); }
+    catch (cause) { setError(userSafeError(cause, 'Wallet creation was cancelled.')); haptic('error'); }
+    finally { setBusy('none'); }
   }, [authenticated, connect, createWallet]);
 
   const handleConnect = useCallback(async (external = false) => {
-    setBusy('connect');
-    setError('');
-    try {
-      await connect({ external });
-    } catch (cause) {
-      setError(userSafeError(cause, 'Wallet connection was cancelled.'));
-      haptic('error');
-    } finally {
-      setBusy('none');
-    }
+    setBusy('connect'); setError('');
+    try { await connect({ external }); haptic('success'); }
+    catch (cause) { setError(userSafeError(cause, 'Wallet connection was cancelled.')); haptic('error'); }
+    finally { setBusy('none'); }
   }, [connect]);
 
   const handleExport = useCallback(async () => {
     if (!embedded?.address) return;
-    setBusy('export');
-    setError('');
-    try {
-      // Privy renders the export UI in its own isolated surface; the key is
-      // never returned to FxAeon or placed in React state/DOM.
-      await exportWallet({ address: embedded.address });
-    } catch (cause) {
-      // Closing the modal is expected. Surface other failures for recovery.
-      if (cause instanceof Error && !/cancel|exit|closed/i.test(cause.message)) {
-        setError(userSafeError(cause, 'Wallet export could not be completed.'));
-      }
-    } finally {
-      setBusy('none');
-    }
+    setBusy('export'); setError('');
+    try { await exportWallet({ address: embedded.address }); }
+    catch (cause) {
+      if (cause instanceof Error && !/cancel|exit|closed/i.test(cause.message)) setError(userSafeError(cause, 'Wallet export could not be completed.'));
+    } finally { setBusy('none'); }
   }, [embedded?.address, exportWallet]);
 
   if (!ready) {
-    if (readyTimedOut) return <div role="alert" aria-live="polite" aria-label="Wallet provider unavailable"><Card className="flex flex-col gap-3"><p className="text-[12px] text-warn">Wallet services did not become available. Retry before attempting a wallet action.</p><Button aria-label="Retry wallet provider" onClick={() => window.location.reload()} className="flex min-h-11 items-center justify-center rounded-xl px-3"><RefreshCw className="h-4 w-4" aria-hidden="true" /> Retry wallet</Button></Card></div>;
-    return <div role="status" aria-live="polite"><Card className="h-24 animate-pulse"><span className="sr-only">Loading wallet provider</span></Card></div>;
+    if (readyTimedOut) return <div className={styles.panel} role="alert" aria-live="polite">
+      <p className={styles.errorCopy}>Wallet services are unavailable. Retry before trying a wallet action.</p>
+      <Button aria-label="Retry wallet provider" onClick={() => window.location.reload()} className={styles.retry}><RefreshCw size={16} aria-hidden="true" />Retry wallet</Button>
+    </div>;
+    return <div className={`${styles.panel} ${styles.loading}`} role="status" aria-live="polite"><span className="sr-only">Loading wallet provider</span></div>;
   }
 
-  if (!authenticated) {
-    return (
-      <Card className="flex flex-col gap-3">
-        <p className="text-[13px] leading-relaxed text-mut">
-          Connect a wallet to view your account and use FxAeon.
-        </p>
-        <Button onClick={() => void handleConnect()} loading={busy === 'connect'}>Connect wallet</Button>
-      </Card>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      <Card className="flex flex-col gap-3">
-        <p className="text-[12px] font-medium text-mut">Selected wallet</p>
-        {selectedWallet?.address && <AddressChip address={selectedWallet.address} />}
-        {wallets.length > 1 && (
-          <div className="flex flex-col gap-2">
-            <p className="text-[12px] font-medium text-mut">Connected wallets</p>
-            {wallets.filter((wallet) => wallet.type === 'ethereum').map((wallet) => (
-              <button
-                key={wallet.address}
-                type="button"
-                onClick={() => selectWallet(wallet.address)}
-                className={`flex items-center justify-between rounded-xl border px-3 py-2 text-left transition-colors ${
-                  address?.toLowerCase() === wallet.address.toLowerCase()
-                    ? 'border-[var(--mint)] bg-[var(--mint-dim)]'
-                    : 'border-[var(--line)] bg-[var(--surface-2)] hover:border-[var(--mint)]'
-                }`}
-              >
-                <span className="min-w-0">
-                  <span className="block text-[12px] font-medium">{wallet.walletClientType ?? 'Ethereum wallet'}</span>
-                  <span className="mt-0.5 block truncate font-mono text-[11px] text-mut">{wallet.address}</span>
-                </span>
-                {address?.toLowerCase() === wallet.address.toLowerCase() && <span className="text-[11px] text-mint">Selected</span>}
-              </button>
-            ))}
-          </div>
-        )}
-      </Card>
-
-      {!embedded && (
-        <Card className="flex items-start gap-3">
-          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)]">
-            <Plus className="h-[18px] w-[18px] text-mint" strokeWidth={2} aria-hidden="true" />
-          </span>
-          <span className="flex-1">
-            <p className="text-[14px] font-medium">Create wallet</p>
-            <p className="mt-0.5 text-[12.5px] leading-relaxed text-mut">Create a Privy wallet for this account.</p>
-            <Button onClick={handleCreate} loading={busy === 'create'} className="mt-3">Create wallet</Button>
-          </span>
-        </Card>
-      )}
-
-      <Card className="flex items-start gap-3">
-        <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)]">
-          <Wallet className="h-[18px] w-[18px] text-mint" strokeWidth={2} aria-hidden="true" />
-        </span>
-        <span className="flex-1">
-          <p className="text-[14px] font-medium">Connect another wallet</p>
-          <p className="mt-0.5 text-[12.5px] leading-relaxed text-mut">
-            Use another EVM wallet with FxAeon.
-          </p>
-          <Button variant="ghost" onClick={() => void handleConnect(true)} loading={busy === 'connect'} className="mt-3">
-            Connect external wallet
-          </Button>
-        </span>
-      </Card>
-
-      {embedded && (
-        <Card className="flex items-start gap-3">
-          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)]">
-            <KeyRound className="h-[18px] w-[18px] text-mint" strokeWidth={2} aria-hidden="true" />
-          </span>
-          <span className="flex-1">
-            <p className="text-[14px] font-medium">Export wallet</p>
-            <p className="mt-0.5 text-[12.5px] leading-relaxed text-mut">Open Privy&apos;s wallet export flow.</p>
-            <Button variant="ghost" onClick={handleExport} loading={busy === 'export'} className="mt-3">
-              Export wallet
-            </Button>
-          </span>
-        </Card>
-      )}
-
-      {externalWallets.length > 0 && (
-        <p className="text-[11px] leading-relaxed text-mut">
-          {externalWallets.length} external Ethereum wallet{externalWallets.length === 1 ? '' : 's'} connected.
-        </p>
-      )}
-      {error && (
-        <Card className="border-[rgba(255,194,75,0.35)]">
-          <p role="alert" className="text-[13px] leading-relaxed text-warn">{error}</p>
-        </Card>
-      )}
+  if (!authenticated) return <div className={styles.panel}>
+    <div className={styles.actionRow}>
+      <span className={styles.icon}><Wallet size={18} aria-hidden="true" /></span>
+      <span className={styles.copy}><strong>No wallet connected</strong><small>Connect to use FxAeon.</small></span>
+      <Button aria-label="Connect wallet" className={styles.actionButton} onClick={() => void handleConnect()} loading={busy === 'connect'}>Connect</Button>
     </div>
-  );
+    {error && <p role="alert" className={styles.errorCopy}>{error}</p>}
+  </div>;
+
+  return <div className={styles.panel}>
+    {otherWallets.length > 0 && <section className={styles.walletChoices} aria-labelledby="settings-other-wallets">
+      <h3 id="settings-other-wallets">Switch wallet</h3>
+      {otherWallets.map((wallet) => <button key={wallet.address} type="button" className={styles.walletChoice}
+        aria-label={`Switch to ${wallet.walletClientType ?? 'Ethereum wallet'} ${wallet.address}`}
+        disabled={busy !== 'none'} onClick={() => selectWallet(wallet.address)}>
+        <span><strong>{wallet.walletClientType ?? 'Ethereum wallet'}</strong><small>{compactAddress(wallet.address)}</small></span>
+        <ChevronRight size={17} aria-hidden="true" />
+      </button>)}
+    </section>}
+    <div className={styles.actions} role="group" aria-label="Wallet actions">
+      {!embedded && <ActionRow icon={Plus} title="Create wallet" detail="Add an FxAeon wallet." label="Create wallet" variant="primary" onClick={() => void handleCreate()} loading={busy === 'create'} disabled={busy !== 'none'} />}
+      <ActionRow icon={Wallet} title="Connect another wallet" detail="Use an external EVM wallet." label="Connect external wallet" onClick={() => void handleConnect(true)} loading={busy === 'connect'} disabled={busy !== 'none'} />
+      {embedded && <ActionRow icon={KeyRound} title="Export wallet" detail="Open Privy’s secure export flow." label="Export wallet" onClick={() => void handleExport()} loading={busy === 'export'} disabled={busy !== 'none'} />}
+    </div>
+    {error && <p role="alert" className={styles.errorCopy}>{error}</p>}
+    {externalWallets.length > 0 && <p className={styles.statusCopy}>{externalWallets.length} external Ethereum wallet{externalWallets.length === 1 ? '' : 's'} connected.</p>}
+  </div>;
 }
 
 function BrowserWalletControls() {
   const wallet = usePrivyWallet();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-
   const connect = async () => {
-    setBusy(true);
-    setError('');
-    try {
-      await wallet.connect();
-      haptic('success');
-    } catch (cause) {
-      setError(userSafeError(cause, 'Browser wallet connection was cancelled.'));
-      haptic('error');
-    } finally {
-      setBusy(false);
-    }
+    setBusy(true); setError('');
+    try { await wallet.connect(); haptic('success'); }
+    catch (cause) { setError(userSafeError(cause, 'Browser wallet connection was cancelled.')); haptic('error'); }
+    finally { setBusy(false); }
   };
 
-  if (!wallet.ready) return <div role="status" aria-live="polite"><Card className="h-24 animate-pulse"><span className="sr-only">Loading wallet provider</span></Card></div>;
-  if (!wallet.authenticated || !wallet.selectedWallet) {
-    return (
-      <div className="flex flex-col gap-2">
-        <Button onClick={connect} loading={busy}>Connect wallet</Button>
-        {error && <p role="alert" className="rounded-xl border border-[var(--danger-dim)] bg-[var(--danger-dim)] px-3 py-2.5 text-[12px] leading-relaxed text-danger">{error}</p>}
-      </div>
-    );
-  }
-  return (
-    <Card className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-3"><span className="text-[12px] font-medium text-mut">Connected wallet</span><span className="text-[11px] font-medium text-success">Browser</span></div>
-      <AddressChip address={wallet.selectedWallet.address} />
-      <Button variant="ghost" onClick={connect} loading={busy}>Reconnect wallet</Button>
-      {error && <p role="alert" className="rounded-xl border border-[var(--danger-dim)] bg-[var(--danger-dim)] px-3 py-2.5 text-[12px] leading-relaxed text-danger">{error}</p>}
-    </Card>
-  );
+  if (!wallet.ready) return <div className={`${styles.panel} ${styles.loading}`} role="status" aria-live="polite"><span className="sr-only">Loading wallet provider</span></div>;
+  return <div className={styles.panel}>
+    <ActionRow icon={Wallet} title={wallet.authenticated && wallet.selectedWallet ? 'Browser wallet connected' : 'Connect a browser wallet'}
+      detail={wallet.authenticated && wallet.selectedWallet ? 'Refresh the connection.' : 'Use an injected EVM wallet.'}
+      label={wallet.authenticated && wallet.selectedWallet ? 'Reconnect wallet' : 'Connect wallet'}
+      onClick={() => void connect()} loading={busy} variant={wallet.authenticated && wallet.selectedWallet ? 'ghost' : 'primary'} />
+    {error && <p role="alert" className={styles.errorCopy}>{error}</p>}
+  </div>;
 }
 
 export default function WalletSection() {
-  return (
-    <section className="flex flex-col gap-3">
-      <SectionTitle>Wallet</SectionTitle>
-      {privyConfigured() ? (
-        <PrivyWalletControls />
-      ) : (
-        <BrowserWalletControls />
-      )}
-    </section>
-  );
+  return privyConfigured() ? <PrivyWalletControls /> : <BrowserWalletControls />;
 }

@@ -15,6 +15,7 @@ import type {
   FxPublicClient,
   PendingHashRecord,
 } from "./types";
+import { receiptTransfersFromLogs } from "../receiptPresentation";
 
 export type RecoveryStatus = "pending" | "confirmed" | "failed";
 
@@ -32,6 +33,12 @@ export type RecoveryViewModel = {
   verification: RecoveryVerification;
   explorerUrl: string;
   receiptBlockNumber?: bigint;
+  /** Actual EVM execution gas only; Base L1/operator fees are not included. */
+  receiptExecutionCostWei?: bigint;
+  /** Value attached to a successful verified transaction, when non-zero. */
+  receiptNativeValueWei?: bigint;
+  /** ERC-20 Transfer facts decoded directly from verified receipt logs. */
+  receiptTransfers?: { token: Address; from: Address; to: Address; amountRaw: bigint }[];
   message: string;
 };
 
@@ -265,7 +272,16 @@ export async function reconcileWalletJournal(params: {
       const mismatch = minedTransactionMismatch(record, transaction);
       if (mismatch) return pendingView(record, "mismatch", mismatch);
       updatePendingHashRecord(record, finalView.status === "confirmed" ? "confirmed" : "failed");
-      return finalView;
+      const effectiveGasPrice = (finalReceipt as { effectiveGasPrice?: bigint }).effectiveGasPrice;
+      return {
+        ...finalView,
+        receiptExecutionCostWei: typeof effectiveGasPrice === "bigint" && typeof finalReceipt.gasUsed === "bigint"
+          ? finalReceipt.gasUsed * effectiveGasPrice : undefined,
+        receiptNativeValueWei: finalView.status === "confirmed" && transaction.value > 0n ? transaction.value : undefined,
+        receiptTransfers: finalView.status === "confirmed"
+          ? receiptTransfersFromLogs(finalReceipt.logs ?? [], record.walletAddress)
+          : [],
+      };
     } catch (error) {
       return pendingView(
         record,

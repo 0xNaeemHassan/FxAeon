@@ -54,6 +54,36 @@ async function assertViewportGeometry(page: Page, route: string, viewport: { wid
   expect(geometry.documentWidth, `${route} must not overflow horizontally at ${viewport.width}x${viewport.height}`).toBeLessThanOrEqual(geometry.viewportWidth + 1);
 }
 
+async function assertReachableAction(page: Page, route: string, viewport: { width: number; height: number }, action: Locator) {
+  await expect(action, `${route} must expose its next action at ${viewport.width}x${viewport.height}`).toBeVisible();
+  await expect(action, `${route} next action must be enabled`).toBeEnabled();
+  await action.scrollIntoViewIfNeeded();
+  const geometry = await action.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const topmost = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    const nav = document.querySelector<HTMLElement>('nav.mobile-tabbar[aria-label="Primary navigation"]');
+    const navRect = nav && getComputedStyle(nav).display !== 'none' ? nav.getBoundingClientRect() : null;
+    return {
+      left: rect.left,
+      right: rect.right,
+      top: rect.top,
+      bottom: rect.bottom,
+      width: rect.width,
+      height: rect.height,
+      receivesPointer: topmost === element || Boolean(topmost && element.contains(topmost)),
+      navTop: navRect?.top ?? null,
+    };
+  });
+  expect(geometry.left, `${route} next action must fit horizontally`).toBeGreaterThanOrEqual(-1);
+  expect(geometry.right, `${route} next action must fit horizontally`).toBeLessThanOrEqual(viewport.width + 1);
+  expect(geometry.top, `${route} next action must be reachable`).toBeGreaterThanOrEqual(-1);
+  expect(geometry.bottom, `${route} next action must be reachable`).toBeLessThanOrEqual(viewport.height + 1);
+  expect(geometry.width, `${route} next action needs a 44px hit target`).toBeGreaterThanOrEqual(44);
+  expect(geometry.height, `${route} next action needs a 44px hit target`).toBeGreaterThanOrEqual(44);
+  expect(geometry.receivesPointer, `${route} next action must not be obscured`).toBe(true);
+  if (geometry.navTop !== null) expect(geometry.bottom, `${route} next action must clear primary navigation`).toBeLessThanOrEqual(geometry.navTop + 1);
+}
+
 async function assertEnabledCtas(page: Page, route: string, viewport: { width: number; height: number }, options: { includeDisabled?: boolean } = {}) {
   const includeDisabled = options.includeDisabled ?? false;
   const ctaSelector = includeDisabled ? ".button-primary:visible" : ".button-primary:visible:not([disabled])";
@@ -172,13 +202,47 @@ test.describe("single-viewport route contract", () => {
 
         await assertViewportGeometry(page, route, viewport);
         if (CTA_ROUTES.has(route)) {
-          await expect(page.locator(".button-primary:visible:not([disabled])").first(), `${route} must expose an enabled primary/review action at ${viewport.width}x${viewport.height}`).toBeVisible();
-          await assertEnabledCtas(page, route, viewport);
+          if (route === "/settings") {
+            // Settings' first disconnected action is AccountSummary's Connect
+            // control, which has its own account-row style rather than the
+            // product form's .button-primary class.
+            await assertReachableAction(page, route, viewport, page.getByRole("button", { name: "Connect", exact: true }));
+          } else {
+            await expect(page.locator(".button-primary:visible:not([disabled])").first(), `${route} must expose an enabled primary/review action at ${viewport.width}x${viewport.height}`).toBeVisible();
+            await assertEnabledCtas(page, route, viewport);
+          }
         }
       }
     }
 
     assertNoBackendRequests(requests);
+  });
+
+  test("390px Move keeps the compact bridge ticket and review action above navigation", async ({ page }) => {
+    const viewport = { width: 390, height: 844 } as const;
+    await page.setViewportSize(viewport);
+    await page.goto("/move", { waitUntil: "domcontentloaded" });
+    await expect(page.locator(".app-topbar").getByRole("button", { name: "Connect wallet", exact: true })).toBeVisible({ timeout: 15_000 });
+
+    const main = page.locator("main:visible");
+    await expect(main.getByRole("heading", { name: "Move", exact: true })).toBeVisible();
+    await expect(page.getByLabel("Amount in fxUSD")).toBeVisible();
+    await expect(page.getByText("Recipient on Base", { exact: true })).toBeVisible();
+    await expect(page.locator('summary').filter({ hasText: 'Custom contracts' })).toBeVisible();
+    const action = page.locator(".button-primary:visible").first();
+    await expect(action).toBeVisible();
+
+    const geometry = await action.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const nav = document.querySelector<HTMLElement>('nav.mobile-tabbar[aria-label="Primary navigation"]');
+      const navRect = nav && getComputedStyle(nav).display !== "none" ? nav.getBoundingClientRect() : null;
+      const root = document.scrollingElement ?? document.documentElement;
+      return { top: rect.top, bottom: rect.bottom, height: rect.height, navTop: navRect?.top ?? window.innerHeight, documentWidth: Math.max(root.scrollWidth, document.body.scrollWidth), viewportWidth: root.clientWidth };
+    });
+    expect(geometry.top, "Move action should be visible without scrolling at 390x844").toBeGreaterThanOrEqual(-1);
+    expect(geometry.bottom, "Move action should clear primary navigation without scrolling at 390x844").toBeLessThanOrEqual(geometry.navTop + 1);
+    expect(geometry.height, "Move action should keep an accessible hit target").toBeGreaterThanOrEqual(44);
+    expect(geometry.documentWidth, "Move must not overflow horizontally at 390px").toBeLessThanOrEqual(geometry.viewportWidth + 1);
   });
 
   test("mobile trade chart is a deliberate, explicit scroll exception", async ({ page }) => {
@@ -232,7 +296,7 @@ test.describe("single-viewport route contract", () => {
       page.getByLabel("Amount in ETH"),
       page.getByRole("button", { name: /Input asset/ }),
       page.getByLabel("Target leverage", { exact: true }),
-      page.locator("summary").filter({ hasText: "Advanced" }),
+      page.locator(".trade-ticket summary").filter({ hasText: /^Settings/ }),
       page.getByRole("button", { name: "Connect wallet", exact: true }).last(),
     ];
 
@@ -252,8 +316,10 @@ test.describe("single-viewport route contract", () => {
       expect(box.y).toBeGreaterThanOrEqual(-1);
       expect(box.y + box.height).toBeLessThanOrEqual(navBox.y + 1);
     }
-    await expect(page.getByLabel("Amount in ETH")).toHaveCSS("min-height", "44px");
-    await expect(page.getByRole("slider", { name: "Target leverage slider" })).toHaveCSS("height", "44px");
+    const amountTarget = await page.getByLabel("Amount in ETH").evaluate((element) => element.getBoundingClientRect().height);
+    const sliderTarget = await page.getByRole("slider", { name: "Target leverage slider" }).evaluate((element) => element.getBoundingClientRect().height);
+    expect(amountTarget, "amount input must retain a 44px hit target").toBeGreaterThanOrEqual(44);
+    expect(sliderTarget, "leverage slider must retain a 44px hit target").toBeGreaterThanOrEqual(44);
     await assertViewportGeometry(page, "/trade", viewport);
     await assertEnabledCtas(page, "/trade", viewport);
   });
@@ -416,6 +482,59 @@ test.describe("single-viewport route contract", () => {
 
   test.describe("connected browser route states", () => {
     test.use({ browserWallet: { address: "0x930f0000000000000000000000000000000098b9", initiallyConnected: true } });
+
+    test("connected Trade keeps its compact ticket action above navigation at 390x844", async ({ page }) => {
+      const viewport = { width: 390, height: 844 } as const;
+      await page.setViewportSize(viewport);
+      await page.goto("/trade", { waitUntil: "domcontentloaded" });
+      await expect(page.getByRole("button", { name: "Open wallet profile", exact: true })).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByRole("button", { name: "Show chart", exact: true })).toHaveAttribute("aria-expanded", "false");
+
+      const label = page.getByText("Target leverage", { exact: true });
+      const numeric = page.getByLabel("Target leverage", { exact: true });
+      const slider = page.getByRole("slider", { name: "Target leverage slider" });
+      await expect(label).toBeVisible();
+      await expect(numeric).toBeVisible();
+      await expect(slider).toBeVisible();
+      const numericBox = await numeric.boundingBox();
+      expect(numericBox, "Trade leverage numeric input must have rendered geometry").not.toBeNull();
+      const leverageGeometry = await page.locator(".trade-ticket").evaluate((ticket) => {
+        const labelElement = Array.from(ticket.querySelectorAll("label"))
+          .find((element) => element.textContent?.trim() === "Target leverage");
+        const sliderElement = ticket.querySelector('[aria-label="Target leverage slider"]');
+        if (!labelElement || !sliderElement) throw new Error("Trade leverage caption and slider must be mounted");
+        const labelRect = labelElement.getBoundingClientRect();
+        const sliderRect = sliderElement.getBoundingClientRect();
+        return {
+          ticketWidth: ticket.getBoundingClientRect().width,
+          label: { top: labelRect.top, bottom: labelRect.bottom },
+          sliderWidth: sliderRect.width,
+          sliderHeight: sliderRect.height,
+        };
+      });
+      // The numeric control sits beside its caption, while the range control
+      // spans the ticket below it and remains a 44px touch target.
+      expect(Math.min(leverageGeometry.label.bottom, numericBox!.y + numericBox!.height)
+        - Math.max(leverageGeometry.label.top, numericBox!.y)).toBeGreaterThan(0);
+      expect(numericBox!.height, "Trade leverage numeric input must remain usable").toBeGreaterThanOrEqual(44);
+      expect(leverageGeometry.sliderWidth).toBeGreaterThan(leverageGeometry.ticketWidth * 0.72);
+      expect(leverageGeometry.sliderHeight).toBeGreaterThanOrEqual(44);
+
+      const action = page.locator(".trade-ticket .reviewTrigger .button-primary").first();
+      const nav = page.locator('nav.mobile-tabbar[aria-label="Primary navigation"]');
+      await expect(action, "connected Trade's initial primary action must be visible without scrolling").toBeVisible();
+      await expect(nav).toBeVisible();
+      const geometry = await page.evaluate(() => {
+        const actionElement = document.querySelector<HTMLElement>(".trade-ticket .reviewTrigger .button-primary");
+        const navElement = document.querySelector<HTMLElement>('nav.mobile-tabbar[aria-label="Primary navigation"]');
+        if (!actionElement || !navElement) throw new Error("Trade action and primary navigation must be mounted");
+        const actionRect = actionElement.getBoundingClientRect();
+        const navRect = navElement.getBoundingClientRect();
+        return { actionBottom: actionRect.bottom, navTop: navRect.top, viewportHeight: window.innerHeight };
+      });
+      expect(geometry.actionBottom, "initial Trade action must clear the bottom navigation").toBeLessThanOrEqual(geometry.navTop + 1);
+      expect(geometry.actionBottom).toBeLessThanOrEqual(geometry.viewportHeight + 1);
+    });
 
     test("connected forms keep their supporting state inside the viewport contract", async ({ page, requests }) => {
       test.setTimeout(300_000);

@@ -15,6 +15,7 @@ import { useLiveMarketQuote, useUsdPrices } from '@/components/PriceProvider';
 import { MissingValue } from '@/components/MissingValue';
 import TokenIcon from '@/components/TokenIcon';
 import { formatUsdPrice, priceKeyForSymbol } from '@/lib/prices';
+import { freshDisplayPrices } from '@/lib/displayPrices';
 import { calculatePositionUsdValuation, debtCollateralRatioPercent, formatUsdCents } from '@/lib/positionValuation';
 import styles from './ProtocolPositionCard.module.css';
 
@@ -44,17 +45,16 @@ function PositionBody({
   compact: boolean;
   interactive: boolean;
 }) {
-  const { prices, status: pricesStatus } = useUsdPrices();
+  const priceSnapshot = useUsdPrices();
+  const prices = freshDisplayPrices(priceSnapshot);
   const { quote: liveQuote, isFresh: hasFreshLiveQuote } = useLiveMarketQuote(position.market);
   const collateral = formatAmount(position.info.rawColls, positionTokenDecimals(position, 'collateral'));
   const debt = formatAmount(position.info.rawDebts, positionTokenDecimals(position, 'debt'));
   const collateralKey = priceKeyForSymbol(position.info.rawCollsToken);
   const debtKey = priceKeyForSymbol(position.info.rawDebtsToken);
-  const pricesAreCurrent = pricesStatus !== 'stale' && pricesStatus !== 'unavailable';
-  // Preserve a known $0 for zero raw balances while withholding non-zero USD
-  // values when the quote snapshot is stale or unavailable.
-  const valuation = positionValuation(position, pricesAreCurrent ? prices : {});
-  const missingStatus = pricesAreCurrent ? 'loading' as const : 'unavailable' as const;
+  // Validate each display quote independently, including retained quotes.
+  const valuation = positionValuation(position, prices);
+  const missingStatus = priceSnapshot.status === 'loading' ? 'loading' as const : 'unavailable' as const;
   const netEquity = valuation.netEquityUsdCents === null
     ? <MissingValue width="lg" status={missingStatus} />
     : `≈ ${formatUsdCents(valuation.netEquityUsdCents)}`;
@@ -67,17 +67,17 @@ function PositionBody({
   const marketKey = position.market === 'ETH' ? 'ETH' : 'WBTC';
   const marketPrice = hasFreshLiveQuote
     ? liveQuote?.price
-    : pricesAreCurrent ? prices[marketKey] : undefined;
+    : prices[marketKey];
   const marketPriceDisplay = marketPrice === undefined || !Number.isFinite(marketPrice)
     ? <MissingValue width="lg" status={missingStatus} />
     : formatUsdPrice(marketPrice);
   const debtCollateralRatio = debtCollateralRatioPercent({
     collateralRaw: position.info.rawColls,
     collateralDecimals: positionTokenDecimals(position, 'collateral'),
-    collateralPrice: !pricesAreCurrent || !collateralKey ? undefined : prices[collateralKey],
+    collateralPrice: !collateralKey ? undefined : prices[collateralKey],
     debtRaw: position.info.rawDebts,
     debtDecimals: positionTokenDecimals(position, 'debt'),
-    debtPrice: !pricesAreCurrent || !debtKey ? undefined : prices[debtKey],
+    debtPrice: !debtKey ? undefined : prices[debtKey],
   });
   const leverageInfo = positionDisplayLeverage(position);
   const leverage = leverageInfo.value !== null
@@ -85,7 +85,7 @@ function PositionBody({
     : <MissingValue width="sm" status="loading" />;
   const debtCollateralDisplay = debtCollateralRatio ?? <MissingValue width="md" status={missingStatus} />;
   const positionValueTitle = valuation.netEquityUsdCents === null
-    ? pricesAreCurrent ? 'Loading position value' : 'Position value unavailable until prices refresh'
+    ? missingStatus === 'loading' ? 'Loading position value' : 'Position value unavailable until prices refresh'
     : 'Collateral value minus debt';
   const sideLabel = position.side === 'long' ? 'Long' : 'Short';
 
@@ -199,7 +199,7 @@ export function ProtocolPositionNotice({
   return (
     <div role="status" aria-label={label} className={`flex items-center gap-2.5 rounded-xl border border-[rgba(255,194,102,.2)] bg-[rgba(255,194,102,.08)] text-warn ${compact ? 'p-2.5' : 'p-3'}`}>
       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-      <span className="flex-1 text-[11px] leading-relaxed">{label}</span>
+      <span className="flex-1 text-[11px] leading-relaxed">{refreshing ? 'Refreshing positions' : 'Refresh positions'}</span>
       {onRefresh && (
         <button type="button" onClick={onRefresh} disabled={refreshing} aria-label="Retry position verification" className="glass-press flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg disabled:opacity-50">
           <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
