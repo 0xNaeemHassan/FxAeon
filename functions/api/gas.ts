@@ -35,6 +35,34 @@ export const MAX_API_KEY_LENGTH = 256;
 const MIN_TIMEOUT_MS = 250;
 const MAX_TIMEOUT_MS = 10_000;
 
+type GasOracleFailureCode = "binding_missing" | "binding_invalid" | "upstream_timeout"
+  | "upstream_fetch_failed" | "upstream_auth_failed" | "upstream_http_failed"
+  | "upstream_response_invalid" | "upstream_payload_rejected" | "upstream_gas_price_invalid"
+  | "upstream_timestamp_invalid" | "internal_failure";
+
+class GasOracleFailure extends Error {
+  constructor(readonly code: GasOracleFailureCode, message: string) {
+    super(message);
+    this.name = "GasOracleFailure";
+  }
+}
+
+const LOG_SUPPRESSION_MS = FAILURE_BACKOFF_MS;
+const lastFailureLogAt = new Map<GasOracleFailureCode, number>();
+
+/** Emit only a fixed allowlisted category, at most once per backoff window. */
+function logGasOracleFailure(code: GasOracleFailureCode): void {
+  const now = Date.now();
+  const previous = lastFailureLogAt.get(code);
+  if (previous !== undefined && now - previous < LOG_SUPPRESSION_MS) return;
+  lastFailureLogAt.set(code, now);
+  console.warn(`[gas-oracle] ${code}`);
+}
+
+function failureCode(error: unknown): GasOracleFailureCode {
+  return error instanceof GasOracleFailure ? error.code : "internal_failure";
+}
+
 interface GasOracleResult {
   LastBlock?: unknown;
   ProposeGasPrice?: unknown;
@@ -77,6 +105,7 @@ export function resetGasOracleCacheForTests(): void {
   inFlight = undefined;
   failureUntil = 0;
   failureError = undefined;
+  lastFailureLogAt.clear();
 }
 
 function parseDecimalGwei(value: unknown): bigint | undefined {
@@ -118,7 +147,7 @@ function queryIsAllowed(request: Request): boolean {
 async function boundedText(response: Response, maxBytes: number): Promise<string> {
   const contentLength = response.headers.get("content-length");
   if (contentLength !== null && /^\d+$/.test(contentLength) && Number(contentLength) > maxBytes) {
-    throw new Error("upstream response too large");
+    throw new GasOracleFailure("upstream_response_invalid", "upstream response too large");
   }
   // Pages' upstream Response streams are not guaranteed to expose the same
   // reader lifecycle as browser streams. Read the small, fixed oracle payload
@@ -126,13 +155,13 @@ async function boundedText(response: Response, maxBytes: number): Promise<string
   // after decoding as a second line of defence when Content-Length is absent.
   const text = await response.text();
   if (new TextEncoder().encode(text).byteLength > maxBytes) {
-    throw new Error("upstream response too large");
+    throw new GasOracleFailure("upstream_response_invalid", "upstream response too large");
   }
   return text;
 }
 
 function timeoutError(): Error {
-  return new Error("upstream request timed out");
+  return new GasOracleFailure("upstream_timeout", "upstream request timed out");
 }
 
 async function requestUpstream(
@@ -155,27 +184,42 @@ async function requestUpstream(
     upstream.searchParams.set("apikey", apiKey);
     let response: Response;
     try {
-      response = await options.fetchImpl(upstream, { method: "GET", redirect: "error", signal: controller.signal });
+      // Cloudflare Workerd requires the global fetch function to be called
+      // unbound. Calling it as `options.fetchImpl(...)` sets `this` to options
+      // and fails with an Illegal invocation error in production.
+      const fetchImpl = options.fetchImpl;
+      response = await fetchImpl(upstream, { method: "GET", redirect: "manual", signal: controller.signal });
     } catch (error) {
       if (controller.signal.aborted) throw timeoutError();
-      throw new Error("upstream request failed");
+      throw new GasOracleFailure("upstream_fetch_failed", "upstream request failed");
     }
-    if (!response.ok) throw new Error("upstream returned an HTTP error");
+    if (!response.ok) throw new GasOracleFailure(
+      response.status === 401 || response.status === 403 ? "upstream_auth_failed" : "upstream_http_failed",
+      "upstream returned an HTTP error",
+    );
     let parsed: unknown;
     try {
       parsed = JSON.parse(await boundedText(response, MAX_RESPONSE_BYTES)) as unknown;
-    } catch {
-      throw new Error("upstream returned invalid data");
+    } catch (error) {
+      if (error instanceof GasOracleFailure) throw error;
+      throw new GasOracleFailure("upstream_response_invalid", "upstream returned invalid data");
     }
     if (!isRecord(parsed) || parsed.status !== "1" || !isRecord(parsed.result)) {
-      throw new Error("upstream returned no gas data");
+      const upstreamText = [parsed && isRecord(parsed) ? parsed.message : null,
+        parsed && isRecord(parsed) ? parsed.result : null]
+        .filter((value): value is string => typeof value === "string")
+        .join(" ").toLowerCase();
+      if (/invalid\s+api\s+key|api\s+key\s+(?:is\s+)?(?:missing|invalid)|missing\s+api\s+key/.test(upstreamText)) {
+        throw new GasOracleFailure("upstream_auth_failed", "upstream rejected its credential");
+      }
+      throw new GasOracleFailure("upstream_payload_rejected", "upstream returned no gas data");
     }
     const result = parsed.result as GasOracleResult;
     const gasPriceWei = parseDecimalGwei(result.ProposeGasPrice)
       ?? parseDecimalGwei(result.SafeGasPrice);
-    if (gasPriceWei === undefined) throw new Error("upstream returned an invalid gas price");
+    if (gasPriceWei === undefined) throw new GasOracleFailure("upstream_gas_price_invalid", "upstream returned an invalid gas price");
     const fetchedAt = options.now();
-    if (!Number.isSafeInteger(fetchedAt) || fetchedAt < 0) throw new Error("upstream returned an invalid timestamp");
+    if (!Number.isSafeInteger(fetchedAt) || fetchedAt < 0) throw new GasOracleFailure("upstream_timestamp_invalid", "upstream returned an invalid timestamp");
     const blockNumber = parseBlock(result.LastBlock);
     return {
       source: "etherscan",
@@ -198,7 +242,8 @@ export async function fetchEtherscanGasOracle(
   options: EtherscanGasFetchOptions = {},
 ): Promise<EthereumGasSnapshot> {
   const key = typeof apiKey === "string" ? apiKey.trim() : "";
-  if (!key || key.length > MAX_API_KEY_LENGTH) throw new Error("Etherscan gas oracle is not configured");
+  if (!key) throw new GasOracleFailure("binding_missing", "Etherscan gas oracle is not configured");
+  if (key.length > MAX_API_KEY_LENGTH) throw new GasOracleFailure("binding_invalid", "Etherscan gas oracle binding is invalid");
   const requestedTimeout = options.timeoutMs ?? REQUEST_TIMEOUT_MS;
   const resolved = {
     fetchImpl: options.fetchImpl ?? fetch,
@@ -249,11 +294,28 @@ export async function fetchEtherscanGasOracle(
 export const onRequestGet: PagesFunction<GasFunctionEnv> = async ({ request, env }) => {
   try {
     if (!queryIsAllowed(request)) return jsonResponse({ error: "unsupported query" }, 400);
-    const apiKey = typeof env?.ETHERSCAN_API_KEY === "string" ? env.ETHERSCAN_API_KEY.trim() : "";
-    if (!apiKey || apiKey.length > MAX_API_KEY_LENGTH) return jsonResponse({ error: "gas oracle unavailable" }, 503);
+    const rawKey: unknown = env?.ETHERSCAN_API_KEY;
+    if (rawKey === undefined || rawKey === null || rawKey === "") {
+      logGasOracleFailure("binding_missing");
+      return jsonResponse({ error: "gas oracle unavailable" }, 503);
+    }
+    if (typeof rawKey !== "string") {
+      logGasOracleFailure("binding_invalid");
+      return jsonResponse({ error: "gas oracle unavailable" }, 503);
+    }
+    const apiKey = rawKey.trim();
+    if (!apiKey) {
+      logGasOracleFailure("binding_missing");
+      return jsonResponse({ error: "gas oracle unavailable" }, 503);
+    }
+    if (apiKey.length > MAX_API_KEY_LENGTH) {
+      logGasOracleFailure("binding_invalid");
+      return jsonResponse({ error: "gas oracle unavailable" }, 503);
+    }
     const snapshot = await fetchEtherscanGasOracle(apiKey);
     return jsonResponse(snapshot);
   } catch (error) {
+    logGasOracleFailure(failureCode(error));
     if (cacheEntry && cacheEntry.staleUntil > Date.now()) {
       return jsonResponse({ ...cacheEntry.snapshot, stale: true });
     }

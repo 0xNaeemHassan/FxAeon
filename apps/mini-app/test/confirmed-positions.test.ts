@@ -5,6 +5,7 @@ import { encodeAbiParameters, encodeEventTopics, encodeFunctionData, parseAbi, z
 import {
   ConfirmedPositionNotReadyError,
   deriveConfirmedPositionHint,
+  receiptMintedPositionIdentity,
   parseConfirmedPositionHint,
   POSITION_TRANSFER_EVENT,
   readConfirmedPosition,
@@ -420,4 +421,32 @@ test('an NFT transferred while the SDK is pending cannot hydrate the former owne
   const { deps } = dependencies(source, { readOwner: async () => ++reads === 1 ? WALLET : OTHER });
   assert.equal(await readConfirmedPosition(hintFrom(source), WALLET, deps), null);
   assert.equal(reads, 2);
+});
+
+test('receipt presentation exposes only the exact newly minted Trade or Borrow identity', () => {
+  const cases = [
+    { source: fixture({ operation: 'increasePosition', market: 'ETH', side: 'long' }), market: 'ETH', side: 'long' },
+    { source: fixture({ operation: 'increasePosition', market: 'BTC', side: 'short' }), market: 'BTC', side: 'short' },
+    { source: fixture({ operation: 'depositAndMint', market: 'ETH' }), market: 'ETH', side: 'long' },
+    { source: fixture({ operation: 'depositAndMint', market: 'BTC' }), market: 'BTC', side: 'long' },
+    { source: routedFixture({ operation: 'increasePosition', market: 'ETH', side: 'short' }), market: 'ETH', side: 'short' },
+    { source: routedFixture({ operation: 'increasePosition', market: 'BTC', side: 'long' }), market: 'BTC', side: 'long' },
+    { source: routedFixture({ operation: 'depositAndMint', market: 'ETH' }), market: 'ETH', side: 'long' },
+    { source: routedFixture({ operation: 'depositAndMint', market: 'BTC' }), market: 'BTC', side: 'long' },
+  ] as const;
+  for (const { source, market, side } of cases) {
+    assert.deepEqual(receiptMintedPositionIdentity(source), {
+      market, side, positionId: 42, transactionHash: TX_HASH,
+    });
+  }
+
+  const ambiguous = fixture({ operation: 'depositAndMint', market: 'ETH' });
+  ambiguous.receipt.logs = [transferLog(ambiguous.pool, { to: OTHER })];
+  assert.equal(receiptMintedPositionIdentity(ambiguous), null);
+  const unconfirmed = fixture({ operation: 'increasePosition', market: 'ETH' });
+  unconfirmed.result.status = 'partial';
+  assert.equal(receiptMintedPositionIdentity(unconfirmed), null);
+
+  assert.equal(receiptMintedPositionIdentity(fixture({ operation: 'increasePosition', positionId: 42 })), null, 'an existing Trade position is not a new mint');
+  assert.equal(receiptMintedPositionIdentity(fixture({ operation: 'depositAndMint', positionId: 42 })), null, 'an existing Borrow position is not a new mint');
 });

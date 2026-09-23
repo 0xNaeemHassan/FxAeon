@@ -8,6 +8,7 @@ import {
   summarizeWalletAssets,
   walletAssetValuation,
   walletAssetCountLabel,
+  walletAssetSourcesFailed,
   type WalletAssetSnapshot,
 } from '../src/lib/walletAssets';
 
@@ -19,6 +20,13 @@ test('asset counts stay truthful while canonical reads are pending or unavailabl
   assert.equal(walletAssetCountLabel(0, 'unavailable'), '—');
   assert.equal(walletAssetCountLabel(0, 'partial'), '—');
   assert.equal(walletAssetCountLabel(0, 'ready'), '0 assets');
+});
+
+test('disabled optional indexing is settled when both canonical chain reads fail', () => {
+  assert.equal(walletAssetSourcesFailed(false, false, true, true), true);
+  assert.equal(walletAssetSourcesFailed(false, false, false, true), false);
+  assert.equal(walletAssetSourcesFailed(true, false, true, true), false);
+  assert.equal(walletAssetSourcesFailed(true, true, true, true), true);
 });
 
 test('parses exact Alchemy native and ERC-20 balances with validated metadata and prices', () => {
@@ -64,11 +72,28 @@ test('expired balance or quote reads are removed from the display subtotal by th
   ], { prices: { ETH: 2000 }, status: 'ready', updatedAt: now }, now);
 
   const fresh = summarizeWalletAssets(merged, now);
-  const expired = summarizeWalletAssets(merged, now + 3 * 60_000);
+  const expired = summarizeWalletAssets(merged, now + 16 * 60_000);
   assert.equal(fresh.totalUsdValue, 4000);
   assert.equal(expired.totalUsdValue, 0);
   assert.equal(expired.assets.find((asset) => asset.canonicalKey === 'ETH')?.usdValue, null);
   assert.equal(walletAssetValuation(expired).totalUsd, null);
+});
+
+test('a seven-minute cached quote remains display-fresh after refresh failure without renewing its timestamp', () => {
+  const quoteAt = now - 7 * 60_000;
+  const merged = mergeCanonicalWalletAssets(null, wallet, [{
+    chainId: 1,
+    balances: [{ key: 'ETH', address: null, decimals: 18, amountWei: 2n * 10n ** 18n }],
+    failedTokens: [],
+    updatedAt: now,
+  }], {
+    prices: { ETH: 2_000 }, status: 'stale', updatedAt: quoteAt, updatedAts: { ETH: quoteAt },
+  }, now);
+  const eth = merged.assets.find((asset) => asset.canonicalKey === 'ETH');
+  assert.equal(eth?.priceStatus, 'fresh');
+  assert.equal(eth?.priceUpdatedAt, quoteAt);
+  assert.equal(eth?.usdValue, 4_000);
+  assert.equal(summarizeWalletAssets(merged, quoteAt + 15 * 60_000 + 1).assets[0]?.priceStatus, 'stale');
 });
 
 test('canonical replacement retains prior validated quote metadata when current prices omit the token', () => {

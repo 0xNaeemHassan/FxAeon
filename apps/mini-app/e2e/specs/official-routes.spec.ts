@@ -38,7 +38,19 @@ test.describe("official f(x) client routes", () => {
       // With RPC and Privy deliberately omitted from this build, a route may
       // render an empty/unavailable state, but it must never invent market or
       // wallet numbers to make the screen look loaded.
-      await expect(page.locator("body")).not.toContainText(/\$\s*\d/);
+      // An untouched amount input has a real zero notional independent of
+      // prices. Exclude only that input hint; wallet/market values stay unknown.
+      const pricedText = await page.locator('body').evaluate((body) => {
+        const copy = body.cloneNode(true) as HTMLElement;
+        copy.querySelectorAll('script, style, template').forEach((node) => node.remove());
+        const sourceFields = Array.from(body.querySelectorAll('[data-amount-field]'));
+        copy.querySelectorAll('[data-amount-field]').forEach((field, index) => {
+          const input = sourceFields[index]?.querySelector('input');
+          if (input && !input.value.trim()) field.querySelector('[data-amount-usd]')?.remove();
+        });
+        return copy.textContent;
+      });
+      expect(pricedText).not.toMatch(/\$\s*\d/);
       await expect(page.locator("body")).not.toContainText(/5,240\.75|3,500(?:\.42)?|104,500/);
       await expect(page.locator("canvas")).toHaveCount(0);
 
@@ -178,7 +190,11 @@ test.describe("connected browser wallet flows", () => {
     await expect(page.getByRole("heading", { name: /portfolio/i })).toBeVisible();
     await expect(page.getByText(/0x930f/i).first()).toBeVisible();
     await expect(page.getByText("Wallet balances", { exact: true })).toHaveCount(0);
-    await expect(page.locator('.portfolio-value-metrics .missing-value')).toHaveCount(3);
+    await expect(page.getByRole('main').getByRole('status', { name: /portfolio value/i })).toBeVisible();
+    const breakdown = page.locator('details').filter({ has: page.locator('summary', { hasText: 'Value breakdown' }) });
+    await breakdown.locator('summary').click();
+    await expect(breakdown.getByText(/^(Known )?wallet assets$/i)).toBeVisible();
+  await expect(breakdown.getByText(/^(Known )?position value$/i)).toBeVisible();
     await expect(page.getByText('Verified units', { exact: true })).toHaveCount(0);
     await expect(page.getByText('0 assets', { exact: true })).toHaveCount(0);
     await expect(page.locator("body")).not.toContainText(/\$\s*\d/);
@@ -195,8 +211,8 @@ test.describe("connected browser wallet flows", () => {
     await expect(profile).toBeVisible();
     await expect(profile).toHaveAccessibleName("Wallet 0x930f0000000000000000000000000000000098b9");
     await expect(profile.getByRole("heading", { level: 2 })).toHaveText("0x930f…98b9");
-    await expect(profile.getByText("Wallet value", { exact: true })).toBeVisible();
-    await expect(profile.getByRole("link", { name: "View wallet on Etherscan" })).toHaveAttribute("href", /etherscan\.io\/address\/0x930f/i);
+    await expect(profile.getByRole("status", { name: /wallet value/i })).toBeVisible();
+    await expect(profile.getByRole("link", { name: "View on Etherscan" })).toHaveAttribute("href", /etherscan\.io\/address\/0x930f/i);
     await expect(profile.getByRole("link", { name: /History/ })).toBeVisible();
     await profile.getByRole("link", { name: /History/ }).click();
     await expect(page).toHaveURL(/\/history\/?$/);
@@ -514,8 +530,8 @@ test("Earn links to borrowing without presenting positions as savings", async ({
   await page.goto("/earn", { waitUntil: "domcontentloaded" });
   await page.getByRole("link", { name: "Borrow fxUSD" }).click();
   await expect(page).toHaveURL(/\/borrow\/?$/);
-  await expect(page.getByRole("heading", { name: "Borrow" })).toBeVisible();
-  await expect(page.getByText("Borrow fxUSD", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Earn", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Borrow fxUSD", exact: true })).toHaveAttribute("aria-current", "page");
   assertNoBackendRequests(requests);
 });
 
@@ -540,7 +556,7 @@ test.describe("browser wallet connection", () => {
 
   test("Move keeps recipient editable and centralizes wallet connection in review", async ({ page, requests }) => {
     await page.goto("/move", { waitUntil: "domcontentloaded" });
-    const recipient = page.getByText("Recipient", { exact: true }).locator("xpath=../..");
+    const recipient = page.getByText(/^Recipient on (Ethereum|Base)$/).locator("xpath=../..");
     await expect(recipient.getByText("Connect wallet", { exact: true })).toBeVisible();
     await expect(page.locator(".reviewTrigger").getByRole("button", { name: "Connect wallet", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Connect wallet for recipient", exact: true })).toHaveCount(0);
@@ -602,12 +618,30 @@ test.describe("Move and More compact surfaces", () => {
     await expect(page.getByRole("link", { name: /History/ })).toBeVisible();
     await expect(page.getByRole("link", { name: /Receive/ })).toBeVisible();
     await expect(page.getByRole("link", { name: /Settings/ })).toBeVisible();
-    await expect(page.getByRole("radiogroup", { name: "Appearance theme", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Appearance/ })).toBeVisible();
     await expect(page.getByText("Resources", { exact: true })).toBeVisible();
     await expect(page.getByText("FxAeon docs", { exact: true })).toBeVisible();
     await page.goto("/settings", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("radiogroup", { name: "Appearance theme", exact: true })).toBeVisible();
     assertNoBackendRequests(requests);
+  });
+
+  test("More and Settings fit narrow screens without clipping their account controls", async ({ page }) => {
+    for (const viewport of [{ width: 390, height: 844 }, { width: 320, height: 568 }]) {
+      await page.setViewportSize(viewport);
+      await page.goto("/more", { waitUntil: "domcontentloaded" });
+      const more = page.getByRole("main");
+      await expect(more.getByRole("heading", { name: "More", exact: true })).toBeVisible();
+      await expect(more.getByRole("link", { name: /History/ })).toBeVisible();
+      await expect(more.getByRole("link", { name: /Receive/ })).toBeVisible();
+      await expect(more.getByRole("link", { name: /Settings/ })).toBeVisible();
+      expect(await more.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+
+      await page.goto("/settings", { waitUntil: "domcontentloaded" });
+      await expect(page.getByRole("radiogroup", { name: "Slippage tolerance" })).toBeVisible();
+      await expect(page.getByRole("radiogroup", { name: "Appearance theme" })).toBeVisible();
+      expect(await page.getByRole("main").evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+    }
   });
 
   test("Move keeps the bridge form focused on the supported asset flow", async ({ page, requests }) => {

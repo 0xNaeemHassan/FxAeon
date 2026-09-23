@@ -1,151 +1,5 @@
-import { createRequire } from 'node:module';
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { test, expect } from '@playwright/test';
-
-const root = resolve(__dirname, '../../../..');
-const require = createRequire(resolve(root, 'package.json'));
-const tsxPackage = require.resolve('tsx/package.json', { paths: [resolve(root, 'apps/mini-app')] });
-const esbuild = createRequire(tsxPackage)('esbuild') as { build: (options: Record<string, unknown>) => Promise<{ outputFiles: Array<{ text: string }> }> };
-const entry = resolve(root, 'apps/mini-app/e2e/harness/action-review-entry.tsx');
-const src = resolve(root, 'apps/mini-app/src');
-
-const mocks: Record<string, string> = {
-  '@/lib/fx': `
-    const H = () => globalThis.__actionReviewHarness;
-    export const FX_TOKENS = { fxUSD: { address: '0x00000000000000000000000000000000000000c1' }, fxSAVE: { address: '0x00000000000000000000000000000000000000c2' } };
-    export const formatRouteGasCost = () => ({ gasFee: '', totalCost: '' });
-    export const useRouteGasCost = () => ({ estimate: null, estimateIsCurrent: false, status: 'idle' });
-    export async function prepareRoutesForReview(planned, walletAddress) {
-      const h = H(); h.prepareCount += 1;
-      if (h.failNextPrepare) { h.failNextPrepare = false; throw new Error('mock preview failure'); }
-      const route = Array.isArray(planned) ? planned[0] : planned;
-      if (h.mode === 'deferred') return new Promise((resolve) => {
-        const request = {
-          id: h.nextPreviewRequestId++,
-          routeVersion: route.harnessRouteVersion,
-          routeType: route.details?.routeType ?? '',
-          routeWalletAddress: route.walletAddress?.toLowerCase() ?? '',
-          previewWalletAddress: walletAddress?.toLowerCase() ?? '',
-          connectionVersion: route.harnessConnectionVersion,
-          settled: false,
-          resolve: () => {
-            if (request.settled) return;
-            request.settled = true;
-            resolve({ viable: [route], failures: [] });
-          },
-        };
-        h.previewRequests.push(request);
-      });
-      return { viable: [route], failures: [] };
-    }
-    export async function runTransactionRoute({ route, callbacks }) {
-      const h = H(); h.runnerCount += 1;
-      h.lastExecutedRouteVersion = route.harnessRouteVersion;
-      if (h.deferRunner) { h.deferRunner = false; await new Promise((resolve) => h.executionResolvers.push(resolve)); }
-      if (h.failRunner) { h.failRunner = false; throw new Error('mock execution failure'); }
-      callbacks.onStatus?.('submitted', 'mock submitted');
-      const hash = await callbacks.requestSignature(route.transactions[0]);
-      callbacks.onStep?.({ index: 0, transaction: route.transactions[0], status: 'confirmed', hash });
-      callbacks.onStatus?.('confirmed', 'mock confirmed');
-      const result = { status: 'confirmed', operation: route.operation, chainId: route.chainId, walletAddress: route.walletAddress, steps: [{ index: 0, transaction: route.transactions[0], status: 'confirmed', hash }] };
-      await callbacks.postConfirmRead?.(route, result);
-      return result;
-    }
-    export const saveSignatureRequiredDraft = () => { const h = H(); h.draftSaveCount += 1; return { id: 'mock-draft' }; };
-    export const removeSignatureRequiredDraft = () => {};
-    export const cancelSignatureRequiredDraft = () => {};
-  `,
-  '@/lib/wallet': `
-    export function usePrivyWallet() {
-      const h = globalThis.__actionReviewHarness;
-      return { ...h.wallet, isEmbedded: false, wallets: [], selectedWallet: undefined,
-        connect: async () => { h.wallet = { ready: true, authenticated: true, connectionVersion: h.wallet.connectionVersion + 1, address: '0x00000000000000000000000000000000000000aa', chainId: 1 }; h.rerender?.(); },
-        disconnect: async () => {}, selectWallet: () => {}, switchChain: async () => {},
-        sendTransaction: async () => { h.sendCount += 1; return { hash: '0x1111111111111111111111111111111111111111111111111111111111111111' }; },
-      };
-    }
-  `,
-  '@/components/WalletDataProvider': `
-    export const useInvalidateWalletData = () => async () => {
-      const h = globalThis.__actionReviewHarness;
-      h.refreshStarted = true;
-      h.rerender?.();
-      if (h.deferRefresh) await new Promise((resolve) => h.refreshResolvers.push(resolve));
-    };
-  `,
-  '@/lib/walletDataRefresh': `export const createRouteWalletRefresh = (invalidate) => async (route) => invalidate(route.walletAddress, route.chainId);`,
-  '@/lib/telegram': `export const haptic = () => {}; export const openExternalLink = () => false;`,
-  '@/components/ui': `
-    import React, { forwardRef } from 'react';
-    export const Card = ({ children, className = '' }) => <div className={className}>{children}</div>;
-    export const Button = forwardRef(({ children, onClick, disabled, loading, className = '', ...props }, ref) => <button ref={ref} type="button" {...props} disabled={disabled || loading} onClick={onClick} className={className}>{children}</button>);
-  `,
-  '@/components/ConnectWalletButton': `
-    import React from 'react';
-    import { usePrivyWallet } from '@/lib/wallet';
-    export default function ConnectWalletButton({ children, onConnectStart, onConnected, onConnectError, ...props }) {
-      const wallet = usePrivyWallet();
-      return <button type="button" {...props} onClick={async () => { onConnectStart?.(); try { await wallet.connect(); await onConnected?.(); } catch { onConnectError?.(); } }}>{children}</button>;
-    }
-  `,
-  '@/lib/errors': `export const userSafeError = (cause, fallback) => cause instanceof Error ? cause.message : fallback;`,
-  '@/lib/transactionProgress': `
-    export const hasTransactionHash = (step) => Boolean(step?.hash);
-    export const transactionStepProgress = () => ({ state: 'confirmed', label: 'Confirmed' });
-    export const confirmedUpdateCopy = () => ({ label: 'Confirmed', body: 'Mock confirmed.' });
-  `,
-  '@/components/BridgeTracker': `export const BridgeTracker = () => null;`,
-  '@/components/review/ReviewProgress': `
-    import React from 'react';
-    export const chainName = (id) => id === 8453 ? 'Base' : 'Ethereum';
-    export const stepProgress = () => ({ label: 'Confirmed', className: '', icon: null });
-    export const CalldataDisclosure = ({ data }) => <div><button type="button">Copy</button><pre>{data}</pre></div>;
-    export const StatusNotice = ({ label, body }) => <div role="status"><strong>{label}</strong><span>{body}</span></div>;
-    export const InlineError = ({ message }) => <div role="alert">{message}</div>;
-    export const TransactionHashLink = () => null;
-  `,
-  '@/components/review/executionResult': `export const resultPresentation = () => ({ title: 'Confirmed', body: 'Mock confirmed.', tone: 'success', icon: () => null });`,
-  '@/lib/fx/reviewFormatting': `export const rawQuoteReviewFacts = () => []; export const routeFinancialReviewFacts = () => [];`,
-  'lucide-react': `
-    import React from 'react';
-    const Icon = (props) => <span {...props} />;
-    export const AlertTriangle = Icon; export const ArrowLeft = Icon; export const CheckCircle2 = Icon; export const CircleAlert = Icon;
-    export const Clock3 = Icon; export const LoaderCircle = Icon; export const ShieldCheck = Icon; export const ExternalLink = Icon;
-    export const Circle = Icon; export const XCircle = Icon;
-  `,
-};
-
-async function buildHarness(): Promise<string> {
-  type EsbuildPluginBuild = {
-    onResolve: (options: { filter: RegExp }, callback: (args: { path: string; resolveDir?: string }) => unknown) => void;
-    onLoad: (options: { filter: RegExp; namespace?: string }, callback: (args: { path: string; resolveDir: string }) => unknown) => void;
-  };
-  const result = await esbuild.build({
-    entryPoints: [entry], bundle: true, write: false, format: 'iife', platform: 'browser', target: 'es2020',
-    jsx: 'automatic', loader: { '.tsx': 'tsx', '.ts': 'ts' }, absWorkingDir: root,
-    plugins: [{
-      name: 'action-review-harness-mocks',
-      setup(build: EsbuildPluginBuild) {
-        build.onResolve({ filter: /^@\// }, (args: { path: string }) => {
-          if (mocks[args.path]) return { path: args.path, namespace: 'mock' };
-          const candidate = resolve(src, args.path.slice(2));
-          if (existsSync(candidate)) return { path: candidate };
-          for (const extension of ['.tsx', '.ts']) if (existsSync(`${candidate}${extension}`)) return { path: `${candidate}${extension}` };
-          return { path: candidate };
-        });
-        build.onResolve({ filter: /^lucide-react$/ }, () => ({ path: 'lucide-react', namespace: 'mock' }));
-        build.onLoad({ filter: /.*/, namespace: 'mock' }, (args: { path: string }) => ({ contents: mocks[args.path], loader: 'tsx', resolveDir: resolve(root, 'apps/mini-app') }));
-        build.onResolve({ filter: /\.module\.css$/ }, (args: { path: string; resolveDir?: string }) => ({ path: resolve(args.resolveDir ?? root, args.path), namespace: 'empty-css' }));
-        build.onLoad({ filter: /.*/, namespace: 'empty-css' }, () => ({ contents: 'export default {};', loader: 'js' }));
-      },
-    }],
-  });
-  return result.outputFiles[0].text;
-}
-
-let bundle = '';
-
+import { openHarness, metric } from '../harness/action-review-measurement-support';
 type PreviewRequestSnapshot = {
   id: number;
   routeVersion: number;
@@ -155,14 +9,6 @@ type PreviewRequestSnapshot = {
   connectionVersion: number;
   settled: boolean;
 };
-
-async function openHarness(page: import('@playwright/test').Page, options: { initialPreviewMode?: 'auto' | 'deferred' } = {}): Promise<void> {
-  const modePrelude = options.initialPreviewMode
-    ? `<script>globalThis.__actionReviewHarnessInitialMode = ${JSON.stringify(options.initialPreviewMode)};</script>`
-    : '';
-  await page.setContent(`<div id="root"></div>${modePrelude}<script>${bundle}</script>`);
-  await expect(page.locator('[data-harness-ready="true"]')).toHaveCount(1);
-}
 
 async function previewRequests(page: import('@playwright/test').Page): Promise<PreviewRequestSnapshot[]> {
   return page.evaluate(() => {
@@ -193,16 +39,7 @@ async function expectNoEnabledCurrentAction(page: import('@playwright/test').Pag
   expect(await metric(page, 'send')).toBe(0);
 }
 
-async function metric(page: import('@playwright/test').Page, key: 'prepare' | 'plan' | 'runner' | 'send' | 'draftSave'): Promise<number> {
-  return page.evaluate((metricKey) => {
-    const harness = (window as typeof window & { __actionReviewHarness?: Record<string, number> }).__actionReviewHarness;
-    return harness?.[`${metricKey}Count`] ?? 0;
-  }, key);
-}
-
 test.describe('ActionReview isolated orchestration', () => {
-  test.beforeAll(async () => { bundle = await buildHarness(); });
-
   test('explicit review never signs until the separate confirmation action', async ({ page }) => {
     await openHarness(page);
     await page.getByRole('button', { name: 'Use explicit review', exact: true }).click();
@@ -217,6 +54,80 @@ test.describe('ActionReview isolated orchestration', () => {
     await expect(page.getByRole('heading', { name: 'Confirmed', exact: true })).toBeVisible();
     expect(await metric(page, 'runner')).toBe(1);
     expect(await metric(page, 'send')).toBe(1);
+  });
+
+  test('locks the accepted route while the wallet response is pending', async ({ page }) => {
+    await openHarness(page);
+    await page.getByRole('button', { name: 'Use explicit review', exact: true }).click();
+    await page.getByRole('button', { name: 'Review position', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Confirm in wallet', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Defer wallet response', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm in wallet', exact: true }).click();
+    await expect(page.getByText('Wallet approval', { exact: true })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Change terms', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Open position v1', exact: true })).toBeVisible();
+    expect(await metric(page, 'send')).toBe(1);
+    expect(await metric(page, 'runner')).toBe(1);
+
+    await page.getByRole('button', { name: 'Resolve wallet response', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Confirmed', exact: true })).toBeVisible();
+    const executedRouteVersion = await page.evaluate(() => (window as typeof window & { __actionReviewHarness?: { lastExecutedRouteVersion?: number } }).__actionReviewHarness?.lastExecutedRouteVersion);
+    expect(executedRouteVersion).toBe(1);
+    expect(await metric(page, 'send')).toBe(1);
+  });
+
+  test('keeps accepted calldata when a rerender recreates the planner for the same form intent', async ({ page }) => {
+    await openHarness(page);
+    await page.getByRole('button', { name: 'Use explicit review', exact: true }).click();
+    await page.getByRole('button', { name: 'Review position', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Open position v1', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Recreate planner', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Open position v1', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Confirm in wallet', exact: true })).toBeEnabled();
+    await page.getByRole('button', { name: 'Confirm in wallet', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Confirmed', exact: true })).toBeVisible();
+    const executedRouteVersion = await page.evaluate(() => (window as typeof window & { __actionReviewHarness?: { lastExecutedRouteVersion?: number } }).__actionReviewHarness?.lastExecutedRouteVersion);
+    expect(executedRouteVersion).toBe(1);
+    expect(await metric(page, 'send')).toBe(1);
+  });
+
+  test('keeps reviewed terms visible but blocks signing when disabled or its planner disappears', async ({ page }) => {
+    await openHarness(page);
+    await page.getByRole('button', { name: 'Use explicit review', exact: true }).click();
+    await page.getByRole('button', { name: 'Review position', exact: true }).click();
+    const confirm = page.getByRole('button', { name: 'Confirm in wallet', exact: true });
+    await expect(confirm).toBeEnabled();
+    await page.getByRole('button', { name: 'Disable action', exact: true }).click();
+    await expect(confirm).toBeDisabled();
+    await expect(page.getByRole('heading', { name: 'Open position v1', exact: true })).toBeVisible();
+    expect(await metric(page, 'send')).toBe(0);
+    await page.getByRole('button', { name: 'Enable action', exact: true }).click();
+    await page.getByRole('button', { name: 'Remove planner', exact: true }).click();
+    await expect(confirm).toBeDisabled();
+    await expect(page.getByRole('heading', { name: 'Open position v1', exact: true })).toBeVisible();
+    expect(await metric(page, 'send')).toBe(0);
+    await page.getByRole('button', { name: 'Restore planner', exact: true }).click();
+    await expect(confirm).toBeEnabled();
+    await confirm.click();
+    await expect(page.getByRole('heading', { name: 'Confirmed', exact: true })).toBeVisible();
+    expect(await metric(page, 'send')).toBe(1);
+  });
+
+  test('invalidates the accepted route when the logical form intent really changes', async ({ page }) => {
+    await openHarness(page);
+    await page.getByRole('button', { name: 'Use explicit review', exact: true }).click();
+    await page.getByRole('button', { name: 'Review position', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Open position v1', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Change terms', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Confirm in wallet', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Open position v1', exact: true })).toHaveCount(0);
+    const refresh = page.getByRole('button', { name: 'Review updated quote', exact: true });
+    await expect(refresh).toBeEnabled();
+    await refresh.click();
+    await expect(page.getByRole('heading', { name: 'Open position v2', exact: true })).toBeVisible();
+    expect(await metric(page, 'runner')).toBe(0);
+    expect(await metric(page, 'send')).toBe(0);
   });
 
 
@@ -251,6 +162,19 @@ test.describe('ActionReview isolated orchestration', () => {
     await expect.poll(() => page.evaluate(() => Boolean((globalThis as typeof globalThis & { __actionReviewHarness?: { completeStarted?: boolean } }).__actionReviewHarness?.completeStarted))).toBe(true);
     expect(await metric(page, 'runner')).toBe(1);
     expect(await metric(page, 'send')).toBe(1);
+    await page.getByRole('button', { name: 'Resolve wallet refresh', exact: true }).click();
+  });
+
+  test('keeps partial-result copy accurate while the post-confirm refresh is pending', async ({ page }) => {
+    await openHarness(page);
+    await expect(page.getByRole('button', { name: 'Open position v1', exact: true })).toBeVisible({ timeout: 2_000 });
+    await page.getByRole('button', { name: 'Return partial result', exact: true }).click();
+    await page.getByRole('button', { name: 'Defer wallet refresh', exact: true }).click();
+    await page.getByRole('button', { name: 'Open position v1', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Partially completed', exact: true })).toBeVisible();
+    await expect(page.getByText('An earlier step confirmed before the action stopped.', { exact: true })).toBeVisible();
+    await expect(page.getByText('Transaction confirmed. Position details are refreshing.', { exact: true })).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => Boolean((globalThis as typeof globalThis & { __actionReviewHarness?: { refreshStarted?: boolean } }).__actionReviewHarness?.refreshStarted))).toBe(true);
     await page.getByRole('button', { name: 'Resolve wallet refresh', exact: true }).click();
   });
 
@@ -393,7 +317,7 @@ test.describe('ActionReview isolated orchestration', () => {
     expect(await metric(page, 'send')).toBe(0);
   });
 
-  test('expires a resumed legacy review and refreshes before enabling confirmation', async ({ page }) => {
+  test('expires a resumed review without dropping accepted terms and requires an explicit quote refresh', async ({ page }) => {
     await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
     await openHarness(page);
     await page.getByRole('button', { name: 'Resume legacy review', exact: true }).click();
@@ -408,11 +332,17 @@ test.describe('ActionReview isolated orchestration', () => {
     // effect at the end of the same fake-clock advancement.
     await page.clock.runFor(1);
     await expect(confirm).toHaveCount(0);
+    const refresh = page.getByRole('button', { name: 'Review updated quote', exact: true });
+    await expect(refresh).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Open position v1', exact: true })).toBeVisible();
     expect(await metric(page, 'runner')).toBe(0);
     expect(await metric(page, 'send')).toBe(0);
-    const action = page.getByRole('button', { name: 'Open position v1', exact: true });
-    await expect(action).toBeVisible();
-    await expect(action).toBeEnabled({ timeout: 5_000 });
+    await page.getByRole('button', { name: 'Change quote terms to v2', exact: true }).click();
+    await refresh.click();
+    const changes = page.getByRole('region', { name: 'Updated transaction consequences' });
+    await expect(changes).toContainText('Changed since your previous review');
+    await expect(changes).toContainText('Terms 1 → Terms 2');
+    await expect(confirm).toBeEnabled();
     expect(await metric(page, 'runner')).toBe(0);
     expect(await metric(page, 'send')).toBe(0);
   });

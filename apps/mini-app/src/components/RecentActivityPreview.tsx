@@ -15,8 +15,10 @@ import { haptic } from '@/lib/telegram';
 import { useInvalidateWalletData } from '@/components/WalletDataProvider';
 import { createRecoveryWalletRefresh, createWalletReadScope } from '@/lib/walletDataRefresh';
 import styles from '@/app/AccountWorkspace.module.css';
+import { selectWalletTasks } from '@/lib/taskState';
+import ProtocolPositionHistory from '@/components/ProtocolPositionHistory';
 
-export default function RecentActivityPreview({ walletAddress }: { walletAddress: Address }) {
+export default function RecentActivityPreview({ walletAddress, attentionOnly = false }: { walletAddress: Address; attentionOnly?: boolean }) {
   const identity = walletAddress.toLowerCase();
   const readScope = useRef(createWalletReadScope(walletAddress));
   readScope.current.select(walletAddress);
@@ -27,6 +29,7 @@ export default function RecentActivityPreview({ walletAddress }: { walletAddress
   const items = current ? snapshot.items : [];
   const loading = !current || snapshot.loading;
   const loadError = current ? snapshot.error : '';
+  const attention = selectWalletTasks({ walletAddress, transactions: items }).filter((task) => task.kind === 'transaction');
 
   const load = useCallback(async () => {
     const isCurrent = readScope.current.start(walletAddress);
@@ -46,7 +49,10 @@ export default function RecentActivityPreview({ walletAddress }: { walletAddress
         setSnapshot({ identity, items: [], loading: false, error: 'Saved history is on this device, but transaction status is unavailable. Retry when network access is available.' });
         return;
       }
-      setSnapshot({ identity, items: [...reconciled].reverse().slice(0, 3), loading: false, error: '' });
+      const ordered = [...reconciled].reverse();
+      const unresolved = ordered.filter((item) => item.status === 'pending');
+      const terminal = ordered.filter((item) => item.status !== 'pending');
+      setSnapshot({ identity, items: [...unresolved, ...terminal].slice(0, 3), loading: false, error: '' });
     } catch {
       if (!isCurrent()) return;
       setSnapshot({ identity, items: [], loading: false, error: 'Saved history could not be checked against chain receipts. Nothing was treated as complete or failed.' });
@@ -58,6 +64,20 @@ export default function RecentActivityPreview({ walletAddress }: { walletAddress
     void load();
     return () => scope.cancel();
   }, [load]);
+
+  if (attentionOnly) {
+    if (!loading && !loadError && attention.length === 0) return null;
+    return <section aria-labelledby="wallet-task-attention-title" className={styles.section}>
+      <SectionTitle><span id="wallet-task-attention-title">Needs attention</span></SectionTitle>
+      <Card className="p-3">
+        {loading ? <p role="status" className="text-[11px] text-mut">Checking submitted transactions…</p>
+          : loadError ? <p role="status" className="text-[11px] text-warn">Confirmation could not be verified. <Link href="/history" className="font-semibold text-mint">Open History</Link> to check progress.</p>
+            : <ul className="space-y-1">{attention.map((task) => <li key={task.id} className="flex items-center justify-between gap-3 text-[11px]">
+              <span>{task.title}</span><Link href={task.href} className="inline-flex min-h-11 shrink-0 items-center font-semibold text-mint">View progress</Link>
+            </li>)}</ul>}
+      </Card>
+    </section>;
+  }
 
   return (
     <section className={styles.section} aria-labelledby="recent-activity-title">
@@ -81,6 +101,17 @@ export default function RecentActivityPreview({ walletAddress }: { walletAddress
           </div>
         ) : items.length ? (
           <>
+            {attention.length > 0 && (
+              <section aria-labelledby="portfolio-attention-title" className="mx-3 mt-3 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3">
+                <h3 id="portfolio-attention-title" className="text-[11px] font-semibold">Needs attention</h3>
+                <ul className="mt-2 space-y-2">
+                  {attention.map((task) => <li key={task.id} className="flex items-center justify-between gap-3 text-[11px]">
+                    <span className="min-w-0">{task.title}</span>
+                    <Link href={task.href} className="min-h-11 shrink-0 inline-flex items-center font-semibold text-mint">View progress</Link>
+                  </li>)}
+                </ul>
+              </section>
+            )}
             {items.some((item) => item.verification === 'rpc-error') && (
               <div role="status" aria-live="polite" className="mx-3 mt-3 flex items-center gap-2 rounded-lg bg-[var(--warn-dim)] px-3 py-2"><span className="min-w-0 flex-1 text-[11px] text-warn">Some transaction details are unavailable. Retry before relying on this history.</span><button type="button" aria-label="Retry receipt details" onClick={() => { haptic('light'); void load(); }} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-lg text-warn"><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /></button></div>
             )}
@@ -93,6 +124,7 @@ export default function RecentActivityPreview({ walletAddress }: { walletAddress
           Open full history <ChevronRight className="h-4 w-4" aria-hidden="true" />
         </Link>
       </Card>
+      <ProtocolPositionHistory walletAddress={walletAddress} compact />
     </section>
   );
 }

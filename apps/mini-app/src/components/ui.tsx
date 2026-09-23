@@ -25,6 +25,7 @@ import WalletProfile from '@/components/WalletProfile';
 import NetworkSelector from '@/components/NetworkSelector';
 import { ValueOrSkeleton } from '@/components/MissingValue';
 import { compactAddress } from '@/lib/addressPresentation';
+import headerWalletControl from '@/components/HeaderWalletControl.module.css';
 
 /* ------------------------------------------------------------------ shell */
 
@@ -89,8 +90,10 @@ export function AppShell({
             </Link>
             <DesktopNavigation />
             <span className="app-topbar-actions">
-              <NetworkSelector />
-              <WalletProfile />
+              <span className={headerWalletControl.control} data-header-wallet-control="true" role="group" aria-label="Wallet and network controls">
+                <NetworkSelector />
+                <WalletProfile />
+              </span>
               <ThemeToggle />
             </span>
           </header>

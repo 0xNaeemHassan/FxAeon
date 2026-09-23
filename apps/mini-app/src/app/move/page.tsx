@@ -5,6 +5,7 @@ import { AlertTriangle, ArrowLeftRight } from 'lucide-react';
 import { formatUnits, type Address } from 'viem';
 import { AppShell, Card } from '@/components/ui';
 import { PageHeading } from '@/components/ProductUI';
+import { ActionWorkspace } from '@/components/ProductLayout';
 import { ActionReview, type ActionReviewStage } from '@/components/ActionReview';
 import { AmountField, TokenSelect, type TokenBalanceView } from '@/components/ProtocolForm';
 import { useMoveBalances } from '@/components/WalletDataProvider';
@@ -131,7 +132,7 @@ export default function MovePage() {
   const [customRecipient, setCustomRecipient] = useState(false);
   const [reviewRevision, setReviewRevision] = useState(0);
   const [resumeReview, setResumeReview] = useState(0);
-  const [reviewStage, setReviewStage] = useState<ActionReview reviewBeforeSignStage>('input');
+  const [reviewStage, setReviewStage] = useState<ActionReviewStage>('input');
   const [advancedBalance, setAdvancedBalance] = useState<TokenBalanceView | undefined>(undefined);
   const previousWalletContextRef = useRef<string | null>(null);
   // A review-rail connection is part of the current move action. Do not
@@ -463,7 +464,7 @@ export default function MovePage() {
 
   return (
     <AppShell>
-      <div className={`${styles.workspace} ${styles.moveWorkspace} ${moveStyles.moveWorkspace}`}>
+      <ActionWorkspace density="compact" className={`${styles.workspace} ${styles.moveWorkspace} ${moveStyles.moveWorkspace}`}>
         <PageHeading title="Move" />
         <Card
           data-flow-stage={reviewStage}
@@ -574,7 +575,7 @@ export default function MovePage() {
             }}
           />
         </Card>
-      </div>
+      </ActionWorkspace>
     </AppShell>
   );
 }

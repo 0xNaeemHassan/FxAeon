@@ -6,6 +6,7 @@ import { usePrivyWallet, type FxChainId } from '@/lib/wallet';
 import { usePathname } from 'next/navigation';
 import ConnectWalletButton from '@/components/ConnectWalletButton';
 import { ChainIcon } from '@/components/TokenIcon';
+import { beginLocalHistoryEntry, isLocalHistoryTraversal } from '@/lib/useOverlayDialog';
 
 const CHAINS: readonly { id: FxChainId; label: string }[] = [
   { id: 1, label: 'Ethereum' },
@@ -80,8 +81,46 @@ export default function NetworkSelector() {
 
   useEffect(() => {
     if (!open) return;
+    const root = rootRef.current;
+    const menu = menuRef.current;
+    if (!root || !menu) return;
+
+    // The selector can sit near the center of a narrow mobile header. Keeping
+    // the menu right-aligned to it would push the menu beyond the viewport.
+    // Clamp its left edge to the viewport while preserving right alignment
+    // whenever there is room.
+    const positionMenu = () => {
+      const rootRect = root.getBoundingClientRect();
+      const menuRect = menu.getBoundingClientRect();
+      const minLeft = 12 - rootRect.left;
+      const maxLeft = window.innerWidth - 12 - rootRect.left - menuRect.width;
+      const rightAlignedLeft = rootRect.width - menuRect.width;
+      const left = Math.max(minLeft, Math.min(rightAlignedLeft, maxLeft));
+      menu.style.left = `${left}px`;
+      menu.style.right = 'auto';
+    };
+
+    positionMenu();
+    window.addEventListener('resize', positionMenu);
+    return () => {
+      window.removeEventListener('resize', positionMenu);
+      menu.style.left = '';
+      menu.style.right = '';
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const trigger = buttonRef.current;
+    let consumedBack = false;
+    let restoreFocus = true;
+    const historyKey = '__fxaeonNetworkMenu';
+    const historyEntry = beginLocalHistoryEntry(historyKey, menuId);
     const onPointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      if (!rootRef.current?.contains(event.target as Node)) {
+        restoreFocus = false;
+        setOpen(false);
+      }
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -90,13 +129,30 @@ export default function NetworkSelector() {
         buttonRef.current?.focus();
       }
     };
+    const onPopState = (event: PopStateEvent) => {
+      if (isLocalHistoryTraversal(event)) return;
+      consumedBack = true;
+      setOpen(false);
+    };
+    const onTelegramBack = (event: Event) => {
+      const detail = (event as CustomEvent<{ consume?: () => void; isConsumed?: () => boolean }>).detail;
+      if (detail?.isConsumed?.()) return;
+      setOpen(false);
+      detail?.consume?.();
+    };
     document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
+    window.addEventListener('popstate', onPopState);
+    window.addEventListener('fxaeon:telegram-back', onTelegramBack);
     return () => {
       document.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('popstate', onPopState);
+      window.removeEventListener('fxaeon:telegram-back', onTelegramBack);
+      historyEntry.finish(consumedBack);
+      if (restoreFocus) trigger?.focus({ preventScroll: true });
     };
-  }, [open]);
+  }, [open, menuId]);
 
   const selectChain = async (chainId: FxChainId) => {
     if (pending || !connected || chainId === wallet.chainId) return;
@@ -133,6 +189,7 @@ export default function NetworkSelector() {
   const switchError = failedTarget === null
     ? 'Switch failed.'
     : `Switch failed. Couldn't switch to ${chainLabel(failedTarget)}. Try again.`;
+  const visibleLabel = !connected ? 'Networks' : pending ? 'Switching…' : supportedChain ? chainLabel(wallet.chainId) : 'Unsupported';
   return (
     <div ref={rootRef} className={`network-selector-wrap${routeBlocked ? ' network-selector-wrap-blocked' : ''}`}>
       <button
@@ -149,6 +206,7 @@ export default function NetworkSelector() {
       >
         {pending ? <LoaderCircle className="network-selector-spinner" size={15} aria-hidden="true" /> : currentChainIcon ? <ChainIcon chainId={currentChainIcon} size={17} /> : <Globe2 size={16} aria-hidden="true" />}
         <span className="sr-only network-selector-label">{label}</span>
+        <span className="network-selector-visual-label" aria-hidden="true">{visibleLabel}</span>
       </button>
       {routeBlocked && <p className="network-selector-notice" role="status" aria-live="polite">{requiredChain ? `Switch to ${chainLabel(requiredChain)} to continue.` : 'Choose a supported network to continue.'}</p>}
       {open && <div ref={menuRef} id={menuId} className="network-selector-menu" role="menu" aria-label="Choose wallet network" onKeyDown={(event) => {

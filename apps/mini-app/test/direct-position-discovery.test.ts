@@ -6,7 +6,7 @@ import {
   type DirectPositionDiscoveryParams,
 } from '../src/app/trade/directPositionDiscovery';
 import { readCanonicalPositionContext, readCanonicalPositionInfo } from '../src/app/trade/canonicalPositionReader';
-import { readPositionGroupWithDirectFallback } from '../src/app/trade/fxUi';
+import { POSITION_INDEXER_READ_TIMEOUT_MS, readPositionGroupWithDirectFallback, verifyPositionGroupOwnership } from '../src/app/trade/fxUi';
 import type { FxPublicClient } from '../src/lib/fx/types';
 import type { PositionGroup } from '../src/app/trade/fxUi';
 
@@ -150,6 +150,37 @@ test('failed or delayed indexer discovery still exposes a directly held foreign-
   assert.deepEqual(result.map((info) => info.positionId), [3]);
 });
 
+test('SDK index hydration may exceed three seconds without triggering historical discovery', async () => {
+  assert.ok(POSITION_INDEXER_READ_TIMEOUT_MS > 3_000);
+  const client = mockClient({ balance: 1n, ownedIds: [7] });
+  const result = await readPositionGroupWithDirectFallback({
+    client: client as unknown as FxPublicClient,
+    sdk: {
+      getPositions: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        return [{
+          positionId: 7,
+          rawColls: 2n * WAD,
+          rawDebts: WAD,
+          currentLeverage: 2,
+          lsdLeverage: 2,
+          rawCollsToken: 'ETH',
+          rawDebtsToken: 'fxUSD',
+          rawCollsDecimals: 18,
+          rawDebtsDecimals: 18,
+        }];
+      },
+    },
+    walletAddress: wallet,
+    group,
+    // Keep the harness quick while exercising a delayed SDK result within
+    // the same configurable production budget.
+    indexerTimeoutMs: 100,
+  });
+  assert.deepEqual(result.map((info) => info.positionId), [7]);
+  assert.equal(client.calls.includes('getNextPositionId'), false);
+});
+
 test('a fast index result is rejected when the wallet NFT count changes before completion', async () => {
   const client = mockClient({ balances: [1n, 2n], ownedIds: [7] });
   const result = readPositionGroupWithDirectFallback({
@@ -218,4 +249,48 @@ test('BTC pricing chooses the best available SDK route independently in each dir
 test('BTC pricing rejects a refresh when both candidate routes fail', async () => {
   const client = { readContract: async () => { throw new Error('unavailable'); } } as unknown as FxPublicClient;
   await assert.rejects(readCanonicalPositionContext({ client, group: { market: 'BTC', side: 'short' } }), /quotes unavailable/);
+});
+
+test('zero-accounting owned indexer IDs satisfy completeness without scanning history', async () => {
+  const client = mockClient({ balance: 1n, ownedIds: [7], position: [0n, 0n] });
+  const result = await readPositionGroupWithDirectFallback({
+    client: client as unknown as FxPublicClient,
+    sdk: {
+      getPositions: async () => [{
+        positionId: 7,
+        rawColls: 0n,
+        rawDebts: 0n,
+        currentLeverage: 0,
+        lsdLeverage: 0,
+        rawCollsToken: 'ETH',
+        rawDebtsToken: 'fxUSD',
+        rawCollsDecimals: 18,
+        rawDebtsDecimals: 18,
+      }],
+    },
+    walletAddress: wallet,
+    group,
+  });
+  assert.deepEqual(result.map((info) => info.positionId), [7]);
+  assert.equal(client.calls.includes('getNextPositionId'), false, 'a complete owned ID set avoids the bounded history scan');
+});
+
+test('nonzero canonical accounting with uncertain owner remains unverified', async () => {
+  const client = mockClient({ balance: 1n, ownedIds: [] });
+  await assert.rejects(verifyPositionGroupOwnership({
+    client,
+    walletAddress: wallet,
+    group,
+    positions: [{
+      positionId: 7,
+      rawColls: 2n * WAD,
+      rawDebts: WAD,
+      currentLeverage: 2,
+      lsdLeverage: 2,
+      rawCollsToken: 'ETH',
+      rawDebtsToken: 'fxUSD',
+      rawCollsDecimals: 18,
+      rawDebtsDecimals: 18,
+    }],
+  }), /foreign or burned/);
 });

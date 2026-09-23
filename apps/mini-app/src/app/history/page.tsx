@@ -2,6 +2,7 @@
 
 import { AppShell } from '@/components/ui';
 import PendingTransactionRecovery from '@/components/PendingTransactionRecovery';
+import ProtocolPositionHistory from '@/components/ProtocolPositionHistory';
 import WalletConnectCTA from '@/components/WalletConnectCTA';
 import { usePrivyWallet } from '@/lib/wallet';
 import type { Address } from 'viem';
@@ -14,10 +15,10 @@ export default function HistoryPage() {
     <AppShell title="History">
       <div className={`${styles.workspace} ${styles.activitySection} ${styles.activityCompactWorkspace}`}>
         {!wallet.address ? (
-          <WalletConnectCTA compact ready={wallet.ready} authenticated={wallet.authenticated} body="Connect to see this wallet's pending and completed transactions." />
+          <WalletConnectCTA compact ready={wallet.ready} authenticated={wallet.authenticated} body="Connect to see this wallet's indexed position activity and saved transaction history." />
         ) : (
           <>
-            <p className="px-1 text-[11px] leading-relaxed text-mut">Submitted actions and signature reviews for this wallet.</p>
+            <ProtocolPositionHistory walletAddress={wallet.address as Address} />
             <PendingTransactionRecovery walletAddress={wallet.address as Address} embedded />
           </>
         )}

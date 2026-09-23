@@ -104,7 +104,7 @@ test('keeps the subtotal unavailable when no verified fresh quote or balance exi
   assert.deepEqual(knownFreshPortfolioSubtotal(null, {
     balances: [{ key: 'ETH', address: FX_TOKENS.ETH.address, decimals: 18, amountWei: 600_000_000_000_000n }],
     failedTokens: [],
-  }, now, { prices: { ETH: 2_000 }, status: 'stale', updatedAt: now - 10 * 60_000 }, now), {
+  }, now, { prices: { ETH: 2_000 }, status: 'stale', updatedAt: now - 16 * 60_000 }, now), {
     totalUsd: null, assetCount: 1, hasKnownValue: false,
   });
   assert.deepEqual(knownFreshPortfolioSubtotal(null, {

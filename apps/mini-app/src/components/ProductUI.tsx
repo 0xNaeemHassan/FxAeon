@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowLeft, Check, ChevronDown, ChevronRight, ExternalLink, Info, type LucideIcon } from 'lucide-react';
 import { haptic, openExternalLink } from '@/lib/telegram';
 import styles from './ProductUI.module.css';
+import { ValueOrSkeleton } from './MissingValue';
 
 /** Shared presentation only. Quotes, balances, eligibility and signing remain
  * owned by the product routes and their existing providers. */
@@ -30,7 +31,7 @@ export type MetricRow = { label: string; value: ReactNode; detail?: ReactNode; e
 export function MetricRows({ rows, label }: { rows: readonly MetricRow[]; label?: string }) {
   return <dl className={styles.metrics} aria-label={label}>
     {rows.map((row) => <div key={row.label} className={row.emphasis ? styles.emphasizedMetric : undefined}>
-      <dt>{row.label}</dt><dd>{row.value}{row.detail && <small>{row.detail}</small>}</dd>
+      <dt>{row.label}</dt><dd><ValueOrSkeleton value={row.value} status="unavailable" label={row.label} />{row.detail && <small>{row.detail}</small>}</dd>
     </div>)}
   </dl>;
 }
@@ -79,10 +80,15 @@ export function RowGroup({ title, children, id }: { title?: string; children: Re
   </section>;
 }
 
-export function ActionRow({ icon: Icon, title, description, value, href, external = false, onClick, disabled = false }: {
-  icon?: LucideIcon; title: string; description?: ReactNode; value?: ReactNode;
-  href?: string; external?: boolean; onClick?: () => void; disabled?: boolean;
-}) {
+type ActionRowBase = { icon?: LucideIcon; title: string; description?: ReactNode; value?: ReactNode };
+type ActionRowLink = ActionRowBase & { href: string; external?: boolean; onClick?: () => void; disabled?: never };
+type ActionRowButton = ActionRowBase & { href?: never; external?: never; onClick: () => void; disabled?: boolean };
+export function ActionRow(props: ActionRowLink | ActionRowButton) {
+  const { icon: Icon, title, description, value } = props;
+  const href = 'href' in props ? props.href : undefined;
+  const external = 'external' in props ? props.external ?? false : false;
+  const onClick = props.onClick;
+  const disabled = 'disabled' in props ? props.disabled ?? false : false;
   const content = <>{Icon && <Icon className={styles.rowIcon} size={20} aria-hidden="true" />}<span className={styles.rowCopy}><strong>{title}</strong>{description && <small>{description}</small>}</span>{value && <span className={styles.rowValue}>{value}</span>}{external ? <ExternalLink size={17} aria-hidden="true" /> : <ChevronRight size={18} aria-hidden="true" />}</>;
   if (href && external) return <a className={styles.actionRow} href={href} target="_blank" rel="noopener noreferrer" aria-label={`${title} (opens in a new tab)`} onClick={(event) => {
     haptic('light'); onClick?.();

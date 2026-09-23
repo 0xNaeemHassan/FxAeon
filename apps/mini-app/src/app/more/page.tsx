@@ -8,15 +8,16 @@ import { useAppearance } from '@/components/AppearancePreference';
 import { THEMES } from '@/lib/theme';
 import { usePrivyWallet } from '@/lib/wallet';
 import styles from '@/components/SettingsWorkspace.module.css';
+import { AccountWorkspace } from '@/components/ProductLayout';
 
 /** Secondary destinations, not a duplicate portfolio or wallet manager. */
 export default function MorePage() {
   const { theme, ready } = useAppearance();
   const wallet = usePrivyWallet();
   return <AppShell>
-    <div className={styles.workspace}>
+    <AccountWorkspace className={styles.workspace + ' ' + styles.moreWorkspace}>
       <PageHeading title="More" />
-      <AccountSummary />
+      <div className={styles.identity}><AccountSummary /></div>
       <RowGroup title="Account">
         <ActionRow icon={History} title="History" description="Activity on this device" href="/history" />
         <ActionRow icon={QrCode} title="Receive" description={wallet.ready && !wallet.address ? 'Connect a wallet to receive' : undefined} href="/qr" />
@@ -28,6 +29,6 @@ export default function MorePage() {
         <ActionRow icon={BookOpen} title="f(x) Protocol docs" href="https://fxprotocol.gitbook.io/fx-docs" external />
         <ActionRow icon={MessageCircleQuestionMark} title="Support on X" href="https://x.com/FxAeonxyz" external />
       </RowGroup>
-    </div>
+    </AccountWorkspace>
   </AppShell>;
 }

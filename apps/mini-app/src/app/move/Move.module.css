@@ -7,6 +7,7 @@
 .moveCard {
   width: 100%;
   min-width: 0;
+  padding: 16px !important;
 }
 
 .moveCard .moveAmountHero {
@@ -21,7 +22,7 @@
   display: flex !important;
   min-width: 0;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .moveCard .moveFormFields > details {
@@ -57,7 +58,7 @@
     max-width: 100%;
   }
 
-  .moveCard .moveFormFields {
-    gap: 10px;
-  }
+  .moveCard { padding: 14px !important; }
+
+  .moveCard .moveFormFields { gap: 8px; }
 }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { FX_TOKENS, type FxTokenKey } from "../src/lib/fx/tokens";
+import { freshDisplayPrices } from "../src/lib/displayPrices";
 import {
   formatUsd,
   coinGeckoTokenPriceEndpoint,
@@ -49,6 +50,28 @@ test("preserves each quote timestamp when another token is older", () => {
   assert.equal(snapshot.updatedAts.FXN, (now - 120) * 1_000);
 });
 
+test('accepts provider quotes inside fifteen minutes and isolates an older token', () => {
+  const now = 2_000_000_000;
+  const payload = validPayload(now);
+  payload.coins[`ethereum:${FX_TOKENS.FXN.address.toLowerCase()}`].timestamp = now - 901;
+  const snapshot = parseUsdPriceResponse(payload, now);
+  assert.equal(snapshot.prices.ETH, 2_400);
+  assert.equal(snapshot.updatedAts.ETH, (now - 12) * 1_000);
+  assert.equal(snapshot.prices.FXN, undefined, 'a quote older than the provider freshness window is excluded independently');
+  const sevenMinutesOld = validPayload(now);
+  for (const coin of Object.values(sevenMinutesOld.coins)) coin.timestamp = now - 7 * 60;
+  assert.equal(parseUsdPriceResponse(sevenMinutesOld, now).prices.ETH, 2_400);
+});
+
+test('display surfaces retain seven-minute quotes and filter each token at fifteen minutes', () => {
+  const now = 2_000_000_000_000;
+  const sevenMinutesAgo = now - 7 * 60_000;
+  assert.deepEqual(freshDisplayPrices({
+    prices: { ETH: 2_400, FXN: 1 }, status: 'stale', updatedAt: sevenMinutesAgo,
+    updatedAts: { ETH: sevenMinutesAgo, FXN: now - 15 * 60_000 - 1 },
+  }, now), { ETH: 2_400 });
+});
+
 test("rejects stale and low-confidence prices without discarding independently valid tokens", () => {
   const now = 2_000_000_000;
   const stale = validPayload(now);
@@ -79,14 +102,22 @@ test("calculates display-only USD values without changing token units", () => {
   assert.equal(formatUsd(0.001), "<$0.01");
 });
 
-test("restores only a recent, validated USD snapshot", () => {
+test("restores validated USD snapshots through the quote freshness window", () => {
   const now = 2_000_000_000_000;
   const prices = parseUsdPriceResponse(validPayload(Math.floor(now / 1_000)), Math.floor(now / 1_000)).prices;
   assert.deepEqual(parseUsdPriceCache({ prices, updatedAt: now - 12_000 }, now), {
     prices,
     updatedAt: now - 12_000,
   });
-  assert.equal(parseUsdPriceCache({ prices, updatedAt: now - 121_000 }, now), null);
+  assert.deepEqual(parseUsdPriceCache({ prices, updatedAt: now - 7 * 60_000 }, now), {
+    prices,
+    updatedAt: now - 7 * 60_000,
+  });
+  assert.equal(parseUsdPriceCache({ prices, updatedAt: now - 15 * 60_000 - 1 }, now), null);
+  const perToken = parseUsdPriceCache({ prices, updatedAt: now - 7 * 60_000,
+    updatedAts: { ETH: now - 7 * 60_000, FXN: now - 15 * 60_000 - 1 } }, now);
+  assert.equal(perToken?.prices.ETH, prices.ETH);
+  assert.equal(perToken?.prices.FXN, undefined);
   assert.equal(parseUsdPriceCache({ prices: { ...prices, fxUSD: 0 }, updatedAt: now - 12_000 }, now)?.prices.fxUSD, undefined);
   assert.equal(parseUsdPriceCache({ prices: { fxUSD: 0 }, updatedAt: now - 12_000 }, now), null);
 });

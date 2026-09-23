@@ -15,10 +15,10 @@ export function inspectGasOracleResponse(status, bodyText) {
     throw new Error(`gas oracle returned invalid JSON (HTTP ${status})`);
   }
 
-  // The Pages Function uses 503 for a missing binding or an optional upstream
-  // failure. Keep accepting the legacy 502 shape while older deployments drain;
-  // `requireConfigured` still rejects `configured: false` when production
-  // explicitly expects Etherscan-backed gas data.
+  // The Pages Function intentionally shares this response for a missing
+  // binding and an optional upstream failure. A public probe can establish
+  // availability, but cannot diagnose which of those caused the 503. Keep
+  // accepting the legacy 502 shape while older deployments drain.
   if ((status === 502 || status === 503)
     && body && typeof body === 'object' && body.error === 'gas oracle unavailable') {
     return { configured: false };
@@ -98,7 +98,7 @@ async function main() {
   await writeGitHubOutput(result.configured);
   console.log(result.configured
     ? 'PASS: live gas-oracle endpoint returned a valid public snapshot.'
-    : 'The Pages Function reports a missing gas-oracle binding; the verified-artifact redeploy step will run.');
+    : 'The Pages Function returned its unavailable response (missing binding or upstream failure); the verified-artifact redeploy step will run if the deployment secret was synced.');
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

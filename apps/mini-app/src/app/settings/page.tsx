@@ -11,6 +11,7 @@ import { useLocale } from '@/lib/i18n';
 import { haptic } from '@/lib/telegram';
 import { readSlippagePercent, SETTINGS_KEY } from '@/lib/settings';
 import styles from '@/components/SettingsWorkspace.module.css';
+import { AccountWorkspace } from '@/components/ProductLayout';
 
 const WalletSection = dynamic(() => import('@/components/WalletSection'), { ssr: false, loading: () => <Skeleton className="h-24" /> });
 const PRESETS = [10, 50, 100, 200] as const;
@@ -48,7 +49,7 @@ export default function SettingsPage() {
     }
   };
   return <AppShell>
-    <div className={styles.workspace}>
+    <AccountWorkspace className={styles.workspace + ' ' + styles.settingsWorkspace}>
       <PageHeading title={t('settings.title')} backHref="/more" />
       <section className={styles.section} aria-labelledby={`${id}-wallet`}>
         <h2 id={`${id}-wallet`}>Wallet</h2>
@@ -61,7 +62,7 @@ export default function SettingsPage() {
           <div className={styles.preferenceHeading}><h3 id={`${id}-slippage`}>Slippage tolerance</h3>
             <span className={saved ? styles.saved : undefined} role="status" aria-live="polite">{saved ? <><Check size={14} aria-hidden="true" />Saved</> : dirty ? 'Unsaved changes' : ''}</span>
           </div>
-          <p id={`${id}-help`} className={styles.help}>Maximum adverse change from the quote.</p>
+          <p id={`${id}-help`} className={styles.help}>Max adverse change from the quote.</p>
           <div className={styles.choices} role="radiogroup" aria-label={t('settings.maxSlippage')} aria-describedby={`${id}-help`}>
             {PRESETS.map((bps, index) => <button type="button" key={bps} role="radio" aria-checked={slippageBps === bps} disabled={!ready} tabIndex={slippageBps === bps ? 0 : -1}
               onClick={() => select(bps)} onKeyDown={(event) => {
@@ -71,13 +72,13 @@ export default function SettingsPage() {
                 select(PRESETS[next]); event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
               }}>{bps / 100}%</button>)}
           </div>
-          <p className={styles.scope}>Trade, Positions and eligible fxSAVE actions. Saved on this device.</p>
+          <p className={styles.scope}>Trade, Positions, and eligible fxSAVE; saved on this device.</p>
           <Button onClick={save} disabled={!ready || !dirty} className={styles.save}>Save preferences</Button>
           {error && <p role="alert" className={styles.error}>{error}</p>}
         </ProductSurface>
       </section>
       <AppearancePreference />
-      <SessionControl />
-    </div>
+      <div className={styles.disconnect}><SessionControl /></div>
+    </AccountWorkspace>
   </AppShell>;
 }

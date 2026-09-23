@@ -1,6 +1,7 @@
 'use client';
 
 import { createPortal } from 'react-dom';
+import { useOverlayDialog } from '@/lib/useOverlayDialog';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, Info, Search } from 'lucide-react';
 import TokenIcon from '@/components/TokenIcon';
@@ -43,8 +44,8 @@ export function useWalletTokenBalances(walletAddress?: string, chainId?: number,
   const address = walletAddress?.trim();
   const query = useWalletBalances({ address, chainId: chainId ?? 0, enabled: Boolean(address) && chainId === 1 });
   const refreshBalances = query.refresh;
-  const refresh = useCallback(async () => {
-    if (address && chainId === 1) await refreshBalances();
+  const refresh = useCallback(async (force = false) => {
+    if (address && chainId === 1) await refreshBalances(force);
   }, [address, chainId, refreshBalances]);
   const balances = useMemo(() => query.data ? balanceMapForResult(query.data) : EMPTY_TOKEN_BALANCES, [query.data]);
 
@@ -243,8 +244,8 @@ export function SlippageField({
   );
 }
 
-export { AmountField } from './AmountField';
-export type { AmountFieldProps } from './AmountField';
+export { AmountField, AmountFieldView } from './AmountField';
+export type { AmountFieldProps, AmountFieldViewProps } from './AmountField';
 
 export function TokenSelect<T extends string>({
   value,
@@ -273,11 +274,9 @@ export function TokenSelect<T extends string>({
   const pickerStatus = balanceStatus;
   const showBalanceColumn = pickerStatus !== 'disconnected' && Boolean(pickerBalances || pickerStatus);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const dialogRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const closingRef = useRef(false);
-  const restoreFocusRef = useRef(false);
   const filteredOptions = useMemo(() => {
     const normalised = query.trim().toLowerCase();
     if (!normalised) return [...options];
@@ -286,67 +285,21 @@ export function TokenSelect<T extends string>({
 
   const closePicker = () => {
     closingRef.current = true;
-    restoreFocusRef.current = true;
     setQuery('');
     setOpen(false);
   };
+  const overlayRef = useOverlayDialog<HTMLDivElement>({ open, onClose: closePicker, triggerRef });
 
   useEffect(() => {
     if (!open) return;
     closingRef.current = false;
-    restoreFocusRef.current = false;
-    const trigger = triggerRef.current;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
     const selectedIndex = Math.max(0, filteredOptions.indexOf(value));
     window.requestAnimationFrame(() => {
-      if (closingRef.current || !dialogRef.current) return;
+      if (closingRef.current || !overlayRef.current) return;
       if (options.length > 4) searchRef.current?.focus();
       else optionRefs.current[selectedIndex]?.focus();
     });
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        closePicker();
-      } else if (event.key === 'Tab' && dialogRef.current) {
-        const dialog = dialogRef.current;
-        const focusable = getDialogFocusable(dialog);
-        if (!dialog.contains(document.activeElement)) {
-          event.preventDefault();
-          (event.shiftKey ? focusable[focusable.length - 1] : focusable[0])?.focus();
-        } else {
-          trapDialogFocus(event, dialog);
-        }
-      }
-    };
-    const onFocusIn = (event: FocusEvent) => {
-      const dialog = dialogRef.current;
-      if (closingRef.current || !dialog || dialog.contains(event.target as Node)) return;
-      getDialogFocusable(dialog)[0]?.focus();
-    };
-    const onTelegramBack = (event: Event) => {
-      if (!open) return;
-      const detail = (event as CustomEvent<{ consume?: () => void; isConsumed?: () => boolean }>).detail;
-      if (detail?.isConsumed?.()) return;
-      closePicker();
-      detail?.consume?.();
-    };
-    document.addEventListener('keydown', onKeyDown);
-    document.addEventListener('focusin', onFocusIn);
-    window.addEventListener('fxaeon:telegram-back', onTelegramBack);
-    return () => {
-      document.removeEventListener('focusin', onFocusIn);
-      document.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('fxaeon:telegram-back', onTelegramBack);
-      document.body.style.overflow = previousOverflow;
-      if (restoreFocusRef.current) {
-        restoreFocusRef.current = false;
-        closingRef.current = false;
-        trigger?.focus({ preventScroll: true });
-      }
-    };
-    // Picker lifecycle listeners intentionally only follow open/close. Search
-    // and option changes must not restart the initial-focus routine.
+    // Search and option changes must not restart the initial-focus routine.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -402,7 +355,7 @@ export function TokenSelect<T extends string>({
           onMouseDown={(event) => { if (event.target === event.currentTarget) closePicker(); }}
         >
           <div
-            ref={dialogRef}
+            ref={overlayRef}
             id={`${selectId}-menu`}
             role="dialog"
             aria-modal="true"
@@ -573,60 +526,85 @@ export function LeverageField({
   const invalid = Boolean(error);
   const sliderValue = Math.min(max, Math.max(min, Number.isFinite(value) && value > 0 ? value : min));
   const fill = max === min ? 0 : ((sliderValue - min) / (max - min)) * 100;
-  return (
-    <div>
-      <FieldLabel htmlFor={inputId} hint={`${min}× – ${max}×`}>{label}</FieldLabel>
-      <div className={`${styles.rangeField} ${compact ? styles.compactRangeField : ''} range-control p-3 ${invalid ? 'field-error' : ''}`}>
-        <div className="flex items-center gap-3">
-          <input
-            id={inputId}
-            type="number"
-            inputMode="decimal"
-            min={min}
-            max={max}
-            step="0.1"
-            value={Number.isFinite(value) ? value : ''}
-            onChange={(event) => {
-              if (!event.target.value) {
-                onChange(0);
-                return;
-              }
-              const next = Number(event.target.value);
-              // Clamp an over-limit paste/keystroke immediately. Values below
-              // the live minimum remain editable until blur so decimals can be
-              // entered naturally, then the field is normalized below.
-              onChange(Number.isFinite(next) ? Math.min(max, next) : 0);
-            }}
-            onBlur={() => {
-              haptic('selection');
-              if (Number.isFinite(value) && value > 0 && value < min) onChange(min);
-            }}
-            aria-invalid={invalid}
-            aria-describedby={invalid ? errorId : undefined}
-            className={`${styles.leverageInput} field-control min-h-[52px] min-w-0 flex-1 px-4 text-[20px] font-semibold outline-none`}
-          />
-          <span className="text-display text-[22px] font-semibold text-mint" aria-hidden="true">×</span>
-        </div>
-        <div className="mt-2 border-t border-[var(--line)] pt-2">
-          <input
-            id={sliderId}
-            type="range"
-            className="lever"
-            min={min}
-            max={max}
-            step="0.1"
-            value={sliderValue}
-            aria-label={`${label} slider`}
-            aria-valuetext={`${sliderValue.toFixed(1)}×`}
-            onChange={(event) => onChange(Number(event.target.value))}
-            onPointerUp={() => haptic('selection')}
-            style={{ '--fill': `${fill}%` } as React.CSSProperties}
-          />
-          <div className="flex justify-between px-1 text-[10px] font-medium text-mut" aria-hidden="true">
-            <span>{min.toFixed(1)}×</span><span>{max.toFixed(1)}×</span>
-          </div>
-        </div>
+  const numberInput = (
+    <input
+      id={inputId}
+      type="number"
+      inputMode="decimal"
+      min={min}
+      max={max}
+      step="0.1"
+      value={Number.isFinite(value) ? value : ''}
+      onChange={(event) => {
+        if (!event.target.value) {
+          onChange(0);
+          return;
+        }
+        const next = Number(event.target.value);
+        // Clamp an over-limit paste/keystroke immediately. Values below
+        // the live minimum remain editable until blur so decimals can be
+        // entered naturally, then the field is normalized below.
+        onChange(Number.isFinite(next) ? Math.min(max, next) : 0);
+      }}
+      onBlur={() => {
+        haptic('selection');
+        if (Number.isFinite(value) && value > 0 && value < min) onChange(min);
+      }}
+      aria-invalid={invalid}
+      aria-describedby={invalid ? errorId : undefined}
+      className={`${styles.leverageInput} field-control min-h-[52px] min-w-0 flex-1 px-4 text-[20px] font-semibold outline-none`}
+    />
+  );
+  const slider = (
+    <>
+      <input
+        id={sliderId}
+        type="range"
+        className="lever"
+        min={min}
+        max={max}
+        step="0.1"
+        value={sliderValue}
+        aria-label={`${label} slider`}
+        aria-valuetext={`${sliderValue.toFixed(1)}×`}
+        onChange={(event) => onChange(Number(event.target.value))}
+        onPointerUp={() => haptic('selection')}
+        style={{ '--fill': `${fill}%` } as React.CSSProperties}
+      />
+      <div className="flex justify-between px-1 text-[10px] font-medium text-mut" aria-hidden="true">
+        <span>{min.toFixed(1)}×</span><span>{max.toFixed(1)}×</span>
       </div>
+    </>
+  );
+  return (
+    <div className={compact ? styles.tradeCompactLeverage : undefined}>
+      {compact ? (
+        <>
+          <div className={styles.tradeCompactLeverageHeader}>
+            <FieldLabel htmlFor={inputId}>{label}</FieldLabel>
+            <div className={`${styles.rangeField} ${styles.tradeCompactLeverageValue} range-control ${invalid ? 'field-error' : ''}`}>
+              {numberInput}
+              <span className="text-display text-[18px] font-semibold text-mint" aria-hidden="true">×</span>
+            </div>
+          </div>
+          <div className={styles.tradeCompactLeverageSlider}>
+            {slider}
+          </div>
+        </>
+      ) : (
+        <>
+          <FieldLabel htmlFor={inputId} hint={`${min}× – ${max}×`}>{label}</FieldLabel>
+          <div className={`${styles.rangeField} range-control p-3 ${invalid ? 'field-error' : ''}`}>
+            <div className="flex items-center gap-3">
+              {numberInput}
+              <span className="text-display text-[22px] font-semibold text-mint" aria-hidden="true">×</span>
+            </div>
+            <div className="mt-2 border-t border-[var(--line)] pt-2">
+              {slider}
+            </div>
+          </div>
+        </>
+      )}
       {error && <p id={errorId} role="alert" className="mt-1.5 px-1 text-[11px] leading-relaxed text-danger">{error}</p>}
     </div>
   );
@@ -655,25 +633,6 @@ function optionBalanceUsdContent(balance: TokenBalanceView | undefined, symbol: 
   if (cents === null) return null;
   if (cents === 0n && /[1-9]/.test(balance?.amount ?? '')) return '≈ <$0.01';
   return `≈ ${formatUsdCents(cents)}`;
-}
-
-function getDialogFocusable(dialog: HTMLElement): HTMLElement[] {
-  return [...dialog.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')]
-    .filter((element) => !element.hasAttribute('hidden') && element.getAttribute('aria-hidden') !== 'true');
-}
-
-function trapDialogFocus(event: KeyboardEvent, dialog: HTMLElement): void {
-  const focusable = getDialogFocusable(dialog);
-  if (focusable.length === 0) return;
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
-  }
 }
 
 export function ToggleRow({

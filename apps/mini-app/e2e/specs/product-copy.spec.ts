@@ -22,7 +22,7 @@ test.describe('product copy and session visibility', () => {
   test('disconnected settings do not expose a session disconnect card', async ({ page, requests }) => {
     await page.goto('/settings', { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: /settings/i })).toBeVisible();
-    await expect(page.getByRole('main').getByRole('button', { name: 'Connect wallet', exact: true })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('button', { name: /^(Connect|Retry wallet provider)/ })).toBeVisible();
     await expect(page.getByText('Session', { exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /sign out|log out/i })).toHaveCount(0);
     assertNoBackendRequests(requests);
@@ -38,12 +38,17 @@ test.describe('product copy and session visibility', () => {
 
     test('connected settings preserve wallet controls and expose a reachable session exit', async ({ page, requests }) => {
       await page.goto('/settings', { waitUntil: 'domcontentloaded' });
-      const address = page.getByRole('button', { name: 'Copy wallet address 0x930f…98b9', exact: true });
-      await expect(address).toBeVisible();
-      await expect(address).toHaveAttribute('title', '0x930f0000000000000000000000000000000098b9');
-      await expect(page.getByRole('button', { name: 'Reconnect wallet', exact: true })).toBeVisible();
-      await expect(page.getByText('Session', { exact: true })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
+      const account = page.getByRole('button', { name: /View connected account/ });
+      await expect(account).toBeVisible();
+      await account.click();
+      const profile = page.getByRole('dialog');
+      await expect(profile.getByRole('heading', { level: 2 })).toHaveText('0x930f…98b9');
+      await expect(profile.getByRole('link', { name: 'View on Etherscan' })).toHaveAttribute('href', /etherscan\.io\/address\/0x930f/i);
+      await profile.getByRole('button', { name: 'Close wallet profile' }).click();
+      const changeWallet = page.locator('details').filter({ has: page.locator('summary', { hasText: 'Change wallet' }) });
+      await changeWallet.locator('summary').click();
+      await expect(changeWallet.getByRole('button', { name: 'Reconnect wallet', exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Disconnect wallet', exact: true })).toBeVisible();
       assertNoBackendRequests(requests);
     });
   });

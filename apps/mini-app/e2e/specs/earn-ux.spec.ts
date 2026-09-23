@@ -3,9 +3,41 @@ import { test, expect, assertNoBackendRequests } from '../fixtures/test';
 test.describe('Earn entry and honest unavailable state', () => {
   test.use({ telegram: false });
 
+  test('keeps the position, APY, action tabs, and primary action together on a normal phone viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/earn', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: 'Earn with fxSAVE', exact: true })).toBeVisible();
+    await expect(page.getByText('Variable APY')).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'Deposit', exact: true })).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'Withdraw', exact: true })).toBeVisible();
+    const primary = page.getByRole('button', { name: 'Connect wallet', exact: true }).last();
+    await expect(primary).toBeVisible();
+    const nav = page.locator('nav.mobile-tabbar[aria-label="Primary navigation"]');
+    await expect(nav).toBeVisible();
+    const geometry = await page.evaluate(() => {
+      const action = document.querySelector<HTMLElement>('.reviewTrigger .button-primary');
+      const navigation = document.querySelector<HTMLElement>('nav.mobile-tabbar[aria-label="Primary navigation"]');
+      if (!action || !navigation) throw new Error('Earn primary action and bottom navigation must be mounted');
+      return { actionBottom: action.getBoundingClientRect().bottom, navTop: navigation.getBoundingClientRect().top };
+    });
+    expect(geometry.actionBottom, 'Earn primary action must clear the fixed bottom navigation').toBeLessThanOrEqual(geometry.navTop + 1);
+  });
+
+  test('keeps the narrow Earn form within 320px while allowing natural vertical scrolling', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 568 });
+    await page.goto('/earn', { waitUntil: 'domcontentloaded' });
+    const main = page.getByRole('main');
+    await expect(main).toBeVisible();
+    const widths = await main.evaluate((element) => ({ scroll: element.scrollWidth, client: element.clientWidth }));
+    expect(widths.scroll - widths.client).toBeLessThanOrEqual(1);
+    const primary = page.getByRole('button', { name: 'Connect wallet', exact: true }).last();
+    await primary.scrollIntoViewIfNeeded();
+    await expect(primary).toBeInViewport();
+  });
+
   test('disconnected users can edit the earn form and enter through its review action', async ({ page, requests }) => {
     await page.goto('/earn', { waitUntil: 'domcontentloaded' });
-    await expect(page.getByRole('heading', { name: 'Earn' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Earn', exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Borrow fxUSD' })).toBeVisible();
     const amount = page.getByLabel('Deposit amount in fxUSD');
     await expect(amount).toBeVisible();
@@ -24,14 +56,14 @@ test.describe('Earn entry and honest unavailable state', () => {
     const withdraw = page.getByRole('radio', { name: 'Withdraw', exact: true });
     await withdraw.click();
     await expect(withdraw).toHaveAttribute('aria-checked', 'true');
-    const methods = page.getByRole('radiogroup', { name: 'Withdrawal method' });
+    const methods = page.getByRole('group', { name: 'Withdrawal method' });
     await expect(methods).toBeVisible();
     const cooldown = methods.getByRole('radio', { name: /After cooldown/ });
     const instant = methods.getByRole('radio', { name: /Without cooldown/ });
     await expect(cooldown).toBeVisible();
     await expect(instant).toBeVisible();
     await cooldown.click();
-    await expect(cooldown).toHaveAttribute('aria-checked', 'true');
+    await expect(cooldown).toBeChecked();
     await expect(page.getByText(/claimed later/i)).toBeVisible();
     const amount = page.getByLabel('fxSAVE to withdraw in fxSAVE');
     await expect(amount).toBeVisible();
@@ -51,5 +83,30 @@ test.describe('Earn entry and honest unavailable state', () => {
     await page.getByRole('button', { name: 'Back to fxSAVE' }).click();
     await expect(page.getByRole('radio', { name: 'Withdraw', exact: true })).toHaveAttribute('aria-checked', 'true');
     assertNoBackendRequests(requests);
+  });
+});
+
+test.describe('connected Earn summary at normal phone width', () => {
+  test.use({
+    telegram: false,
+    browserWallet: { address: '0x930f0000000000000000000000000000000098b9', initiallyConnected: true },
+  });
+
+  test('keeps the honest fxSAVE balance and APY row above bottom navigation', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/earn', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('button', { name: 'Open wallet profile', exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/^(?:Your fxSAVE value|Last verified fxSAVE value|fxSAVE balance)$/)).toBeVisible();
+    await expect(page.getByText('Last verified position value', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('status', { name: 'fxSAVE balance' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Variable APY')).toBeVisible();
+    await expect(page.getByRole('status', { name: 'fxSAVE APY' })).toBeVisible();
+    const geometry = await page.evaluate(() => {
+      const summary = document.querySelector<HTMLElement>('[class*="balanceTop"]');
+      const navigation = document.querySelector<HTMLElement>('nav.mobile-tabbar[aria-label="Primary navigation"]');
+      if (!summary || !navigation) throw new Error('Earn balance summary and bottom navigation must be mounted');
+      return { summaryBottom: summary.getBoundingClientRect().bottom, navTop: navigation.getBoundingClientRect().top };
+    });
+    expect(geometry.summaryBottom, 'Earn balance and APY should remain visible above navigation').toBeLessThanOrEqual(geometry.navTop + 1);
   });
 });

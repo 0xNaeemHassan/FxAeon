@@ -102,3 +102,21 @@ if (builtFailures.length) {
   console.error(`[verify] build-dependent checks failed (${builtFailures.length})`);
   process.exitCode = 1;
 }
+
+// Isolated browser harnesses are separate Playwright projects so their
+// fixtures never leak into the production mini-app E2E suite. Run them one
+// at a time after the shared build gates to keep browser memory bounded.
+const isolatedBrowserChecks = [
+  { args: ['test:e2e:borrow-harness'], label: 'Borrow selection browser harness' },
+  { args: ['test:e2e:overlay'], label: 'Overlay lifecycle browser harness' },
+  { args: ['test:e2e:state-lab'], label: 'UI state lab browser suite' },
+];
+const isolatedFailures = [];
+for (const check of isolatedBrowserChecks) {
+  const code = await pnpmRun(check.args, check.label);
+  if (code !== 0) isolatedFailures.push(check.label);
+}
+if (isolatedFailures.length) {
+  console.error(`[verify] isolated browser checks failed: ${isolatedFailures.join(', ')}`);
+  process.exitCode = 1;
+}

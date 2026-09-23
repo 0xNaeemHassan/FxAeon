@@ -3,11 +3,14 @@ import { expect, test, assertNoBackendRequests } from '../fixtures/test';
 test.describe('cohesive responsive design', () => {
   test.use({ telegram: false });
 
-  test('More theme choices persist and all route surfaces inherit the selected palette', async ({ page, requests }) => {
+  test('Appearance theme choices persist and all route surfaces inherit the selected palette', async ({ page, requests }) => {
     test.setTimeout(120_000);
-    await page.goto('/more', { waitUntil: 'domcontentloaded' });
+    await page.goto('/settings', { waitUntil: 'domcontentloaded' });
     for (const theme of ['official', 'dark', 'light'] as const) {
-      await page.getByRole('radio', { name: new RegExp(`^${theme}`, 'i') }).click();
+      const choices = page.getByRole('radiogroup', { name: 'Appearance theme' });
+      const choice = choices.getByRole('radio', { name: new RegExp(`^${theme}$`, 'i') });
+      await expect(choice).toBeEnabled();
+      await choice.click();
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
       for (const route of ['/trade', '/positions', '/portfolio', '/earn', '/borrow', '/move', '/history', '/settings', '/qr', '/docs']) {
         await page.goto(route, { waitUntil: 'domcontentloaded' });
@@ -21,7 +24,7 @@ test.describe('cohesive responsive design', () => {
           });
         }), { message: `${route} must not replace the selected theme with a private palette` }).toEqual([]);
       }
-      await page.goto('/more', { waitUntil: 'domcontentloaded' });
+      await page.goto('/settings', { waitUntil: 'domcontentloaded' });
     }
     assertNoBackendRequests(requests);
   });
@@ -210,6 +213,7 @@ test.describe('cohesive responsive design', () => {
     const group = page.getByRole('radiogroup', { name: 'Slippage tolerance' });
     const selected = group.getByRole('radio', { name: '0.5%', exact: true });
     await expect(selected).toHaveAttribute('aria-checked', 'true');
+    await expect(selected).toBeEnabled();
     await selected.focus();
     await selected.press('ArrowRight');
     const next = group.getByRole('radio', { name: '1%', exact: true });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -12,121 +12,37 @@ import {
 import { decodeFunctionData, formatEther, formatUnits } from 'viem';
 import {
   FX_TOKENS,
-  formatRouteGasCost,
-  prepareRoutesForReview,
-  runTransactionRoute,
   type PlannedRoute,
   type PlannedTransaction,
-  type PlanStatus,
-  type TransactionExecutionResult,
-  type TransactionStepResult,
 } from '@/lib/fx';
-import { useRouteGasCost } from '@/lib/fx';
 import type { UseGasCostResult } from '@/lib/fx/useGasCost';
-import { cancelSignatureRequiredDraft, removeSignatureRequiredDraft, saveSignatureRequiredDraft, type SignatureDraftState } from '@/lib/fx';
-import { usePrivyWallet } from '@/lib/wallet';
-import { useInvalidateWalletData } from '@/components/WalletDataProvider';
-import { createRouteWalletRefresh } from '@/lib/walletDataRefresh';
-import { haptic } from '@/lib/telegram';
+import type { ActionReviewProps } from '@/components/review/actionReviewTypes';
+export type { ActionPlanBuilder, ActionReviewProps, ActionReviewStage } from '@/components/review/actionReviewTypes';
 import { Button, Card } from '@/components/ui';
 import { ValueOrSkeleton } from '@/components/MissingValue';
 import ConnectWalletButton from '@/components/ConnectWalletButton';
-import { userSafeError } from '@/lib/errors';
 import { compactAddress } from '@/lib/addressPresentation';
-import { confirmedUpdateCopy, hasTransactionHash, transactionStepProgress } from '@/lib/transactionProgress';
+import { hasTransactionHash } from '@/lib/transactionProgress';
 import { BridgeTracker } from '@/components/BridgeTracker';
-import { CalldataDisclosure, InlineError, StatusNotice, stepProgress, TransactionHashLink, chainName } from '@/components/review/ReviewProgress';
+import { CalldataDisclosure, InlineError, StatusNotice, stepProgress, chainName } from '@/components/review/ReviewProgress';
 import { resultPresentation } from '@/components/review/executionResult';
 import { splitReviewFacts } from '@/components/review/reviewSummary';
-import { rawQuoteReviewFacts, routeFinancialReviewFacts, type ReviewFact } from '@/lib/fx/reviewFormatting';
+import { factsOutsideConsequenceSummary, primaryReviewFacts, routeFacts as buildRouteFacts } from '@/components/review/actionReviewPresentation';
+import { consequenceSummary, pairVerifiedPositionFacts, reviewActionLabel } from '@/components/review/actionReviewModel';
+import { useActionReviewLifecycle } from '@/components/review/useActionReviewLifecycle';
+import { selectExecutionTask } from '@/lib/taskState';
+import { buildReceiptPresentation, receiptTransfersFromLogs } from '@/lib/receiptPresentation';
+import { receiptMintedPositionIdentity } from '@/lib/confirmedPositions';
+import { rawQuoteReviewFacts, type ReviewFact } from '@/lib/fx/reviewFormatting';
+import { buildStatusPresentation } from '@/components/review/actionReviewStatusModel';
+import { ActionConsequenceSummary, CompactQuoteMetrics, PositionOutcomeSummary, TransactionProgressPresentation, UpdatedQuoteSummary } from '@/components/review/ActionReviewSummary';
+import { TransactionResultView } from '@/components/review/TransactionResultView';
+import { positionPoolAddress } from '@/lib/fx/policy';
 import styles from './FlowWorkspace.module.css';
-
-export type ActionPlanBuilder = () => Promise<PlannedRoute | readonly PlannedRoute[]>;
-
-export type ActionReviewStage = 'input' | 'planning' | 'review' | 'executing' | 'result';
-
-export interface ActionReviewProps {
-  /** Build the route for initial preview, background refresh, and explicit review. */
-  planBuilder: ActionPlanBuilder | null;
-  /**
-   * Read an exact, short-lived in-memory route prepared for these inputs.
-   * Returning null falls back to planBuilder. Prefetched routes still pass
-   * the normal review simulation; signing uses the displayed route only while
-   * its intent, wallet session, and freshness window still match.
-   */
-  prefetchedPlan?: () => Promise<PlannedRoute | readonly PlannedRoute[] | null>;
-  label?: string;
-  disabled?: boolean;
-  /** Runs after verified receipts and confirmation; state reads may still be settling. */
-  onComplete?: (result: TransactionExecutionResult, confirmedRoute: PlannedRoute) => void | Promise<void>;
-  operationLabel?: string;
-  /** Uses an explicit destructive treatment for irreversible full exits. */
-  destructive?: boolean;
-  /**
-   * Notifies the owning product card when the flow replaces its editor.
-   * Product pages can hide their mounted editor while preserving all input
-   * state, then reveal it again when this callback reports `input`.
-   */
-  onStageChange?: (stage: ActionReviewStage) => void;
-  /** Optional primitive-only UI snapshot for local unsigned-draft recovery. */
-  draftState?: SignatureDraftState;
-  /** Stable product-level identity used to match a History draft to its form. */
-  draftActionKey?: string;
-  /** Optional same-origin resume path; defaults to the current location. */
-  draftResumePath?: string;
-  /**
-   * Monotonic caller nonce used when History restores an unsigned form. A
-   * matching nonce triggers one fresh review (never a wallet request) once
-   * the restored form exposes a plan builder.
-   */
-  resumeReview?: number;
-  /**
-   * Optional editor content owned by the product surface. When supplied it is
-   * rendered only in the `input` stage, allowing the review to replace the
-   * editor in the same card without unmounting the action controller.
-   */
-  editor?: ReactNode;
-  /** Product forms require review before requesting a wallet signature. */
-  reviewBeforeSign?: boolean;
-  /** Render the review as a card, or as content inside an existing product card. */
-  surface?: 'card' | 'content';
-  /** Verified current values for an existing position or account context. */
-  decisionBefore?: ReviewFact[];
-  /** Optional authoritative cost facts supplied by the gas/cost estimator. */
-  executionCost?: {
-    estimatedGas?: string;
-    gasFee?: string;
-    protocolFee?: string;
-    totalCost?: string;
-  };
-}
-
-type Stage = ActionReviewStage;
-
-const PREVIEW_REFRESH_INTERVAL_MS = 15_000;
-const PREVIEW_FRESHNESS_MS = 30_000;
-
-function asRoutes(value: PlannedRoute | readonly PlannedRoute[]): PlannedRoute[] {
-  const routes = Array.isArray(value) ? [...value] : [value];
-  if (!routes.length) throw new Error('No executable transaction route was returned.');
-  return routes;
-}
+import presentationStyles from './review/ActionReviewPresentation.module.css';
 
 function trimDecimal(value: string): string {
   return value.includes('.') ? value.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '') : value;
-}
-
-function signatureDraftActionKey(route: PlannedRoute): string {
-  const details = route.details;
-  return [
-    route.operation,
-    details?.routeType ?? '',
-    details?.positionId ?? '',
-    details?.requestedAmount ?? '',
-    details?.requestedLeverage ?? '',
-    details?.slippagePercent ?? '',
-    route.transactions.length,
-  ].join(':').slice(0, 160);
 }
 
 function tokenForAddress(address: string | undefined) {
@@ -140,142 +56,9 @@ function formatTokenAmount(value: bigint, tokenAddress?: string, fallback = 'raw
   return `${trimDecimal(formatUnits(value, token.decimals))} ${token.key}`;
 }
 
-function conciseDecimal(value: string, places = 6): string {
-  const [whole, fraction = ''] = value.split('.');
-  const shown = fraction.slice(0, places).replace(/0+$/, '');
-  const omitted = /[1-9]/.test(fraction.slice(places));
-  if (omitted && whole === '0' && !shown) return `<0.${'0'.repeat(Math.max(places - 1, 0))}1`;
-  const groupedWhole = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return `${omitted ? '≈ ' : ''}${groupedWhole}${shown ? `.${shown}` : ''}`;
-}
-
-function addTokenAmountFact(facts: ReviewFact[], label: string, value: bigint, tokenAddress?: string, fallback = 'raw units'): void {
-  const token = tokenForAddress(tokenAddress);
-  if (!token) {
-    addFact(facts, label, `${value.toString()} ${fallback}`);
-    return;
-  }
-  const exact = trimDecimal(formatUnits(value, token.decimals));
-  facts.push({ label, value: `${conciseDecimal(exact)} ${token.key}`, title: `${exact} ${token.key}` });
-}
-
-function addWadAmountFact(facts: ReviewFact[], label: string, value: bigint, unit: string): void {
-  const exact = trimDecimal(formatUnits(value, 18));
-  facts.push({ label, value: `${conciseDecimal(exact)} ${unit}`, title: `${exact} ${unit}` });
-}
-
 function addFact(facts: ReviewFact[], label: string, value: string | undefined): void {
   if (!value || facts.some((fact) => fact.label === label)) return;
   facts.push({ label, value });
-}
-
-function addNativeCostFact(facts: ReviewFact[], label: string, exactValue: string | undefined): void {
-  if (!exactValue || facts.some((fact) => fact.label === label)) return;
-  const match = exactValue.match(/^(\d[\d,]*(?:\.\d+)?)\s+(ETH|Gwei)(.*)$/);
-  if (!match) {
-    addFact(facts, label, exactValue);
-    return;
-  }
-  const [, amount, unit, qualifier] = match;
-  const isMax = /\bmax\b/i.test(qualifier);
-  const shortQualifier = isMax ? ' max' : label === 'Total cost' ? ' total' : '';
-  facts.push({
-    label,
-    value: `${conciseDecimal(amount, 6)} ${unit}${shortQualifier}`,
-    title: exactValue,
-  });
-}
-
-function primaryReviewFacts(route: PlannedRoute): ReviewFact[] {
-  const facts: ReviewFact[] = [];
-  const intent = route.policy?.reviewedAction;
-  if (intent) {
-    switch (intent.kind) {
-      case 'position-increase':
-        addTokenAmountFact(facts, 'Amount', intent.inputAmount, intent.inputTokenAddress);
-        if (intent.requestedLeverage !== undefined) addFact(facts, 'Target leverage', `${intent.requestedLeverage}×`);
-        if (intent.slippagePercent !== undefined) addFact(facts, 'Slippage', `${intent.slippagePercent}%`);
-        addFact(facts, 'Position', intent.positionId === 0 ? 'New position' : `#${intent.positionId}`);
-        addFact(facts, 'Risk', 'Liquidation risk may increase');
-        break;
-      case 'position-reduce':
-        addFact(facts, 'Position', `#${intent.positionId}`);
-        addFact(facts, 'Action', intent.isClosePosition ? 'Close position' : 'Reduce position');
-        if (intent.slippagePercent !== undefined) addFact(facts, 'Slippage', `${intent.slippagePercent}%`);
-        break;
-      case 'position-adjust':
-        addFact(facts, 'Position', `#${intent.positionId}`);
-        if (intent.requestedLeverage !== undefined) addFact(facts, 'Target leverage', `${intent.requestedLeverage}×`);
-        if (intent.slippagePercent !== undefined) addFact(facts, 'Slippage', `${intent.slippagePercent}%`);
-        addFact(facts, 'Risk', 'Liquidation risk may change');
-        break;
-      case 'deposit-and-mint':
-        addTokenAmountFact(facts, 'Deposit', intent.depositAmount, intent.depositTokenAddress);
-        addTokenAmountFact(facts, 'Borrow', intent.mintAmount, FX_TOKENS.fxUSD.address);
-        addFact(facts, 'Position', intent.positionId === 0 ? 'New position' : `#${intent.positionId}`);
-        addFact(facts, 'Risk', intent.mintAmount > 0n ? 'Added debt may increase liquidation risk' : 'Collateral changes affect the liquidation buffer');
-        break;
-      case 'repay-and-withdraw':
-        addTokenAmountFact(facts, 'Repay', intent.minimumRepayAmount, intent.repayTokenAddress);
-        addTokenAmountFact(facts, 'Withdraw', intent.withdrawAmount, intent.withdrawTokenAddress);
-        addFact(facts, 'Position', `#${intent.positionId}`);
-        addFact(facts, 'Risk', intent.withdrawAmount > 0n ? 'Withdrawal may reduce the liquidation buffer' : 'Repayment should reduce debt');
-        break;
-      case 'fxsave-deposit':
-        addTokenAmountFact(facts, 'Deposit', intent.amount, intent.tokenInAddress);
-        addFact(facts, 'Recipient', compactAddress(intent.receiver));
-        if (intent.slippagePercent !== undefined) addFact(facts, 'Slippage', `${intent.slippagePercent}%`);
-        break;
-      case 'fxsave-withdraw':
-        addTokenAmountFact(facts, 'fxSAVE', intent.amount, FX_TOKENS.fxSAVE.address);
-        addFact(facts, 'Receive', tokenForAddress(intent.tokenOutAddress)?.key ?? compactAddress(intent.tokenOutAddress));
-        addFact(facts, 'Mode', intent.directBasePool ? 'Direct' : intent.instant ? 'Instant' : 'Queued');
-        if (intent.slippagePercent !== undefined) addFact(facts, 'Slippage', `${intent.slippagePercent}%`);
-        break;
-      case 'fxsave-claim':
-        addFact(facts, 'Recipient', compactAddress(intent.receiver));
-        break;
-    }
-  }
-
-  if (route.details?.routeType) addFact(facts, 'Route', route.details.routeType);
-  if (route.details?.requestedLeverage !== undefined) addFact(facts, 'Target leverage', `${route.details.requestedLeverage}×`);
-  if (route.details?.slippagePercent !== undefined) addFact(facts, 'Slippage', `${route.details.slippagePercent}%`);
-  if (route.details?.leverage !== undefined) addFact(facts, 'Leverage', `${route.details.leverage}×`);
-  facts.push(...routeFinancialReviewFacts(route));
-
-  if (isBridgeQuote(route.quote)) {
-    addFact(facts, 'Asset', route.quote.bridgeToken ?? 'Bridge asset');
-    if (route.quote.bridgeAmount !== undefined) {
-      addWadAmountFact(facts, 'Amount', route.quote.bridgeAmount, route.quote.bridgeToken ?? 'tokens');
-    }
-    if (route.quote.minAmountLD !== undefined) {
-      addWadAmountFact(facts, 'Minimum received', route.quote.minAmountLD, route.quote.bridgeToken ?? 'tokens');
-    }
-    if (route.quote.recipient) addFact(facts, 'Recipient', route.quote.recipient);
-    addWadAmountFact(facts, 'Bridge fee', route.quote.nativeFee, 'ETH');
-  }
-
-  return facts;
-}
-
-function safePreviewFailure(cause: unknown, fallback: string): string {
-  const message = userSafeError(cause, fallback);
-  if (!message || /0x[a-f\d]{128,}|\bcalldata\b|raw (?:rpc|transaction) data/i.test(message)) return fallback;
-  return message.length > 150 ? `${message.slice(0, 147).trimEnd()}…` : message;
-}
-
-function routeFacts(route: PlannedRoute, gasCost: Pick<UseGasCostResult, 'estimate' | 'estimateIsCurrent'>, executionCost?: ActionReviewProps['executionCost']): ReviewFact[] {
-  const facts = primaryReviewFacts(route);
-  const currentGasCost = gasCost.estimateIsCurrent && gasCost.estimate
-    ? formatRouteGasCost(gasCost.estimate)
-    : undefined;
-  if (currentGasCost?.gasFee) addNativeCostFact(facts, 'Gas fee', currentGasCost.gasFee);
-  if (currentGasCost?.totalCost) addNativeCostFact(facts, 'Total cost', currentGasCost.totalCost);
-  if (executionCost?.gasFee) addNativeCostFact(facts, 'Gas fee', executionCost.gasFee);
-  if (executionCost?.protocolFee) addFact(facts, 'Protocol fee', executionCost.protocolFee);
-  if (executionCost?.totalCost) addNativeCostFact(facts, 'Total cost', executionCost.totalCost);
-  return facts;
 }
 
 function actionButtonLabel(label: string, operationLabel?: string): string {
@@ -323,811 +106,25 @@ function stepTitle(transaction: PlannedTransaction): string {
   return transaction.type === 'approvePosition' ? 'Approve position' : `Approve ${tokenForAddress(transaction.to)?.key ?? 'token'}`;
 }
 
-function statusPresentation(params: {
-  stage: Stage;
-  status: PlanStatus;
-  detail: string;
-  stepResults: readonly TransactionStepResult[];
-  stepCount: number;
-  operation?: PlannedRoute['operation'];
-  refreshing?: boolean;
-  networkSwitching?: boolean;
-}): { label: string; body: string; className: string; icon: ReactNode } {
-  const confirmed = params.stepResults.filter((step) => transactionStepProgress(step).state === 'confirmed').length;
-  const uncertain = params.stepResults.find((step) => ['unknown', 'unverified'].includes(transactionStepProgress(step).state));
-  if (uncertain) {
-    return {
-      label: transactionStepProgress(uncertain).label,
-      body: 'Submission is recorded. Check the explorer or History; do not submit this action again.',
-      className: 'text-warn',
-      icon: <Clock3 className="h-4 w-4" />,
-    };
-  }
-  if (params.status === 'planning') {
-    return {
-      label: params.stage === 'executing' ? 'Preparing wallet request' : 'Preparing transaction',
-      body: params.stage === 'executing' ? 'Verifying the latest route.' : 'Building the route.',
-      className: 'text-mint',
-      icon: <LoaderCircle className="h-4 w-4 animate-spin" />,
-    };
-  }
-  if (params.status === 'reviewing') {
-    return params.stage === 'review'
-      ? { label: 'Ready to sign', body: 'Review the amount, limits, approvals, and risk above.', className: 'text-success', icon: <CheckCircle2 className="h-4 w-4" /> }
-      : { label: 'Checking transaction', body: 'Verifying the route.', className: 'text-mint', icon: <LoaderCircle className="h-4 w-4 animate-spin" /> };
-  }
-  if (params.status === 'awaiting-user') {
-    if (params.networkSwitching) {
-      return {
-        label: 'Switching network',
-        body: 'Your wallet is switching to the transaction network. Signing opens after the switch is verified.',
-        className: 'text-warn',
-        icon: <LoaderCircle className="h-4 w-4 animate-spin" />,
-      };
-    }
-    return {
-      label: 'Wallet approval',
-      body: params.detail ? `${params.detail.replace(/^transaction/i, 'Transaction')}. Review it in your wallet.` : 'Review the transaction in your wallet, then approve it.',
-      className: 'text-warn',
-      icon: <Clock3 className="h-4 w-4" />,
-    };
-  }
-  if (params.status === 'submitted') {
-    return {
-      label: 'Submitted',
-      body: 'Waiting for on-chain confirmation. Track it below or in History; do not submit again.',
-      className: 'text-mint',
-      icon: <LoaderCircle className="h-4 w-4 animate-spin" />,
-    };
-  }
-  if (params.status === 'included' || params.status === 'confirming') {
-    const active = params.stepResults.find((step) => step.status === 'included' || step.status === 'confirming');
-    const count = active?.confirmations ?? 0;
-    const required = active?.requiredConfirmations ?? 1;
-    return {
-      label: params.status === 'included' ? 'Included' : `Confirming · ${count}/${required}`,
-      body: `Waiting for ${required} confirmation${required === 1 ? '' : 's'} before the next step.`,
-      className: 'text-mint',
-      icon: <LoaderCircle className="h-4 w-4 animate-spin" />,
-    };
-  }
-  if (params.status === 'confirmed') {
-    return confirmed < params.stepCount
-      ? { label: 'Step confirmed', body: `${confirmed} of ${params.stepCount} confirmed. Preparing the next transaction.`, className: 'text-success', icon: <CheckCircle2 className="h-4 w-4" /> }
-      : { ...confirmedUpdateCopy(params.operation, params.refreshing ?? false), className: 'text-success', icon: <CheckCircle2 className="h-4 w-4" /> };
-  }
-  if (params.status === 'partial' || (params.status === 'failed' && confirmed > 0)) {
-    return { label: 'Partially completed', body: 'An earlier step confirmed before the action stopped.', className: 'text-warn', icon: <AlertTriangle className="h-4 w-4" /> };
-  }
-  return {
-    label: 'Action stopped',
-    body: userSafeError(params.detail, 'The action could not continue. Check it again before signing.'),
-    className: 'text-danger',
-    icon: <CircleAlert className="h-4 w-4" />,
-  };
+function statusPresentation(params: Parameters<typeof buildStatusPresentation>[0]) {
+  const state = buildStatusPresentation(params);
+  const icon = state.icon === 'clock' ? <Clock3 className="h-4 w-4" />
+    : state.icon === 'loading' ? <LoaderCircle className="h-4 w-4 animate-spin" />
+      : state.icon === 'success' ? <CheckCircle2 className="h-4 w-4" />
+        : state.icon === 'warning' ? <AlertTriangle className="h-4 w-4" />
+          : <CircleAlert className="h-4 w-4" />;
+  return { ...state, icon };
 }
 
-export function ActionReview({
-  planBuilder,
-  prefetchedPlan,
-  label = 'Review action',
-  disabled = false,
-  onComplete,
-  operationLabel,
-  destructive = false,
-  onStageChange,
-  draftState,
-  draftActionKey,
-  draftResumePath,
-  resumeReview = 0,
-  editor,
-  surface = 'card',
-  reviewBeforeSign = false,
-  decisionBefore,
-  executionCost,
-}: ActionReviewProps) {
-  const wallet = usePrivyWallet();
-  const invalidateWalletData = useInvalidateWalletData();
-  const [stage, setStage] = useState<Stage>('input');
-  const [routes, setRoutes] = useState<PlannedRoute[]>([]);
-  const [selectedRoute, setSelectedRoute] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<PlanStatus>('planning');
-  const [statusDetail, setStatusDetail] = useState('');
-  const [result, setResult] = useState<TransactionExecutionResult | null>(null);
-  const [stepResults, setStepResults] = useState<TransactionStepResult[]>([]);
-  const [executionRoute, setExecutionRoute] = useState<PlannedRoute | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [reviewTitle, setReviewTitle] = useState<string | null>(null);
-  const [networkSwitching, setNetworkSwitching] = useState(false);
-  const [reviewContext, setReviewContext] = useState<{ walletAddress: string; chainId?: number; connectionVersion: number } | null>(null);
-  const [resumeAfterConnect, setResumeAfterConnect] = useState(false);
-  const [previewRoutes, setPreviewRoutes] = useState<PlannedRoute[]>([]);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewUpdating, setPreviewUpdating] = useState(false);
-  const [previewPreparedAt, setPreviewPreparedAt] = useState<number | null>(null);
-  const [previewIsStale, setPreviewIsStale] = useState(true);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  const [previewRetry, setPreviewRetry] = useState(0);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const headingRef = useRef<HTMLHeadingElement>(null);
-  const previousPlanBuilder = useRef<ActionPlanBuilder | null>(planBuilder);
-  // React state updates are asynchronous; latch before any wallet request so
-  // repeated clicks in the same frame cannot start a second execution.
-  const busyRef = useRef(false);
-  const executionStepsRef = useRef<TransactionStepResult[]>([]);
-  const signatureDraftIdRef = useRef<string | null>(null);
-  const resumedReviewRef = useRef<number | null>(null);
-  // Every asynchronous planning/execution attempt owns a generation. Route,
-  // account, and component changes invalidate the generation so late SDK/RPC
-  // responses can never repopulate a newer wallet session.
-  const generationRef = useRef(0);
-  const previewGenerationRef = useRef(0);
-  const previewRouteRef = useRef<PlannedRoute | null>(null);
-  const previewPreparedAtRef = useRef<number | null>(null);
-  const previewOwnerRef = useRef<{ intentKey: string | ActionPlanBuilder | null; walletAddress?: string; chainId?: number; connectionVersion: number } | null>(null);
-  const planBuilderRef = useRef(planBuilder);
-  const prefetchedPlanRef = useRef(prefetchedPlan);
-  const mountedRef = useRef(true);
-  const liveWalletRef = useRef({
-    authenticated: wallet.authenticated,
-    address: wallet.address,
-    chainId: wallet.chainId,
-    connectionVersion: wallet.connectionVersion,
-  });
-  const onStageChangeRef = useRef(onStageChange);
-  onStageChangeRef.current = onStageChange;
-  planBuilderRef.current = planBuilder;
-  prefetchedPlanRef.current = prefetchedPlan;
-
-  const isCurrentGeneration = useCallback((generation: number) => (
-    mountedRef.current && generationRef.current === generation
-  ), []);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-      generationRef.current += 1;
-    };
-  }, []);
-
-  // Keep the owning product card synchronized without depending on callback
-  // identity (route pages commonly pass an inline setter).
-  useEffect(() => {
-    onStageChangeRef.current?.(stage);
-  }, [stage]);
-  liveWalletRef.current = {
-    authenticated: wallet.authenticated,
-    address: wallet.address,
-    chainId: wallet.chainId,
-    connectionVersion: wallet.connectionVersion,
-  };
-
-  const route = (stage === 'executing' || stage === 'result') && executionRoute
-    ? executionRoute
-    : routes[selectedRoute];
-  const previewRoute = stage === 'input' ? previewRoutes[selectedRoute] ?? previewRoutes[0] : undefined;
-  const activeRoute = stage === 'input' ? previewRoute : route;
-  const gasCost = useRouteGasCost(activeRoute, { enabled: Boolean(activeRoute && stage !== 'planning') });
-  const previewIntentKey = draftState === undefined ? planBuilder : JSON.stringify(draftState);
-
-  // Prepare a read-only, debounced route while the editor remains mounted.
-  // This supplies useful facts before the primary action, but it never changes
-  // stage or opens a wallet. The generation and wallet checks discard late
-  // results after input, account, network, or component changes.
-  useEffect(() => {
-    // The input preview lifecycle must stop when entering the separate review
-    // surface, but it must leave the review's own freshness timestamp intact.
-    // Otherwise the review() timestamp below is immediately cleared here.
-    if (stage !== 'input') {
-      setPreviewLoading(false);
-      setPreviewUpdating(false);
-      return undefined;
-    }
-
-    previewGenerationRef.current += 1;
-    const previewGeneration = previewGenerationRef.current;
-    const previewWalletAddress = wallet.address?.toLowerCase();
-    const previewChainId = wallet.chainId;
-    const previewConnectionVersion = wallet.connectionVersion;
-    let cancelled = false;
-    let running = false;
-    let timer: number | undefined;
-
-    const previousPreview = previewRouteRef.current;
-    const previousOwner = previewOwnerRef.current;
-    const preservePreview = Boolean(
-      previousPreview
-      && previousOwner?.intentKey === previewIntentKey
-      && previousOwner.connectionVersion === previewConnectionVersion
-      && previousPreview.walletAddress.toLowerCase() === previewWalletAddress
-      && previousPreview.chainId === previewChainId,
-    );
-    previewOwnerRef.current = {
-      intentKey: previewIntentKey,
-      walletAddress: previewWalletAddress,
-      chainId: previewChainId,
-      connectionVersion: previewConnectionVersion,
-    };
-    previewRouteRef.current = preservePreview ? previousPreview : null;
-    setPreviewRoutes(preservePreview ? [previousPreview!] : []);
-    if (!preservePreview) {
-      previewPreparedAtRef.current = null;
-      setPreviewPreparedAt(null);
-      setPreviewIsStale(true);
-    }
-    setPreviewError(null);
-
-    const isVisibleAndOnline = () => (
-      (typeof document === 'undefined' || document.visibilityState === 'visible')
-      && (typeof navigator === 'undefined' || navigator.onLine !== false)
-    );
-    const isCurrentPreview = () => {
-      const liveWallet = liveWalletRef.current;
-      return !cancelled
-        && mountedRef.current
-        && previewGenerationRef.current === previewGeneration
-        && stage === 'input'
-        && liveWallet.authenticated
-        && liveWallet.address?.toLowerCase() === previewWalletAddress
-        && liveWallet.chainId === previewChainId
-        && liveWallet.connectionVersion === previewConnectionVersion;
-    };
-    const schedule = (delay: number) => {
-      if (cancelled) return;
-      if (timer !== undefined) window.clearTimeout(timer);
-      timer = window.setTimeout(() => {
-        timer = undefined;
-        if (isVisibleAndOnline()) void load();
-        else schedule(PREVIEW_REFRESH_INTERVAL_MS);
-      }, delay);
-    };
-    const load = async () => {
-      if (running || !isCurrentPreview()) return;
-      if (!isVisibleAndOnline()) {
-        schedule(PREVIEW_REFRESH_INTERVAL_MS);
-        return;
-      }
-      running = true;
-      const hasCurrentQuote = Boolean(previewRouteRef.current);
-      if (!hasCurrentQuote) setPreviewLoading(true);
-      setPreviewUpdating(hasCurrentQuote);
-      setPreviewError(null);
-      try {
-        const currentPlanBuilder = planBuilderRef.current;
-        if (!currentPlanBuilder) throw new Error('Enter valid action details to prepare a quote.');
-        const prefetched = await prefetchedPlanRef.current?.();
-        if (!isCurrentPreview()) return;
-        const planned = asRoutes(prefetched ?? await currentPlanBuilder());
-        if (!isCurrentPreview()) return;
-        const { viable, failures } = await prepareRoutesForReview(planned, previewWalletAddress!);
-        if (!isCurrentPreview()) return;
-        if (!viable.length) {
-          const reason = failures
-            .map((failure) => safePreviewFailure(failure, ''))
-            .find(Boolean);
-          throw new Error(reason ?? 'No executable transaction route is available.');
-        }
-        const currentType = previewRouteRef.current?.details?.routeType;
-        const selectedIndex = currentType
-          ? viable.findIndex((candidate) => candidate.details?.routeType === currentType)
-          : -1;
-        const nextIndex = selectedIndex >= 0 ? selectedIndex : 0;
-        setPreviewRoutes(viable);
-        setSelectedRoute(nextIndex);
-        previewRouteRef.current = viable[nextIndex] ?? null;
-        const preparedAt = Date.now();
-        previewPreparedAtRef.current = preparedAt;
-        setPreviewPreparedAt(preparedAt);
-        setPreviewIsStale(false);
-      } catch (cause) {
-        if (isCurrentPreview()) {
-          if (!previewRouteRef.current) setPreviewRoutes([]);
-          const quoteIsFresh = Boolean(previewPreparedAtRef.current && Date.now() - previewPreparedAtRef.current < PREVIEW_FRESHNESS_MS);
-          setPreviewIsStale(!quoteIsFresh);
-          const reason = safePreviewFailure(cause, 'Try again.');
-          setPreviewError(previewRouteRef.current
-            ? quoteIsFresh
-              ? `Quote refresh failed: ${reason}. The shown quote is still current.`
-              : `Quote refresh failed: ${reason}. Refresh before continuing.`
-            : `Could not prepare: ${reason}`);
-        }
-      } finally {
-        running = false;
-        if (isCurrentPreview()) {
-          setPreviewLoading(false);
-          setPreviewUpdating(false);
-          schedule(PREVIEW_REFRESH_INTERVAL_MS);
-        }
-      }
-    };
-
-    if (!planBuilderRef.current || disabled || !wallet.ready || !wallet.authenticated || !previewWalletAddress) {
-      setPreviewLoading(false);
-      setPreviewUpdating(false);
-      return undefined;
-    }
-    schedule(350);
-    const refreshWhenActive = () => {
-      if (!isCurrentPreview() || running || !isVisibleAndOnline()) return;
-      if (previewPreparedAtRef.current === null || Date.now() - previewPreparedAtRef.current >= PREVIEW_FRESHNESS_MS) setPreviewIsStale(true);
-      if (timer !== undefined) window.clearTimeout(timer);
-      timer = undefined;
-      void load();
-    };
-    document.addEventListener('visibilitychange', refreshWhenActive);
-    window.addEventListener('online', refreshWhenActive);
-    return () => {
-      cancelled = true;
-      if (timer !== undefined) window.clearTimeout(timer);
-      document.removeEventListener('visibilitychange', refreshWhenActive);
-      window.removeEventListener('online', refreshWhenActive);
-      if (previewGenerationRef.current === previewGeneration) previewGenerationRef.current += 1;
-    };
-  }, [disabled, previewIntentKey, previewRetry, stage, wallet.address, wallet.authenticated, wallet.chainId, wallet.connectionVersion, wallet.ready]);
-
-  useEffect(() => {
-    if ((stage !== 'input' && stage !== 'review') || previewPreparedAt === null) return undefined;
-    const remaining = Math.max(0, PREVIEW_FRESHNESS_MS - (Date.now() - previewPreparedAt));
-    const timer = window.setTimeout(() => {
-      setPreviewIsStale(true);
-      if (stage === 'review') {
-        setError('This review expired. Refreshing the quote before continuing.');
-        setRoutes([]);
-        setSelectedRoute(0);
-        setReviewContext(null);
-        setReviewTitle(null);
-        setStatus('planning');
-        setStage('input');
-      }
-    }, remaining);
-    return () => window.clearTimeout(timer);
-  }, [previewPreparedAt, stage]);
-
-  useEffect(() => {
-    previewRouteRef.current = previewRoutes[selectedRoute] ?? previewRoutes[0] ?? null;
-  }, [previewRoutes, selectedRoute]);
-
-  useEffect(() => {
-    if (stage === 'review' || stage === 'result') {
-      headingRef.current?.focus({ preventScroll: true });
-    }
-  }, [stage]);
-
-  const reset = useCallback(() => {
-    if (busyRef.current) return;
-    generationRef.current += 1;
-    if (signatureDraftIdRef.current) {
-      cancelSignatureRequiredDraft(signatureDraftIdRef.current);
-      signatureDraftIdRef.current = null;
-    }
-    setStage('input');
-    setNetworkSwitching(false);
-    setRoutes([]);
-    setSelectedRoute(0);
-    setError(null);
-    setResult(null);
-    setStepResults([]);
-    setExecutionRoute(null);
-    executionStepsRef.current = [];
-    setRefreshing(false);
-    setReviewTitle(null);
-    setReviewContext(null);
-    setResumeAfterConnect(false);
-    setStatus('planning');
-    setStatusDetail('');
-    window.requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
-  }, []);
-
-  useEffect(() => {
-    const onTelegramBack = (event: Event) => {
-      if (stage !== 'review' && stage !== 'result') return;
-      const detail = (event as CustomEvent<{ consume?: () => void; isConsumed?: () => boolean }>).detail;
-      if (detail?.isConsumed?.()) return;
-      reset();
-      detail?.consume?.();
-    };
-    window.addEventListener('fxaeon:telegram-back', onTelegramBack);
-    return () => window.removeEventListener('fxaeon:telegram-back', onTelegramBack);
-  }, [reset, stage]);
-
-  const invalidatePreparedRoute = useCallback((message: string) => {
-    generationRef.current += 1;
-    if (signatureDraftIdRef.current) {
-      cancelSignatureRequiredDraft(signatureDraftIdRef.current);
-      signatureDraftIdRef.current = null;
-    }
-    setStage('input');
-    setRoutes([]);
-    setSelectedRoute(0);
-    setResult(null);
-    setStepResults([]);
-    setExecutionRoute(null);
-    setReviewTitle(null);
-    setReviewContext(null);
-    setResumeAfterConnect(false);
-    setStatus('planning');
-    setStatusDetail('');
-    setLoading(false);
-    setRefreshing(false);
-    setNetworkSwitching(false);
-    busyRef.current = false;
-    setError(message);
-  }, []);
-
-  // The route is a snapshot of the wallet, network, and form inputs at review
-  // time. Any change invalidates it before another signing prompt can open.
-  useEffect(() => {
-    if (previousPlanBuilder.current !== planBuilder) {
-      previousPlanBuilder.current = planBuilder;
-      if (stage === 'review') {
-        invalidatePreparedRoute('The inputs changed. Check the action again before signing.');
-      }
-    }
-  }, [invalidatePreparedRoute, planBuilder, stage]);
-
-  useEffect(() => {
-    // Results are non-signable historical evidence. Retain their original
-    // wallet and chain when the active wallet or form changes.
-    if (!reviewContext || (stage !== 'review' && stage !== 'executing')) return;
-    const currentWallet = wallet.address?.toLowerCase();
-    const walletChanged = !wallet.authenticated || !currentWallet || currentWallet !== reviewContext.walletAddress;
-    // `undefined` is also a change: an account that moved to an unsupported
-    // network must not retain a review prepared for Ethereum/Base.
-    const chainChanged = reviewContext.chainId !== undefined
-      && wallet.chainId !== reviewContext.chainId;
-    const connectionChanged = wallet.connectionVersion !== reviewContext.connectionVersion;
-    if (walletChanged || chainChanged || connectionChanged) {
-      invalidatePreparedRoute(walletChanged
-        ? 'The selected wallet changed. Check the action again before signing.'
-        : chainChanged
-          ? 'The wallet network changed. Check the action again before signing.'
-          : 'The wallet connection changed. Check the action again before signing.');
-    }
-  }, [invalidatePreparedRoute, reviewContext, stage, wallet.address, wallet.authenticated, wallet.chainId, wallet.connectionVersion]);
-
-  const review = useCallback(async () => {
-    if (!planBuilder || disabled || loading || busyRef.current || stage !== 'input') return;
-    if (!wallet.authenticated || !wallet.address) {
-      setError('Connect a wallet before preparing a transaction.');
-      return;
-    }
-    const generation = generationRef.current + 1;
-    generationRef.current = generation;
-    const reviewWalletAddress = wallet.address.toLowerCase();
-    const reviewChainId = wallet.chainId;
-    const reviewConnectionVersion = wallet.connectionVersion;
-    const assertReviewSession = () => {
-      if (!isCurrentGeneration(generation)) return false;
-      const liveWallet = liveWalletRef.current;
-      if (!liveWallet.authenticated || liveWallet.address?.toLowerCase() !== reviewWalletAddress) {
-        throw new Error('The selected wallet changed while preparing the review.');
-      }
-      if (reviewChainId !== undefined && liveWallet.chainId !== reviewChainId) {
-        throw new Error('The wallet network changed while preparing the review.');
-      }
-      if (liveWallet.connectionVersion !== reviewConnectionVersion) {
-        throw new Error('The selected wallet connection changed while preparing the review.');
-      }
-      return true;
-    };
-    busyRef.current = true;
-    setLoading(true);
-    setStage('planning');
-    setError(null);
-    setStatus('planning');
-    setStatusDetail('Preparing a fresh route.');
-    try {
-      const prefetched = await prefetchedPlan?.();
-      if (!assertReviewSession()) return;
-      const planned = asRoutes(prefetched ?? await planBuilder());
-      if (!assertReviewSession()) return;
-      setStatus('reviewing');
-      setStatusDetail('Verifying the route.');
-      const walletAddress = reviewWalletAddress;
-      // Alternatives are independent; checking them concurrently removes one
-      // RPC round trip per extra route from the review's critical path.
-      const { viable, failures } = await prepareRoutesForReview(planned, walletAddress);
-      if (!assertReviewSession()) return;
-      if (!viable.length) {
-        throw new Error(`The transaction could not be simulated: ${failures.join('; ')}`);
-      }
-      setRoutes(viable);
-      setSelectedRoute(0);
-      setStepResults([]);
-      executionStepsRef.current = [];
-      setExecutionRoute(null);
-      // Snapshot the human-readable action with the calldata. Inputs remain
-      // visible above the review card, but later form edits must never rename
-      // an already reviewed route.
-      setReviewTitle(operationLabel ?? viable[0].operation);
-      setReviewContext({ walletAddress, chainId: wallet.chainId, connectionVersion: wallet.connectionVersion });
-      setStatus('reviewing');
-      setStatusDetail('Route ready.');
-      const preparedAt = Date.now();
-      previewPreparedAtRef.current = preparedAt;
-      setPreviewPreparedAt(preparedAt);
-      setPreviewIsStale(false);
-      setStage('review');
-      haptic('selection');
-    } catch (cause) {
-      if (!isCurrentGeneration(generation)) return;
-      setStage('input');
-      setStatus('failed');
-      setError(userSafeError(cause, 'The transaction could not be prepared. Check the inputs and network, then try again.'));
-      haptic('error');
-    } finally {
-      if (isCurrentGeneration(generation)) {
-        busyRef.current = false;
-        setLoading(false);
-      }
-    }
-  }, [disabled, isCurrentGeneration, loading, operationLabel, planBuilder, prefetchedPlan, stage, wallet.address, wallet.authenticated, wallet.chainId, wallet.connectionVersion]);
-
-  // History restores editable primitives only. Once the route owner has
-  // applied those values and exposes its planner, immediately reopen the
-  // exact review surface so the user can continue signing without having to
-  // press Review a second time. This is deliberately one-shot per nonce:
-  // reconnects and planner refreshes can never trigger an implicit wallet
-  // request or loop back into review.
-  useEffect(() => {
-    if (resumeReview <= 0) {
-      resumedReviewRef.current = null;
-      return;
-    }
-    if (resumedReviewRef.current === resumeReview || stage !== 'input' || loading || disabled) return;
-    if (!wallet.authenticated || !wallet.address || !planBuilder) return;
-    resumedReviewRef.current = resumeReview;
-    void review();
-  }, [disabled, loading, planBuilder, resumeReview, review, stage, wallet.address, wallet.authenticated]);
-
-  const execute = useCallback(async (inputRoute?: PlannedRoute) => {
-    const startingRoute = inputRoute ?? route;
-    const directFromInput = stage === 'input' && Boolean(inputRoute);
-    if (!startingRoute || loading || busyRef.current || (!directFromInput && stage !== 'review') || (!directFromInput && status === 'failed') || stepResults.some(hasTransactionHash)) return;
-    const executionWalletAddress = startingRoute.walletAddress.toLowerCase();
-    const previewOwner = previewOwnerRef.current;
-    const previewSessionMatches = previewOwner?.intentKey === previewIntentKey
-      && previewOwner.walletAddress?.toLowerCase() === executionWalletAddress
-      && previewOwner.chainId === wallet.chainId
-      && previewOwner.connectionVersion === wallet.connectionVersion;
-    if ((directFromInput && !previewSessionMatches)
-      || !previewPreparedAtRef.current
-      || Date.now() - previewPreparedAtRef.current >= PREVIEW_FRESHNESS_MS) {
-      setPreviewIsStale(true);
-      setError(directFromInput
-        ? previewSessionMatches ? 'This quote expired. Refreshing it before continuing.' : 'Action details changed. Updating the quote before continuing.'
-        : 'This review expired. Refreshing the quote before continuing.');
-      if (!directFromInput) {
-        setRoutes([]);
-        setSelectedRoute(0);
-        setReviewContext(null);
-        setReviewTitle(null);
-        setStatus('planning');
-        setStage('input');
-      } else {
-        setPreviewRetry((value) => value + 1);
-      }
-      return;
-    }
-    const generation = generationRef.current + 1;
-    generationRef.current = generation;
-    const executionConnectionVersion = wallet.connectionVersion;
-    const isCurrentExecution = () => {
-      if (!isCurrentGeneration(generation)) return false;
-      const liveWallet = liveWalletRef.current;
-      return liveWallet.authenticated
-        && liveWallet.address?.toLowerCase() === executionWalletAddress
-        && liveWallet.connectionVersion === executionConnectionVersion;
-    };
-    busyRef.current = true;
-    setLoading(true);
-    setError(null);
-    // Bind the displayed route to this wallet session before simulation.
-    // Deliberate network switching remains valid during execution, while
-    // account/reconnect changes invalidate this context.
-    setReviewContext({ walletAddress: executionWalletAddress, connectionVersion: executionConnectionVersion });
-    setStage('executing');
-    // Keep the displayed route visible while the runner performs its final
-    // policy validation and simulation immediately before each wallet request.
-    setExecutionRoute(startingRoute);
-    setStatus('planning');
-    setStatusDetail('Checking the displayed quote before signing.');
-    setStepResults([]);
-    executionStepsRef.current = [];
-    setRefreshing(false);
-    // Scope refreshes to the captured review, never the currently selected wallet.
-    const refreshWallet = createRouteWalletRefresh(invalidateWalletData);
-    const currentRoute = startingRoute;
-    let postConfirmReadStarted = false;
-    try {
-      setExecutionRoute(currentRoute);
-      const execution = await runTransactionRoute({
-        route: currentRoute,
-        callbacks: {
-          ensureChain: async (chainId) => {
-            if (!isCurrentExecution()) throw new Error('The selected wallet changed before the network switch.');
-            setNetworkSwitching(true);
-            try {
-              await wallet.switchChain(chainId);
-              if (!isCurrentExecution()) throw new Error('The selected wallet changed during the network switch.');
-            } finally {
-              if (isCurrentExecution()) setNetworkSwitching(false);
-            }
-          },
-          requestSignature: async (request) => {
-            const liveWallet = liveWalletRef.current;
-            if (!isCurrentExecution()
-              || !liveWallet.authenticated
-              || liveWallet.address?.toLowerCase() !== request.from.toLowerCase()
-              || liveWallet.connectionVersion !== executionConnectionVersion) {
-              throw new Error('The selected wallet changed before signing.');
-            }
-            setStatus('awaiting-user');
-            setStatusDetail('Review this transaction in your wallet.');
-            // Persist the unsigned resume hint only after the runner's final
-            // validation/simulation has reached the wallet request boundary.
-            if (!signatureDraftIdRef.current) {
-              try {
-                const draft = saveSignatureRequiredDraft({
-                  walletAddress: startingRoute.walletAddress,
-                  chainId: startingRoute.chainId,
-                  operation: startingRoute.operation,
-                  actionKey: draftActionKey ?? signatureDraftActionKey(startingRoute),
-                  resumePath: draftResumePath ?? `${window.location.pathname}${window.location.search}${window.location.hash}`,
-                  formState: draftState,
-                });
-                signatureDraftIdRef.current = draft.id;
-              } catch {
-                signatureDraftIdRef.current = null;
-              }
-            }
-            const signed = await wallet.sendTransaction({
-              chainId: request.chainId,
-              from: request.from,
-              to: request.to,
-              data: request.data,
-              value: request.value,
-              nonce: request.nonce,
-            }, {
-              action: `${reviewTitle ?? currentRoute.operation} · ${request.to}`,
-              description: `Check this transaction on ${chainName(request.chainId)} before approving it.`,
-              buttonText: 'Confirm transaction',
-            });
-            if (isCurrentExecution() && signatureDraftIdRef.current) {
-              removeSignatureRequiredDraft(signatureDraftIdRef.current);
-              signatureDraftIdRef.current = null;
-            }
-            return signed.hash;
-          },
-          onStatus: (next, detail) => {
-            if (!isCurrentExecution()) return;
-            setStatus(next);
-            setStatusDetail(detail ? userSafeError(detail, 'The transaction could not continue. Check the network and try again.') : '');
-          },
-          onStep: (step) => {
-            if (!isCurrentExecution()) return;
-            const next = [...executionStepsRef.current];
-            next[step.index] = step;
-            executionStepsRef.current = next;
-            setStepResults(next);
-          },
-          // The runner invokes this only after a receipt and the required
-          // confirmation depth have both been observed. Publish the receipt
-          // result before the optional state refresh so the user sees the
-          // confirmed action immediately while the read runs in the background.
-          postConfirmRead: async (confirmedRoute, execution) => {
-            if (!isCurrentExecution()) return;
-            postConfirmReadStarted = true;
-            setResult(execution);
-            setStage('result');
-            setRefreshing(true);
-            try {
-              // These reads have independent cache boundaries. Start both
-              // immediately so a slow wallet refresh cannot delay the
-              // receipt-bound position hint or other completion bookkeeping.
-              // Each task is scoped before it starts; the owning callbacks
-              // retain their own account/session guards for late results.
-              const refreshPromise = Promise.resolve().then(() => {
-                if (!isCurrentExecution()) return;
-                return refreshWallet(confirmedRoute, execution);
-              });
-              const completePromise = Promise.resolve().then(() => {
-                if (!isCurrentExecution()) return;
-                return onComplete?.(execution, confirmedRoute);
-              });
-              const outcomes = await Promise.allSettled([refreshPromise, completePromise]);
-              if (!isCurrentExecution()) return;
-              const rejected = outcomes.find((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');
-              if (rejected) throw rejected.reason;
-            } finally {
-              if (isCurrentExecution()) setRefreshing(false);
-            }
-          },
-        },
-      });
-      if (!isCurrentExecution()) return;
-      // A finality/confirmation timeout can skip postConfirmRead despite
-      // inclusion. Mark wallet data stale for gas/approvals/reverts without
-      // duplicating the refresh already running behind the result view.
-      if (!postConfirmReadStarted) await refreshWallet(currentRoute, execution);
-      if (!isCurrentExecution()) return;
-      setResult(execution);
-      setStage('result');
-      const uncertain = execution.steps.some((step) => ['unknown', 'unverified'].includes(transactionStepProgress(step).state));
-      haptic(execution.status === 'confirmed' ? 'success' : execution.status === 'partial' || uncertain ? 'warning' : 'error');
-    } catch (cause) {
-      if (!isCurrentExecution()) return;
-      const message = userSafeError(cause, 'The transaction could not continue. No later step was submitted.');
-      const submittedSteps = executionStepsRef.current;
-      if (submittedSteps.some(hasTransactionHash)) {
-        // A UI/observer exception cannot erase a broadcast hash or reopen a
-        // signing action. The existing journal remains the recovery authority.
-        const interrupted: TransactionExecutionResult = {
-          status: submittedSteps.some((step) => step.status === 'confirmed') ? 'partial' : 'failed',
-          operation: currentRoute.operation,
-          chainId: currentRoute.chainId,
-          walletAddress: currentRoute.walletAddress,
-          steps: submittedSteps.map((step) => step.status === 'submitted' ? { ...step, status: 'failed', error: message } : step),
-          error: message,
-        };
-        await refreshWallet(currentRoute, interrupted);
-        setResult(interrupted);
-        setStage('result');
-      } else {
-        if (signatureDraftIdRef.current) {
-          cancelSignatureRequiredDraft(signatureDraftIdRef.current);
-          signatureDraftIdRef.current = null;
-        }
-        setError(message);
-        if (directFromInput) {
-          setPreviewRoutes([startingRoute]);
-          previewRouteRef.current = startingRoute;
-          setExecutionRoute(null);
-          setStatus('planning');
-          setStage('input');
-        } else {
-          setStage('review');
-        }
-      }
-      setStatus('failed');
-      // A failed or stale route must be explicitly reviewed again. This is
-      // especially important when the runner rejects a changed minOut,
-      // converter path, leverage, or transformed reduction amount.
-      haptic(submittedSteps.some(hasTransactionHash) ? 'warning' : 'error');
-    } finally {
-      if (isCurrentGeneration(generation)) {
-        busyRef.current = false;
-        setRefreshing(false);
-        setLoading(false);
-      }
-    }
-  }, [draftActionKey, draftResumePath, draftState, invalidateWalletData, isCurrentGeneration, loading, onComplete, previewIntentKey, reviewTitle, route, stage, status, stepResults, wallet]);
-
-  // A connect click leaves the editor and its read-only preview in place. It
-  // never opens the legacy review surface or requests a signature; the user
-  // must click the action again after the wallet is connected.
-  useEffect(() => {
-    if (!resumeAfterConnect || stage !== 'input' || !wallet.authenticated || !wallet.address) return;
-    if (disabled) {
-      setResumeAfterConnect(false);
-      return;
-    }
-    setResumeAfterConnect(false);
-  }, [disabled, resumeAfterConnect, stage, wallet.address, wallet.authenticated]);
-
-  const routeSummaries = useMemo(() => routes.map((candidate) => {
-    const routeType = candidate.details?.routeType ?? 'Route';
-    const approvals = candidate.transactions.filter((transaction) => transaction.kind === 'approval').length;
-    return { routeType, approvals, count: candidate.transactions.length };
-  }), [routes]);
+export function ActionReview(props: ActionReviewProps) {
+  const lifecycle = useActionReviewLifecycle(props);
+  const { label = 'Review action', disabled = false, operationLabel, destructive = false, editor, reviewBeforeSign = true, decisionBefore, executionCost, surface = 'card', planBuilder } = props;
+  const { canSelectReviewedRoute, endConnectFlow, error, execute, gasCost, headingRef, loading, networkSwitching, previewError, previewIsStale, previewLoading, previewRoute, previewRoutes, previewUpdating, quoteChanges, quoteExpired, refreshReviewedQuote, refreshing, reset, result, review, reviewTitle, route, routeSummaries, routes, selectedRoute, selectPreviewRoute, selectReviewedRoute, retryPreview, startConnectFlow, stage, status, statusDetail, stepResults, triggerRef, wallet } = lifecycle;
 
   if (stage === 'input') {
     const progress = statusPresentation({ stage, status, detail: statusDetail, stepResults, stepCount: 0 });
     const disconnected = !wallet.authenticated || !wallet.address;
-    const reviewLabel = /^review\b/i.test(label) ? label : `Review ${actionButtonLabel(label, operationLabel).replace(/^(open|send)\s+/i, '').toLowerCase()}`;
+    const reviewLabel = quoteExpired ? 'Review updated quote' : reviewActionLabel(label, operationLabel);
     const previewAction = previewRoute ? reviewBeforeSign ? reviewLabel : actionButtonLabel(label, operationLabel) : null;
     const trigger = (
       <div className={`${styles.reviewTrigger} reviewTrigger flex flex-col gap-2.5`}>
@@ -1136,7 +133,7 @@ export function ActionReview({
           alternatives={previewRoutes}
           selectedRoute={selectedRoute}
           onSelect={(index) => {
-            setSelectedRoute(index);
+            selectPreviewRoute(index);
           }}
           decisionBefore={decisionBefore}
           gasCost={gasCost}
@@ -1146,7 +143,7 @@ export function ActionReview({
         {previewError && (
           <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-[rgba(255,194,102,.24)] bg-[var(--warn-dim)] px-3 py-2 text-[12px]">
             <span className="min-w-0 break-words text-warn">{previewError}</span>
-            <Button variant="outline" className="w-full px-2.5 py-1.5 text-[11px] sm:w-auto sm:self-start" onClick={() => setPreviewRetry((value) => value + 1)} disabled={previewLoading}>Try again</Button>
+          <Button variant="outline" className="w-full px-2.5 py-1.5 text-[11px] sm:w-auto sm:self-start" onClick={retryPreview} disabled={previewLoading}>Try again</Button>
           </div>
         )}
         {error && <InlineError message={error} />}
@@ -1157,8 +154,8 @@ export function ActionReview({
             // the action's own disabled state should block that intent.
             disabled={disabled}
             resumeIfConnected
-            onConnectStart={() => { setError(null); setResumeAfterConnect(true); }}
-            onConnectError={() => setResumeAfterConnect(false)}
+            onConnectStart={startConnectFlow}
+            onConnectError={endConnectFlow}
           >
             Connect wallet
           </ConnectWalletButton>
@@ -1191,10 +188,10 @@ export function ActionReview({
   }
 
   if (stage === 'result' && result) {
+    const transactionTask = selectExecutionTask(result);
     const bridgeQuote = route?.operation === 'buildBridgeTx' && isBridgeQuote(route.quote) ? route.quote : null;
     const bridge = Boolean(bridgeQuote);
     const presentation = resultPresentation(result, bridge);
-    const ResultIcon = presentation.icon;
     const bridgeStep = bridge
       ? [...result.steps].reverse().find((step) => step.transaction.kind === 'action' && step.hash)
       : undefined;
@@ -1203,34 +200,56 @@ export function ActionReview({
       : bridgeStep?.status === 'confirmed' && bridgeStep.receipt?.status === 'success'
         ? 'source_confirmed'
         : 'pending';
-    const tone = presentation.tone === 'success'
-      ? 'bg-[var(--success-dim)] text-success'
-      : presentation.tone === 'warning'
-        ? 'bg-[var(--warn-dim)] text-warn'
-        : 'bg-[var(--danger-dim)] text-danger';
+    const positionAction = result.status === 'confirmed' && [
+      'increasePosition', 'reducePosition', 'adjustPositionLeverage', 'depositAndMint', 'repayAndWithdraw',
+    ].includes(result.operation);
+    const positionIntent = route?.policy?.reviewedAction && 'positionId' in route.policy.reviewedAction
+      && 'poolAddress' in route.policy.reviewedAction
+      ? route.policy.reviewedAction
+      : null;
+    const poolLocation = positionIntent
+      ? (['ETH', 'BTC'] as const).flatMap((market) => (['long', 'short'] as const).map((side) => ({ market, side })))
+        .find(({ market, side }) => positionPoolAddress(market, side).toLowerCase() === positionIntent.poolAddress.toLowerCase())
+      : undefined;
+    const receiptPositionIdentity = result.status === 'confirmed' && route && positionIntent?.positionId === 0
+      && (route.operation === 'increasePosition' || route.operation === 'depositAndMint')
+      ? receiptMintedPositionIdentity({ route, result })
+      : null;
+    const positionSide = positionIntent && 'positionType' in positionIntent ? positionIntent.positionType : poolLocation?.side ?? receiptPositionIdentity?.side;
+    const positionMarket = poolLocation?.market ?? receiptPositionIdentity?.market;
+    const positionId = positionIntent && positionIntent.positionId > 0
+      ? positionIntent.positionId
+      : receiptPositionIdentity?.positionId;
+    const positionLabel = positionAction && result.status === 'confirmed' && positionId !== undefined
+      ? `${positionMarket ?? 'Protocol'}${positionSide ? ` ${positionSide}` : ''} · #${positionId}`
+      : undefined;
+    const positionHref = positionId !== undefined && positionMarket && positionSide
+      ? `/positions?position=${encodeURIComponent(`${positionMarket}:${positionSide}:${positionId}`)}&action=${positionIntent?.kind === 'position-reduce' && positionIntent.isClosePosition ? 'close' : positionIntent?.kind === 'position-reduce' || positionIntent?.kind === 'repay-and-withdraw' ? 'reduce' : positionIntent?.kind === 'position-adjust' ? 'leverage' : 'increase'}`
+      : undefined;
+    const receiptFacts = result.steps.flatMap((step) => {
+      if (!hasTransactionHash(step) || !step.receipt) return [];
+      const receiptStatus = step.receipt.status === 'success' ? 'success' : 'reverted';
+      const effectiveGasPrice = (step.receipt as { effectiveGasPrice?: bigint }).effectiveGasPrice;
+      return [buildReceiptPresentation({
+        chainId: result.chainId as 1 | 8453,
+        walletAddress: result.walletAddress,
+        status: receiptStatus,
+        transfers: receiptTransfersFromLogs(step.receipt.logs ?? [], result.walletAddress),
+        executionCostWei: typeof effectiveGasPrice === 'bigint' ? step.receipt.gasUsed * effectiveGasPrice : undefined,
+        nativeValueWei: step.transaction.value,
+      })];
+    });
     return (
       <ReviewSurface surface={surface} className={`${styles.reviewCard} ${styles.reviewInlineCard} anim-scale-in p-4 sm:p-5`}>
-        <div className="flex flex-col items-center text-center">
-          <span className={`flex h-12 w-12 items-center justify-center rounded-xl ${tone}`}>
-            <ResultIcon className="h-6 w-6" aria-hidden="true" />
-          </span>
-          <h3 ref={headingRef} data-review-focus tabIndex={-1} className="text-display mt-4 text-[21px] font-semibold outline-none">
-            {presentation.title}
-          </h3>
-          <p className="mt-1.5 text-[12px] leading-relaxed text-mut">
-            {presentation.body}
-          </p>
-          <p className="mt-2 text-[11px] text-mut" title={result.walletAddress}>
-            {chainName(result.chainId)} · Wallet {compactAddress(result.walletAddress)}
-          </p>
-          {result.steps.some(hasTransactionHash) && (
-            <div className="mt-4 flex w-full flex-col gap-2 text-left">
-              {result.steps.map((step) => hasTransactionHash(step) ? (
-                <TransactionHashLink key={`${step.index}-${step.hash}`} step={step} chainId={result.chainId} />
-              ) : null)}
-            </div>
-          )}
-          {bridgeQuote && bridgeStep?.hash && (
+        <TransactionResultView
+          result={result}
+          presentation={presentation}
+          refreshing={refreshing}
+          positionAction={positionAction}
+          positionLabel={positionLabel}
+          receipts={receiptFacts}
+          headingRef={headingRef}
+          bridgeTracker={bridgeQuote && bridgeStep?.hash ? (
             <BridgeTracker
               className="mt-4 w-full text-left"
               sourceChain={route.chainId === 1 ? 'Ethereum' : 'Base'}
@@ -1247,9 +266,11 @@ export function ActionReview({
               minAmountLD={bridgeQuote.minAmountLD}
               destinationBaselineBlock={bridgeQuote.destinationBaselineBlock}
             />
-          )}
-          <Button variant="ghost" aria-label="Done" className={`${styles.primaryAction} mt-4`} onClick={reset}>{bridge ? 'Back to Move' : result.status === 'confirmed' ? 'Back to action' : 'Try again'}</Button>
-        </div>
+          ) : undefined}
+          nextAriaLabel={transactionTask ? 'View transaction progress' : positionAction ? 'View position' : 'Done'}
+          nextLabel={transactionTask ? 'View transaction progress' : bridge ? 'Back to Move' : positionAction ? 'View position' : result.status === 'confirmed' ? 'Back to action' : 'Try again'}
+          onNext={() => transactionTask ? window.location.assign(transactionTask.href) : positionAction ? window.location.assign(positionHref ?? '/positions') : reset()}
+        />
       </ReviewSurface>
     );
   }
@@ -1257,8 +278,13 @@ export function ActionReview({
   if (!route) return null;
   const stepCount = route.transactions.length;
   const approvalCount = route.transactions.filter((transaction) => transaction.kind === 'approval').length;
-  const facts = routeFacts(route, gasCost, executionCost);
+  const facts = buildRouteFacts(route, gasCost, executionCost);
   const reviewFacts = splitReviewFacts(facts);
+  const consequenceFacts = consequenceSummary(primaryReviewFacts(route));
+  const positionChanges = pairVerifiedPositionFacts(decisionBefore ?? [], facts);
+  const pairedOutcomeLabels = new Set(positionChanges.paired.map((fact) => `estimated ${fact.label.toLowerCase()}`));
+  const actionConsequences = consequenceFacts.filter((fact) => !pairedOutcomeLabels.has(fact.label.toLowerCase()));
+  const remainingSummaryFacts = factsOutsideConsequenceSummary(reviewFacts.summary, actionConsequences);
   const gasEstimateStatus = gasCost.estimate?.status === 'partial'
     ? 'Partial route estimate'
     : gasCost.estimate?.status === 'unavailable'
@@ -1305,12 +331,9 @@ export function ActionReview({
       </div>
 
       {showExecutionProgress && (
-        <section className="mt-4 flex flex-col gap-2" aria-label="Submitted transactions">
-          <StatusNotice {...progress} />
-          {stepResults.map((step) => hasTransactionHash(step) ? (
-            <TransactionHashLink key={`${step.index}-${step.hash}`} step={step} chainId={route.chainId} />
-          ) : null)}
-        </section>
+        <div className={presentationStyles.actualProgress}>
+          <TransactionProgressPresentation label="Submitted transactions" status={status} stepResults={stepResults} chainId={route.chainId} presentation={progress} />
+        </div>
       )}
 
       {routes.length > 1 && (
@@ -1321,14 +344,10 @@ export function ActionReview({
               type="button"
               role="radio"
               aria-checked={selectedRoute === index}
-              disabled={loading || stage !== 'review'}
+              disabled={loading || !canSelectReviewedRoute}
               key={`${candidate.operation}-${index}`}
               tabIndex={selectedRoute === index ? 0 : -1}
-              onClick={() => {
-                if (busyRef.current || stage !== 'review') return;
-                setSelectedRoute(index);
-                setStepResults([]);
-              }}
+              onClick={() => selectReviewedRoute(index)}
               onKeyDown={(event) => {
                 const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
                 if (!keys.includes(event.key)) return;
@@ -1339,8 +358,7 @@ export function ActionReview({
                   : event.key === 'End'
                     ? routes.length - 1
                     : (index + (backwards ? -1 : 1) + routes.length) % routes.length;
-                setSelectedRoute(next);
-                setStepResults([]);
+                selectReviewedRoute(next);
                 event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
               }}
               className={`flex min-h-12 items-center justify-between rounded-xl border px-3 text-left disabled:cursor-default ${selectedRoute === index ? 'border-[rgba(139,109,255,.55)] bg-[var(--mint-dim)]' : 'border-[var(--line)] bg-[rgba(255,255,255,.025)]'}`}
@@ -1354,16 +372,22 @@ export function ActionReview({
 
       <div className="my-4 hairline" />
       <div className={styles.reviewFacts}>
+        <p className={presentationStyles.reviewFactsTitle}>Review details</p>
         <ReviewRow label="Network" value={chainName(route.chainId)} />
         <ReviewRow label="Wallet" value={compactAddress(route.walletAddress)} title={route.walletAddress} />
-        {reviewFacts.summary.map((fact) => <ReviewRow key={`${fact.label}-${fact.value}`} label={fact.label} value={fact.value} title={fact.title} />)}
+        {remainingSummaryFacts.map((fact) => <ReviewRow key={`${fact.label}-${fact.value}`} label={fact.label} value={fact.value} title={fact.title} />)}
         {approvals.length > 0 && <ReviewRow label="Approvals" value={approvals.join('; ')} />}
      </div>
+
+      {quoteExpired && <div role="status" className="mt-3 rounded-xl border border-[rgba(255,194,102,.28)] bg-[var(--warn-dim)] px-3 py-2 text-[12px] text-warn">This reviewed quote expired. Refresh and review the updated terms before signing.</div>}
+      <UpdatedQuoteSummary changes={quoteChanges} />
+      <ActionConsequenceSummary facts={actionConsequences} />
 
       {wrongNetwork && <p role="status" className="mt-2 rounded-xl border border-[rgba(255,194,102,.24)] bg-[var(--warn-dim)] px-3 py-2 text-[11.5px] leading-relaxed text-warn">Wallet is on {chainName(wallet.chainId!)}. Confirmation will switch to {chainName(route.chainId)} before signing.</p>}
       {unsupportedNetwork && <p role="status" className="mt-2 rounded-xl border border-[rgba(255,194,102,.24)] bg-[var(--warn-dim)] px-3 py-2 text-[11.5px] leading-relaxed text-warn">Wallet network is unavailable or unsupported. Confirmation will request {chainName(route.chainId)} before signing.</p>}
 
-      <DecisionContext beforeFacts={decisionBefore} />
+      <PositionOutcomeSummary facts={positionChanges.paired} />
+      <DecisionContext beforeFacts={positionChanges.remainingBefore.length ? positionChanges.remainingBefore : undefined} />
 
       <QuoteFactDetails facts={facts} />
       <AdvancedReviewDetails route={route} />
@@ -1404,13 +428,14 @@ export function ActionReview({
       {error && <div className="mt-3"><InlineError message={error} /></div>}
       {stage === 'review' && (
         <div className={styles.reviewInlineActions}>
-          <Button variant={destructive ? 'danger' : 'primary'} disabled={loading || status === 'failed'} loading={loading} className={styles.primaryAction} onClick={() => void execute()}>
-            {stepCount === 1 ? 'Confirm in wallet' : `Confirm ${stepCount} transactions`}
+          <Button variant={destructive ? 'danger' : 'primary'} disabled={disabled || !planBuilder || loading || (!quoteExpired && status === 'failed')} loading={loading} className={styles.primaryAction} onClick={() => quoteExpired ? void refreshReviewedQuote() : void execute()}>
+            {quoteExpired ? 'Review updated quote' : stepCount === 1 ? 'Confirm in wallet' : `Confirm ${stepCount} transactions`}
           </Button>
         </div>
       )}
     </ReviewSurface>
   );
+
 }
 
 function ReviewSurface({ surface, className, children }: { surface: 'card' | 'content'; className: string; children: ReactNode }) {
@@ -1433,13 +458,15 @@ function InlinePreviewSummary({
   selectedRoute?: number;
   onSelect?: (index: number) => void;
   decisionBefore?: ReviewFact[];
-  gasCost: Pick<UseGasCostResult, 'estimate' | 'estimateIsCurrent'>;
+  gasCost: Pick<UseGasCostResult, 'estimate' | 'estimateIsCurrent' | 'status'>;
   executionCost?: ActionReviewProps['executionCost'];
   updating: boolean;
 }) {
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const facts = routeFacts(route, gasCost, executionCost);
+  const facts = buildRouteFacts(route, gasCost, executionCost);
   const reviewFacts = splitReviewFacts(facts);
+  const metricLabels = new Set(['Estimated collateral', 'Gas fee', 'Total cost']);
+  const summaryFacts = reviewFacts.summary.filter((fact) => !metricLabels.has(fact.label));
   const approvals = route.transactions
     .map((transaction) => {
       const approval = approvalFacts(transaction);
@@ -1481,11 +508,13 @@ function InlinePreviewSummary({
           })}
         </div>
       )}
-      <div className="grid grid-cols-1 gap-x-5 gap-y-1.5 sm:grid-cols-2">
-        <ReviewRow label="Network" value={chainName(route.chainId)} />
-        {reviewFacts.summary.map((fact) => <ReviewRow key={`${fact.label}-${fact.value}`} label={fact.label} value={fact.value} title={fact.title} />)}
-        {approvals.length > 0 && <ReviewRow label="Approvals" value={approvals.join('; ')} />}
+      <CompactQuoteMetrics facts={facts} gasStatus={gasCost.status} />
+      <div className={`${presentationStyles.previewFacts} mt-2`}>
+        <p className={presentationStyles.reviewFactsTitle}>Quote details</p>
+        <ReviewRow label="Network" value={chainName(route.chainId)} className={presentationStyles.previewFactRow} />
+        {summaryFacts.map((fact) => <ReviewRow key={`${fact.label}-${fact.value}`} label={fact.label} value={fact.value} title={fact.title} className={presentationStyles.previewFactRow} />)}
       </div>
+      {approvals.length > 0 && <div className="mt-2"><ReviewRow label="Approvals" value={approvals.join('; ')} /></div>}
       <DecisionContext beforeFacts={decisionBefore} />
       <QuoteFactDetails facts={facts} />
       <AdvancedReviewDetails route={route} />
@@ -1493,9 +522,9 @@ function InlinePreviewSummary({
   );
 }
 
-function ReviewRow({ label, value, title }: { label: string; value: ReactNode; title?: string }) {
+function ReviewRow({ label, value, title, className }: { label: string; value: ReactNode; title?: string; className?: string }) {
   const valueTitle = title ?? (typeof value === 'string' ? value : undefined);
-  return <div className="flex items-start justify-between gap-4 text-[12px]"><span className="text-mut">{label}</span><span title={valueTitle} className="max-w-[62%] break-all text-right font-semibold tabular-nums"><ValueOrSkeleton value={value} width="md" label={`Loading ${label.toLowerCase()}`} /></span></div>;
+  return <div className={`flex items-start justify-between gap-4 text-[12px] ${className ?? ''}`}><span className="text-mut">{label}</span><span title={valueTitle} className="max-w-[62%] break-all text-right font-semibold tabular-nums"><ValueOrSkeleton value={value} width="md" label={`Loading ${label.toLowerCase()}`} /></span></div>;
 }
 
 function AdvancedReviewDetails({ route }: { route: PlannedRoute }) {

@@ -43,13 +43,13 @@ executor.
 
 ## Transaction lifecycle
 
-The action review builds and simulates a route for the current input. While the
-user reviews it, an idle refresh may replace the displayed summary. A review is
-usable for up to 30 seconds and is bound to the selected wallet session and
-signing-relevant inputs. The action executes that displayed route; the runner
-rechecks policy and simulates immediately before each wallet request. If the
-route is stale or the intent changed, the app refreshes the review and asks the
-user to act again. There is no hidden confirm-time route substitution.
+The action review builds and simulates a route for the current input. Product
+actions open an explicit review before signing by default. A review is usable
+for up to 30 seconds and is bound to the selected wallet session and
+signing-relevant inputs. If it expires or the intent changes, the app refreshes
+the review and asks the user to accept it again. The action executes that
+displayed route; the runner rechecks policy and simulates immediately before
+each wallet request. There is no hidden confirm-time route substitution.
 
 Every step requires wallet approval. The next step waits for the prior
 transaction's receipt and canonical check. Rejection, revert, timeout, reorg, or
@@ -72,15 +72,50 @@ matching LayerZero messages.
 | USD prices and charts | Validated display feeds; never used to plan or sign |
 | Theme, slippage, and recovery hints | Local device storage; reread or revalidated before use |
 
+Wallet queries are scoped by wallet session, chain, and normalized address.
+Standard balance queries have a 15-second freshness window. fxSAVE claimability
+uses a 60-second window and active observers refresh every 45 seconds, before
+that window expires. Claim reads verify the configured Ethereum chain before
+calling the SDK; claim availability is actionable only while the matching
+wallet query is fresh and not fetching or failed. Async provider reads use
+session or generation guards so a response from an old wallet selection cannot
+replace the current one. After an included transaction, the app cancels and
+refetches active queries for that wallet and chain. Overlapping invalidations
+coalesce, and a later receipt schedules a trailing refresh so an earlier RPC
+response cannot win. A cache refresh is not evidence that an action succeeded;
+only verified chain receipts establish transaction state.
+
 Positions, Borrow, and Earn are Ethereum-based. Move supports the reviewed
 `fxUSD` and `fxSAVE` routes between Ethereum and Base; Base is not a positions or
 fxSAVE ledger.
 
 Portfolio distinguishes unavailable data from zero. It shows a full USD total
-only when all applicable values are available; when some prices are missing it
-can show a known priced subtotal with an incomplete-state cue. Estimated
+only when all applicable values are available. Known individual holdings stay
+visible during refresh; an incomplete subtotal never becomes the headline total. Estimated
 position value is collateral value minus debt when validated inputs are
 available; it is not P&L, ROI, health, or liquidation value.
+
+Portfolio, Earn, and the wallet profile derive withdrawal and valuation
+attention items through the shared wallet-task selector. They read claimability
+from the same identity-scoped query, so a stale or unavailable claim read does
+not create a claim action. Recent activity and transaction recovery use the
+same selector for receipt-reconciled transaction tasks. A submitted transaction
+task can direct the user to inspect progress, but is never marked retryable;
+uncertain confirmation does not create a resubmit action. Receipt presentations
+use verified receipt logs and transaction data for actual movements and
+execution cost, while unavailable facts remain explicitly unavailable. Local
+recovery records help find receipts and never establish financial truth.
+
+Position activity loads automatically for the connected wallet from the same
+four market indexes used by the pinned SDK. Orders are associated with their
+position using the index entity ID, then matched to a successful Ethereum
+receipt and router event. Reads are bounded and paginated; refreshing preserves
+existing rows and wallet changes discard the previous wallet's view. Discovery
+uses each index's current owner/real-owner association; orders have no independent
+actor or recipient filter. Transferred-out positions can therefore be absent
+from a prior owner's activity, and the older ETH-short index has no real-owner
+field. Complete historical attribution requires a wallet-aware event index.
+Indexed position events and local recovery records remain distinct sources.
 
 ## User data
 
@@ -89,3 +124,9 @@ financial truth or cross-device history. Unsigned drafts contain form values,
 not executable calldata; they are kept separate from submitted transaction
 records. See [`security.md`](security.md) for trust assumptions and
 [`sdk-scope.md`](sdk-scope.md) for the protocol boundary.
+
+The deterministic UI state lab is a development and test fixture served only
+on loopback by `pnpm --dir apps/mini-app dev:state-lab`; it is not part of the
+production app. Browser-test isolation and commands are listed in
+[`browser-test-gates.md`](browser-test-gates.md), and lab usage is in
+[`ui-state-lab.md`](ui-state-lab.md).

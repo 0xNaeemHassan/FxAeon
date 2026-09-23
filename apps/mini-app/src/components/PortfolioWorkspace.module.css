@@ -1,19 +1,25 @@
-.workspace { min-width: 0; width: min(100%, 1120px); margin-inline: auto; }
-.dashboard { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; }
-.primary, .secondary { display: flex; min-width: 0; flex-direction: column; gap: 22px; }
-.valueCard { padding: 24px; }
+.workspace { width: min(100%, 1120px); margin-inline: auto; }
+.dashboard { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
+.primary, .secondary { display: flex; min-width: 0; flex-direction: column; gap: 16px; }
+.valueCard { padding: 20px; }
 .valueTop { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 12px; color: var(--mut); font-size: 13px; }
 .valueTop > div { display: flex; align-items: center; gap: 8px; }
 .valueTop button { display: inline-grid; min-width: 44px; min-height: 44px; place-items: center; border-radius: 12px; color: var(--mut); margin-right: -10px; }
 .valueTop button:hover { background: var(--mint-dim); color: var(--mint); }
 .partial { color: var(--warn); border-radius: 7px; padding: 4px 7px; background: var(--warn-dim); font-size: 11px; }
-.valueNumber { margin: 9px 0 8px; font-size: clamp(34px, 7vw, 48px); line-height: 1.1; font-weight: 600; letter-spacing: -.04em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.valueCaption { color: var(--mut); font-size: 12px; line-height: 1.5; margin: 0 0 20px; }
+.valueNumber { margin: 7px 0 5px; font-size: clamp(30px, 7vw, 40px); line-height: 1.1; font-weight: 600; letter-spacing: -.04em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.valueCaption { color: var(--mut); font-size: 12px; line-height: 1.5; margin: 0 0 12px; }
 .helper { color: var(--mut); font-size: 12px; line-height: 1.65; margin: 12px 0 0; }
 .sectionTitle { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .sectionTitle h2 { font-size: 17px; font-weight: 600; margin: 0; }
 .sectionTitle a { display: flex; min-height: 44px; align-items: center; gap: 3px; font-size: 12px; color: var(--mint); }
 .positionList { display: flex; flex-direction: column; gap: 14px; }
+.emptyState { margin: 0; padding: 12px 2px; color: var(--mut); font-size: 13px; }
+.emptyState a { display: inline-flex; min-height: 44px; align-items: center; color: var(--mint); font-weight: 600; vertical-align: middle; }
+.emptyEarn p a { color: var(--mint); font-weight: 600; }
+.emptyEarn > p { display: flex; align-items: center; gap: 12px; margin: 0; padding: 10px 0; color: var(--mut); font-size: 13px; }
+.emptyEarn > p strong { flex: 1; color: var(--text); font-weight: 550; }
+.emptyEarn p a { display: inline-flex; min-height: 44px; align-items: center; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; }
 .positionItem { min-width: 0; }
 .positionActions { display: flex; gap: 6px; padding: 8px 0 0; }
 .positionActions a { display: grid; flex: 1; place-items: center; min-height: 44px; border: 1px solid var(--line); border-radius: 10px; font-size: 12px; color: var(--mut); }
@@ -28,9 +34,9 @@
 .earnActions a { flex: 1; min-width: 0; text-align: center; padding: 12px 8px; border: 1px solid var(--line); border-radius: 11px; font-size: 12px; color: var(--mut); }
 .earnActions a:first-child { color: var(--mint); background: var(--mint-dim); }
 .quickActions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.quickAction { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 68px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 10px 6px; font-size: 12px; }
+.quickAction { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 56px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 7px 6px; font-size: 12px; }
 .quickAction > span { color: var(--mint); }
 .quickAction > strong { font-weight: 600; }
 .quickAction:hover { border-color: var(--mint); background: var(--mint-dim); }
-@media (min-width: 1000px) { .dashboard { grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); gap: 24px; align-items: start; } .secondary { padding-top: 2px; } }
-@media (max-width: 380px) { .valueCard { padding: 18px; } .primary, .secondary { gap: 18px; } }
+@media (min-width: 1000px) { .dashboard { grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); gap: 20px; align-items: start; } .secondary { padding-top: 2px; } }
+@media (max-width: 380px) { .valueCard { padding: 16px; } .primary, .secondary { gap: 14px; } }

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowDownRight, ArrowUpRight, ChevronRight, Layers2 } from 'lucide-react';
 import { AppShell, Card } from '@/components/ui';
 import { Disclosure } from '@/components/ProductUI';
+import { ActionWorkspace } from '@/components/ProductLayout';
 import { ActionReview, type ActionReviewStage } from '@/components/ActionReview';
 import { TradeMarketChart } from '@/components/MarketChart';
 import {
@@ -64,7 +65,7 @@ export default function TradePage() {
   const [nativeMaxAmount, setNativeMaxAmount] = useState<string | null>(null);
   const [nativeMaxPending, setNativeMaxPending] = useState(false);
   const [nativeMaxError, setNativeMaxError] = useState<string | null>(null);
-  const [reviewStage, setReviewStage] = useState<ActionReview reviewBeforeSignStage>('input');
+  const [reviewStage, setReviewStage] = useState<ActionReviewStage>('input');
   const prefetchStoreRef = useRef<RoutePrefetchStore | null>(null);
   const prefetchSessionRef = useRef(createPrefetchSessionId());
   const prefetchDescriptorRef = useRef<RoutePrefetchDescriptor | null>(null);
@@ -504,7 +505,7 @@ export default function TradePage() {
   return (
     <AppShell tabs>
       <div className={styles.tradeRoot}>
-      <div className={`${styles.tradeWorkspace} trade-workspace`}>
+      <ActionWorkspace className={`${styles.tradeWorkspace} trade-workspace`}>
         <header className={`${styles.tradePageHeading} trade-page-heading`}>
           <div><h1 className="text-display text-[30px] font-semibold leading-tight">Trade</h1></div>
           <Link href="/positions" className={`${styles.positionsShortcut} glass-press inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 text-[12px] font-semibold text-mut hover:text-mint`}><Layers2 className="h-4 w-4" aria-hidden="true" />Positions</Link>
@@ -537,6 +538,9 @@ export default function TradePage() {
                     <div>
                       <h2 className="text-[18px] font-semibold">Open position</h2>
                     </div>
+                    <Disclosure title="Settings" summary={`${slippage}% slippage`}>
+                      <SlippageField value={slippage} onChange={changeSlippage} max={MAX_FX_SLIPPAGE_PERCENT} />
+                    </Disclosure>
                   </div>
 
                   <div className={styles.sideControl}><Segmented tone="sides" value={side} onChange={changeSide} ariaLabel="Position side" options={[{ value: 'long', label: 'Long', sub: 'Price rises' }, { value: 'short', label: 'Short', sub: 'Price falls' }]} /></div>
@@ -544,9 +548,6 @@ export default function TradePage() {
                   <div className={styles.fieldStack}>
                     <AmountField compact label="Amount" symbol={token} value={amount} onChange={changeAmount} maxDecimals={tokenDecimals(token)} showMax showUnitPrice={false} constraintError={token === 'ETH' ? nativeMaxError : undefined} maxAmount={token === 'ETH' ? nativeMaxAmount : undefined} onMax={token === 'ETH' ? resolveNativeMax : undefined} maxPending={token === 'ETH' && nativeMaxPending} balanceState={selectedTokenBalance} tokenSelector={<TokenSelect compact label="Input asset" value={token} options={tokenOptions} onChange={changeToken} balances={wallet.address ? walletBalances.balances : undefined} balanceStatus={wallet.address ? (walletBalances.status !== 'idle' ? walletBalances.status : undefined) : 'disconnected'} />} />
                     <LeverageField label="Target leverage" value={leverage} onChange={changeLeverage} min={leverageBounds.min} max={leverageBounds.max} error={leverageError} compact />
-                    <Disclosure title="Settings" summary={`${slippage}% slippage`}>
-                      <SlippageField value={slippage} onChange={changeSlippage} max={MAX_FX_SLIPPAGE_PERCENT} />
-                    </Disclosure>
                   </div>
                 </>
               }
@@ -584,7 +585,7 @@ export default function TradePage() {
             )}
           </section>
         )}
-      </div>
+      </ActionWorkspace>
       </div>
     </AppShell>
   );

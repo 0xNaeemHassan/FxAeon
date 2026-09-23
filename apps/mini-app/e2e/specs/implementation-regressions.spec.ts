@@ -155,7 +155,7 @@ test.describe('implementation regressions', () => {
   test('settings preserves reachable browser wallet controls', async ({ page, requests }) => {
     await page.goto('/settings', { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: /settings/i })).toBeVisible();
-    const connect = page.getByRole('main').getByRole('button', { name: 'Connect wallet', exact: true }).first();
+    const connect = page.getByRole('main').getByRole('button', { name: /^(Connect|Retry wallet provider)/ });
     await expect(connect).toBeVisible();
     await expect(connect).toBeEnabled();
     await connect.click();

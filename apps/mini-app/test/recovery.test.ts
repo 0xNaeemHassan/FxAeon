@@ -124,6 +124,19 @@ test("reconciles a receipt at its mined block while retaining final receipt and 
   assert.equal(readPendingHashJournal().find((item) => item.id === record.id)?.status, "confirmed");
 });
 
+test("exposes network cost only when it can be derived from receipt and mined transaction", async () => {
+  const record = addRecord();
+  const [view] = await reconcileWalletJournal({
+    walletAddress: WALLET,
+    getClient: () => client(async () => receipt(record, { gasUsed: 21_000n, effectiveGasPrice: 3n }), 1,
+      async ({ hash }) => ({ hash, from: WALLET, to: DESTINATION, input: DATA, value: 0n, nonce: 4 }) as never,
+      123n),
+  });
+  assert.equal(view?.status, "confirmed");
+  assert.equal(view?.receiptExecutionCostWei, 63_000n);
+  assert.deepEqual(view?.receiptTransfers, []);
+});
+
 test("never ages unresolved records out of recovery", async () => {
   for (let index = 0; index < 12; index += 1) {
     addRecord({ hash: `0x${index.toString(16).padStart(64, "0")}` as Hex });

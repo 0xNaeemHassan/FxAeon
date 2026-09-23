@@ -9,9 +9,17 @@ import type { WalletBalancesResult } from '../fx/balances';
 import type { WalletDataConfig } from './config';
 import { CANONICAL_MOVE_ASSETS, canonicalMoveSourceTokenAddress, type CanonicalMoveBalanceMap } from '../moveBalances';
 import type { CanonicalAssetRead } from '../walletAssets';
+import { assertConfiguredPublicClientChain } from '../fx/clients';
+import { getFxReadFacade, withReadDeadline } from '../fx/readFacade';
 
 export const WALLET_QUERY_ROOT = 'fxaeon-wallet';
 export const WALLET_BALANCE_STALE_MS = 15_000;
+export const FX_SAVE_CLAIMABLE_STALE_MS = 60_000;
+export const FX_SAVE_CLAIMABLE_REFETCH_MS = 45_000;
+
+export function walletQueryResultFresh(updatedAt: number, isStale: boolean, isFetching: boolean, now = Date.now(), staleMs = WALLET_BALANCE_STALE_MS): boolean {
+  return updatedAt > 0 && now - updatedAt < staleMs && !isStale && !isFetching;
+}
 
 export function createWalletQueryClient() {
   return new QueryClient({ defaultOptions: {
@@ -86,6 +94,30 @@ export function walletBalanceQueryOptions(config: WalletDataConfig, session: str
   return queryOptions({
     queryKey: walletBalanceQueryKey(session, address, chainId),
     queryFn: ({ signal }) => readWagmiWalletBalances(config, address, chainId, signal),
+  });
+}
+
+export function fxSaveClaimableQueryKey(session: string, address: string) {
+  return [WALLET_QUERY_ROOT, session, 1, address.toLowerCase(), 'fxsave-claimable'] as const;
+}
+
+export function fxSaveClaimableQueryOptions(
+  session: string,
+  address: string,
+  read = (userAddress: string) => getFxReadFacade().getFxSaveClaimable({ userAddress: assertWalletAddress(userAddress) }),
+  verifyChain = () => assertConfiguredPublicClientChain(1),
+) {
+  return queryOptions({
+    queryKey: fxSaveClaimableQueryKey(session, address),
+    queryFn: async ({ signal }) => {
+      signal.throwIfAborted();
+      await withReadDeadline(verifyChain());
+      signal.throwIfAborted();
+      const result = await withReadDeadline(read(address));
+      signal.throwIfAborted();
+      return result;
+    },
+    staleTime: FX_SAVE_CLAIMABLE_STALE_MS,
   });
 }
 
@@ -166,20 +198,26 @@ export function walletQueryScope(address: string, chainId: number) {
 type RefreshWork = { generation: number; promise: Promise<void> };
 const refreshes = new WeakMap<QueryClient, Map<string, RefreshWork>>();
 
+export type WalletQueryRefreshOptions = { afterReceipt?: boolean };
+
 /**
  * A pre-receipt RPC response must not win a post-receipt refresh. Cancel it,
  * then refetch; coalesce simultaneous consumers of the same wallet/chain.
  */
-export function invalidateWalletQueries(client: QueryClient, address: string, chainId: number): Promise<void> {
+export function invalidateWalletQueries(
+  client: QueryClient,
+  address: string,
+  chainId: number,
+  options: WalletQueryRefreshOptions = {},
+): Promise<void> {
   let pending = refreshes.get(client);
   if (!pending) { pending = new Map(); refreshes.set(client, pending); }
   const key = `${address.toLowerCase()}:${chainId}`;
   const existing = pending.get(key);
   if (existing) {
-    // A later receipt may arrive while a manual refresh is already reading.
-    // Joining it alone would accept a pre-receipt value. Mark a trailing read
-    // and resolve every caller only once the newest generation is covered.
-    existing.generation += 1;
+    // Ordinary refresh callers join the active read. A confirmed receipt is
+    // different: force a trailing read so pre-receipt work cannot win.
+    if (options.afterReceipt) existing.generation += 1;
     return existing.promise;
   }
   const scope = walletQueryScope(address, chainId);

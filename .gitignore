@@ -86,3 +86,4 @@ __pycache__/
 **/playwright-report/
 **/test-results/
 **/.last-run.json
+/apps/mini-app/e2e/state-lab/captures/*.png

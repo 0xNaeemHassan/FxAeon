@@ -1,5 +1,13 @@
-.workspace { display: flex; flex-direction: column; min-width: 0; width: min(100%, 620px); margin-inline: auto; gap: 24px; }
-.workspace > header { margin-bottom: 0; }
+.workspace { width: min(100%, 620px); margin-inline: auto; }
+.moreWorkspace { gap: 16px; }
+.moreWorkspace > :global(header) { margin-bottom: -2px; }
+.moreWorkspace > :global(section) { scroll-margin-top: 100px; }
+.identity > :global(button),
+.identity > :global(div) { min-height: 72px; padding: 14px; border-radius: 18px; }
+.settingsWorkspace { gap: 20px; padding-bottom: 12px; }
+.disconnect { padding-inline: 6px; }
+.disconnect :global(button) { min-height: 44px; color: var(--mut); font-size: 12px; }
+.disconnect :global(button:hover) { color: var(--danger); background: var(--danger-dim); }
 .section { min-width: 0; scroll-margin-top: 104px; }
 .section > h2 { margin: 0 0 12px; color: var(--mut); font-size: 13px; font-weight: 600; }
 .panel { padding: 20px; }
@@ -15,7 +23,11 @@
 .choices button:disabled { opacity: .5; }
 .save { width: 100%; }
 .error { color: var(--danger); font-size: 12px; line-height: 1.6; margin-top: 10px; }
-.walletManagement { margin-top: 12px; }
-.walletManagement :global(.ui-card) { box-shadow: none; background: var(--surface); padding: 14px; border-radius: 14px; }
-.walletManagement :global(.section-heading) { display: none; }
-@media (max-width: 360px) { .panel { padding: 16px; } .workspace { gap: 20px; } }
+.walletManagement { margin-top: 8px; }
+@media (max-width: 380px) {
+  .panel { padding: 16px; }
+  .moreWorkspace { gap: 14px; }
+  .identity > :global(button),
+  .identity > :global(div) { min-height: 68px; padding: 12px; }
+  .settingsWorkspace { gap: 16px; }
+}
