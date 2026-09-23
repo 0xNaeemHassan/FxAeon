@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -15,7 +15,6 @@ import {
   type PlannedRoute,
   type PlannedTransaction,
 } from '@/lib/fx';
-import type { UseGasCostResult } from '@/lib/fx/useGasCost';
 import type { ActionReviewProps } from '@/components/review/actionReviewTypes';
 export type { ActionPlanBuilder, ActionReviewProps, ActionReviewStage } from '@/components/review/actionReviewTypes';
 import { Button, Card } from '@/components/ui';
@@ -35,7 +34,7 @@ import { buildReceiptPresentation, receiptTransfersFromLogs } from '@/lib/receip
 import { receiptMintedPositionIdentity } from '@/lib/confirmedPositions';
 import { rawQuoteReviewFacts, type ReviewFact } from '@/lib/fx/reviewFormatting';
 import { buildStatusPresentation } from '@/components/review/actionReviewStatusModel';
-import { ActionConsequenceSummary, CompactQuoteMetrics, PositionOutcomeSummary, TransactionProgressPresentation, UpdatedQuoteSummary } from '@/components/review/ActionReviewSummary';
+import { PositionOutcomeSummary, TransactionProgressPresentation, UpdatedQuoteSummary } from '@/components/review/ActionReviewSummary';
 import { TransactionResultView } from '@/components/review/TransactionResultView';
 import { positionPoolAddress } from '@/lib/fx/policy';
 import styles from './FlowWorkspace.module.css';
@@ -59,11 +58,6 @@ function formatTokenAmount(value: bigint, tokenAddress?: string, fallback = 'raw
 function addFact(facts: ReviewFact[], label: string, value: string | undefined): void {
   if (!value || facts.some((fact) => fact.label === label)) return;
   facts.push({ label, value });
-}
-
-function actionButtonLabel(label: string, operationLabel?: string): string {
-  const value = operationLabel ?? label;
-  return /^review\s+/i.test(value) ? value.replace(/^review\s+/i, '') : value;
 }
 
 const APPROVE_ABI = [{
@@ -118,34 +112,15 @@ function statusPresentation(params: Parameters<typeof buildStatusPresentation>[0
 
 export function ActionReview(props: ActionReviewProps) {
   const lifecycle = useActionReviewLifecycle(props);
-  const { label = 'Review action', disabled = false, operationLabel, destructive = false, editor, reviewBeforeSign = true, decisionBefore, executionCost, surface = 'card', planBuilder } = props;
-  const { canSelectReviewedRoute, endConnectFlow, error, execute, gasCost, headingRef, loading, networkSwitching, previewError, previewIsStale, previewLoading, previewRoute, previewRoutes, previewUpdating, quoteChanges, quoteExpired, refreshReviewedQuote, refreshing, reset, result, review, reviewTitle, route, routeSummaries, routes, selectedRoute, selectPreviewRoute, selectReviewedRoute, retryPreview, startConnectFlow, stage, status, statusDetail, stepResults, triggerRef, wallet } = lifecycle;
+  const { label = 'Review action', disabled = false, operationLabel, destructive = false, editor, decisionBefore, executionCost, surface = 'card', planBuilder } = props;
+  const { canSelectReviewedRoute, endConnectFlow, error, execute, gasCost, headingRef, loading, networkSwitching, quoteChanges, quoteExpired, refreshReviewedQuote, refreshing, reset, result, review, reviewTitle, route, routeSummaries, routes, selectedRoute, selectReviewedRoute, startConnectFlow, stage, status, statusDetail, stepResults, triggerRef, wallet } = lifecycle;
 
   if (stage === 'input') {
     const progress = statusPresentation({ stage, status, detail: statusDetail, stepResults, stepCount: 0 });
     const disconnected = !wallet.authenticated || !wallet.address;
     const reviewLabel = quoteExpired ? 'Review updated quote' : reviewActionLabel(label, operationLabel);
-    const previewAction = previewRoute ? reviewBeforeSign ? reviewLabel : actionButtonLabel(label, operationLabel) : null;
     const trigger = (
       <div className={`${styles.reviewTrigger} reviewTrigger flex flex-col gap-2.5`}>
-        {previewRoute && <InlinePreviewSummary
-          route={previewRoute}
-          alternatives={previewRoutes}
-          selectedRoute={selectedRoute}
-          onSelect={(index) => {
-            selectPreviewRoute(index);
-          }}
-          decisionBefore={decisionBefore}
-          gasCost={gasCost}
-          executionCost={executionCost}
-          updating={previewUpdating}
-        />}
-        {previewError && (
-          <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-[rgba(255,194,102,.24)] bg-[var(--warn-dim)] px-3 py-2 text-[12px]">
-            <span className="min-w-0 break-words text-warn">{previewError}</span>
-          <Button variant="outline" className="w-full px-2.5 py-1.5 text-[11px] sm:w-auto sm:self-start" onClick={retryPreview} disabled={previewLoading}>Try again</Button>
-          </div>
-        )}
         {error && <InlineError message={error} />}
         {disconnected ? (
           <ConnectWalletButton
@@ -160,8 +135,8 @@ export function ActionReview(props: ActionReviewProps) {
             Connect wallet
           </ConnectWalletButton>
         ) : (
-          <Button ref={triggerRef} variant={destructive ? 'danger' : 'primary'} className={styles.primaryAction} disabled={!planBuilder || !previewRoute || previewLoading || previewIsStale || disabled || !wallet.ready} loading={loading || previewLoading} onClick={() => { if (reviewBeforeSign) void review(); else void execute(previewRoute ?? undefined); }}>
-            {previewAction ?? (previewLoading ? 'Updating quote' : reviewBeforeSign ? reviewLabel : actionButtonLabel(label, operationLabel))}
+          <Button ref={triggerRef} variant={destructive ? 'danger' : 'primary'} className={styles.primaryAction} disabled={!planBuilder || disabled || !wallet.ready} loading={loading} onClick={() => void review()}>
+            {reviewLabel}
           </Button>
         )}
         {loading && <StatusNotice {...progress} />}
@@ -176,12 +151,12 @@ export function ActionReview(props: ActionReviewProps) {
   if (stage === 'planning') {
     return (
       <ReviewSurface surface={surface} className={`${styles.reviewCard} ${styles.reviewInlineCard} p-4 sm:p-5`}>
-          <div className="flex min-h-56 flex-col items-center justify-center text-center" role="status" aria-live="polite">
+          <button type="button" onClick={reset} className="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-1 text-[12px] font-semibold text-mut"><ArrowLeft aria-hidden="true" className="h-4 w-4" /> Edit</button>
+          <div className="flex min-h-44 flex-col items-center justify-center text-center" role="status" aria-live="polite">
             <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--mint-dim)] text-mint">
               <LoaderCircle className="h-6 w-6 animate-spin" aria-hidden="true" />
             </span>
-            <h3 data-review-focus tabIndex={-1} className="text-display mt-4 text-[21px] font-semibold outline-none">Preparing transaction</h3>
-            <p className="mt-2 max-w-[320px] text-[12px] leading-relaxed text-mut">Building and checking the route.</p>
+            <h3 data-review-focus tabIndex={-1} className="text-display mt-4 text-[21px] font-semibold outline-none">Preparing review</h3>
           </div>
       </ReviewSurface>
     );
@@ -313,7 +288,7 @@ export function ActionReview(props: ActionReviewProps) {
         type="button"
         disabled={loading}
         onClick={reset}
-        className="mb-3 inline-flex min-h-11 items-center gap-1.5 rounded-xl pr-3 text-[12px] font-semibold text-mut disabled:opacity-50"
+        className="mb-1 inline-flex min-h-11 items-center gap-1.5 rounded-xl pr-3 text-[12px] font-semibold text-mut disabled:opacity-50"
       >
         <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Edit
       </button>
@@ -370,18 +345,16 @@ export function ActionReview(props: ActionReviewProps) {
         </div>
       )}
 
-      <div className="my-4 hairline" />
+      <div className="my-3 hairline" />
       <div className={styles.reviewFacts}>
         <p className={presentationStyles.reviewFactsTitle}>Review details</p>
-        <ReviewRow label="Network" value={chainName(route.chainId)} />
         <ReviewRow label="Wallet" value={compactAddress(route.walletAddress)} title={route.walletAddress} />
-        {remainingSummaryFacts.map((fact) => <ReviewRow key={`${fact.label}-${fact.value}`} label={fact.label} value={fact.value} title={fact.title} />)}
+        {[...actionConsequences, ...remainingSummaryFacts].map((fact) => <ReviewRow key={`${fact.label}-${fact.value}`} label={fact.label} value={fact.value} title={fact.title} />)}
         {approvals.length > 0 && <ReviewRow label="Approvals" value={approvals.join('; ')} />}
      </div>
 
       {quoteExpired && <div role="status" className="mt-3 rounded-xl border border-[rgba(255,194,102,.28)] bg-[var(--warn-dim)] px-3 py-2 text-[12px] text-warn">This reviewed quote expired. Refresh and review the updated terms before signing.</div>}
       <UpdatedQuoteSummary changes={quoteChanges} />
-      <ActionConsequenceSummary facts={actionConsequences} />
 
       {wrongNetwork && <p role="status" className="mt-2 rounded-xl border border-[rgba(255,194,102,.24)] bg-[var(--warn-dim)] px-3 py-2 text-[11.5px] leading-relaxed text-warn">Wallet is on {chainName(wallet.chainId!)}. Confirmation will switch to {chainName(route.chainId)} before signing.</p>}
       {unsupportedNetwork && <p role="status" className="mt-2 rounded-xl border border-[rgba(255,194,102,.24)] bg-[var(--warn-dim)] px-3 py-2 text-[11.5px] leading-relaxed text-warn">Wallet network is unavailable or unsupported. Confirmation will request {chainName(route.chainId)} before signing.</p>}
@@ -439,87 +412,8 @@ export function ActionReview(props: ActionReviewProps) {
 }
 
 function ReviewSurface({ surface, className, children }: { surface: 'card' | 'content'; className: string; children: ReactNode }) {
-  if (surface === 'content') return <div className={styles.reviewInlineContent}>{children}</div>;
+  if (surface === 'content') return <div className={`${styles.reviewInlineContent} reviewInlineContent anim-scale-in`}>{children}</div>;
   return <Card className={className}>{children}</Card>;
-}
-
-function InlinePreviewSummary({
-  route,
-  alternatives = [],
-  selectedRoute = 0,
-  onSelect,
-  decisionBefore,
-  gasCost,
-  executionCost,
-  updating,
-}: {
-  route: PlannedRoute;
-  alternatives?: PlannedRoute[];
-  selectedRoute?: number;
-  onSelect?: (index: number) => void;
-  decisionBefore?: ReviewFact[];
-  gasCost: Pick<UseGasCostResult, 'estimate' | 'estimateIsCurrent' | 'status'>;
-  executionCost?: ActionReviewProps['executionCost'];
-  updating: boolean;
-}) {
-  const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const facts = buildRouteFacts(route, gasCost, executionCost);
-  const reviewFacts = splitReviewFacts(facts);
-  const metricLabels = new Set(['Estimated collateral', 'Gas fee', 'Total cost']);
-  const summaryFacts = reviewFacts.summary.filter((fact) => !metricLabels.has(fact.label));
-  const approvals = route.transactions
-    .map((transaction) => {
-      const approval = approvalFacts(transaction);
-      if (!approval) return null;
-      const amount = approval.valueLabel === 'Position NFT ID' ? `#${approval.value.toString()}` : formatTokenAmount(approval.value, transaction.to);
-      return `${amount} → ${compactAddress(approval.spender)}`;
-    })
-    .filter((value): value is string => Boolean(value));
-  return (
-    <section className="rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.025)] px-3 py-3" aria-label="Review details">
-      {updating && <p role="status" className="mb-2 text-[11px] font-medium text-mut">Updating quote</p>}
-      {alternatives.length > 1 && onSelect && (
-        <div className="mb-2.5 flex flex-wrap gap-1.5" role="radiogroup" aria-label="Transaction options">
-          {alternatives.map((candidate, index) => {
-            const routeType = candidate.details?.routeType ?? `Option ${index + 1}`;
-            const isSelected = index === selectedRoute;
-            return <button
-              key={`${routeType}-${index}`}
-              ref={(element) => { optionRefs.current[index] = element; }}
-              type="button"
-              role="radio"
-              aria-checked={isSelected}
-              tabIndex={isSelected ? 0 : -1}
-              disabled={updating}
-              className={`min-h-11 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold ${isSelected ? 'border-mint bg-[var(--mint-dim)] text-mint' : 'border-[var(--line)] text-mut'}`}
-              onClick={() => onSelect(index)}
-              onKeyDown={(event) => {
-                if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
-                event.preventDefault();
-                const next = event.key === 'Home'
-                  ? 0
-                  : event.key === 'End'
-                    ? alternatives.length - 1
-                    : (index + (event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1) + alternatives.length) % alternatives.length;
-                onSelect(next);
-                window.requestAnimationFrame(() => optionRefs.current[next]?.focus());
-              }}
-            >{routeType}</button>;
-          })}
-        </div>
-      )}
-      <CompactQuoteMetrics facts={facts} gasStatus={gasCost.status} />
-      <div className={`${presentationStyles.previewFacts} mt-2`}>
-        <p className={presentationStyles.reviewFactsTitle}>Quote details</p>
-        <ReviewRow label="Network" value={chainName(route.chainId)} className={presentationStyles.previewFactRow} />
-        {summaryFacts.map((fact) => <ReviewRow key={`${fact.label}-${fact.value}`} label={fact.label} value={fact.value} title={fact.title} className={presentationStyles.previewFactRow} />)}
-      </div>
-      {approvals.length > 0 && <div className="mt-2"><ReviewRow label="Approvals" value={approvals.join('; ')} /></div>}
-      <DecisionContext beforeFacts={decisionBefore} />
-      <QuoteFactDetails facts={facts} />
-      <AdvancedReviewDetails route={route} />
-    </section>
-  );
 }
 
 function ReviewRow({ label, value, title, className }: { label: string; value: ReactNode; title?: string; className?: string }) {

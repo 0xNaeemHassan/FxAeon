@@ -141,7 +141,7 @@ export default function ProtocolPositionHistory({ walletAddress, compact = false
         </button>
       )}>
         <span id={compact ? 'recent-protocol-activity-title' : 'protocol-position-history-title'}>
-          {compact ? 'Recent position activity' : 'Position activity'}
+          {compact ? 'Recent history' : 'Position activity'}
         </span>
       </SectionTitle>
       <Card className="p-3.5">
@@ -166,7 +166,7 @@ export default function ProtocolPositionHistory({ walletAddress, compact = false
                   <li key={`${item.chainId}:${item.hash.toLowerCase()}:${item.poolAddress.toLowerCase()}:${item.positionId}:${item.kind}`} className="flex min-h-14 items-center gap-3 py-2.5">
                     <TokenIcon symbol={item.market === 'ETH' ? 'ETH' : 'WBTC'} size={30} />
                     <span className="min-w-0 flex-1">
-                      <strong className="block truncate text-[12px]">{title(item)}</strong>
+                      <strong className="block text-[12px] leading-snug">{title(item)}</strong>
                       <span className="mt-1 block text-[10.5px] text-mut">Ethereum · {activityDate(item.timestamp)}</span>
                     </span>
                     <a

@@ -24,3 +24,8 @@
 .usd { display: flex; min-width: 0; justify-content: space-between; flex-wrap: wrap; gap: 6px; min-height: 18px; margin-top: 3px; color: var(--mut); font-size: 12px; font-variant-numeric: tabular-nums; }
 .error { margin: 7px 2px 0; color: var(--danger); font-size: 12px; line-height: 1.5; }
 @media (max-width: 360px) { .surface:global(.amount-control) { padding-inline: 11px; } .entryRow > input { font-size: 26px; } .entryRow > input[data-long-amount='true'] { font-size: 20px; } .entryRow { gap: 6px; } .labelRow { gap: 8px; } }
+
+.balance { margin-left: auto; text-align: right; color: var(--mut); font-size: 11px; line-height: 18px; }
+.balance strong { color: var(--text); font-weight: 600; }
+
+.entryRow > input:focus-visible { outline: none; }

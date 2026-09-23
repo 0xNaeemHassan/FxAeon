@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { ArrowDownToLine, ArrowLeft, Check, Copy, ExternalLink, ArrowLeftRight, CandlestickChart, PiggyBank } from 'lucide-react';
-import { AssetNetworkIcon, AssetQuantity, networkLabel } from '@/components/AssetPresentation';
+import { AssetNetworkIcon, networkLabel } from '@/components/AssetPresentation';
 import { ValueOrSkeleton } from '@/components/MissingValue';
 import type { WalletAsset } from '@/lib/walletAssets';
 import { formatUsd } from '@/lib/prices';
@@ -33,9 +33,9 @@ export default function WalletAssetDetails({ asset, walletAddress, onNavigate }:
   const tradeable = asset.chainId === 1 && tokenKey && ['ETH', 'WETH', 'stETH', 'wstETH', 'WBTC', 'USDC', 'USDT', 'fxUSD'].includes(tokenKey);
   const bridgeable = tokenKey === 'fxUSD' || tokenKey === 'fxSAVE';
   const earnable = asset.chainId === 1 && tokenKey && ['USDC', 'fxUSD', 'fxUSDBasePool', 'fxSAVE'].includes(tokenKey);
-  const copyQuantity = async () => {
+  const copyAddress = async () => {
     setCopyFailed(false);
-    if (await copyText(asset.balance)) {
+    if (await copyText(walletAddress ?? '')) {
       haptic('success');
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1800);
@@ -54,26 +54,24 @@ export default function WalletAssetDetails({ asset, walletAddress, onNavigate }:
       <AssetNetworkIcon asset={asset} size={48} />
       <h3>{symbol}</h3>
       <p>{tokenName(asset.symbol)}</p>
-      <span className={styles.assetKind}>{asset.tokenAddress ? `Token on ${network}` : `Native asset on ${network}`}</span>
       <strong className={styles.holdingValue}><ValueOrSkeleton value={formatUsd(asset.usdValue)} width="md" status="unavailable" label="Holding value unavailable" /></strong>
       <span className={styles.holdingLabel}>Estimated holding value</span>
     </div>
 
-    <section className={styles.quantityPanel} aria-labelledby="wallet-asset-exact-quantity">
-      <h3 id="wallet-asset-exact-quantity">Exact token quantity</h3>
-      <p className={styles.quantity}><AssetQuantity asset={asset} /></p>
-      <button type="button" className={styles.copyButton} onClick={() => void copyQuantity()}>
+    {walletAddress && <section className={styles.addressPanel} aria-labelledby="wallet-asset-address">
+      <h3 id="wallet-asset-address">Wallet address</h3>
+      <p className={styles.address}>{walletAddress}</p>
+      <button type="button" className={styles.copyButton} onClick={() => void copyAddress()}>
         {copied ? <Check size={18} aria-hidden="true" /> : <Copy size={18} aria-hidden="true" />}
-        {copied ? 'Quantity copied' : 'Copy quantity'}
+        {copied ? 'Address copied' : 'Copy address'}
       </button>
       <p className={styles.copyStatus} role="status" aria-live="polite">
-        {copyFailed ? 'Copy was blocked. Select the quantity to copy it manually.' : copied ? 'Exact quantity copied.' : ''}
+        {copyFailed ? 'Copy was blocked. Select the address to copy it manually.' : copied ? 'Address copied.' : ''}
       </p>
-    </section>
+    </section>}
 
     <dl className={styles.facts}>
       <div><dt>Network</dt><dd><span className={styles.chain}><ChainIcon chainId={asset.chainId} size={18} />{network}</span></dd></div>
-      {walletAddress && <div><dt>Wallet</dt><dd title={walletAddress}>{compactAddress(walletAddress)}</dd></div>}
       {asset.tokenAddress && <div><dt>Contract</dt><dd title={asset.tokenAddress}>{compactAddress(asset.tokenAddress)}</dd></div>}
     </dl>
 

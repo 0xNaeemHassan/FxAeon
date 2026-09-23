@@ -10,7 +10,7 @@ const route = (data = '0x1234'): PlannedRoute => ({
 } as unknown as PlannedRoute);
 
 test('review stage transitions reject impossible events and lock the draft while wallet is pending', () => {
-  assert.equal(transitionReviewStage('input', 'begin-signing'), 'executing', 'legacy direct-action callers retain their execution path');
+  assert.equal(transitionReviewStage('input', 'begin-signing'), 'input', 'signing requires a prepared review');
   assert.equal(transitionReviewStage('input', 'prepare'), 'planning');
   assert.equal(transitionReviewStage('planning', 'prepared'), 'review');
   assert.equal(transitionReviewStage('review', 'begin-signing'), 'executing');

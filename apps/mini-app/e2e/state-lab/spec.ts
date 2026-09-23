@@ -24,9 +24,14 @@ test('catalogs deterministic data states through the real provider-independent a
   expect(await page.evaluate(() => document.fonts.check('14px Inter'))).toBe(true);
   await select(page, 'loading');
   await expect(page.getByText('Checking balance')).toBeVisible();
-  await expect(page.getByLabel('Available balance')).toHaveAttribute('role', 'status');
+  await expect(page.getByLabel('Available balance', { exact: true })).toHaveAttribute('role', 'status');
+  const shortcuts = page.getByRole('group', { name: 'Amount shortcuts' });
+  for (const button of await shortcuts.getByRole('button').all()) await expect(button).toBeDisabled();
+  await expect(shortcuts.getByRole('button')).toHaveCount(4);
   await select(page, 'zero');
   await expect(page.getByText('0 ETH')).toBeVisible();
+  await expect(shortcuts).toContainText('25%50%75%Max');
+  for (const button of await shortcuts.getByRole('button').all()) await expect(button).toBeDisabled();
   await select(page, 'partial');
   await expect(page.getByText('Some data is unavailable')).toBeVisible();
   await expect(page.getByLabel('USD value unavailable')).toHaveAttribute('role', 'status');
@@ -37,6 +42,7 @@ test('catalogs deterministic data states through the real provider-independent a
   await expect(page.getByText('Balance unavailable')).toBeVisible();
   await select(page, 'positive');
   await expect(page.getByText('Balance available')).toBeVisible();
+  for (const button of await shortcuts.getByRole('button').all()) await expect(button).toBeEnabled();
   await expect(page.getByText('Available:')).toContainText('1,234.56789 ETH');
   await expect(page.getByText('$4,267,629.59')).toBeVisible();
   await expect(page.getByRole('region', { name: 'Action consequences' })).toContainText('Estimated debt');

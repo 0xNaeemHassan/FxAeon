@@ -48,7 +48,6 @@ function Harness() {
   const [version, setVersion] = useState(H.version);
   const [builderRevision, setBuilderRevision] = useState(0);
   const [resumeReview, setResumeReview] = useState(0);
-  const [reviewBeforeSign, setReviewBeforeSign] = useState(false);
   const [disabled, setDisabled] = useState(false);
   const [builderAvailable, setBuilderAvailable] = useState(true);
   const draftState = useMemo(() => ({ action: 'increase', amount: String(version), side: 'long' }), [version]);
@@ -68,7 +67,6 @@ function Harness() {
   return <>
     <div data-harness-ready="true" />
     <div role="toolbar">
-      <button type="button" onClick={() => setReviewBeforeSign(true)}>Use explicit review</button>
       <button type="button" onClick={setTerms}>Change terms</button>
       <button type="button" onClick={() => setBuilderRevision((value) => value + 1)}>Recreate planner</button>
       <button type="button" onClick={() => setDisabled((value) => !value)}>{disabled ? 'Enable action' : 'Disable action'}</button>
@@ -76,7 +74,7 @@ function Harness() {
       <button type="button" onClick={disconnect}>Disconnect</button>
       <button type="button" onClick={connect}>Reconnect</button>
       <button type="button" onClick={() => { H.mode = 'deferred'; }}>Defer preview</button>
-      <button type="button" onClick={() => setResumeReview((value) => value + 1)}>Resume legacy review</button>
+      <button type="button" onClick={() => setResumeReview((value) => value + 1)}>Resume review</button>
       <button type="button" onClick={() => { H.deferRunner = true; }}>Defer before wallet request</button>
       <button type="button" onClick={() => { H.deferWalletResponse = true; }}>Defer wallet response</button>
       <button type="button" onClick={() => { H.walletResolvers.shift()?.(); }}>Resolve wallet response</button>
@@ -94,7 +92,6 @@ function Harness() {
       <button type="button" onClick={() => { H.refreshResolvers.shift()?.(); }}>Resolve wallet refresh</button>
     </div>
     <ActionReview
-      reviewBeforeSign={reviewBeforeSign}
       planBuilder={builderAvailable ? planBuilder : null}
       label="Review position"
       operationLabel={`Open position v${version}`}

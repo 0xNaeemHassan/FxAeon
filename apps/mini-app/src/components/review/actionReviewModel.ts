@@ -28,9 +28,6 @@ const destinations: Record<ReviewTransition, ReviewStage> = {
 /** Pure stage controller. Wallet prompts lock the reviewed route and stage until they settle. */
 export function transitionReviewStage(stage: ReviewStage, event: ReviewTransition, walletPending = false): ReviewStage {
   if (walletPending && event === 'return-to-input') return stage;
-  // `reviewBeforeSign={false}` remains a supported compatibility path for
-  // non-product callers. Product pages now default to explicit review.
-  if (event === 'begin-signing' && stage === 'input') return 'executing';
   return transitions[event].includes(stage) ? destinations[event] : stage;
 }
 
@@ -85,7 +82,9 @@ export function consequenceSummary(facts: readonly ReviewFact[]): ReviewFact[] {
     'Current collateral', 'Expected collateral', 'Current debt', 'Expected debt', 'Expected receive',
     'Estimated collateral', 'Estimated debt',
   ]);
-  return facts.filter((fact) => consequenceLabels.has(fact.label));
+  const targetLeverage = facts.find((fact) => fact.label === 'Target leverage');
+  return facts.filter((fact) => consequenceLabels.has(fact.label)
+    && !(fact.label === 'Leverage' && targetLeverage?.value === fact.value));
 }
 
 export function pairVerifiedPositionFacts(before: readonly ReviewFact[], after: readonly ReviewFact[]): {

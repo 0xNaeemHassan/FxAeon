@@ -502,18 +502,6 @@
 }
 
 @media (max-width: 640px) {
-  .positionsHeading {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    clip-path: inset(50%);
-    white-space: nowrap;
-    border: 0;
-  }
 
   .tradeRoot :global([data-product-layout='action']).tradeWorkspace { gap: 10px; }
   .positionsWorkspace { gap: 10px; }
@@ -792,3 +780,5 @@
   .positionQuickActions button:active,
   .positionQuickActions a:active { transform: none; }
 }
+
+.tradeLayout[data-review='true'] { display: block; width: 100%; max-width: 640px; margin-inline: auto; }

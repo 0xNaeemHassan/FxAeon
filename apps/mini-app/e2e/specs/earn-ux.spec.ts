@@ -59,7 +59,7 @@ test.describe('Earn entry and honest unavailable state', () => {
     const methods = page.getByRole('group', { name: 'Withdrawal method' });
     await expect(methods).toBeVisible();
     const cooldown = methods.getByRole('radio', { name: /After cooldown/ });
-    const instant = methods.getByRole('radio', { name: /Without cooldown/ });
+    const instant = methods.getByRole('radio', { name: /Instant/ });
     await expect(cooldown).toBeVisible();
     await expect(instant).toBeVisible();
     await cooldown.click();

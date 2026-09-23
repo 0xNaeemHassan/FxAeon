@@ -12,6 +12,8 @@
 [data-product-ui='v2'] .page-header h1 { font-size: 28px; letter-spacing: -.035em; line-height: 1.2; }
 [data-product-ui='v2'] .app-content { scroll-padding-bottom: 140px; }
 [data-product-ui='v2'] .app-content :where(button, a, input, select, summary):focus-visible { outline: 2px solid var(--mint); outline-offset: 3px; }
+/* The amount surface already supplies a visible focus-within ring. */
+[data-product-ui='v2'] .app-content .amount-control input:focus-visible { outline: none; }
 [data-product-ui='v2'] .tabbar { box-shadow: none; }
 [data-product-ui='v2'] .nav-item-active { box-shadow: none; }
 [data-product-ui='v2'] .segmented { box-shadow: none; }

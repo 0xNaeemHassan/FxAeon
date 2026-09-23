@@ -80,13 +80,14 @@ export default function RecentActivityPreview({ walletAddress, attentionOnly = f
   }
 
   return (
-    <section className={styles.section} aria-labelledby="recent-activity-title">
+    <section className={styles.section} aria-label="Recent history">
+      {(loading || loadError || items.length > 0) && <>
       <SectionTitle right={(
         <button type="button" aria-label="Refresh recent history" onClick={() => { haptic('light'); void load(); }} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-lg text-mut hover:text-mint">
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
         </button>
       )}>
-        <span id="recent-activity-title">Recent history</span>
+        <span id="recent-activity-title">Saved transactions</span>
       </SectionTitle>
       <Card className={`${styles.activityCard} portfolio-activity-card p-0`}>
         {loading ? (
@@ -120,11 +121,13 @@ export default function RecentActivityPreview({ walletAddress, attentionOnly = f
             </ul>
           </>
         ) : null}
-        <Link href="/history" className={`${styles.activityLink} glass-press flex min-h-12 items-center justify-between border-t border-[var(--line)] px-4 text-[12px] font-semibold text-mint`}>
-          Open full history <ChevronRight className="h-4 w-4" aria-hidden="true" />
-        </Link>
+
       </Card>
+      </>}
       <ProtocolPositionHistory walletAddress={walletAddress} compact />
+      <Link href="/history" className="glass-press flex min-h-11 items-center justify-between text-[12px] font-semibold text-mint">
+        Open full history <ChevronRight className="h-4 w-4" aria-hidden="true" />
+      </Link>
     </section>
   );
 }

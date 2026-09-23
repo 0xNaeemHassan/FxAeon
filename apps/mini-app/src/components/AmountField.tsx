@@ -67,7 +67,7 @@ export function AmountFieldView({ value, onChange, symbol, label, hint, balance,
     ?? (touched && !value && !allowZero ? 'Enter an amount.' : null);
   const showBalance = balanceState?.status !== 'disconnected' && (balance !== undefined || balanceState !== undefined);
   const canUseMax = allowAll ? hasBalance : hasMaximum || (maxAmount === null && hasBalance);
-  const hasShortcuts = showPercentages && hasBalance || showMax && canUseMax;
+  const hasShortcuts = showPercentages || showMax;
   const isMax = allowAll ? value.toLowerCase() === 'all' : Boolean(maximum && hasMaximum && compareExactDecimals(value, maximum, maxDecimals) === 0);
   const describedBy = [hint && `${id}-hint`, showBalance && `${id}-balance`, error && `${id}-error`, maxError && `${id}-max-error`].filter(Boolean).join(' ') || undefined;
   const inactive = disabled || !hydrated;
@@ -87,18 +87,15 @@ export function AmountFieldView({ value, onChange, symbol, label, hint, balance,
       <label htmlFor={id}>{label}</label>
       <span className={styles.meta}>
         {hint && <span id={`${id}-hint`}>{hint}</span>}
-        {showBalance && <span id={`${id}-balance`} title={balanceState?.reason ?? (available ? `${available} ${tokenSymbol(symbol)}` : 'Balance unavailable')}>
-          Available: <strong><ValueOrSkeleton value={available != null ? `${formatExactDecimal(available, 8)} ${tokenSymbol(symbol)}` : '—'} width="sm"
-            status={balanceState?.status === 'loading' || !balanceState && available == null ? 'loading' : 'unavailable'} label="Available balance" /></strong>
-        </span>}
+
       </span>
     </div>
     <div className={`${styles.surface} amount-control`} data-invalid={Boolean(error) || undefined}>
       {hasShortcuts && <div role="group" aria-label={`${label} shortcuts`} className={styles.shortcuts}>
-        {showPercentages && hasBalance && [25, 50, 75].map((percent) => <button key={percent} type="button" disabled={inactive} onClick={() => {
+        {showPercentages && [25, 50, 75].map((percent) => <button key={percent} type="button" disabled={inactive || !hasBalance} onClick={() => {
           haptic('selection'); const next = calculateFractionDecimal(available, percent, maxDecimals); if (next) change(next);
         }}><span>{percent}%</span></button>)}
-        {showMax && canUseMax && <button type="button" onClick={() => void chooseMax()} disabled={inactive || maxPending || !allowAll && maxAmount === null && !onMax}
+        {showMax && <button type="button" onClick={() => void chooseMax()} disabled={inactive || !canUseMax || maxPending || !allowAll && maxAmount === null && !onMax}
           aria-busy={maxPending || undefined} aria-label={allowAll ? 'Use all' : maxAmount === null ? 'Calculate 100% after gas reserve' : 'Use 100% of available balance'}
           title={maxAmount === null ? 'Reserve network fees before using the maximum' : undefined} data-selected={isMax || undefined}><span>{maxPending ? '…' : 'Max'}</span></button>}
       </div>}
@@ -116,8 +113,12 @@ export function AmountFieldView({ value, onChange, symbol, label, hint, balance,
           data-long-amount={value.length > 12 || undefined} />
         <div className={styles.token}>{tokenSelector ?? <span className={styles.tokenLabel} title={tokenSymbol(symbol)}><TokenIcon symbol={symbol} size={24} /><span>{tokenSymbol(symbol)}</span></span>}</div>
       </div>
-      {showUsdValue && <div className={styles.usd} data-amount-usd>
-        <span>{!value.trim() ? '≈ $0.00' : worth !== null ? `≈ ${formatUsd(worth)}` : <ValueOrSkeleton value="—" width="sm" status={priceStatus === 'loading' ? 'loading' : 'unavailable'} label="USD value unavailable" />}</span>
+      {(showUsdValue || showBalance) && <div className={styles.usd} data-amount-usd>
+        {showUsdValue && <span>{!value.trim() ? '≈ $0.00' : worth !== null ? `≈ ${formatUsd(worth)}` : <ValueOrSkeleton value="—" width="sm" status={priceStatus === 'loading' ? 'loading' : 'unavailable'} label="USD value unavailable" />}</span>}
+        {showBalance && <span className={styles.balance} id={`${id}-balance`} title={balanceState?.reason ?? (available ? `${available} ${tokenSymbol(symbol)}` : 'Balance unavailable')}>
+          Available: <strong><ValueOrSkeleton value={available != null ? `${formatExactDecimal(available, 8)} ${tokenSymbol(symbol)}` : '—'} width="sm"
+            status={balanceState?.status === 'loading' || !balanceState && available == null ? 'loading' : 'unavailable'} label="Available balance" /></strong>
+        </span>}
         {showUnitPrice && price && <span>{formatUsdPrice(price)} / {tokenSymbol(symbol)}</span>}
       </div>}
     </div>

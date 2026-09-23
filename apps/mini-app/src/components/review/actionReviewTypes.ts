@@ -7,7 +7,7 @@ export type ActionPlanBuilder = () => Promise<PlannedRoute | readonly PlannedRou
 export type ActionReviewStage = 'input' | 'planning' | 'review' | 'executing' | 'result';
 
 export interface ActionReviewProps {
-  /** Build the route for initial preview, background refresh, and explicit review. */
+  /** Build the route only after Review or an explicit quote refresh. */
   planBuilder: ActionPlanBuilder | null;
   /** Read a short-lived prepared route for the current form intent. */
   prefetchedPlan?: () => Promise<PlannedRoute | readonly PlannedRoute[] | null>;
@@ -23,7 +23,6 @@ export interface ActionReviewProps {
   draftResumePath?: string;
   resumeReview?: number;
   editor?: ReactNode;
-  reviewBeforeSign?: boolean;
   surface?: 'card' | 'content';
   decisionBefore?: ReviewFact[];
   executionCost?: {

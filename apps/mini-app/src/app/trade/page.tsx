@@ -511,16 +511,15 @@ export default function TradePage() {
           <Link href="/positions" className={`${styles.positionsShortcut} glass-press inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 text-[12px] font-semibold text-mut hover:text-mint`}><Layers2 className="h-4 w-4" aria-hidden="true" />Positions</Link>
         </header>
 
-        <div className={styles.tradeLayout} data-trade-layout>
-        <div className={styles.marketColumn} data-trade-market>
+        <div className={styles.tradeLayout} data-trade-layout data-review={reviewStage !== 'input' || undefined}>
+        {reviewStage === 'input' && <div className={styles.marketColumn} data-trade-market>
           <TradeMarketChart market={market} onMarketChange={changeMarket} />
-        </div>
+        </div>}
         <div className={styles.ticketColumn} data-trade-ticket>
           {/* The editor and review deliberately share one card. ActionReview
-              replaces this content in place, keeping the market context and
-              the user's exact draft stable while the wallet is opened. */}
+              replaces this content in place, keeping the user's exact draft stable while the wallet is opened. */}
           <Card className={`${styles.tradeTicket} trade-ticket ${reviewStage === 'input' ? '' : styles.tradeTicketReview}`}>
-            <ActionReview reviewBeforeSign
+            <ActionReview
               key={reviewRevision}
               surface="content"
               planBuilder={planBuilder}

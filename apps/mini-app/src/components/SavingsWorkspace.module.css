@@ -22,9 +22,9 @@
 .retryButton { display: inline-flex; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 12px; color: var(--warn); background: color-mix(in srgb, var(--warn-dim) 68%, var(--surface)); }
 .retryButton:hover { background: var(--warn-dim); }
 .retryButton:disabled { cursor: not-allowed; opacity: .55; }
-.withdrawOptions :global(fieldset) { gap: 6px; }
-.withdrawOptions :global(label) { min-height: 60px; padding: 10px 12px; }
-.withdrawOptions :global(label small) { margin-top: 2px; font-size: 11.5px; }
+.withdrawOptions :global(fieldset) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.withdrawOptions :global(label) { align-items: flex-start; gap: 6px; min-height: 68px; padding: 10px; }
+.withdrawOptions :global(label small) { margin-top: 4px; font-size: 11px; }
 .helper { margin: 0; color: var(--mut); font-size: 12px; line-height: 1.6; }
 .workspace > details { margin-top: 18px; }
 .workspace > details p { margin-bottom: 16px; }
@@ -42,4 +42,14 @@
   .balanceTop { gap: 10px; }
   .rate > strong { font-size: 17px; }
   .actionTabs { margin-top: 10px; padding-top: 8px; margin-bottom: 10px; }
+}
+
+@media (max-width: 640px) {
+  .workspace { gap: 10px; }
+  .workspace > :global(header) { margin-bottom: 0; }
+  .workspace > :global(nav) { margin-bottom: 0; }
+  .panel { padding: 14px 16px; }
+  .balanceCopy h2 { font-size: 26px; margin-block: 4px; }
+  .actionTabs { margin-top: 8px; padding-top: 8px; margin-bottom: 10px; }
+  .editor { gap: 10px; }
 }

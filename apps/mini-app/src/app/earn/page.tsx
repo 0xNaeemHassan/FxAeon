@@ -438,7 +438,7 @@ export default function EarnPage() {
         <PageHeading title="Earn" />
         <ProductNav current="save" />
         <ProductSurface className={presentation.panel} data-flow-stage={reviewStage}>
-          <ActionReview reviewBeforeSign
+          <ActionReview
             key={reviewRevision}
             surface="content"
             planBuilder={planBuilder}
@@ -575,8 +575,8 @@ function EarnActionEditor({ mode, token, onTokenChange, amount, onAmountChange, 
       <div className={presentation.withdrawOptions}>
         <ChoiceCards value={token === 'fxUSDBasePool' || !instant ? 'cooldown' : 'instant'}
           onChange={(value) => onInstantChange(value === 'instant')} label="Withdrawal method" options={[
-            { value: 'cooldown', label: 'After cooldown', description: config ? `Claim after ${formatCooldown(config.cooldownPeriodSeconds)} · no instant fee` : 'Claim later · cooldown unavailable' },
-            { value: 'instant', label: 'Without cooldown', disabled: token === 'fxUSDBasePool', description: config ? `${formatRatio(config.instantRedeemFeeRatio)} instant fee` : 'Instant-redemption fee applies' },
+            { value: 'cooldown', label: 'After cooldown', description: config ? `${formatCooldown(config.cooldownPeriodSeconds)} wait · no instant fee` : 'Claim later · cooldown unavailable' },
+            { value: 'instant', label: 'Instant', disabled: token === 'fxUSDBasePool', description: config ? `${formatRatio(config.instantRedeemFeeRatio)} instant fee` : 'Instant-redemption fee applies' },
           ]} />
       </div>
       <div className={presentation.receiveRow}><span>{instant && token !== 'fxUSDBasePool' ? 'Receive asset' : 'Withdrawal route'}</span>{picker}</div>

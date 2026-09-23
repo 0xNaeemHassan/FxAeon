@@ -14,21 +14,14 @@ import { chainName } from '@/components/review/ReviewProgress';
 import { primaryReviewFacts } from '@/components/review/actionReviewPresentation';
 import { changedConsequenceFacts, reviewGenerationIsCurrent, updatedRouteTermsRequired, type ChangedReviewFact, type ReviewTransition } from '@/components/review/actionReviewModel';
 import { useActionReviewController } from '@/components/review/useActionReviewController';
-import type { ActionPlanBuilder, ActionReviewProps } from './actionReviewTypes';
+import type { ActionReviewProps } from './actionReviewTypes';
 
-const PREVIEW_REFRESH_INTERVAL_MS = 15_000;
-const PREVIEW_FRESHNESS_MS = 30_000;
+const REVIEW_FRESHNESS_MS = 30_000;
 
 function asRoutes(value: PlannedRoute | readonly PlannedRoute[]): PlannedRoute[] {
   const routes = Array.isArray(value) ? [...value] : [value];
   if (!routes.length) throw new Error('No executable transaction route was returned.');
   return routes;
-}
-
-function safePreviewFailure(cause: unknown, fallback: string): string {
-  const message = userSafeError(cause, fallback);
-  if (!message || /0x[a-f\d]{128,}|\bcalldata\b|raw (?:rpc|transaction) data/i.test(message)) return fallback;
-  return message.length > 150 ? message.slice(0, 147).trimEnd() + '…' : message;
 }
 
 function signatureDraftActionKey(route: PlannedRoute): string {
@@ -67,13 +60,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
   const [quoteChanges, setQuoteChanges] = useState<ChangedReviewFact[]>([]);
   const [networkSwitching, setNetworkSwitching] = useState(false);
   const [resumeAfterConnect, setResumeAfterConnect] = useState(false);
-  const [previewRoutes, setPreviewRoutes] = useState<PlannedRoute[]>([]);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewUpdating, setPreviewUpdating] = useState(false);
-  const [previewPreparedAt, setPreviewPreparedAt] = useState<number | null>(null);
-  const [previewIsStale, setPreviewIsStale] = useState(true);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  const [previewRetry, setPreviewRetry] = useState(0);
+  const [preparedAt, setPreparedAt] = useState<number | null>(null);
   const transition = useCallback((event: ReviewTransition) => {
     transitionStage(event, status === 'awaiting-user');
   }, [status, transitionStage]);
@@ -89,12 +76,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
   // account, and component changes invalidate the generation so late SDK/RPC
   // responses can never repopulate a newer wallet session.
   const generationRef = useRef(0);
-  const previewGenerationRef = useRef(0);
-  const previewRouteRef = useRef<PlannedRoute | null>(null);
-  const previewPreparedAtRef = useRef<number | null>(null);
-  const previewOwnerRef = useRef<{ intentKey: string | ActionPlanBuilder | null; walletAddress?: string; chainId?: number; connectionVersion: number } | null>(null);
-  const planBuilderRef = useRef(planBuilder);
-  const prefetchedPlanRef = useRef(prefetchedPlan);
+  const preparedAtRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
   const liveWalletRef = useRef({
     authenticated: wallet.authenticated,
@@ -104,8 +86,6 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
   });
   const onStageChangeRef = useRef(onStageChange);
   onStageChangeRef.current = onStageChange;
-  planBuilderRef.current = planBuilder;
-  prefetchedPlanRef.current = prefetchedPlan;
 
   const isCurrentGeneration = useCallback((generation: number) => (
     reviewGenerationIsCurrent(mountedRef.current, generationRef.current, generation)
@@ -134,182 +114,18 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
   const route = (stage === 'executing' || stage === 'result') && executionRoute
     ? executionRoute
     : routes[selectedRoute];
-  const previewRoute = stage === 'input' ? previewRoutes[selectedRoute] ?? previewRoutes[0] : undefined;
-  const activeRoute = stage === 'input' ? previewRoute : route;
-  const gasCost = useRouteGasCost(activeRoute, { enabled: Boolean(activeRoute && stage !== 'planning') });
-  const previewIntentKey = draftState === undefined ? planBuilder : JSON.stringify(draftState);
-  const previousIntentKey = useRef<typeof previewIntentKey>(previewIntentKey);
-
-  // Prepare a read-only, debounced route while the editor remains mounted.
-  // This supplies useful facts before the primary action, but it never changes
-  // stage or opens a wallet. The generation and wallet checks discard late
-  // results after input, account, network, or component changes.
-  useEffect(() => {
-    // The input preview lifecycle must stop when entering the separate review
-    // surface, but it must leave the review's own freshness timestamp intact.
-    // Otherwise the review() timestamp below is immediately cleared here.
-    if (stage !== 'input') {
-      setPreviewLoading(false);
-      setPreviewUpdating(false);
-      return undefined;
-    }
-
-    previewGenerationRef.current += 1;
-    const previewGeneration = previewGenerationRef.current;
-    const previewWalletAddress = wallet.address?.toLowerCase();
-    const previewChainId = wallet.chainId;
-    const previewConnectionVersion = wallet.connectionVersion;
-    let cancelled = false;
-    let running = false;
-    let timer: number | undefined;
-
-    const previousPreview = previewRouteRef.current;
-    const previousOwner = previewOwnerRef.current;
-    const preservePreview = Boolean(
-      previousPreview
-      && previousOwner?.intentKey === previewIntentKey
-      && previousOwner.connectionVersion === previewConnectionVersion
-      && previousPreview.walletAddress.toLowerCase() === previewWalletAddress
-      && previousPreview.chainId === previewChainId,
-    );
-    previewOwnerRef.current = {
-      intentKey: previewIntentKey,
-      walletAddress: previewWalletAddress,
-      chainId: previewChainId,
-      connectionVersion: previewConnectionVersion,
-    };
-    previewRouteRef.current = preservePreview ? previousPreview : null;
-    setPreviewRoutes(preservePreview ? [previousPreview!] : []);
-    if (!preservePreview) {
-      previewPreparedAtRef.current = null;
-      setPreviewPreparedAt(null);
-      setPreviewIsStale(true);
-    }
-    setPreviewError(null);
-
-    const isVisibleAndOnline = () => (
-      (typeof document === 'undefined' || document.visibilityState === 'visible')
-      && (typeof navigator === 'undefined' || navigator.onLine !== false)
-    );
-    const isCurrentPreview = () => {
-      const liveWallet = liveWalletRef.current;
-      return !cancelled
-        && reviewGenerationIsCurrent(mountedRef.current, previewGenerationRef.current, previewGeneration)
-        && stage === 'input'
-        && liveWallet.authenticated
-        && liveWallet.address?.toLowerCase() === previewWalletAddress
-        && liveWallet.chainId === previewChainId
-        && liveWallet.connectionVersion === previewConnectionVersion;
-    };
-    const schedule = (delay: number) => {
-      if (cancelled) return;
-      if (timer !== undefined) window.clearTimeout(timer);
-      timer = window.setTimeout(() => {
-        timer = undefined;
-        if (isVisibleAndOnline()) void load();
-        else schedule(PREVIEW_REFRESH_INTERVAL_MS);
-      }, delay);
-    };
-    const load = async () => {
-      if (running || !isCurrentPreview()) return;
-      if (!isVisibleAndOnline()) {
-        schedule(PREVIEW_REFRESH_INTERVAL_MS);
-        return;
-      }
-      running = true;
-      const hasCurrentQuote = Boolean(previewRouteRef.current);
-      if (!hasCurrentQuote) setPreviewLoading(true);
-      setPreviewUpdating(hasCurrentQuote);
-      setPreviewError(null);
-      try {
-        const currentPlanBuilder = planBuilderRef.current;
-        if (!currentPlanBuilder) throw new Error('Enter valid action details to prepare a quote.');
-        const prefetched = await prefetchedPlanRef.current?.();
-        if (!isCurrentPreview()) return;
-        const planned = asRoutes(prefetched ?? await currentPlanBuilder());
-        if (!isCurrentPreview()) return;
-        const { viable, failures } = await prepareRoutesForReview(planned, previewWalletAddress!);
-        if (!isCurrentPreview()) return;
-        if (!viable.length) {
-          const reason = failures
-            .map((failure) => safePreviewFailure(failure, ''))
-            .find(Boolean);
-          throw new Error(reason ?? 'No executable transaction route is available.');
-        }
-        const currentType = previewRouteRef.current?.details?.routeType;
-        const selectedIndex = currentType
-          ? viable.findIndex((candidate) => candidate.details?.routeType === currentType)
-          : -1;
-        const nextIndex = selectedIndex >= 0 ? selectedIndex : 0;
-        setPreviewRoutes(viable);
-        setSelectedRoute(nextIndex);
-        previewRouteRef.current = viable[nextIndex] ?? null;
-        const preparedAt = Date.now();
-        previewPreparedAtRef.current = preparedAt;
-        setPreviewPreparedAt(preparedAt);
-        setPreviewIsStale(false);
-      } catch (cause) {
-        if (isCurrentPreview()) {
-          if (!previewRouteRef.current) setPreviewRoutes([]);
-          const quoteIsFresh = Boolean(previewPreparedAtRef.current && Date.now() - previewPreparedAtRef.current < PREVIEW_FRESHNESS_MS);
-          setPreviewIsStale(!quoteIsFresh);
-          const reason = safePreviewFailure(cause, 'Try again.');
-          setPreviewError(previewRouteRef.current
-            ? quoteIsFresh
-              ? `Quote refresh failed: ${reason}. The shown quote is still current.`
-              : `Quote refresh failed: ${reason}. Refresh before continuing.`
-            : `Could not prepare: ${reason}`);
-        }
-      } finally {
-        running = false;
-        if (isCurrentPreview()) {
-          setPreviewLoading(false);
-          setPreviewUpdating(false);
-          schedule(PREVIEW_REFRESH_INTERVAL_MS);
-        }
-      }
-    };
-
-    if (!planBuilderRef.current || disabled || !wallet.ready || !wallet.authenticated || !previewWalletAddress) {
-      setPreviewLoading(false);
-      setPreviewUpdating(false);
-      return undefined;
-    }
-    schedule(350);
-    const refreshWhenActive = () => {
-      if (!isCurrentPreview() || running || !isVisibleAndOnline()) return;
-      if (previewPreparedAtRef.current === null || Date.now() - previewPreparedAtRef.current >= PREVIEW_FRESHNESS_MS) setPreviewIsStale(true);
-      if (timer !== undefined) window.clearTimeout(timer);
-      timer = undefined;
-      void load();
-    };
-    document.addEventListener('visibilitychange', refreshWhenActive);
-    window.addEventListener('online', refreshWhenActive);
-    return () => {
-      cancelled = true;
-      if (timer !== undefined) window.clearTimeout(timer);
-      document.removeEventListener('visibilitychange', refreshWhenActive);
-      window.removeEventListener('online', refreshWhenActive);
-      if (previewGenerationRef.current === previewGeneration) previewGenerationRef.current += 1;
-    };
-  }, [disabled, previewIntentKey, previewRetry, stage, wallet.address, wallet.authenticated, wallet.chainId, wallet.connectionVersion, wallet.ready]);
+  const gasCost = useRouteGasCost(route, { enabled: Boolean(route && stage !== 'planning') });
+  const intentKey = draftState === undefined ? planBuilder : JSON.stringify(draftState);
+  const previousIntentKey = useRef<typeof intentKey>(intentKey);
 
   useEffect(() => {
-    if ((stage !== 'input' && stage !== 'review') || previewPreparedAt === null) return undefined;
-    const remaining = Math.max(0, PREVIEW_FRESHNESS_MS - (Date.now() - previewPreparedAt));
+    if (stage !== 'review' || preparedAt === null) return undefined;
+    const remaining = Math.max(0, REVIEW_FRESHNESS_MS - (Date.now() - preparedAt));
     const timer = window.setTimeout(() => {
-      setPreviewIsStale(true);
-      if (stage === 'review') {
-        expireQuote();
-        setError('This quote expired. Review an updated quote before signing.');
-      }
+      expireQuote();
     }, remaining);
     return () => window.clearTimeout(timer);
-  }, [expireQuote, previewPreparedAt, stage]);
-
-  useEffect(() => {
-    previewRouteRef.current = previewRoutes[selectedRoute] ?? previewRoutes[0] ?? null;
-  }, [previewRoutes, selectedRoute]);
+  }, [expireQuote, preparedAt, stage]);
 
   useEffect(() => {
     if (stage === 'review' || stage === 'result') {
@@ -318,7 +134,9 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
   }, [stage]);
 
   const reset = useCallback(() => {
-    if (busyRef.current) return;
+    if (busyRef.current && stage !== 'planning') return;
+    busyRef.current = false;
+    setLoading(false);
     generationRef.current += 1;
     if (signatureDraftIdRef.current) {
       cancelSignatureRequiredDraft(signatureDraftIdRef.current);
@@ -341,7 +159,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
     setStatus('planning');
     setStatusDetail('');
     window.requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
-  }, [clearAcceptedRoute, clearSession, transition]);
+  }, [clearAcceptedRoute, clearSession, stage, transition]);
 
   useEffect(() => {
     const onTelegramBack = (event: Event) => {
@@ -384,13 +202,13 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
   // draft snapshot may recreate planners during claim/balance polling without
   // changing what the user accepted.
   useEffect(() => {
-    if (previousIntentKey.current !== previewIntentKey) {
-      previousIntentKey.current = previewIntentKey;
-      if (stage === 'review') {
+    if (previousIntentKey.current !== intentKey) {
+      previousIntentKey.current = intentKey;
+      if (stage === 'review' || stage === 'planning') {
         invalidatePreparedRoute('The inputs changed. Check the action again before signing.');
       }
     }
-  }, [invalidatePreparedRoute, previewIntentKey, stage]);
+  }, [invalidatePreparedRoute, intentKey, stage]);
 
   useEffect(() => {
     // Results are non-signable historical evidence. Retain their original
@@ -462,19 +280,17 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
       setStepResults([]);
       executionStepsRef.current = [];
       setExecutionRoute(null);
-      // Snapshot the human-readable action with the calldata. Inputs remain
-      // visible above the review card, but later form edits must never rename
-      // an already reviewed route.
+      // Snapshot the action with its calldata so later form changes cannot
+      // rename the route the user reviewed.
       setReviewTitle(operationLabel ?? viable[0].operation);
       bindSession({ walletAddress, chainId: wallet.chainId, connectionVersion: wallet.connectionVersion });
       setStatus('reviewing');
       setStatusDetail('Route ready.');
       const preparedAt = Date.now();
-      acceptRoute(viable[0], previewIntentKey);
+      acceptRoute(viable[0], intentKey);
       setQuoteChanges([]);
-      previewPreparedAtRef.current = preparedAt;
-      setPreviewPreparedAt(preparedAt);
-      setPreviewIsStale(false);
+      preparedAtRef.current = preparedAt;
+      setPreparedAt(preparedAt);
       transition('prepared');
       haptic('selection');
     } catch (cause) {
@@ -489,7 +305,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
         setLoading(false);
       }
     }
-  }, [acceptRoute, bindSession, checkSession, disabled, isCurrentGeneration, loading, operationLabel, planBuilder, prefetchedPlan, previewIntentKey, setQuoteChanges, stage, transition, wallet.address, wallet.authenticated, wallet.chainId, wallet.connectionVersion]);
+  }, [acceptRoute, bindSession, checkSession, disabled, isCurrentGeneration, loading, operationLabel, planBuilder, prefetchedPlan, intentKey, setQuoteChanges, stage, transition, wallet.address, wallet.authenticated, wallet.chainId, wallet.connectionVersion]);
 
   const refreshReviewedQuote = useCallback(async () => {
     if (stage !== 'review' || !quoteExpired || !planBuilder || disabled || busyRef.current) return;
@@ -537,10 +353,9 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
       executionStepsRef.current = [];
       setReviewTitle(operationLabel ?? next.operation);
       bindSession({ walletAddress, chainId: sessionChainId, connectionVersion });
-      acceptRoute(next, previewIntentKey);
-      setPreviewPreparedAt(Date.now());
-      previewPreparedAtRef.current = Date.now();
-      setPreviewIsStale(false);
+      acceptRoute(next, intentKey);
+      setPreparedAt(Date.now());
+      preparedAtRef.current = Date.now();
       if (termsChanged && factChanges.length === 0) {
         setQuoteChanges([{ label: 'Transaction route', before: 'Previously reviewed route', after: 'Updated route' }]);
       }
@@ -558,7 +373,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
         setLoading(false);
       }
     }
-  }, [acceptRoute, acceptedTerms, bindSession, disabled, isCurrentGeneration, operationLabel, planBuilder, previewIntentKey, quoteExpired, routes, selectedRoute, stage, wallet.chainId, wallet.connectionVersion]);
+  }, [acceptRoute, acceptedTerms, bindSession, disabled, isCurrentGeneration, operationLabel, planBuilder, intentKey, quoteExpired, routes, selectedRoute, stage, wallet.chainId, wallet.connectionVersion]);
 
   // History restores editable primitives only. Once the route owner has
   // applied those values and exposes its planner, immediately reopen the
@@ -577,37 +392,17 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
     void review();
   }, [disabled, loading, planBuilder, resumeReview, review, stage, wallet.address, wallet.authenticated]);
 
-  const execute = useCallback(async (inputRoute?: PlannedRoute) => {
-    const startingRoute = inputRoute ?? route;
-    const directFromInput = stage === 'input' && Boolean(inputRoute);
-    if (disabled || !planBuilder || !startingRoute || loading || busyRef.current || (!directFromInput && stage !== 'review') || (!directFromInput && status === 'failed') || stepResults.some(hasTransactionHash)) return;
-    if (!directFromInput && (!matchesAcceptedRoute(startingRoute, previewIntentKey) || quoteExpired)) {
+  const execute = useCallback(async () => {
+    const startingRoute = route;
+    if (disabled || !planBuilder || !startingRoute || loading || busyRef.current || stage !== 'review' || status === 'failed' || stepResults.some(hasTransactionHash)) return;
+    if (!matchesAcceptedRoute(startingRoute, intentKey) || quoteExpired
+      || !preparedAtRef.current || Date.now() - preparedAtRef.current >= REVIEW_FRESHNESS_MS) {
       expireQuote();
-      setError('Action details changed. Refresh and review the updated terms before signing.');
+      setError('Review an updated quote before signing.');
       setStatus('reviewing');
       return;
     }
     const executionWalletAddress = startingRoute.walletAddress.toLowerCase();
-    const previewOwner = previewOwnerRef.current;
-    const previewSessionMatches = previewOwner?.intentKey === previewIntentKey
-      && previewOwner.walletAddress?.toLowerCase() === executionWalletAddress
-      && previewOwner.chainId === wallet.chainId
-      && previewOwner.connectionVersion === wallet.connectionVersion;
-    if ((directFromInput && !previewSessionMatches)
-      || !previewPreparedAtRef.current
-      || Date.now() - previewPreparedAtRef.current >= PREVIEW_FRESHNESS_MS) {
-      setPreviewIsStale(true);
-      if (!directFromInput) expireQuote();
-      setError(directFromInput
-        ? previewSessionMatches ? 'This quote expired. Refreshing it before continuing.' : 'Action details changed. Updating the quote before continuing.'
-        : 'This quote expired. Review an updated quote before signing.');
-      if (!directFromInput) {
-        setStatus('reviewing');
-      } else {
-        setPreviewRetry((value) => value + 1);
-      }
-      return;
-    }
     const generation = generationRef.current + 1;
     generationRef.current = generation;
     const executionConnectionVersion = wallet.connectionVersion;
@@ -778,15 +573,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
           signatureDraftIdRef.current = null;
         }
         setError(message);
-        if (directFromInput) {
-          setPreviewRoutes([startingRoute]);
-          previewRouteRef.current = startingRoute;
-          setExecutionRoute(null);
-          setStatus('planning');
-          transition('return-to-input');
-        } else {
-          transition('signing-failed');
-        }
+        transition('signing-failed');
       }
       setStatus('failed');
       // A failed or stale route must be explicitly reviewed again. This is
@@ -800,10 +587,9 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
         setLoading(false);
       }
     }
-  }, [bindSession, disabled, draftActionKey, draftResumePath, draftState, expireQuote, invalidateWalletData, isCurrentGeneration, loading, matchesAcceptedRoute, onComplete, planBuilder, previewIntentKey, quoteExpired, reviewTitle, route, stage, status, stepResults, transition, wallet]);
+  }, [bindSession, disabled, draftActionKey, draftResumePath, draftState, expireQuote, invalidateWalletData, isCurrentGeneration, loading, matchesAcceptedRoute, onComplete, planBuilder, intentKey, quoteExpired, reviewTitle, route, stage, status, stepResults, transition, wallet]);
 
-  // A connect click leaves the editor and its read-only preview in place. It
-  // never opens the legacy review surface or requests a signature; the user
+  // Connecting leaves the editor in place without preparing a transaction. The user
   // must click the action again after the wallet is connected.
   useEffect(() => {
     if (!resumeAfterConnect || stage !== 'input' || !wallet.authenticated || !wallet.address) return;
@@ -819,16 +605,14 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
     const approvals = candidate.transactions.filter((transaction) => transaction.kind === 'approval').length;
     return { routeType, approvals, count: candidate.transactions.length };
   }), [routes]);
-  const selectPreviewRoute = useCallback((index: number) => setSelectedRoute(index), []);
   const selectReviewedRoute = useCallback((index: number) => {
     if (busyRef.current || stage !== 'review') return;
     const candidate = routes[index];
     if (!candidate) return;
     setSelectedRoute(index);
-    acceptRoute(candidate, previewIntentKey);
+    acceptRoute(candidate, intentKey);
     setStepResults([]);
-  }, [acceptRoute, previewIntentKey, routes, stage]);
-  const retryPreview = useCallback(() => setPreviewRetry((value) => value + 1), []);
+  }, [acceptRoute, intentKey, routes, stage]);
   const startConnectFlow = useCallback(() => { setError(null); setResumeAfterConnect(true); }, []);
   const endConnectFlow = useCallback(() => setResumeAfterConnect(false), []);
 
@@ -836,10 +620,10 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
     stage, wallet, route, routes, selectedRoute, routeSummaries,
     status, statusDetail, stepResults, loading, networkSwitching, refreshing,
     error, result, reviewTitle, quoteExpired, quoteChanges,
-    previewRoute, previewRoutes, previewLoading, previewUpdating, previewIsStale, previewError, gasCost,
+    gasCost,
     triggerRef, headingRef, review, execute, refreshReviewedQuote, reset,
-    selectPreviewRoute, selectReviewedRoute,
+    selectReviewedRoute,
     canSelectReviewedRoute: stage === 'review' && !busyRef.current,
-    retryPreview, startConnectFlow, endConnectFlow,
+    startConnectFlow, endConnectFlow,
   };
 }

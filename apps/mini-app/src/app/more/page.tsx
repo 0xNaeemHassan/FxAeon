@@ -19,7 +19,7 @@ export default function MorePage() {
       <PageHeading title="More" />
       <div className={styles.identity}><AccountSummary /></div>
       <RowGroup title="Account">
-        <ActionRow icon={History} title="History" description="Activity on this device" href="/history" />
+        <ActionRow icon={History} title="History" href="/history" />
         <ActionRow icon={QrCode} title="Receive" description={wallet.ready && !wallet.address ? 'Connect a wallet to receive' : undefined} href="/qr" />
         <ActionRow icon={Settings} title="Settings" href="/settings" />
       </RowGroup>

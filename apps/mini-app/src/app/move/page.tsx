@@ -470,7 +470,7 @@ export default function MovePage() {
           data-flow-stage={reviewStage}
           className={`${styles.focusCard} ${styles.moveCard} ${moveStyles.moveCard} p-5`}
         >
-          <ActionReview reviewBeforeSign
+          <ActionReview
             key={reviewRevision}
             surface="content"
             editor={<>

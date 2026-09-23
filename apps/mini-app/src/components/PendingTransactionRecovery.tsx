@@ -34,6 +34,7 @@ import { useWalletDemand } from '@/components/WalletDemandProvider';
 type Props = {
   walletAddress: Address;
   embedded?: boolean;
+  hideWhenEmpty?: boolean;
 };
 
 const RECOVERY_POSITION_DEMAND = { expandedAssets: false, chainPulse: false, positions: true } as const;
@@ -264,7 +265,7 @@ function formatBridgeAmount(value: string): string {
  * only reopen the original product route; that route must rebuild and simulate
  * its transaction from current state before asking the wallet to sign.
  */
-export default function PendingTransactionRecovery({ walletAddress, embedded = false }: Props) {
+export default function PendingTransactionRecovery({ walletAddress, embedded = false, hideWhenEmpty = false }: Props) {
   const identity = walletAddress.toLowerCase();
   useWalletDemand(RECOVERY_POSITION_DEMAND, Boolean(walletAddress));
   const readScope = useRef(createWalletReadScope(walletAddress));
@@ -319,6 +320,7 @@ export default function PendingTransactionRecovery({ walletAddress, embedded = f
       ? { ...previous, drafts: previous.drafts.map((draft) => draft.id === id ? { ...draft, status: 'cancelled', updatedAt: Date.now() } : draft) }
       : previous);
   }, [identity]);
+  if (hideWhenEmpty && !loading && !error && views.length === 0 && drafts.length === 0) return null;
   return (
     <section aria-labelledby="transaction-recovery-title">
       {!embedded && <SectionTitle

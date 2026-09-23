@@ -19,7 +19,7 @@ export default function HistoryPage() {
         ) : (
           <>
             <ProtocolPositionHistory walletAddress={wallet.address as Address} />
-            <PendingTransactionRecovery walletAddress={wallet.address as Address} embedded />
+            <PendingTransactionRecovery walletAddress={wallet.address as Address} embedded hideWhenEmpty />
           </>
         )}
       </div>
