@@ -27,6 +27,7 @@ import { userSafeError } from '@/lib/errors';
 import { tokenSymbol } from '@/lib/fx/tokenPresentation';
 import { haptic, openExternalLink } from '@/lib/telegram';
 import { usePrivyWallet } from '@/lib/wallet';
+import { activeWalletAddress } from '@/lib/wallet/activeWalletAddress';
 import { canonicalWalletBalancesSnapshot, knownFreshPortfolioSubtotal, mergeFreshCanonicalWalletBalances } from '@/lib/portfolioValuation';
 import { walletAssetValuation } from '@/lib/walletAssets';
 import { useOverlayDialog } from '@/lib/useOverlayDialog';
@@ -44,9 +45,10 @@ const WALLET_PROFILE_DEMAND = { expandedAssets: true, chainPulse: true, position
 export default function WalletProfile() {
   const pathname = usePathname();
   const wallet = usePrivyWallet();
+  const activeAddress = activeWalletAddress(wallet);
   const positionState = useProtocolPositions();
   const refreshPositions = positionState.refresh;
-  const walletIdentity = wallet.ready && wallet.authenticated ? wallet.address?.toLowerCase() ?? '' : '';
+  const walletIdentity = activeAddress?.toLowerCase() ?? '';
   const manualRefresh = useRefreshAction(walletIdentity);
   const { walletProfileAddress: openWallet, setWalletProfileAddress: setOpenWallet } = useWalletProfileSession();
   const [disconnecting, setDisconnecting] = useState(false);
@@ -93,10 +95,10 @@ export default function WalletProfile() {
   const accountTasks = selectWalletTasks({ walletAddress: wallet.address ?? '', transactions: [], claimable: currentClaimable,
     valuation: valuationTaskState }).filter((task) => task.kind !== 'transaction');
   const verifiedEnsName = useVerifiedWalletName(wallet.ready && wallet.authenticated ? wallet.address : undefined);
-  const walletHeading = verifiedEnsName ?? (wallet.address ? compactAddress(wallet.address) : 'Wallet');
+  const walletHeading = verifiedEnsName ?? (activeAddress ? compactAddress(activeAddress) : 'Wallet');
   const profileDialogName = verifiedEnsName
-    ? `Wallet profile for ${verifiedEnsName}; address ${wallet.address}`
-    : `Wallet ${wallet.address}`;
+    ? `Wallet profile for ${verifiedEnsName}; address ${activeAddress}`
+    : `Wallet ${activeAddress ?? ''}`;
   const openerRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useOverlayDialog<HTMLElement>({
@@ -140,7 +142,7 @@ export default function WalletProfile() {
   };
 
   if (!wallet.ready) return <span role="status" className="h-11 w-11 animate-pulse rounded-xl bg-[var(--surface)]"><span className="sr-only">Loading wallet</span></span>;
-  if (!wallet.address) {
+  if (!activeAddress) {
     return (
       <ConnectWalletButton aria-label="Connect wallet" loadingLabel="Opening…" className={`${styles.walletConnect} ${headerWalletControl.trigger} glass-press`}>
         Connect
@@ -151,7 +153,7 @@ export default function WalletProfile() {
   return <>
     <button ref={openerRef} type="button" aria-label="Open wallet profile" onClick={() => { openedAtPathRef.current = pathname; setOpenWallet(walletIdentity); haptic('light'); }}
       className={`${styles.walletTrigger} ${headerWalletControl.trigger} ${headerWalletControl.identityTrigger} glass-press`}>
-      <span className={headerWalletControl.identityName}>{verifiedEnsName ?? compactAddress(wallet.address)}</span>
+      <span className={headerWalletControl.identityName}>{verifiedEnsName ?? compactAddress(activeAddress)}</span>
     </button>
     {open && typeof document !== 'undefined' && createPortal(
       <div className={`${styles.walletBackdrop} wallet-profile-backdrop`} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpenWallet(null); }}>
@@ -160,10 +162,10 @@ export default function WalletProfile() {
             <span className={presentation.handle} aria-hidden="true" />
             <span className={presentation.identityMark}><WalletIdentityMark /></span>
             <div className={presentation.identity}>
-              <div className={presentation.identityTitle}><h2 title={wallet.address}>{walletHeading}</h2>
-                {!verifiedEnsName && <AddressChip address={wallet.address} iconOnly />}
+              <div className={presentation.identityTitle}><h2 title={activeAddress}>{walletHeading}</h2>
+                {!verifiedEnsName && <AddressChip address={activeAddress} iconOnly />}
               </div>
-              {verifiedEnsName && <AddressChip address={wallet.address} />}
+              {verifiedEnsName && <AddressChip address={activeAddress} />}
             </div>
             <button ref={closeRef} type="button" aria-label="Close wallet profile" onClick={() => setOpenWallet(null)} className={presentation.iconButton}><X size={22} aria-hidden="true" /></button>
           </header>

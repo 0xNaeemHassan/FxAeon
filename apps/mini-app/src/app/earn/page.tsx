@@ -23,7 +23,7 @@ import {
   type SignatureDraftState,
 } from '@/lib/fx';
 import { usePrivyWallet } from '@/lib/wallet';
-import { DEFAULT_SLIPPAGE_PERCENT, readSlippagePercent } from '@/lib/settings';
+import { DEFAULT_SLIPPAGE_PERCENT, readSlippagePercent, SETTINGS_KEY, SETTINGS_UPDATED_EVENT } from '@/lib/settings';
 import { userSafeError } from '@/lib/errors';
 import { resetTransactionAmounts } from '@/lib/transactionState';
 import { claimAvailability, cooldownRefreshDelayMs, createEarnReadGuard } from '@/lib/earnState';
@@ -185,6 +185,17 @@ export default function EarnPage() {
 
   useEffect(() => {
     setSlippage(String(readSlippagePercent()));
+  }, []);
+  useEffect(() => {
+    const onSettingsUpdated = (event: Event) => {
+      if (event.type === 'storage' && (event as StorageEvent).key !== SETTINGS_KEY) return;
+      setSlippage(String(readSlippagePercent()));
+      setReviewStage('input');
+      setReviewRevision((revision) => revision + 1);
+    };
+    window.addEventListener(SETTINGS_UPDATED_EVENT, onSettingsUpdated);
+    window.addEventListener('storage', onSettingsUpdated);
+    return () => { window.removeEventListener(SETTINGS_UPDATED_EVENT, onSettingsUpdated); window.removeEventListener('storage', onSettingsUpdated); };
   }, []);
 
   useEffect(() => {

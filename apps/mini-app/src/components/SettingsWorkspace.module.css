@@ -15,6 +15,11 @@
 .preferenceHeading h3 { font-size: 16px; font-weight: 600; margin: 0; }
 .preferenceHeading > span { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--mut); }
 .preferenceHeading .saved { color: var(--success); }
+.refresh { min-height: 44px; min-width: 44px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 12px; color: var(--mut); font-size: 12px; }
+.refresh:hover { color: var(--text); border-color: var(--line-strong); }
+.refresh:disabled { opacity: .55; }
+.gasValue { margin: 8px 0 0; font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.network { padding: 4px 0; border-bottom: 1px solid var(--line); }
 .help { color: var(--mut); font-size: 12px; line-height: 1.6; margin: 6px 0 8px; }
 .scope { color: var(--mut); font-size: 12px; line-height: 1.55; margin: 8px 0 12px; }
 .choices { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }

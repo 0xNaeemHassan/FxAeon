@@ -29,7 +29,7 @@ import { ConfirmedPositionCards } from '@/components/ConfirmedPositionCards';
 import RecentActivityPreview from '@/components/RecentActivityPreview';
 import TokenIcon from '@/components/TokenIcon';
 import { AppShell, SectionTitle } from '@/components/ui';
-import { ActionRow, Disclosure, MetricRows, PageHeading, ProductSurface, RowGroup, StatusNotice } from '@/components/ProductUI';
+import { ActionRow, Disclosure, MetricRows, PageHeading, RowGroup, StatusNotice } from '@/components/ProductUI';
 import { formatExactDecimal } from '@/lib/amount';
 import { freshDisplayPrices } from '@/lib/displayPrices';
 import presentation from '@/components/PortfolioWorkspace.module.css';
@@ -320,14 +320,14 @@ function SupportedValueCard({ displayTotalUsd, loading, refreshing, onRefresh,
   displayTotalUsd: number | null; loading: boolean; refreshing: boolean; onRefresh: () => void;
   walletValue: number | null; positionEquity: number | null; walletComplete: boolean; positionsComplete: boolean; assetCount: number;
 }) {
-  return <ProductSurface className={`${presentation.valueCard} ${balancePresentation.hero}`}>
-    <div className={presentation.valueTop}><span>Portfolio value</span><div>
+  return <section aria-label="Portfolio balance" className={`${presentation.valueCard} ${balancePresentation.hero}`}>
+    <div className={presentation.valueTop}>
+      <p className={`${presentation.valueNumber} ${balancePresentation.value}`} data-portfolio-value><ValueOrSkeleton value={displayTotalUsd === null ? '—' : formatUsd(displayTotalUsd)} width="xl"
+        status={loading ? 'loading' : 'unavailable'} label={loading ? 'Loading portfolio value' : 'Portfolio value unavailable'} /></p>
       <button type="button" aria-label="Refresh portfolio balances and positions" aria-busy={refreshing} title="Refresh balances and positions" disabled={refreshing} onClick={onRefresh}>
         <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} aria-hidden="true" />
       </button>
-    </div></div>
-    <p className={`${presentation.valueNumber} ${balancePresentation.value}`} data-portfolio-value><ValueOrSkeleton value={displayTotalUsd === null ? '—' : formatUsd(displayTotalUsd)} width="xl"
-      status={loading ? 'loading' : 'unavailable'} label={loading ? 'Loading portfolio value' : 'Portfolio value unavailable'} /></p>
+    </div>
     <p className={presentation.valueCaption}><ValueOrSkeleton value={walletComplete ? `${assetCount} ${assetCount === 1 ? 'wallet asset' : 'wallet assets'}` : '—'} width="sm" status={loading ? 'loading' : 'unavailable'} label="Wallet asset count" /></p>
     <QuickActions />
     <Disclosure title="Value breakdown">
@@ -337,7 +337,7 @@ function SupportedValueCard({ displayTotalUsd, loading, refreshing, onRefresh,
       ]} />
       <p className={presentation.helper}>Position value is collateral minus debt. Pending transfers and withdrawal claims are excluded.</p>
     </Disclosure>
-  </ProductSurface>;
+  </section>;
 }
 
 function QuickActions() {

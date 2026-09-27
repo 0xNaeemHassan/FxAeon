@@ -73,6 +73,28 @@ test.describe('unified product presentation', () => {
     assertNoBackendRequests(requests);
   });
 
+  test('saved slippage updates the open Trade form', async ({ page, requests }) => {
+    await page.goto('/trade', { waitUntil: 'domcontentloaded' });
+    const settings = page.locator('.trade-ticket summary').filter({ hasText: /^Settings/ }).first();
+    await settings.click();
+    const slippage = page.getByRole('textbox', { name: 'Slippage tolerance percentage', exact: true });
+    await expect(slippage).toHaveValue('0.5');
+    await page.evaluate(() => {
+      window.localStorage.setItem('fxaeon.settings.v1', JSON.stringify({ slippageBps: 100 }));
+      window.dispatchEvent(new CustomEvent('fxaeon:settings-updated', { detail: { slippageBps: 100 } }));
+    });
+    await expect(slippage).toHaveValue('1');
+    await expect(settings).toContainText('1% slippage');
+    await page.evaluate(() => {
+      const value = JSON.stringify({ slippageBps: 200 });
+      window.localStorage.setItem('fxaeon.settings.v1', value);
+      window.dispatchEvent(new StorageEvent('storage', { key: 'fxaeon.settings.v1', newValue: value }));
+    });
+    await expect(slippage).toHaveValue('2');
+    await expect(settings).toContainText('2% slippage');
+    assertNoBackendRequests(requests);
+  });
+
   test('More distinguishes internal destinations from external resources', async ({ page, requests }) => {
     await page.goto('/more', { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('link', { name: /FxAeon docs/ })).toHaveAttribute('href', '/docs');

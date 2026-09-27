@@ -1,20 +1,59 @@
 'use client';
 
-import { useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { Check } from 'lucide-react';
+import { formatUnits } from 'viem';
 import { AppShell, Button, Skeleton } from '@/components/ui';
 import { AccountSummary, SessionControl } from '@/components/AccountControls';
 import AppearancePreference from '@/components/AppearancePreference';
 import { Disclosure, PageHeading, ProductSurface } from '@/components/ProductUI';
+import { MissingValue } from '@/components/MissingValue';
 import { useLocale } from '@/lib/i18n';
 import { haptic } from '@/lib/telegram';
-import { readSlippagePercent, SETTINGS_KEY } from '@/lib/settings';
+import { announceSettingsUpdated, readSlippagePercent, SETTINGS_KEY } from '@/lib/settings';
+import { fetchEthereumGasFallback, type EthereumGasFallbackSnapshot } from '@/lib/fx/etherscanGas';
+import { getEthereumClient } from '@/lib/fx/clients';
 import styles from '@/components/SettingsWorkspace.module.css';
 import { AccountWorkspace } from '@/components/ProductLayout';
 
 const WalletSection = dynamic(() => import('@/components/WalletSection'), { ssr: false, loading: () => <Skeleton className="h-24" /> });
 const PRESETS = [10, 50, 100, 200] as const;
+
+function formatGwei(value: string): string {
+  return formatUnits(BigInt(value), 9).replace(/\.0+$|(?<=\.[0-9]*[1-9])0+$/, '');
+}
+
+type GasReadout = EthereumGasFallbackSnapshot | {
+  source: 'rpc';
+  chainId: 1;
+  gasPriceWei: string;
+  fetchedAt: number;
+  stale: false;
+};
+
+async function readEthereumGas(): Promise<GasReadout> {
+  const client = getEthereumClient();
+  try {
+    const request = client.getGasPrice?.();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let gasPrice: bigint | undefined;
+    try {
+      gasPrice = request
+        ? await Promise.race([
+          request,
+          new Promise<bigint | undefined>((resolve) => { timer = setTimeout(() => resolve(undefined), 4_000); }),
+        ])
+        : undefined;
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+    if (typeof gasPrice === 'bigint' && gasPrice > 0n) {
+      return { source: 'rpc', chainId: 1, gasPriceWei: gasPrice.toString(), fetchedAt: Date.now(), stale: false };
+    }
+  } catch { /* The optional server oracle below can cover an RPC fee-read outage. */ }
+  return fetchEthereumGasFallback();
+}
 
 export default function SettingsPage() {
   const { t } = useLocale();
@@ -23,12 +62,20 @@ export default function SettingsPage() {
   const [savedBps, setSavedBps] = useState(50);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
+  const [gas, setGas] = useState<GasReadout | null>(null);
+  const [gasLoading, setGasLoading] = useState(true);
+  const [gasError, setGasError] = useState(false);
   const id = useId();
   const dirty = slippageBps !== savedBps;
   useEffect(() => {
     const value = Math.round(readSlippagePercent() * 100);
     setSlippageBps(value); setSavedBps(value); setReady(true);
   }, []);
+  const refreshGas = useCallback(() => {
+    setGasLoading(true); setGasError(false);
+    void readEthereumGas().then((snapshot) => setGas(snapshot)).catch(() => setGasError(true)).finally(() => setGasLoading(false));
+  }, []);
+  useEffect(() => { refreshGas(); }, [refreshGas]);
   const select = (value: number) => { setSlippageBps(value); setSaved(false); setError(''); haptic('selection'); };
   const save = () => {
     if (!ready || !dirty) return;
@@ -41,6 +88,7 @@ export default function SettingsPage() {
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) previous = parsed as Record<string, unknown>;
       } catch { /* A corrupt old value can be replaced by the selected preference. */ }
       window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...previous, slippageBps }));
+      announceSettingsUpdated(slippageBps);
       setSavedBps(slippageBps); setSaved(true); haptic('success');
     } catch {
       setSaved(false);
@@ -76,6 +124,18 @@ export default function SettingsPage() {
           <Button onClick={save} disabled={!ready || !dirty} className={styles.save}>Save preferences</Button>
           {error && <p role="alert" className={styles.error}>{error}</p>}
         </ProductSurface>
+      </section>
+      <section className={`${styles.section} ${styles.network}`} aria-labelledby={`${id}-gas`}>
+          <div className={styles.preferenceHeading}>
+            <h3 id={`${id}-gas`}>Ethereum gas</h3>
+            <button type="button" className={styles.refresh} onClick={refreshGas} disabled={gasLoading} aria-label={gasError ? 'Retry Ethereum gas' : 'Refresh Ethereum gas'}>
+              {gasError ? 'Retry' : 'Refresh'}
+            </button>
+          </div>
+          <p className={styles.gasValue} aria-live="polite">
+            {gas ? `${formatGwei(gas.gasPriceWei)} Gwei${gas.stale ? ' · cached' : ''}` : <MissingValue width="md" status={gasLoading ? 'loading' : 'unavailable'} label={gasLoading ? 'Loading Ethereum gas' : 'Ethereum gas unavailable'} />}
+          </p>
+          <p className={styles.scope}>Final fee set in your wallet.</p>
       </section>
       <AppearancePreference />
       <div className={styles.disconnect}><SessionControl /></div>

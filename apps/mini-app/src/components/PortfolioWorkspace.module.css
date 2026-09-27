@@ -1,13 +1,13 @@
 .workspace { width: min(100%, 1120px); margin-inline: auto; }
 .dashboard { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; }
 .primary, .secondary { display: flex; min-width: 0; flex-direction: column; gap: 20px; }
-.valueCard { padding: 10px 16px 0; }
+.valueCard { padding: 4px 0 0; }
 .valueTop { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 12px; color: var(--mut); font-size: 13px; }
 .valueTop > div { display: flex; align-items: center; gap: 8px; }
 .valueTop button { display: inline-grid; min-width: 44px; min-height: 44px; place-items: center; border-radius: 50%; color: var(--mut); margin-right: -8px; }
 .valueTop button:hover { background: var(--mint-dim); color: var(--mint); }
 .partial { color: var(--warn); border-radius: 7px; padding: 4px 7px; background: var(--warn-dim); font-size: 11px; }
-.valueNumber { margin: 5px 0 5px; }
+.valueNumber { min-width: 0; margin: 5px 0; color: var(--text); }
 .valueCaption { color: var(--mut); font-size: 13px; line-height: 1.5; margin: 0 0 8px; }
 .helper { color: var(--mut); font-size: 12px; line-height: 1.65; margin: 12px 0 0; }
 .sectionTitle { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }

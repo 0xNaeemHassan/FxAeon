@@ -1,45 +1,33 @@
 # Product visual review
 
-## Latest reviewed working-tree captures
+## Latest captured gallery
 
-The latest gallery is
-`artifacts/refinement/generated/run-20260927T071112Z/`. Its manifest lists 63
-route/theme/viewport views and 103 PNG frames at 393×852 mobile and 1440×1000
-desktop viewports. Root and the form-art reviewer manually inspected the
-Portfolio, wallet profile, main forms, Settings, More, Receive, History, and
-all Docs sections; no material clipping was found. The gallery includes
-Portfolio, Trade, Borrow, Earn, Move, Positions, History, More, Settings,
-Receive, Docs, Privacy, and Login.
+[`artifacts/refinement/generated/run-20260927T121703Z/`](../artifacts/refinement/generated/run-20260927T121703Z/)
+contains 64 views and 104 PNG frames at 393×852 mobile and 1440×1000 desktop.
+The frames were collectively visually audited, including Docs, Privacy, Login,
+and all state-lab themes/stages. Root also inspected disconnected Earn,
+Portfolio, and wallet states in Official and Light themes, plus three
+fork-backed transaction reviews and their CTA fit.
 
-These are source-built UI fixtures, not healthy live balance evidence. The
-capture harness used an EIP-1193 test-wallet shim without an RPC/backend
-connection, so chain balances are unavailable; deterministic market values
-are labelled illustrative. The state-lab frames show generic UI stages, not
-flow-specific quotes, transactions, or receipts. No confirmation, signature,
-or chain mutation was invoked. Move's centered route panel is intentional. The
-separate built-app browser suite passed 163/163 checks. A distinct protected
-Anvil browser proof is still pending: its first attempt opened all four
-ETH/BTC long/short positions, then failed because the existing-position Borrow
-review CTA did not fit at 393×852. The layout correction and proof rerun are
-pending; this gallery is not final-candidate evidence.
+This gallery predates the later glyph change. Two focused tests passed for that
+change, but refreshed screenshots and final screenshot promotion remain
+pending. The current browser proof is also pending; see
+[`../release-validation.md`](../release-validation.md).
 
-See [`../release-validation.md`](../release-validation.md) for revision-specific
-validation status. This gallery documents rendered UI only and does not
-establish transaction submission or confirmation.
+The gallery uses fixture prices, Goldsky responses, and a test-wallet shim. The
+preview lacks RPC environment values, and the local configured-Privy build
+requires user authentication. These images establish rendered UI only, not
+healthy live balances, transaction submission, or confirmation. No signature
+or chain mutation was performed.
 
-## Historical build4 references
+A separate user-authenticated check on local build `4321` completed healthy
+live balance and network reads. Portfolio values remained visible during
+refresh and controls re-enabled when reads finished. There were zero open
+positions; History showed the opening and closed events for the same position.
+This spot-check is not part of the gallery or a release gate. Public evidence
+omits wallet identity, balances, and screenshots.
 
-The images below are retained only as before references. They do not show the
-current styling. Their session requested 393×852, but Chrome reported a
-394-pixel CSS width and a 393.6-pixel visual viewport; they are not evidence at
-the exact current baseline.
+## Historical references
 
-| Surface | Historical capture |
-| --- | --- |
-| Portfolio balance summary and assets | [Portfolio](assets/portfolio.png) |
-| Wallet profile and identity | [Wallet profile](assets/wallet-profile.png) |
-| Wallet asset detail | [Wallet asset](assets/wallet-asset.png) |
-| Move route | [Move](assets/move.png) |
-| Transaction review | [Trade review](assets/trade-review.png) |
-
-Rendered screenshots do not establish transaction submission or confirmation.
+Earlier galleries and captures are retained as before-state evidence. They do
+not establish the current release gates or production behavior.

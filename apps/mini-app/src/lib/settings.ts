@@ -3,6 +3,7 @@
  * Nothing in this file is used as protocol state or wallet authorization.
  */
 export const SETTINGS_KEY = 'fxaeon.settings.v1';
+export const SETTINGS_UPDATED_EVENT = 'fxaeon:settings-updated';
 export const DEFAULT_SLIPPAGE_PERCENT = 0.5;
 const ALLOWED_SLIPPAGE_BPS = [10, 50, 100, 200] as const;
 
@@ -16,4 +17,10 @@ export function readSlippagePercent(): number {
   } catch {
     return DEFAULT_SLIPPAGE_PERCENT;
   }
+}
+
+/** Notify already-open protocol surfaces that device preferences changed. */
+export function announceSettingsUpdated(slippageBps: number): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(SETTINGS_UPDATED_EVENT, { detail: { slippageBps } }));
 }

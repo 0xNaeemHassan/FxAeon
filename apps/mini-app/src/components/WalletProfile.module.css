@@ -22,7 +22,7 @@
 .actions > a:hover { border-color: color-mix(in srgb, var(--mint) 58%, var(--line)); background: var(--mint-dim); }
 .actions .primaryAction { background: var(--mint); color: var(--on-accent); border-color: var(--mint); }
 .actions .primaryAction:hover { background: var(--mint-bright); border-color: var(--mint-bright); }
-.summary { padding: 10px 14px 14px; margin-top: 8px; }
+.summary { padding: 4px 0 16px; margin-top: 8px; }
 .assets { margin-top: 16px; padding: 0; }
 .sectionHeading { display: flex; min-height: 42px; align-items: center; justify-content: space-between; gap: 8px; }
 .sectionHeading h3 { font-size: 16px; font-weight: 620; letter-spacing: -.02em; margin: 0; }

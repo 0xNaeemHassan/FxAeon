@@ -24,7 +24,7 @@ import { usePrivyWallet } from '@/lib/wallet';
 import styles from '@/components/trade-surfaces.module.css';
 import { positiveDecimal } from '@/lib/amount';
 import { formatUnits } from 'viem';
-import { DEFAULT_SLIPPAGE_PERCENT, readSlippagePercent } from '@/lib/settings';
+import { DEFAULT_SLIPPAGE_PERCENT, readSlippagePercent, SETTINGS_KEY, SETTINGS_UPDATED_EVENT } from '@/lib/settings';
 import { readTradeDeepLinkContext, resetTransactionAmounts, type TradeDeepLinkContext } from '@/lib/transactionState';
 import {
   parseAmount,
@@ -244,6 +244,17 @@ export default function TradePage() {
 
   useEffect(() => {
     setSlippage(String(readSlippagePercent()));
+  }, []);
+  useEffect(() => {
+    const onSettingsUpdated = (event: Event) => {
+      if (event.type === 'storage' && (event as StorageEvent).key !== SETTINGS_KEY) return;
+      setSlippage(String(readSlippagePercent()));
+      setReviewStage('input');
+      setReviewRevision((revision) => revision + 1);
+    };
+    window.addEventListener(SETTINGS_UPDATED_EVENT, onSettingsUpdated);
+    window.addEventListener('storage', onSettingsUpdated);
+    return () => { window.removeEventListener(SETTINGS_UPDATED_EVENT, onSettingsUpdated); window.removeEventListener('storage', onSettingsUpdated); };
   }, []);
 
   const tokenOptions = positionInputTokenOptions(market);
