@@ -118,6 +118,42 @@ test.describe('ActionReview isolated orchestration', () => {
     expect(await metric(page, 'send')).toBe(0);
   });
 
+  test('same-tab gas-tier preference changes invalidate the accepted review until an updated quote is explicit', async ({ page }) => {
+    // Give this isolated harness a same-origin storage area for the real
+    // settings reader before replacing the document with the harness bundle.
+    await page.goto('/');
+    await page.evaluate(() => window.localStorage.setItem('fxaeon.settings.v1', JSON.stringify({ slippageBps: 100, gasTier: 'fast' })));
+    await openHarness(page);
+    await page.getByRole('button', { name: 'Review position', exact: true }).click();
+    const confirm = page.getByRole('button', { name: 'Confirm in wallet', exact: true });
+    await expect(confirm).toBeVisible();
+    const gasTier = page.locator('.reviewInlineContent').getByText('Gas tier', { exact: true }).locator('..');
+    await expect(gasTier).toContainText('Fast · 30 Gwei');
+    expect(await metric(page, 'send')).toBe(0);
+
+    await page.evaluate(() => {
+      const key = 'fxaeon.settings.v1';
+      const current = JSON.parse(window.localStorage.getItem(key) || '{}') as { slippageBps?: number; [key: string]: unknown };
+      window.localStorage.setItem(key, JSON.stringify({ ...current, gasTier: 'rapid' }));
+      window.dispatchEvent(new CustomEvent('fxaeon:settings-updated', { detail: { slippageBps: 100, gasTier: 'rapid' } }));
+    });
+    await expect(confirm).toHaveCount(0);
+    await expect(gasTier, 'the accepted Fast fee must remain visible until the user reviews the new tier').toContainText('Fast · 30 Gwei');
+    const reviewUpdated = page.getByRole('button', { name: 'Review updated quote', exact: true });
+    await expect(reviewUpdated).toBeEnabled();
+    await expect(page.getByRole('alert')).toContainText('Network fee preference changed');
+    expect(await metric(page, 'runner')).toBe(0);
+    expect(await metric(page, 'send')).toBe(0);
+
+    await reviewUpdated.click();
+    await expect(confirm).toBeVisible();
+    await expect(gasTier).toContainText('Rapid · 40 Gwei');
+    await expect(page.locator('[aria-label="Updated transaction consequences"]')).toContainText('Fast · 30 Gwei → Rapid · 40 Gwei');
+    expect(await metric(page, 'prepare')).toBe(2);
+    expect(await metric(page, 'runner')).toBe(0);
+    expect(await metric(page, 'send')).toBe(0);
+  });
+
 
   test('typing and connecting do not prepare quotes; Review replaces the editor once', async ({ page }) => {
     await openHarness(page, { initialPreviewMode: 'deferred' });

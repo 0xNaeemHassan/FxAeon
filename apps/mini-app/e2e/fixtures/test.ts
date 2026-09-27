@@ -130,6 +130,22 @@ export async function installMarketPrices(page: Page, enabled: boolean): Promise
   });
 }
 
+/** Enriched, deterministic quote used by the gas-tier settings E2E. */
+export async function installGasTierFixture(page: Page): Promise<void> {
+  // Replace the legacy-only default installed by the general browser fixture.
+  await page.unroute('**/api/gas');
+  await page.route('**/api/gas', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      source: 'etherscan', chainId: 1, gasPriceWei: '25000000000',
+      baseFeePerGasWei: '20000000000',
+      tiers: { standard: '25000000000', fast: '30000000000', rapid: '40000000000' },
+      blockNumber: '21000000', fetchedAt: Date.now(), stale: false,
+    }),
+  }));
+}
+
 /** Install the same deterministic browser-only fixtures for standalone visual captures. */
 export async function installBrowserAppFixtures(page: Page, options: {
   telegram?: boolean | TelegramShimOptions;

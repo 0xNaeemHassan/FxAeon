@@ -19,6 +19,7 @@ type HarnessState = {
   wallet: WalletState; version: number; mode: 'auto' | 'deferred'; failNextPrepare: boolean; executeVersion?: number; partialResult: boolean;
   deferRunner: boolean; failRunner: boolean; executionResolvers: Array<() => void>; deferWalletResponse: boolean; walletResolvers: Array<() => void>; lastExecutedRouteVersion?: number;
   prepareCount: number; planCount: number; runnerCount: number; sendCount: number; draftSaveCount: number;
+  feeQuoteCount: number;
   previewRequests: PreviewRequest[]; nextPreviewRequestId: number;
   deferRefresh: boolean; refreshStarted: boolean; completeStarted: boolean; refreshResolvers: Array<() => void>; rerender?: () => void;
   previewDelayMs: number; refreshDelayMs: number; accountRefreshCount: number;
@@ -28,7 +29,7 @@ const initialOptions = (globalThis as typeof globalThis & { __actionReviewHarnes
 const H = (globalThis as typeof globalThis & { __actionReviewHarness?: HarnessState }).__actionReviewHarness ??= {
   wallet: { ready: true, authenticated: true, connectionVersion: 1, address: '0x00000000000000000000000000000000000000aa', chainId: 1 },
   version: 1, mode: initialOptions?.mode ?? 'auto', failNextPrepare: false, executeVersion: undefined, partialResult: false, deferRunner: false, failRunner: false, executionResolvers: [], deferWalletResponse: false, walletResolvers: [],
-  prepareCount: 0, planCount: 0, runnerCount: 0, sendCount: 0, draftSaveCount: 0,
+  prepareCount: 0, planCount: 0, runnerCount: 0, sendCount: 0, draftSaveCount: 0, feeQuoteCount: 0,
   previewRequests: [], nextPreviewRequestId: 1,
   deferRefresh: false, refreshStarted: false, completeStarted: false, refreshResolvers: [],
   previewDelayMs: initialOptions?.previewDelayMs ?? 0, refreshDelayMs: initialOptions?.refreshDelayMs ?? 0, accountRefreshCount: 0,

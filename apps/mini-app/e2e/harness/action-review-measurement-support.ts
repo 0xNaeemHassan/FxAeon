@@ -58,6 +58,26 @@ const mocks: Record<string, string> = {
     export const removeSignatureRequiredDraft = () => {};
     export const cancelSignatureRequiredDraft = () => {};
   `,
+  '@/lib/fx/gasFeePolicy': `
+    const H = () => globalThis.__actionReviewHarness;
+    const baseFeePerGasWei = 20000000000n;
+    const feeTiers = {
+      standard: { tier: 'standard', gasPriceWei: 25000000000n, maxFeePerGas: 30000000000n, maxPriorityFeePerGas: 5000000000n, source: 'rpc' },
+      fast: { tier: 'fast', gasPriceWei: 30000000000n, maxFeePerGas: 50000000000n, maxPriorityFeePerGas: 10000000000n, source: 'rpc' },
+      rapid: { tier: 'rapid', gasPriceWei: 40000000000n, maxFeePerGas: 60000000000n, maxPriorityFeePerGas: 20000000000n, source: 'rpc' },
+    };
+    export async function fetchGasTierQuotes(chainId) {
+      const now = Date.now();
+      H().feeQuoteCount += 1;
+      return { chainId, fetchedAt: now, validUntil: now + 300000, source: 'rpc', baseFeePerGasWei, tiers: feeTiers };
+    }
+    export function selectedGasTierQuote(snapshot, tier) { return { ...snapshot.tiers[tier], validUntil: snapshot.validUntil }; }
+    export function formatGasTierQuote(quote) {
+      const label = quote.tier.charAt(0).toUpperCase() + quote.tier.slice(1);
+      const rate = Number(quote.gasPriceWei) / 1000000000;
+      return label + ' · ' + rate + ' Gwei';
+    }
+  `,
   '@/lib/wallet': `
     export function usePrivyWallet() {
       const h = globalThis.__actionReviewHarness;

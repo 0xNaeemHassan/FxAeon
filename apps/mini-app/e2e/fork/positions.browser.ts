@@ -94,6 +94,23 @@ async function rpc<T = unknown>(method: string, params: unknown[] = []): Promise
   return body.result;
 }
 
+type ForkFeeHistory = { baseFeePerGas: string[]; reward: string[][] };
+
+function expectedForkGasFee(history: ForkFeeHistory, tier: 'fast' | 'rapid'): { gasPriceWei: bigint; maxFeePerGas: bigint; maxPriorityFeePerGas: bigint } {
+  assert.ok(Array.isArray(history.baseFeePerGas) && history.baseFeePerGas.length === 6,
+    'fork feeHistory must return five base-fee intervals and the next-block estimate');
+  assert.ok(Array.isArray(history.reward) && history.reward.length === 5,
+    'fork feeHistory must return five reward samples');
+  const base = BigInt(history.baseFeePerGas[history.baseFeePerGas.length - 2]!);
+  const priorityIndex = tier === 'fast' ? 1 : 2;
+  const tips = history.reward.map((row) => {
+    assert.ok(Array.isArray(row) && row.length === 3, 'fork feeHistory reward rows must have three percentiles');
+    return BigInt(row[priorityIndex]!);
+  }).sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
+  const tip = tips[2]!;
+  return { gasPriceWei: base + tip, maxFeePerGas: base * 2n + tip, maxPriorityFeePerGas: tip };
+}
+
 function hexQuantity(value: bigint): Hex {
   return `0x${value.toString(16)}` as Hex;
 }
@@ -159,8 +176,12 @@ async function runProof(captureStage: string) {
   let page: Page | undefined;
   const miningTasks: Promise<unknown>[] = [];
   const miningErrors: string[] = [];
-  const submitted: Array<{ hash: Hex; to: string; data: string; value?: string }> = [];
+  const submitted: Array<{
+    hash: Hex; to: string; data: string; value?: string;
+    maxFeePerGas?: string | bigint; maxPriorityFeePerGas?: string | bigint;
+  }> = [];
   const heldReceipts = new Map<string, ReturnType<typeof receiptHold>>();
+  let latestFeeHistory: ForkFeeHistory | undefined;
   const submittedExplorerHashes = new Set<string>();
   const candidates: Array<(typeof scenarios)[number] & { positionId: number }> = [];
   const delayedDiscoveries = new Map<string, number>();
@@ -306,11 +327,15 @@ async function runProof(captureStage: string) {
       }
       assert.equal(request.method, 'eth_sendTransaction', 'unexpected wallet method');
       assert.equal(selectedWallet, wallet, 'read-only alternate session must never send');
-      const tx = request.params?.[0] as { from: string; to: string; data?: string; value?: string };
+      const tx = request.params?.[0] as {
+        from: string; to: string; data?: string; value?: string;
+        maxFeePerGas?: string | bigint; maxPriorityFeePerGas?: string | bigint;
+      };
       assert.equal(tx.from.toLowerCase(), wallet.toLowerCase());
       const hash = await rpc<Hex>('eth_sendTransaction', [tx]);
       heldReceipts.set(hash.toLowerCase(), receiptHold());
-      submitted.push({ hash, to: tx.to, data: tx.data ?? '0x', value: tx.value });
+      submitted.push({ hash, to: tx.to, data: tx.data ?? '0x', value: tx.value,
+        maxFeePerGas: tx.maxFeePerGas, maxPriorityFeePerGas: tx.maxPriorityFeePerGas });
       // Mine the runner's post-receipt boundary without continuously advancing
       // fork time while slow route simulation/quoting is in progress.
       miningTasks.push(new Promise(resolveMine => setTimeout(resolveMine, 750))
@@ -347,6 +372,27 @@ async function runProof(captureStage: string) {
         const hold = hash ? heldReceipts.get(hash) : undefined;
         return hash && hold && !hold.released ? [{ hash, hold, id: request.id }] : [];
       });
+      if (!held.length && requests.some(request => request.method === 'eth_feeHistory')) {
+        const response = await route.fetch({ maxRedirects: 0, timeout: 120_000 });
+        assert.ok(response.ok(), 'feeHistory used by the browser must come from the localhost fork');
+        const payload = JSON.parse((await response.body()).toString('utf8')) as
+          | { id: number; result?: { baseFeePerGas?: unknown; reward?: unknown } }
+          | Array<{ id: number; result?: { baseFeePerGas?: unknown; reward?: unknown } }>;
+        const responses = Array.isArray(payload) ? payload : [payload];
+        for (const request of requests.filter(candidate => candidate.method === 'eth_feeHistory')) {
+          const result = responses.find(candidate => candidate.id === request.id)?.result;
+          if (Array.isArray(result?.baseFeePerGas) && Array.isArray(result.reward)
+            && result.baseFeePerGas.every(value => typeof value === 'string')
+            && result.reward.every(row => Array.isArray(row) && row.every(value => typeof value === 'string'))) {
+            latestFeeHistory = {
+              baseFeePerGas: result.baseFeePerGas as string[],
+              reward: result.reward as string[][],
+            };
+          }
+        }
+        await route.fulfill({ response });
+        return;
+      }
       if (!held.length) return route.continue();
       // Fetch the actual fork receipt first, then withhold only its delivery
       // to the browser. All receipt fields and the response body stay intact.
@@ -601,10 +647,14 @@ async function runProof(captureStage: string) {
       options: {
         beforeSigning?: (reviewed: ReviewedTransaction[]) => Promise<void>;
         probeQuoteExpiry?: boolean;
+        expectedGasTier?: 'Fast' | 'Rapid';
+        changeGasTierToRapid?: boolean;
       } = {},
     ): Promise<{ signedBefore: number; transactionCount: number }> => {
       const signedBefore = submitted.length;
       let fakeClockInstalled = false;
+      let expectedGasTier = options.expectedGasTier?.toLowerCase() as 'fast' | 'rapid' | undefined;
+      let expectedFee: { maxFeePerGas: bigint; maxPriorityFeePerGas: bigint } | undefined;
       try {
       await activePage.getByRole('button', { name: buttonName, exact: true }).click();
       const actionButton = activePage.getByRole('button', { name: /^Confirm (?:in wallet|\d+ transactions)$/ });
@@ -631,13 +681,52 @@ async function runProof(captureStage: string) {
       await capturePreconfirmReview(screenshotPrefix, actionButton);
       await activePage.screenshot({ path: resolve(artifactRoot, `${screenshotPrefix}-review.png`), fullPage: true });
       const initialReviewedTransactions = await readReviewedTransactions();
+      if (options.expectedGasTier) {
+        await expect(reviewedFactRow('Gas tier')).toContainText(new RegExp(`${options.expectedGasTier} · [\\d.]+ Gwei`));
+        await expect(reviewedFactRow('Gas fee')).toContainText(/max/i);
+      }
       await options.beforeSigning?.(initialReviewedTransactions);
+      if (options.changeGasTierToRapid) {
+        assert.equal(options.expectedGasTier, 'Fast', 'the tier-change probe must begin from a Fast review');
+        const oldTierValue = await reviewedFactRow('Gas tier').innerText();
+        await activePage.evaluate(() => {
+          const key = 'fxaeon.settings.v1';
+          const current = JSON.parse(window.localStorage.getItem(key) || '{}') as { slippageBps?: number; [key: string]: unknown };
+          const next = { ...current, gasTier: 'rapid' };
+          window.localStorage.setItem(key, JSON.stringify(next));
+          window.dispatchEvent(new CustomEvent('fxaeon:settings-updated', {
+            detail: { slippageBps: current.slippageBps ?? 100, gasTier: 'rapid' },
+          }));
+        });
+        await expect(actionButton, 'changing the saved gas tier must invalidate the prepared review').toHaveCount(0);
+        const refreshTier = activePage.getByRole('button', { name: 'Review updated quote', exact: true });
+        await expect(refreshTier, 'a changed gas tier must require explicit updated review').toBeVisible();
+        await expect(activePage.locator('.reviewInlineContent [role="alert"]')).toContainText('Network fee preference changed');
+        assert.equal(submitted.length, signedBefore, 'gas-tier invalidation must not request a signature');
+        await refreshTier.click();
+        await expect(actionButton, 'the updated review must be rebuilt before signing').toBeVisible({ timeout: 180_000 });
+        await expect(reviewedFactRow('Gas tier')).toContainText(/Rapid · [\d.]+ Gwei/);
+        await expect(reviewedFactRow('Gas fee')).toContainText(/max/i);
+        const updatedConsequences = activePage.locator('[aria-label="Updated transaction consequences"]');
+        await expect(updatedConsequences).toContainText('Gas tier');
+        await expect(updatedConsequences).toContainText(oldTierValue.replace(/^Gas tier\s*/, '').trim());
+        await expect(updatedConsequences).toContainText(/Rapid · [\d.]+ Gwei/);
+        assert.equal(submitted.length, signedBefore, 're-reviewing the changed gas tier must remain read-only');
+        expectedGasTier = 'rapid';
+      }
       let firstSignatureObserved = false;
       let reviewedTransactions: ReviewedTransaction[] = [];
       for (let attempt = 0; attempt < 3 && !firstSignatureObserved; attempt += 1) {
         const refresh = activePage.getByRole('button', { name: 'Review updated quote', exact: true });
         if (await refresh.isVisible()) await refresh.click();
         await expect(actionButton).toBeVisible({ timeout: 180_000 });
+        if (expectedGasTier) {
+          assert.ok(latestFeeHistory, 'browser review must use a captured localhost feeHistory snapshot');
+          expectedFee = expectedForkGasFee(latestFeeHistory, expectedGasTier);
+          const tierLabel = expectedGasTier === 'fast' ? 'Fast' : 'Rapid';
+          const gasRate = formatUnits(expectedFee.gasPriceWei, 9).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
+          await expect(reviewedFactRow('Gas tier')).toContainText(`${tierLabel} · ${gasRate} Gwei`);
+        }
         reviewedTransactions = await readReviewedTransactions();
         assert.equal(submitted.length, signedBefore, 'read-only action details must never request a signature');
         await actionButton.click();
@@ -677,6 +766,12 @@ async function runProof(captureStage: string) {
         assert.ok(reviewedTransaction, `broadcast ${transactionIndex + 1} has no reviewed transaction`);
         assert.equal(tx.to.toLowerCase(), reviewedTransaction.contract.toLowerCase(), `broadcast ${transactionIndex + 1} target differs from action details`);
         assert.equal(tx.data.toLowerCase(), reviewedTransaction.calldata.toLowerCase(), `broadcast ${transactionIndex + 1} calldata differs from action details`);
+        if (expectedFee) {
+          assert.notEqual(tx.maxFeePerGas, undefined, 'selected gas tier must set an EIP-1559 fee cap on the wallet request');
+          assert.notEqual(tx.maxPriorityFeePerGas, undefined, 'selected gas tier must set an EIP-1559 priority fee on the wallet request');
+          assert.equal(BigInt(tx.maxFeePerGas!), expectedFee.maxFeePerGas, 'wallet fee cap must match the selected fork fee tier');
+          assert.equal(BigInt(tx.maxPriorityFeePerGas!), expectedFee.maxPriorityFeePerGas, 'wallet priority fee must match the selected fork fee tier');
+        }
         const hold = heldReceipts.get(tx.hash.toLowerCase());
         assert.ok(hold, 'each actual broadcast must be held before browser receipt completion');
         await expect.poll(() => proofValue(hold.intercepted)).toBeGreaterThan(0);
@@ -841,6 +936,19 @@ async function runProof(captureStage: string) {
       console.log(`Responsive live-balance shortcuts verified at ${viewport.width}x${viewport.height}`);
     }
     await page.setViewportSize({ width: 393, height: 852 });
+    // Set both preferences through Settings before opening a real fork-backed
+    // review. The same-tab preference event below must invalidate that review
+    // without silently retaining or signing with the older fee tier.
+    await page.goto(`${baseUrl}/settings`);
+    const settingsSlippage = page.getByRole('radiogroup').filter({ has: page.getByRole('radio', { name: '0.1%', exact: true }) });
+    await settingsSlippage.getByRole('radio', { name: '1%', exact: true }).click();
+    const settingsGasTier = page.getByRole('radiogroup', { name: 'Gas speed', exact: true });
+    const settingsFast = settingsGasTier.getByRole('radio', { name: /^Fast\b/ });
+    await expect(settingsFast).toContainText(/[\d.]+/);
+    await settingsFast.click();
+    await page.getByRole('button', { name: 'Save preferences', exact: true }).click();
+    await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+    assert.equal(submitted.length, 0, 'saving transaction preferences must not request a signature');
     for (const scenario of scenarios) {
       console.log(`Browser preparing ${scenario.market} ${scenario.side}`);
       const positionId = Number(await client.readContract({ address: scenario.pool, abi: poolAbi, functionName: 'getNextPositionId' }));
@@ -871,7 +979,11 @@ async function runProof(captureStage: string) {
       const { signedBefore: tradeSignedBefore, transactionCount } = await driveDirectAction(
         actionButtonName,
         `${scenario.market}-${scenario.side}`,
-        { probeQuoteExpiry: scenario.market === 'ETH' && scenario.side === 'long' },
+        {
+          probeQuoteExpiry: scenario.market === 'ETH' && scenario.side === 'long',
+          expectedGasTier: scenario.market === 'ETH' && scenario.side === 'long' ? 'Fast' : 'Rapid',
+          changeGasTierToRapid: scenario.market === 'ETH' && scenario.side === 'long',
+        },
       );
       if (scenario.market === 'ETH' && scenario.side === 'long') quoteExpiryBlockedUntilRefresh = true;
       assert.equal(tradeSignedBefore, signedBefore);
