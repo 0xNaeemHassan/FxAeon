@@ -508,6 +508,10 @@ async function runProof(captureStage: string) {
       await advanced.locator('summary').click();
       return reviewed;
     };
+    const reviewedFactRow = (label: string): Locator => activePage
+      .locator('.reviewInlineContent')
+      .getByText(label, { exact: true })
+      .locator('..');
     const capturePreconfirmReview = async (action: string, actionButton: Locator): Promise<void> => {
       const viewportBefore = activePage.viewportSize();
       if (!viewportBefore) throw new Error('review evidence requires a finite browser viewport');
@@ -1253,11 +1257,10 @@ async function runProof(captureStage: string) {
           assert.equal(tokenInAddress.toLowerCase(), usdc.toLowerCase(), 'reviewed deposit calldata must bind USDC as the input');
           assert.equal(receiver.toLowerCase(), wallet.toLowerCase(), 'reviewed deposit calldata must bind the connected wallet recipient');
           assert.equal(minShares > 0n, true, 'reviewed deposit calldata must retain a positive minimum fxSAVE share output');
-          const consequences = activePage.locator('.reviewInlineContent [aria-label="Action consequences"]');
-          await expect(consequences).toContainText('Deposit');
-          await expect(consequences).toContainText(/1,?000(?:\.0+)? USDC/i);
-          await expect(consequences).toContainText('Recipient');
-          await expect(consequences).toContainText('Minimum fxSAVE received');
+          const deposit = reviewedFactRow('Deposit');
+          await expect(deposit).toContainText(/1,?000(?:\.0+)? USDC/i);
+          await expect(reviewedFactRow('Recipient')).toBeVisible();
+          await expect(reviewedFactRow('Minimum fxSAVE received')).toBeVisible();
         },
       },
     );
@@ -1289,12 +1292,10 @@ async function runProof(captureStage: string) {
       assert.equal(amount, withdrawalShares, 'instant withdrawal calldata must bind the actual selected fxSAVE shares');
       assert.equal(receiver.toLowerCase(), wallet.toLowerCase(), 'instant withdrawal calldata must bind the connected wallet recipient');
       assert.ok(fxusdOutput.minOut > 0n && usdcOutput.minOut > 0n, 'instant withdrawal calldata must retain positive minimums for both output legs');
-      const consequences = page.locator('.reviewInlineContent [aria-label="Action consequences"]');
-      await expect(consequences).toContainText('fxSAVE');
-      await expect(consequences).toContainText('Receive');
-      await expect(consequences).toContainText('Mode');
-      await expect(consequences).toContainText('Instant');
-      await expect(consequences).toContainText(/Minimum received.*USDC/i);
+      await expect(reviewedFactRow('fxSAVE')).toBeVisible();
+      await expect(reviewedFactRow('Receive')).toBeVisible();
+      await expect(reviewedFactRow('Mode')).toContainText('Instant');
+      await expect(reviewedFactRow('Minimum received (USDC leg)')).toBeVisible();
     });
     assert.equal(submitted.length, withdrawalReviewSignatureBaseline, 'instant withdrawal review must not request a signature');
 
@@ -1313,11 +1314,9 @@ async function runProof(captureStage: string) {
       const decoded = decodeFunctionData({ abi: queuedRedeemAbi, data: action.calldata as Hex });
       assert.equal(decoded.functionName, 'requestRedeem', 'after-cooldown review must use the queued redemption method');
       assert.equal(decoded.args[0], withdrawalShares, 'queued withdrawal calldata must bind the actual selected fxSAVE shares');
-      const consequences = page.locator('.reviewInlineContent [aria-label="Action consequences"]');
-      await expect(consequences).toContainText('fxSAVE');
-      await expect(consequences).toContainText('Receive');
-      await expect(consequences).toContainText('Mode');
-      await expect(consequences).toContainText('Queued');
+      await expect(reviewedFactRow('fxSAVE')).toBeVisible();
+      await expect(reviewedFactRow('Receive')).toBeVisible();
+      await expect(reviewedFactRow('Mode')).toContainText('Queued');
     });
     assert.equal(submitted.length, withdrawalReviewSignatureBaseline, 'after-cooldown withdrawal review must not request a signature');
 

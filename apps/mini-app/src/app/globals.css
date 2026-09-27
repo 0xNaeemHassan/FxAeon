@@ -1372,9 +1372,14 @@ select.field-control option {
   animation: missing-value-shimmer 1.35s ease-in-out infinite;
 }
 
-.missing-value-unavailable .missing-value-bar {
-  background: color-mix(in srgb, var(--mut) 28%, transparent);
-  animation: none;
+.missing-value-unavailable {
+  color: var(--mut);
+}
+
+.missing-value-icon {
+  width: .9em;
+  height: .9em;
+  flex: 0 0 auto;
 }
 
 @keyframes missing-value-shimmer {

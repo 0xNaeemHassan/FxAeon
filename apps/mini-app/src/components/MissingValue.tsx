@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { CircleAlert } from 'lucide-react';
 
 export type MissingValueWidth = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 export type MissingValueStatus = 'loading' | 'unavailable';
@@ -31,7 +32,9 @@ export function MissingValue({
       title={unavailable ? accessibleLabel : undefined}
       className={`missing-value missing-value-${width}${unavailable ? ' missing-value-unavailable' : ''} ${className}`.trim()}
     >
-      <span className="missing-value-bar" aria-hidden="true" />
+      {unavailable
+        ? <CircleAlert className="missing-value-icon" aria-hidden="true" />
+        : <span className="missing-value-bar" aria-hidden="true" />}
     </span>
   );
 }
