@@ -23,7 +23,10 @@ const redactedManifestPath = resolveRepoPath(
   'FX_SCREENSHOT_REDACTED_MANIFEST',
 );
 const baseUrl = `http://127.0.0.1:${serverPort}`;
-const expectedAssets = ['fxaeon-portfolio-positions.png', 'fxaeon-positions.png', 'fxaeon-trade-connected.png', 'fxaeon-positions-mobile.png'];
+const expectedAssets = [
+  'fxaeon-portfolio-positions.png', 'fxaeon-positions.png', 'fxaeon-trade-connected.png', 'fxaeon-positions-mobile.png',
+  'fxaeon-portfolio-populated-mobile.png', 'fxaeon-wallet-profile-populated-mobile.png', 'fxaeon-wallet-asset-detail-mobile.png',
+];
 if (Number(new URL(rpcUrl).port) === serverPort) throw new Error('Anvil and screenshot server must use different ports');
 const temporaryDirectory = mkdtempSync(join(tmpdir(), 'fxaeon-position-screenshot-'));
 const privateManifestPath = join(temporaryDirectory, 'fixture.json');
@@ -451,8 +454,8 @@ try {
   assertNotCancelled();
   assertCapturedAssets();
   const report = JSON.parse(readFileSync(captureReportPath, 'utf8'));
-  if (report.profile !== 'positions' || report.captures?.length !== 4 || report.discoveryErrors?.length !== 0
-    || new Set(report.captures.map((capture) => capture.file)).size !== 4
+  if (report.profile !== 'positions' || report.captures?.length !== expectedAssets.length || report.discoveryErrors?.length !== 0
+    || new Set(report.captures.map((capture) => capture.file)).size !== expectedAssets.length
     || report.captures.some((capture) => !expectedAssets.includes(capture.file)
       || createHash('sha256').update(readFileSync(join(stagedAssetsPath, capture.file))).digest('hex') !== capture.sha256
       || readFileSync(join(stagedAssetsPath, capture.file)).readUInt32BE(16) !== capture.viewport?.width

@@ -60,6 +60,13 @@
   gap: 8px;
 }
 
+.positionOutcome { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 11px; line-height: 1.4; }
+.positionOutcome > p { margin: 0 0 4px; color: var(--mut); font-weight: 600; }
+.positionOutcome dl { display: grid; gap: 4px; margin: 0; }
+.positionOutcome dl > div { display: grid; grid-template-columns: minmax(52px, .45fr) minmax(0, 1.55fr); gap: 8px; }
+.positionOutcome dt { color: var(--mut); }
+.positionOutcome dd { margin: 0; min-width: 0; overflow-wrap: anywhere; text-align: right; font-variant-numeric: tabular-nums; }
+
 @media (max-width: 380px) {
   .quoteMetrics { gap: 3px; padding: 5px; }
   .quoteMetric { padding-inline: 4px; }

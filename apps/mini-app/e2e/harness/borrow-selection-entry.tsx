@@ -8,6 +8,7 @@ type HarnessState = {
   plannerCount: number;
   walletRequestCount: number;
   reviewAttemptCount: number;
+  exerciseReviewStage: boolean;
   rerender?: () => void;
 };
 
@@ -27,7 +28,7 @@ const initialState: HarnessState = {
     refresh: async () => ({ positions: [position], failedGroups: [], successfulGroups: [], status: 'ready', newPositions: [] }),
     trackConfirmedPosition: async () => true,
   },
-  plannerCount: 0, walletRequestCount: 0, reviewAttemptCount: 0,
+  plannerCount: 0, walletRequestCount: 0, reviewAttemptCount: 0, exerciseReviewStage: false,
 };
 
 function Harness() {

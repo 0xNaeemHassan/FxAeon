@@ -68,11 +68,11 @@ export function ActionConsequenceSummary({ facts }: { facts: readonly ReviewFact
 export function PositionOutcomeSummary({ facts }: { facts: readonly { label: string; before: string; after: string }[] }) {
   if (!facts.length) return null;
   return (
-    <section className="mt-3 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2.5" aria-label="Current and expected position values">
-      <p className="text-[11px] font-semibold text-mut">Position outcome</p>
-      {facts.map((fact) => <div key={fact.label} className="mt-1 grid grid-cols-[minmax(80px,.7fr)_minmax(0,1.3fr)] gap-x-3 text-[11px]">
-        <span className="text-mut">{fact.label}</span><span>{fact.before} → {fact.after}</span>
-      </div>)}
+    <section className={presentationStyles.positionOutcome} aria-label="Current and expected position values">
+      <p>Position outcome</p>
+      <dl>{facts.map((fact) => <div key={fact.label}>
+        <dt>{fact.label}</dt><dd>{fact.before} → {fact.after}</dd>
+      </div>)}</dl>
     </section>
   );
 }

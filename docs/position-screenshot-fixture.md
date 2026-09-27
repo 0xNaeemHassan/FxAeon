@@ -1,9 +1,11 @@
 # Position screenshot fixture
 
 The populated position images show four ETH/BTC long/short positions on a
-disposable Ethereum fork at block `25965421`. The browser proof opens and closes
-the positions, checks ownership and nonzero accounting, then restores the fork
-snapshot. It does not use production funds or a native wallet.
+disposable Ethereum fork. The pinned block and proof assertions are recorded
+in the [position screenshot manifest](fixtures/position-screenshot-manifest.json)
+and may change when the fixture is regenerated. The browser proof opens and
+closes the positions, checks ownership and nonzero accounting, then restores
+the fork snapshot. It does not use production funds or a native wallet.
 
 The current position image set is in [`assets/`](assets/) and its exact IDs,
 hashes, routes, and capture assertions are recorded in

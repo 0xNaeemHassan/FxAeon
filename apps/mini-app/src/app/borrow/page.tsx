@@ -507,7 +507,7 @@ export default function BorrowPage() {
   return <AppShell>
     <ActionWorkspace className={presentation.workspace}>
       <PageHeading title="Earn" />
-      <ProductNav current="borrow" />
+      {reviewStage === 'input' && <ProductNav current="borrow" />}
       <ConfirmedPositionCards />
       <ProductSurface className={presentation.card} data-testid="borrow-workspace-card">
       {reviewStage === 'input' && <div className={presentation.viewTabs}>

@@ -14,13 +14,13 @@ const mocks: Record<string, string> = {
   '@/components/ui': `import React from 'react'; export const AppShell = ({children}) => <main>{children}</main>;`,
   '@/components/TokenIcon': `import React from 'react'; export default () => <span />;`,
   '@/components/ConnectWalletButton': `import React from 'react'; export default ({children}) => <button>{children}</button>;`,
-  '@/components/ProductUI': `import React from 'react'; export const MetricRows = ({rows}) => <div>{rows.map((row) => <div key={row.label}>{row.label}: {row.value}</div>)}</div>; export const PageHeading = ({title}) => <h1>{title}</h1>; export const ProductNav = () => null; export const ProductSurface = ({children, ...props}) => <section {...props}>{children}</section>; export const StatusNotice = ({title, children}) => <div role="status">{title} {children}</div>;`,
+  '@/components/ProductUI': `import React from 'react'; export const MetricRows = ({rows}) => <div>{rows.map((row) => <div key={row.label}>{row.label}: {row.value}</div>)}</div>; export const PageHeading = ({title}) => <h1>{title}</h1>; export const ProductNav = ({current}) => <nav aria-label="Borrow product navigation"><button type="button" aria-current={current === 'save' ? 'page' : undefined}>fxSAVE</button><button type="button" aria-current={current === 'borrow' ? 'page' : undefined}>Borrow fxUSD</button></nav>; export const ProductSurface = ({children, ...props}) => <section {...props}>{children}</section>; export const StatusNotice = ({title, children}) => <div role="status">{title} {children}</div>;`,
   '@/lib/displayPrices': `export const freshDisplayPrices = () => ({});`,
   '@/lib/fx/nativeMax': `export const calculateNativeMax = async () => 0n;`,
   '@/lib/fx': `export const estimatePlannedRouteCost = async () => ({}); export async function planDepositAndMint(input){ globalThis.__borrowHarness.lastPlan = input; globalThis.__borrowHarness.plannerCount += 1; return {}; } export async function planRepayAndWithdraw(){ globalThis.__borrowHarness.plannerCount += 1; return {}; } export const restoreSignatureRequiredDraftFromSearch = () => undefined; export const signatureDraftIdFromSearch = () => undefined; export const assertConfiguredPublicClientChain = () => {}; export const assertPublicClientChain = () => {}; export const getEthereumClient = () => ({}); export const getFxReadFacade = () => ({});`,
   '@/lib/fx/readFacade': `export const FX_READ_DEADLINE_MS = 1; export const withReadDeadline = (promise) => promise;`,
   '@/lib/fx/policy': `export const positionPoolAddress = () => '0x0000000000000000000000000000000000000001';`,
-  '@/components/ActionReview': `import React from 'react'; import { usePrivyWallet } from '@/lib/wallet'; export const ActionReview = ({planBuilder, label, editor}) => { const wallet = usePrivyWallet(); return <>{editor}<button type="button" onClick={async () => { globalThis.__borrowHarness.reviewAttemptCount += 1; if (planBuilder) { const route = await planBuilder(); if (route) await wallet.sendTransaction({}); } }}>{label}</button></>; };`,
+  '@/components/ActionReview': `import React from 'react'; import { usePrivyWallet } from '@/lib/wallet'; export const ActionReview = ({planBuilder, label, editor, operationLabel, onStageChange}) => { const wallet = usePrivyWallet(); const [reviewing,setReviewing] = React.useState(false); if (reviewing) return <section aria-label="Existing position borrow review"><h2>{operationLabel}</h2><p>ETH long · existing position #17</p><button type="button" onClick={() => { setReviewing(false); onStageChange?.('input'); }}>Edit</button><button type="button">Confirm borrowing</button></section>; return <>{editor}<button type="button" onClick={async () => { globalThis.__borrowHarness.reviewAttemptCount += 1; if (globalThis.__borrowHarness.exerciseReviewStage && label === 'Review borrowing') { setReviewing(true); onStageChange?.('review'); return; } if (planBuilder) { const route = await planBuilder(); if (route) await wallet.sendTransaction({}); } }}>{label}</button></>; };`,
   '@/components/ProtocolPositionProvider': `export const useProtocolPositions = () => globalThis.__borrowHarness.shared;`,
   '@/components/ProtocolPositionCard': `import React from 'react'; export const ProtocolPositionNotice = ({status}) => status === 'unavailable' ? <div role="status">Positions are temporarily unavailable</div> : null;`,
   '@/components/ConfirmedPositionCards': `export const ConfirmedPositionCards = () => null;`,
@@ -68,6 +68,7 @@ type BorrowHarnessControl = {
   plannerCount: number;
   walletRequestCount: number;
   reviewAttemptCount: number;
+  exerciseReviewStage: boolean;
   rerender?: () => void;
 };
 
@@ -190,4 +191,31 @@ test('one collateral picker plans both ETH and BTC with borrowing above collater
     expect(plan.market).toBe(market);
     expect(plan.depositTokenAddress).toBe(asset === 'WBTC' ? '0x0000000000000000000000000000000000000005' : '0x0000000000000000000000000000000000000001');
   }
+});
+
+test('existing ETH-long Borrow review hides product navigation and restores it on Edit', async ({ page }) => {
+  await mount(page);
+  await page.setViewportSize({ width: 393, height: 852 });
+  const productNav = page.getByRole('navigation', { name: 'Borrow product navigation' });
+  await page.getByRole('button', { name: 'Your positions' }).click();
+  await expect(page.getByText('ETH position #17')).toBeVisible();
+  await expect(productNav).toBeVisible();
+  await page.getByRole('button', { name: 'Borrow more' }).click();
+  await page.getByLabel('Additional fxUSD to borrow').fill('1');
+  await page.evaluate(() => {
+    const harness = (window as Window & { __borrowHarness: BorrowHarnessControl }).__borrowHarness;
+    harness.exerciseReviewStage = true;
+  });
+
+  await page.getByRole('button', { name: 'Review borrowing' }).click();
+  const review = page.getByRole('region', { name: 'Existing position borrow review' });
+  await expect(review).toBeVisible();
+  await expect(review).toContainText('Update collateral position');
+  await expect(review).toContainText('ETH long · existing position #17');
+  await expect(productNav).toHaveCount(0);
+  await expect(review.getByRole('button', { name: 'Confirm borrowing', exact: true })).toBeVisible();
+
+  await review.getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(productNav).toBeVisible();
+  await expect(page.getByLabel('Additional fxUSD to borrow')).toHaveValue('1');
 });

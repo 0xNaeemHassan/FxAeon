@@ -436,7 +436,7 @@ export default function EarnPage() {
     <AppShell>
       <ActionWorkspace className={presentation.workspace} density="compact">
         <PageHeading title="Earn" />
-        <ProductNav current="save" />
+        {reviewStage === 'input' && <ProductNav current="save" />}
         <ProductSurface className={presentation.panel} data-flow-stage={reviewStage}>
           <ActionReview
             key={reviewRevision}

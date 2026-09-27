@@ -40,10 +40,9 @@ submitted.
 
 Populated position screenshots are separate. Their
 [`position-screenshot-manifest.json`](fixtures/position-screenshot-manifest.json)
-records browser-fork provenance at Ethereum block `25965421`, four verified
-ETH/BTC long/short positions, and restored snapshot state. Displayed prices and
-charts are illustrative and visibly labelled. The landing's desktop and mobile
-portfolio frames are exact copies of `assets/fxaeon-positions.png` and
-`assets/fxaeon-positions-mobile.png`, respectively; the manifest records their
-hashes. These screenshots document a test fixture, not production balances or
-market-price evidence.
+is authoritative for the browser-fork provenance, pinned block, verified
+ETH/BTC long/short positions, captures, and restored snapshot state. Displayed
+prices and charts are illustrative and visibly labelled. The landing hero uses
+an HTML/CSS portfolio preview with illustrative content; it does not embed the
+populated position screenshots. Those screenshots document a test fixture,
+not production balances or market-price evidence.
