@@ -301,14 +301,11 @@ summary:focus-visible {
   color: var(--text);
 }
 
-::-webkit-scrollbar {
-  width: 5px;
+/* Keep scrolling and focus navigation; omit scrollbar chrome in the app. */
+:where(html, body, .app-shell, .app-shell *, [role='dialog'], [role='dialog'] *) {
+  scrollbar-width: none;
 }
-
-::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.15);
-}
+::-webkit-scrollbar { display: none; width: 0; height: 0; }
 
 .app-shell {
   position: relative;
@@ -353,21 +350,6 @@ summary:focus-visible {
   overscroll-behavior: contain;
   padding-bottom: var(--content-bottom-clearance);
   scroll-padding-bottom: var(--content-bottom-clearance);
-}
-
-/* App content stays scrollable for wheel, touch, keyboard, and focus scrolling;
-   desktop scrollbar chrome is visual noise at the edge. */
-@media (min-width: 840px) {
-  .app-content-tabs {
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-
-  .app-content-tabs::-webkit-scrollbar {
-    display: none;
-    width: 0;
-    height: 0;
-  }
 }
 
 .app-topbar {

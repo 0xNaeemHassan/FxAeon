@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { ExternalLink, RefreshCw } from 'lucide-react';
 import type { Address } from 'viem';
 import { Card, SectionTitle } from '@/components/ui';
@@ -130,6 +131,8 @@ export default function ProtocolPositionHistory({ walletAddress, compact = false
   return (
     <section aria-labelledby={compact ? 'recent-protocol-activity-title' : 'protocol-position-history-title'}>
       <SectionTitle right={(
+        <div className="flex items-center gap-2">
+        {compact && <Link href="/history" aria-label="View all history" className="inline-flex min-h-11 items-center text-[12px] font-semibold text-mint">View all</Link>}
         <button
           type="button"
           aria-label="Refresh activity"
@@ -139,9 +142,10 @@ export default function ProtocolPositionHistory({ walletAddress, compact = false
         >
           <RefreshCw className={`h-3.5 w-3.5 ${loading || loadingMore ? 'animate-spin' : ''}`} aria-hidden="true" />
         </button>
+        </div>
       )}>
         <span id={compact ? 'recent-protocol-activity-title' : 'protocol-position-history-title'}>
-          {compact ? 'Recent history' : 'Position activity'}
+          {compact ? 'History' : 'Position activity'}
         </span>
       </SectionTitle>
       <Card className="p-3.5">
@@ -187,10 +191,10 @@ export default function ProtocolPositionHistory({ walletAddress, compact = false
             ) : (
               <p className="px-1 py-2 text-[11.5px] leading-relaxed text-mut">No position activity yet.</p>
             )}
-            <details className="mt-2 border-t border-[var(--line)] px-1 pt-1">
+            {!compact && <details className="mt-2 border-t border-[var(--line)] px-1 pt-1">
               <summary className="flex min-h-11 cursor-pointer items-center text-[10.5px] font-semibold text-mut">History details</summary>
               <p className="pb-2 text-[10px] leading-relaxed text-mut">Indexed position events are matched to successful Ethereum router receipts. Transfers out may not retain prior-wallet attribution in every market index. Other transaction types appear when saved in this browser.</p>
-            </details>
+            </details>}
             {hasMore && !compact && (
               <button
                 type="button"

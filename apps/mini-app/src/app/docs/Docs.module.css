@@ -147,16 +147,7 @@
   gap: 2px;
   overflow-y: auto;
   overscroll-behavior-y: contain;
-  scrollbar-gutter: stable;
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--mut-2) 70%, transparent) transparent;
 }
-.navLinks::-webkit-scrollbar { width: 6px; }
-.navLinks::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--mut-2) 70%, transparent);
-}
-.navLinks::-webkit-scrollbar-track { background: transparent; }
 .emptySearch { margin: 4px 10px 0; color: var(--mut); font-size: 11px; line-height: 1.45; }
 
 .navLink:hover,

@@ -10,14 +10,13 @@
 .handle { display: none; }
 .iconButton { display: inline-grid; flex: 0 0 auto; min-width: 44px; min-height: 44px; place-items: center; border-radius: 50%; color: var(--mut); }
 .iconButton:hover { color: var(--mint); background: var(--mint-dim); }
-.body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 8px 16px 16px; scrollbar-width: thin; }
+.body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 8px 16px 16px; }
 .valueTop { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--mut); font-size: 13px; }
 .valueTop > div { display: flex; align-items: center; gap: 6px; }
 .valueTop .iconButton { margin-right: -6px; }
 .partial { padding: 4px 7px; border-radius: 7px; background: var(--warn-dim); color: var(--warn); font-size: 11px; }
 .total { display: block; margin: 6px 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.valueNote { min-height: 18px; margin: 4px 0 12px; color: var(--mut); font-size: 12px; line-height: 1.5; }
-.actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0; }
+.actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 12px 0 0; }
 .actions > a { display: flex; min-width: 0; min-height: 48px; align-items: center; justify-content: center; gap: 7px; padding: 10px; border: 1px solid color-mix(in srgb, var(--mint) 25%, var(--line)); border-radius: 13px; background: transparent; color: var(--text); font-size: 13px; font-weight: 600; text-align: center; }
 .actions > a:hover { border-color: color-mix(in srgb, var(--mint) 58%, var(--line)); background: var(--mint-dim); }
 .actions .primaryAction { background: var(--mint); color: var(--on-accent); border-color: var(--mint); }

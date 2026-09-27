@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { CheckCircle2, ChevronRight, CircleAlert, Clock3, RefreshCw, XCircle, type LucideIcon } from 'lucide-react';
+import { CheckCircle2, CircleAlert, Clock3, RefreshCw, XCircle, type LucideIcon } from 'lucide-react';
 import type { Address } from 'viem';
 import { Card, SectionTitle } from '@/components/ui';
 import {
@@ -125,9 +125,6 @@ export default function RecentActivityPreview({ walletAddress, attentionOnly = f
       </Card>
       </>}
       <ProtocolPositionHistory walletAddress={walletAddress} compact />
-      <Link href="/history" className="glass-press flex min-h-11 items-center justify-between text-[12px] font-semibold text-mint">
-        Open full history <ChevronRight className="h-4 w-4" aria-hidden="true" />
-      </Link>
     </section>
   );
 }

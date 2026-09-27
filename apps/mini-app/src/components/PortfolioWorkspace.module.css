@@ -8,7 +8,6 @@
 .valueTop button:hover { background: var(--mint-dim); color: var(--mint); }
 .partial { color: var(--warn); border-radius: 7px; padding: 4px 7px; background: var(--warn-dim); font-size: 11px; }
 .valueNumber { min-width: 0; margin: 5px 0; color: var(--text); }
-.valueCaption { color: var(--mut); font-size: 13px; line-height: 1.5; margin: 0 0 8px; }
 .helper { color: var(--mut); font-size: 12px; line-height: 1.65; margin: 12px 0 0; }
 .sectionTitle { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
 .sectionTitle h2 { font-size: 17px; font-weight: 620; letter-spacing: -.02em; margin: 0; }

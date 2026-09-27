@@ -85,9 +85,6 @@ export default function WalletProfile() {
   const valuationTaskState = !walletSnapshotValuation.complete && hasValuedAssets
     ? walletValueIsPartial ? 'partial' : 'unavailable'
     : 'complete';
-  const walletAssetCountLabel = knownWalletValue.assetCount > 0 || walletSnapshotValuation.complete
-    ? `${knownWalletValue.assetCount} ${knownWalletValue.assetCount === 1 ? 'asset' : 'assets'}`
-    : '—';
   const walletValueLoading = loading || walletBalances.status === 'idle' || walletBalances.status === 'loading' || priceSnapshot.status === 'loading';
   const refreshingBalances = walletAssets.isFetching || walletBalances.isFetching;
   const refreshing = manualRefresh.refreshing || refreshingBalances || priceSnapshot.refreshing || positionState.refreshing || claimSnapshot.isFetching;
@@ -179,7 +176,6 @@ export default function WalletProfile() {
               </div></div>
               <strong className={`${presentation.total} ${balancePresentation.value}`}><ValueOrSkeleton value={walletSnapshotValuation.totalUsd === null ? '—' : formatUsd(walletSnapshotValuation.totalUsd)} width="xl"
                 status={walletValueLoading ? 'loading' : 'unavailable'} label={walletValueLoading ? 'Loading wallet value' : 'Wallet value unavailable'} /></strong>
-              <p className={presentation.valueNote}><ValueOrSkeleton value={walletAssetCountLabel} width="sm" status={loading ? 'loading' : 'unavailable'} label="Wallet asset count" /></p>
               <div className={presentation.actions}>
                 <Link href="/qr" className={presentation.primaryAction}><ArrowDownToLine size={18} aria-hidden="true" />Receive</Link>
                 <Link href="/portfolio">View portfolio<ArrowUpRight size={18} aria-hidden="true" /></Link>
