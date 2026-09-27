@@ -2,36 +2,29 @@
 
 ## Latest captured gallery
 
-[`artifacts/refinement/generated/run-20260927T121703Z/`](../artifacts/refinement/generated/run-20260927T121703Z/)
-contains 64 views and 104 PNG frames at 393×852 mobile and 1440×1000 desktop.
-The frames were collectively visually audited, including Docs, Privacy, Login,
-and all state-lab themes/stages. Root also inspected disconnected Earn,
-Portfolio, and wallet states in Official and Light themes, plus three
-fork-backed transaction reviews and their CTA fit.
+[`artifacts/refinement/generated/run-20260927T154147Z/`](../artifacts/refinement/generated/run-20260927T154147Z/)
+contains 66 views and 101 PNG frames at 393×852 mobile and 1440×1000 desktop,
+captured against build `34400ef`. It predates the current gas-tier feature and
+needs a refreshed capture and final screenshot promotion.
 
-This gallery predates the later glyph change. Two focused tests passed for that
-change, but refreshed screenshots and final screenshot promotion remain
-pending. The latest protected browser attempt opened/reloaded all four
-positions and passed Borrow, then failed at Earn because a strict selector
-matched both a visible primary fact and a hidden advanced duplicate. The
-selector now filters to visible rows without weakening the assertion; a full
-retry is pending. See
-[`../release-validation.md`](../release-validation.md).
+Candidate `3663bdc` adds saved Standard, Fast, and Rapid gas choices, invalidates
+an open review when the saved tier changes, and requires explicit review of the
+updated quote. Focused fee-tier tests passed 60/60, and TypeScript and lint
+checks passed; full `pnpm verify` is still running. The protected protocol suite
+last passed 4/4 at fork block `26065969`, but the current fee-tier browser gate
+remains pending.
+The latest browser attempt stopped before signing when simulation was
+unavailable; its retry was stopped during warmup for edits. No browser pass is
+claimed. See [release validation](../release-validation.md).
 
 The gallery uses fixture prices, Goldsky responses, and a test-wallet shim. The
-preview lacks RPC environment values, and the local configured-Privy build
-requires user authentication. These images establish rendered UI only, not
-healthy live balances, transaction submission, or confirmation. No signature
-or chain mutation was performed.
-
-A separate user-authenticated check on local build `4321` completed healthy
-live balance and network reads. Portfolio values remained visible during
-refresh and controls re-enabled when reads finished. There were zero open
-positions; History showed the opening and closed events for the same position.
-This spot-check is not part of the gallery or a release gate. Public evidence
-omits wallet identity, balances, and screenshots.
+Cloudflare preview lacks RPC environment values. Earlier user-authenticated
+local checks confirmed healthy reads and matching opening/closed History
+events; they do not establish transaction submission or current-candidate
+behavior. Public evidence omits private wallet identity, balances, and
+screenshots.
 
 ## Historical references
 
-Earlier galleries and captures are retained as before-state evidence. They do
-not establish the current release gates or production behavior.
+Earlier galleries and captures remain as before-state evidence. They do not
+establish the current release gates or production behavior.
