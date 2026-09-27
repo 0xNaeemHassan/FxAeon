@@ -96,7 +96,11 @@ async function rpc<T = unknown>(method: string, params: unknown[] = []): Promise
 
 type ForkFeeHistory = { baseFeePerGas: string[]; reward: string[][] };
 
-function expectedForkGasFee(history: ForkFeeHistory, tier: 'fast' | 'rapid'): { gasPriceWei: bigint; maxFeePerGas: bigint; maxPriorityFeePerGas: bigint } {
+function expectedForkGasFee(history: ForkFeeHistory, tier: 'fast' | 'rapid'): {
+  gasPriceWei: bigint;
+  maxFeePerGas: bigint;
+  maxPriorityFeePerGas: bigint;
+} {
   assert.ok(Array.isArray(history.baseFeePerGas) && history.baseFeePerGas.length === 6,
     'fork feeHistory must return five base-fee intervals and the next-block estimate');
   assert.ok(Array.isArray(history.reward) && history.reward.length === 5,
