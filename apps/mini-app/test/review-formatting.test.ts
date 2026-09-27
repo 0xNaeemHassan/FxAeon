@@ -235,6 +235,43 @@ test('fxSAVE deposits show independent input-conversion and share minimum units'
   }
 });
 
+test('identity fxSAVE deposits omit only the zero converter no-op and retain the positive share floor', () => {
+  const intent: ReviewedActionIntent = {
+    kind: 'fxsave-deposit', tokenInAddress: FX_TOKENS.USDC.address, amount: 1_000_000n,
+    receiver: WALLET, directBasePool: false,
+  };
+  const planned = route(intent, {
+    economicLimits: [
+      { label: 'fxSAVE deposit conversion minimum output', value: '0' },
+      { label: 'fxSAVE minimum shares', value: '892022464500000000000' },
+    ],
+    conversionPaths: [{ label: 'fxSAVE deposit conversion', fingerprint: `0x${'1'.repeat(64)}` }],
+  });
+  const facts = routeFinancialReviewFacts(planned);
+  assert.deepEqual(facts.map(({ label, value }) => ({ label, value })), [
+    { label: 'Minimum fxSAVE received', value: '892.0224645 fxSAVE' },
+  ]);
+});
+
+test('routed fxSAVE deposit conversion floors, including zero-valued other limits, remain visible', () => {
+  const intent: ReviewedActionIntent = {
+    kind: 'fxsave-deposit', tokenInAddress: FX_TOKENS.USDC.address, amount: 1_000_000n,
+    receiver: WALLET, directBasePool: false,
+  };
+  const planned = route(intent, {
+    economicLimits: [
+      { label: 'fxSAVE deposit conversion minimum output', value: '900000' },
+      { label: 'unrecognized route limit', value: '0' },
+      { label: 'fxSAVE minimum shares', value: '800000000000000000' },
+    ],
+    conversionPaths: [{ label: 'fxSAVE deposit conversion', fingerprint: `0x${'2'.repeat(64)}` }],
+  });
+  const facts = routeFinancialReviewFacts(planned);
+  assert.equal(facts.find((fact) => fact.label === 'Minimum converted deposit')?.value, '0.9 USDC');
+  assert.equal(facts.find((fact) => fact.label === 'Additional limits')?.value, 'See advanced details');
+  assert.equal(facts.find((fact) => fact.label === 'Minimum fxSAVE received')?.value, '0.8 fxSAVE');
+});
+
 test('both instant fxSAVE output legs use the destination token decimals', () => {
   const intent: ReviewedActionIntent = { kind: 'fxsave-withdraw', tokenOutAddress: FX_TOKENS.USDC.address, amount: 1n, receiver: WALLET, directBasePool: false, instant: true };
   const facts = routeFinancialReviewFacts(route(intent, {

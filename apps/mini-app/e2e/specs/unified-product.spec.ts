@@ -83,15 +83,17 @@ test.describe('unified product presentation', () => {
       window.localStorage.setItem('fxaeon.settings.v1', JSON.stringify({ slippageBps: 100 }));
       window.dispatchEvent(new CustomEvent('fxaeon:settings-updated', { detail: { slippageBps: 100 } }));
     });
-    await expect(slippage).toHaveValue('1');
     await expect(settings).toContainText('1% slippage');
+    await settings.click();
+    await expect(slippage).toHaveValue('1');
     await page.evaluate(() => {
       const value = JSON.stringify({ slippageBps: 200 });
       window.localStorage.setItem('fxaeon.settings.v1', value);
       window.dispatchEvent(new StorageEvent('storage', { key: 'fxaeon.settings.v1', newValue: value }));
     });
-    await expect(slippage).toHaveValue('2');
     await expect(settings).toContainText('2% slippage');
+    await settings.click();
+    await expect(slippage).toHaveValue('2');
     assertNoBackendRequests(requests);
   });
 

@@ -21,7 +21,10 @@ const WalletSection = dynamic(() => import('@/components/WalletSection'), { ssr:
 const PRESETS = [10, 50, 100, 200] as const;
 
 function formatGwei(value: string): string {
-  return formatUnits(BigInt(value), 9).replace(/\.0+$|(?<=\.[0-9]*[1-9])0+$/, '');
+  const gwei = Number(formatUnits(BigInt(value), 9));
+  return gwei > 0 && gwei < 0.001
+    ? '<0.001'
+    : new Intl.NumberFormat('en-US', { maximumFractionDigits: 3 }).format(gwei);
 }
 
 type GasReadout = EthereumGasFallbackSnapshot | {
@@ -133,7 +136,7 @@ export default function SettingsPage() {
             </button>
           </div>
           <p className={styles.gasValue} aria-live="polite">
-            {gas ? `${formatGwei(gas.gasPriceWei)} Gwei${gas.stale ? ' · cached' : ''}` : <MissingValue width="md" status={gasLoading ? 'loading' : 'unavailable'} label={gasLoading ? 'Loading Ethereum gas' : 'Ethereum gas unavailable'} />}
+            {gas ? `${formatGwei(gas.gasPriceWei)} Gwei${gas.stale || gasError ? ' · cached' : ''}` : <MissingValue width="md" status={gasLoading ? 'loading' : 'unavailable'} label={gasLoading ? 'Loading Ethereum gas' : 'Ethereum gas unavailable'} />}
           </p>
           <p className={styles.scope}>Final fee set in your wallet.</p>
       </section>

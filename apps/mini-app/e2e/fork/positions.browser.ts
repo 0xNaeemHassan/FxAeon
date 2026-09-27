@@ -511,6 +511,7 @@ async function runProof(captureStage: string) {
     const reviewedFactRow = (label: string): Locator => activePage
       .locator('.reviewInlineContent')
       .getByText(label, { exact: true })
+      .filter({ visible: true })
       .locator('..');
     const capturePreconfirmReview = async (action: string, actionButton: Locator): Promise<void> => {
       const viewportBefore = activePage.viewportSize();

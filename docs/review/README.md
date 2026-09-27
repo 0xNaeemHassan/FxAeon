@@ -11,7 +11,11 @@ fork-backed transaction reviews and their CTA fit.
 
 This gallery predates the later glyph change. Two focused tests passed for that
 change, but refreshed screenshots and final screenshot promotion remain
-pending. The current browser proof is also pending; see
+pending. The latest protected browser attempt opened/reloaded all four
+positions and passed Borrow, then failed at Earn because a strict selector
+matched both a visible primary fact and a hidden advanced duplicate. The
+selector now filters to visible rows without weakening the assertion; a full
+retry is pending. See
 [`../release-validation.md`](../release-validation.md).
 
 The gallery uses fixture prices, Goldsky responses, and a test-wallet shim. The

@@ -144,6 +144,14 @@ export async function installBrowserAppFixtures(page: Page, options: {
   await page.route('https://api.goldsky.com/api/public/**', (route) => route.fulfill({
     status: 200, contentType: 'application/json', body: JSON.stringify({ data: { positions: [], orders: [] } }),
   }));
+  // The deployed app's optional read-only gas fallback is a public endpoint;
+  // keep its schema deterministic while all other same-origin API requests
+  // remain blocked by the client-first request assertion below.
+  await page.route('**/api/gas', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ source: 'etherscan', chainId: 1, gasPriceWei: '25000000000', blockNumber: '21000000', fetchedAt: Date.now(), stale: false }),
+  }));
   if (browserWallet !== false) await page.addInitScript(browserWalletInitScript(browserWallet), browserWallet);
 }
 
@@ -168,7 +176,10 @@ export const test = base.extend<{
         // client-first assertion focused on same-origin/unknown API routes.
         const host = new URL(url).hostname;
         const publicDataHosts = new Set(["assets.smold.app", "api.coingecko.com", "api.g.alchemy.com", "api.exchange.coinbase.com", "api.goldsky.com"]);
-        if (/\/api(?:\/|$)/i.test(pathname) && !publicDataHosts.has(host)) observed.backend.push(url);
+        const explicitPublicGasRead = pathname === "/api/gas"
+          && new URL(url).origin === new URL(page.url()).origin
+          && request.method() === "GET";
+        if (/\/api(?:\/|$)/i.test(pathname) && !publicDataHosts.has(host) && !explicitPublicGasRead) observed.backend.push(url);
       } catch {
         // Ignore malformed URLs; Playwright normally supplies absolute URLs.
       }
