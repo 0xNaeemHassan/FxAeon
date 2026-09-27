@@ -38,6 +38,8 @@ export const DIRECT_POSITION_SCAN_BATCH_SIZE = 128;
 export const DIRECT_POSITION_SCAN_CONCURRENCY = 2;
 export const DIRECT_POSITION_SCAN_DEADLINE_MS = 12_000;
 export const DIRECT_POSITION_CANDIDATE_CACHE_MAX_ENTRIES = 128;
+export const DIRECT_POSITION_CANDIDATE_SESSION_KEY = 'fxaeon:position-candidates:v1';
+const DIRECT_POSITION_CANDIDATE_MAX_AGE_MS = 24 * 60 * 60 * 1_000;
 
 type ReadContract = FxPublicClient['readContract'];
 type MulticallResult = { status?: string; result?: unknown } | unknown;
@@ -57,6 +59,79 @@ type DiscoveryClient = Pick<FxPublicClient, 'readContract'> & {
 // reuse is checked against the current balance and ownerOf values.
 const candidateIdCache = new Map<string, number[]>();
 
+export interface PositionCandidateStorage {
+  getItem: (key: string) => string | null;
+  setItem: (key: string, value: string) => void;
+}
+
+type StoredCandidate = { key: string; ids: number[]; updatedAt: number };
+
+/** Parse a bounded session cache. Entries are untrusted candidate IDs only. */
+export function parsePositionCandidateCache(raw: string | null, now = Date.now()): StoredCandidate[] {
+  try {
+    if (!raw || raw.length > 64_000) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length > DIRECT_POSITION_CANDIDATE_CACHE_MAX_ENTRIES) return [];
+    const seen = new Set<string>();
+    return parsed.flatMap((value: unknown) => {
+      if (!value || typeof value !== 'object') return [];
+      const item = value as Partial<StoredCandidate>;
+      if (typeof item.key !== 'string' || item.key.length > 180 || seen.has(item.key)
+        || !Array.isArray(item.ids) || item.ids.length === 0 || item.ids.length > DIRECT_POSITION_SCAN_MAX_IDS
+        || typeof item.updatedAt !== 'number' || !Number.isSafeInteger(item.updatedAt)
+        || item.updatedAt > now || now - item.updatedAt > DIRECT_POSITION_CANDIDATE_MAX_AGE_MS
+        || item.ids.some((id) => typeof id !== 'number' || !Number.isSafeInteger(id) || id < 1)) return [];
+      const ids = [...new Set(item.ids as number[])].sort((a, b) => a - b);
+      if (ids.length !== item.ids.length) return [];
+      seen.add(item.key);
+      return [{ key: item.key, ids, updatedAt: item.updatedAt }];
+    });
+  } catch { return []; }
+}
+
+/** Store candidate IDs in sessionStorage without treating them as verified state. */
+export function storePositionCandidateIds(
+  storage: PositionCandidateStorage | undefined,
+  key: string,
+  ids: readonly number[],
+  now = Date.now(),
+): void {
+  if (!storage) return;
+  try {
+    const validated = uniqueVerifiedIds(ids);
+    if (!validated.length || validated.length > DIRECT_POSITION_SCAN_MAX_IDS) return;
+    const records = parsePositionCandidateCache(storage.getItem(DIRECT_POSITION_CANDIDATE_SESSION_KEY), now)
+      .filter((record) => record.key !== key);
+    records.push({ key, ids: validated, updatedAt: now });
+    while (records.length > DIRECT_POSITION_CANDIDATE_CACHE_MAX_ENTRIES) records.shift();
+    let serialized = JSON.stringify(records);
+    while (serialized.length > 64_000 && records.length > 1) {
+      records.shift();
+      serialized = JSON.stringify(records);
+    }
+    if (serialized.length <= 64_000) storage.setItem(DIRECT_POSITION_CANDIDATE_SESSION_KEY, serialized);
+  } catch { /* Storage denial must fall back to a canonical scan. */ }
+}
+
+function sessionCandidateStorage(): PositionCandidateStorage | undefined {
+  try { return typeof window === 'undefined' ? undefined : window.sessionStorage; }
+  catch { return undefined; }
+}
+
+function readStoredPositionCandidateIds(storage: PositionCandidateStorage | undefined, key: string): number[] | undefined {
+  if (!storage) return undefined;
+  try { return parsePositionCandidateCache(storage.getItem(DIRECT_POSITION_CANDIDATE_SESSION_KEY)).find((record) => record.key === key)?.ids; }
+  catch { return undefined; }
+}
+
+function removeStoredPositionCandidateIds(storage: PositionCandidateStorage | undefined, key: string): void {
+  if (!storage) return;
+  try {
+    const records = parsePositionCandidateCache(storage.getItem(DIRECT_POSITION_CANDIDATE_SESSION_KEY)).filter((record) => record.key !== key);
+    storage.setItem(DIRECT_POSITION_CANDIDATE_SESSION_KEY, JSON.stringify(records));
+  } catch { /* Storage denial must not affect the canonical read. */ }
+}
+
 export interface DirectPositionDiscoveryParams {
   client: DiscoveryClient;
   group: PositionGroup;
@@ -67,6 +142,10 @@ export interface DirectPositionDiscoveryParams {
   expectedCount?: bigint;
   /** Shared refresh deadline, so a slow indexer cannot add another full timeout. */
   deadlineAt?: number;
+  /** Test hook: isolate the in-memory layer while exercising session-cache reuse. */
+  memoryCandidates?: Map<string, number[]>;
+  /** Test hook for sessionStorage-backed candidate reuse. */
+  candidateStorage?: PositionCandidateStorage;
 }
 
 export interface DirectPositionDiscoveryResult {
@@ -165,12 +244,17 @@ async function scanOwners(params: {
 
   const found = new Set<number>();
   const lastId = params.nextId - 1;
-  for (let start = 1; start <= lastId; start += DIRECT_POSITION_SCAN_BATCH_SIZE * DIRECT_POSITION_SCAN_CONCURRENCY) {
+  // Newly minted NFTs are normally near the end of the ID range. Search
+  // newest IDs first to find common recent positions quickly, while still
+  // covering the complete historical range before accepting completeness.
+  for (let windowEnd = lastId; windowEnd >= 1; windowEnd -= DIRECT_POSITION_SCAN_BATCH_SIZE * DIRECT_POSITION_SCAN_CONCURRENCY) {
     const jobs: Promise<readonly MulticallResult[]>[] = [];
+    const batchStarts: number[] = [];
     for (let offset = 0; offset < DIRECT_POSITION_SCAN_CONCURRENCY; offset += 1) {
-      const batchStart = start + offset * DIRECT_POSITION_SCAN_BATCH_SIZE;
-      if (batchStart > lastId) break;
-      const batchEnd = Math.min(batchStart + DIRECT_POSITION_SCAN_BATCH_SIZE - 1, lastId);
+      const batchEnd = windowEnd - offset * DIRECT_POSITION_SCAN_BATCH_SIZE;
+      if (batchEnd < 1) break;
+      const batchStart = Math.max(1, batchEnd - DIRECT_POSITION_SCAN_BATCH_SIZE + 1);
+      batchStarts.push(batchStart);
       const contracts = Array.from({ length: batchEnd - batchStart + 1 }, (_, index) => ({
         address: params.pool,
         abi: POSITION_NFT_ABI,
@@ -181,7 +265,7 @@ async function scanOwners(params: {
     }
     const results = await Promise.all(jobs);
     results.forEach((batch, batchIndex) => {
-      const batchStart = start + batchIndex * DIRECT_POSITION_SCAN_BATCH_SIZE;
+      const batchStart = batchStarts[batchIndex]!;
       batch.forEach((result, index) => {
         if (ownerMatches(result, params.walletAddress)) found.add(batchStart + index);
       });
@@ -246,13 +330,17 @@ export async function discoverDirectWalletPositionIds(
   }
 
   const indexedIds = uniqueVerifiedIds(params.verifiedIndexerIds);
+  const storage = params.candidateStorage ?? sessionCandidateStorage();
+  const memoryCandidates = params.memoryCandidates ?? candidateIdCache;
+  const cacheKey = `1:${pool.toLowerCase()}:${params.walletAddress.toLowerCase()}`;
   if (expectedCount === 0n) return { ids: [], expectedCount, usedScan: false };
   if (BigInt(indexedIds.length) === expectedCount) {
+    memoryCandidates.set(cacheKey, indexedIds);
+    storePositionCandidateIds(storage, cacheKey, indexedIds);
     return { ids: indexedIds, expectedCount, usedScan: false };
   }
 
-  const cacheKey = `1:${pool.toLowerCase()}:${params.walletAddress.toLowerCase()}`;
-  const cached = candidateIdCache.get(cacheKey);
+  const cached = memoryCandidates.get(cacheKey) ?? readStoredPositionCandidateIds(storage, cacheKey);
   if (cached) {
     const reused = await verifyCachedOwners({
       client: params.client,
@@ -262,8 +350,12 @@ export async function discoverDirectWalletPositionIds(
       expectedCount,
       deadline,
     });
-    if (reused) return { ids: reused, expectedCount, usedScan: true };
-    candidateIdCache.delete(cacheKey);
+    if (reused) {
+      memoryCandidates.set(cacheKey, reused);
+      return { ids: reused, expectedCount, usedScan: true };
+    }
+    memoryCandidates.delete(cacheKey);
+    removeStoredPositionCandidateIds(storage, cacheKey);
   }
 
   const nextIdValue = await withDeadline(params.client.readContract({
@@ -273,12 +365,13 @@ export async function discoverDirectWalletPositionIds(
   } as Parameters<ReadContract>[0]), deadline);
   const nextId = asNextId(nextIdValue);
   const ids = await scanOwners({ client: params.client, pool, walletAddress: params.walletAddress, nextId, expectedCount, deadline });
-  candidateIdCache.delete(cacheKey);
-  candidateIdCache.set(cacheKey, ids);
-  while (candidateIdCache.size > DIRECT_POSITION_CANDIDATE_CACHE_MAX_ENTRIES) {
-    const oldest = candidateIdCache.keys().next().value;
+  memoryCandidates.delete(cacheKey);
+  memoryCandidates.set(cacheKey, ids);
+  storePositionCandidateIds(storage, cacheKey, ids);
+  while (memoryCandidates.size > DIRECT_POSITION_CANDIDATE_CACHE_MAX_ENTRIES) {
+    const oldest = memoryCandidates.keys().next().value;
     if (oldest === undefined) break;
-    candidateIdCache.delete(oldest);
+    memoryCandidates.delete(oldest);
   }
   return { ids, expectedCount, usedScan: true };
 }
