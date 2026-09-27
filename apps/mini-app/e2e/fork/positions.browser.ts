@@ -658,7 +658,7 @@ async function runProof(captureStage: string) {
       const signedBefore = submitted.length;
       let fakeClockInstalled = false;
       let expectedGasTier = options.expectedGasTier?.toLowerCase() as 'fast' | 'rapid' | undefined;
-      let expectedFee: { maxFeePerGas: bigint; maxPriorityFeePerGas: bigint } | undefined;
+      let expectedFee: { gasPriceWei: bigint; maxFeePerGas: bigint; maxPriorityFeePerGas: bigint } | undefined;
       try {
       await activePage.getByRole('button', { name: buttonName, exact: true }).click();
       const actionButton = activePage.getByRole('button', { name: /^Confirm (?:in wallet|\d+ transactions)$/ });
