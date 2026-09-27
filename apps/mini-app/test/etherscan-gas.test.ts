@@ -169,6 +169,43 @@ test('parses the fixed Ethereum gas oracle and never returns the secret', async 
   });
 });
 
+test('parses bounded monotonic Etherscan tiers and base fee without changing the legacy gas price', async () => {
+  const snapshot = await fetchEtherscanGasOracle('server-key', {
+    cache: false,
+    fetchImpl: async () => upstreamResponse({
+      LastBlock: '235',
+      SafeGasPrice: '1',
+      ProposeGasPrice: '1.2',
+      FastGasPrice: '1.4',
+      suggestBaseFee: '0.8',
+    }),
+    now: () => 1235,
+  });
+  assert.deepEqual(snapshot, {
+    source: 'etherscan',
+    chainId: 1,
+    gasPriceWei: '1200000000',
+    baseFeePerGasWei: '800000000',
+    tiers: { standard: '1000000000', fast: '1200000000', rapid: '1400000000' },
+    blockNumber: '235',
+    fetchedAt: 1235,
+    stale: false,
+  });
+});
+
+test('rejects malformed, non-monotonic, or below-base enriched tiers', async () => {
+  for (const result of [
+    { SafeGasPrice: '1.2', ProposeGasPrice: '1', FastGasPrice: '1.4', suggestBaseFee: '0.8' },
+    { SafeGasPrice: '1', ProposeGasPrice: '1.2', FastGasPrice: '1.4', suggestBaseFee: '1.1' },
+    { SafeGasPrice: '1', ProposeGasPrice: '1.2', FastGasPrice: '1e1', suggestBaseFee: '0.8' },
+  ]) {
+    await assert.rejects(
+      fetchEtherscanGasOracle('server-key', { cache: false, fetchImpl: async () => upstreamResponse(result) }),
+      /invalid gas tiers|invalid gas price/,
+    );
+  }
+});
+
 test('upstream errors become an unavailable response without echoing upstream data', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async () => { throw new Error('network outage'); }) as typeof fetch;
@@ -189,7 +226,7 @@ test('serves a bounded stale cache during a temporary upstream failure', async (
   let fail = false;
   const fetchImpl = async () => {
     if (fail) throw new Error('network outage');
-    return upstreamResponse({ LastBlock: '10', ProposeGasPrice: '1.25' });
+    return upstreamResponse({ LastBlock: '10', SafeGasPrice: '1', ProposeGasPrice: '1.25', FastGasPrice: '1.5', suggestBaseFee: '0.9' });
   };
   const first = await fetchEtherscanGasOracle('server-key', { fetchImpl, now: () => now });
   assert.equal(first.stale, false);
@@ -197,6 +234,9 @@ test('serves a bounded stale cache during a temporary upstream failure', async (
   fail = true;
   const stale = await fetchEtherscanGasOracle('server-key', { fetchImpl, now: () => now });
   assert.equal(stale.gasPriceWei, '1250000000');
+  assert.equal(stale.baseFeePerGasWei, '900000000');
+  assert.deepEqual(stale.tiers, { standard: '1000000000', fast: '1250000000', rapid: '1500000000' });
+  assert.equal(stale.fetchedAt, 10_000);
   assert.equal(stale.stale, true);
   now += STALE_MAX_AGE_MS + 1;
   await assert.rejects(
@@ -239,6 +279,27 @@ test('browser fallback accepts only a fresh bounded snapshot', async () => {
       fetchImpl: async () => new Response(JSON.stringify({
         source: 'etherscan', chainId: 1, gasPriceWei: '1250000000', fetchedAt: 100_001_000, stale: false,
       })),
+      now: () => 100_000,
+    }),
+    /invalid data/,
+  );
+});
+
+test('browser fallback accepts enriched tiers and rejects unsafe tier relationships', async () => {
+  const response = (payload: Record<string, unknown>) => new Response(JSON.stringify(payload));
+  const enriched = {
+    source: 'etherscan', chainId: 1, gasPriceWei: '1200000000', baseFeePerGasWei: '800000000',
+    tiers: { standard: '1000000000', fast: '1200000000', rapid: '1400000000' },
+    blockNumber: '10', fetchedAt: 100_000, stale: false,
+  };
+  const snapshot = await fetchEthereumGasFallback({ fetchImpl: async () => response(enriched), now: () => 100_000 });
+  assert.deepEqual(snapshot.tiers, enriched.tiers);
+  assert.equal(snapshot.baseFeePerGasWei, enriched.baseFeePerGasWei);
+
+  resetEthereumGasFallbackForTests();
+  await assert.rejects(
+    fetchEthereumGasFallback({
+      fetchImpl: async () => response({ ...enriched, tiers: { standard: '1300000000', fast: '1200000000', rapid: '1400000000' } }),
       now: () => 100_000,
     }),
     /invalid data/,

@@ -68,12 +68,22 @@ interface GasOracleResult {
   ProposeGasPrice?: unknown;
   SafeGasPrice?: unknown;
   FastGasPrice?: unknown;
+  suggestBaseFee?: unknown;
+}
+
+export interface EthereumGasTiers {
+  standard: string;
+  fast: string;
+  rapid: string;
 }
 
 export interface EthereumGasSnapshot {
   source: "etherscan";
   chainId: 1;
   gasPriceWei: string;
+  /** Optional enriched oracle data; legacy callers use gasPriceWei. */
+  baseFeePerGasWei?: string;
+  tiers?: EthereumGasTiers;
   blockNumber?: string;
   fetchedAt: number;
   stale: boolean;
@@ -218,6 +228,24 @@ async function requestUpstream(
     const gasPriceWei = parseDecimalGwei(result.ProposeGasPrice)
       ?? parseDecimalGwei(result.SafeGasPrice);
     if (gasPriceWei === undefined) throw new GasOracleFailure("upstream_gas_price_invalid", "upstream returned an invalid gas price");
+    const hasEnrichedFields = result.suggestBaseFee !== undefined
+      || result.SafeGasPrice !== undefined
+      || result.FastGasPrice !== undefined;
+    let enriched: { baseFeePerGasWei: string; tiers: EthereumGasTiers } | undefined;
+    if (hasEnrichedFields) {
+      const baseFeePerGasWei = parseDecimalGwei(result.suggestBaseFee);
+      const standard = parseDecimalGwei(result.SafeGasPrice);
+      const fast = parseDecimalGwei(result.ProposeGasPrice);
+      const rapid = parseDecimalGwei(result.FastGasPrice);
+      if (baseFeePerGasWei === undefined || standard === undefined || fast === undefined || rapid === undefined
+        || baseFeePerGasWei > standard || standard > fast || fast > rapid) {
+        throw new GasOracleFailure("upstream_gas_price_invalid", "upstream returned invalid gas tiers");
+      }
+      enriched = {
+        baseFeePerGasWei: baseFeePerGasWei.toString(),
+        tiers: { standard: standard.toString(), fast: fast.toString(), rapid: rapid.toString() },
+      };
+    }
     const fetchedAt = options.now();
     if (!Number.isSafeInteger(fetchedAt) || fetchedAt < 0) throw new GasOracleFailure("upstream_timestamp_invalid", "upstream returned an invalid timestamp");
     const blockNumber = parseBlock(result.LastBlock);
@@ -225,6 +253,7 @@ async function requestUpstream(
       source: "etherscan",
       chainId: 1,
       gasPriceWei: gasPriceWei.toString(),
+      ...(enriched ?? {}),
       ...(blockNumber === undefined ? {} : { blockNumber }),
       fetchedAt,
       stale: false,
