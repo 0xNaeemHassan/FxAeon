@@ -177,8 +177,20 @@ export async function openHarness(page: Page, options: { initialPreviewMode?: 'a
   if (!cachedBundle) cachedBundle = await buildHarness();
   const startedAt = performance.now();
   const initialOptions = { mode: options.initialPreviewMode, previewDelayMs: options.previewDelayMs ?? 0, refreshDelayMs: options.refreshDelayMs ?? 0 };
-  const modePrelude = `<script>globalThis.__actionReviewHarnessInitialOptions = ${JSON.stringify(initialOptions)};</script>`;
-  await page.setContent(`<div id="root"></div>${modePrelude}<script>${cachedBundle}</script>`);
+  // Mount into the existing same-origin document instead of navigating it.
+  // This keeps the settings storage used by the cross-tab invalidation test,
+  // and avoids inheriting the production HTML response's CSP into an inline
+  // harness document. The explicit marker below is the readiness signal.
+  await page.evaluate(({ bundle, options }) => {
+    document.body.replaceChildren();
+    const root = document.createElement('div');
+    root.id = 'root';
+    document.body.append(root);
+    (globalThis as typeof globalThis & { __actionReviewHarnessInitialOptions?: typeof options }).__actionReviewHarnessInitialOptions = options;
+    const script = document.createElement('script');
+    script.textContent = bundle;
+    document.body.append(script);
+  }, { bundle: cachedBundle, options: initialOptions });
   await expect(page.locator('[data-harness-ready="true"]')).toHaveCount(1);
   return startedAt;
 }

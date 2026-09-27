@@ -72,7 +72,8 @@ test.describe('unified product presentation', () => {
       { checked: 'false', tabIndex: -1 },
       { checked: 'false', tabIndex: -1 },
     ]);
-    await expect(gasTier).toContainText('Gwei');
+    const gasHelp = page.locator(`#${await gasTier.getAttribute('aria-describedby')}`);
+    await expect(gasHelp).toContainText('Gwei');
     await expect(gasTier.getByRole('radio', { name: /^Standard\b/ })).toContainText('25');
     const fast = gasTier.getByRole('radio', { name: /^Fast\b/ });
     await expect(fast).toContainText('30');

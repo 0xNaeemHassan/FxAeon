@@ -358,7 +358,9 @@ export function ActionReview(props: ActionReviewProps) {
       <DecisionContext beforeFacts={positionChanges.remainingBefore.length ? positionChanges.remainingBefore : undefined} />
 
       <div className={presentationStyles.disclosures}>
-      <QuoteFactDetails facts={facts} />
+      {/* Summary facts are already visible above. Keep Quote details for the
+       * remaining exact route metadata so a fact has one deliberate home. */}
+      <QuoteFactDetails facts={reviewFacts.details} />
       <AdvancedReviewDetails route={route} />
 
       <details className="group mt-3 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.02)] px-3" open={stage === 'executing' || showExecutionProgress}>

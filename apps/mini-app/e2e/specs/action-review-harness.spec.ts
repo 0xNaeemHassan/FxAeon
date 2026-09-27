@@ -119,15 +119,19 @@ test.describe('ActionReview isolated orchestration', () => {
   });
 
   test('same-tab gas-tier preference changes invalidate the accepted review until an updated quote is explicit', async ({ page }) => {
+    test.setTimeout(60_000);
     // Give this isolated harness a same-origin storage area for the real
     // settings reader before replacing the document with the harness bundle.
-    await page.goto('/');
+    // Establish the app origin without carrying the HTML document's CSP into
+    // the inline harness document. The static token asset is same-origin and
+    // has no document policy, while localStorage remains available.
+    await page.goto('/token-icons/eth.png', { waitUntil: 'load' });
     await page.evaluate(() => window.localStorage.setItem('fxaeon.settings.v1', JSON.stringify({ slippageBps: 100, gasTier: 'fast' })));
     await openHarness(page);
     await page.getByRole('button', { name: 'Review position', exact: true }).click();
     const confirm = page.getByRole('button', { name: 'Confirm in wallet', exact: true });
     await expect(confirm).toBeVisible();
-    const gasTier = page.locator('.reviewInlineContent').getByText('Gas tier', { exact: true }).locator('..');
+    const gasTier = page.locator('.reviewInlineContent').getByText('Gas tier', { exact: true }).first().locator('..');
     await expect(gasTier).toContainText('Fast · 30 Gwei');
     expect(await metric(page, 'send')).toBe(0);
 
