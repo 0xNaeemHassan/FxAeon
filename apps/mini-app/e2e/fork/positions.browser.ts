@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, expect as playwrightExpect, type Locator, type Page, type Route } from '@playwright/test';
-import { createPublicClient, decodeFunctionData, encodeFunctionData, formatUnits, http, parseAbi, parseUnits, type Address, type Hex } from 'viem';
+import { createPublicClient, decodeFunctionData, encodeFunctionData, formatUnits, http, multicall3Abi, parseAbi, parseUnits, type Address, type Hex } from 'viem';
 import { formatExactDecimal } from '../../src/lib/amount';
 import { formatAmount, readPositionGroupWithDirectFallback, tokenAddress } from '../../src/app/trade/fxUi';
 import { readCanonicalPositionInfo } from '../../src/app/trade/canonicalPositionReader';
@@ -66,6 +66,7 @@ const depositToFxSaveAbi = parseAbi([
 const queuedRedeemAbi = parseAbi(['function requestRedeem(uint256 amount)']);
 const fxSave = tokenAddress('fxSAVE');
 const router = '0x33636D49FbefBE798e15e7F356E8DBef543CC708' as Address;
+const multicall3 = '0xca11bde05977b3631167028862be2a173976ca11' as Address;
 
 function receiptHold() {
   let releasePromise: () => void = () => undefined;
@@ -220,15 +221,23 @@ async function runProof(captureStage: string) {
       assert.ok(nextId >= 1 && nextId - 1 <= DIRECT_POSITION_SCAN_MAX_IDS, 'fixture pool must fit the supported direct discovery range');
       for (let start = 1; start < nextId; start += DIRECT_POSITION_SCAN_BATCH_SIZE) {
         const count = Math.min(DIRECT_POSITION_SCAN_BATCH_SIZE, nextId - start);
-        await client.multicall({
-          contracts: Array.from({ length: count }, (_, offset) => ({
-            address: group.pool,
-            abi: poolAbi,
-            functionName: 'ownerOf' as const,
-            args: [BigInt(start + offset)] as const,
-          })),
-          allowFailure: true,
-          batchSize: 0,
+        // Keep individual burned/unminted NFTs non-fatal, but let the outer
+        // Multicall3 request reject if the fork transport/upstream fails. The
+        // viem client multicall helper intentionally normalizes outer failures
+        // into per-call failures, which can make a broken warmup look valid.
+        await client.readContract({
+          address: multicall3,
+          abi: multicall3Abi,
+          functionName: 'aggregate3',
+          args: [Array.from({ length: count }, (_, offset) => ({
+            target: group.pool,
+            allowFailure: true,
+            callData: encodeFunctionData({
+              abi: poolAbi,
+              functionName: 'ownerOf',
+              args: [BigInt(start + offset)],
+            }),
+          }))],
         });
       }
       console.log(`Hydrated historical NFT ownership storage for ${group.market} ${group.side}`);
