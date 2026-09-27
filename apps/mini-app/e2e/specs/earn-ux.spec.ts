@@ -1,4 +1,5 @@
 import { test, expect, assertNoBackendRequests } from '../fixtures/test';
+import { FX_SAVE_APY_ENDPOINT, FX_SAVE_TOKEN_ADDRESS } from '../../src/lib/fxSaveApy';
 
 test.describe('Earn entry and honest unavailable state', () => {
   test.use({ telegram: false });
@@ -96,13 +97,18 @@ test.describe('connected Earn summary at normal phone width', () => {
 
   test('keeps the honest fxSAVE balance and APY row above bottom navigation', async ({ page }) => {
     await page.setViewportSize({ width: 393, height: 852 });
+    await page.route(FX_SAVE_APY_ENDPOINT, route => route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ code: 200, data: { fxSave: { address: FX_SAVE_TOKEN_ADDRESS, apy: '6.96' } } }),
+    }));
     await page.goto('/earn', { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('button', { name: 'Open wallet profile', exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/^(?:Your fxSAVE value|Last verified fxSAVE value|fxSAVE balance)$/)).toBeVisible();
     await expect(page.getByText('Last verified position value', { exact: true })).toHaveCount(0);
     await expect(page.getByRole('status', { name: 'fxSAVE balance' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText('Variable APY')).toBeVisible();
-    await expect(page.getByRole('status', { name: 'fxSAVE APY' })).toBeVisible();
+    const apyRow = page.getByText('Variable APY', { exact: true }).locator('..');
+    await expect(apyRow.getByText('6.96%', { exact: true })).toBeVisible();
     const geometry = await page.evaluate(() => {
       const summary = document.querySelector<HTMLElement>('[class*="balanceTop"]');
       const navigation = document.querySelector<HTMLElement>('nav.mobile-tabbar[aria-label="Primary navigation"]');
