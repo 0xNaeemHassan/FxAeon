@@ -18,8 +18,11 @@
 .refresh { min-height: 44px; min-width: 44px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 12px; color: var(--mut); font-size: 12px; }
 .refresh:hover { color: var(--text); border-color: var(--line-strong); }
 .refresh:disabled { opacity: .55; }
-.gasValue { margin: 8px 0 0; font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
-.network { padding: 4px 0; border-bottom: 1px solid var(--line); }
+.gasPreference { margin: 12px 0 16px; padding-top: 8px; border-top: 1px solid var(--line); }
+.choices.gasChoices { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.choices.gasChoices button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 68px; padding: 8px 4px; font-size: 13px; }
+.gasRate { display: flex; justify-content: center; color: var(--mut); font-size: 12px; font-variant-numeric: tabular-nums; }
+.gasChoices button[aria-checked='true'] .gasRate { color: var(--mint); }
 .help { color: var(--mut); font-size: 12px; line-height: 1.6; margin: 6px 0 8px; }
 .scope { color: var(--mut); font-size: 12px; line-height: 1.55; margin: 8px 0 12px; }
 .choices { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }

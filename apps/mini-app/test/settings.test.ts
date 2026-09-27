@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { announceSettingsUpdated, DEFAULT_SLIPPAGE_PERCENT, readSlippagePercent, SETTINGS_KEY, SETTINGS_UPDATED_EVENT } from '../src/lib/settings';
+import { announceSettingsUpdated, DEFAULT_GAS_TIER, DEFAULT_SLIPPAGE_PERCENT, GAS_TIERS, readGasTier, readSlippagePercent, SETTINGS_KEY, SETTINGS_UPDATED_EVENT } from '../src/lib/settings';
 
 function withWindow(value: unknown, callback: () => void): void {
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'window');
@@ -54,5 +54,31 @@ test('saving preferences announces the exact device preference payload', () => {
     assert.equal(events[0].type, SETTINGS_UPDATED_EVENT);
     assert.deepEqual((events[0] as CustomEvent<{ slippageBps: number }>).detail, { slippageBps: 100 });
     assert.equal(SETTINGS_KEY, 'fxaeon.settings.v1');
+  });
+});
+
+test('gas speed accepts only supported saved tiers and does not alter slippage', () => {
+  for (const gasTier of GAS_TIERS) {
+    withWindow({ localStorage: { getItem: () => JSON.stringify({ gasTier, slippageBps: 100 }) } }, () => {
+      assert.equal(readGasTier(), gasTier);
+      assert.equal(readSlippagePercent(), 1);
+    });
+  }
+});
+
+test('gas speed defaults safely for old preferences, invalid data, and blocked storage', () => {
+  withWindow(undefined, () => assert.equal(readGasTier(), DEFAULT_GAS_TIER));
+  for (const stored of [null, '{}', 'null', '{broken', JSON.stringify({ gasTier: 'turbo' }), JSON.stringify({ gasTier: 1 })]) {
+    withWindow({ localStorage: { getItem: () => stored } }, () => assert.equal(readGasTier(), DEFAULT_GAS_TIER));
+  }
+  withWindow({ localStorage: { getItem: () => { throw new Error('blocked'); } } }, () => assert.equal(readGasTier(), DEFAULT_GAS_TIER));
+});
+
+test('saving gas speed notifies mounted reviews with the selected tier', () => {
+  const events: Event[] = [];
+  withWindow({ dispatchEvent: (event: Event) => { events.push(event); return true; } }, () => {
+    announceSettingsUpdated(50, 'rapid');
+    assert.equal(events[0].type, SETTINGS_UPDATED_EVENT);
+    assert.deepEqual((events[0] as CustomEvent).detail, { slippageBps: 50, gasTier: 'rapid' });
   });
 });

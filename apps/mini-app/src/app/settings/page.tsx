@@ -11,51 +11,19 @@ import { Disclosure, PageHeading, ProductSurface } from '@/components/ProductUI'
 import { MissingValue } from '@/components/MissingValue';
 import { useLocale } from '@/lib/i18n';
 import { haptic } from '@/lib/telegram';
-import { announceSettingsUpdated, readSlippagePercent, SETTINGS_KEY } from '@/lib/settings';
-import { fetchEthereumGasFallback, type EthereumGasFallbackSnapshot } from '@/lib/fx/etherscanGas';
-import { getEthereumClient } from '@/lib/fx/clients';
+import { announceSettingsUpdated, GAS_TIERS, readGasTier, readSlippagePercent, SETTINGS_KEY, type GasTier } from '@/lib/settings';
+import { fetchGasTierQuotes, type GasTierQuotes } from '@/lib/fx/gasFeePolicy';
 import styles from '@/components/SettingsWorkspace.module.css';
 import { AccountWorkspace } from '@/components/ProductLayout';
 
 const WalletSection = dynamic(() => import('@/components/WalletSection'), { ssr: false, loading: () => <Skeleton className="h-24" /> });
 const PRESETS = [10, 50, 100, 200] as const;
 
-function formatGwei(value: string): string {
-  const gwei = Number(formatUnits(BigInt(value), 9));
+function formatGwei(value: bigint): string {
+  const gwei = Number(formatUnits(value, 9));
   return gwei > 0 && gwei < 0.001
     ? '<0.001'
     : new Intl.NumberFormat('en-US', { maximumFractionDigits: 3 }).format(gwei);
-}
-
-type GasReadout = EthereumGasFallbackSnapshot | {
-  source: 'rpc';
-  chainId: 1;
-  gasPriceWei: string;
-  fetchedAt: number;
-  stale: false;
-};
-
-async function readEthereumGas(): Promise<GasReadout> {
-  const client = getEthereumClient();
-  try {
-    const request = client.getGasPrice?.();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let gasPrice: bigint | undefined;
-    try {
-      gasPrice = request
-        ? await Promise.race([
-          request,
-          new Promise<bigint | undefined>((resolve) => { timer = setTimeout(() => resolve(undefined), 4_000); }),
-        ])
-        : undefined;
-    } finally {
-      if (timer !== undefined) clearTimeout(timer);
-    }
-    if (typeof gasPrice === 'bigint' && gasPrice > 0n) {
-      return { source: 'rpc', chainId: 1, gasPriceWei: gasPrice.toString(), fetchedAt: Date.now(), stale: false };
-    }
-  } catch { /* The optional server oracle below can cover an RPC fee-read outage. */ }
-  return fetchEthereumGasFallback();
 }
 
 export default function SettingsPage() {
@@ -63,23 +31,34 @@ export default function SettingsPage() {
   const [ready, setReady] = useState(false);
   const [slippageBps, setSlippageBps] = useState(50);
   const [savedBps, setSavedBps] = useState(50);
+  const [gasTier, setGasTier] = useState<GasTier>('standard');
+  const [savedGasTier, setSavedGasTier] = useState<GasTier>('standard');
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
-  const [gas, setGas] = useState<GasReadout | null>(null);
+  const [gas, setGas] = useState<GasTierQuotes | null>(null);
   const [gasLoading, setGasLoading] = useState(true);
   const [gasError, setGasError] = useState(false);
   const id = useId();
-  const dirty = slippageBps !== savedBps;
+  const dirty = slippageBps !== savedBps || gasTier !== savedGasTier;
   useEffect(() => {
     const value = Math.round(readSlippagePercent() * 100);
+    const tier = readGasTier();
+    setGasTier(tier); setSavedGasTier(tier);
     setSlippageBps(value); setSavedBps(value); setReady(true);
   }, []);
   const refreshGas = useCallback(() => {
     setGasLoading(true); setGasError(false);
-    void readEthereumGas().then((snapshot) => setGas(snapshot)).catch(() => setGasError(true)).finally(() => setGasLoading(false));
+    void fetchGasTierQuotes(1).then((snapshot) => setGas(snapshot)).catch(() => setGasError(true)).finally(() => setGasLoading(false));
   }, []);
-  useEffect(() => { refreshGas(); }, [refreshGas]);
+  useEffect(() => {
+    refreshGas();
+    const refreshVisible = () => { if (document.visibilityState === 'visible') refreshGas(); };
+    const timer = setInterval(refreshVisible, 30_000);
+    document.addEventListener('visibilitychange', refreshVisible);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', refreshVisible); };
+  }, [refreshGas]);
   const select = (value: number) => { setSlippageBps(value); setSaved(false); setError(''); haptic('selection'); };
+  const selectGas = (value: GasTier) => { setGasTier(value); setSaved(false); setError(''); haptic('selection'); };
   const save = () => {
     if (!ready || !dirty) return;
     setError('');
@@ -90,9 +69,9 @@ export default function SettingsPage() {
         const parsed: unknown = JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || '{}');
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) previous = parsed as Record<string, unknown>;
       } catch { /* A corrupt old value can be replaced by the selected preference. */ }
-      window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...previous, slippageBps }));
-      announceSettingsUpdated(slippageBps);
-      setSavedBps(slippageBps); setSaved(true); haptic('success');
+      window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...previous, slippageBps, gasTier }));
+      announceSettingsUpdated(slippageBps, gasTier);
+      setSavedBps(slippageBps); setSavedGasTier(gasTier); setSaved(true); haptic('success');
     } catch {
       setSaved(false);
       setError('This browser blocked local preference storage. Your changes have not been saved. Your wallet and onchain state were not affected.');
@@ -124,21 +103,28 @@ export default function SettingsPage() {
               }}>{bps / 100}%</button>)}
           </div>
           <p className={styles.scope}>Trade, Positions, and eligible fxSAVE; saved on this device.</p>
+          <div className={styles.gasPreference}>
+            <div className={styles.preferenceHeading}>
+              <h3 id={`${id}-gas`}>Gas speed</h3>
+              <button type="button" className={styles.refresh} onClick={refreshGas} disabled={gasLoading} aria-label={gasError ? 'Retry gas fees' : 'Refresh gas fees'}>{gasError ? 'Retry' : 'Refresh'}</button>
+            </div>
+            <p id={`${id}-gas-help`} className={styles.help}>Ethereum · Gwei{gasError && gas ? ' · last update' : ''}</p>
+            <div className={`${styles.choices} ${styles.gasChoices}`} role="radiogroup" aria-label="Gas speed" aria-describedby={`${id}-gas-help`}>
+              {GAS_TIERS.map((tier, index) => <button type="button" key={tier} role="radio" aria-checked={gasTier === tier} disabled={!ready} tabIndex={gasTier === tier ? 0 : -1}
+                onClick={() => selectGas(tier)} onKeyDown={(event) => {
+                  if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+                  event.preventDefault();
+                  const next = event.key === 'Home' ? 0 : event.key === 'End' ? GAS_TIERS.length - 1 : (index + (event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1) + GAS_TIERS.length) % GAS_TIERS.length;
+                  selectGas(GAS_TIERS[next]); event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
+                }}>
+                <span>{tier === 'standard' ? 'Standard' : tier === 'fast' ? 'Fast' : 'Rapid'}</span>
+                <span className={styles.gasRate}>{gas ? formatGwei(gas.tiers[tier].gasPriceWei) : <MissingValue width="xs" status={gasLoading ? 'loading' : 'unavailable'} label={`${tier} gas fee ${gasLoading ? 'loading' : 'unavailable'}`} />}</span>
+              </button>)}
+            </div>
+          </div>
           <Button onClick={save} disabled={!ready || !dirty} className={styles.save}>Save preferences</Button>
           {error && <p role="alert" className={styles.error}>{error}</p>}
         </ProductSurface>
-      </section>
-      <section className={`${styles.section} ${styles.network}`} aria-labelledby={`${id}-gas`}>
-          <div className={styles.preferenceHeading}>
-            <h3 id={`${id}-gas`}>Ethereum gas</h3>
-            <button type="button" className={styles.refresh} onClick={refreshGas} disabled={gasLoading} aria-label={gasError ? 'Retry Ethereum gas' : 'Refresh Ethereum gas'}>
-              {gasError ? 'Retry' : 'Refresh'}
-            </button>
-          </div>
-          <p className={styles.gasValue} aria-live="polite">
-            {gas ? `${formatGwei(gas.gasPriceWei)} Gwei${gas.stale || gasError ? ' · cached' : ''}` : <MissingValue width="md" status={gasLoading ? 'loading' : 'unavailable'} label={gasLoading ? 'Loading Ethereum gas' : 'Ethereum gas unavailable'} />}
-          </p>
-          <p className={styles.scope}>Final fee set in your wallet.</p>
       </section>
       <AppearancePreference />
       <div className={styles.disconnect}><SessionControl /></div>
