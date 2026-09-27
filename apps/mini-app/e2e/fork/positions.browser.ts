@@ -37,6 +37,9 @@ assert.ok(parsedRpc.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(
 const port = Number(process.env.FX_FORK_BROWSER_PORT ?? '4325');
 assert.ok(Number.isInteger(port) && port >= 1024 && port <= 65535, 'invalid browser proof port');
 const baseUrl = `http://127.0.0.1:${port}`;
+const warmupConcurrency = Number(process.env.FX_FORK_WARMUP_CONCURRENCY ?? '1');
+assert.ok(Number.isInteger(warmupConcurrency) && warmupConcurrency >= 1 && warmupConcurrency <= 2,
+  'FX_FORK_WARMUP_CONCURRENCY must be 1 or 2');
 const client = createPublicClient({ chain: mainnet, transport: http(rpcUrl, { timeout: 120_000 }) });
 const scenarios = [
   { market: 'ETH', side: 'long', pool: '0x6Ecfa38FeE8a5277B91eFdA204c235814F0122E8', graphSubgraph: 'fx-v2-wsteth/3.0.0' },
@@ -216,7 +219,7 @@ async function runProof(captureStage: string) {
     // locally hydrated fork, like a full RPC node. No returned state is changed
     // or injected into the app, and the product's 12-second deadline is intact.
     // This is functional evidence, not a cold-provider performance benchmark.
-    for (const group of scenarios) {
+    const hydrateGroup = async (group: (typeof scenarios)[number]): Promise<void> => {
       const nextId = Number(await client.readContract({ address: group.pool, abi: poolAbi, functionName: 'getNextPositionId' }));
       assert.ok(nextId >= 1 && nextId - 1 <= DIRECT_POSITION_SCAN_MAX_IDS, 'fixture pool must fit the supported direct discovery range');
       for (let start = 1; start < nextId; start += DIRECT_POSITION_SCAN_BATCH_SIZE) {
@@ -241,7 +244,18 @@ async function runProof(captureStage: string) {
         });
       }
       console.log(`Hydrated historical NFT ownership storage for ${group.market} ${group.side}`);
-    }
+    };
+    let nextGroup = 0;
+    const workers = Array.from({ length: Math.min(warmupConcurrency, scenarios.length) }, async () => {
+      while (true) {
+        const group = scenarios[nextGroup++];
+        if (!group) return;
+        await hydrateGroup(group);
+      }
+    });
+    const workerResults = await Promise.allSettled(workers);
+    const warmupFailure = workerResults.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+    if (warmupFailure) throw warmupFailure.reason;
     const funding = parseUnits('4000', 6);
     const before = await client.readContract({ address: usdc, abi: tokenAbi, functionName: 'balanceOf', args: [wallet] });
     assert.ok(await client.readContract({ address: usdc, abi: tokenAbi, functionName: 'balanceOf', args: [donor] }) >= funding);
