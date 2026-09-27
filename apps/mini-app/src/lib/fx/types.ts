@@ -353,6 +353,10 @@ export interface WalletTransactionRequest {
   data: Hex;
   value: bigint;
   nonce: number;
+  /** Frozen EIP-1559 fee selection applied equally to approvals and actions. */
+  maxFeePerGas?: bigint;
+  maxPriorityFeePerGas?: bigint;
+  gasPrice?: bigint;
 }
 
 export interface TransactionRunnerCallbacks {

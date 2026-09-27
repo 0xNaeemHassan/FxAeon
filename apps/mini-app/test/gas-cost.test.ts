@@ -66,6 +66,33 @@ test('estimates every route step and separates gas from native transaction value
   assert.equal(estimate.steps[0].gasFeeWei, 63_000n);
 });
 
+test('route estimate uses the reviewed tier cap and does not re-read an RPC fee', async () => {
+  let feeReads = 0;
+  const selected = {
+    tier: 'fast' as const,
+    gasPriceWei: 20n,
+    maxFeePerGas: 40n,
+    maxPriorityFeePerGas: 5n,
+    validUntil: Date.now() + 30_000,
+    source: 'rpc' as const,
+  };
+  const client = {
+    ...clientFor(async () => 21_000n),
+    estimateFeesPerGas: async () => { feeReads += 1; return { maxFeePerGas: 999n, maxPriorityFeePerGas: 10n }; },
+  } as FxPublicClient;
+  const estimate = await estimatePlannedRouteCost(route(), {
+    client,
+    feeTierQuote: selected,
+  });
+  assert.equal(feeReads, 0);
+  assert.equal(estimate.fee?.tier, 'fast');
+  assert.equal(estimate.fee?.feePerGasWei, 40n);
+  assert.equal(estimate.fee?.displayFeePerGasWei, 20n);
+  assert.equal(estimate.executionGasFeeWei, 840_000n);
+  assert.match(formatRouteGasCost(estimate).gasFee ?? '', /max/);
+  assert.match(formatRouteGasCost(estimate).gasTier ?? '', /^Fast · /);
+});
+
 test('does not spend an RPC request on optional block provenance before estimating gas', async () => {
   let blockReads = 0;
   const client = {

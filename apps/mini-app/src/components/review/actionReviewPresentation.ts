@@ -3,6 +3,7 @@ import { FX_TOKENS, formatRouteGasCost, type PlannedRoute } from '@/lib/fx';
 import { compactAddress } from '@/lib/addressPresentation';
 import { routeFinancialReviewFacts, type ReviewFact } from '@/lib/fx/reviewFormatting';
 import type { UseGasCostResult } from '@/lib/fx/useGasCost';
+import { formatGasTierQuote, type GasTierQuote } from '@/lib/fx/gasFeePolicy';
 
 export interface ExecutionCost { estimatedGas?: string; gasFee?: string; protocolFee?: string; totalCost?: string }
 type BridgeReviewQuote = { nativeFee: bigint; destinationChainId?: number; bridgeToken?: string; bridgeAmount?: bigint; minAmountLD?: bigint; recipient?: string };
@@ -81,7 +82,6 @@ export function primaryReviewFacts(route: PlannedRoute): ReviewFact[] {
         if (intent.requestedLeverage !== undefined) addFact(facts, 'Target leverage', `${intent.requestedLeverage}×`);
         if (intent.slippagePercent !== undefined) addFact(facts, 'Slippage', `${intent.slippagePercent}%`);
         addFact(facts, 'Position', intent.positionId === 0 ? 'New position' : `#${intent.positionId}`);
-        addFact(facts, 'Risk', 'Liquidation risk may increase');
         break;
       case 'position-reduce':
         addFact(facts, 'Position', `#${intent.positionId}`);
@@ -92,19 +92,16 @@ export function primaryReviewFacts(route: PlannedRoute): ReviewFact[] {
         addFact(facts, 'Position', `#${intent.positionId}`);
         if (intent.requestedLeverage !== undefined) addFact(facts, 'Target leverage', `${intent.requestedLeverage}×`);
         if (intent.slippagePercent !== undefined) addFact(facts, 'Slippage', `${intent.slippagePercent}%`);
-        addFact(facts, 'Risk', 'Liquidation risk may change');
         break;
       case 'deposit-and-mint':
         addTokenAmountFact(facts, 'Deposit', intent.depositAmount, intent.depositTokenAddress);
         addTokenAmountFact(facts, 'Borrow', intent.mintAmount, FX_TOKENS.fxUSD.address);
         addFact(facts, 'Position', intent.positionId === 0 ? 'New position' : `#${intent.positionId}`);
-        addFact(facts, 'Risk', intent.mintAmount > 0n ? 'Added debt may increase liquidation risk' : 'Collateral changes affect the liquidation buffer');
         break;
       case 'repay-and-withdraw':
         addTokenAmountFact(facts, 'Repay', intent.minimumRepayAmount, intent.repayTokenAddress);
         addTokenAmountFact(facts, 'Withdraw', intent.withdrawAmount, intent.withdrawTokenAddress);
         addFact(facts, 'Position', `#${intent.positionId}`);
-        addFact(facts, 'Risk', intent.withdrawAmount > 0n ? 'Withdrawal may reduce the liquidation buffer' : 'Repayment should reduce debt');
         break;
       case 'fxsave-deposit':
         addTokenAmountFact(facts, 'Deposit', intent.amount, intent.tokenInAddress);
@@ -156,8 +153,9 @@ export function factsOutsideConsequenceSummary(summaryFacts: readonly ReviewFact
   return summaryFacts.filter((fact) => !owned.has(`${fact.label}\u0000${fact.value}`));
 }
 
-export function routeFacts(route: PlannedRoute, gasCost: Pick<UseGasCostResult, 'estimate' | 'estimateIsCurrent'>, executionCost?: ExecutionCost): ReviewFact[] {
+export function routeFacts(route: PlannedRoute, gasCost: Pick<UseGasCostResult, 'estimate' | 'estimateIsCurrent'>, executionCost?: ExecutionCost, feeTierQuote?: GasTierQuote): ReviewFact[] {
   const facts = primaryReviewFacts(route);
+  if (feeTierQuote) addFact(facts, 'Gas tier', formatGasTierQuote(feeTierQuote));
   const currentGasCost = gasCost.estimateIsCurrent && gasCost.estimate
     ? formatRouteGasCost(gasCost.estimate)
     : undefined;

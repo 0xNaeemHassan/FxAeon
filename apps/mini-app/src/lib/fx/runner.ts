@@ -8,6 +8,8 @@ import { recordPendingHash, updatePendingHashRecord } from "./journal";
 import { withWalletChainLock } from "./lock";
 import { defaultTransactionPolicy } from "./policy";
 import { normalizeFxProtocolError } from "./errorNormalization";
+import { selectedGasTierQuote, type GasFeeSelection } from "./gasFeePolicy";
+import { readGasTier } from "@/lib/settings";
 import type {
   BridgeRouteQuote,
   FxPublicClient,
@@ -326,6 +328,7 @@ export async function runTransactionRoute(params: {
   callbacks: TransactionRunnerCallbacks;
   policy?: TransactionPolicy;
   publicClient?: FxPublicClient;
+  feeSelection?: GasFeeSelection;
   options?: TransactionRunnerOptions;
 }): Promise<TransactionExecutionResult> {
   // Snapshot the reviewed route before acquiring the cross-tab lock. A
@@ -340,6 +343,19 @@ export async function runTransactionRoute(params: {
     quote: cloneReviewValue(params.route.quote),
     policy: params.route.policy ? clonePolicy(params.route.policy) : undefined,
   };
+  const feeSelection: GasFeeSelection | undefined = params.feeSelection
+    ? {
+        tier: params.feeSelection.tier,
+        snapshot: {
+          ...params.feeSelection.snapshot,
+          tiers: {
+            standard: { ...params.feeSelection.snapshot.tiers.standard },
+            fast: { ...params.feeSelection.snapshot.tiers.fast },
+            rapid: { ...params.feeSelection.snapshot.tiers.rapid },
+          },
+        },
+      }
+    : undefined;
   const policy = clonePolicy(params.policy ?? defaultTransactionPolicy(route));
   const options = params.options ?? {};
   if (
@@ -487,6 +503,16 @@ export async function runTransactionRoute(params: {
             data: transaction.data,
             value: transaction.value,
             nonce,
+            ...(feeSelection ? (() => {
+              if (readGasTier() !== feeSelection.tier) {
+                throw new Error("Network fee preference changed; review the action again before signing.");
+              }
+              if (feeSelection.snapshot.chainId !== route.chainId) {
+                throw new Error("Network fee quote does not match the transaction network; review the action again.");
+              }
+              const fee = selectedGasTierQuote(feeSelection.snapshot, feeSelection.tier);
+              return { maxFeePerGas: fee.maxFeePerGas, maxPriorityFeePerGas: fee.maxPriorityFeePerGas };
+            })() : {}),
           };
           const hash = normalizeHash(await params.callbacks.requestSignature(request));
           step.hash = hash;

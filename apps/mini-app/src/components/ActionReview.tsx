@@ -114,7 +114,7 @@ function statusPresentation(params: Parameters<typeof buildStatusPresentation>[0
 export function ActionReview(props: ActionReviewProps) {
   const lifecycle = useActionReviewLifecycle(props);
   const { label = 'Review action', disabled = false, operationLabel, destructive = false, editor, decisionBefore, executionCost, surface = 'card', planBuilder } = props;
-  const { canSelectReviewedRoute, endConnectFlow, error, execute, gasCost, headingRef, loading, networkSwitching, quoteChanges, quoteExpired, refreshReviewedQuote, refreshing, reset, result, review, reviewTitle, route, routeSummaries, routes, selectedRoute, selectReviewedRoute, startConnectFlow, stage, status, statusDetail, stepResults, triggerRef, wallet } = lifecycle;
+  const { canSelectReviewedRoute, endConnectFlow, error, execute, feeSelection, gasCost, headingRef, loading, networkSwitching, quoteChanges, quoteExpired, refreshReviewedQuote, refreshing, reset, result, review, reviewTitle, route, routeSummaries, routes, selectedRoute, selectReviewedRoute, startConnectFlow, stage, status, statusDetail, stepResults, triggerRef, wallet } = lifecycle;
 
   if (stage === 'input') {
     const progress = statusPresentation({ stage, status, detail: statusDetail, stepResults, stepCount: 0 });
@@ -254,7 +254,10 @@ export function ActionReview(props: ActionReviewProps) {
   if (!route) return null;
   const stepCount = route.transactions.length;
   const approvalCount = route.transactions.filter((transaction) => transaction.kind === 'approval').length;
-  const facts = buildRouteFacts(route, gasCost, executionCost);
+  const feeTierQuote = feeSelection?.snapshot.chainId === route.chainId
+    ? feeSelection.snapshot.tiers[feeSelection.tier]
+    : undefined;
+  const facts = buildRouteFacts(route, gasCost, executionCost, feeTierQuote);
   const reviewFacts = splitReviewFacts(facts);
   const consequenceFacts = consequenceSummary(primaryReviewFacts(route));
   const positionChanges = pairVerifiedPositionFacts(decisionBefore ?? [], facts);

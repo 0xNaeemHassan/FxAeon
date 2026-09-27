@@ -2,6 +2,7 @@ import { formatEther, formatUnits, type Address } from 'viem';
 import { assertPublicClientChain, getPublicClient } from './clients';
 import { fetchEthereumGasFallback } from './etherscanGas';
 import type { FxPublicClient, PlannedRoute, PlannedTransaction } from './types';
+import { formatGasPriceGwei, validateGasTierQuote, type GasTierQuote } from './gasFeePolicy';
 
 /**
  * Gas is a property of the exact reviewed route. It is deliberately kept
@@ -20,6 +21,8 @@ export interface GasFeeSnapshot {
   source?: 'rpc' | 'etherscan';
   /** The Pages oracle may serve a bounded stale cache during an outage. */
   stale?: boolean;
+  tier?: GasTierQuote['tier'];
+  displayFeePerGasWei?: bigint;
 }
 
 export interface GasStepEstimate {
@@ -76,6 +79,8 @@ export interface EstimatePlannedRouteCostOptions {
   now?: () => number;
   /** Freshness lifetime. Defaults to fifteen seconds and is bounded. */
   ttlMs?: number;
+  /** Exact user-selected fee snapshot shared with review and wallet requests. */
+  feeTierQuote?: GasTierQuote;
 }
 
 const DEFAULT_TIMEOUT_MS = 8_000;
@@ -125,8 +130,8 @@ function bridgeQuoteFee(route: PlannedRoute, name: 'nativeFee' | 'lzTokenFee'): 
  * A stable, in-memory-only key. Keeping calldata in the key avoids reusing a
  * gas result for a different route while never persisting or logging it.
  */
-export function routeGasCostKey(route: PlannedRoute): string {
-  return [
+export function routeGasCostKey(route: PlannedRoute, feeTierQuote?: GasTierQuote): string {
+  const routeKey = [
     route.chainId,
     route.walletAddress.toLowerCase(),
     route.operation,
@@ -142,6 +147,9 @@ export function routeGasCostKey(route: PlannedRoute): string {
     bridgeQuoteFee(route, 'nativeFee')?.toString() ?? '',
     bridgeQuoteFee(route, 'lzTokenFee')?.toString() ?? '',
   ].join('::');
+  return feeTierQuote
+    ? `${routeKey}::${feeTierQuote.tier}:${feeTierQuote.gasPriceWei}:${feeTierQuote.maxFeePerGas}:${feeTierQuote.maxPriorityFeePerGas}:${feeTierQuote.validUntil ?? ''}:${feeTierQuote.source ?? ''}`
+    : routeKey;
 }
 
 function assertTimeout(value: number | undefined, fallback: number, maximum: number, label: string): number {
@@ -196,7 +204,19 @@ async function resolveFee(
   timeoutMs: number,
   signal?: AbortSignal,
   chainId?: PlannedRoute['chainId'],
+  selectedQuote?: GasTierQuote,
 ): Promise<GasFeeSnapshot> {
+  if (selectedQuote) {
+    const quote = validateGasTierQuote(selectedQuote);
+    return {
+      mode: 'eip1559-max',
+      feePerGasWei: quote.maxFeePerGas,
+      maxPriorityFeePerGasWei: quote.maxPriorityFeePerGas,
+      source: quote.source,
+      tier: quote.tier,
+      displayFeePerGasWei: quote.gasPriceWei,
+    };
+  }
   let firstError: unknown;
   if (client.estimateFeesPerGas) {
     try {
@@ -324,7 +344,7 @@ export async function estimatePlannedRouteCost(
   if (fetchedAt > Number.MAX_SAFE_INTEGER - ttlMs) {
     throw new RangeError('gas estimate timestamp is too large');
   }
-  const routeKey = routeGasCostKey(route);
+  const routeKey = routeGasCostKey(route, options.feeTierQuote);
   const nativeValueWei = route.transactions.reduce((sum, tx) => sum + tx.value, 0n);
   const validUntil = fetchedAt + ttlMs;
   if (route.transactions.length === 0) {
@@ -352,7 +372,7 @@ export async function estimatePlannedRouteCost(
   // Always settle this parallel request before the step loop completes. If a
   // fee request aborts while eth_estimateGas is still running, leaving a
   // rejected promise pending would surface as an unhandled rejection.
-  const feePromise = resolveFee(client, timeoutMs, options.signal, route.chainId)
+  const feePromise = resolveFee(client, timeoutMs, options.signal, route.chainId, options.feeTierQuote)
     .then((fee) => ({ fee } as const))
     .catch((error: unknown) => ({
       feeError: errorText(error),
@@ -488,6 +508,7 @@ export async function estimatePlannedRouteCost(
 /** UI-facing strings are produced only for values proven by the snapshot. */
 export function formatRouteGasCost(estimate: RouteGasCostEstimate): {
   estimatedGas?: string;
+  gasTier?: string;
   gasFee?: string;
   totalCost?: string;
 } {
@@ -495,6 +516,8 @@ export function formatRouteGasCost(estimate: RouteGasCostEstimate): {
   const gasAmount = estimate.executionGasFeeWei === undefined ? undefined : formatNativeCost(estimate.executionGasFeeWei);
   const totalAmount = estimate.totalNativeCostWei === undefined ? undefined : formatNativeCost(estimate.totalNativeCostWei);
   const isMaxFee = estimate.fee?.mode !== 'legacy';
+  const displayRate = estimate.fee?.displayFeePerGasWei;
+  const displayRateGwei = displayRate === undefined ? undefined : formatGasPriceGwei(displayRate);
   const gasFeeLabel = gasAmount === undefined ? undefined : `${gasAmount.unit}${isMaxFee ? ' (max)' : ''}`;
   const executionLabel = isMaxFee ? 'max execution' : 'execution fee';
   const totalLabel = totalAmount === undefined ? undefined : estimate.totalNativeCostScope === 'execution-plus-l1-plus-operator-plus-value'
@@ -502,6 +525,9 @@ export function formatRouteGasCost(estimate: RouteGasCostEstimate): {
     : `${totalAmount.unit} (native value + ${executionLabel})`;
   return {
     ...(estimate.estimatedGasUnits === undefined ? {} : { estimatedGas: `${formatGasUnits(estimate.estimatedGasUnits)} gas` }),
+    ...(estimate.fee?.tier === undefined || displayRateGwei === undefined
+      ? {}
+      : { gasTier: `${estimate.fee.tier[0].toUpperCase()}${estimate.fee.tier.slice(1)} · ${displayRateGwei} Gwei` }),
     ...(gasAmount === undefined || gasFeeLabel === undefined ? {} : { gasFee: `${gasAmount.amount} ${gasFeeLabel}` }),
     ...(totalAmount === undefined || totalLabel === undefined ? {} : { totalCost: `${totalAmount.amount} ${totalLabel}` }),
   };
@@ -550,8 +576,8 @@ export class RouteGasCostCache {
     this.now = options.now ?? Date.now;
   }
 
-  view(route: PlannedRoute): GasCostCacheView {
-    const key = routeGasCostKey(route);
+  view(route: PlannedRoute, feeTierQuote?: GasTierQuote): GasCostCacheView {
+    const key = routeGasCostKey(route, feeTierQuote);
     const previous = this.entries.get(key);
     const current = previous && previous.validUntil > this.now() ? previous : undefined;
     if (current) return { status: 'current', current };
@@ -560,7 +586,7 @@ export class RouteGasCostCache {
   }
 
   async refresh(route: PlannedRoute, options: Omit<EstimatePlannedRouteCostOptions, 'ttlMs' | 'now'> = {}): Promise<RouteGasCostEstimate> {
-    const key = routeGasCostKey(route);
+    const key = routeGasCostKey(route, options.feeTierQuote);
     const existing = this.inFlight.get(key)?.promise;
     if (existing) return existing;
     const globalGeneration = this.generation;
@@ -597,13 +623,16 @@ export class RouteGasCostCache {
 
   clear(route?: PlannedRoute): void {
     if (route) {
-      const key = routeGasCostKey(route);
-      this.entries.delete(key);
-      this.routeGenerations.set(key, (this.routeGenerations.get(key) ?? 0) + 1);
+      const routeKey = routeGasCostKey(route);
+      for (const key of [...this.entries.keys(), ...this.inFlight.keys()]) {
+        if (!key.startsWith(`${routeKey}::`) && key !== routeKey) continue;
+        this.entries.delete(key);
+        this.routeGenerations.set(key, (this.routeGenerations.get(key) ?? 0) + 1);
+        this.inFlight.delete(key);
+      }
       // Detach the request so a subsequent refresh starts with the new route
       // state. The old request is allowed to finish, but generation prevents
       // it from repopulating this cache.
-      this.inFlight.delete(key);
       return;
     }
     this.generation += 1;

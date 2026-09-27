@@ -64,14 +64,14 @@ test('new ETH review formats the actual quoted collateral, debt, and decimal exe
   ]);
 });
 
-test('review consequence facts have one visible owner while risk and constraints stay in the summary', () => {
+test('review consequence facts have one visible owner without a generic risk filler', () => {
   const facts = [
     { label: 'Amount', value: '10 fxUSD' },
-    { label: 'Risk', value: 'Liquidation risk may increase' },
     { label: 'Slippage', value: '0.5%' },
     { label: 'Gas fee', value: '0.001 ETH' },
   ];
   assert.deepEqual(factsOutsideConsequenceSummary(facts, [facts[0]!]), facts.slice(1));
+  assert.equal(primaryReviewFacts(route(opening(), {})).some((fact) => fact.label === 'Risk'), false);
 });
 
 test('refresh copy never describes partial or failed position actions as confirmed', () => {

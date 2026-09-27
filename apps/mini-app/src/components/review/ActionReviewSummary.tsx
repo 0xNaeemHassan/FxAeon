@@ -17,8 +17,8 @@ export function CompactQuoteMetrics({ facts, gasStatus }: {
   );
   const candidates: Array<ReviewFact | undefined> = [
     primaryOutcome ?? byLabel.get('Estimated collateral'),
+    byLabel.get('Gas tier'),
     byLabel.get('Gas fee') ?? { label: 'Network fee max', value: '—' },
-    byLabel.get('Total cost') ?? { label: 'Total cost max', value: '—' },
   ];
   const metrics = candidates
     .filter((fact): fact is ReviewFact => fact !== undefined)
@@ -27,7 +27,7 @@ export function CompactQuoteMetrics({ facts, gasStatus }: {
   return <div className={presentationStyles.quoteMetrics} aria-label="Current quote estimates">
     {metrics.map((fact) => <div className={presentationStyles.quoteMetric} key={fact.label}>
       <span className={presentationStyles.quoteMetricLabel}>{fact.label}</span>
-      <span className={presentationStyles.quoteMetricValue} title={fact.title}><ValueOrSkeleton value={fact.value} width="sm" status={gasStatus === 'refreshing' ? 'loading' : 'unavailable'} label={fact.label} /></span>
+      <span className={presentationStyles.quoteMetricValue} title={fact.title}>{fact.label === 'Gas tier' ? fact.value : <ValueOrSkeleton value={fact.value} width="sm" status={gasStatus === 'refreshing' ? 'loading' : 'unavailable'} label={fact.label} />}</span>
     </div>)}
   </div>;
 }

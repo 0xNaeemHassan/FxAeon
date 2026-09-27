@@ -12,6 +12,8 @@ import { userSafeError } from '@/lib/errors';
 import { hasTransactionHash, transactionStepProgress } from '@/lib/transactionProgress';
 import { chainName } from '@/components/review/ReviewProgress';
 import { primaryReviewFacts } from '@/components/review/actionReviewPresentation';
+import { fetchGasTierQuotes, formatGasTierQuote, selectedGasTierQuote, type GasFeeSelection } from '@/lib/fx/gasFeePolicy';
+import { readGasTier, SETTINGS_KEY, SETTINGS_UPDATED_EVENT } from '@/lib/settings';
 import { changedConsequenceFacts, reviewGenerationIsCurrent, updatedRouteTermsRequired, type ChangedReviewFact, type ReviewTransition } from '@/components/review/actionReviewModel';
 import { useActionReviewController } from '@/components/review/useActionReviewController';
 import type { ActionReviewProps } from './actionReviewTypes';
@@ -61,6 +63,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
   const [networkSwitching, setNetworkSwitching] = useState(false);
   const [resumeAfterConnect, setResumeAfterConnect] = useState(false);
   const [preparedAt, setPreparedAt] = useState<number | null>(null);
+  const [feeSelection, setFeeSelection] = useState<GasFeeSelection | null>(null);
   const transition = useCallback((event: ReviewTransition) => {
     transitionStage(event, status === 'awaiting-user');
   }, [status, transitionStage]);
@@ -114,7 +117,13 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
   const route = (stage === 'executing' || stage === 'result') && executionRoute
     ? executionRoute
     : routes[selectedRoute];
-  const gasCost = useRouteGasCost(route, { enabled: Boolean(route && stage !== 'planning') });
+  const routeChainId = route?.chainId;
+  const currentGasTier = readGasTier();
+  const selectedFeeQuote = useMemo(() => {
+    if (!routeChainId || feeSelection?.snapshot.chainId !== routeChainId || feeSelection.tier !== currentGasTier) return undefined;
+    try { return selectedGasTierQuote(feeSelection.snapshot, feeSelection.tier); } catch { return undefined; }
+  }, [currentGasTier, feeSelection, routeChainId]);
+  const gasCost = useRouteGasCost(route, { enabled: Boolean(route && stage !== 'planning' && selectedFeeQuote), feeTierQuote: selectedFeeQuote });
   const intentKey = draftState === undefined ? planBuilder : JSON.stringify(draftState);
   const previousIntentKey = useRef<typeof intentKey>(intentKey);
 
@@ -150,6 +159,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
     setResult(null);
     setStepResults([]);
     setExecutionRoute(null);
+    setFeeSelection(null);
     executionStepsRef.current = [];
     setRefreshing(false);
     setReviewTitle(null);
@@ -160,6 +170,25 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
     setStatusDetail('');
     window.requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
   }, [clearAcceptedRoute, clearSession, stage, transition]);
+
+  useEffect(() => {
+    const invalidateForTierChange = () => {
+      if (stage === 'review' && feeSelection && readGasTier() !== feeSelection.tier) {
+        expireQuote();
+        setError('Network fee preference changed. Review the updated fee before signing.');
+        setStatus('reviewing');
+      }
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === null || event.key === SETTINGS_KEY) invalidateForTierChange();
+    };
+    window.addEventListener(SETTINGS_UPDATED_EVENT, invalidateForTierChange);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener(SETTINGS_UPDATED_EVENT, invalidateForTierChange);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, [expireQuote, feeSelection, stage]);
 
   useEffect(() => {
     const onTelegramBack = (event: Event) => {
@@ -238,6 +267,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
     generationRef.current = generation;
     const reviewWalletAddress = wallet.address.toLowerCase();
     const reviewChainId = wallet.chainId;
+    const requestedGasTier = readGasTier();
     const reviewConnectionVersion = wallet.connectionVersion;
     const reviewSessionSnapshot = { walletAddress: reviewWalletAddress, chainId: reviewChainId, connectionVersion: reviewConnectionVersion };
     const assertReviewSession = () => {
@@ -275,18 +305,25 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
       if (!viable.length) {
         throw new Error(`The transaction could not be simulated: ${failures.join('; ')}`);
       }
+      const feeSnapshot = await fetchGasTierQuotes(viable[0].chainId);
+      if (!assertReviewSession()) return;
+      selectedGasTierQuote(feeSnapshot, requestedGasTier);
+      if (readGasTier() !== requestedGasTier) throw new Error('Network fee preference changed while preparing the review. Try reviewing again.');
       setRoutes(viable);
       setSelectedRoute(0);
       setStepResults([]);
       executionStepsRef.current = [];
       setExecutionRoute(null);
+      setFeeSelection({ snapshot: feeSnapshot, tier: requestedGasTier });
       // Snapshot the action with its calldata so later form changes cannot
       // rename the route the user reviewed.
       setReviewTitle(operationLabel ?? viable[0].operation);
       bindSession({ walletAddress, chainId: wallet.chainId, connectionVersion: wallet.connectionVersion });
       setStatus('reviewing');
       setStatusDetail('Route ready.');
-      const preparedAt = Date.now();
+      // Align the ordinary review freshness window with the earlier of route
+      // quote and gas quote expiry; neither can silently outlive the other.
+      const preparedAt = Math.min(Date.now(), feeSnapshot.validUntil - REVIEW_FRESHNESS_MS);
       acceptRoute(viable[0], intentKey);
       setQuoteChanges([]);
       preparedAtRef.current = preparedAt;
@@ -316,6 +353,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
     const walletAddress = reviewed.walletAddress.toLowerCase();
     const sessionChainId = wallet.chainId;
     const connectionVersion = wallet.connectionVersion;
+    const requestedGasTier = readGasTier();
     const sessionMatches = () => {
       if (!isCurrentGeneration(generation)) return false;
       const live = liveWalletRef.current;
@@ -337,6 +375,10 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
       if (!sessionMatches()) return;
       if (!viable.length) throw new Error(`The updated transaction could not be simulated: ${failures.join('; ')}`);
       const next = viable[0];
+      const feeSnapshot = await fetchGasTierQuotes(next.chainId);
+      const nextFeeQuote = selectedGasTierQuote(feeSnapshot, requestedGasTier);
+      if (!sessionMatches()) return;
+      if (readGasTier() !== requestedGasTier) throw new Error('Network fee preference changed while preparing the updated review. Try again.');
       const termsChanged = updatedRouteTermsRequired(acceptedTerms, next);
       const previousFacts = primaryReviewFacts(reviewed);
       const nextFacts = primaryReviewFacts(next);
@@ -346,16 +388,26 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
       if (previousRouteType !== nextRouteType && (previousRouteType || nextRouteType)) {
         factChanges.push({ label: 'Route', before: previousRouteType, after: nextRouteType });
       }
+      const previousFeeQuote = feeSelection?.snapshot.chainId === reviewed.chainId
+        ? feeSelection.snapshot.tiers[feeSelection.tier]
+        : undefined;
+      const previousFeeValue = previousFeeQuote ? formatGasTierQuote(previousFeeQuote) : undefined;
+      const nextFeeValue = formatGasTierQuote(nextFeeQuote);
+      if (previousFeeValue !== nextFeeValue) {
+        factChanges.push({ label: 'Gas tier', before: previousFeeValue, after: nextFeeValue });
+      }
       setQuoteChanges(factChanges);
       setRoutes(viable);
+      setFeeSelection({ snapshot: feeSnapshot, tier: requestedGasTier });
       setSelectedRoute(0);
       setStepResults([]);
       executionStepsRef.current = [];
       setReviewTitle(operationLabel ?? next.operation);
       bindSession({ walletAddress, chainId: sessionChainId, connectionVersion });
       acceptRoute(next, intentKey);
-      setPreparedAt(Date.now());
-      preparedAtRef.current = Date.now();
+      const updatedPreparedAt = Math.min(Date.now(), feeSnapshot.validUntil - REVIEW_FRESHNESS_MS);
+      setPreparedAt(updatedPreparedAt);
+      preparedAtRef.current = updatedPreparedAt;
       if (termsChanged && factChanges.length === 0) {
         setQuoteChanges([{ label: 'Transaction route', before: 'Previously reviewed route', after: 'Updated route' }]);
       }
@@ -373,7 +425,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
         setLoading(false);
       }
     }
-  }, [acceptRoute, acceptedTerms, bindSession, disabled, isCurrentGeneration, operationLabel, planBuilder, intentKey, quoteExpired, routes, selectedRoute, stage, wallet.chainId, wallet.connectionVersion]);
+  }, [acceptRoute, acceptedTerms, bindSession, disabled, feeSelection, isCurrentGeneration, operationLabel, planBuilder, intentKey, quoteExpired, routes, selectedRoute, stage, wallet.chainId, wallet.connectionVersion]);
 
   // History restores editable primitives only. Once the route owner has
   // applied those values and exposes its planner, immediately reopen the
@@ -395,6 +447,15 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
   const execute = useCallback(async () => {
     const startingRoute = route;
     if (disabled || !planBuilder || !startingRoute || loading || busyRef.current || stage !== 'review' || status === 'failed' || stepResults.some(hasTransactionHash)) return;
+    if (!feeSelection
+      || feeSelection.snapshot.chainId !== startingRoute.chainId
+      || feeSelection.tier !== readGasTier()
+      || feeSelection.snapshot.validUntil <= Date.now()) {
+      expireQuote();
+      setError('The selected network fee changed or expired. Review the updated fee before signing.');
+      setStatus('reviewing');
+      return;
+    }
     if (!matchesAcceptedRoute(startingRoute, intentKey) || quoteExpired
       || !preparedAtRef.current || Date.now() - preparedAtRef.current >= REVIEW_FRESHNESS_MS) {
       expireQuote();
@@ -437,6 +498,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
       setExecutionRoute(currentRoute);
       const execution = await runTransactionRoute({
         route: currentRoute,
+        feeSelection,
         callbacks: {
           ensureChain: async (chainId) => {
             if (!isCurrentExecution()) throw new Error('The selected wallet changed before the network switch.');
@@ -482,6 +544,9 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
               data: request.data,
               value: request.value,
               nonce: request.nonce,
+              gasPrice: request.gasPrice,
+              maxFeePerGas: request.maxFeePerGas,
+              maxPriorityFeePerGas: request.maxPriorityFeePerGas,
             }, {
               action: `${reviewTitle ?? currentRoute.operation} · ${request.to}`,
               description: `Check this transaction on ${chainName(request.chainId)} before approving it.`,
@@ -587,7 +652,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
         setLoading(false);
       }
     }
-  }, [bindSession, disabled, draftActionKey, draftResumePath, draftState, expireQuote, invalidateWalletData, isCurrentGeneration, loading, matchesAcceptedRoute, onComplete, planBuilder, intentKey, quoteExpired, reviewTitle, route, stage, status, stepResults, transition, wallet]);
+  }, [bindSession, disabled, draftActionKey, draftResumePath, draftState, expireQuote, feeSelection, invalidateWalletData, isCurrentGeneration, loading, matchesAcceptedRoute, onComplete, planBuilder, intentKey, quoteExpired, reviewTitle, route, stage, status, stepResults, transition, wallet]);
 
   // Connecting leaves the editor in place without preparing a transaction. The user
   // must click the action again after the wallet is connected.
@@ -620,7 +685,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
     stage, wallet, route, routes, selectedRoute, routeSummaries,
     status, statusDetail, stepResults, loading, networkSwitching, refreshing,
     error, result, reviewTitle, quoteExpired, quoteChanges,
-    gasCost,
+    gasCost, feeSelection,
     triggerRef, headingRef, review, execute, refreshReviewedQuote, reset,
     selectReviewedRoute,
     canSelectReviewedRoute: stage === 'review' && !busyRef.current,
