@@ -155,7 +155,7 @@ export function routeFinancialReviewFacts(route: PlannedRoute): ReviewFact[] {
     const identityDepositNoOp = intent.kind === 'fxsave-deposit'
       && limit.label === 'fxSAVE deposit conversion minimum output'
       && limit.value === '0'
-      && details.conversionPaths?.some((path) => path.label === 'fxSAVE deposit conversion');
+      && details?.conversionPaths?.some((path) => path.label === 'fxSAVE deposit conversion');
     if (identityDepositNoOp) continue;
     const known = limitUnit(limit.label, intent, pool);
     const fact = known && amountFact(known.label, limit.value, known.unit);

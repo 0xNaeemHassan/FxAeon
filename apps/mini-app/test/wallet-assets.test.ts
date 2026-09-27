@@ -9,6 +9,7 @@ import {
   walletAssetValuation,
   walletAssetCountLabel,
   walletAssetSourcesFailed,
+  ASSET_PRICE_MAX_AGE_MS,
   type WalletAssetSnapshot,
 } from '../src/lib/walletAssets';
 
@@ -72,7 +73,7 @@ test('expired balance or quote reads are removed from the display subtotal by th
   ], { prices: { ETH: 2000 }, status: 'ready', updatedAt: now }, now);
 
   const fresh = summarizeWalletAssets(merged, now);
-  const expired = summarizeWalletAssets(merged, now + 16 * 60_000);
+  const expired = summarizeWalletAssets(merged, now + ASSET_PRICE_MAX_AGE_MS + 1);
   assert.equal(fresh.totalUsdValue, 4000);
   assert.equal(expired.totalUsdValue, 0);
   assert.equal(expired.assets.find((asset) => asset.canonicalKey === 'ETH')?.usdValue, null);
@@ -93,7 +94,7 @@ test('a seven-minute cached quote remains display-fresh after refresh failure wi
   assert.equal(eth?.priceStatus, 'fresh');
   assert.equal(eth?.priceUpdatedAt, quoteAt);
   assert.equal(eth?.usdValue, 4_000);
-  assert.equal(summarizeWalletAssets(merged, quoteAt + 15 * 60_000 + 1).assets[0]?.priceStatus, 'stale');
+  assert.equal(summarizeWalletAssets(merged, quoteAt + ASSET_PRICE_MAX_AGE_MS + 1).assets[0]?.priceStatus, 'stale');
 });
 
 test('canonical replacement retains prior validated quote metadata when current prices omit the token', () => {

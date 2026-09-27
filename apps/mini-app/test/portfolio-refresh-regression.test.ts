@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { knownFreshPortfolioSubtotal } from '../src/lib/portfolioValuation';
 import { mergeUsdPriceUpdate, priceRefreshDelay, startPriceRefreshLoop } from '../src/lib/priceRefresh';
+import { USD_PRICE_MAX_AGE_MS } from '../src/lib/prices';
 import type { UsdPriceSnapshot, UsdPriceUpdate } from '../src/lib/prices';
 import type { WalletAsset, WalletAssetSnapshot } from '../src/lib/walletAssets';
 import type { WalletBalancesResult } from '../src/lib/fx/balances';
@@ -34,7 +35,7 @@ test('nonzero ETH without a quote plus an unrelated zero balance is unavailable,
 
 test('expiring the only held-token price cannot turn a correct total into $0', () => {
   assert.equal(knownFreshPortfolioSubtotal(null, balances, now, price, now).totalUsd?.toFixed(2), '1.50');
-  const staleAt = now - 15 * 60_000 - 1;
+  const staleAt = now - USD_PRICE_MAX_AGE_MS - 1;
   const stale = { ...price, updatedAt: staleAt, updatedAts: { ETH: staleAt } };
   assert.equal(knownFreshPortfolioSubtotal(null, balances, now, stale, now).totalUsd, null);
 });
@@ -91,7 +92,7 @@ test('partial price progress retains a seven-minute ETH quote and its original t
 
 test('refresh merge keeps seven-minute quotes but drops older tokens independently', () => {
   const aged = { prices: { ETH: 2_500, FXN: 1 }, updatedAt: now - 7 * 60_000,
-    updatedAts: { ETH: now - 7 * 60_000, FXN: now - 15 * 60_000 - 1 }, status: 'partial' as const };
+    updatedAts: { ETH: now - 7 * 60_000, FXN: now - USD_PRICE_MAX_AGE_MS - 1 }, status: 'partial' as const };
   const merged = mergeUsdPriceUpdate(aged, { prices: { USDC: 1 }, updatedAt: now,
     updatedAts: { USDC: now } }, now);
   assert.equal(merged.prices.ETH, 2_500);
@@ -114,7 +115,7 @@ test('an older response cannot overwrite a newer token price', () => {
 });
 
 test('expired, invalid and future prices are not revived during a refresh', () => {
-  const expiredAt = now - 15 * 60_000 - 1;
+  const expiredAt = now - USD_PRICE_MAX_AGE_MS - 1;
   const expired = { ...price, updatedAt: expiredAt, updatedAts: { ETH: expiredAt } };
   const result = mergeUsdPriceUpdate(expired, { prices: { ETH: 0, USDC: Number.NaN, WBTC: 100_000 }, updatedAt: now, updatedAts: { ETH: now, USDC: now, WBTC: now + 30_001 } }, now);
   assert.deepEqual(result.prices, {});

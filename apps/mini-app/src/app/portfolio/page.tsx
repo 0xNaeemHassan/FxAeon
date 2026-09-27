@@ -240,7 +240,8 @@ function PortfolioWallet() {
       <SupportedValueCard displayTotalUsd={portfolioValuation.totalUsd}
         loading={loading || liveLoading || priceSnapshot.refreshing || positionState.refreshing} refreshing={manualRefresh.refreshing} onRefresh={refreshAll}
         walletValue={knownWalletSubtotal.totalUsd} positionEquity={positionsComplete || knownPositionCount > 0 ? protocolEquityUsd : null}
-        walletComplete={valuation.complete && allWalletRowsPriced} positionsComplete={positionsComplete} assetCount={valuation.assetCount} />
+        walletComplete={valuation.complete && allWalletRowsPriced} positionsComplete={positionsComplete} assetCount={valuation.assetCount}
+        assetCountKnown={Boolean(displayAssets && Object.values(displayAssets.networks).every((network) => network.status === 'ready'))} />
       {walletTasks.filter((task) => task.kind !== 'transaction' && (task.kind !== 'valuation' || !refreshing)).map((task) => <StatusNotice key={task.id} title={task.title}
         tone={task.state === 'ready' ? 'success' : 'neutral'} action={<Link href={task.href}>{task.kind === 'withdrawal' && task.state === 'ready' ? 'Review claim' : task.kind === 'valuation' ? 'View affected assets' : 'View details'}</Link>}>
         {task.kind !== 'valuation' && task.detail}
@@ -315,10 +316,10 @@ function EarnPositionCard({ protocol, loading, prices }: { protocol: ProtocolSna
 }
 
 function SupportedValueCard({ displayTotalUsd, loading, refreshing, onRefresh,
-  walletValue, positionEquity, walletComplete, positionsComplete, assetCount,
+  walletValue, positionEquity, walletComplete, positionsComplete, assetCount, assetCountKnown,
 }: {
   displayTotalUsd: number | null; loading: boolean; refreshing: boolean; onRefresh: () => void;
-  walletValue: number | null; positionEquity: number | null; walletComplete: boolean; positionsComplete: boolean; assetCount: number;
+  walletValue: number | null; positionEquity: number | null; walletComplete: boolean; positionsComplete: boolean; assetCount: number; assetCountKnown: boolean;
 }) {
   return <section aria-label="Portfolio balance" className={`${presentation.valueCard} ${balancePresentation.hero}`}>
     <div className={presentation.valueTop}>
@@ -328,7 +329,7 @@ function SupportedValueCard({ displayTotalUsd, loading, refreshing, onRefresh,
         <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} aria-hidden="true" />
       </button>
     </div>
-    <p className={presentation.valueCaption}><ValueOrSkeleton value={walletComplete ? `${assetCount} ${assetCount === 1 ? 'wallet asset' : 'wallet assets'}` : '—'} width="sm" status={loading ? 'loading' : 'unavailable'} label="Wallet asset count" /></p>
+    <p className={presentation.valueCaption}><ValueOrSkeleton value={assetCountKnown ? `${assetCount} ${assetCount === 1 ? 'wallet asset' : 'wallet assets'}` : '—'} width="sm" status={loading ? 'loading' : 'unavailable'} label="Wallet asset count" /></p>
     <QuickActions />
     <Disclosure title="Value breakdown">
       <MetricRows rows={[
