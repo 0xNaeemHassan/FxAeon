@@ -93,6 +93,16 @@ test('pure ActionReview presentation builder keeps verified action facts and aut
   assert.equal(facts.some((fact) => fact.label === 'Estimated debt'), true);
 });
 
+test('estimated leverage is concise while the exact quote and requested target are preserved', () => {
+  const planned = route(opening(), { leverage: '2.0276220198182835', requestedLeverage: '2' });
+  const facts = routeFacts(planned, { estimate: undefined, estimateIsCurrent: false }, {});
+  assert.deepEqual(facts.find((fact) => fact.label === 'Leverage'), {
+    label: 'Leverage', value: '≈ 2.02×', title: '2.0276220198182835×',
+  });
+  assert.equal(facts.find((fact) => fact.label === 'Target leverage')?.value, '2×');
+  assert.equal(planned.details?.leverage, '2.0276220198182835');
+});
+
 test('bridge review keeps validated source, destination, asset, recipient, receive bound, and fee together', () => {
   const planned = {
     operation: 'buildBridgeTx',

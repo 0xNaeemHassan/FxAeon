@@ -126,7 +126,11 @@ export function primaryReviewFacts(route: PlannedRoute): ReviewFact[] {
   if (route.details?.routeType) addFact(facts, 'Route', route.details.routeType);
   if (route.details?.requestedLeverage !== undefined) addFact(facts, 'Target leverage', `${route.details.requestedLeverage}×`);
   if (route.details?.slippagePercent !== undefined) addFact(facts, 'Slippage', `${route.details.slippagePercent}%`);
-  if (route.details?.leverage !== undefined) addFact(facts, 'Leverage', `${route.details.leverage}×`);
+  if (route.details?.leverage !== undefined) facts.push({
+    label: 'Leverage',
+    value: `${conciseDecimal(route.details.leverage, 2)}×`,
+    title: `${route.details.leverage}×`,
+  });
   facts.push(...routeFinancialReviewFacts(route));
 
   if (isBridgeQuote(route.quote)) {

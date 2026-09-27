@@ -343,7 +343,7 @@ export default function EarnPage() {
       // A failed chain guard means none of the account-scoped reads are
       // current. Keep any previous snapshot visible for context, but prevent
       // every planner from treating it as authorization for a new action.
-      setReadWarnings(['vault configuration', 'balance', 'redemption status']);
+      setReadWarnings(address ? ['vault configuration', 'balance', 'redemption status'] : ['vault configuration']);
     } finally {
       readGuard.current.finish(request);
       if (readGuard.current.isCurrent(request)) setLoading(false);
@@ -464,7 +464,7 @@ export default function EarnPage() {
                 <button type="button" onClick={() => changeMode('withdraw')} className={presentation.back}><ArrowLeft size={17} aria-hidden="true" />Back to fxSAVE</button>
                 <h2>Withdrawal</h2>
               </div>}
-              {(activeReadWarnings.length > 0 || error) && <StatusNotice tone="warning" title={warningTitle}
+              {wallet.address && (activeReadWarnings.length > 0 || error) && <StatusNotice tone="warning" title={warningTitle}
                 action={<button type="button" aria-label="Retry fxSAVE data" title="Retry fxSAVE data" className={presentation.retryButton}
                   disabled={loading || refreshAction.refreshing} onClick={() => void refreshEarn()}><RefreshCw size={16} aria-hidden="true" /></button>} />}
               {loading && !walletData && wallet.address && <span role="status" className="sr-only">Reading fxSAVE data</span>}

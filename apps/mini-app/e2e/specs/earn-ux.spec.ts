@@ -45,6 +45,8 @@ test.describe('Earn entry and honest unavailable state', () => {
     await amount.fill('112');
     await expect(amount).toHaveValue('112');
     await expect(page.getByRole('button', { name: 'Connect wallet', exact: true }).last()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Retry fxSAVE data', exact: true })).toHaveCount(0);
+    await expect(page.getByText('fxSAVE balance unavailable', { exact: true })).toHaveCount(0);
     await expect(page.getByRole('radio', { name: 'Claim', exact: true })).toHaveCount(0);
     await expect(page.getByText(/claim success|claimed successfully/i)).toHaveCount(0);
     assertNoBackendRequests(requests);
