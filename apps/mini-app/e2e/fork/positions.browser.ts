@@ -605,16 +605,16 @@ async function runProof(captureStage: string) {
     ): Promise<{ signedBefore: number; transactionCount: number }> => {
       const signedBefore = submitted.length;
       let fakeClockInstalled = false;
-      if (options.probeQuoteExpiry) {
-        await activePage.clock.install();
-        fakeClockInstalled = true;
-      }
       try {
       await activePage.getByRole('button', { name: buttonName, exact: true }).click();
       const actionButton = activePage.getByRole('button', { name: /^Confirm (?:in wallet|\d+ transactions)$/ });
       await expect(actionButton).toBeVisible({ timeout: 180_000 });
       assert.equal(submitted.length, signedBefore, 'Review must prepare details without signing');
       if (options.probeQuoteExpiry) {
+        // Let the real route quote and RPC simulation complete on wall-clock
+        // timers. Freeze time only for the deliberate expiry assertion.
+        await activePage.clock.install();
+        fakeClockInstalled = true;
         await activePage.clock.fastForward(31_000);
         await activePage.clock.runFor(1);
         await expect(actionButton, 'an expired reviewed quote must remove the confirm action').toHaveCount(0);
