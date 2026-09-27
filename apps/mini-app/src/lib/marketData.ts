@@ -13,6 +13,8 @@ export type MarketHistorySnapshot = {
   currentPrice: number;
   percentChange: number;
   updatedAt: number;
+  /** Provider that supplied the accepted history, when known. */
+  source?: 'coingecko' | 'coinbase';
 };
 
 const COINGECKO_API_ROOT = 'https://api.coingecko.com/api/v3';
@@ -87,6 +89,7 @@ export function parseMarketHistoryResponse(
     currentPrice: last.price,
     percentChange,
     updatedAt: last.timestamp,
+    source: 'coingecko',
   };
 }
 
