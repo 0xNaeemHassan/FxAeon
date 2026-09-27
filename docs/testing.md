@@ -29,7 +29,11 @@ deterministic UI state lab each use an isolated Playwright config and focused
 commands: `pnpm test:e2e:borrow-harness`, `pnpm test:e2e:overlay`, and
 `pnpm test:e2e:state-lab`. `pnpm verify` runs those harness suites
 sequentially. The state-lab gate compares its approved screenshots on Windows;
-the current reference set contains 17 images. See
+the current reference set contains 17 images. The overlay harness includes
+portfolio asset loading/empty/error/refresh states and wallet refresh fan-out,
+including recovery after a synchronous reader failure. Production E2E checks
+server-rendered route metadata and form reachability with 200% text across all
+three appearance themes. See
 [`browser-test-gates.md`](browser-test-gates.md) for the exact suite map and
 [`ui-state-lab.md`](ui-state-lab.md) for the development-only lab and its
 fixture limits.
@@ -53,11 +57,19 @@ pnpm test:anvil:all
 pnpm test:anvil:browser
 ```
 
-`pnpm test:anvil:all` runs protocol, fxSAVE lifecycle, and stress suites.
-`pnpm test:anvil:browser` exercises position actions through the browser. The
-protected manual workflow `.github/workflows/anvil-fork.yml` runs these gates
-and uploads redacted proof manifests; it requires the protected Ethereum RPC
-secret and Foundry/Anvil.
+`pnpm test:anvil:all` opens ETH/BTC long/short positions, performs a real 25%
+partial reduction using the SDK's market- and side-specific amount units, runs
+the fxSAVE lifecycle proof, and runs randomized transaction-runner/snapshot
+smoke checks. The randomized runner checks exercise the execution harness on
+Anvil; they are not randomized protocol-position stress tests.
+`pnpm test:anvil:browser` exercises position actions through the browser,
+including quote-expiry refresh without signing and reviews of fxSAVE deposit,
+instant withdrawal, and queued withdrawal calldata. The protected manual
+workflow `.github/workflows/anvil-fork.yml` runs these gates and uploads
+redacted proof manifests; it requires the protected Ethereum RPC secret and
+Foundry/Anvil. Current-candidate results are recorded in
+[`release-validation.md`](release-validation.md); source coverage does not
+mean the protected gates have passed.
 
 ## Screenshot evidence
 

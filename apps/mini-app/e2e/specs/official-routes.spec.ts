@@ -463,17 +463,27 @@ test.describe("market price context", () => {
 
   test("portfolio keeps positions and fxSAVE actions inline", async ({ page, requests }) => {
     await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { name: "Positions", exact: true })).toBeVisible();
+    const positions = page.getByRole("region", { name: "Positions", exact: true });
+    const disclosure = positions.locator("details");
+    await expect(disclosure.locator("summary")).toBeVisible();
+    await expect(disclosure).not.toHaveAttribute("open");
+    await disclosure.locator("summary").click();
+    await expect(disclosure).toHaveAttribute("open", "");
     await expect(page.getByRole("link", { name: "Open trade", exact: true }).first()).toHaveAttribute("href", "/trade");
-    const openEarn = page.getByRole("link", { name: "Open Earn", exact: true });
-    if (await openEarn.count()) await expect(openEarn.first()).toHaveAttribute("href", "/earn");
+    const earnSection = page.locator('section[aria-labelledby="portfolio-earn-heading"]');
+    if (await earnSection.count()) {
+      const earnDisclosure = earnSection.locator("details");
+      await expect(earnDisclosure.locator("summary")).toBeVisible();
+      await expect(earnDisclosure).not.toHaveAttribute("open");
+      await earnDisclosure.locator("summary").click();
+      await expect(earnDisclosure).toHaveAttribute("open", "");
+    } else {
+      await expect(page.getByRole("link", { name: /^fxSAVE View Earn$/ })).toHaveAttribute("href", "/earn");
+    }
     // The no-RPC fixture cannot fabricate protocol positions. When a
     // canonical read returns one, the card and its Manage/Borrow/Close links
     // stay in this region; when it does not, the empty state is still valid.
-    const positions = page.getByRole("region", { name: "Positions", exact: true });
     await expect(positions).toBeVisible();
-    const earn = page.getByRole("heading", { name: "Earn position", exact: true });
-    if (await earn.count()) await expect(earn).toBeVisible();
     assertNoBackendRequests(requests);
   });
 

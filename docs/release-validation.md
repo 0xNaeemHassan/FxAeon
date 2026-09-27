@@ -1,71 +1,92 @@
 # Release validation record
 
-Use this record with the repository's release checklist. A result applies only
-to the source revision named here; update every status and evidence link after
-the final changes are ready. A successful typecheck alone is not a release
-result.
+Results apply only to the working-tree state and evidence listed here. Refresh
+this record after final verification; a successful typecheck alone is not a
+release result.
 
-## Revision
+## Current candidate
 
-- Commit:
-- Pull request:
-- Validation date:
-- Reviewer:
+- Pull request: [#208](https://github.com/0xNaeemHassan/FxAeon/pull/208)
+- Verified source basis: working tree based on `7c7157023adbea8eaf3b57612e4265dc57eba73d`; changes were uncommitted during verification, so this is not commit evidence
+- Validation date: 2026-09-27
+- `pnpm verify`: passed with terminal exit code 0; log: `%TEMP%/fxaeon-release-verify.log`
+- Protected Anvil protocol proof: running locally at fork block `26065969`; browser proof: pending
+- Fresh visual gallery review: complete for the capture listed below; no material clipping found
+- CI for the final committed revision: pending
 
-The results below are from the current working-tree validation. The final
-commit and evidence links must be recorded before release.
+The successful verification run covered the uncommitted working-tree state
+based on `7c71570`. It must not be attributed to a later commit until the
+committed revision has its own successful CI and protected protocol/browser
+proofs.
 
-## Automated gates
+## Verification evidence
 
-| Gate | Result | Evidence |
-| --- | --- | --- |
-| `pnpm verify` | First run exited 1 on two stale test assertions; a clean full rerun is not recorded. | Initial run log; rerun on final commit pending |
-| Root `pnpm typecheck` | Pass; includes the fork TypeScript project. | Local result; attach final log |
-| Unit suite | 463 passed; 4 fork-gated tests skipped. | Local test log; attach final log |
-| Build and artifact checks | Pass: app build, CSP, bundle, audit, secret scan, and landing checks. | Local logs; attach final reports |
-| Built-app browser suite | 155/155 passed. | Playwright report; attach final artifact |
-| Isolated browser suites | Borrow 5/5; overlay refresh 13/13; state lab 4/4, with 17 snapshots reviewed. | Harness reports and snapshot review; attach final artifacts |
-| Protected Anvil protocol and fxSAVE | 4/4 passed; proof manifests verified. | Redacted protocol and Earn proof manifests; attach final artifacts |
-| Protected Anvil browser suite | Pending. | Run and attach redacted proof manifest |
+- Unit and contract tests: 466 passed, 0 failed, 4 fork-related skips.
+- Root `pnpm verify` typecheck gate ran both `pnpm --dir apps/mini-app typecheck`
+  and `tsc -p apps/mini-app/e2e/fork/tsconfig.json`.
+- Built Mini App browser suite: 163 passed.
+- Borrow harness: 5 passed; overlay harness: 18 passed; state lab: 5 passed.
+- Landing build and static checks completed. The landing browser verifier passed
+  14 theme/viewport states covering preview semantics and readability, visible
+  content bounds, WCAG text contrast, 44px targets, keyboard/theme persistence,
+  reduced motion, and zero external requests.
 
-Record failures and retries alongside the final outcome. Keep the production
-browser suite, isolated harnesses, and protected fork results distinct; they
-exercise different environments and do not substitute for one another. These
-results do not constitute a clean final `pnpm verify` run or establish
-validation of the eventual PR commit.
+Anvil protocol and browser proofs are separate from the successful `pnpm
+verify` gate. The local protocol run is in progress at fork block `26065969`;
+the browser proof remains pending. The four skipped tests are not a substitute
+for those release proofs. CI for the final committed revision remains pending.
 
-## Visual review
+The verified working tree includes product and landing changes, shared
+portfolio asset-state coverage, synchronous wallet-refresh failure/retry
+coverage, route metadata and enlarged-text checks, and Anvil proof updates.
+Earlier successful results apply to revision
+`7c7157023adbea8eaf3b57612e4265dc57eba73d` only and do not establish the
+current working-tree or future committed-revision gates.
 
-The current working-tree gallery in
-`artifacts/refinement/generated/run-20260927T025408Z/` contains 55
-route/theme/viewport views and 86 PNG frames; all frames were manually
-reviewed. Mobile views use the exact 393×852 CSS-pixel baseline across the
-official, dark, and light themes. Three official-theme desktop views cover
-Portfolio, wallet profile, and Trade at 1440×1000. The built-app browser suite
-passed 155/155 checks, including action clearance at the compact baseline.
-Interactive targets remain at least 44px and primary actions at least 48px.
+## Coverage in the candidate
 
-| Surface or change | Before reference | Reviewed working-tree capture | Review note |
-| --- | --- | --- | --- |
-| Shared surfaces, portfolio identity, and assets | Historical build4 [Portfolio](review/assets/portfolio.png) | `portfolio-{official,dark,light}-mobile-01.png` | Theme and route states reviewed; chain balances unavailable in the static fixture. |
-| Trade amount control and transaction review | Historical build4 [Trade review](review/assets/trade-review.png) | `trade-eth-long-01.png`; `state-lab-{official,dark,light}-review.png` | Amount form plus generic review UI stages; no flow-specific quote or receipt. |
-| Borrow tabs and heading hierarchy | — | `borrow-eth-collateral-01.png` | Editable form state; no synthetic route quote. |
-| Earn withdrawal action and navigation clearance | — | `earn-withdraw-instant-01.png`; `earn-withdraw-queued-01.png` | UI states only; no claim or withdrawal was submitted. |
-| Move alignment and action placement | Historical build4 [Move](review/assets/move.png) | `move-ethereum-to-base-01.png`; `move-base-to-ethereum-01.png` | Route panel is intentionally centered; no bridge quote was synthesized. |
-| Wallet focus, close, and return-focus behavior | Historical build4 [Wallet profile](review/assets/wallet-profile.png) | `wallet-profile-{official,dark,light}-mobile-01.png` | Wallet remains a test shim; balance and asset reads are unavailable. |
+- The isolated PortfolioAssets browser harness distinguishes pending, ready
+  empty, unavailable with Retry, and verified holdings during refresh.
+- The refresh harness covers fan-out/coalescing, wallet changes with stale
+  requests, and a synchronous reader failure followed by a same-wallet retry.
+- Production browser checks cover route-specific metadata before hydration,
+  responsive review-action clearance at 393×852, 44px amount shortcuts, and
+  form reachability with 200% text in Official, Dark, and Light themes.
+- The protected protocol proof opens ETH/BTC long/short positions and performs
+  a real 25% partial reduction using market- and side-specific SDK amount
+  units. The browser proof checks expired-quote refresh without signing and
+  binds reviewed transactions to broadcast calldata. Earn browser coverage
+  verifies deposit calldata and reviews both instant and queued withdrawals.
 
-These fixture captures document rendered UI, not healthy live balances or
-protocol state. See the [visual review record](review/README.md) for route
-coverage, themes, source provenance, and the limits of the evidence. Record the
-final source revision and capture manifest after the final commit; the current
-gallery does not establish final-commit evidence.
+These describe assertions in the current source; they do not imply that the
+pending candidate gates have passed. See [testing](testing.md) and [browser
+test gates](browser-test-gates.md) for the suite boundaries.
 
-Concept art in `artifacts/refinement/concepts/` is not implementation evidence;
-verify illustrative protocol values against the app.
+## Visual evidence
 
-## Limits
+The reviewed current-working-tree gallery is
+[`artifacts/refinement/generated/run-20260927T071112Z/`](../artifacts/refinement/generated/run-20260927T071112Z/).
+It contains 63 views and 103 PNG frames at 393×852 mobile and 1440×1000 desktop
+viewports. Root and the form-art reviewer inspected the Portfolio, wallet
+profile, main forms, Settings, More, Receive, History, and every Docs section;
+they found no material clipping.
 
-State whether any native Telegram login or wallet handoff, real bridge delivery,
-or other device-only behavior was separately exercised. Do not infer those
-results from browser emulation. Link the relevant [testing](testing.md),
-[deployment](deployment.md), and [release checklist](launch-readiness.md).
+The capture manifest records zero page errors and zero console errors. It also
+records two `net::ERR_ABORTED` requests for same-origin Next RSC prefetches
+during navigation (`settings` and `more`), not external-service failures. The
+gallery uses a connected test-wallet shim and deterministic illustrative
+market data; wallet balances and flow-specific route quotes are unavailable,
+and no confirmation, signature, transaction, or chain mutation was performed.
+It documents rendered UI only, not healthy live data or protocol state.
+
+The earlier gallery at
+[`artifacts/refinement/generated/run-20260927T025408Z/`](../artifacts/refinement/generated/run-20260927T025408Z/)
+is historical and is not the current visual evidence.
+
+Concept art in `artifacts/refinement/concepts/` is not implementation evidence.
+
+## Release limits
+
+Browser emulation does not establish native Telegram authentication, wallet
+handoff, or real bridge delivery. Record those separately if exercised. Do not
+infer them from the automated browser or fork results.

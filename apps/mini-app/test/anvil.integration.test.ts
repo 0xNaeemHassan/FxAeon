@@ -14,13 +14,14 @@ import {
   type Hex,
 } from "viem";
 import { mainnet } from "viem/chains";
-import { planDepositAndMint, planIncreasePosition } from "../src/lib/fx/service";
+import { planDepositAndMint, planIncreasePosition, planReducePosition } from "../src/lib/fx/service";
 import { clampLeverage, readLeverageBounds } from "../src/lib/fx/leverage";
 import { positionPoolAddress } from "../src/lib/fx/policy";
-import { tokenAddress, type UiMarket, type UiSide } from "../src/app/trade/fxUi";
+import { getSdkReductionAmountWei, tokenAddress, type UiMarket, type UiSide } from "../src/app/trade/fxUi";
 import { clearPendingHashJournalForTests } from "../src/lib/fx/journal";
 import { runTransactionRoute, waitForReceipt } from "../src/lib/fx/runner";
 import type { FxPublicClient, PlannedRoute, TransactionPolicy } from "../src/lib/fx/types";
+import { decodePositionRouterEvent } from "../src/lib/positionRouterEvents";
 
 const configuredRpc = process.env.ANVIL_RPC_URL?.trim();
 const configuredSuite = process.env.FX_ANVIL_SUITE?.trim().toLowerCase() || "protocol";
@@ -223,6 +224,22 @@ interface ProtocolPositionProof {
     hash: Hex;
     blockNumber: string;
   }>;
+}
+
+interface PartialReductionProof {
+  market: UiMarket;
+  side: UiSide;
+  pool: Address;
+  positionId: number;
+  requestedAmountWei: string;
+  reductionFractionBps: number;
+  rawCollateralBefore: string;
+  rawDebtBefore: string;
+  rawCollateralAfter: string;
+  rawDebtAfter: string;
+  usdcBefore: string;
+  usdcAfter: string;
+  transactions: Array<{ hash: Hex; blockNumber: string }>;
 }
 
 async function writeProtocolManifest(manifest: unknown): Promise<void> {
@@ -600,6 +617,174 @@ test("protocol proof: official SDK opens coexisting ETH/BTC long and short posit
       assert.equal(rawDebt.toString(), position.rawDebt, `${position.market} ${position.side} debt changed before coexistence verification`);
     }
 
+    // Exercise a genuine partial reduction on every supported market/direction
+    // against the positions above. Reduce 25% using the SDK's market- and
+    // side-specific amount units so each position remains open.
+    const partialReductions: PartialReductionProof[] = [];
+    const reductionFractionBps = 2_500;
+    for (const position of positions) {
+      const positionId = position.positionId;
+      const beforeOwner = await publicClient.readContract({
+        address: position.pool,
+        abi: POSITION_POOL_ABI,
+        functionName: "ownerOf",
+        args: [BigInt(positionId)],
+      });
+      assert.equal(beforeOwner.toLowerCase(), wallet.toLowerCase());
+      const [collateralBefore, debtBefore] = await publicClient.readContract({
+        address: position.pool,
+        abi: POSITION_POOL_ABI,
+        functionName: "getPosition",
+        args: [BigInt(positionId)],
+      });
+      const reductionAmount = await getSdkReductionAmountWei({
+        client: publicClient,
+        market: position.market,
+        side: position.side,
+        rawCollateralWei: collateralBefore,
+        rawDebtWei: debtBefore,
+        fractionBps: reductionFractionBps,
+      });
+      const nextIdBefore = Number(await publicClient.readContract({
+        address: position.pool,
+        abi: POSITION_POOL_ABI,
+        functionName: "getNextPositionId",
+      }));
+      assert.ok(collateralBefore > 0n && debtBefore > 0n, `${position.market} ${position.side} partial reduce fixture must be active`);
+      const usdcBefore = await publicClient.readContract({
+        address: tokenAddress("USDC"),
+        abi: ERC20_ABI,
+        functionName: "balanceOf",
+        args: [wallet],
+      });
+      const otherPositionsBefore = await Promise.all(positions
+        .filter((candidate) => candidate !== position)
+        .map(async (candidate) => ({
+          position: candidate,
+          state: await publicClient.readContract({
+            address: candidate.pool,
+            abi: POSITION_POOL_ABI,
+            functionName: "getPosition",
+            args: [BigInt(candidate.positionId)],
+          }),
+        })));
+      const reduceRoutes = await planReducePosition({
+        market: position.market,
+        type: position.side,
+        positionId,
+        userAddress: wallet,
+        outputTokenAddress: tokenAddress("USDC"),
+        amount: reductionAmount,
+        slippage: 1,
+        isClosePosition: false,
+      });
+      assert.ok(reduceRoutes.length > 0, `${position.market} ${position.side} partial reduction returned no SDK route`);
+      const reduceRoute = reduceRoutes[0];
+      const reduceIntent = reduceRoute.policy?.reviewedAction;
+      assert.ok(reduceIntent?.kind === "position-reduce", "partial reduction route must retain its reduce-position intent");
+      assert.equal(reduceIntent.positionId, positionId);
+      assert.equal(reduceIntent.isClosePosition, false);
+      assert.equal(reduceIntent.requestedAmount, reductionAmount);
+      const reduced = await runTransactionRoute({
+        route: reduceRoute,
+        publicClient,
+        callbacks: {
+          requestSignature: (request) => rpc<Hex>("eth_sendTransaction", [{
+            from: request.from,
+            to: request.to,
+            data: request.data,
+            value: hexQuantity(request.value),
+            nonce: hexQuantity(BigInt(request.nonce)),
+          }]),
+        },
+        options: { receiptTimeoutMs: 120_000, pollMs: 100, waitForNextBlock: false },
+      });
+      assert.equal(reduced.status, "confirmed", `${position.market} ${position.side} partial reduction failed: ${reduced.error ?? "unknown error"}`);
+      assert.ok(reduced.steps.length > 0, `${position.market} ${position.side} partial reduction returned no transaction steps`);
+      for (const step of reduced.steps) {
+        assert.equal(step.status, "confirmed", `${position.market} ${position.side} partial reduction step did not confirm`);
+        assert.ok(step.hash && step.receipt, `${position.market} ${position.side} partial reduction step lacks receipt evidence`);
+        assert.equal(step.receipt.status, "success");
+      }
+      const actionStep = [...reduced.steps].reverse().find((step) => step.transaction.kind === "action");
+      assert.ok(actionStep?.hash && actionStep.receipt, `${position.market} ${position.side} partial reduction action receipt is missing`);
+      let positionEventObserved = false;
+      for (const log of actionStep.receipt.logs) {
+        const event = decodePositionRouterEvent(log);
+        if (!event
+          || event.operation !== "close"
+          || event.pool.toLowerCase() !== position.pool.toLowerCase()
+          || event.positionId !== BigInt(positionId)) continue;
+        if (event.recipient) assert.equal(event.recipient.toLowerCase(), wallet.toLowerCase(), "long reduction event recipient must be the disposable wallet");
+        positionEventObserved = true;
+      }
+      assert.equal(positionEventObserved, true, `${position.market} ${position.side} reduction receipt must emit the canonical same-ID position event`);
+      await rpc("anvil_mine", ["0x1"]);
+
+      const ownerAfter = await publicClient.readContract({
+        address: position.pool,
+        abi: POSITION_POOL_ABI,
+        functionName: "ownerOf",
+        args: [BigInt(positionId)],
+      });
+      assert.equal(ownerAfter.toLowerCase(), wallet.toLowerCase(), `${position.market} ${position.side} partial reduction changed NFT owner`);
+      const [collateralAfter, debtAfter] = await publicClient.readContract({
+        address: position.pool,
+        abi: POSITION_POOL_ABI,
+        functionName: "getPosition",
+        args: [BigInt(positionId)],
+      });
+      assert.ok(collateralAfter > 0n && collateralAfter < collateralBefore, `${position.market} ${position.side} partial reduction must lower, not clear, collateral`);
+      assert.ok(debtAfter > 0n && debtAfter < debtBefore, `${position.market} ${position.side} partial reduction must lower, not clear, debt`);
+      assert.equal(Number(await publicClient.readContract({
+        address: position.pool,
+        abi: POSITION_POOL_ABI,
+        functionName: "getNextPositionId",
+      })), nextIdBefore, `${position.market} ${position.side} partial reduction must preserve the position ID counter`);
+      const usdcAfter = await publicClient.readContract({
+        address: tokenAddress("USDC"),
+        abi: ERC20_ABI,
+        functionName: "balanceOf",
+        args: [wallet],
+      });
+      assert.ok(usdcAfter > usdcBefore, `${position.market} ${position.side} partial reduction must return its selected USDC output`);
+
+      for (const { position: other, state: [otherCollateralBefore, otherDebtBefore] } of otherPositionsBefore) {
+        const [otherCollateralAfter, otherDebtAfter] = await publicClient.readContract({
+          address: other.pool,
+          abi: POSITION_POOL_ABI,
+          functionName: "getPosition",
+          args: [BigInt(other.positionId)],
+        });
+        assert.equal(otherCollateralAfter, otherCollateralBefore, `${position.market} ${position.side} reduction unexpectedly changed ${other.market} ${other.side} collateral`);
+        assert.equal(otherDebtAfter, otherDebtBefore, `${position.market} ${position.side} reduction unexpectedly changed ${other.market} ${other.side} debt`);
+        assert.equal((await publicClient.readContract({
+          address: other.pool,
+          abi: POSITION_POOL_ABI,
+          functionName: "ownerOf",
+          args: [BigInt(other.positionId)],
+        })).toLowerCase(), wallet.toLowerCase(), `${position.market} ${position.side} reduction unexpectedly changed ${other.market} ${other.side} ownership`);
+      }
+
+      position.rawCollateral = collateralAfter.toString();
+      position.rawDebt = debtAfter.toString();
+      partialReductions.push({
+        market: position.market,
+        side: position.side,
+        pool: position.pool,
+        positionId,
+        requestedAmountWei: reductionAmount.toString(),
+        reductionFractionBps,
+        rawCollateralBefore: collateralBefore.toString(),
+        rawDebtBefore: debtBefore.toString(),
+        rawCollateralAfter: collateralAfter.toString(),
+        rawDebtAfter: debtAfter.toString(),
+        usdcBefore: usdcBefore.toString(),
+        usdcAfter: usdcAfter.toString(),
+        transactions: reduced.steps.map((step) => ({ hash: step.hash!, blockNumber: step.receipt!.blockNumber.toString() })),
+      });
+    }
+
     manifest = {
       schemaVersion: 1,
       proof: "fxaeon-real-fx-position-fork",
@@ -630,6 +815,10 @@ test("protocol proof: official SDK opens coexisting ETH/BTC long and short posit
         existingLongDebtIncreased: true,
         borrowedFxUsdReceived: true,
         existingLongPositionIdPreserved: true,
+        partialReductionVerified: partialReductions.length === scenarios.length,
+        partialReductionPreservedOwnershipAndIds: true,
+        partialReductionChangedOnlyTargetPosition: true,
+        partialReductionReturnedSelectedOutput: true,
         snapshotRevertedAfterProof: true,
       },
       existingLongBorrow: {
@@ -641,6 +830,7 @@ test("protocol proof: official SDK opens coexisting ETH/BTC long and short posit
         walletFxUsdBeforeWei: beforeFxUsdBalance.toString(),
         walletFxUsdAfterWei: afterFxUsdBalance.toString(),
       },
+      partialReductions,
       positions,
       redactions: ["upstream RPC URL", "upstream provider credential", "impersonated donor address", "Anvil private keys"],
     };

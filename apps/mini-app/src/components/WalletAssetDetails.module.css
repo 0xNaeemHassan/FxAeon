@@ -6,12 +6,12 @@
 .modalHeader button:hover { background: var(--mint-dim); color: var(--text); }
 .modalBody { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 14px 20px calc(20px + env(safe-area-inset-bottom, 0px)); }
 .details { display: flex; min-width: 0; flex-direction: column; gap: 14px; }
-.hero { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 8px 14px; text-align: center; border-bottom: 1px solid var(--line); }
-.hero h3 { margin: 4px 0 0; color: var(--text); font-size: 22px; font-weight: 650; letter-spacing: -.02em; }
-.hero > p { margin: 0; color: var(--mut); font-size: 13px; }
-.holdingValue { margin-top: 8px; color: var(--text); font-size: clamp(32px, 8vw, 40px); font-variant-numeric: tabular-nums; font-weight: 650; letter-spacing: -.055em; line-height: 1.1; }
+.hero { display: flex; align-items: center; gap: 16px; padding: 12px 0 20px; border-bottom: 1px solid var(--line); }
+.heroValue { display: grid; min-width: 0; gap: 6px; }
+.holdingValue { color: var(--text); font-size: clamp(32px, 8vw, 40px); font-variant-numeric: tabular-nums; font-weight: 650; letter-spacing: -.055em; line-height: 1.1; overflow-wrap: anywhere; }
 .holdingLabel { color: var(--mut); font-size: 12px; }
-.addressPanel { display: grid; gap: 10px; border: 1px solid var(--line); border-radius: 15px; background: color-mix(in srgb, var(--surface-2) 42%, transparent); padding: 12px; }
+.addressPanel { display: grid; gap: 6px; border: 1px solid var(--line); border-radius: var(--radius-md); background: color-mix(in srgb, var(--surface-2) 42%, transparent); padding: 6px 12px 12px; }
+.addressHeader { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .addressPanel h3 { margin: 0; color: var(--mut); font-size: 13px; font-weight: 500; }
 .address { margin: 0; color: var(--text); font-size: 14px; line-height: 1.4; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; user-select: all; }
 .copyStatus:empty { display: none; }

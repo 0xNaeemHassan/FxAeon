@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, expect as playwrightExpect, type Locator, type Page, type Route } from '@playwright/test';
-import { createPublicClient, decodeEventLog, encodeFunctionData, formatUnits, http, parseUnits, type Address, type Hex } from 'viem';
+import { createPublicClient, decodeFunctionData, encodeFunctionData, formatUnits, http, parseAbi, parseUnits, type Address, type Hex } from 'viem';
 import { formatExactDecimal } from '../../src/lib/amount';
 import { formatAmount, readPositionGroupWithDirectFallback, tokenAddress } from '../../src/app/trade/fxUi';
 import { readCanonicalPositionInfo } from '../../src/app/trade/canonicalPositionReader';
@@ -22,6 +22,7 @@ import { runTransactionRoute } from '../../src/lib/fx/runner';
 import { getFxReadFacade } from '../../src/lib/fx/readFacade';
 import type { FxPublicClient } from '../../src/lib/fx/types';
 import { positionPoolAddress } from '../../src/lib/fx/policy';
+import { decodePositionRouterEvent, positionRouterEventMatchesRecipient } from '../../src/lib/positionRouterEvents';
 import { mainnet } from 'viem/chains';
 
 const appRoot = fileURLToPath(new URL('../..', import.meta.url));
@@ -53,21 +54,18 @@ const tokenAbi = [
   { type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] },
   { type: 'function', name: 'transfer', stateMutability: 'nonpayable', inputs: [{ type: 'address' }, { type: 'uint256' }], outputs: [{ type: 'bool' }] },
 ] as const;
-const positionRouterEventAbi = [
-  { type: 'event', name: 'OpenOrAdd', anonymous: false, inputs: [
-    { name: 'pool', type: 'address', indexed: false }, { name: 'position', type: 'uint256', indexed: false },
-    { name: 'recipient', type: 'address', indexed: false }, { name: 'colls', type: 'uint256', indexed: false },
-    { name: 'debts', type: 'uint256', indexed: false }, { name: 'borrows', type: 'uint256', indexed: false },
-  ] },
-  { type: 'event', name: 'CloseOrRemove', anonymous: false, inputs: [
-    { name: 'pool', type: 'address', indexed: false }, { name: 'position', type: 'uint256', indexed: false },
-    { name: 'recipient', type: 'address', indexed: false }, { name: 'colls', type: 'uint256', indexed: false },
-    { name: 'debts', type: 'uint256', indexed: false }, { name: 'borrows', type: 'uint256', indexed: false },
-  ] },
-] as const;
 const usdc = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48' as const;
 const fxUsd = tokenAddress('fxUSD');
 const donor = '0xc3d688b66703497daa19211eedff47f25384cdc3' as const;
+const instantRedeemAbi = parseAbi([
+  'function instantRedeemFromFxSave((address tokenOut,address converter,uint256 encodings,uint256[] routes,uint256 minOut,bytes signature) fxusdParams,(address tokenOut,address converter,uint256 encodings,uint256[] routes,uint256 minOut,bytes signature) usdcParams,uint256 amount,address receiver)',
+]);
+const depositToFxSaveAbi = parseAbi([
+  'function depositToFxSave((address tokenIn,uint256 amount,address target,bytes data,uint256 minOut,bytes signature) convertInParams,address tokenInAddress,uint256 minShares,address receiver)',
+]);
+const queuedRedeemAbi = parseAbi(['function requestRedeem(uint256 amount)']);
+const fxSave = tokenAddress('fxSAVE');
+const router = '0x33636D49FbefBE798e15e7F356E8DBef543CC708' as Address;
 
 function receiptHold() {
   let releasePromise: () => void = () => undefined;
@@ -114,6 +112,29 @@ function normalizeForkBlock(value: string | number): bigint {
 
 async function runProof(captureStage: string) {
   await mkdir(artifactRoot, { recursive: true });
+  const reviewRunName = `run-${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z')}`;
+  const reviewEvidenceRoot = resolve(artifactRoot, 'reviews', reviewRunName);
+  let reviewEvidenceInitialized = false;
+  const reviewCaptures: Array<{
+    file: string;
+    action: string;
+    route: string;
+    viewport: { width: 393; height: 852 };
+    scrollTop: number;
+    overflowReason: string | null;
+    provenance: string;
+  }> = [];
+  const writeReviewManifest = async () => writeFile(resolve(reviewEvidenceRoot, 'manifest.json'), JSON.stringify({
+    schemaVersion: 1,
+    generatedAt: new Date().toISOString(),
+    provenance: 'Actual protected browser actions on a disposable local Anvil fork of Ethereum mainnet. Each image is captured after the real app opens its preconfirm review and before a wallet signature is requested. Values shown are fork-backed reads; this evidence does not represent live mainnet state.',
+    walletAddress: 'omitted; local fork account',
+    captures: reviewCaptures,
+    unavailableReviewCoverage: [
+      { action: 'Move Ethereum to Base review', reason: 'The protected browser proof does not submit or review bridge actions.' },
+      { action: 'Move Base to Ethereum review', reason: 'The protected browser proof does not submit or review bridge actions.' },
+    ],
+  }, null, 2));
   assert.equal(await rpc('eth_chainId'), '0x1');
   assert.match(await rpc<string>('web3_clientVersion'), /anvil/i, 'never use a real RPC for this test');
   const [wallet, alternateWallet] = await rpc<Address[]>('eth_accounts');
@@ -163,6 +184,7 @@ async function runProof(captureStage: string) {
     createdBy: Address; transferredTo: Address; transferredBackTo: Address; finalOwner: Address;
     rawCollateral: string; rawDebt: string; transactions: Array<{ kind: string; hash: Hex; blockNumber: string }>;
   } | undefined;
+  let quoteExpiryBlockedUntilRefresh = false;
   const browserErrors: string[] = [];
   const routeErrors: string[] = [];
   let tearingDown = false;
@@ -347,7 +369,7 @@ async function runProof(captureStage: string) {
       if (group && query.startsWith('queryWalletPositionOrders{')) {
         const match = query.match(/^queryWalletPositionOrders\{orders\(first:5,skip:(0|[1-9][0-9]*),where:\{positionId_in:\[([0-9,\"]*)\],type_in:\["Open","Close"\]\},orderBy:blockNumber,orderDirection:desc\)\{idtypehashblockNumbertimestamp\}\}$/);
         assert.ok(!url.search && !url.hash && route.request().method() === 'POST'
-          && Object.keys(body).length === 1 && match, 'unexpected indexer order query');
+          && Object.keys(body).length === 1 && match && queryWallet, 'unexpected indexer order query');
         const queriedIds = [...match[2].matchAll(/"([1-9][0-9]{0,15})"/g)].map(value => Number(value[1]));
         assert.ok(queriedIds.length > 0 && queriedIds.every(id => candidates.some(candidate => candidate.pool === group.pool && candidate.positionId === id)),
           'indexer order query must refer only to positions discovered by this fork proof');
@@ -357,6 +379,7 @@ async function runProof(captureStage: string) {
         ])];
         const orders: Array<{ id: string; type: 'Open' | 'Close'; hash: Hex; blockNumber: string; timestamp: string }> = [];
         for (const hash of hashes) {
+          if (!hash) continue;
           const receipt = await (forkReceiptCache.get(hash.toLowerCase()) ?? (() => {
             const pending = client.getTransactionReceipt({ hash }).catch(() => null as never);
             forkReceiptCache.set(hash.toLowerCase(), pending);
@@ -365,14 +388,13 @@ async function runProof(captureStage: string) {
           if (!receipt) continue;
           const block = await client.getBlock({ blockNumber: receipt.blockNumber });
           for (const log of receipt.logs) {
-            if (log.address.toLowerCase() !== '0x33636d49fbefbe798e15e7f356e8dbef543cc708') continue;
-            try {
-              const event = decodeEventLog({ abi: positionRouterEventAbi, data: log.data, topics: log.topics });
-              const positionId = Number(event.args.position);
-              if (event.args.pool.toLowerCase() !== group.pool.toLowerCase() || !queriedIds.includes(positionId)) continue;
-              orders.push({ id: `${positionId}_${hash}`, type: event.eventName === 'OpenOrAdd' ? 'Open' : 'Close',
-                hash, blockNumber: receipt.blockNumber.toString(), timestamp: block.timestamp.toString() });
-            } catch { /* Other router events do not represent position history rows. */ }
+            const event = decodePositionRouterEvent(log);
+            if (!event || event.pool.toLowerCase() !== group.pool.toLowerCase()) continue;
+            if (!positionRouterEventMatchesRecipient(event, log, receipt.logs, queryWallet)) continue;
+            const positionId = Number(event.positionId);
+            if (!queriedIds.includes(positionId)) continue;
+            orders.push({ id: `${positionId}_${hash}`, type: event.operation === 'open' ? 'Open' : 'Close',
+              hash, blockNumber: receipt.blockNumber.toString(), timestamp: block.timestamp.toString() });
           }
         }
         orders.sort((a, b) => BigInt(a.blockNumber) === BigInt(b.blockNumber) ? 0 : BigInt(a.blockNumber) > BigInt(b.blockNumber) ? -1 : 1);
@@ -389,6 +411,7 @@ async function runProof(captureStage: string) {
       ])];
       const candidateOrderEvents = new Map<number, Array<{ type: 'Open' | 'Close'; blockNumber: bigint }>>();
       for (const hash of hashes) {
+        if (!hash) continue;
         const receipt = await (forkReceiptCache.get(hash.toLowerCase()) ?? (() => {
           const pending = client.getTransactionReceipt({ hash }).catch(() => null as never);
           forkReceiptCache.set(hash.toLowerCase(), pending);
@@ -396,15 +419,13 @@ async function runProof(captureStage: string) {
         })());
         if (!receipt) continue;
         for (const log of receipt.logs) {
-          if (log.address.toLowerCase() !== '0x33636d49fbefbe798e15e7f356e8dbef543cc708') continue;
-          try {
-            const event = decodeEventLog({ abi: positionRouterEventAbi, data: log.data, topics: log.topics });
-            if (event.args.pool.toLowerCase() !== group.pool.toLowerCase()) continue;
-            const positionId = Number(event.args.position);
-            const list = candidateOrderEvents.get(positionId) ?? [];
-            list.push({ type: event.eventName === 'OpenOrAdd' ? 'Open' : 'Close', blockNumber: receipt.blockNumber });
-            candidateOrderEvents.set(positionId, list);
-          } catch { /* Ignore unrelated router events. */ }
+          const event = decodePositionRouterEvent(log);
+          if (!event || event.pool.toLowerCase() !== group.pool.toLowerCase()) continue;
+          if (!positionRouterEventMatchesRecipient(event, log, receipt.logs, queryWallet)) continue;
+          const positionId = Number(event.positionId);
+          const list = candidateOrderEvents.get(positionId) ?? [];
+          list.push({ type: event.operation === 'open' ? 'Open' : 'Close', blockNumber: receipt.blockNumber });
+          candidateOrderEvents.set(positionId, list);
         }
       }
       for (const candidate of candidates.filter(c => c.pool === group.pool)) {
@@ -478,13 +499,111 @@ async function runProof(captureStage: string) {
       await advanced.locator('summary').click();
       return reviewed;
     };
-    const driveDirectAction = async (buttonName: string, screenshotPrefix: string): Promise<{ signedBefore: number; transactionCount: number }> => {
+    const capturePreconfirmReview = async (action: string, actionButton: Locator): Promise<void> => {
+      const viewportBefore = activePage.viewportSize();
+      if (!viewportBefore) throw new Error('review evidence requires a finite browser viewport');
+      const appContent = activePage.locator('.app-content').first();
+      await expect(appContent, 'review evidence requires the app scroll container').toHaveCount(1);
+      const scrollBefore = await appContent.evaluate((element) => element.scrollTop);
+      const windowScrollBefore = await activePage.evaluate(() => window.scrollY);
+      try {
+        await activePage.setViewportSize({ width: 393, height: 852 });
+        await appContent.evaluate((element) => element.scrollTo({ top: 0, behavior: 'instant' }));
+        await activePage.evaluate(() => new Promise<void>((resolveFrame) => requestAnimationFrame(() => requestAnimationFrame(() => resolveFrame()))));
+        const scrollAtTop = await appContent.evaluate((element) => element.scrollTop);
+        assert.equal(scrollAtTop, 0, `${action} review evidence must start at the top of the app content`);
+        const warningTexts = (await activePage.locator('.reviewInlineContent [data-tone="warning"], .reviewInlineContent [data-tone="danger"], .reviewInlineContent [role="alert"], .reviewInlineContent [role="status"]').allTextContents())
+          .map((value) => value.trim()).filter((value) => value && /expired|unavailable|warning|failed|partial|stale|error/i.test(value));
+        const warningReason = warningTexts.join(' | ') || null;
+        const buttonIsAboveNav = async () => {
+          const box = await actionButton.boundingBox();
+          if (!box) return false;
+          const navTop = await activePage.evaluate(() => {
+            const nav = document.querySelector<HTMLElement>('nav.mobile-tabbar[aria-label="Primary navigation"]');
+            return !nav || getComputedStyle(nav).display === 'none' ? window.innerHeight : nav.getBoundingClientRect().top;
+          });
+          return box.y >= 0 && box.y + box.height <= navTop + 1;
+        };
+        let scrollTop = scrollAtTop;
+        if (!await buttonIsAboveNav()) {
+          assert.ok(warningReason, `${action} healthy review CTA must be visible above the bottom navigation at app-content scrollTop 0`);
+          await actionButton.evaluate((element) => element.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' }));
+          await activePage.evaluate(() => new Promise<void>((resolveFrame) => requestAnimationFrame(() => requestAnimationFrame(() => resolveFrame()))));
+          scrollTop = await appContent.evaluate((element) => element.scrollTop);
+          assert.ok(await buttonIsAboveNav(), `${action} warning-state review CTA must be reachable above the bottom navigation`);
+        }
+        const prefix = `${action.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-review-393x852`;
+        if (!reviewEvidenceInitialized) {
+          await mkdir(dirname(reviewEvidenceRoot), { recursive: true });
+          await mkdir(reviewEvidenceRoot, { recursive: false });
+          reviewEvidenceInitialized = true;
+        }
+        const capturePositions = new Set<number>([scrollTop]);
+        const metrics = await appContent.evaluate((element) => ({ maxTop: Math.max(0, element.scrollHeight - element.clientHeight), client: element.clientHeight }));
+        if (metrics.maxTop > 0) {
+          capturePositions.add(0);
+          const step = Math.max(1, Math.floor(metrics.client * 0.78));
+          for (let top = step; top < metrics.maxTop; top += step) capturePositions.add(top);
+          capturePositions.add(metrics.maxTop);
+        }
+        const sortedCapturePositions = [...capturePositions].sort((a, b) => a - b);
+        for (let index = 0; index < sortedCapturePositions.length; index += 1) {
+          const top = sortedCapturePositions[index];
+          await appContent.evaluate((element, value) => element.scrollTo({ top: value, behavior: 'instant' }), top);
+          await activePage.evaluate(() => new Promise<void>((resolveFrame) => requestAnimationFrame(() => requestAnimationFrame(() => resolveFrame()))));
+          const file = `${prefix}${index === 0 ? '' : `-scroll-${String(index + 1).padStart(2, '0')}`}.png`;
+          await activePage.screenshot({ path: resolve(reviewEvidenceRoot, file), fullPage: false, animations: 'disabled', caret: 'hide' });
+          reviewCaptures.push({ file, action, route: new URL(activePage.url()).pathname, viewport: { width: 393, height: 852 }, scrollTop: top, overflowReason: warningReason,
+            provenance: 'Actual preconfirm review from protected browser flow against local mainnet fork; zero signatures requested at capture.' });
+          await writeReviewManifest();
+        }
+      } finally {
+        await activePage.setViewportSize(viewportBefore);
+        await activePage.evaluate(({ windowTop, rootTop }) => {
+          window.scrollTo({ top: windowTop, behavior: 'instant' });
+          const root = document.querySelector<HTMLElement>('.app-content');
+          root?.scrollTo({ top: rootTop, behavior: 'instant' });
+        }, { windowTop: windowScrollBefore, rootTop: scrollBefore });
+        await activePage.evaluate(() => new Promise<void>((resolveFrame) => requestAnimationFrame(() => requestAnimationFrame(() => resolveFrame()))));
+      }
+    };
+    const driveDirectAction = async (
+      buttonName: string,
+      screenshotPrefix: string,
+      options: {
+        beforeSigning?: (reviewed: ReviewedTransaction[]) => Promise<void>;
+        probeQuoteExpiry?: boolean;
+      } = {},
+    ): Promise<{ signedBefore: number; transactionCount: number }> => {
       const signedBefore = submitted.length;
+      let fakeClockInstalled = false;
+      if (options.probeQuoteExpiry) {
+        await activePage.clock.install();
+        fakeClockInstalled = true;
+      }
+      try {
       await activePage.getByRole('button', { name: buttonName, exact: true }).click();
       const actionButton = activePage.getByRole('button', { name: /^Confirm (?:in wallet|\d+ transactions)$/ });
       await expect(actionButton).toBeVisible({ timeout: 180_000 });
       assert.equal(submitted.length, signedBefore, 'Review must prepare details without signing');
+      if (options.probeQuoteExpiry) {
+        await activePage.clock.fastForward(31_000);
+        await activePage.clock.runFor(1);
+        await expect(actionButton, 'an expired reviewed quote must remove the confirm action').toHaveCount(0);
+        const refreshQuote = activePage.getByRole('button', { name: 'Review updated quote', exact: true });
+        await expect(refreshQuote).toBeVisible();
+        await expect(activePage.locator('.reviewInlineContent [role="status"]').filter({ hasText: 'reviewed quote expired' })).toBeVisible();
+        assert.equal(submitted.length, signedBefore, 'quote expiry must not request a wallet signature');
+        await activePage.clock.resume();
+        fakeClockInstalled = false;
+        await refreshQuote.click();
+        await expect(actionButton, 'refreshing an expired quote must prepare a new confirm action').toBeVisible({ timeout: 180_000 });
+        assert.equal(submitted.length, signedBefore, 'refreshing an expired quote must remain read-only');
+      }
+      await capturePreconfirmReview(screenshotPrefix, actionButton);
       await activePage.screenshot({ path: resolve(artifactRoot, `${screenshotPrefix}-review.png`), fullPage: true });
+      const initialReviewedTransactions = await readReviewedTransactions();
+      await options.beforeSigning?.(initialReviewedTransactions);
       let firstSignatureObserved = false;
       let reviewedTransactions: ReviewedTransaction[] = [];
       for (let attempt = 0; attempt < 3 && !firstSignatureObserved; attempt += 1) {
@@ -550,6 +669,26 @@ async function runProof(captureStage: string) {
       assert.ok(transactionIndex > 0, 'the explicit action must submit at least one transaction');
       assert.equal(transactionIndex, reviewedTransactions.length, 'actual signatures must match the reviewed transaction count');
       return { signedBefore, transactionCount: reviewedTransactions.length };
+      } finally {
+        if (fakeClockInstalled) await activePage.clock.resume().catch(() => undefined);
+      }
+    };
+    const captureReviewOnly = async (
+      buttonName: string,
+      screenshotPrefix: string,
+      verifyReview?: (reviewed: ReviewedTransaction[]) => Promise<void>,
+    ): Promise<void> => {
+      const signedBefore = submitted.length;
+      await activePage.getByRole('button', { name: buttonName, exact: true }).click();
+      const actionButton = activePage.getByRole('button', { name: /^Confirm (?:in wallet|\d+ transactions)$/ });
+      await expect(actionButton, `${screenshotPrefix} must wait for the real route quote`).toBeVisible({ timeout: 180_000 });
+      await expect(actionButton, `${screenshotPrefix} review must be enabled only after planning succeeds`).toBeEnabled();
+      const reviewedTransactions = await readReviewedTransactions();
+      assert.ok(reviewedTransactions.some((transaction) => transaction.heading.startsWith('Action ')), `${screenshotPrefix} must show a real protocol action`);
+      await verifyReview?.(reviewedTransactions);
+      assert.equal(submitted.length, signedBefore, `${screenshotPrefix} preconfirm review must not request a signature`);
+      await capturePreconfirmReview(screenshotPrefix, actionButton);
+      assert.equal(submitted.length, signedBefore, `${screenshotPrefix} screenshot capture must remain read-only`);
     };
     const ensureInputAssetPickerOpen = async (): Promise<void> => {
       const trigger = activePage.getByRole('button', { name: 'Input asset', exact: true });
@@ -701,7 +840,12 @@ async function runProof(captureStage: string) {
       console.log(`Browser prepared ${scenario.market} ${scenario.side} action details`);
       assert.equal(submitted.length, signedBefore, 'review must never request a signature');
       await page.screenshot({ path: resolve(artifactRoot, `${scenario.market}-${scenario.side}-review.png`), fullPage: true });
-      const { signedBefore: tradeSignedBefore, transactionCount } = await driveDirectAction(actionButtonName, `${scenario.market}-${scenario.side}`);
+      const { signedBefore: tradeSignedBefore, transactionCount } = await driveDirectAction(
+        actionButtonName,
+        `${scenario.market}-${scenario.side}`,
+        { probeQuoteExpiry: scenario.market === 'ETH' && scenario.side === 'long' },
+      );
+      if (scenario.market === 'ETH' && scenario.side === 'long') quoteExpiryBlockedUntilRefresh = true;
       assert.equal(tradeSignedBefore, signedBefore);
 
       // The GraphQL response is deliberately held empty for this candidate.
@@ -1051,14 +1195,144 @@ async function runProof(captureStage: string) {
     await page.getByRole('button', { name: 'View position', exact: true }).click();
     await page.goto(`${baseUrl}/positions`);
     await page.screenshot({ path: resolve(artifactRoot, 'positions-mobile.png'), fullPage: true });
+
+    // Exercise Earn reviews with the same real fork-backed SDK route used by
+    // the separate earn.anvil proof. The browser confirms only the deposit
+    // needed to mint real fxSAVE shares; both withdrawal reviews stay
+    // preconfirm and must not request another signature.
+    const earnDepositAmount = parseUnits('1000', 6);
+    const earnUsdcBeforeFunding = await client.readContract({ address: usdc, abi: tokenAbi, functionName: 'balanceOf', args: [wallet] });
+    if (earnUsdcBeforeFunding < earnDepositAmount) {
+      const earnDonorCandidates = [donor, '0xf977814e90da44bfa03b6295a0616a897441acec', '0x55fe002aeff02f77364de339a1292923a15844b8'] as const;
+      let earnDonor: Address | undefined;
+      for (const candidate of earnDonorCandidates) {
+        const available = await client.readContract({ address: usdc, abi: tokenAbi, functionName: 'balanceOf', args: [candidate] });
+        if (available >= earnDepositAmount - earnUsdcBeforeFunding) { earnDonor = candidate; break; }
+      }
+      assert.ok(earnDonor, 'Earn review fixture requires a real fork USDC holder with enough balance');
+      const fundingAmount = earnDepositAmount - earnUsdcBeforeFunding;
+      await rpc('anvil_impersonateAccount', [earnDonor]);
+      try {
+        await rpc('anvil_setBalance', [earnDonor, '0x8ac7230489e80000']);
+        const fundingHash = await rpc<Hex>('eth_sendTransaction', [{ from: earnDonor, to: usdc,
+          data: encodeFunctionData({ abi: tokenAbi, functionName: 'transfer', args: [wallet, fundingAmount] }) }]);
+        assert.equal((await client.waitForTransactionReceipt({ hash: fundingHash })).status, 'success', 'Earn fork funding transfer must succeed');
+        await rpc('anvil_mine', ['0x1']);
+      } finally { await rpc('anvil_stopImpersonatingAccount', [earnDonor]); }
+      assert.equal(await client.readContract({ address: usdc, abi: tokenAbi, functionName: 'balanceOf', args: [wallet] }), earnDepositAmount,
+        'Earn fixture must expose the exact real USDC deposit amount');
+    }
+    await page.goto(`${baseUrl}/earn`);
+    await expect(page.getByRole('button', { name: 'Open wallet profile' })).toBeVisible({ timeout: 30_000 });
+    await page.getByLabel('Asset', { exact: true }).click();
+    await page.getByRole('listbox', { name: 'Asset options', exact: true }).getByRole('option', { name: /^USDC\b/i }).click();
+    await page.getByLabel('Deposit amount in USDC', { exact: true }).fill('1000');
+    await expect(page.getByRole('button', { name: 'Review deposit', exact: true })).toBeEnabled({ timeout: 180_000 });
+    const earnDepositSignatureBaseline = submitted.length;
+    const { signedBefore: earnDepositSignedBefore, transactionCount: earnDepositTransactionCount } = await driveDirectAction(
+      'Review deposit',
+      'earn-usdc-deposit',
+      {
+        beforeSigning: async (reviewed) => {
+          const action = reviewed.find((transaction) => transaction.heading.startsWith('Action '));
+          assert.ok(action, 'Earn deposit review must expose its action transaction');
+          assert.equal(action.contract.toLowerCase(), router.toLowerCase(), 'Earn deposit review action must target the fx router');
+          const decoded = decodeFunctionData({ abi: depositToFxSaveAbi, data: action.calldata as Hex });
+          assert.equal(decoded.functionName, 'depositToFxSave', 'Earn deposit review must use the fxSAVE deposit action');
+          const [convertInParams, tokenInAddress, minShares, receiver] = decoded.args;
+          assert.equal(convertInParams.amount, earnDepositAmount, 'reviewed deposit calldata must bind the selected 1,000 USDC amount');
+          assert.equal(tokenInAddress.toLowerCase(), usdc.toLowerCase(), 'reviewed deposit calldata must bind USDC as the input');
+          assert.equal(receiver.toLowerCase(), wallet.toLowerCase(), 'reviewed deposit calldata must bind the connected wallet recipient');
+          assert.equal(minShares > 0n, true, 'reviewed deposit calldata must retain a positive minimum fxSAVE share output');
+          const consequences = activePage.locator('.reviewInlineContent [aria-label="Action consequences"]');
+          await expect(consequences).toContainText('Deposit');
+          await expect(consequences).toContainText(/1,?000(?:\.0+)? USDC/i);
+          await expect(consequences).toContainText('Recipient');
+          await expect(consequences).toContainText('Minimum fxSAVE received');
+        },
+      },
+    );
+    assert.equal(earnDepositSignedBefore, earnDepositSignatureBaseline);
+    assert.ok(earnDepositTransactionCount > 0, 'Earn deposit review must bind at least one real fork transaction');
+    await expect(page.getByRole('heading', { name: 'Confirmed', exact: true })).toBeVisible({ timeout: 180_000 });
+    const fxSaveShares = await client.readContract({ address: fxSave, abi: tokenAbi, functionName: 'balanceOf', args: [wallet] });
+    assert.ok(fxSaveShares > 0n, 'real Earn deposit must mint the wallet fxSAVE shares needed for withdrawal reviews');
+
+    const withdrawalReviewSignatureBaseline = submitted.length;
+    const withdrawalShares = fxSaveShares / 10n;
+    assert.ok(withdrawalShares > 0n, 'Earn fixture must have a positive verified fxSAVE amount for both withdrawal reviews');
+    const withdrawalAmount = formatUnits(withdrawalShares, 18);
+    await page.goto(`${baseUrl}/earn?mode=withdraw`);
+    await expect(page.getByRole('button', { name: 'Open wallet profile' })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('radio', { name: 'Withdraw', exact: true })).toHaveAttribute('aria-checked', 'true');
+    await page.getByLabel('Amount in fxSAVE', { exact: true }).fill(withdrawalAmount);
+    await page.getByRole('group', { name: 'Withdrawal method', exact: true }).getByRole('radio', { name: /Instant/ }).click();
+    await expect(page.getByRole('button', { name: 'Review withdrawal', exact: true })).toBeEnabled({ timeout: 180_000 });
+    await expect(page.getByRole('radio', { name: /Instant/ })).toHaveAttribute('aria-checked', 'true');
+    await expect(page.getByRole('group', { name: 'Withdrawal method', exact: true })).toContainText(/instant fee/i);
+    await captureReviewOnly('Review withdrawal', 'earn-instant-withdrawal', async (reviewed) => {
+      const action = reviewed.find((transaction) => transaction.heading.startsWith('Action '));
+      assert.ok(action, 'instant withdrawal review must expose its action transaction');
+      assert.equal(action.contract.toLowerCase(), router.toLowerCase(), 'instant withdrawal review must target the fx router');
+      const decoded = decodeFunctionData({ abi: instantRedeemAbi, data: action.calldata as Hex });
+      assert.equal(decoded.functionName, 'instantRedeemFromFxSave', 'instant withdrawal review must use the instant redemption action');
+      const [fxusdOutput, usdcOutput, amount, receiver] = decoded.args;
+      assert.equal(amount, withdrawalShares, 'instant withdrawal calldata must bind the actual selected fxSAVE shares');
+      assert.equal(receiver.toLowerCase(), wallet.toLowerCase(), 'instant withdrawal calldata must bind the connected wallet recipient');
+      assert.ok(fxusdOutput.minOut > 0n && usdcOutput.minOut > 0n, 'instant withdrawal calldata must retain positive minimums for both output legs');
+      const consequences = page.locator('.reviewInlineContent [aria-label="Action consequences"]');
+      await expect(consequences).toContainText('fxSAVE');
+      await expect(consequences).toContainText('Receive');
+      await expect(consequences).toContainText('Mode');
+      await expect(consequences).toContainText('Instant');
+      await expect(consequences).toContainText(/Minimum received.*USDC/i);
+    });
+    assert.equal(submitted.length, withdrawalReviewSignatureBaseline, 'instant withdrawal review must not request a signature');
+
+    await page.goto(`${baseUrl}/earn?mode=withdraw`);
+    await expect(page.getByRole('button', { name: 'Open wallet profile' })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('radio', { name: 'Withdraw', exact: true })).toHaveAttribute('aria-checked', 'true');
+    await page.getByLabel('Amount in fxSAVE', { exact: true }).fill(withdrawalAmount);
+    await page.getByRole('group', { name: 'Withdrawal method', exact: true }).getByRole('radio', { name: /After cooldown/ }).click();
+    await expect(page.getByRole('button', { name: 'Review withdrawal', exact: true })).toBeEnabled({ timeout: 180_000 });
+    await expect(page.getByRole('radio', { name: /After cooldown/ })).toHaveAttribute('aria-checked', 'true');
+    await expect(page.getByRole('group', { name: 'Withdrawal method', exact: true })).toContainText(/no instant fee/i);
+    await captureReviewOnly('Review withdrawal', 'earn-after-cooldown-withdrawal', async (reviewed) => {
+      const action = reviewed.find((transaction) => transaction.heading.startsWith('Action '));
+      assert.ok(action, 'after-cooldown withdrawal review must expose its action transaction');
+      assert.equal(action.contract.toLowerCase(), fxSave.toLowerCase(), 'after-cooldown withdrawal must call fxSAVE directly');
+      const decoded = decodeFunctionData({ abi: queuedRedeemAbi, data: action.calldata as Hex });
+      assert.equal(decoded.functionName, 'requestRedeem', 'after-cooldown review must use the queued redemption method');
+      assert.equal(decoded.args[0], withdrawalShares, 'queued withdrawal calldata must bind the actual selected fxSAVE shares');
+      const consequences = page.locator('.reviewInlineContent [aria-label="Action consequences"]');
+      await expect(consequences).toContainText('fxSAVE');
+      await expect(consequences).toContainText('Receive');
+      await expect(consequences).toContainText('Mode');
+      await expect(consequences).toContainText('Queued');
+    });
+    assert.equal(submitted.length, withdrawalReviewSignatureBaseline, 'after-cooldown withdrawal review must not request a signature');
+
     for (const route of ['portfolio', 'earn', 'move']) {
       await page.goto(`${baseUrl}/${route}`);
       if (route === 'portfolio') {
-        await expect(page.locator('section[aria-labelledby="portfolio-positions-heading"] [data-position-key]')).toHaveCount(2);
+        const portfolioPositions = page.locator('section[aria-label="Positions"] details').first();
+        const portfolioPositionsSummary = portfolioPositions.locator('summary');
+        await expect(portfolioPositionsSummary).toContainText(/\d+ open/);
+        await expect(portfolioPositions.locator('[data-position-key]').first()).toBeHidden();
+        await page.screenshot({ path: resolve(artifactRoot, 'portfolio-positions-collapsed-mobile.png'), fullPage: false });
+        await portfolioPositionsSummary.click();
+        await expect(portfolioPositions.locator('[data-position-key]')).toHaveCount(2);
         await expect(page.getByRole('link', { name: 'Manage all', exact: true })).toHaveAttribute('href', '/positions');
         for (const position of positions.filter(p => p.market === 'ETH')) {
           await expect(page.locator(`[data-position-key="${position.market}:${position.side}:${position.positionId}"]`)).toBeVisible();
         }
+        const fxSaveSection = page.locator('section[aria-labelledby="portfolio-earn-heading"]');
+        await expect(fxSaveSection).toHaveCount(1, { timeout: 180_000 });
+        const fxSaveDisclosure = fxSaveSection.locator('details').first();
+        await expect(fxSaveDisclosure.locator('summary')).toContainText('fxSAVE');
+        await fxSaveDisclosure.locator('summary').click();
+        await expect(fxSaveDisclosure.getByRole('link', { name: 'Deposit', exact: true })).toBeVisible();
+        await page.screenshot({ path: resolve(artifactRoot, 'portfolio-expanded-mobile.png'), fullPage: true });
       }
       await page.getByRole('button', { name: 'Open wallet profile' }).click();
       const drawer = page.getByRole('dialog', { name: new RegExp(`^(?:Wallet ${wallet}|Wallet profile for .*; address ${wallet})$`, 'i') });
@@ -1095,16 +1369,14 @@ async function runProof(captureStage: string) {
         assert.equal(receipt.status, 'success', 'history rows must come from successful fork receipts');
         const block = await client.getBlock({ blockNumber: receipt.blockNumber });
         for (const log of receipt.logs) {
-          if (log.address.toLowerCase() !== '0x33636d49fbefbe798e15e7f356e8dbef543cc708') continue;
-          try {
-            const event = decodeEventLog({ abi: positionRouterEventAbi, data: log.data, topics: log.topics });
-            if (event.args.pool.toLowerCase() !== position.pool.toLowerCase()
-              || Number(event.args.position) !== position.positionId) continue;
-            historyRows.push({ market: position.market, side: position.side, pool: position.pool,
-              positionId: position.positionId, id: `${position.positionId}_${transaction.hash}`,
-              type: event.eventName === 'OpenOrAdd' ? 'Open' : 'Close', hash: transaction.hash,
-              blockNumber: receipt.blockNumber.toString(), timestamp: block.timestamp.toString() });
-          } catch { /* Unrelated events emitted by the router are not history rows. */ }
+          const event = decodePositionRouterEvent(log);
+          if (!event || event.pool.toLowerCase() !== position.pool.toLowerCase()
+            || Number(event.positionId) !== position.positionId) continue;
+          if (!positionRouterEventMatchesRecipient(event, log, receipt.logs, wallet)) continue;
+          historyRows.push({ market: position.market, side: position.side, pool: position.pool,
+            positionId: position.positionId, id: `${position.positionId}_${transaction.hash}`,
+            type: event.operation === 'open' ? 'Open' : 'Close', hash: transaction.hash,
+            blockNumber: receipt.blockNumber.toString(), timestamp: block.timestamp.toString() });
         }
       }
     }
@@ -1194,14 +1466,17 @@ async function runProof(captureStage: string) {
       let closeHash: Hex | undefined;
       for (const transaction of position.transactions) {
         const receipt = await client.getTransactionReceipt({ hash: transaction.hash });
-        const hasClose = receipt.logs.some(log => {
-          if (log.address.toLowerCase() !== '0x33636d49fbefbe798e15e7f356e8dbef543cc708') return false;
-          try {
-            const event = decodeEventLog({ abi: positionRouterEventAbi, data: log.data, topics: log.topics });
-            return event.eventName === 'CloseOrRemove' && event.args.pool.toLowerCase() === positionPoolAddress(position.market, position.side).toLowerCase()
-              && event.args.position === BigInt(position.positionId);
-          } catch { return false; }
-        });
+        let hasClose = false;
+        for (const log of receipt.logs) {
+          const event = decodePositionRouterEvent(log);
+          if (event?.operation === 'close'
+            && event.pool.toLowerCase() === positionPoolAddress(position.market, position.side).toLowerCase()
+            && event.positionId === BigInt(position.positionId)
+            && positionRouterEventMatchesRecipient(event, log, receipt.logs, wallet)) {
+            hasClose = true;
+            break;
+          }
+        }
         if (hasClose) { closeHash = transaction.hash; break; }
       }
       assert.ok(closeHash, `closed ${position.market} ${position.side} #${position.positionId} must have a real router receipt`);
@@ -1302,6 +1577,15 @@ async function runProof(captureStage: string) {
       existingLongBorrowDeepLinkVerified: true, existingLongBorrowExecuted: true,
       borrowedFxUsdReceived: true, existingLongPositionIdPreserved: true,
       instantReviewVerified: true,
+      quoteExpiryBlockedUntilRefresh,
+      earnDepositReviewVerified: true,
+      earnDepositCalldataBoundToReviewedAmountAndRecipient: true,
+      earnInstantWithdrawalReviewVerified: true,
+      earnInstantWithdrawalCalldataBoundToSelectedShares: true,
+      earnAfterCooldownReviewVerified: true,
+      earnAfterCooldownCalldataBoundToSelectedShares: true,
+      moveExecutionVerified: false,
+      moveExecutionNotTestedReason: 'The protected browser proof uses an Ethereum mainnet fork only; it does not execute bridge actions on a Base fork.',
       everySupportedPositionClosed: true, closeOutputBalanceRefreshVerified: true,
       readSurfaces: ['trade', 'positions', 'portfolio', 'earn', 'move'] }, positions, externalPosition: externalPositionProof, existingBorrow: existingBorrowProof, closedPositions }, null, 2));
   console.log('Real browser four-position open-and-close acceptance proof complete; fork snapshot reverted.');

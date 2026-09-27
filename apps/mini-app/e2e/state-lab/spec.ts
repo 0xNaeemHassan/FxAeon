@@ -18,7 +18,7 @@ test('catalogs deterministic data states through the real provider-independent a
   await openLab(page);
   const input = page.getByRole('textbox', { name: 'Amount in ETH' });
   await expect(input).toHaveValue('1234.56789');
-  expect(await page.locator('.amount-control').evaluate((element) => getComputedStyle(element).borderRadius)).toBe('18px');
+  expect(await page.locator('.amount-control').evaluate((element) => getComputedStyle(element).borderRadius)).toBe('16px');
   await expect.poll(() => page.locator('img[aria-label="ETH logo"]').evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
   await page.evaluate(() => document.fonts.ready);
   expect(await page.evaluate(() => document.fonts.check('14px Inter'))).toBe(true);
@@ -92,6 +92,47 @@ test('adapts to narrow, short, tablet, and desktop viewports with reduced motion
   }
 });
 
+test('keeps amount label and shortcut targets clear at enlarged text on narrow widths', async ({ page }) => {
+  await openLab(page);
+  await select(page, 'positive');
+
+  for (const width of [393, 320]) {
+    await page.setViewportSize({ width, height: 852 });
+    const field = page.locator('.field-shell');
+    await field.evaluate((root) => {
+      const textNodes = Array.from(root.querySelectorAll<HTMLElement>('label, button, span, strong, input'));
+      const initialSizes = textNodes.map((element) => ({ element, size: Number.parseFloat(getComputedStyle(element).fontSize) }));
+      for (const { element, size } of initialSizes) element.style.fontSize = `${size * 2}px`;
+    });
+    const geometry = await field.evaluate((root) => {
+      const label = root.querySelector('label');
+      const shortcutGroup = root.querySelector('[role="group"]');
+      const shortcutTargets = [...(shortcutGroup?.querySelectorAll('button') ?? [])];
+      if (!label || !shortcutGroup || shortcutTargets.length === 0) throw new Error('Expected the amount label and shortcut controls.');
+      const range = document.createRange();
+      range.selectNodeContents(label);
+      const textRects = [...range.getClientRects()].map(({ left, right, top, bottom }) => ({ left, right, top, bottom }));
+      const targets = shortcutTargets.map((button) => {
+        const { left, right, top, bottom } = button.getBoundingClientRect();
+        return { left, right, top, bottom };
+      });
+      const fieldRect = root.querySelector('.amount-control')!.getBoundingClientRect();
+      return { textRects, targets, field: { left: fieldRect.left, right: fieldRect.right, top: fieldRect.top, bottom: fieldRect.bottom } };
+    });
+    expect(geometry.textRects.length, `amount label has visible text at ${width}px`).toBeGreaterThan(0);
+    for (const target of geometry.targets) {
+      expect(target.left, `shortcut starts within amount field at ${width}px`).toBeGreaterThanOrEqual(geometry.field.left);
+      expect(target.right, `shortcut ends within amount field at ${width}px`).toBeLessThanOrEqual(geometry.field.right);
+      for (const text of geometry.textRects) {
+        const overlaps = target.left < text.right && target.right > text.left && target.top < text.bottom && target.bottom > text.top;
+        expect(overlaps, `shortcut target does not cover label text at ${width}px`).toBe(false);
+      }
+    }
+    await page.screenshot({ animations: 'disabled', path: `./test-results/ui-state-lab-playwright/amount-enlarged-${width}.png` });
+    await field.evaluate((root) => root.querySelectorAll<HTMLElement>('label, button, span, strong, input').forEach((element) => { element.style.fontSize = ''; }));
+  }
+});
+
 test('captures focused components and compares approved Windows references when present', async ({ page }, testInfo) => {
   await openLab(page);
   const artifacts = resolve(root, 'apps/mini-app/e2e/state-lab/captures');
@@ -119,7 +160,7 @@ test('captures focused components and compares approved Windows references when 
       const path = resolve(artifacts, `${name}.png`);
       await writeFile(path, image);
     }
-    if (compare) await expect(locator).toHaveScreenshot(`ui-state-${name}.png`, { animations: 'disabled' });
+    if (compare) await expect.soft(locator).toHaveScreenshot(`ui-state-${name}.png`, { animations: 'disabled' });
     else await testInfo.attach(name, { body: image, contentType: 'image/png' });
   };
   const field = page.locator('.field-shell');

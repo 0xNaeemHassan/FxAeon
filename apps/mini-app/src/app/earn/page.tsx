@@ -570,7 +570,7 @@ function EarnActionEditor({ mode, token, onTokenChange, amount, onAmountChange, 
       </Disclosure>}
     </>}
     {mode === 'withdraw' && <>
-      <AmountField label="fxSAVE to withdraw" symbol="fxSAVE" value={shares} onChange={onSharesChange}
+      <AmountField label="Amount" symbol="fxSAVE" value={shares} onChange={onSharesChange}
         balanceState={shareBalance} allowAll maxDecimals={18} />
       <div className={presentation.withdrawOptions}>
         <ChoiceCards value={token === 'fxUSDBasePool' || !instant ? 'cooldown' : 'instant'}

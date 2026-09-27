@@ -41,7 +41,6 @@ const PAGE_TITLES: Record<string, string> = {
   '/more': 'More',
   '/settings': 'Settings',
   '/history': 'History',
-  '/activity': 'History',
   '/docs': 'Docs',
   '/login': 'Sign in',
 };
@@ -126,7 +125,7 @@ const TABS: { href: string; labelKey: string; icon: LucideIcon; also?: string[] 
   { href: '/trade', labelKey: 'nav.trade', icon: CandlestickChart, also: ['/positions'] },
   { href: '/earn', labelKey: 'nav.earn', icon: PiggyBank, also: ['/borrow'] },
   { href: '/move', labelKey: 'nav.move', icon: ArrowLeftRight, also: ['/qr'] },
-  { href: '/more', labelKey: 'nav.more', icon: LayoutGrid, also: ['/settings', '/history', '/activity', '/docs'] },
+  { href: '/more', labelKey: 'nav.more', icon: LayoutGrid, also: ['/settings', '/history', '/docs'] },
 ];
 
 function isTabActive(pathname: string | null, href: string, also?: string[]) {
@@ -286,7 +285,7 @@ export async function copyText(value: string): Promise<boolean> {
   }
 }
 
-export function AddressChip({ address }: { address: string }) {
+export function AddressChip({ address, iconOnly = false }: { address: string; iconOnly?: boolean }) {
   const [copied, setCopied] = useState(false);
   const short = compactAddress(address);
   return (
@@ -303,9 +302,9 @@ export function AddressChip({ address }: { address: string }) {
           haptic('error');
         }
       }}
-      className="address-chip glass glass-press inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-1.5 font-mono text-[12px] text-mut"
+      className={`address-chip glass glass-press inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-1.5 font-mono text-[12px] text-mut${iconOnly ? ' min-w-11' : ''}`}
     >
-      {short}
+      {!iconOnly && short}
       {copied ? (
         <Check aria-hidden="true" className="h-3.5 w-3.5 text-success" />
       ) : (

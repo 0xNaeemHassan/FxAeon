@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import { WagmiProvider, useConfig, useWatchBlockNumber } from 'wagmi';
 import { usePrivyWallet } from '@/lib/wallet';
@@ -20,6 +20,7 @@ import { createAlchemyChainPulse, initialRealtimeChainState, type RealtimeChainE
 import { priceDemandRegistry } from '@/lib/priceDemand';
 import type { FxChainId } from '@/lib/fx/types';
 import { subscribeToForegroundResume } from '@/lib/foreground';
+import { createDeferredQueryCacheNotification } from '@/lib/deferredQueryCacheNotification';
 
 const WalletDataSession = createContext('disconnected');
 
@@ -388,25 +389,39 @@ function BalanceBlockWatcher({ chainId }: { chainId: 1 | 8453 }) {
   const client = useQueryClient();
   const session = useContext(WalletDataSession);
   const realtime = useContext(RealtimeChainContext)[chainId];
-  const [watching, setWatching] = useState(false);
-  useEffect(() => {
-    const update = () => {
-      const active = realtime.status !== 'live' && session !== 'disconnected' && document.visibilityState === 'visible' && navigator.onLine
-        && client.getQueryCache().findAll({ predicate: ({ queryKey }) =>
-          queryKey[0] === WALLET_QUERY_ROOT && queryKey[1] === session && queryKey[2] === chainId,
-        }).some((query) => query.isActive());
-      // A public/no-RPC build must show the normal unavailable state, not
-      // throw while installing a watcher from a React effect.
-      try { if (active) config.getClient({ chainId }); setWatching(active); }
-      catch { setWatching(false); }
+  const subscribe = useCallback((onStoreChange: () => void) => {
+    // QueryCache can notify synchronously while a route component registers a
+    // useQuery observer during render. Use TanStack's scheduler just as its own
+    // React adapter does, so React never receives this store update mid-render.
+    const notification = createDeferredQueryCacheNotification(onStoreChange);
+    const unsubscribe = client.getQueryCache().subscribe(notification.notify);
+    document.addEventListener('visibilitychange', notification.notify);
+    window.addEventListener('online', notification.notify);
+    window.addEventListener('offline', notification.notify);
+    return () => {
+      notification.dispose();
+      unsubscribe();
+      document.removeEventListener('visibilitychange', notification.notify);
+      window.removeEventListener('online', notification.notify);
+      window.removeEventListener('offline', notification.notify);
     };
-    const unsubscribe = client.getQueryCache().subscribe(update);
-    document.addEventListener('visibilitychange', update);
-    window.addEventListener('online', update);
-    window.addEventListener('offline', update);
-    update();
-    return () => { unsubscribe(); document.removeEventListener('visibilitychange', update); window.removeEventListener('online', update); window.removeEventListener('offline', update); };
+  }, [client]);
+  const getSnapshot = useCallback(() => {
+    const active = typeof document !== 'undefined' && typeof navigator !== 'undefined'
+      && realtime.status !== 'live' && session !== 'disconnected'
+      && document.visibilityState === 'visible' && navigator.onLine
+      && client.getQueryCache().findAll({ predicate: ({ queryKey }) =>
+        queryKey[0] === WALLET_QUERY_ROOT && queryKey[1] === session && queryKey[2] === chainId,
+      }).some((query) => query.isActive());
+    // A public/no-RPC build must show the normal unavailable state, not throw
+    // while React reads the external query-cache snapshot.
+    try { if (active) config.getClient({ chainId }); return active; }
+    catch { return false; }
   }, [chainId, client, config, realtime.status, session]);
+  // QueryCache notifies synchronously, so subscribe schedules its change
+  // callback outside the current render stack. useSyncExternalStore then keeps
+  // React's snapshot reads consistent as route queries activate or settle.
+  const watching = useSyncExternalStore(subscribe, getSnapshot, () => false);
   useWatchBlockNumber({
     config, chainId, enabled: watching, poll: true, pollingInterval: 12_000, emitOnBegin: false,
     onBlockNumber: (_block, previous) => {

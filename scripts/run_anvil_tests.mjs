@@ -172,6 +172,7 @@ function validateProtocolManifest() {
     throw new Error("protocol proof manifest contains a forbidden credential field");
   }
   const positions = Array.isArray(manifest?.positions) ? manifest.positions : [];
+  const partialReductions = Array.isArray(manifest?.partialReductions) ? manifest.partialReductions : [];
   const closedPositions = Array.isArray(manifest?.closedPositions) ? manifest.closedPositions : [];
   const externalPosition = manifest?.externalPosition;
   const scenarios = new Set(positions.map((position) => `${position?.market}:${position?.side}`));
@@ -189,6 +190,29 @@ function validateProtocolManifest() {
       && BigInt(transaction?.blockNumber ?? "0") > 0n
     ))
   ));
+  const partialReductionEvidenceValid = suite === "browser" || (
+    partialReductions.length === 4
+    && partialReductions.every((reduction) => (
+      ["ETH", "BTC"].includes(reduction?.market)
+      && ["long", "short"].includes(reduction?.side)
+      && Number.isSafeInteger(reduction?.positionId)
+      && reduction.positionId > 0
+      && /^0x[0-9a-f]{40}$/i.test(reduction?.pool ?? "")
+      && BigInt(reduction?.requestedAmountWei ?? "0") > 0n
+      && reduction?.reductionFractionBps === 2500
+      && BigInt(reduction?.rawCollateralBefore ?? "0") > BigInt(reduction?.rawCollateralAfter ?? "0")
+      && BigInt(reduction?.rawCollateralAfter ?? "0") > 0n
+      && BigInt(reduction?.rawDebtBefore ?? "0") > BigInt(reduction?.rawDebtAfter ?? "0")
+      && BigInt(reduction?.rawDebtAfter ?? "0") > 0n
+      && BigInt(reduction?.usdcAfter ?? "0") > BigInt(reduction?.usdcBefore ?? "0")
+      && Array.isArray(reduction?.transactions)
+      && reduction.transactions.length > 0
+      && reduction.transactions.every((transaction) => (
+        /^0x[0-9a-f]{64}$/i.test(transaction?.hash ?? "")
+        && BigInt(transaction?.blockNumber ?? "0") > 0n
+      ))
+    ))
+  );
   const closedEvidenceValid = suite !== "browser" || (
     closedPositions.length === 4
     && closedPositions.every((position) => (
@@ -231,6 +255,10 @@ function validateProtocolManifest() {
     || manifest?.assertions?.coexistingInSingleSnapshot !== true
     || manifest?.assertions?.ownershipVerified !== true
     || manifest?.assertions?.nonzeroCollateralAndDebtVerified !== true
+    || (suite !== "browser" && manifest?.assertions?.partialReductionVerified !== true)
+    || (suite !== "browser" && manifest?.assertions?.partialReductionPreservedOwnershipAndIds !== true)
+    || (suite !== "browser" && manifest?.assertions?.partialReductionChangedOnlyTargetPosition !== true)
+    || (suite !== "browser" && manifest?.assertions?.partialReductionReturnedSelectedOutput !== true)
     || manifest?.assertions?.snapshotRevertedAfterProof !== true
     || (suite === "browser" && manifest?.assertions?.submittedExplorerBeforeConfirmation !== true)
     || (suite === "browser" && manifest?.assertions?.confirmedPositionBeforeIndexer !== true)
@@ -243,8 +271,18 @@ function validateProtocolManifest() {
     || (suite === "browser" && manifest?.assertions?.directCloseActionVerified !== true)
     || (suite === "browser" && manifest?.assertions?.everySupportedPositionClosed !== true)
     || (suite === "browser" && manifest?.assertions?.closeOutputBalanceRefreshVerified !== true)
+    || (suite === "browser" && manifest?.assertions?.quoteExpiryBlockedUntilRefresh !== true)
+    || (suite === "browser" && manifest?.assertions?.earnDepositReviewVerified !== true)
+    || (suite === "browser" && manifest?.assertions?.earnDepositCalldataBoundToReviewedAmountAndRecipient !== true)
+    || (suite === "browser" && manifest?.assertions?.earnInstantWithdrawalReviewVerified !== true)
+    || (suite === "browser" && manifest?.assertions?.earnInstantWithdrawalCalldataBoundToSelectedShares !== true)
+    || (suite === "browser" && manifest?.assertions?.earnAfterCooldownReviewVerified !== true)
+    || (suite === "browser" && manifest?.assertions?.earnAfterCooldownCalldataBoundToSelectedShares !== true)
+    || (suite === "browser" && manifest?.assertions?.moveExecutionVerified !== false)
+    || (suite === "browser" && typeof manifest?.assertions?.moveExecutionNotTestedReason !== "string")
     || expectedScenarios.some((scenario) => !scenarios.has(scenario))
     || !positionEvidenceValid
+    || !partialReductionEvidenceValid
     || !closedEvidenceValid
     || !externalEvidenceValid
   ) {

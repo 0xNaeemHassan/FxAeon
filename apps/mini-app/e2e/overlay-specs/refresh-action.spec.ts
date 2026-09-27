@@ -84,3 +84,35 @@ test('a new wallet gets a fresh refresh and an old completion cannot clear its s
     expect(await calls(page, 'wallet-B', reader)).toBe(1);
   }
 });
+
+test('a synchronous reader failure cannot prevent other reads or strand a subsequent retry', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await mount(page);
+  await page.getByRole('button', { name: 'Fail activity synchronously' }).click();
+  const refresh = page.getByRole('button', { name: 'Refresh wallet data' });
+  const state = page.getByTestId('refresh-state');
+  await refresh.click();
+  for (const reader of ['portfolio', 'activity', 'positions']) {
+    await expect.poll(() => calls(page, 'wallet-A', reader)).toBe(1);
+  }
+  await expect(state).toHaveText('Refreshing');
+  await settle(page, 'wallet-A', 'portfolio', 'reject');
+  await expect(state).toHaveText('Refreshing');
+  await settle(page, 'wallet-A', 'positions', 'reject');
+  await expect(state).toHaveText('Idle');
+
+  // A completely failed refresh must release its in-flight request so Retry
+  // actually reads again for the same account instead of joining old work.
+  await page.getByRole('button', { name: 'Allow activity reader' }).click();
+  await refresh.click();
+  for (const reader of ['portfolio', 'activity', 'positions']) {
+    await expect.poll(() => calls(page, 'wallet-A', reader)).toBe(2);
+  }
+  await expect(state).toHaveText('Refreshing');
+  for (const reader of ['portfolio', 'activity', 'positions']) {
+    await settle(page, 'wallet-A', reader, 'resolve');
+  }
+  await expect(state).toHaveText('Idle');
+  expect(errors).toEqual([]);
+});

@@ -11,4 +11,16 @@
 .worth .quantity { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .quantity { min-width: 0; color: var(--mut); font-size: 12px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .unavailable { color: var(--mut); font-size: 11px; font-weight: 400; }
+.loadingList { min-width: 0; }
+.loadingRow { display: flex; align-items: center; gap: 12px; min-height: 72px; padding-block: 10px; }
+.loadingRow + .loadingRow { border-top: 1px solid var(--line); }
+.loadingIcon { width: 34px; height: 34px; flex: 0 0 34px; border-radius: 50%; }
+.loadingName, .loadingWorth { display: grid; gap: 8px; }
+.loadingName { flex: 1; }
+.loadingWorth { justify-items: end; }
+.loadingName > span, .loadingWorth > span { display: block; height: 10px; border-radius: 4px; }
+.loadingName > span:first-child { width: 40px; }
+.loadingName > span:last-child { width: 62px; }
+.loadingWorth > span:first-child { width: 66px; }
+.loadingWorth > span:last-child { width: 92px; }
 @media (max-width: 350px) { .worth { max-width: 55%; } .quantity { font-size: 11px; } }

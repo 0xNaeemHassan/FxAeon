@@ -246,16 +246,18 @@ function PortfolioWallet() {
         {task.kind !== 'valuation' && task.detail}
       </StatusNotice>)}
       <PortfolioAssets snapshot={displayAssets} loading={loading || liveLoading}
-        network={network} onNetworkChange={setNetwork} />
-      <section aria-labelledby="portfolio-positions-heading" className={presentation.positionsSection}>
-        <div className={presentation.sectionTitle}><h2 id="portfolio-positions-heading">Positions</h2>
-          {positionState.positions.length > 0 && <Link href="/positions">Manage all <ChevronRight size={15} aria-hidden="true" /></Link>}</div>
-        <ProtocolPositionNotice status={positionState.status} failedGroups={positionState.failedGroups}
-          hasPositions={positionState.positions.length + positionState.pendingPositions.length > 0} refreshing={positionState.refreshing}
-          onRefresh={() => void positionState.refresh()} compact />
-        <ConfirmedPositionCards />
-        {positionState.status === 'loading' && !positionState.positions.length && !positionState.pendingPositions.length ? <ProtocolPositionSkeleton compact />
-          : positionState.positions.length > 0 ? <div className={presentation.positionList}>{positionState.positions.slice(0, 2).map((position) => {
+        network={network} onNetworkChange={setNetwork} onRefresh={refreshAll} refreshing={manualRefresh.refreshing} />
+      <section aria-label="Positions" className={presentation.positionsSection}>
+        <Disclosure title="Positions" summary={positionState.status === 'ready'
+          ? `${positionState.positions.length} open`
+          : <ValueOrSkeleton value="—" width="sm" status={positionState.status === 'loading' ? 'loading' : 'unavailable'} label="Verified open position count" />}>
+          <div className={presentation.disclosureActions}>{positionState.positions.length > 0 && <Link href="/positions">Manage all <ChevronRight size={15} aria-hidden="true" /></Link>}</div>
+          <ProtocolPositionNotice status={positionState.status} failedGroups={positionState.failedGroups}
+            hasPositions={positionState.positions.length + positionState.pendingPositions.length > 0} refreshing={positionState.refreshing}
+            onRefresh={() => void positionState.refresh()} compact />
+          <ConfirmedPositionCards />
+          {positionState.status === 'loading' && !positionState.positions.length && !positionState.pendingPositions.length ? <ProtocolPositionSkeleton compact />
+            : positionState.positions.length > 0 ? <div className={presentation.positionList}>{positionState.positions.slice(0, 2).map((position) => {
             const key = encodeURIComponent(`${position.market}:${position.side}:${position.info.positionId}`);
             return <div key={key} className={presentation.positionItem}><ProtocolPositionCard position={position} compact />
               <div className={presentation.positionActions} role="group" aria-label={`Actions for ${position.market} ${position.side} position ${position.info.positionId}`}>
@@ -264,12 +266,13 @@ function PortfolioWallet() {
                 <Link href={`/positions?position=${key}&action=close`}>Close</Link>
               </div>
             </div>;
-          })}</div> : positionState.status === 'ready' && !positionState.pendingPositions.length ? <div className={presentation.emptyState}><span className={presentation.emptyIcon}><Layers2 size={22} aria-hidden="true" /></span><p>No open positions</p><Link href="/trade">Open trade <ChevronRight size={14} aria-hidden="true" /></Link></div> : null}
+            })}</div> : positionState.status === 'ready' && !positionState.pendingPositions.length ? <div className={presentation.emptyState}><span className={presentation.emptyIcon}><Layers2 size={22} aria-hidden="true" /></span><p>No open positions</p><Link href="/trade">Open trade <ChevronRight size={14} aria-hidden="true" /></Link></div> : null}
+        </Disclosure>
       </section>
       <EarnPositionCard protocol={protocol} loading={fxSaveLoading} prices={displayPrices} />
+      <RecentActivityPreview walletAddress={wallet.address as Address} />
     </div>
     <aside className={presentation.secondary}>
-      <RecentActivityPreview walletAddress={wallet.address as Address} />
       <MarketOverview />
       <RowGroup title="Protocol tools"><ActionRow icon={CircleDollarSign} title="Borrow fxUSD" description="Manage collateral and debt" href="/borrow" /></RowGroup>
     </aside>
@@ -292,23 +295,23 @@ function DisconnectedPortfolio({ authenticated }: { authenticated: boolean }) {
 
 function EarnPositionCard({ protocol, loading, prices }: { protocol: ProtocolSnapshot; loading: boolean; prices: UsdPriceMap }) {
   const hasBalance = protocol.fxSaveShares !== null;
-  if (loading && !hasBalance) return <ProductSurface><span role="status" className="skeleton block h-16 w-full rounded-xl" aria-label="Loading fxSAVE position" /></ProductSurface>;
   if (!hasBalance) return <ActionRow icon={PiggyBank} title="fxSAVE" href="/earn" value="View Earn" />;
-  if (!/[1-9]/.test(protocol.fxSaveShares!) && claimAvailability(protocol.claimable).status !== 'ready') return <section aria-labelledby="portfolio-earn-heading" className={presentation.emptyEarn}>
-    <div className={presentation.sectionTitle}><h2 id="portfolio-earn-heading">Earn position</h2><Link href="/earn">Manage <ChevronRight size={15} aria-hidden="true" /></Link></div>
-    <p><TokenIcon symbol="fxSAVE" size={32} /><strong>0 fxSAVE</strong><Link href="/earn?mode=deposit">Deposit</Link></p>
+  const earnSection = (content: React.ReactNode, summary: React.ReactNode) => <section aria-labelledby="portfolio-earn-heading" className={presentation.earnSection}>
+    <h2 id="portfolio-earn-heading" className="sr-only">fxSAVE</h2>
+    <Disclosure title="fxSAVE" summary={summary}>{content}</Disclosure>
   </section>;
+  if (!/[1-9]/.test(protocol.fxSaveShares!) && claimAvailability(protocol.claimable).status !== 'ready') return earnSection(<div className={presentation.emptyEarn}><p><TokenIcon symbol="fxSAVE" size={32} /><strong>0 fxSAVE</strong><Link href="/earn?mode=deposit">Deposit</Link></p></div>, '0 fxSAVE');
   const value = fxSaveUsdValue('assetsWei', protocol.fxSaveAssets, prices);
-  return <section aria-labelledby="portfolio-earn-heading" className={presentation.earnSection}>
-    <div className={presentation.sectionTitle}><h2 id="portfolio-earn-heading">Earn position</h2><Link href="/earn">Manage <ChevronRight size={15} aria-hidden="true" /></Link></div>
-    <ProductSurface className={presentation.earnCard}>
+  return earnSection(
+    <div className={presentation.earnCard}>
       <div className={presentation.earnTop}><TokenIcon symbol="fxSAVE" size={36} /><div><h3>fxSAVE</h3><p>{formatExactDecimal(protocol.fxSaveShares!, 6)} fxSAVE</p></div>
         <strong><ValueOrSkeleton value={formatUsd(value)} width="md" status="unavailable" label="fxSAVE position value" /></strong></div>
       <div className={presentation.earnActions}><Link href="/earn?mode=deposit">Deposit</Link><Link href="/earn?mode=withdraw">Withdraw</Link>
         {claimAvailability(protocol.claimable).status === 'ready' && <Link href="/earn?mode=claim">Review claim</Link>}</div>
       <Disclosure title="Underlying holdings"><p className={presentation.helper}><ValueOrSkeleton value={protocol.fxSaveAssets === null ? '—' : `${formatExactDecimal(protocol.fxSaveAssets, 6)} fxUSD base-pool shares`} status={loading ? 'loading' : 'unavailable'} label="Underlying holdings" /></p></Disclosure>
-    </ProductSurface>
-  </section>;
+    </div>,
+    <ValueOrSkeleton value={formatUsd(value)} width="md" status="unavailable" label="fxSAVE position value" />,
+  );
 }
 
 function SupportedValueCard({ displayTotalUsd, loading, refreshing, onRefresh,

@@ -8,6 +8,7 @@ product guide is available under **More → FxAeon docs** and at `/docs`.
 
 | Guide | Purpose |
 | --- | --- |
+| [Design contract](../DESIGN.md) | Shared app surfaces, themes, responsive controls, and transaction presentation |
 | [Architecture](architecture.md) | App boundaries, transaction flow, and state ownership |
 | [Product behavior](product-behavior.md) | App areas, transaction reviews, and compact mobile layout |
 | [SDK scope](sdk-scope.md) | Locked f(x) SDK method contract and reviewed package patch |

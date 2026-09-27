@@ -9,7 +9,7 @@ import { ValueOrSkeleton } from '@/components/MissingValue';
 import type { WalletAsset } from '@/lib/walletAssets';
 import { formatUsd } from '@/lib/prices';
 import { compactAddress } from '@/lib/addressPresentation';
-import { tokenName, tokenSymbol } from '@/lib/fx/tokenPresentation';
+import { tokenSymbol } from '@/lib/fx/tokenPresentation';
 import { haptic, openExternalLink } from '@/lib/telegram';
 import { ChainIcon } from '@/components/TokenIcon';
 import { copyText } from '@/components/ui';
@@ -52,19 +52,20 @@ export default function WalletAssetDetails({ asset, walletAddress, onNavigate }:
   return <div className={styles.details}>
     <div className={styles.hero}>
       <AssetNetworkIcon asset={asset} size={48} />
-      <h3>{symbol}</h3>
-      <p>{tokenName(asset.symbol)}</p>
-      <strong className={styles.holdingValue}><ValueOrSkeleton value={formatUsd(asset.usdValue)} width="md" status="unavailable" label="Holding value unavailable" /></strong>
-      <span className={styles.holdingLabel}>Estimated holding value</span>
+      <div className={styles.heroValue}>
+        <span className={styles.holdingLabel}>Holding value</span>
+        <strong className={styles.holdingValue}><ValueOrSkeleton value={formatUsd(asset.usdValue)} width="md" status="unavailable" label="Holding value unavailable" /></strong>
+      </div>
     </div>
 
     {walletAddress && <section className={styles.addressPanel} aria-labelledby="wallet-asset-address">
-      <h3 id="wallet-asset-address">Wallet address</h3>
-      <p className={styles.address}>{walletAddress}</p>
-      <button type="button" className={styles.copyButton} onClick={() => void copyAddress()}>
+      <div className={styles.addressHeader}><h3 id="wallet-asset-address">Wallet address</h3>
+        <button type="button" className={styles.copyButton} onClick={() => void copyAddress()}>
         {copied ? <Check size={18} aria-hidden="true" /> : <Copy size={18} aria-hidden="true" />}
         {copied ? 'Address copied' : 'Copy address'}
-      </button>
+        </button>
+      </div>
+      <p className={styles.address}>{walletAddress}</p>
       <p className={styles.copyStatus} role="status" aria-live="polite">
         {copyFailed ? 'Copy was blocked. Select the address to copy it manually.' : copied ? 'Address copied.' : ''}
       </p>

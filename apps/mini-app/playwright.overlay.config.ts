@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e/overlay-specs',
+  outputDir: './test-results/overlay-playwright',
   fullyParallel: false,
   workers: 1,
   reporter: 'list',

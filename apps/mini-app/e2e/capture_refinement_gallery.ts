@@ -185,6 +185,20 @@ async function captureAppView(browser: Awaited<ReturnType<typeof chromium.launch
     const walletConnected = walletOptions.initiallyConnected ?? false;
     const page = await createAppPage(context, theme, options.id, walletOptions);
     await pageReady(page, options.route, walletConnected);
+    if (new URL(options.route, appUrl).pathname === '/portfolio') {
+      const positions = page.locator('section[aria-label="Positions"] details');
+      await positions.locator('summary').waitFor({ state: 'visible', timeout: 20_000 });
+      if (await positions.evaluate((element) => (element as HTMLDetailsElement).open)) {
+        throw new Error(`portfolio positions should be compact by default in ${options.id}`);
+      }
+      const earn = page.locator('section[aria-labelledby="portfolio-earn-heading"] details');
+      if (await earn.count()) {
+        await earn.locator('summary').waitFor({ state: 'visible', timeout: 20_000 });
+        if (await earn.evaluate((element) => (element as HTMLDetailsElement).open)) {
+          throw new Error(`portfolio fxSAVE should be compact by default in ${options.id}`);
+        }
+      }
+    }
     await options.prepare?.(page);
     await captureScrollView(page, { ...options, theme, viewport, walletConnected, note: options.note, scrollTarget: options.scrollTarget ?? '.app-content' });
   } finally {
@@ -371,6 +385,33 @@ async function main(): Promise<void> {
         await reverse.click();
       },
     });
+    for (const theme of ['dark', 'light'] as const) {
+      await captureAppView(browser, {
+        id: `trade-eth-long-${theme}-mobile`, route: '/trade', theme,
+        note: `ETH Long form in the ${theme} theme; deterministic fixture only, no quote or protocol balance asserted.`,
+        prepare: async (page) => {
+          await setRadio(page, 'ETH');
+          await setRadio(page, 'Long');
+          await page.locator('[data-trade-ticket]').waitFor({ state: 'visible' });
+        },
+      });
+      await captureAppView(browser, {
+        id: `earn-withdraw-instant-${theme}-mobile`, route: '/earn', theme,
+        note: `Instant withdrawal editor in the ${theme} theme; fixture selection only, no withdrawal quote.`,
+        prepare: async (page) => {
+          await page.getByRole('radio', { name: 'Withdraw', exact: true }).click();
+          await page.getByRole('radio', { name: /Instant/ }).click();
+        },
+      });
+      await captureAppView(browser, {
+        id: `borrow-default-${theme}-mobile`, route: '/borrow', theme,
+        note: `Default Borrow editor in the ${theme} theme; no protocol balance or quote asserted.`,
+      });
+      await captureAppView(browser, {
+        id: `move-default-${theme}-mobile`, route: '/move', theme,
+        note: `Default Move editor in the ${theme} theme; no bridge quote asserted.`,
+      });
+    }
     for (const [id, route] of [
       ['settings', '/settings'], ['history', '/history'], ['receive', '/qr'], ['docs', '/docs'], ['privacy-docs-section', '/docs#privacy'], ['more', '/more'], ['positions', '/positions'], ['login', '/login'],
     ] as const) {

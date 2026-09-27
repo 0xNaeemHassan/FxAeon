@@ -11,7 +11,7 @@
 .rate { flex: 0 0 auto; text-align: right; padding-top: 4px; }
 .rate > strong { display: block; font-size: 20px; color: var(--mint); font-weight: 650; font-variant-numeric: tabular-nums; }
 .rate > small { display: block; margin-top: 3px; color: var(--mut); font-size: 11px; }
-.refresh { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; margin: 0 -6px 0 0; color: var(--mut); border-radius: 12px; }
+.refresh { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; margin: 0 -6px 0 0; color: var(--mut); border-radius: var(--radius-sm); }
 .refresh:hover { color: var(--mint); background: var(--mint-dim); }
 .actionTabs { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 10px; margin-bottom: 10px; }
 .editor { display: flex; min-width: 0; flex-direction: column; gap: 10px; }
@@ -20,7 +20,7 @@
 .receiveRow > div { min-width: 0; max-width: 66%; }
 .pendingTask { min-width: 0; }
 .pendingTask > :global([role='status']) { width: 100%; }
-.retryButton { display: inline-flex; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 12px; color: var(--warn); background: color-mix(in srgb, var(--warn-dim) 68%, var(--surface)); }
+.retryButton { display: inline-flex; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--warn); background: color-mix(in srgb, var(--warn-dim) 68%, var(--surface)); }
 .retryButton:hover { background: var(--warn-dim); }
 .retryButton:disabled { cursor: not-allowed; opacity: .55; }
 .withdrawOptions :global(fieldset) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -37,8 +37,12 @@
   .workspace { gap: 8px; }
   .workspace > :global(header), .workspace > :global(nav) { margin-bottom: 0; }
   .panel { padding: 16px; }
+  .actionTabs { margin-block: 8px; padding-top: 8px; }
+  .editor { gap: 8px; }
+  .panel > [role='status'] { margin-block: 8px; }
   .balanceCopy h2 { font-size: 28px; }
   .rate > strong { font-size: 18px; }
   .withdrawOptions :global(label) { padding: 8px; }
+  .withdrawOptions :global(fieldset) { gap: 6px; }
   .withdrawOptions :global(legend) { margin-bottom: 6px; }
 }

@@ -547,10 +547,18 @@ async function waitForPopulatedPositions(page) {
   await waitForPositionKeys(page, positionManifest.positions);
 }
 
+async function openPortfolioPositions(page) {
+  const disclosure = page.locator('section[aria-label="Positions"] details');
+  await disclosure.locator('summary').waitFor({ state: 'visible', timeout: 30_000 });
+  if (!await disclosure.evaluate((element) => element.open)) await disclosure.locator('summary').click();
+  await page.waitForFunction(() => document.querySelector('section[aria-label="Positions"] details')?.open === true, null, { timeout: 30_000 });
+}
+
 async function waitForPopulatedPortfolio(page) {
+  await openPortfolioPositions(page);
   await waitForPositionKeys(page, positionManifest.positions.filter((position) => position.market === 'ETH'));
   await page.waitForFunction(() => {
-    const positionSection = document.querySelector('section[aria-labelledby="portfolio-positions-heading"]');
+    const positionSection = document.querySelector('section[aria-label="Positions"]');
     const valueCard = document.querySelector('[data-portfolio-value]');
     const loadingValue = document.querySelector('[aria-label="Loading portfolio value"], [aria-label="Loading wallet asset count"]');
     return Boolean(positionSection && valueCard) && !loadingValue;

@@ -51,3 +51,14 @@ export function AssetRowContent({ asset, loading = false }: { asset: WalletAsset
     </span>
   </>;
 }
+
+/** Preserve the holdings ledger's shape during the first balance read. */
+export function AssetListSkeleton() {
+  return <div role="status" aria-label="Loading assets" className={styles.loadingList}>
+    {[0, 1, 2].map((row) => <div key={row} className={styles.loadingRow} aria-hidden="true">
+      <span className={`${styles.loadingIcon} skeleton`} />
+      <span className={styles.loadingName}><span className="skeleton" /><span className="skeleton" /></span>
+      <span className={styles.loadingWorth}><span className="skeleton" /><span className="skeleton" /></span>
+    </div>)}
+  </div>;
+}

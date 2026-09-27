@@ -1,5 +1,4 @@
 import {
-  decodeEventLog,
   isAddress,
   type Address,
   type Hex,
@@ -9,8 +8,8 @@ import { assertPublicClientChain, getEthereumClient } from './fx/clients';
 import { positionPoolAddress } from './fx/policy';
 import { withReadDeadline } from './fx/readFacade';
 import type { FxPublicClient } from './fx/types';
+import { decodePositionRouterEvent, positionRouterEventMatchesRecipient } from './positionRouterEvents';
 
-const ROUTER = '0x33636D49FbefBE798e15e7F356E8DBef543CC708' as Address;
 const HASH_PATTERN = /^0x[0-9a-f]{64}$/i;
 const POSITIONS_PER_PAGE = 25;
 const ORDERS_PER_PAGE = 5;
@@ -24,30 +23,6 @@ const INDEXES = [
   { market: 'ETH', side: 'short', supportsRealOwner: false, url: 'https://api.goldsky.com/api/public/project_cmgz5g9sl0065xhp2aqd9c6sv/subgraphs/fx-v2-wsteth-short/v0.1.0/gn' },
   { market: 'BTC', side: 'short', url: 'https://api.goldsky.com/api/public/project_cmgz5g9sl0065xhp2aqd9c6sv/subgraphs/fx-v2-wbtc-short/v2.0.0/gn' },
 ] as const;
-
-const CLOSE_EVENT = [{
-  type: 'event', name: 'CloseOrRemove', anonymous: false,
-  inputs: [
-    { name: 'pool', type: 'address', indexed: false },
-    { name: 'position', type: 'uint256', indexed: false },
-    { name: 'recipient', type: 'address', indexed: false },
-    { name: 'colls', type: 'uint256', indexed: false },
-    { name: 'debts', type: 'uint256', indexed: false },
-    { name: 'borrows', type: 'uint256', indexed: false },
-  ],
-}] as const;
-
-const OPEN_EVENT = [{
-  type: 'event', name: 'OpenOrAdd', anonymous: false,
-  inputs: [
-    { name: 'pool', type: 'address', indexed: false },
-    { name: 'position', type: 'uint256', indexed: false },
-    { name: 'recipient', type: 'address', indexed: false },
-    { name: 'colls', type: 'uint256', indexed: false },
-    { name: 'debts', type: 'uint256', indexed: false },
-    { name: 'borrows', type: 'uint256', indexed: false },
-  ],
-}] as const;
 
 type Market = (typeof INDEXES)[number]['market'];
 type Side = (typeof INDEXES)[number]['side'];
@@ -219,19 +194,18 @@ function sameAddress(left: unknown, right: string): boolean {
   return typeof left === 'string' && left.toLowerCase() === right.toLowerCase();
 }
 
-function decodeMatchingEvent(log: TransactionReceipt['logs'][number], candidate: Candidate, walletAddress: Address): boolean {
-  if (log.removed || !sameAddress(log.address, ROUTER)) return false;
-  const abi = candidate.kind === 'open' ? OPEN_EVENT : CLOSE_EVENT;
-  try {
-    const { eventName, args } = decodeEventLog({ abi, data: log.data, topics: log.topics, strict: true });
-    const expectedName = candidate.kind === 'open' ? 'OpenOrAdd' : 'CloseOrRemove';
-    return eventName === expectedName
-      && sameAddress(args.pool, candidate.poolAddress)
-      && args.position === BigInt(candidate.positionId)
-      && sameAddress(args.recipient, walletAddress);
-  } catch {
-    return false;
-  }
+function decodeMatchingEvent(
+  log: TransactionReceipt['logs'][number],
+  candidate: Candidate,
+  walletAddress: Address,
+  receiptLogs: TransactionReceipt['logs'],
+): boolean {
+  const event = decodePositionRouterEvent(log);
+  if (!event
+    || !sameAddress(event.pool, candidate.poolAddress)
+    || event.positionId !== BigInt(candidate.positionId)
+    || (candidate.kind === 'open') !== (event.operation === 'open')) return false;
+  return positionRouterEventMatchesRecipient(event, log, receiptLogs, walletAddress);
 }
 
 async function verifyCandidates(candidates: Candidate[], walletAddress: Address, client: FxPublicClient): Promise<ProtocolPositionActivity[]> {
@@ -245,7 +219,7 @@ async function verifyCandidates(candidates: Candidate[], walletAddress: Address,
       && receipt.logs.some((log) => sameAddress(log.transactionHash, candidate.hash)
         && log.blockNumber === receipt.blockNumber
         && sameAddress(log.blockHash, receipt.blockHash)
-        && decodeMatchingEvent(log, candidate, walletAddress)));
+        && decodeMatchingEvent(log, candidate, walletAddress, receipt.logs)));
     return events.map((candidate) => ({
       chainId: 1,
       hash: candidate.hash,

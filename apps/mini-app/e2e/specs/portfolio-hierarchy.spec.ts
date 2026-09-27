@@ -7,6 +7,10 @@ test.describe('Portfolio mobile hierarchy', () => {
     for (const viewport of [{ width: 390, height: 844 }, { width: 320, height: 568 }]) {
       await page.setViewportSize(viewport);
       await page.goto('/portfolio', { waitUntil: 'domcontentloaded' });
+      const positions = page.getByRole('region', { name: 'Positions', exact: true });
+      const disclosure = positions.locator('details');
+      await expect(disclosure.locator('summary')).toBeVisible();
+      await expect(disclosure).not.toHaveAttribute('open');
       const assets = page.getByRole('region', { name: 'Assets', exact: true });
       const filters = page.getByRole('group', { name: 'Portfolio network', exact: true });
       await expect(assets).toBeVisible();

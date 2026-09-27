@@ -7,14 +7,14 @@
 .productSwitch {
   padding: 4px;
   border: 1px solid color-mix(in srgb, var(--line-strong) 32%, var(--line));
-  border-radius: 15px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--surface-2) 78%, var(--bg));
 }
 
 .productSwitch > a,
 .productSwitch > span {
   min-height: 44px;
-  border-radius: 11px;
+  border-radius: var(--radius-sm);
   transition: background-color 150ms ease, color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
 }
 
@@ -30,7 +30,7 @@
 .productSwitch > a:focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
 
 .focusCard {
-  border-radius: 22px;
+  border-radius: var(--radius-md);
   border-color: color-mix(in srgb, var(--line-strong) 34%, var(--line));
   background: var(--surface);
   box-shadow: none;
@@ -55,12 +55,12 @@
 .bridgePreviewGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 
 .summaryCard {
-  border-radius: 24px;
+  border-radius: var(--radius-md);
   background: var(--surface-2);
 }
 
 .reviewCard {
-  border-radius: 24px;
+  border-radius: var(--radius-md);
   background: var(--surface-2);
 }
 
@@ -118,7 +118,7 @@
 
 .metric {
   border: 1px solid color-mix(in srgb, var(--line-strong) 28%, var(--line));
-  border-radius: 14px;
+  border-radius: var(--radius-sm);
   background: var(--surface-2);
 }
 
@@ -157,7 +157,7 @@
 
 .primaryAction {
   min-height: 48px;
-  border-radius: 14px;
+  border-radius: var(--radius-sm);
   font-weight: 750;
 }
 
@@ -180,14 +180,11 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
-  padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--surface-2) 72%, var(--surface));
+  padding: 4px 0 8px;
 }
 
 .reviewStep {
-  border-radius: 16px;
+  border-radius: var(--radius-sm);
   background: var(--surface-2);
 }
 
@@ -213,7 +210,7 @@
 
 @media (max-width: 640px) {
   .workspace { max-width: 100%; }
-  .moveCard.moveCard { padding: 14px; border-radius: 20px; }
+  .moveCard.moveCard { padding: 14px; border-radius: var(--radius-md); }
   .moveCard > :first-child h2 { font-size: 21px; }
   .moveNetworkFlow { margin-top: 10px; }
   .networkNode { min-height: 54px; padding: 7px 2px; border-radius: 0; }
@@ -240,9 +237,9 @@
 .borrowWorkspace { min-width: 0; }
 
 .earnWorkspace :global(.segmented),
-.borrowWorkspace :global(.segmented) { border-color: transparent; border-radius: 13px; background: transparent; }
+.borrowWorkspace :global(.segmented) { border-color: transparent; border-radius: var(--radius-md); background: transparent; }
 .earnWorkspace :global(.segmented-option),
-.borrowWorkspace :global(.segmented-option) { min-height: 44px; border-radius: 10px; transition: background-color 150ms ease, color 150ms ease, box-shadow 150ms ease, transform 150ms ease; }
+.borrowWorkspace :global(.segmented-option) { min-height: 44px; border-radius: var(--radius-sm); transition: background-color 150ms ease, color 150ms ease, box-shadow 150ms ease, transform 150ms ease; }
 .earnWorkspace :global(.segmented-option-active),
 .borrowWorkspace :global(.segmented-option-active) { background: var(--mint-dim); box-shadow: none; color: var(--text); }
 .earnWorkspace :global(.segmented-option:hover),
@@ -259,18 +256,14 @@
   background: color-mix(in srgb, var(--input) 82%, var(--surface));
   transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
 }
-.earnWorkspace :global(.field-control), .borrowWorkspace :global(.field-control), .moveWorkspace :global(.field-control) { border-radius: 13px; }
-.earnWorkspace :global(.amount-control), .borrowWorkspace :global(.amount-control), .moveWorkspace :global(.amount-control) { border-radius: 16px; box-shadow: none; }
+.earnWorkspace :global(.field-control), .borrowWorkspace :global(.field-control), .moveWorkspace :global(.field-control) { border-radius: var(--radius-sm); }
+.earnWorkspace :global(.amount-control), .borrowWorkspace :global(.amount-control), .moveWorkspace :global(.amount-control) { border-radius: var(--radius-md); box-shadow: none; }
 .earnWorkspace :global(.field-control:focus), .earnWorkspace :global(.field-control:focus-within), .earnWorkspace :global(.amount-control:focus-within), .earnWorkspace :global(.range-control:focus-within),
 .borrowWorkspace :global(.field-control:focus), .borrowWorkspace :global(.field-control:focus-within), .borrowWorkspace :global(.amount-control:focus-within), .borrowWorkspace :global(.range-control:focus-within),
 .moveWorkspace :global(.field-control:focus), .moveWorkspace :global(.field-control:focus-within), .moveWorkspace :global(.amount-control:focus-within), .moveWorkspace :global(.range-control:focus-within) {
   border-color: var(--mint); background: var(--surface); box-shadow: 0 0 0 3px var(--mint-dim);
 }
 .earnWorkspace :global(.token-pill), .borrowWorkspace :global(.token-pill), .moveWorkspace :global(.token-pill) { border-color: color-mix(in srgb, var(--line-strong) 34%, var(--line)); background: color-mix(in srgb, var(--surface-3) 76%, var(--surface)); }
-.earnWorkspace :global(.fraction-button), .borrowWorkspace :global(.fraction-button), .moveWorkspace :global(.fraction-button) { min-height: 44px; border-radius: 11px; transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease; }
-.earnWorkspace :global(.fraction-button:hover), .borrowWorkspace :global(.fraction-button:hover), .moveWorkspace :global(.fraction-button:hover) { border-color: var(--line-strong); background: var(--surface-3); color: var(--text); }
-.earnWorkspace :global(.fraction-button:active), .borrowWorkspace :global(.fraction-button:active), .moveWorkspace :global(.fraction-button:active) { transform: translateY(1px); }
-
 .earnHeading { margin: 0; color: var(--text); font-size: 28px; font-weight: 700; letter-spacing: -.03em; line-height: 1.1; }
 .borrowHeading { margin: 0; color: var(--text); font-size: 28px; font-weight: 700; letter-spacing: -.03em; line-height: 1.1; }
 
@@ -401,10 +394,10 @@
   .earnWorkspace,
   .borrowWorkspace { gap: 8px; }
 
-  .earnWorkspace .focusCard,
-  .borrowWorkspace .focusCard,
-  .earnWorkspace .summaryCard,
-  .borrowWorkspace .summaryCard { padding: 16px; border-radius: 20px; }
+.earnWorkspace .focusCard,
+.borrowWorkspace .focusCard,
+.earnWorkspace .summaryCard,
+.borrowWorkspace .summaryCard { padding: 16px; border-radius: var(--radius-md); }
 
   .earnWorkspace .focusCard > div,
   .borrowWorkspace .focusCard > div { gap: 12px; }
@@ -481,9 +474,7 @@
   .productSwitch > a, .productSwitch > span, .earnWorkspace :global(.segmented-option), .borrowWorkspace :global(.segmented-option),
   .earnWorkspace :global(.field-control), .borrowWorkspace :global(.field-control), .moveWorkspace :global(.field-control),
   .earnWorkspace :global(.amount-control), .borrowWorkspace :global(.amount-control), .moveWorkspace :global(.amount-control),
-  .earnWorkspace :global(.fraction-button), .borrowWorkspace :global(.fraction-button), .moveWorkspace :global(.fraction-button),
   .reviewTrigger .primaryAction:global(.button-primary), .reviewInlineActions .primaryAction:global(.button-primary), .networkArrow { transition: none; }
   .productSwitch > a:active, .earnWorkspace :global(.segmented-option:active), .borrowWorkspace :global(.segmented-option:active),
-  .earnWorkspace :global(.fraction-button:active), .borrowWorkspace :global(.fraction-button:active), .moveWorkspace :global(.fraction-button:active),
   .reviewTrigger .primaryAction:global(.button-primary):active, .reviewInlineActions .primaryAction:global(.button-primary):active { transform: none; }
 }

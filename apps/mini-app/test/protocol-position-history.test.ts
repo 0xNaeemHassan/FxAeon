@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { encodeAbiParameters, toEventSelector, type Address, type Hex, type TransactionReceipt } from 'viem';
+import { encodeAbiParameters, encodeEventTopics, toEventSelector, type Address, type Hex, type TransactionReceipt } from 'viem';
 import { loadProtocolPositionHistory } from '../src/lib/protocolPositionHistory';
+import {
+  ERC721_POSITION_TRANSFER_ABI,
+  POSITION_ROUTER_EVENT_ABI,
+  POSITION_ROUTER_ADDRESS,
+} from '../src/lib/positionRouterEvents';
+import { positionPoolAddress } from '../src/lib/fx/policy';
 import type { FxPublicClient } from '../src/lib/fx/types';
 import { createWalletReadScope } from '../src/lib/walletDataRefresh';
 
@@ -10,8 +16,19 @@ const hash = `0x${'7'.repeat(64)}` as Hex;
 const syntheticWallet = '0x1111111111111111111111111111111111111111' as Address;
 const blockHash = `0x${'a'.repeat(64)}` as Hex;
 const pool = '0x6Ecfa38FeE8a5277B91eFdA204c235814F0122E8' as Address;
-const router = '0x33636D49FbefBE798e15e7F356E8DBef543CC708' as Address;
+const router = POSITION_ROUTER_ADDRESS;
+const shortPool = positionPoolAddress('ETH', 'short');
 const closeTopic = toEventSelector('event CloseOrRemove(address pool,uint256 position,address recipient,uint256 colls,uint256 debts,uint256 borrows)');
+const shortOperateTopics = (poolAddress: Address) => encodeEventTopics({
+  abi: POSITION_ROUTER_EVENT_ABI,
+  eventName: 'PositionOperate',
+  args: { pool: poolAddress },
+});
+const positionTransferTopics = (args: { from: Address; to: Address; tokenId: bigint }) => encodeEventTopics({
+  abi: ERC721_POSITION_TRANSFER_ABI,
+  eventName: 'Transfer',
+  args,
+});
 
 function testHash(digit: string): Hex {
   return `0x${digit.repeat(64)}` as Hex;
@@ -43,6 +60,47 @@ function successfulReceipt(
   } as unknown as TransactionReceipt;
 }
 
+function successfulShortReceipt(
+  operation: 'open' | 'close',
+  positionId = 2004,
+  transactionHash: Hex = hash,
+  poolAddress: Address = shortPool,
+  userCollateralsDelta?: bigint,
+  transferOverrides: {
+    contract?: Address; from?: Address; to?: Address; tokenId?: number;
+    transactionHash?: Hex; blockNumber?: bigint; blockHash?: Hex;
+  } = {},
+  operationDeltas: { newColl?: bigint; newDebt?: bigint } = {},
+): TransactionReceipt {
+  const opening = operation === 'open';
+  const transferredPositionId = BigInt(transferOverrides.tokenId ?? positionId);
+  return {
+    status: 'success', transactionHash, blockNumber: 100n, blockHash,
+    logs: [{
+      address: router,
+      data: encodeAbiParameters(
+        [{ type: 'uint256' }, { type: 'int256' }, { type: 'int256' }, { type: 'int256' }, { type: 'int256' }],
+        [BigInt(positionId), userCollateralsDelta ?? (opening ? -3n : 1n), 0n,
+          operationDeltas.newColl ?? (opening ? 3n : -3n), operationDeltas.newDebt ?? (opening ? 4n : -4n)],
+      ),
+      topics: shortOperateTopics(poolAddress),
+      blockNumber: 100n, blockHash, transactionHash, logIndex: 1, removed: false,
+    }, {
+      address: transferOverrides.contract ?? poolAddress,
+      data: '0x',
+      topics: positionTransferTopics({
+        from: transferOverrides.from ?? router,
+        to: transferOverrides.to ?? wallet,
+        tokenId: transferredPositionId,
+      }),
+      blockNumber: transferOverrides.blockNumber ?? 100n,
+      blockHash: transferOverrides.blockHash ?? blockHash,
+      transactionHash: transferOverrides.transactionHash ?? transactionHash,
+      logIndex: 2, removed: false,
+    }],
+  } as unknown as TransactionReceipt;
+}
+
 function fakeClient(receipt: TransactionReceipt | Map<Hex, TransactionReceipt>): FxPublicClient {
   return {
     chain: { id: 1 },
@@ -62,17 +120,25 @@ function jsonResponse(data: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify({ data }), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
-function fakeFetcher(options: { recipient?: Address; includePosition?: boolean } = {}) {
+function fakeFetcher(options: {
+  recipient?: Address;
+  includePosition?: boolean;
+  side?: 'long' | 'short';
+  orderType?: 'Open' | 'Close';
+  isClosed?: boolean;
+} = {}) {
   const requests: Array<{ url: string; query: string }> = [];
   const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const payload = JSON.parse(String(init?.body)) as { query: string };
     requests.push({ url, query: payload.query });
-    const isEthLong = url.includes('/fx-v2-wsteth/3.0.0/');
+    const isSelectedIndex = options.side === 'short'
+      ? url.includes('/fx-v2-wsteth-short/v0.1.0/')
+      : url.includes('/fx-v2-wsteth/3.0.0/');
     const isPositionQuery = payload.query.includes('WalletPositionHistory');
     const data = isPositionQuery
-      ? { positions: isEthLong && options.includePosition !== false ? [{ id: '2004', isClosed: true, blockNumber: '100' }] : [] }
-      : { orders: isEthLong && options.includePosition !== false ? [{ positionId: '2004', type: 'Close', hash, blockNumber: '100', timestamp: '1700000000' }] : [] };
+      ? { positions: isSelectedIndex && options.includePosition !== false ? [{ id: '2004', isClosed: options.isClosed ?? true, blockNumber: '100' }] : [] }
+      : { orders: isSelectedIndex && options.includePosition !== false ? [{ positionId: '2004', type: options.orderType ?? 'Close', hash, blockNumber: '100', timestamp: '1700000000' }] : [] };
     return new Response(JSON.stringify({ data }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   }) as typeof fetch;
   return { fetcher, requests };
@@ -106,6 +172,86 @@ test('does not present an indexed close when the receipt event names another rec
 
   assert.equal(result.items.length, 0);
   assert.equal(result.partial, true);
+});
+
+test('verifies official short PositionOperate open through the exact router-to-wallet NFT transfer', async () => {
+  const { fetcher } = fakeFetcher({ side: 'short', orderType: 'Open', isClosed: false });
+  const result = await loadProtocolPositionHistory({
+    walletAddress: wallet,
+    client: fakeClient(successfulShortReceipt('open')),
+    fetcher,
+  });
+
+  assert.equal(result.items.length, 1);
+  assert.equal(result.items[0].side, 'short');
+  assert.equal(result.items[0].kind, 'open');
+  assert.equal(result.items[0].positionId, 2004);
+
+  const noDebtChangeFetcher = fakeFetcher({ side: 'short', orderType: 'Open', isClosed: false });
+  const noDebtChange = await loadProtocolPositionHistory({
+    walletAddress: wallet,
+    client: fakeClient(successfulShortReceipt('open', 2004, hash, shortPool, undefined, {}, { newDebt: 0n })),
+    fetcher: noDebtChangeFetcher.fetcher,
+  });
+  assert.equal(noDebtChange.items.length, 1, 'a positive collateral-only short add can leave debt unchanged');
+  assert.equal(noDebtChange.items[0].kind, 'open');
+
+  const invalidInput = await loadProtocolPositionHistory({
+    walletAddress: wallet,
+    client: fakeClient(successfulShortReceipt('open', 2004, hash, shortPool, 0n)),
+    fetcher,
+  });
+  assert.equal(invalidInput.items.length, 0, 'short open must include the negative user-supplied collateral delta emitted by the pinned SDK route');
+  assert.equal(invalidInput.partial, true);
+});
+
+test('verifies official short close/reduction and rejects mismatched NFT recipient evidence', async () => {
+  const { fetcher } = fakeFetcher({ side: 'short', orderType: 'Close', isClosed: true });
+  const receipt = successfulShortReceipt('close');
+  const accepted = await loadProtocolPositionHistory({
+    walletAddress: wallet,
+    client: fakeClient(receipt),
+    fetcher,
+  });
+  assert.equal(accepted.items.length, 1);
+  assert.equal(accepted.items[0].kind, 'close');
+  assert.equal(accepted.items[0].side, 'short');
+
+  const noOperationFetcher = fakeFetcher({ side: 'short', orderType: 'Close', isClosed: true });
+  const noOperation = await loadProtocolPositionHistory({
+    walletAddress: wallet,
+    client: fakeClient(successfulShortReceipt('close', 2004, hash, shortPool, undefined, {}, { newColl: 0n, newDebt: 0n })),
+    fetcher: noOperationFetcher.fetcher,
+  });
+  assert.equal(noOperation.items.length, 0, 'an event with no signed position movement cannot verify indexed history');
+
+  const reductionFetcher = fakeFetcher({ side: 'short', orderType: 'Close', isClosed: false });
+  const reduced = await loadProtocolPositionHistory({
+    walletAddress: wallet,
+    client: fakeClient(successfulShortReceipt('close', 2004, hash, shortPool, undefined, {}, { newDebt: 0n })),
+    fetcher: reductionFetcher.fetcher,
+  });
+  assert.equal(reduced.items.length, 1);
+  assert.equal(reduced.items[0].kind, 'reduce');
+
+  const mismatches = [
+    { name: 'recipient', transfer: { to: syntheticWallet } },
+    { name: 'token ID', transfer: { tokenId: 2005 } },
+    { name: 'contract', transfer: { contract: syntheticWallet } },
+    { name: 'transfer source', transfer: { from: syntheticWallet } },
+    { name: 'transaction hash', transfer: { transactionHash: testHash('6') } },
+    { name: 'block number', transfer: { blockNumber: 101n } },
+    { name: 'block hash', transfer: { blockHash: testHash('b') } },
+  ] as const;
+  for (const mismatch of mismatches) {
+    const rejected = await loadProtocolPositionHistory({
+      walletAddress: wallet,
+      client: fakeClient(successfulShortReceipt('close', 2004, hash, shortPool, undefined, mismatch.transfer)),
+      fetcher,
+    });
+    assert.equal(rejected.items.length, 0, `wrong ${mismatch.name} must not verify a short PositionOperate event`);
+    assert.equal(rejected.partial, true);
+  }
 });
 
 test('queries an arbitrary second wallet and verifies its matching receipt', async () => {

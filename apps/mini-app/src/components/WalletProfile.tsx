@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { Address } from 'viem';
 import { ArrowDownToLine, ArrowUpRight, History, Layers2, ExternalLink, LogOut, RefreshCw, Settings, X } from 'lucide-react';
-import { AssetRowContent, networkLabel } from '@/components/AssetPresentation';
+import { AssetListSkeleton, AssetRowContent, networkLabel } from '@/components/AssetPresentation';
 import { ActionRow, StatusNotice } from '@/components/ProductUI';
 import presentation from '@/components/WalletProfile.module.css';
 import balancePresentation from '@/components/BalanceSummary.module.css';
@@ -122,6 +122,7 @@ export default function WalletProfile() {
   }, [open]);
   const walletExplorer = wallet.chainId === 8453 ? 'https://basescan.org' : 'https://etherscan.io';
   const walletExplorerName = wallet.chainId === 8453 ? 'BaseScan' : 'Etherscan';
+  const refreshAll = () => void manualRefresh.run([priceSnapshot.refresh, walletAssets.refresh, walletBalances.refresh, claimSnapshot.refresh, refreshPositions]);
 
   const disconnect = async () => {
     setDisconnectError('');
@@ -158,14 +159,19 @@ export default function WalletProfile() {
           <header className={presentation.header}>
             <span className={presentation.handle} aria-hidden="true" />
             <span className={presentation.identityMark}><WalletIdentityMark /></span>
-            <div className={presentation.identity}><h2 title={wallet.address}>{walletHeading}</h2><AddressChip address={wallet.address} /></div>
+            <div className={presentation.identity}>
+              <div className={presentation.identityTitle}><h2 title={wallet.address}>{walletHeading}</h2>
+                {!verifiedEnsName && <AddressChip address={wallet.address} iconOnly />}
+              </div>
+              {verifiedEnsName && <AddressChip address={wallet.address} />}
+            </div>
             <button ref={closeRef} type="button" aria-label="Close wallet profile" onClick={() => setOpenWallet(null)} className={presentation.iconButton}><X size={22} aria-hidden="true" /></button>
           </header>
           <div className={presentation.body}>
             <section className={`${presentation.summary} ${balancePresentation.hero}`} aria-labelledby="wallet-value-heading">
               <div className={presentation.valueTop}><span id="wallet-value-heading">Wallet assets</span><div>
                 <button type="button" disabled={manualRefresh.refreshing} aria-busy={manualRefresh.refreshing} aria-label="Refresh balances and positions" title="Refresh balances and positions"
-                  className={presentation.iconButton} onClick={() => void manualRefresh.run([priceSnapshot.refresh, walletAssets.refresh, walletBalances.refresh, claimSnapshot.refresh, refreshPositions])}>
+                  className={presentation.iconButton} onClick={refreshAll}>
                   <RefreshCw size={18} className={manualRefresh.refreshing ? 'animate-spin' : ''} aria-hidden="true" />
                 </button>
               </div></div>
@@ -179,8 +185,13 @@ export default function WalletProfile() {
             </section>
             <section className={presentation.assets} aria-labelledby="wallet-profile-balances-title">
               <div className={presentation.sectionHeading}><h3 id="wallet-profile-balances-title">Assets</h3><span>All networks</span></div>
-              {loading && !displayAssets && <div role="status" className="skeleton h-20 w-full rounded-xl" aria-label="Loading assets" />}
-              {!loading && !displayAssets && <p role="status" className={presentation.helper}>Refresh balances</p>}
+              {loading && nonZero.length === 0 && <AssetListSkeleton />}
+              {!loading && nonZero.length === 0 && !walletSnapshotValuation.complete && <div className={presentation.assetRetry}>
+                <span role="status">Couldn’t load assets.</span>
+                <button type="button" onClick={refreshAll} disabled={manualRefresh.refreshing} aria-busy={manualRefresh.refreshing}>
+                  <RefreshCw size={16} aria-hidden="true" />Retry
+                </button>
+              </div>}
               {!loading && displayAssets && walletSnapshotValuation.complete && nonZero.length === 0 && <p className={presentation.helper}>No token balances detected.</p>}
               <ul className={presentation.assetList}>{nonZero.map((asset) => <li key={asset.id}>
                 <button type="button" className={presentation.assetDetails} aria-label={`View ${tokenSymbol(asset.symbol)} details on ${networkLabel(asset.chainId)}`} onClick={() => setSelectedAssetId(asset.id)}>

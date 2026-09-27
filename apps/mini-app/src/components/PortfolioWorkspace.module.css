@@ -1,7 +1,7 @@
 .workspace { width: min(100%, 1120px); margin-inline: auto; }
 .dashboard { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; }
 .primary, .secondary { display: flex; min-width: 0; flex-direction: column; gap: 20px; }
-.valueCard { padding: 4px 0 0; }
+.valueCard { padding: 10px 16px 0; }
 .valueTop { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 12px; color: var(--mut); font-size: 13px; }
 .valueTop > div { display: flex; align-items: center; gap: 8px; }
 .valueTop button { display: inline-grid; min-width: 44px; min-height: 44px; place-items: center; border-radius: 50%; color: var(--mut); margin-right: -8px; }
@@ -26,6 +26,8 @@
 .positionActions { display: flex; gap: 6px; padding: 8px 0 0; }
 .positionActions a { display: grid; flex: 1; place-items: center; min-height: 44px; border: 1px solid var(--line); border-radius: 10px; font-size: 12px; color: var(--mut); }
 .positionActions a:hover { color: var(--mint); border-color: color-mix(in srgb, var(--mint) 45%, var(--line)); }
+.disclosureActions { display: flex; justify-content: flex-end; min-height: 0; }
+.disclosureActions a { display: inline-flex; min-height: 44px; align-items: center; gap: 3px; color: var(--mint); font-size: 12px; font-weight: 600; }
 .earnCard { padding: 16px; }
 .earnTop { display: flex; min-width: 0; align-items: center; gap: 12px; }
 .earnTop > div { min-width: 0; flex: 1; }
@@ -42,7 +44,8 @@
 .quickAction:hover, .quickAction:focus-visible { color: var(--text); background: color-mix(in srgb, var(--mint) 5%, transparent); }
 .quickAction:hover > span { transform: translateY(-1px); border-color: color-mix(in srgb, var(--mint) 58%, var(--line)); background: var(--mint-dim); }
 .quickAction:focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
-.positionsSection, .emptyEarn { border-block: 1px solid var(--line); padding: 12px 0; background: transparent; }
+.positionsSection, .emptyEarn { border-block: 1px solid var(--line); padding: 4px 0; background: transparent; }
+.positionsSection :global(details > summary), .earnSection :global(details > summary) { color: var(--text); font-size: 14px; font-weight: 600; }
 @media (min-width: 1000px) {
   .dashboard { grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); gap: 28px; align-items: start; }
   .primary, .secondary { gap: 22px; }

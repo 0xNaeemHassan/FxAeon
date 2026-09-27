@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   CheckCircle2,
+  ChevronDown,
   CircleAlert,
   Clock3,
   LoaderCircle,
@@ -339,7 +340,6 @@ export function ActionReview(props: ActionReviewProps) {
       )}
 
       <div className={styles.reviewFacts}>
-        <p className={presentationStyles.reviewFactsTitle}>Review details</p>
         <ReviewRow label="Wallet" value={compactAddress(route.walletAddress)} title={route.walletAddress} />
         {[...actionConsequences, ...remainingSummaryFacts].map((fact) => <ReviewRow key={`${fact.label}-${fact.value}`} label={fact.label} value={fact.value} title={fact.title} />)}
         {approvals.length > 0 && <ReviewRow label="Approvals" value={approvals.join('; ')} />}
@@ -361,7 +361,7 @@ export function ActionReview(props: ActionReviewProps) {
       <details className="group mt-3 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.02)] px-3" open={stage === 'executing' || showExecutionProgress}>
         <summary id="transaction-steps-heading" className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-[12px] font-semibold text-mut">
           <span>{stage === 'executing' ? 'Transaction progress' : `Steps · ${stepCount}`}</span>
-          <span className="text-[11px] font-normal text-[var(--mut-2)] group-open:hidden">View steps</span>
+          <ChevronDown size={16} aria-hidden="true" />
         </summary>
         <section className="flex flex-col gap-2 border-t border-[var(--line)] py-3" aria-labelledby="transaction-steps-heading">
         {route.transactions.map((transaction, index) => {
@@ -435,7 +435,7 @@ function AdvancedReviewDetails({ route }: { route: PlannedRoute }) {
     <details className="group mt-4 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.02)] px-3">
       <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-[12px] font-semibold text-mut">
         <span>Advanced details</span>
-        <span className="text-[11px] font-normal text-[var(--mut-2)] group-open:hidden">Route and contract data</span>
+        <ChevronDown size={16} aria-hidden="true" />
       </summary>
       <div className="flex flex-col gap-2.5 border-t border-[var(--line)] py-3">
         {route.details?.requestedAmount && <ReviewRow label="Requested amount (raw units)" value={route.details.requestedAmount} />}
@@ -519,7 +519,7 @@ function QuoteFactDetails({ facts }: { facts: ReviewFact[] }) {
   if (!facts.length) return null;
   return <details className="group mt-2 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.02)] px-3">
     <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-[11px] font-semibold text-mut">
-      <span>Quote details</span><span className="text-[10px] font-normal text-[var(--mut-2)] group-open:hidden">Exact values and route</span>
+      <span>Quote details</span><ChevronDown size={16} aria-hidden="true" />
     </summary>
     <div className="flex flex-col gap-1 border-t border-[var(--line)] py-2">
       {facts.map((fact) => <ReviewRow key={`${fact.label}-${fact.value}`} label={fact.label} value={fact.title ?? fact.value} title={fact.title ?? fact.value} />)}

@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Coins, Search } from 'lucide-react';
-import { AssetRowContent, displayAssetSymbol, networkLabel } from '@/components/AssetPresentation';
+import { AssetListSkeleton, AssetRowContent, displayAssetSymbol, networkLabel } from '@/components/AssetPresentation';
 export { AssetIcon, AssetNetworkIcon, AssetQuantity, displayAssetSymbol, networkLabel } from '@/components/AssetPresentation';
 import { ValueOrSkeleton } from '@/components/MissingValue';
 import { summarizeWalletAssets, walletAssetCountLabel, type WalletAssetSnapshot } from '@/lib/walletAssets';
@@ -21,11 +21,13 @@ export function PortfolioNetworkTabs({ value, onChange }: { value: PortfolioNetw
   </div>;
 }
 
-export function PortfolioAssets({ snapshot, loading, network = 'all', onNetworkChange }: {
+export function PortfolioAssets({ snapshot, loading, network = 'all', onNetworkChange, onRefresh, refreshing = false }: {
   snapshot: WalletAssetSnapshot | null;
   loading: boolean;
   network?: PortfolioNetwork;
   onNetworkChange?: (value: PortfolioNetwork) => void;
+  onRefresh?: () => void;
+  refreshing?: boolean;
 }) {
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState(false);
@@ -49,6 +51,8 @@ export function PortfolioAssets({ snapshot, loading, network = 'all', onNetworkC
   const missingFreshValues = assets.some((asset) => asset.usdValue === null);
   const showSearch = search.length > 0 || (displaySnapshot?.assets.filter((asset) => asset.balanceWei > 0n).length ?? 0) > 6;
   const visibleAssets = expanded || query ? assets : assets.slice(0, 6);
+  const hasNetworkAssets = Boolean(displaySnapshot?.assets.some((asset) => asset.balanceWei > 0n && (network === 'all' || asset.chainId === network)));
+  const showAssetLoading = countState === 'loading' && !hasNetworkAssets;
   const needsStatus = countState !== 'ready' || missingFreshValues;
   const countLabel = countState === 'ready' ? walletAssetCountLabel(assets.length, countState)
     : countState === 'loading' ? '—'
@@ -57,16 +61,18 @@ export function PortfolioAssets({ snapshot, loading, network = 'all', onNetworkC
     countState === 'loading' ? 'Balances loading.' : countState === 'unavailable' ? 'Some balances unavailable.' : countState === 'partial' ? 'Some balances incomplete.' : null,
     missingFreshValues ? 'Some prices unavailable.' : null,
   ].filter(Boolean).join(' ');
-  return <section className={styles.assets} aria-labelledby="portfolio-assets-heading">
+  const retryAction = onRefresh && <button type="button" onClick={onRefresh} disabled={refreshing} aria-busy={refreshing}>{refreshing ? 'Refreshing…' : 'Retry portfolio'}</button>;
+  return <section className={`${styles.assets} ${styles.ledgerSurface}`} aria-labelledby="portfolio-assets-heading">
     <div className={styles.sectionHeading}>
       <h2 id="portfolio-assets-heading">Assets</h2>
         {onNetworkChange ? <PortfolioNetworkTabs value={network} onChange={onNetworkChange} /> : countLabel !== null && <span><ValueOrSkeleton value={countLabel} width="sm" status={countState === 'loading' ? 'loading' : 'unavailable'} label={countState === 'loading' ? 'Loading asset count' : 'Known asset count'} /></span>}
       </div>
     {showSearch && <label className={styles.search}><Search size={18} aria-hidden="true" /><span className="sr-only">Search assets</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search assets" autoComplete="off" /></label>}
     {needsStatus && <p className="sr-only" role="status">{statusLabel}</p>}
-    {loading && !snapshot ? <div className={styles.loading} role="status" aria-label="Loading assets"><span /><span /><span /></div>
-      : !snapshot ? null
-      : assets.length === 0 && incomplete && !search ? null
+    {loading && !snapshot ? <AssetListSkeleton />
+      : !snapshot ? <div className={styles.empty}><Coins size={24} aria-hidden="true" /><p>Balances unavailable.</p>{retryAction}</div>
+      : showAssetLoading ? <AssetListSkeleton />
+      : assets.length === 0 && incomplete && !search ? <div className={styles.empty}><Coins size={24} aria-hidden="true" /><p>Balances unavailable.</p>{retryAction}</div>
         : assets.length === 0 ? <div className={styles.empty}><Coins size={24} aria-hidden="true" /><p>{search ? 'No matching assets.' : 'No assets on this network yet.'}</p>{!search && <Link href="/qr">Receive assets</Link>}</div>
       : <ul className={styles.assetList}>{visibleAssets.map((asset) => <li key={asset.id}><button type="button" className={styles.assetRow} onClick={() => setSelection({ wallet: snapshot.walletAddress, id: asset.id })} aria-label={`View ${displayAssetSymbol(asset.symbol)} on ${networkLabel(asset.chainId)}`}>
         <AssetRowContent asset={asset} loading={loading} />

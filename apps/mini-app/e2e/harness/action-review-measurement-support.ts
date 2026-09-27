@@ -119,7 +119,7 @@ export const useInvalidateWalletData = () => async () => {
     const Icon = (props) => <span {...props} />;
     export const AlertTriangle = Icon; export const ArrowLeft = Icon; export const CheckCircle2 = Icon; export const CircleAlert = Icon;
     export const Clock3 = Icon; export const LoaderCircle = Icon; export const ShieldCheck = Icon; export const ExternalLink = Icon;
-    export const Circle = Icon; export const XCircle = Icon;
+    export const Circle = Icon; export const XCircle = Icon; export const ChevronDown = Icon;
   `,
 };
 
