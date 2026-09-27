@@ -128,7 +128,7 @@ export function primaryReviewFacts(route: PlannedRoute): ReviewFact[] {
   if (route.details?.slippagePercent !== undefined) addFact(facts, 'Slippage', `${route.details.slippagePercent}%`);
   if (route.details?.leverage !== undefined) facts.push({
     label: 'Leverage',
-    value: `${conciseDecimal(route.details.leverage, 2)}×`,
+    value: `${conciseDecimal(String(route.details.leverage), 2)}×`,
     title: `${route.details.leverage}×`,
   });
   facts.push(...routeFinancialReviewFacts(route));
