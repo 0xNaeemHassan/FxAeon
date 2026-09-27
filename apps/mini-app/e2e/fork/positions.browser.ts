@@ -1507,6 +1507,14 @@ async function runProof(captureStage: string) {
   } catch (error) {
     // Capture the actual failed snapshot before teardown reverts it. These
     // read-only diagnostics cannot make the acceptance assertions pass.
+    // Save the browser before diagnostic RPC reads warm caches or allow the
+    // failed screen to change. Successful runs and failed runs have distinct
+    // trace names so a historical success cannot look like current evidence.
+    if (page) {
+      await page.screenshot({ path: resolve(artifactRoot, 'failure.png'), fullPage: true }).catch(() => undefined);
+      await writeFile(resolve(artifactRoot, 'failure.txt'), `${String(error)}\nBrowser errors: ${JSON.stringify(browserErrors)}\nRoute errors: ${JSON.stringify(routeErrors)}\n${await page.locator('body').innerText().catch(() => '')}`);
+      await page.context().tracing.stop({ path: resolve(artifactRoot, 'failure-trace.zip') }).catch(() => undefined);
+    }
     const discoveryDiagnostics = [];
     for (const candidate of candidates) {
       const startedAt = Date.now();
@@ -1529,10 +1537,6 @@ async function runProof(captureStage: string) {
       }
     }
     await writeFile(resolve(artifactRoot, 'failure-discovery.json'), JSON.stringify(discoveryDiagnostics, null, 2));
-    if (page) {
-      await page.screenshot({ path: resolve(artifactRoot, 'failure.png'), fullPage: true }).catch(() => undefined);
-      await writeFile(resolve(artifactRoot, 'failure.txt'), `${String(error)}\nBrowser errors: ${JSON.stringify(browserErrors)}\nRoute errors: ${JSON.stringify(routeErrors)}\n${await page.locator('body').innerText().catch(() => '')}`);
-    }
     throw error;
   } finally {
     tearingDown = true;
