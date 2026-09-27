@@ -3,9 +3,9 @@ const THEME_KEY = "fxaeon-theme";
 const readTheme = () => {
   try {
     const saved = window.localStorage.getItem(THEME_KEY);
-    return saved === "light" || saved === "dark" ? saved : "dark";
+    return saved === "light" || saved === "dark" ? saved : "light";
   } catch {
-    return "dark";
+    return "light";
   }
 };
 
@@ -30,7 +30,7 @@ const init = () => {
     const dark = theme !== "light";
     themeToggle?.setAttribute("aria-pressed", String(!dark));
     themeToggle?.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
-    if (themeColor) themeColor.setAttribute("content", dark ? "#0d0b14" : "#e8def7");
+    if (themeColor) themeColor.setAttribute("content", dark ? "#171421" : "#f8f5ed");
   };
   setThemeUI(document.documentElement.dataset.theme);
   themeToggle?.addEventListener("click", () => {

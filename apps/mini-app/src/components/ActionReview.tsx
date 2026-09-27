@@ -284,26 +284,19 @@ export function ActionReview(props: ActionReviewProps) {
   const unsupportedNetwork = wallet.chainId === undefined;
   return (
     <ReviewSurface surface={surface} className={`${styles.reviewCard} ${styles.reviewInlineCard} anim-scale-in p-4 sm:p-5`}>
-      <button
-        type="button"
-        disabled={loading}
-        onClick={reset}
-        className="mb-1 inline-flex min-h-11 items-center gap-1.5 rounded-xl pr-3 text-[12px] font-semibold text-mut disabled:opacity-50"
-      >
-        <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Edit
-      </button>
-
-      <div className="flex items-start gap-3">
+      <header className={presentationStyles.reviewHeader}>
         <div>
-          <h3 ref={headingRef} data-review-focus tabIndex={-1} className="text-display text-[24px] font-semibold leading-tight outline-none">
+          <h3 ref={headingRef} data-review-focus tabIndex={-1} className="text-display outline-none">
             {reviewTitle ?? route.operation}
           </h3>
-          <p className="mt-1 text-[12px] text-mut">
-            {chainName(route.chainId)} · {stepCount} {stepCount === 1 ? 'transaction' : 'transactions'}
+          <p>{chainName(route.chainId)} · {stepCount} {stepCount === 1 ? 'transaction' : 'transactions'}
             {approvalCount > 0 ? ` · ${approvalCount} approval${approvalCount === 1 ? '' : 's'}` : ''}
           </p>
         </div>
-      </div>
+        <button type="button" disabled={loading} onClick={reset} className={presentationStyles.editButton}>
+          <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Edit
+        </button>
+      </header>
 
       {showExecutionProgress && (
         <div className={presentationStyles.actualProgress}>
@@ -345,7 +338,6 @@ export function ActionReview(props: ActionReviewProps) {
         </div>
       )}
 
-      <div className="my-3 hairline" />
       <div className={styles.reviewFacts}>
         <p className={presentationStyles.reviewFactsTitle}>Review details</p>
         <ReviewRow label="Wallet" value={compactAddress(route.walletAddress)} title={route.walletAddress} />
@@ -362,6 +354,7 @@ export function ActionReview(props: ActionReviewProps) {
       <PositionOutcomeSummary facts={positionChanges.paired} />
       <DecisionContext beforeFacts={positionChanges.remainingBefore.length ? positionChanges.remainingBefore : undefined} />
 
+      <div className={presentationStyles.disclosures}>
       <QuoteFactDetails facts={facts} />
       <AdvancedReviewDetails route={route} />
 
@@ -397,6 +390,8 @@ export function ActionReview(props: ActionReviewProps) {
         </section>
       </details>
 
+      </div>
+
       {!showExecutionProgress && !(stage === 'review' && status === 'reviewing') && <div className="mt-4"><StatusNotice {...progress} /></div>}
       {error && <div className="mt-3"><InlineError message={error} /></div>}
       {stage === 'review' && (
@@ -418,7 +413,7 @@ function ReviewSurface({ surface, className, children }: { surface: 'card' | 'co
 
 function ReviewRow({ label, value, title, className }: { label: string; value: ReactNode; title?: string; className?: string }) {
   const valueTitle = title ?? (typeof value === 'string' ? value : undefined);
-  return <div className={`flex items-start justify-between gap-4 text-[12px] ${className ?? ''}`}><span className="text-mut">{label}</span><span title={valueTitle} className="max-w-[62%] break-all text-right font-semibold tabular-nums"><ValueOrSkeleton value={value} width="md" label={`Loading ${label.toLowerCase()}`} /></span></div>;
+  return <div className={`flex items-start justify-between gap-4 text-[12px] ${className ?? ''}`}><span className="text-mut">{label}</span><span title={valueTitle} className="max-w-[62%] break-words text-right font-semibold tabular-nums"><ValueOrSkeleton value={value} width="md" label={`Loading ${label.toLowerCase()}`} /></span></div>;
 }
 
 function AdvancedReviewDetails({ route }: { route: PlannedRoute }) {
@@ -523,7 +518,7 @@ function isBridgeQuote(value: unknown): value is BridgeReviewQuote {
 function QuoteFactDetails({ facts }: { facts: ReviewFact[] }) {
   if (!facts.length) return null;
   return <details className="group mt-2 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.02)] px-3">
-    <summary className="flex min-h-10 cursor-pointer items-center justify-between gap-3 text-[11px] font-semibold text-mut">
+    <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-[11px] font-semibold text-mut">
       <span>Quote details</span><span className="text-[10px] font-normal text-[var(--mut-2)] group-open:hidden">Exact values and route</span>
     </summary>
     <div className="flex flex-col gap-1 border-t border-[var(--line)] py-2">
@@ -535,7 +530,7 @@ function QuoteFactDetails({ facts }: { facts: ReviewFact[] }) {
 function DecisionContext({ beforeFacts }: { beforeFacts?: ReviewFact[] }) {
   if (!beforeFacts?.length) return null;
   return <details aria-label="Current position" className="group mt-2 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-3">
-    <summary className="flex min-h-10 cursor-pointer items-center justify-between gap-3 text-[11px] font-semibold text-mut"><span>Current position</span><span className="text-[10px] font-normal text-[var(--mut-2)] group-open:hidden">Verified values</span></summary>
+    <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-[11px] font-semibold text-mut"><span>Current position</span><span className="text-[10px] font-normal text-[var(--mut-2)] group-open:hidden">Verified values</span></summary>
     <div className="grid gap-1 border-t border-[var(--line)] py-2">{beforeFacts.map((fact) => <ReviewRow key={`before-${fact.label}`} label={fact.label} value={fact.value} title={fact.title} />)}</div>
   </details>;
 }

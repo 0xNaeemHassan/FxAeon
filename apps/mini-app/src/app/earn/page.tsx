@@ -510,7 +510,7 @@ function SavingsSummary({ data, loading, connected, onRefresh, readWarnings, fxS
     .find((task) => task.kind === 'withdrawal');
   return <div className={presentation.overview}>
     <div className={presentation.balanceTop}>
-      <div className={presentation.balanceCopy}>
+      <div className={presentation.balanceCopy} data-connected={connected}>
         <p>{!connected ? 'fxSAVE' : balanceUnavailable ? 'fxSAVE balance' : lastVerified ? 'Last verified fxSAVE value' : 'Your fxSAVE value'}</p>
         {!connected ? <>
           <h2>Earn with fxSAVE</h2>
@@ -532,10 +532,10 @@ function SavingsSummary({ data, loading, connected, onRefresh, readWarnings, fxS
           ? <ValueOrSkeleton value={`${fxSaveApy.apy.toFixed(2)}%`} width="sm" label="fxSAVE APY" />
           : <MissingValue width="sm" status={fxSaveApyStatus === 'loading' ? 'loading' : 'unavailable'} label="fxSAVE APY unavailable" />}</strong>
         <small>Variable APY</small>
+      </div>
         {connected && <button type="button" disabled={loading} onClick={() => void onRefresh()} aria-label="Refresh fxSAVE state" className={presentation.refresh}>
           <RefreshCw size={16} aria-hidden="true" className={loading ? 'animate-spin' : ''} />
         </button>}
-      </div>
     </div>
     {hasPending && <div className={presentation.pendingTask}>
       <StatusNotice title={claimUnavailable ? 'Withdrawal status unavailable' : withdrawalTask?.title ?? 'Withdrawal pending'}

@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, expect as playwrightExpect, type Locator, type Page, type Route } from '@playwright/test';
-import { createPublicClient, encodeFunctionData, formatUnits, http, parseUnits, type Address, type Hex } from 'viem';
+import { createPublicClient, decodeEventLog, encodeFunctionData, formatUnits, http, parseUnits, type Address, type Hex } from 'viem';
 import { formatExactDecimal } from '../../src/lib/amount';
 import { formatAmount, readPositionGroupWithDirectFallback, tokenAddress } from '../../src/app/trade/fxUi';
 import { readCanonicalPositionInfo } from '../../src/app/trade/canonicalPositionReader';
@@ -52,6 +52,18 @@ const poolAbi = [
 const tokenAbi = [
   { type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] },
   { type: 'function', name: 'transfer', stateMutability: 'nonpayable', inputs: [{ type: 'address' }, { type: 'uint256' }], outputs: [{ type: 'bool' }] },
+] as const;
+const positionRouterEventAbi = [
+  { type: 'event', name: 'OpenOrAdd', anonymous: false, inputs: [
+    { name: 'pool', type: 'address', indexed: false }, { name: 'position', type: 'uint256', indexed: false },
+    { name: 'recipient', type: 'address', indexed: false }, { name: 'colls', type: 'uint256', indexed: false },
+    { name: 'debts', type: 'uint256', indexed: false }, { name: 'borrows', type: 'uint256', indexed: false },
+  ] },
+  { type: 'event', name: 'CloseOrRemove', anonymous: false, inputs: [
+    { name: 'pool', type: 'address', indexed: false }, { name: 'position', type: 'uint256', indexed: false },
+    { name: 'recipient', type: 'address', indexed: false }, { name: 'colls', type: 'uint256', indexed: false },
+    { name: 'debts', type: 'uint256', indexed: false }, { name: 'borrows', type: 'uint256', indexed: false },
+  ] },
 ] as const;
 const usdc = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48' as const;
 const fxUsd = tokenAddress('fxUSD');
@@ -129,6 +141,7 @@ async function runProof(captureStage: string) {
   const delayedDiscoveries = new Map<string, number>();
   const blockedDiscoveries = new Set<string>();
   const emittedDiscoveries = new Set<string>();
+  const forkReceiptCache = new Map<string, Promise<Awaited<ReturnType<typeof client.getTransactionReceipt>>>>();
   const confirmedBeforeIndexer = new Set<string>();
   const restoredConfirmed = new Set<string>();
   const positions: Array<(typeof scenarios)[number] & {
@@ -317,13 +330,83 @@ async function runProof(captureStage: string) {
       const url = new URL(route.request().url());
       const group = scenarios.find(s => url.pathname === `/api/public/project_cmgz5g9sl0065xhp2aqd9c6sv/subgraphs/${s.graphSubgraph}/gn`);
       const body = route.request().postDataJSON() as { query?: string };
-      const queryWallet = [wallet, alternateWallet].find(account => {
-        const expectedQuery = `query MyQuery { positions(first: 1000 where: {owner: "${account.toLowerCase()}"} orderBy: blockNumber orderDirection: desc) { id } }`;
-        return body.query?.replace(/\s/g, '') === expectedQuery.replace(/\s/g, '');
+      const query = body.query?.replace(/\s/g, '') ?? '';
+      const positionQuery = query.match(/^queryWalletPositionHistory\{positions\(first:25,skip:(0|[1-9][0-9]*),where:\{(.+)\},orderBy:blockNumber,orderDirection:desc\)\{idisClosedblockNumber\}\}$/);
+      const sdkQueryWallet = group && [wallet, alternateWallet].find(account => {
+        const expectedQuery = `queryMyQuery{positions(first:1000where:{owner:"${account.toLowerCase()}"}orderBy:blockNumberorderDirection:desc){id}}`;
+        return query === expectedQuery;
       });
+      const historyQueryWallet = group && [wallet, alternateWallet].find(account => {
+        const owner = account.toLowerCase();
+        const walletFilter = group.market === 'ETH' && group.side === 'short'
+          ? `owner:"${owner}"`
+          : `or:[{owner:"${owner}"},{realOwner:"${owner}"}]`;
+        return positionQuery?.[2] !== undefined && positionQuery[2] === walletFilter;
+      });
+      const queryWallet = sdkQueryWallet ?? historyQueryWallet;
+      if (group && query.startsWith('queryWalletPositionOrders{')) {
+        const match = query.match(/^queryWalletPositionOrders\{orders\(first:5,skip:(0|[1-9][0-9]*),where:\{positionId_in:\[([0-9,\"]*)\],type_in:\["Open","Close"\]\},orderBy:blockNumber,orderDirection:desc\)\{idtypehashblockNumbertimestamp\}\}$/);
+        assert.ok(!url.search && !url.hash && route.request().method() === 'POST'
+          && Object.keys(body).length === 1 && match, 'unexpected indexer order query');
+        const queriedIds = [...match[2].matchAll(/"([1-9][0-9]{0,15})"/g)].map(value => Number(value[1]));
+        assert.ok(queriedIds.length > 0 && queriedIds.every(id => candidates.some(candidate => candidate.pool === group.pool && candidate.positionId === id)),
+          'indexer order query must refer only to positions discovered by this fork proof');
+        const hashes = [...new Set([
+          ...submitted.map(transaction => transaction.hash),
+          ...(externalPositionProof?.transactions.map(transaction => transaction.hash as Hex) ?? []),
+        ])];
+        const orders: Array<{ id: string; type: 'Open' | 'Close'; hash: Hex; blockNumber: string; timestamp: string }> = [];
+        for (const hash of hashes) {
+          const receipt = await (forkReceiptCache.get(hash.toLowerCase()) ?? (() => {
+            const pending = client.getTransactionReceipt({ hash }).catch(() => null as never);
+            forkReceiptCache.set(hash.toLowerCase(), pending);
+            return pending;
+          })());
+          if (!receipt) continue;
+          const block = await client.getBlock({ blockNumber: receipt.blockNumber });
+          for (const log of receipt.logs) {
+            if (log.address.toLowerCase() !== '0x33636d49fbefbe798e15e7f356e8dbef543cc708') continue;
+            try {
+              const event = decodeEventLog({ abi: positionRouterEventAbi, data: log.data, topics: log.topics });
+              const positionId = Number(event.args.position);
+              if (event.args.pool.toLowerCase() !== group.pool.toLowerCase() || !queriedIds.includes(positionId)) continue;
+              orders.push({ id: `${positionId}_${hash}`, type: event.eventName === 'OpenOrAdd' ? 'Open' : 'Close',
+                hash, blockNumber: receipt.blockNumber.toString(), timestamp: block.timestamp.toString() });
+            } catch { /* Other router events do not represent position history rows. */ }
+          }
+        }
+        orders.sort((a, b) => BigInt(a.blockNumber) === BigInt(b.blockNumber) ? 0 : BigInt(a.blockNumber) > BigInt(b.blockNumber) ? -1 : 1);
+        const orderOffset = Number(match[1]);
+        await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: { orders: orders.slice(orderOffset, orderOffset + 5) } }) });
+        return;
+      }
       assert.ok(group && !url.search && !url.hash && route.request().method() === 'POST'
-        && Object.keys(body).length === 1 && queryWallet, 'unexpected indexer operation');
-      const ids: Array<{ id: string }> = [];
+        && Object.keys(body).length === 1 && queryWallet, 'unexpected indexer position query');
+      const ids: Array<{ id: string; isClosed: boolean; blockNumber: string }> = [];
+      const hashes = [...new Set([
+        ...submitted.map(transaction => transaction.hash),
+        ...(externalPositionProof?.transactions.map(transaction => transaction.hash as Hex) ?? []),
+      ])];
+      const candidateOrderEvents = new Map<number, Array<{ type: 'Open' | 'Close'; blockNumber: bigint }>>();
+      for (const hash of hashes) {
+        const receipt = await (forkReceiptCache.get(hash.toLowerCase()) ?? (() => {
+          const pending = client.getTransactionReceipt({ hash }).catch(() => null as never);
+          forkReceiptCache.set(hash.toLowerCase(), pending);
+          return pending;
+        })());
+        if (!receipt) continue;
+        for (const log of receipt.logs) {
+          if (log.address.toLowerCase() !== '0x33636d49fbefbe798e15e7f356e8dbef543cc708') continue;
+          try {
+            const event = decodeEventLog({ abi: positionRouterEventAbi, data: log.data, topics: log.topics });
+            if (event.args.pool.toLowerCase() !== group.pool.toLowerCase()) continue;
+            const positionId = Number(event.args.position);
+            const list = candidateOrderEvents.get(positionId) ?? [];
+            list.push({ type: event.eventName === 'OpenOrAdd' ? 'Open' : 'Close', blockNumber: receipt.blockNumber });
+            candidateOrderEvents.set(positionId, list);
+          } catch { /* Ignore unrelated router events. */ }
+        }
+      }
       for (const candidate of candidates.filter(c => c.pool === group.pool)) {
         try {
           const owner = await client.readContract({ address: candidate.pool, abi: poolAbi, functionName: 'ownerOf', args: [BigInt(candidate.positionId)] });
@@ -334,13 +417,17 @@ async function runProof(captureStage: string) {
             // Keep a real, already-owned NFT withheld from GraphQL so the UI
             // must prove canonical wallet discovery. Never fabricate an ID.
             if (!blockedDiscoveries.has(key)) {
-              ids.push({ id: String(candidate.positionId) });
+              const events = candidateOrderEvents.get(candidate.positionId) ?? [];
+              const latest = events.reduce((max, event) => event.blockNumber > max ? event.blockNumber : max, 0n);
+              ids.push({ id: String(candidate.positionId), isClosed: events.some(event => event.type === 'Close' && event.blockNumber === latest), blockNumber: latest.toString() });
               emittedDiscoveries.add(key);
             }
           }
         } catch { /* Candidate has not yet minted. No fabricated position. */ }
       }
-      await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: { positions: ids } }) });
+      ids.sort((a, b) => Number(b.blockNumber) - Number(a.blockNumber));
+      const positionOffset = Number(positionQuery?.[1] ?? 0);
+      await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: { positions: ids.slice(positionOffset, positionOffset + 25) } }) });
     }));
     page = await context.newPage();
     page.setDefaultTimeout(120_000);
@@ -353,7 +440,7 @@ async function runProof(captureStage: string) {
       calldata: string;
     };
     const readReviewedTransactions = async (): Promise<ReviewedTransaction[]> => {
-      const actionDetails = activePage.locator('section[aria-label="Review details"]');
+      const actionDetails = activePage.locator('.reviewInlineContent');
       await expect(actionDetails).toBeVisible({ timeout: 180_000 });
       const advanced = actionDetails.locator('details').filter({ hasText: /^Advanced details/ }).first();
       await expect(advanced).toHaveCount(1);
@@ -388,20 +475,25 @@ async function runProof(captureStage: string) {
         assert.match(transaction.contract, /^0x[0-9a-fA-F]{40}$/, `transaction ${index + 1} must show its contract`);
         assert.match(transaction.calldata, /^0x[0-9a-fA-F]*$/, `transaction ${index + 1} must show its calldata`);
       });
+      await advanced.locator('summary').click();
       return reviewed;
     };
     const driveDirectAction = async (buttonName: string, screenshotPrefix: string): Promise<{ signedBefore: number; transactionCount: number }> => {
-      const actionButton = activePage.getByRole('button', { name: buttonName, exact: true });
       const signedBefore = submitted.length;
+      await activePage.getByRole('button', { name: buttonName, exact: true }).click();
+      const actionButton = activePage.getByRole('button', { name: /^Confirm (?:in wallet|\d+ transactions)$/ });
+      await expect(actionButton).toBeVisible({ timeout: 180_000 });
+      assert.equal(submitted.length, signedBefore, 'Review must prepare details without signing');
+      await activePage.screenshot({ path: resolve(artifactRoot, `${screenshotPrefix}-review.png`), fullPage: true });
       let firstSignatureObserved = false;
       let reviewedTransactions: ReviewedTransaction[] = [];
       for (let attempt = 0; attempt < 3 && !firstSignatureObserved; attempt += 1) {
+        const refresh = activePage.getByRole('button', { name: 'Review updated quote', exact: true });
+        if (await refresh.isVisible()) await refresh.click();
         await expect(actionButton).toBeVisible({ timeout: 180_000 });
         reviewedTransactions = await readReviewedTransactions();
         assert.equal(submitted.length, signedBefore, 'read-only action details must never request a signature');
         await actionButton.click();
-        const changedNotice = activePage.locator('[role="status"]')
-          .filter({ hasText: 'Details changed. Check the updated action before continuing.' }).first();
         const deadline = Date.now() + 180_000;
         let changed = false;
         while (Date.now() < deadline) {
@@ -410,14 +502,14 @@ async function runProof(captureStage: string) {
             firstSignatureObserved = true;
             break;
           }
-          if (await changedNotice.isVisible().catch(() => false)) {
+          if (await refresh.isVisible().catch(() => false)) {
             changed = true;
             break;
           }
           await activePage.waitForTimeout(250);
         }
-        if (!firstSignatureObserved && !changed) throw new Error('timed out waiting for the first signature or a changed-action notice');
-        if (!firstSignatureObserved && attempt === 2) throw new Error('action details changed repeatedly before the first signature');
+        if (!firstSignatureObserved && !changed) throw new Error('timed out waiting for the first signature or quote expiry');
+        if (!firstSignatureObserved && attempt === 2) throw new Error('reviewed quote expired repeatedly before the first signature');
       }
       assert.equal(firstSignatureObserved, true, 'the explicit action must submit its first transaction');
 
@@ -427,7 +519,7 @@ async function runProof(captureStage: string) {
         const deadline = Date.now() + 180_000;
         while (Date.now() < deadline && submitted.length < expected) {
           if (routeErrors.length) throw new Error(routeErrors[0]);
-          if (await activePage.getByRole('button', { name: 'Done', exact: true }).isVisible().catch(() => false)) {
+          if (await activePage.getByRole('button', { name: 'View position', exact: true }).isVisible().catch(() => false)) {
             throw new Error('action completed before all reviewed transactions were broadcast');
           }
           await activePage.waitForTimeout(250);
@@ -448,7 +540,7 @@ async function runProof(captureStage: string) {
         await expect(explorer).toHaveAccessibleName(new RegExp(`^${kind} ${transactionIndex + 1}: Submitted\\.`));
         const bounds = await explorer.boundingBox();
         assert.ok(bounds && bounds.height >= 44 && bounds.width >= 44, 'submitted explorer target must be at least 44px');
-        await expect(activePage.getByRole('button', { name: 'Done', exact: true })).toHaveCount(0);
+        await expect(activePage.getByRole('button', { name: 'View position', exact: true })).toHaveCount(0);
         assert.equal(submitted.length, expected, 'no later step may sign before this receipt is delivered');
         submittedExplorerHashes.add(tx.hash.toLowerCase());
         await activePage.screenshot({ path: resolve(artifactRoot, `${screenshotPrefix}-submitted-${transactionIndex + 1}.png`), fullPage: true });
@@ -467,8 +559,7 @@ async function runProof(captureStage: string) {
     };
     const ensureFormAdvancedDetailsOpen = async (): Promise<void> => {
       const summary = activePage.locator('summary')
-        .filter({ has: activePage.locator('span[aria-hidden="true"]') })
-        .filter({ hasText: /^Advanced/ }).first();
+        .filter({ hasText: /^(?:Advanced|Settings)/ }).first();
       await expect(summary).toBeVisible();
       const open = await summary.evaluate((element) => (element.parentElement as HTMLDetailsElement).open);
       if (!open) await summary.click();
@@ -500,7 +591,7 @@ async function runProof(captureStage: string) {
     await expect(sessionUsdcOption).toContainText(availableLabel(fundedUsdc));
     await page.evaluate(`window.__fxForkChangeAccount(${JSON.stringify(alternateWallet)})`);
     await expect(page.getByRole('button', { name: 'Open wallet profile' }))
-      .toContainText(`${alternateWallet.slice(0, 5)}…${alternateWallet.slice(-4)}`);
+      .toContainText(`${alternateWallet.slice(0, 6)}…${alternateWallet.slice(-4)}`);
     // ProtocolPositionSession may remount account-owned UI while the outer
     // Wagmi cache remains mounted; preserve an already-open picker or open it.
     await ensureInputAssetPickerOpen();
@@ -515,7 +606,7 @@ async function runProof(captureStage: string) {
     await expect(sessionUsdcOption).not.toContainText(/Available: [\d,]/);
     await page.evaluate(`window.__fxForkChangeAccount(${JSON.stringify(wallet)})`);
     await expect(page.getByRole('button', { name: 'Open wallet profile' }))
-      .toContainText(`${wallet.slice(0, 5)}…${wallet.slice(-4)}`);
+      .toContainText(`${wallet.slice(0, 6)}…${wallet.slice(-4)}`);
     await ensureInputAssetPickerOpen();
     await expect(sessionUsdcOption).toContainText(availableLabel(fundedUsdc));
     assert.equal(submitted.length, 0, 'session checks must never request a signature');
@@ -539,8 +630,8 @@ async function runProof(captureStage: string) {
       await expect(responsiveUsdc).toContainText(`Available: ${formatExactDecimal(formatUnits(responsiveBalance, 6), 4)} USDC`);
       await responsiveUsdc.click();
       const responsiveAmount = page.getByLabel('Amount in USDC', { exact: true });
-      const responsiveMeta = page.locator('[class*="amountBalanceMeta"]').filter({ hasText: /Available:/ }).first();
-      const responsiveBalanceLabel = responsiveMeta.locator(':scope > :first-child > span').first();
+      const responsiveMeta = page.locator('[data-amount-usd]').filter({ hasText: /Available:/ }).first();
+      const responsiveBalanceLabel = responsiveMeta.locator('[id$="-balance"]');
       await expect(responsiveBalanceLabel).toBeVisible();
       const responsiveMetaBox = await responsiveMeta.boundingBox();
       const responsiveAmountBox = await responsiveAmount.boundingBox();
@@ -558,8 +649,8 @@ async function runProof(captureStage: string) {
       `live Available balance must be visible without clipping at ${viewport.width}x${viewport.height}`);
       if (viewport.width <= 640) assert.ok(responsiveMetaBox!.width >= responsiveAmountBox!.width - 2,
         `live balance metadata must span the compact amount field at ${viewport.width}x${viewport.height}`);
-      for (const label of ['25%', '50%', '75%', '100%']) {
-        const fraction = page.locator('.fraction-button').filter({ hasText: label }).first();
+      for (const label of ['25%', '50%', '75%', 'Max']) {
+        const fraction = page.locator('[data-amount-field] button').filter({ hasText: new RegExp(`^${label}$`) }).first();
         await fraction.evaluate((element) => element.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' }));
         await expect(fraction, `${label} must remain visible at ${viewport.width}x${viewport.height}`).toBeVisible();
         const box = await fraction.boundingBox();
@@ -578,11 +669,11 @@ async function runProof(captureStage: string) {
           return topmost === element || Boolean(topmost && element.contains(topmost));
         }), `${label} must be hit-testable at ${viewport.width}x${viewport.height}`);
       }
-      await page.locator('.fraction-button').filter({ hasText: '25%' }).first().click();
+      await page.locator('[data-amount-field] button').filter({ hasText: /^25%$/ }).first().click();
       await expect(responsiveAmount).toHaveValue(formatUnits(responsiveBalance / 4n, 6));
       console.log(`Responsive live-balance shortcuts verified at ${viewport.width}x${viewport.height}`);
     }
-    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setViewportSize({ width: 393, height: 852 });
     for (const scenario of scenarios) {
       console.log(`Browser preparing ${scenario.market} ${scenario.side}`);
       const positionId = Number(await client.readContract({ address: scenario.pool, abi: poolAbi, functionName: 'getNextPositionId' }));
@@ -604,7 +695,7 @@ async function runProof(captureStage: string) {
       await page.getByRole('spinbutton', { name: 'Target leverage', exact: true }).fill(scenario.side === 'short' ? '0.5' : '2');
       await ensureFormAdvancedDetailsOpen();
       await page.getByLabel('Slippage tolerance percentage').fill('1');
-      const actionButtonName = `Open ${scenario.market} ${scenario.side === 'long' ? 'Long' : 'Short'}`;
+      const actionButtonName = `Review ${scenario.market} ${scenario.side === 'long' ? 'Long' : 'Short'}`;
       const actionButton = page.getByRole('button', { name: actionButtonName, exact: true });
       await expect(actionButton).toBeVisible({ timeout: 180_000 });
       console.log(`Browser prepared ${scenario.market} ${scenario.side} action details`);
@@ -626,16 +717,22 @@ async function runProof(captureStage: string) {
       assert.equal(emittedDiscoveries.has(key), false, 'GraphQL index response must remain withheld during direct discovery');
       await assertCanonicalCard(scenario, positionId, positionCard);
       confirmedBeforeIndexer.add(key);
-      await expect(page.getByRole('button', { name: 'Done', exact: true })).toBeVisible({ timeout: 180_000 });
+      await expect(page.getByRole('button', { name: 'View position', exact: true })).toBeVisible({ timeout: 180_000 });
       await expect(page.getByRole('heading', { name: 'Confirmed', exact: true })).toBeVisible();
       const own = await client.readContract({ address: scenario.pool, abi: poolAbi, functionName: 'ownerOf', args: [BigInt(positionId)] });
       assert.equal(own.toLowerCase(), wallet.toLowerCase());
       const [collateral, debt] = await client.readContract({ address: scenario.pool, abi: poolAbi, functionName: 'getPosition', args: [BigInt(positionId)] });
       assert.ok(collateral > 0n && debt > 0n);
       assert.equal(Number(await client.readContract({ address: scenario.pool, abi: poolAbi, functionName: 'getNextPositionId' })), positionId + 1);
-      await page.getByRole('button', { name: 'Done', exact: true }).click();
+      await page.getByRole('button', { name: 'View position', exact: true }).click();
+      await expect(page).toHaveURL(/\/positions\?/);
+      await page.goto(`${baseUrl}/trade`);
+      await page.getByRole('radiogroup', { name: 'Market', exact: true }).getByRole('radio', { name: scenario.market, exact: true }).click();
+      await page.getByRole('radiogroup', { name: 'Position side' }).getByRole('radio', { name: scenario.side === 'long' ? 'Long' : 'Short', exact: true }).click();
+      await ensureInputAssetPickerOpen();
+      await page.getByRole('option', { name: /^USDC\b/i }).click();
       const remainingUsdc = await client.readContract({ address: usdc, abi: tokenAbi, functionName: 'balanceOf', args: [wallet] });
-      await expect(page.locator('.trade-ticket')).toContainText(`Available: ${formatExactDecimal(formatUnits(remainingUsdc, 6), 4)} USDC`);
+      await expect(page.locator('.trade-ticket')).toContainText(`Available: ${formatExactDecimal(formatUnits(remainingUsdc, 6), 8)} USDC`);
       await expect(positionCard).toBeVisible();
       const transactions = [];
       for (const tx of submitted.slice(signedBefore)) {
@@ -757,17 +854,17 @@ async function runProof(captureStage: string) {
     await page.reload();
     await assertVisiblePositionSet(originalWalletKeys);
     await page.evaluate(`window.__fxForkChangeAccount(${JSON.stringify(alternateWallet)})`);
-    await expect(page.getByRole('button', { name: 'Open wallet profile' })).toContainText(`${alternateWallet.slice(0, 5)}…${alternateWallet.slice(-4)}`);
+    await expect(page.getByRole('button', { name: 'Open wallet profile' })).toContainText(`${alternateWallet.slice(0, 6)}…${alternateWallet.slice(-4)}`);
     await page.goto(`${baseUrl}/positions`);
     await assertVisiblePositionSet([externalKey]);
     await transferPosition(alternateWallet, wallet);
     await page.evaluate(`window.__fxForkChangeAccount(${JSON.stringify(wallet)})`);
-    await expect(page.getByRole('button', { name: 'Open wallet profile' })).toContainText(`${wallet.slice(0, 5)}…${wallet.slice(-4)}`);
+    await expect(page.getByRole('button', { name: 'Open wallet profile' })).toContainText(`${wallet.slice(0, 6)}…${wallet.slice(-4)}`);
     await page.goto(`${baseUrl}/positions`);
     await assertVisiblePositionSet([...originalWalletKeys, externalKey]);
     await transferPosition(wallet, alternateWallet);
     await page.evaluate(`window.__fxForkChangeAccount(${JSON.stringify(wallet)})`);
-    await expect(page.getByRole('button', { name: 'Open wallet profile' })).toContainText(`${wallet.slice(0, 5)}…${wallet.slice(-4)}`);
+    await expect(page.getByRole('button', { name: 'Open wallet profile' })).toContainText(`${wallet.slice(0, 6)}…${wallet.slice(-4)}`);
     await page.goto(`${baseUrl}/positions`);
     await assertVisiblePositionSet(originalWalletKeys);
     console.log(`External SDK position #${externalPositionId} discovered canonically, then isolated across ownership transfers`);
@@ -872,7 +969,7 @@ async function runProof(captureStage: string) {
       }
       console.log(`Responsive four-position cards verified at ${viewport.width}x${viewport.height}`);
     }
-    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setViewportSize({ width: 393, height: 852 });
     await page.goto(`${baseUrl}/positions`);
     const leveragePosition = positions[0];
     assert.ok(leveragePosition, 'browser proof requires a position for the direct leverage check');
@@ -909,8 +1006,8 @@ async function runProof(captureStage: string) {
     await expect(page).toHaveURL(new RegExp(`/borrow\\?market=ETH&position=${borrowTarget.positionId}$`));
     const linkedPosition = page.getByRole('combobox', { name: 'Collateral position', exact: true });
     await expect(linkedPosition).toHaveValue(borrowTargetKey);
-    await expect(linkedPosition.locator('option:checked')).toContainText(`Trade position #${borrowTarget.positionId}`);
-    await expect(page.getByRole('heading', { name: `Borrow against position #${borrowTarget.positionId}`, exact: true })).toBeVisible();
+    await expect(linkedPosition.locator('option:checked')).toContainText(`ETH position #${borrowTarget.positionId}`);
+    await expect(page.getByRole('heading', { name: 'Add collateral or borrow', exact: true })).toBeVisible();
 
     // Exercise the CTA's real borrowing path, not just its navigation and
     // selection state. A native collateral top-up avoids an ERC-20 approval,
@@ -922,7 +1019,7 @@ async function runProof(captureStage: string) {
     const requestedFxUsd = parseUnits('1', 18);
     await page.getByLabel('Collateral to add in ETH', { exact: true }).fill('0.001');
     await page.getByLabel('Additional fxUSD to borrow in fxUSD', { exact: true }).fill('1');
-    const borrowActionName = 'Update collateral position';
+    const borrowActionName = 'Review borrowing';
     await expect(page.getByRole('button', { name: borrowActionName, exact: true })).toBeVisible({ timeout: 180_000 });
     assert.equal(submitted.length, borrowSignedBefore, 'borrow details must not request a signature');
     const { signedBefore: borrowSignedBeforeActual, transactionCount: borrowTransactionCount } = await driveDirectAction(borrowActionName, 'ETH-long-borrow');
@@ -951,19 +1048,20 @@ async function runProof(captureStage: string) {
     borrowTarget.rawCollateral = borrowCollateralAfter.toString();
     borrowTarget.rawDebt = borrowDebtAfter.toString();
     await page.screenshot({ path: resolve(artifactRoot, 'ETH-long-borrow-confirmed.png'), fullPage: true });
-    await page.getByRole('button', { name: 'Done', exact: true }).click();
+    await page.getByRole('button', { name: 'View position', exact: true }).click();
     await page.goto(`${baseUrl}/positions`);
     await page.screenshot({ path: resolve(artifactRoot, 'positions-mobile.png'), fullPage: true });
     for (const route of ['portfolio', 'earn', 'move']) {
       await page.goto(`${baseUrl}/${route}`);
       if (route === 'portfolio') {
-        await expect(page.locator('.portfolio-value-metrics span').filter({ has: page.locator('small', { hasText: /^Open positions$/ }) }).locator('strong')).toHaveText('4');
+        await expect(page.locator('section[aria-labelledby="portfolio-positions-heading"] [data-position-key]')).toHaveCount(2);
+        await expect(page.getByRole('link', { name: 'Manage all', exact: true })).toHaveAttribute('href', '/positions');
         for (const position of positions.filter(p => p.market === 'ETH')) {
           await expect(page.locator(`[data-position-key="${position.market}:${position.side}:${position.positionId}"]`)).toBeVisible();
         }
       }
       await page.getByRole('button', { name: 'Open wallet profile' }).click();
-      const drawer = page.getByRole('dialog', { name: `Wallet ${wallet}`, exact: true });
+      const drawer = page.getByRole('dialog', { name: new RegExp(`^(?:Wallet ${wallet}|Wallet profile for .*; address ${wallet})$`, 'i') });
       await expect(drawer).toBeVisible();
       await expect(drawer.locator('[data-position-key]')).toHaveCount(2);
       for (const position of positions.filter(p => p.market === 'ETH')) {
@@ -986,11 +1084,41 @@ async function runProof(captureStage: string) {
     assert.ok(externalPositionProof, 'external SDK position proof must complete before browser closes');
     await Promise.all(miningTasks);
     assert.deepEqual(miningErrors, [], 'fork post-receipt block mining must succeed');
+    // The docs helper can only answer history queries from the same real fork
+    // receipts used by this acceptance proof. Serialize those verified rows;
+    // never let the screenshot process invent an empty or synthetic history.
+    const historyRows: Array<{ market: string; side: string; pool: string; positionId: number; id: string;
+      type: 'Open' | 'Close'; hash: Hex; blockNumber: string; timestamp: string }> = [];
+    for (const position of positions) {
+      for (const transaction of position.transactions) {
+        const receipt = await client.getTransactionReceipt({ hash: transaction.hash });
+        assert.equal(receipt.status, 'success', 'history rows must come from successful fork receipts');
+        const block = await client.getBlock({ blockNumber: receipt.blockNumber });
+        for (const log of receipt.logs) {
+          if (log.address.toLowerCase() !== '0x33636d49fbefbe798e15e7f356e8dbef543cc708') continue;
+          try {
+            const event = decodeEventLog({ abi: positionRouterEventAbi, data: log.data, topics: log.topics });
+            if (event.args.pool.toLowerCase() !== position.pool.toLowerCase()
+              || Number(event.args.position) !== position.positionId) continue;
+            historyRows.push({ market: position.market, side: position.side, pool: position.pool,
+              positionId: position.positionId, id: `${position.positionId}_${transaction.hash}`,
+              type: event.eventName === 'OpenOrAdd' ? 'Open' : 'Close', hash: transaction.hash,
+              blockNumber: receipt.blockNumber.toString(), timestamp: block.timestamp.toString() });
+          } catch { /* Unrelated events emitted by the router are not history rows. */ }
+        }
+      }
+    }
+    for (const position of positions) {
+      assert.equal((await client.readContract({ address: position.pool, abi: poolAbi, functionName: 'ownerOf',
+        args: [BigInt(position.positionId)] })).toLowerCase(), wallet.toLowerCase(), 'history fixture NFT must still belong to the wallet');
+      assert.ok(historyRows.some(row => row.positionId === position.positionId && row.pool === position.pool
+        && row.type === 'Open'), 'every serialized history position requires its actual open event');
+    }
     // Reuse the positions this browser actually opened. The capture process
     // receives only a read-only wallet shim, never the signing transport.
     const fixturePath = resolve(captureStage, 'fixture.json');
     await writeFile(fixturePath, JSON.stringify({ schemaVersion: 1, proof: 'fxaeon-position-screenshot-fixture',
-      chainId: 1, forkBlock: Number(forkBlock), wallet, executionSurface: 'browser', positions }));
+      chainId: 1, forkBlock: Number(forkBlock), wallet, executionSurface: 'browser', positions, historyRows }));
     await waitForExit(spawn(process.execPath, [resolve(repoRoot, 'scripts/capture_docs_screenshots.mjs')], {
       cwd: repoRoot, windowsHide: true, stdio: 'inherit', env: { ...buildEnv,
         FX_SCREENSHOT_BASE_URL: baseUrl, FX_SCREENSHOT_POSITION_MANIFEST: fixturePath,
@@ -1023,7 +1151,7 @@ async function runProof(captureStage: string) {
       await closeUsdcOption.click();
       await ensureFormAdvancedDetailsOpen();
       await page.getByLabel('Slippage tolerance percentage').fill('1');
-      const closeActionName = `Close ${position.market} ${position.side} position`;
+      const closeActionName = 'Close position';
       await expect(page.getByRole('button', { name: closeActionName, exact: true })).toBeVisible({ timeout: 180_000 });
       assert.equal(submitted.length, signedBefore, 'close details must never request a signature');
       await page.screenshot({ path: resolve(artifactRoot, `${position.market}-${position.side}-close-review.png`), fullPage: true });
@@ -1039,7 +1167,7 @@ async function runProof(captureStage: string) {
         (await confirmedHeading.isVisible().catch(() => false)) || await closedPositionRow.count() === 0
       ), { timeout: 180_000 }).toBe(true);
       if (await confirmedHeading.isVisible().catch(() => false)) {
-        await expect(page.getByRole('button', { name: 'Done', exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'View position', exact: true })).toBeVisible();
       }
       await expect(closedPositionRow).toHaveCount(0);
       const [remainingCollateral, remainingDebt] = await client.readContract({ address: position.pool, abi: poolAbi, functionName: 'getPosition', args: [BigInt(position.positionId)] });
@@ -1059,6 +1187,27 @@ async function runProof(captureStage: string) {
       console.log(`Browser closed and removed ${position.market} ${position.side} #${position.positionId}`);
     }
     assert.equal(closedPositions.length, scenarios.length, 'every supported position must close through the browser');
+    await page.goto(`${baseUrl}/history`);
+    for (const position of closedPositions) {
+      const row = page.getByRole('listitem').filter({ hasText: `Closed ${position.market} ${position.side} #${position.positionId}` });
+      await expect(row).toBeVisible({ timeout: 180_000 });
+      let closeHash: Hex | undefined;
+      for (const transaction of position.transactions) {
+        const receipt = await client.getTransactionReceipt({ hash: transaction.hash });
+        const hasClose = receipt.logs.some(log => {
+          if (log.address.toLowerCase() !== '0x33636d49fbefbe798e15e7f356e8dbef543cc708') return false;
+          try {
+            const event = decodeEventLog({ abi: positionRouterEventAbi, data: log.data, topics: log.topics });
+            return event.eventName === 'CloseOrRemove' && event.args.pool.toLowerCase() === positionPoolAddress(position.market, position.side).toLowerCase()
+              && event.args.position === BigInt(position.positionId);
+          } catch { return false; }
+        });
+        if (hasClose) { closeHash = transaction.hash; break; }
+      }
+      assert.ok(closeHash, `closed ${position.market} ${position.side} #${position.positionId} must have a real router receipt`);
+      await expect(row.getByRole('link', { name: 'Receipt', exact: true })).toHaveAttribute('href', `https://etherscan.io/tx/${closeHash}`);
+    }
+    await page.goto(`${baseUrl}/positions`);
     // A delayed/unavailable indexer is allowed to leave the product in its
     // honest partial-empty state. Every position has already passed the
     // receipt-bound canonical zero assertion above, so accepting that state
@@ -1124,7 +1273,10 @@ async function runProof(captureStage: string) {
   assert.ok(completed);
   assert.ok(captureStage);
   const captureReport = JSON.parse(await readFile(resolve(captureStage, 'capture-report.json'), 'utf8'));
-  const expectedAssets = ['fxaeon-portfolio-positions.png', 'fxaeon-positions.png', 'fxaeon-trade-connected.png', 'fxaeon-positions-mobile.png'];
+  const expectedAssets = [
+    'fxaeon-portfolio-positions.png', 'fxaeon-positions.png', 'fxaeon-trade-connected.png', 'fxaeon-positions-mobile.png',
+    'fxaeon-portfolio-populated-mobile.png', 'fxaeon-wallet-profile-populated-mobile.png', 'fxaeon-wallet-asset-detail-mobile.png',
+  ];
   assert.equal(captureReport.captures.length, expectedAssets.length);
   const docsArtifactRoot = resolve(artifactRoot, 'docs');
   await mkdir(docsArtifactRoot, { recursive: true });

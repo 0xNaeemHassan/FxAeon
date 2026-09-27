@@ -83,14 +83,9 @@ export function AmountFieldView({ value, onChange, symbol, label, hint, balance,
     if (next) change(next);
   };
   return <div className={styles.field} data-amount-field="unified" data-compact={compact || undefined}>
-    <div className={styles.labelRow}>
-      <label htmlFor={id}>{label}</label>
-      <span className={styles.meta}>
-        {hint && <span id={`${id}-hint`}>{hint}</span>}
-
-      </span>
-    </div>
     <div className={`${styles.surface} amount-control`} data-invalid={Boolean(error) || undefined}>
+      <div className={styles.labelRow}>
+        <label htmlFor={id}>{label}</label>
       {hasShortcuts && <div role="group" aria-label={`${label} shortcuts`} className={styles.shortcuts}>
         {showPercentages && [25, 50, 75].map((percent) => <button key={percent} type="button" disabled={inactive || !hasBalance} onClick={() => {
           haptic('selection'); const next = calculateFractionDecimal(available, percent, maxDecimals); if (next) change(next);
@@ -99,6 +94,8 @@ export function AmountFieldView({ value, onChange, symbol, label, hint, balance,
           aria-busy={maxPending || undefined} aria-label={allowAll ? 'Use all' : maxAmount === null ? 'Calculate 100% after gas reserve' : 'Use 100% of available balance'}
           title={maxAmount === null ? 'Reserve network fees before using the maximum' : undefined} data-selected={isMax || undefined}><span>{maxPending ? '…' : 'Max'}</span></button>}
       </div>}
+      </div>
+      {hint && <span className={styles.meta} id={`${id}-hint`}>{hint}</span>}
       <div className={styles.entryRow}>
         <input id={id} value={value} onChange={(event) => {
           const raw = event.target.value;

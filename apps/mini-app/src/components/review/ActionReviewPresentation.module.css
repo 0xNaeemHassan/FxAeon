@@ -1,16 +1,16 @@
 .quoteMetrics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 106px), 1fr));
-  gap: 6px;
-  padding: 7px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--surface-2) 74%, var(--surface));
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .quoteMetric {
   min-width: 0;
-  padding: 5px 7px;
+  padding: 7px 8px;
 }
 
 .quoteMetric + .quoteMetric { border-left: 1px solid var(--line); }
@@ -41,13 +41,15 @@
 }
 
 .previewFactRow {
-  flex-direction: column;
-  gap: 2px;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .previewFactRow > span:last-child {
-  max-width: 100%;
-  text-align: left;
+  max-width: 68%;
+  text-align: right;
   font-size: 13px;
   line-height: 1.4;
 }
@@ -72,3 +74,16 @@
   .quoteMetrics { gap: 3px; padding: 5px; }
   .quoteMetric { padding-inline: 4px; }
 }
+
+.reviewHeader { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.reviewHeader > div { min-width: 0; }
+.reviewHeader h3 { margin: 0; font-size: 21px; font-weight: 650; line-height: 1.2; letter-spacing: -.025em; }
+.reviewHeader p { margin: 4px 0 0; color: var(--mut); font-size: 12px; }
+.editButton { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 5px; min-height: 44px; min-width: 56px; padding: 0 8px; border-radius: 12px; color: var(--mut); font-size: 12px; font-weight: 600; }
+.editButton:hover { background: var(--mint-dim); color: var(--mint); }
+.editButton:disabled { opacity: .5; }
+.disclosures { margin-top: 8px; border: 1px solid var(--line); border-radius: 14px; overflow: clip; }
+.disclosures > details { margin: 0; border: 0; border-radius: 0; background: transparent; }
+.disclosures > details + details { border-top: 1px solid var(--line); }
+.disclosures > details > summary { min-height: 44px; font-size: 12px; }
+.disclosures > details > summary:focus-visible { outline-offset: -3px; }

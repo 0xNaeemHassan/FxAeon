@@ -60,9 +60,8 @@ export function PortfolioAssets({ snapshot, loading, network = 'all', onNetworkC
   return <section className={styles.assets} aria-labelledby="portfolio-assets-heading">
     <div className={styles.sectionHeading}>
       <h2 id="portfolio-assets-heading">Assets</h2>
-      {countLabel !== null && <span><ValueOrSkeleton value={countLabel} width="sm" status={countState === 'loading' ? 'loading' : 'unavailable'} label={countState === 'loading' ? 'Loading asset count' : 'Known asset count'} /></span>}
-    </div>
-    {onNetworkChange && <PortfolioNetworkTabs value={network} onChange={onNetworkChange} />}
+        {onNetworkChange ? <PortfolioNetworkTabs value={network} onChange={onNetworkChange} /> : countLabel !== null && <span><ValueOrSkeleton value={countLabel} width="sm" status={countState === 'loading' ? 'loading' : 'unavailable'} label={countState === 'loading' ? 'Loading asset count' : 'Known asset count'} /></span>}
+      </div>
     {showSearch && <label className={styles.search}><Search size={18} aria-hidden="true" /><span className="sr-only">Search assets</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search assets" autoComplete="off" /></label>}
     {needsStatus && <p className="sr-only" role="status">{statusLabel}</p>}
     {loading && !snapshot ? <div className={styles.loading} role="status" aria-label="Loading assets"><span /><span /><span /></div>

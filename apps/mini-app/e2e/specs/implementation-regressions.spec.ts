@@ -53,7 +53,7 @@ test.describe('implementation regressions', () => {
       for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
         await page.setViewportSize(viewport);
         await page.goto('/portfolio', { waitUntil: 'domcontentloaded' });
-        const recent = page.locator('section[aria-labelledby="recent-activity-title"]');
+        const recent = page.locator('section[aria-label="Recent history"]');
         await expect(recent).toHaveCount(1);
         await expect(recent).toBeVisible();
         await expect(recent.getByText('No recent FxAeon history', { exact: true })).toHaveCount(0);

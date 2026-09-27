@@ -218,8 +218,8 @@ test.describe("single-viewport route contract", () => {
     assertNoBackendRequests(requests);
   });
 
-  test("390px Move keeps the compact bridge ticket and review action above navigation", async ({ page }) => {
-    const viewport = { width: 390, height: 844 } as const;
+  test("393px Move keeps the compact bridge ticket and review action above navigation", async ({ page }) => {
+    const viewport = { width: 393, height: 852 } as const;
     await page.setViewportSize(viewport);
     await page.goto("/move", { waitUntil: "domcontentloaded" });
     await expect(page.locator(".app-topbar").getByRole("button", { name: "Connect wallet", exact: true })).toBeVisible({ timeout: 15_000 });
@@ -239,10 +239,10 @@ test.describe("single-viewport route contract", () => {
       const root = document.scrollingElement ?? document.documentElement;
       return { top: rect.top, bottom: rect.bottom, height: rect.height, navTop: navRect?.top ?? window.innerHeight, documentWidth: Math.max(root.scrollWidth, document.body.scrollWidth), viewportWidth: root.clientWidth };
     });
-    expect(geometry.top, "Move action should be visible without scrolling at 390x844").toBeGreaterThanOrEqual(-1);
-    expect(geometry.bottom, "Move action should clear primary navigation without scrolling at 390x844").toBeLessThanOrEqual(geometry.navTop + 1);
+    expect(geometry.top, "Move action should be visible without scrolling at 393x852").toBeGreaterThanOrEqual(-1);
+    expect(geometry.bottom, "Move action should clear primary navigation without scrolling at 393x852").toBeLessThanOrEqual(geometry.navTop + 1);
     expect(geometry.height, "Move action should keep an accessible hit target").toBeGreaterThanOrEqual(44);
-    expect(geometry.documentWidth, "Move must not overflow horizontally at 390px").toBeLessThanOrEqual(geometry.viewportWidth + 1);
+    expect(geometry.documentWidth, "Move must not overflow horizontally at 393px").toBeLessThanOrEqual(geometry.viewportWidth + 1);
   });
 
   test("mobile trade chart is a deliberate, explicit scroll exception", async ({ page }) => {
@@ -483,8 +483,8 @@ test.describe("single-viewport route contract", () => {
   test.describe("connected browser route states", () => {
     test.use({ browserWallet: { address: "0x930f0000000000000000000000000000000098b9", initiallyConnected: true } });
 
-    test("connected Trade keeps its compact ticket action above navigation at 390x844", async ({ page }) => {
-      const viewport = { width: 390, height: 844 } as const;
+    test("connected Trade keeps its compact ticket action above navigation at 393x852", async ({ page }) => {
+      const viewport = { width: 393, height: 852 } as const;
       await page.setViewportSize(viewport);
       await page.goto("/trade", { waitUntil: "domcontentloaded" });
       await expect(page.getByRole("button", { name: "Open wallet profile", exact: true })).toBeVisible({ timeout: 15_000 });

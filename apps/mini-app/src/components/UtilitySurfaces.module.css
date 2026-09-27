@@ -237,12 +237,12 @@
 
 .themePreviewOfficial { background: #100e18; }
 .themePreviewDark { background: #090a0c; }
-.themePreviewLight { background: #f7f5fb; }
+.themePreviewLight { background: #faf8f4; }
 .previewBar { width: 46%; height: 5px; border-radius: 999px; background: #b9a0ff; }
 .previewLine { width: 72%; height: 4px; border-radius: 999px; background: color-mix(in srgb, var(--preview-text) 50%, transparent); }
 .themePreviewOfficial .previewLine,
 .themePreviewDark .previewLine { --preview-text: #f7f5fc; }
-.themePreviewLight .previewLine { --preview-text: #251b35; }
+.themePreviewLight .previewLine { --preview-text: #302340; }
 
 .loginPanel { width: 100%; max-width: 460px; height: 100dvh; min-height: 0 !important; overflow-y: auto; overscroll-behavior: contain; }
 .loginCard { border-radius: 24px; background: color-mix(in srgb, var(--surface) 94%, var(--surface-2)); }

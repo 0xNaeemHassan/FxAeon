@@ -234,7 +234,15 @@ test.describe('light theme overlays', () => {
     await page.getByRole('button', { name: 'Open wallet profile' }).click();
     const wallet = page.getByRole('dialog');
     await expect(wallet).toBeVisible();
-    expect(await wallet.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe('rgb(255, 255, 255)');
+    const walletBackground = await wallet.evaluate((element) => {
+      const sample = document.createElement('div');
+      sample.style.backgroundColor = 'var(--surface)';
+      document.body.append(sample);
+      const expected = getComputedStyle(sample).backgroundColor;
+      sample.remove();
+      return { actual: getComputedStyle(element).backgroundColor, expected };
+    });
+    expect(walletBackground.actual).toBe(walletBackground.expected);
     await page.keyboard.press('Escape');
     await expect(wallet).toBeHidden();
     await expect(page.getByRole('button', { name: 'Open wallet profile' })).toBeFocused();

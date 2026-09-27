@@ -29,7 +29,7 @@ async function installTelegram(page: Page, telegram: boolean | TelegramShimOptio
   }
 }
 
-async function installMarketPrices(page: Page, enabled: boolean): Promise<void> {
+export async function installMarketPrices(page: Page, enabled: boolean): Promise<void> {
   if (enabled) {
     // Keep price-context E2E assertions deterministic. The production app
     // still owns the Coinbase socket; this fixture only prevents a live
@@ -130,6 +130,23 @@ async function installMarketPrices(page: Page, enabled: boolean): Promise<void> 
   });
 }
 
+/** Install the same deterministic browser-only fixtures for standalone visual captures. */
+export async function installBrowserAppFixtures(page: Page, options: {
+  telegram?: boolean | TelegramShimOptions;
+  browserWallet?: false | BrowserWalletShimOptions;
+  marketPrices?: boolean;
+} = {}): Promise<void> {
+  const telegram = options.telegram ?? false;
+  const browserWallet = options.browserWallet ?? false;
+  const marketPrices = options.marketPrices ?? true;
+  await installTelegram(page, telegram);
+  await installMarketPrices(page, marketPrices);
+  await page.route('https://api.goldsky.com/api/public/**', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({ data: { positions: [], orders: [] } }),
+  }));
+  if (browserWallet !== false) await page.addInitScript(browserWalletInitScript(browserWallet), browserWallet);
+}
+
 export const test = base.extend<{
   telegram: boolean | TelegramShimOptions;
   browserWallet: false | BrowserWalletShimOptions;
@@ -159,14 +176,7 @@ export const test = base.extend<{
     await use(observed);
   },
   page: async ({ page, telegram, browserWallet, marketPrices }, use) => {
-    await installTelegram(page, telegram);
-    await installMarketPrices(page, marketPrices);
-    // Public protocol indexing is client-side data, not an FxAeon backend.
-    // Keep route tests deterministic and prevent real wallet-history requests.
-    await page.route('https://api.goldsky.com/api/public/**', (route) => route.fulfill({
-      status: 200, contentType: 'application/json', body: JSON.stringify({ data: { positions: [], orders: [] } }),
-    }));
-    if (browserWallet !== false) await page.addInitScript(browserWalletInitScript(browserWallet), browserWallet);
+    await installBrowserAppFixtures(page, { telegram, browserWallet, marketPrices });
     await use(page);
   },
 });

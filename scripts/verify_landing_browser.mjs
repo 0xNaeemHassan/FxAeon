@@ -194,6 +194,7 @@ try {
       ctaHitTarget: (() => { const cta = document.querySelector('.hero .actions a[href="https://fxaeon.com/"]'); const rect = cta.getBoundingClientRect(); return document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)?.closest('a')?.getAttribute('href') || null; })(),
       overflow: [...document.querySelectorAll('body *')].filter((element) => element.getBoundingClientRect().right > innerWidth + 1).map((element) => ({ tag: element.tagName, class: element.className })),
       images: [...document.images].filter((image) => image.getBoundingClientRect().width > 0).map((image) => ({
+        src: image.currentSrc,
         loaded: image.complete && image.naturalWidth > 0,
         ratioError: Math.abs(image.width / image.height - image.naturalWidth / image.naturalHeight),
       })),
@@ -257,15 +258,25 @@ try {
         };
       })(),
     }));
+    await page.locator('.closing').scrollIntoViewIfNeeded();
+    await page.evaluate(() => window.scrollTo({ left: 0, top: window.scrollY, behavior: 'instant' }));
+    const closingBounds = await page.evaluate(() => {
+      const selectors = ['.closing', '.closing-content', '.closing-copy h2', '.closing-copy > p', '.closing-content > .pill'];
+      return selectors.map((selector) => {
+        const { left, right } = document.querySelector(selector).getBoundingClientRect();
+        return { selector, left, right, viewportWidth: document.documentElement.clientWidth };
+      });
+    });
+    assert.ok(closingBounds.every(({ left, right, viewportWidth }) => left >= -1 && right <= viewportWidth + 1), `Closing content is clipped at ${width}px: ${JSON.stringify(closingBounds)}`);
     assert.ok(state.contentWidth <= state.width + 1, `Horizontal overflow at ${width}px: ${JSON.stringify(state.overflow)}`);
     assert.equal(state.theme, theme, `Unexpected rendered theme at ${width}px`);
-    assert.equal(state.themeColor, theme === 'dark' ? '#0d0b14' : '#e8def7', `Theme color metadata mismatch for ${theme}`);
+    assert.equal(state.themeColor, theme === 'dark' ? '#171421' : '#f8f5ed', `Theme color metadata mismatch for ${theme}`);
     assert.equal(state.headerPosition, 'absolute', `Header should overlay the hero at ${width}px`);
     assert.ok(state.headerBackground === 'rgba(0, 0, 0, 0)' || state.headerBackground === 'transparent', `Header is not transparent at ${width}px: ${state.headerBackground}`);
-    if (width <= 520) assert.ok(state.mobileArtOverlapsHeadline, `Hero artwork should sit behind the mobile headline at ${width}px`);
+    if (width <= 520) assert.ok(!state.mobileArtOverlapsHeadline, `Hero artwork should sit below the mobile headline at ${width}px`);
     assert.equal(state.ctaHitTarget, 'https://fxaeon.com/', `Hero CTA is blocked by artwork at ${width}px`);
     assert.ok(state.images.every((image) => image.loaded), `Missing image at ${width}px`);
-    assert.ok(state.images.every((image) => image.ratioError < 0.02), `Distorted image at ${width}px`);
+    assert.ok(state.images.every((image) => image.ratioError < 0.02), `Distorted image at ${width}px: ${JSON.stringify(state.images)}`);
     assert.deepEqual([...new Set(state.featureHrefs)].sort(), [...FEATURE_HREFS].sort(), `Feature destinations must include trade, earn, borrow, and move at ${width}px`);
     assert.deepEqual(state.undersizedControls, [], `Interactive targets shorter than 44px at ${width}px: ${JSON.stringify(state.undersizedControls)}`);
     for (const surface of [...state.contrast.header, ...state.contrast.body, ...state.contrast.footer]) {

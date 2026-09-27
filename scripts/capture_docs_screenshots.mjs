@@ -14,6 +14,7 @@ if (!['live', 'fixture'].includes(marketDataMode)) throw new Error('FX_SCREENSHO
 const captures = [];
 const discoveryErrors = [];
 const interceptedGroups = new Set();
+const interceptedHistoryGroups = new Set();
 const pageErrors = [];
 const consoleErrors = [];
 const externalRequestFailures = [];
@@ -67,6 +68,29 @@ function loadPositionManifest(configuredPath) {
       || !/^\d+$/.test(position?.rawDebt ?? '') || BigInt(position.rawDebt) <= 0n
     ) throw new Error('FX_SCREENSHOT_POSITION_MANIFEST contains an invalid position row');
     seenGroups.add(group);
+  }
+  if (!Array.isArray(manifest.historyRows) || manifest.historyRows.length < 4) {
+    throw new Error('FX_SCREENSHOT_POSITION_MANIFEST requires receipt-derived history rows for all four positions');
+  }
+  const historyGroups = new Set();
+  for (const row of manifest.historyRows) {
+    const group = `${row?.market}:${row?.side}`;
+    const position = manifest.positions.find((candidate) => `${candidate.market}:${candidate.side}` === group
+      && candidate.positionId === row?.positionId && candidate.pool?.toLowerCase() === row?.pool?.toLowerCase());
+    if (!position || !['Open', 'Close'].includes(row?.type)
+      || row?.id !== `${row.positionId}_${row.hash}`
+      || !/^0x[0-9a-f]{64}$/i.test(row?.hash ?? '')
+      || !/^\d+$/.test(row?.blockNumber ?? '') || BigInt(row.blockNumber) <= 0n
+      || !/^\d+$/.test(row?.timestamp ?? '') || BigInt(row.timestamp) <= 0n
+      || !position.transactions?.some((transaction) => transaction.hash?.toLowerCase() === row.hash.toLowerCase())) {
+      throw new Error('FX_SCREENSHOT_POSITION_MANIFEST contains an invalid receipt-derived history row');
+    }
+    historyGroups.add(group);
+  }
+  if (historyGroups.size !== 4 || manifest.positions.some((position) =>
+    !manifest.historyRows.some((row) => row.market === position.market && row.side === position.side
+      && row.positionId === position.positionId && row.type === 'Open'))) {
+    throw new Error('FX_SCREENSHOT_POSITION_MANIFEST history does not prove all four open positions');
   }
   return manifest;
 }
@@ -201,16 +225,67 @@ async function createCaptureContext({ viewport, theme }) {
       } catch {
         // Malformed or expanded queries must never become silent empty data.
       }
-      if (!position || !matchesDiscovery) {
-        discoveryErrors.push('Unexpected Goldsky request; only the four exact owner-ID discovery queries may be intercepted');
+      if (!position) {
+        discoveryErrors.push('Unexpected Goldsky endpoint; only the four pinned position-history indexes may be intercepted');
         return route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ errors: [{ message: 'Unexpected screenshot discovery request' }] }) });
       }
-      interceptedGroups.add(`${position.market}:${position.side}`);
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ data: { positions: [{ id: String(position.positionId) }] } }),
-      });
+      const group = `${position.market}:${position.side}`;
+      if (matchesDiscovery) {
+        interceptedGroups.add(group);
+        await route.fulfill({ status: 200, contentType: 'application/json',
+          body: JSON.stringify({ data: { positions: [{ id: String(position.positionId) }] } }) });
+        return;
+      }
+      let payload;
+      try {
+        payload = request.postDataJSON();
+      } catch { /* The exact-query checks below reject malformed payloads. */ }
+      const normalise = (query) => query.replace(/\s/g, '');
+      const query = typeof payload?.query === 'string' ? normalise(payload.query) : '';
+      const wallet = positionManifest.wallet.toLowerCase();
+      const walletFilter = position.market === 'ETH' && position.side === 'short'
+        ? `owner:"${wallet}"`
+        : `or:[{owner:"${wallet}"},{realOwner:"${wallet}"}]`;
+      const historyMatch = query.match(/^queryWalletPositionHistory\{positions\(first:25,skip:(0|[1-9][0-9]*),where:\{(.+)\},orderBy:blockNumber,orderDirection:desc\)\{idisClosedblockNumber\}\}$/);
+      const ordersMatch = query.match(/^queryWalletPositionOrders\{orders\(first:5,skip:(0|[1-9][0-9]*),where:\{positionId_in:\[([0-9,"]*)\],type_in:\["Open","Close"\]\},orderBy:blockNumber,orderDirection:desc\)\{idtypehashblockNumbertimestamp\}\}$/);
+      const exactEnvelope = request.method() === 'POST' && !url.search && !url.hash
+        && Object.keys(payload ?? {}).length === 1 && typeof payload?.query === 'string';
+      if (exactEnvelope && historyMatch && historyMatch[2] === walletFilter) {
+        const positionRows = positionManifest.historyRows.filter((row) => row.market === position.market
+          && row.side === position.side && row.positionId === position.positionId)
+          .sort((a, b) => BigInt(a.blockNumber) > BigInt(b.blockNumber) ? -1 : BigInt(a.blockNumber) < BigInt(b.blockNumber) ? 1 : 0);
+        if (positionRows.length === 0) {
+          discoveryErrors.push(`No receipt-proven history rows exist for ${group}`);
+          return route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ errors: [{ message: 'Missing receipt-proven history' }] }) });
+        }
+        const offset = Number(historyMatch[1]);
+        const latest = positionRows[0];
+        const closed = latest.type === 'Close';
+        interceptedHistoryGroups.add(group);
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { positions:
+          offset === 0 ? [{ id: String(position.positionId), isClosed: closed, blockNumber: latest.blockNumber }] : [] } }) });
+        return;
+      }
+      if (exactEnvelope && ordersMatch) {
+        const ids = [...ordersMatch[2].matchAll(/"([1-9][0-9]{0,15})"/g)].map((match) => Number(match[1]));
+        const groupPosition = positionManifest.positions.find((candidate) => candidate.market === position.market
+          && candidate.side === position.side && candidate.positionId === position.positionId);
+        if (ids.length === 0 || ids.some((id) => id !== groupPosition?.positionId)) {
+          discoveryErrors.push(`History order query for ${group} requested an unproved pool position`);
+          return route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ errors: [{ message: 'Unproved history position' }] }) });
+        }
+        const offset = Number(ordersMatch[1]);
+        const orders = positionManifest.historyRows.filter((row) => row.market === position.market
+          && row.side === position.side && ids.includes(row.positionId))
+          .sort((a, b) => BigInt(a.blockNumber) > BigInt(b.blockNumber) ? -1 : BigInt(a.blockNumber) < BigInt(b.blockNumber) ? 1 : 0)
+          .slice(offset, offset + 5)
+          .map(({ id, type, hash, blockNumber, timestamp }) => ({ id, type, hash, blockNumber, timestamp }));
+        interceptedHistoryGroups.add(group);
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { orders } }) });
+        return;
+      }
+      discoveryErrors.push('Unexpected Goldsky request; only exact owner-ID, position-history, and receipt-order queries are allowed');
+      await route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ errors: [{ message: 'Unexpected screenshot discovery request' }] }) });
     });
   }
 
@@ -412,6 +487,7 @@ async function capture(page, file, route, prepare) {
     }, null, { timeout: 60_000 });
   }
   if (positionManifest && interceptedGroups.size !== 4) throw new Error('all four exact SDK discovery requests must be observed before capture');
+  if (positionManifest && interceptedHistoryGroups.size !== 4) throw new Error('all four exact receipt-backed history groups must be observed before capture');
   if (marketDataMode === 'fixture' || positionManifest) {
     await page.evaluate(({ illustrative, fork }) => {
       const caption = document.createElement('aside');
@@ -474,12 +550,34 @@ async function waitForPopulatedPositions(page) {
 async function waitForPopulatedPortfolio(page) {
   await waitForPositionKeys(page, positionManifest.positions.filter((position) => position.market === 'ETH'));
   await page.waitForFunction(() => {
-    const metricShowsFour = [...document.querySelectorAll('.portfolio-value-metrics span')].some((metric) => (
-      metric.querySelector('small')?.textContent?.trim() === 'Open positions'
-      && metric.querySelector('strong')?.textContent?.trim() === '4'
-    ));
-    return metricShowsFour && !document.querySelector('[aria-label="Loading wallet balances"]');
+    const positionSection = document.querySelector('section[aria-labelledby="portfolio-positions-heading"]');
+    const valueCard = document.querySelector('[data-portfolio-value]');
+    const loadingValue = document.querySelector('[aria-label="Loading portfolio value"], [aria-label="Loading wallet asset count"]');
+    return Boolean(positionSection && valueCard) && !loadingValue;
   }, null, { timeout: 120_000 });
+}
+
+async function waitForPopulatedWalletProfile(page) {
+  await waitForPopulatedPortfolio(page);
+  await page.getByRole('button', { name: 'Open wallet profile', exact: true }).click();
+  await page.getByRole('dialog').waitFor({ state: 'visible' });
+  await page.waitForFunction(() => {
+    const assets = document.querySelector('[aria-labelledby="wallet-profile-balances-title"]');
+    const rows = assets?.querySelectorAll('ul > li button[aria-label^="View "]') ?? [];
+    const loading = assets?.querySelector('[aria-label="Loading assets"], [aria-label="Loading wallet value"], [aria-label="Loading wallet asset count"]');
+    return Boolean(assets && rows.length > 0 && !loading);
+  }, null, { timeout: 120_000 });
+}
+
+async function waitForPopulatedWalletAssetDetail(page) {
+  await waitForPopulatedWalletProfile(page);
+  const assetRow = page.locator('[aria-labelledby="wallet-profile-balances-title"] ul > li button[aria-label^="View "]').first();
+  const assetLabel = await assetRow.getAttribute('aria-label');
+  if (!assetLabel) throw new Error('receipt-backed wallet asset row has no accessible label');
+  await assetRow.click();
+  const detail = page.getByRole('dialog').last();
+  await detail.waitFor({ state: 'visible' });
+  await page.getByRole('heading', { name: / on (Ethereum|Base)$/ }).waitFor({ state: 'visible' });
 }
 
 async function waitForPopulatedTrade(page) {
@@ -527,6 +625,10 @@ async function main() {
     const mobileContext = await createCaptureContext({ viewport: { width: 390, height: 844 }, theme: 'official' });
     const mobilePage = await mobileContext.newPage();
     await capture(mobilePage, 'fxaeon-positions-mobile.png', '/positions', waitForPopulatedPositions);
+    await mobilePage.setViewportSize({ width: 393, height: 852 });
+    await capture(mobilePage, 'fxaeon-portfolio-populated-mobile.png', '/', waitForPopulatedPortfolio);
+    await capture(mobilePage, 'fxaeon-wallet-profile-populated-mobile.png', '/', waitForPopulatedWalletProfile);
+    await capture(mobilePage, 'fxaeon-wallet-asset-detail-mobile.png', '/', waitForPopulatedWalletAssetDetail);
     await mobileContext.close();
     return;
   }
@@ -581,6 +683,7 @@ try {
     positionDiscovery: positionManifest ? 'exact-four-sdk-owner-id-queries-only' : 'not-intercepted',
     positionFixtureExecutionSurface: positionManifest?.executionSurface ?? 'unspecified',
     observedDiscoveryGroups: [...interceptedGroups].sort(),
+    observedHistoryGroups: [...interceptedHistoryGroups].sort(),
     discoveryErrors,
     captures,
     scope: 'Rendered documentation states, not browser transaction-execution proof.',

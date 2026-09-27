@@ -5,15 +5,15 @@
 /* FxAeon — a focused canvas with a little atmosphere and clear surface depth. */
 :root {
   /* Color roles: one source of truth for CSS and Tailwind utilities. */
-  --bg: #100e18;
-  --bg-raised: #15121e;
-  --surface: #1a1726;
-  --surface-2: #242033;
-  --surface-3: #302a42;
-  --card: #1a1726;
-  --input: #221e30;
-  --line: #322b43;
-  --line-strong: #57496d;
+  --bg: #101018;
+  --bg-raised: #14131d;
+  --surface: #181721;
+  --surface-2: #211f2c;
+  --surface-3: #2b2739;
+  --card: #181721;
+  --input: #1d1b28;
+  --line: #302c3f;
+  --line-strong: #504760;
   --text: #f7f5fc;
   --mut: #b1a9bf;
   --mut-2: #93889f;
@@ -141,18 +141,18 @@
 
 :root[data-theme='light'] {
   color-scheme: light;
-  --bg: #f7f5fb;
-  --bg-raised: #ffffff;
-  --surface: #ffffff;
-  --surface-2: #f0ecf7;
-  --surface-3: #e7e0f2;
-  --card: #ffffff;
-  --input: #f2eef8;
-  --line: #e8e1f0;
-  --line-strong: #b6a8cb;
-  --text: #251b35;
-  --mut: #71637f;
-  --mut-2: #7c6d8c;
+  --bg: #faf8f4;
+  --bg-raised: #fffdfa;
+  --surface: #fffdfa;
+  --surface-2: #eee7f7;
+  --surface-3: #e7def2;
+  --card: #fffdfa;
+  --input: #f4f0f8;
+  --line: #ded5e7;
+  --line-strong: #ad9cc3;
+  --text: #302340;
+  --mut: #6c617b;
+  --mut-2: #786987;
   --mint: #7341c8;
   --mint-bright: #5f2cb4;
   --mint-dim: rgba(115, 65, 200, 0.09);
@@ -165,8 +165,8 @@
   --warn: #90630c;
   --elevation-1: 0 8px 24px rgba(54, 34, 79, 0.07), 0 1px 0 rgba(255, 255, 255, 0.85) inset;
   --elevation-2: 0 18px 52px rgba(54, 34, 79, 0.13), 0 1px 0 rgba(255, 255, 255, 0.9) inset;
-  --canvas-wash: rgba(135, 89, 207, 0.17);
-  --canvas-wash-secondary: rgba(163, 98, 196, 0.075);
+  --canvas-wash: rgba(135, 89, 207, 0.065);
+  --canvas-wash-secondary: rgba(163, 98, 196, 0.025);
   --surface-highlight: rgba(255, 255, 255, 0.9);
   --surface-shadow: rgba(58, 34, 84, 0.1);
 }

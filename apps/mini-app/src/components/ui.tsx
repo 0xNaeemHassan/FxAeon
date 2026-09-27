@@ -340,7 +340,7 @@ export function EmptyState({
 
 export function SectionTitle({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
-    <div className="section-heading mb-2.5 mt-6 flex items-center justify-between">
+    <div className="section-heading mb-2 flex items-center justify-between">
       <h2 className="text-[16px] font-semibold tracking-tight text-[var(--text)]">
         {children}
       </h2>

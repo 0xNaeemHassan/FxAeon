@@ -1,0 +1,45 @@
+.hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 20px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.hero::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  top: -8px;
+  right: -6px;
+  width: min(135px, 38%);
+  height: 150px;
+  background:
+    url('/illustrations/balance-ribbon.png') center right / contain no-repeat,
+    radial-gradient(ellipse at 82% 42%, color-mix(in srgb, var(--mint) 11%, transparent), transparent 70%);
+  opacity: .44;
+  mask-image: linear-gradient(90deg, transparent 0%, #000 32%, #000 76%, transparent 100%);
+}
+
+.hero :where(button, a):focus-visible { outline: 2px solid var(--mint); outline-offset: 3px; }
+:global([data-product-ui='v2']) .hero summary:focus-visible { outline: 2px solid var(--mint); outline-offset: -3px; border-radius: 10px; }
+
+.value {
+  font-size: clamp(40px, 10.5vw, 54px);
+  line-height: 1.04;
+  font-weight: 650;
+  letter-spacing: -.06em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 420px) {
+  .hero::before { right: -24px; width: 118px; opacity: .32; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero::before { transition: none; }
+}

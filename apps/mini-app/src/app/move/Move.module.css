@@ -1,64 +1,119 @@
 .moveWorkspace {
   width: 100%;
-  max-width: 600px;
+  max-width: 640px;
   margin-inline: auto;
 }
 
-.moveCard {
+.moveCard.moveCard {
   width: 100%;
   min-width: 0;
-  padding: 16px !important;
+  padding: 20px;
+  border-color: color-mix(in srgb, var(--line-strong) 34%, var(--line));
+  border-radius: 22px;
+  background: var(--surface);
+  box-shadow: none;
 }
 
-.moveCard .moveAmountHero {
-  padding: 0;
+.moveNetworkFlow {
+  grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.routeNode {
+  min-width: 0;
+  min-height: 58px;
+  padding: 8px 4px;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.routeNode:first-child,
+.routeNode:last-child {
+  border-color: transparent;
   background: transparent;
 }
 
-/* Keep the primary bridge controls in one readable column. The shared flow
- * stylesheet pairs fields for wider workspaces, which makes this simple
- * transfer ticket feel oversized on desktop. */
-.moveCard .moveFormFields {
-  display: flex !important;
+.routeIdentity { min-width: 0; gap: 9px; }
+.chainLogo { flex: 0 0 auto; }
+.routeName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.routeSwap {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  border-color: var(--line);
+  color: var(--mint);
+  background: var(--surface);
+}
+.routeSwap:hover { border-color: var(--mint); color: var(--mint); background: var(--mint-dim); }
+
+.moveCard .moveAmountHero { padding: 0; background: transparent; }
+.moveCard.moveCard .moveFormFields {
+  display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
+.moveCard.moveCard .moveFormFields > details { grid-column: auto; grid-row: auto; }
 
-.moveCard .moveFormFields > details {
-  grid-column: auto;
-  grid-row: auto;
+.recipientSection { min-width: 0; }
+.recipientSection > div:first-child > span { font-size: 13px; }
+.recipientSection > div:first-child > button { min-height: 44px; font-size: 12px; }
+.recipientMark {
+  display: flex;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 11px;
+  background: var(--surface-3);
+  color: var(--mint);
 }
+.recipientLabel,
+.recipientAddress { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recipientLabel { color: var(--mut); font-size: 13px; }
 
 .expertDisclosure {
   min-width: 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
 }
-
 .expertSummary {
   min-height: 44px;
-  border-radius: 12px;
+  border: 0;
+  background: transparent;
+  color: var(--mut);
 }
-
-.expertRisk {
-  min-width: 0;
-}
+.expertDisclosure[open] > .expertSummary { border-bottom: 1px solid var(--line); }
+.expertRisk { min-width: 0; }
 
 @media (min-width: 840px) {
-  .moveCard {
-    padding: 20px !important;
-  }
-
-  .expertSummary {
-    min-height: 48px;
-  }
+  .moveWorkspace { max-width: 640px; }
+  .moveCard.moveCard { padding: 22px; }
 }
 
 @media (max-width: 640px) {
-  .moveWorkspace {
-    max-width: 100%;
-  }
-
-  .moveCard { padding: 14px !important; }
-
-  .moveCard .moveFormFields { gap: 8px; }
+  .moveWorkspace { max-width: 100%; }
+  .moveCard.moveCard { padding: 16px; border-radius: 20px; }
+  .moveNetworkFlow { gap: 8px; }
+  .routeNode { min-height: 62px; padding: 10px; }
 }
+
+@media (max-width: 359px) {
+  .moveCard.moveCard { padding: 12px; }
+  .moveNetworkFlow { grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1fr); gap: 4px; }
+  .routeNode { min-height: 58px; padding: 8px; }
+  .routeIdentity { gap: 6px; }
+  .chainLogo { flex-basis: 20px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .routeSwap { transition: none; }
+}
+
+.moveWorkspace { min-height: 100%; }
+.centerStage { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.centerStage > .moveCard { margin-block: auto; }

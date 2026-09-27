@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowLeftRight } from 'lucide-react';
+import { AlertTriangle, ArrowLeftRight, ChevronDown, Code2, UserRound } from 'lucide-react';
 import { formatUnits, type Address } from 'viem';
 import { AppShell, Card } from '@/components/ui';
 import { PageHeading } from '@/components/ProductUI';
@@ -466,6 +466,7 @@ export default function MovePage() {
     <AppShell>
       <ActionWorkspace density="compact" className={`${styles.workspace} ${styles.moveWorkspace} ${moveStyles.moveWorkspace}`}>
         <PageHeading title="Move" />
+        <div className={moveStyles.centerStage}>
         <Card
           data-flow-stage={reviewStage}
           className={`${styles.focusCard} ${styles.moveCard} ${moveStyles.moveCard} p-5`}
@@ -474,13 +475,13 @@ export default function MovePage() {
             key={reviewRevision}
             surface="content"
             editor={<>
-          <div className={`${styles.networkFlow} ${styles.moveNetworkFlow}`}>
+          <div className={`${styles.networkFlow} ${styles.moveNetworkFlow} ${moveStyles.moveNetworkFlow}`}>
             <NetworkField label="From" name={sourceName} chainId={sourceChainId} />
             <button
               type="button"
               aria-label={`Reverse route to ${sourceName}`}
               onClick={changeDirection}
-              className={`glass-press ${styles.networkArrow}`}
+              className={`glass-press ${styles.networkArrow} ${moveStyles.routeSwap}`}
             >
               <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
             </button>
@@ -522,9 +523,10 @@ export default function MovePage() {
                 />
               ) : (
                 <div className="flex min-h-[56px] items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--input)] px-3">
-                  <span className="text-[12px] text-mut">{wallet.address ? 'Your wallet' : 'Connect wallet'}</span>
+                  <span className={moveStyles.recipientMark}><UserRound className="h-4 w-4" aria-hidden="true" /></span>
+                  <span className={`${moveStyles.recipientLabel} mr-auto text-[12px] text-mut`}>{wallet.address ? 'Your wallet' : 'Connect wallet'}</span>
                   {wallet.address ? (
-                    <span className="font-mono text-[12px] font-semibold">
+                    <span className={`${moveStyles.recipientAddress} font-mono text-[12px] font-semibold`}>
                       {`${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)}`}
                     </span>
                   ) : null}
@@ -538,8 +540,8 @@ export default function MovePage() {
               className={`${styles.advancedPanel} ${moveStyles.expertDisclosure}`}
             >
               <summary className={`${moveStyles.expertSummary} group flex cursor-pointer list-none items-center justify-between gap-3 px-3 text-[12px] font-semibold text-mut [&::-webkit-details-marker]:hidden`}>
-                <span>Custom contracts</span>
-                <span aria-hidden="true" className="text-[15px] leading-none text-[var(--mut-2)] transition-transform group-open:rotate-180">⌄</span>
+                <span className="flex min-w-0 items-center gap-2"><Code2 aria-hidden="true" className="h-4 w-4 shrink-0 text-[var(--mut-2)]" />Custom contracts</span>
+                <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 text-[var(--mut-2)] transition-transform group-open:rotate-180" />
               </summary>
               <div className="border-t border-[var(--line)] p-3">
                 <AdvancedAddressFields
@@ -575,6 +577,7 @@ export default function MovePage() {
             }}
           />
         </Card>
+        </div>
       </ActionWorkspace>
     </AppShell>
   );
@@ -652,9 +655,9 @@ function AddressField({ label, hint, value, onChange, placeholder }: { label: st
 
 function NetworkField({ label, name, chainId }: { label: 'From' | 'To'; name: string; chainId: FxChainId }) {
   return (
-    <div className={styles.networkNode}>
+    <div className={`${styles.networkNode} ${moveStyles.routeNode}`}>
       <span className="block text-[11px] text-mut">{label}</span>
-      <span className="mt-1 flex items-center gap-1.5 text-[14px] font-semibold"><ChainIcon chainId={chainId} size={18} />{name}</span>
+      <span className={`${moveStyles.routeIdentity} mt-1 flex items-center text-[14px] font-semibold`}><ChainIcon chainId={chainId} size={22} className={moveStyles.chainLogo} /><span className={moveStyles.routeName}>{name}</span></span>
     </div>
   );
 }

@@ -4,7 +4,7 @@ test.describe('Earn entry and honest unavailable state', () => {
   test.use({ telegram: false });
 
   test('keeps the position, APY, action tabs, and primary action together on a normal phone viewport', async ({ page }) => {
-    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setViewportSize({ width: 393, height: 852 });
     await page.goto('/earn', { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: 'Earn with fxSAVE', exact: true })).toBeVisible();
     await expect(page.getByText('Variable APY')).toBeVisible();
@@ -93,7 +93,7 @@ test.describe('connected Earn summary at normal phone width', () => {
   });
 
   test('keeps the honest fxSAVE balance and APY row above bottom navigation', async ({ page }) => {
-    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setViewportSize({ width: 393, height: 852 });
     await page.goto('/earn', { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('button', { name: 'Open wallet profile', exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/^(?:Your fxSAVE value|Last verified fxSAVE value|fxSAVE balance)$/)).toBeVisible();

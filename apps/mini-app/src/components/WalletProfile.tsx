@@ -5,10 +5,12 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { Address } from 'viem';
-import { ArrowDownToLine, History, Layers2, ExternalLink, LogOut, RefreshCw, Settings, X } from 'lucide-react';
+import { ArrowDownToLine, ArrowUpRight, History, Layers2, ExternalLink, LogOut, RefreshCw, Settings, X } from 'lucide-react';
 import { AssetRowContent, networkLabel } from '@/components/AssetPresentation';
 import { ActionRow, StatusNotice } from '@/components/ProductUI';
 import presentation from '@/components/WalletProfile.module.css';
+import balancePresentation from '@/components/BalanceSummary.module.css';
+import { WalletIdentityMark } from '@/components/WalletIdentityMark';
 import { AddressChip } from '@/components/ui';
 import { useFxSaveClaimable, useWalletAssets, useWalletBalances } from '@/components/WalletDataProvider';
 import { useUsdPrices } from '@/components/PriceProvider';
@@ -152,29 +154,30 @@ export default function WalletProfile() {
     </button>
     {open && typeof document !== 'undefined' && createPortal(
       <div className={`${styles.walletBackdrop} wallet-profile-backdrop`} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpenWallet(null); }}>
-        <aside ref={dialogRef} role="dialog" aria-modal="true" aria-label={profileDialogName} className={`${presentation.sheet} wallet-profile-sheet`} onMouseDown={(event) => event.stopPropagation()}>
-          <header className={`${presentation.header} wallet-profile-header`}>
+        <aside ref={dialogRef} role="dialog" aria-modal="true" aria-label={profileDialogName} className={presentation.sheet} onMouseDown={(event) => event.stopPropagation()}>
+          <header className={presentation.header}>
             <span className={presentation.handle} aria-hidden="true" />
+            <span className={presentation.identityMark}><WalletIdentityMark /></span>
             <div className={presentation.identity}><h2 title={wallet.address}>{walletHeading}</h2><AddressChip address={wallet.address} /></div>
             <button ref={closeRef} type="button" aria-label="Close wallet profile" onClick={() => setOpenWallet(null)} className={presentation.iconButton}><X size={22} aria-hidden="true" /></button>
           </header>
           <div className={presentation.body}>
-            <section className={`${presentation.summary} wallet-profile-summary`} aria-labelledby="wallet-value-heading">
+            <section className={`${presentation.summary} ${balancePresentation.hero}`} aria-labelledby="wallet-value-heading">
               <div className={presentation.valueTop}><span id="wallet-value-heading">Wallet assets</span><div>
                 <button type="button" disabled={manualRefresh.refreshing} aria-busy={manualRefresh.refreshing} aria-label="Refresh balances and positions" title="Refresh balances and positions"
                   className={presentation.iconButton} onClick={() => void manualRefresh.run([priceSnapshot.refresh, walletAssets.refresh, walletBalances.refresh, claimSnapshot.refresh, refreshPositions])}>
                   <RefreshCw size={18} className={manualRefresh.refreshing ? 'animate-spin' : ''} aria-hidden="true" />
                 </button>
               </div></div>
-              <strong className={presentation.total}><ValueOrSkeleton value={walletSnapshotValuation.totalUsd === null ? '—' : formatUsd(walletSnapshotValuation.totalUsd)} width="xl"
+              <strong className={`${presentation.total} ${balancePresentation.value}`}><ValueOrSkeleton value={walletSnapshotValuation.totalUsd === null ? '—' : formatUsd(walletSnapshotValuation.totalUsd)} width="xl"
                 status={walletValueLoading ? 'loading' : 'unavailable'} label={walletValueLoading ? 'Loading wallet value' : 'Wallet value unavailable'} /></strong>
               <p className={presentation.valueNote}><ValueOrSkeleton value={walletAssetCountLabel} width="sm" status={loading ? 'loading' : 'unavailable'} label="Wallet asset count" /></p>
               <div className={presentation.actions}>
                 <Link href="/qr" className={presentation.primaryAction}><ArrowDownToLine size={18} aria-hidden="true" />Receive</Link>
-                <Link href="/portfolio">View portfolio</Link>
+                <Link href="/portfolio">View portfolio<ArrowUpRight size={18} aria-hidden="true" /></Link>
               </div>
             </section>
-            <section className={`${presentation.assets} wallet-profile-assets`} aria-labelledby="wallet-profile-balances-title">
+            <section className={presentation.assets} aria-labelledby="wallet-profile-balances-title">
               <div className={presentation.sectionHeading}><h3 id="wallet-profile-balances-title">Assets</h3><span>All networks</span></div>
               {loading && !displayAssets && <div role="status" className="skeleton h-20 w-full rounded-xl" aria-label="Loading assets" />}
               {!loading && !displayAssets && <p role="status" className={presentation.helper}>Refresh balances</p>}
@@ -206,7 +209,7 @@ export default function WalletProfile() {
                 </StatusNotice>)}
               </div>
             </section>}
-            <nav className={`${presentation.links} wallet-profile-links`} aria-label="Wallet profile actions">
+            <nav className={presentation.links} aria-label="Wallet profile actions">
               <ActionRow icon={History} title="History" href="/history" />
               <ActionRow icon={Settings} title="Settings" href="/settings" />
             </nav>

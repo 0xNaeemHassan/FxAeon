@@ -46,7 +46,7 @@ export default function RecentActivityPreview({ walletAddress, attentionOnly = f
       await refreshWallet(reconciled, walletAddress, isCurrent);
       if (!isCurrent()) return;
       if (reconciled.length === 0) {
-        setSnapshot({ identity, items: [], loading: false, error: 'Saved history is on this device, but transaction status is unavailable. Retry when network access is available.' });
+        setSnapshot({ identity, items: [], loading: false, error: 'Couldn’t verify saved transaction status. Saved history remains on this device.' });
         return;
       }
       const ordered = [...reconciled].reverse();
@@ -55,7 +55,7 @@ export default function RecentActivityPreview({ walletAddress, attentionOnly = f
       setSnapshot({ identity, items: [...unresolved, ...terminal].slice(0, 3), loading: false, error: '' });
     } catch {
       if (!isCurrent()) return;
-      setSnapshot({ identity, items: [], loading: false, error: 'Saved history could not be checked against chain receipts. Nothing was treated as complete or failed.' });
+      setSnapshot({ identity, items: [], loading: false, error: 'Couldn’t check saved transactions. None were marked complete or failed.' });
     }
   }, [identity, refreshWallet, walletAddress]);
 
@@ -71,7 +71,7 @@ export default function RecentActivityPreview({ walletAddress, attentionOnly = f
       <SectionTitle><span id="wallet-task-attention-title">Needs attention</span></SectionTitle>
       <Card className="p-3">
         {loading ? <p role="status" className="text-[11px] text-mut">Checking submitted transactions…</p>
-          : loadError ? <p role="status" className="text-[11px] text-warn">Confirmation could not be verified. <Link href="/history" className="font-semibold text-mint">Open History</Link> to check progress.</p>
+          : loadError ? <p role="status" className="text-[11px] text-warn">Couldn’t verify confirmation. <Link href="/history" className="font-semibold text-mint">Open History</Link> to check.</p>
             : <ul className="space-y-1">{attention.map((task) => <li key={task.id} className="flex items-center justify-between gap-3 text-[11px]">
               <span>{task.title}</span><Link href={task.href} className="inline-flex min-h-11 shrink-0 items-center font-semibold text-mint">View progress</Link>
             </li>)}</ul>}
@@ -97,7 +97,7 @@ export default function RecentActivityPreview({ walletAddress, attentionOnly = f
         ) : loadError ? (
           <div className="flex items-center gap-3 px-4 py-5" role="status" aria-live="polite">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--warn-dim)] text-warn"><CircleAlert className="h-5 w-5" aria-hidden="true" /></span>
-            <span className="min-w-0 flex-1 text-[11px] leading-relaxed text-warn">Transaction status is unavailable. Retry before relying on this history.</span>
+            <span className="min-w-0 flex-1 text-[11px] leading-relaxed text-warn">Couldn’t load transaction details.</span>
             <button type="button" aria-label="Retry recent history" onClick={() => { haptic('light'); void load(); }} className="glass-press flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-mut"><RefreshCw className="h-4 w-4" aria-hidden="true" /></button>
           </div>
         ) : items.length ? (
@@ -114,7 +114,7 @@ export default function RecentActivityPreview({ walletAddress, attentionOnly = f
               </section>
             )}
             {items.some((item) => item.verification === 'rpc-error') && (
-              <div role="status" aria-live="polite" className="mx-3 mt-3 flex items-center gap-2 rounded-lg bg-[var(--warn-dim)] px-3 py-2"><span className="min-w-0 flex-1 text-[11px] text-warn">Some transaction details are unavailable. Retry before relying on this history.</span><button type="button" aria-label="Retry receipt details" onClick={() => { haptic('light'); void load(); }} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-lg text-warn"><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /></button></div>
+              <div role="status" aria-live="polite" className="mx-3 mt-3 flex items-center gap-2 rounded-lg bg-[var(--warn-dim)] px-3 py-2"><span className="min-w-0 flex-1 text-[11px] text-warn">Some transaction details couldn’t load.</span><button type="button" aria-label="Retry receipt details" onClick={() => { haptic('light'); void load(); }} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-lg text-warn"><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /></button></div>
             )}
             <ul className={`${styles.activityList} divide-y divide-[var(--line)] px-3`}>
               {items.map((item) => <ActivityRow key={item.record.id} item={item} />)}

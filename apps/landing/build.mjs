@@ -16,4 +16,6 @@ for (const file of ['index.html', 'styles.css', 'script.js', '404.html', 'robots
 }
 await cp(resolve(root, '_headers'), resolve(dist, '_headers'));
 await cp(resolve(root, 'assets'), resolve(dist, 'assets'), { recursive: true });
+// One original illustration source serves the app and the standalone site.
+await cp(resolve(root, '../mini-app/public/illustrations/defi-studio.svg'), resolve(dist, 'assets/defi-studio.svg'));
 console.log(`Built ${dist}`);

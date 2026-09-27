@@ -7,6 +7,7 @@ import {
   CandlestickChart,
   ChevronRight,
   CircleDollarSign,
+  Layers2,
   PiggyBank,
   RefreshCw,
   type LucideIcon,
@@ -32,6 +33,7 @@ import { ActionRow, Disclosure, MetricRows, PageHeading, ProductSurface, RowGrou
 import { formatExactDecimal } from '@/lib/amount';
 import { freshDisplayPrices } from '@/lib/displayPrices';
 import presentation from '@/components/PortfolioWorkspace.module.css';
+import balancePresentation from '@/components/BalanceSummary.module.css';
 import {
   assertConfiguredPublicClientChain,
   getFxReadFacade,
@@ -239,7 +241,6 @@ function PortfolioWallet() {
         loading={loading || liveLoading || priceSnapshot.refreshing || positionState.refreshing} refreshing={manualRefresh.refreshing} onRefresh={refreshAll}
         walletValue={knownWalletSubtotal.totalUsd} positionEquity={positionsComplete || knownPositionCount > 0 ? protocolEquityUsd : null}
         walletComplete={valuation.complete && allWalletRowsPriced} positionsComplete={positionsComplete} assetCount={valuation.assetCount} />
-      <QuickActions />
       {walletTasks.filter((task) => task.kind !== 'transaction' && (task.kind !== 'valuation' || !refreshing)).map((task) => <StatusNotice key={task.id} title={task.title}
         tone={task.state === 'ready' ? 'success' : 'neutral'} action={<Link href={task.href}>{task.kind === 'withdrawal' && task.state === 'ready' ? 'Review claim' : task.kind === 'valuation' ? 'View affected assets' : 'View details'}</Link>}>
         {task.kind !== 'valuation' && task.detail}
@@ -263,7 +264,7 @@ function PortfolioWallet() {
                 <Link href={`/positions?position=${key}&action=close`}>Close</Link>
               </div>
             </div>;
-          })}</div> : positionState.status === 'ready' && !positionState.pendingPositions.length ? <p className={presentation.emptyState}>No open positions. <Link href="/trade">Open trade</Link></p> : null}
+          })}</div> : positionState.status === 'ready' && !positionState.pendingPositions.length ? <div className={presentation.emptyState}><span className={presentation.emptyIcon}><Layers2 size={22} aria-hidden="true" /></span><p>No open positions</p><Link href="/trade">Open trade <ChevronRight size={14} aria-hidden="true" /></Link></div> : null}
       </section>
       <EarnPositionCard protocol={protocol} loading={fxSaveLoading} prices={displayPrices} />
     </div>
@@ -295,7 +296,7 @@ function EarnPositionCard({ protocol, loading, prices }: { protocol: ProtocolSna
   if (!hasBalance) return <ActionRow icon={PiggyBank} title="fxSAVE" href="/earn" value="View Earn" />;
   if (!/[1-9]/.test(protocol.fxSaveShares!) && claimAvailability(protocol.claimable).status !== 'ready') return <section aria-labelledby="portfolio-earn-heading" className={presentation.emptyEarn}>
     <div className={presentation.sectionTitle}><h2 id="portfolio-earn-heading">Earn position</h2><Link href="/earn">Manage <ChevronRight size={15} aria-hidden="true" /></Link></div>
-    <p><span>fxSAVE</span><strong>0 fxSAVE</strong><Link href="/earn?mode=deposit">Deposit</Link></p>
+    <p><TokenIcon symbol="fxSAVE" size={32} /><strong>0 fxSAVE</strong><Link href="/earn?mode=deposit">Deposit</Link></p>
   </section>;
   const value = fxSaveUsdValue('assetsWei', protocol.fxSaveAssets, prices);
   return <section aria-labelledby="portfolio-earn-heading" className={presentation.earnSection}>
@@ -316,15 +317,16 @@ function SupportedValueCard({ displayTotalUsd, loading, refreshing, onRefresh,
   displayTotalUsd: number | null; loading: boolean; refreshing: boolean; onRefresh: () => void;
   walletValue: number | null; positionEquity: number | null; walletComplete: boolean; positionsComplete: boolean; assetCount: number;
 }) {
-  return <ProductSurface className={presentation.valueCard}>
+  return <ProductSurface className={`${presentation.valueCard} ${balancePresentation.hero}`}>
     <div className={presentation.valueTop}><span>Portfolio value</span><div>
       <button type="button" aria-label="Refresh portfolio balances and positions" aria-busy={refreshing} title="Refresh balances and positions" disabled={refreshing} onClick={onRefresh}>
         <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} aria-hidden="true" />
       </button>
     </div></div>
-    <p className={presentation.valueNumber} data-portfolio-value><ValueOrSkeleton value={displayTotalUsd === null ? '—' : formatUsd(displayTotalUsd)} width="xl"
+    <p className={`${presentation.valueNumber} ${balancePresentation.value}`} data-portfolio-value><ValueOrSkeleton value={displayTotalUsd === null ? '—' : formatUsd(displayTotalUsd)} width="xl"
       status={loading ? 'loading' : 'unavailable'} label={loading ? 'Loading portfolio value' : 'Portfolio value unavailable'} /></p>
     <p className={presentation.valueCaption}><ValueOrSkeleton value={walletComplete ? `${assetCount} ${assetCount === 1 ? 'wallet asset' : 'wallet assets'}` : '—'} width="sm" status={loading ? 'loading' : 'unavailable'} label="Wallet asset count" /></p>
+    <QuickActions />
     <Disclosure title="Value breakdown">
       <MetricRows rows={[
         { label: walletComplete ? 'Wallet assets' : 'Known wallet assets', value: formatUsd(walletValue) },

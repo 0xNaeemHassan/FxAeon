@@ -78,7 +78,7 @@ function PrivyWalletControls() {
 
   if (!ready) {
     if (readyTimedOut) return <div className={styles.panel} role="alert" aria-live="polite">
-      <p className={styles.errorCopy}>Wallet services are unavailable. Retry before trying a wallet action.</p>
+      <p className={styles.errorCopy}>Wallet services are unavailable. Retry to reconnect.</p>
       <Button aria-label="Retry wallet provider" onClick={() => window.location.reload()} className={styles.retry}><RefreshCw size={16} aria-hidden="true" />Retry wallet</Button>
     </div>;
     return <div className={`${styles.panel} ${styles.loading}`} role="status" aria-live="polite"><span className="sr-only">Loading wallet provider</span></div>;
@@ -87,7 +87,7 @@ function PrivyWalletControls() {
   if (!authenticated) return <div className={styles.panel}>
     <div className={styles.actionRow}>
       <span className={styles.icon}><Wallet size={18} aria-hidden="true" /></span>
-      <span className={styles.copy}><strong>No wallet connected</strong><small>Connect to use FxAeon.</small></span>
+      <span className={styles.copy}><strong>No wallet connected</strong><small>Connect to FxAeon.</small></span>
       <Button aria-label="Connect wallet" className={styles.actionButton} onClick={() => void handleConnect()} loading={busy === 'connect'}>Connect</Button>
     </div>
     {error && <p role="alert" className={styles.errorCopy}>{error}</p>}
@@ -106,7 +106,7 @@ function PrivyWalletControls() {
     <div className={styles.actions} role="group" aria-label="Wallet actions">
       {!embedded && <ActionRow icon={Plus} title="Create wallet" detail="Add an FxAeon wallet." label="Create wallet" variant="primary" onClick={() => void handleCreate()} loading={busy === 'create'} disabled={busy !== 'none'} />}
       <ActionRow icon={Wallet} title="Connect another wallet" detail="Use an external EVM wallet." label="Connect external wallet" onClick={() => void handleConnect(true)} loading={busy === 'connect'} disabled={busy !== 'none'} />
-      {embedded && <ActionRow icon={KeyRound} title="Export wallet" detail="Open Privy’s secure export flow." label="Export wallet" onClick={() => void handleExport()} loading={busy === 'export'} disabled={busy !== 'none'} />}
+      {embedded && <ActionRow icon={KeyRound} title="Export wallet" detail="Open secure export." label="Export wallet" onClick={() => void handleExport()} loading={busy === 'export'} disabled={busy !== 'none'} />}
     </div>
     {error && <p role="alert" className={styles.errorCopy}>{error}</p>}
     {externalWallets.length > 0 && <p className={styles.statusCopy}>{externalWallets.length} external Ethereum wallet{externalWallets.length === 1 ? '' : 's'} connected.</p>}
@@ -127,7 +127,7 @@ function BrowserWalletControls() {
   if (!wallet.ready) return <div className={`${styles.panel} ${styles.loading}`} role="status" aria-live="polite"><span className="sr-only">Loading wallet provider</span></div>;
   return <div className={styles.panel}>
     <ActionRow icon={Wallet} title={wallet.authenticated && wallet.selectedWallet ? 'Browser wallet connected' : 'Connect a browser wallet'}
-      detail={wallet.authenticated && wallet.selectedWallet ? 'Refresh the connection.' : 'Use an injected EVM wallet.'}
+      detail={wallet.authenticated && wallet.selectedWallet ? 'Reconnect your wallet.' : 'Use an EVM wallet in your browser.'}
       label={wallet.authenticated && wallet.selectedWallet ? 'Reconnect wallet' : 'Connect wallet'}
       onClick={() => void connect()} loading={busy} variant={wallet.authenticated && wallet.selectedWallet ? 'ghost' : 'primary'} />
     {error && <p role="alert" className={styles.errorCopy}>{error}</p>}

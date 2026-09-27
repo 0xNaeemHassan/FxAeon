@@ -163,7 +163,8 @@ test('mounted Borrow page removes a selection when its provider snapshot changes
     harness.wallet = { ...harness.wallet, address: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', connectionVersion: 2 };
   });
   await expect(page.getByText('ETH position #17')).toHaveCount(0);
-  await expect(page.getByText('Borrow fxUSD', { exact: true })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'fxUSD to borrow', exact: true })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Starting collateral', exact: true })).toBeVisible();
   const counters = await page.evaluate(() => {
     const h = (window as Window & { __borrowHarness: BorrowHarnessControl }).__borrowHarness;
     return { planners: h.plannerCount, walletRequests: h.walletRequestCount };

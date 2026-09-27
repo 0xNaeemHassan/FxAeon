@@ -484,7 +484,7 @@ export default function BorrowPage() {
     options={activeTokenOptions} onChange={changeToken} balances={wallet.address ? balanceSnapshot.balances : undefined}
     balanceStatus={wallet.address ? balanceStatus : 'disconnected'} />;
   const actionEditor = <div className={presentation.editor}>
-    <h2 className={presentation.formTitle}>{newPosition ? 'Borrow fxUSD' : mode === 'mint' ? 'Add collateral or borrow' : 'Manage debt'}</h2>
+    {!newPosition && <h2 className={presentation.formTitle}>{mode === 'mint' ? 'Add collateral or borrow' : 'Manage debt'}</h2>}
     {showMint && <AmountField label={newPosition ? 'fxUSD to borrow' : 'Additional fxUSD to borrow'} symbol="fxUSD" value={mint}
       onChange={setMint} allowZero maxDecimals={18} showPercentages={false} showMax={false} />}
     {showDeposit && <AmountField label={newPosition ? 'Starting collateral' : 'Collateral to add'} symbol={token} value={deposit}

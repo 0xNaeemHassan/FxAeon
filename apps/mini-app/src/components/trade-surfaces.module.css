@@ -320,9 +320,9 @@
 .tradeTicket,
 .actionPanel {
   border: 1px solid color-mix(in srgb, var(--line-strong) 34%, var(--line));
-  border-radius: 24px;
-  background: linear-gradient(145deg, color-mix(in srgb, var(--surface-2) 76%, transparent), var(--surface) 66%);
-  box-shadow: var(--elevation-1);
+  border-radius: 22px;
+  background: var(--surface);
+  box-shadow: none;
   padding: 20px;
 }
 
@@ -354,11 +354,11 @@
 
 .fieldStack { display: flex; flex-direction: column; gap: 14px; }
 .positionList { border-radius: 16px; }
-.tradeTicket :global(details) { border-color: color-mix(in srgb, var(--line-strong) 30%, var(--line)); background: color-mix(in srgb, var(--surface-2) 56%, var(--surface)); transition: border-color 150ms ease, background-color 150ms ease; }
+.tradeTicket :global(details) { border-color: var(--line); background: transparent; transition: border-color 150ms ease, background-color 150ms ease; }
 .tradeTicket :global(details:hover) { border-color: var(--line-strong); }
-.tradeTicket :global(details[open]) { border-radius: 14px; background: color-mix(in srgb, var(--surface-2) 78%, var(--surface)); }
-.tradeRoot .rangeField { border-color: color-mix(in srgb, var(--line-strong) 34%, var(--line)); border-radius: 15px; background: linear-gradient(140deg, color-mix(in srgb, var(--surface-2) 78%, var(--input)), var(--input)); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 3%, transparent); }
-.tradeRoot .rangeField:focus-within { border-color: var(--mint); box-shadow: 0 0 0 3px var(--mint-dim), inset 0 1px 0 color-mix(in srgb, var(--text) 4%, transparent); }
+.tradeTicket :global(details[open]) { border-radius: 14px; background: var(--surface-2); }
+.tradeRoot .rangeField { border-color: var(--line); border-radius: 14px; background: var(--input); box-shadow: none; }
+.tradeRoot .rangeField:focus-within { border-color: var(--mint); box-shadow: 0 0 0 3px var(--mint-dim); }
 .tradeRoot .rangeField .leverageInput,
 .tradeRoot .rangeField .leverageInput:focus { border-color: transparent; background: transparent; box-shadow: none; }
 .tradeTicket :global(details > summary) { min-height: 44px; padding-inline: 4px; color: var(--mut); }
@@ -366,8 +366,8 @@
 .marketColumn :global(.market-chart-panel) {
   border-radius: 24px;
   border-color: var(--line);
-  background: linear-gradient(155deg, var(--surface-2), var(--surface));
-  box-shadow: var(--elevation-2);
+  background: var(--surface);
+  box-shadow: none;
 }
 .marketColumn :global(.market-chart-panel)::before { display: none; }
 .marketColumn :global(.market-chart-header) { padding: 22px; border-bottom-color: var(--line); }
@@ -408,8 +408,8 @@
 .positionSectionHeader h2,
 .manageHeading h2 { margin-top: 3px; font-size: 17px; font-weight: 700; letter-spacing: -.025em; }
 .positionSectionHeader > span { border-radius: 999px; background: var(--mint-dim); padding: 6px 10px; color: var(--mint); font-size: 11px; font-weight: 700; }
-.positionListItem { overflow: hidden; border: 1px solid var(--line); border-radius: 19px; background: var(--surface); box-shadow: var(--elevation-1); transition: border-color 180ms ease, box-shadow 180ms ease; }
-.positionListItem:hover { border-color: color-mix(in srgb, var(--mint) 42%, var(--line)); box-shadow: 0 8px 24px color-mix(in srgb, var(--bg) 30%, transparent); }
+.positionListItem { overflow: hidden; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: none; transition: border-color 180ms ease; }
+.positionListItem:hover { border-color: color-mix(in srgb, var(--mint) 42%, var(--line)); }
 .positionListItem :global([data-position-key]) { border: 0; border-radius: 0; }
 .positionListItem :global([data-position-key][aria-pressed='true']) { box-shadow: inset 3px 0 0 var(--mint); }
 .positionQuickActions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; border-top: 1px solid var(--line); padding: 8px 10px 10px; background: var(--surface); }
@@ -437,7 +437,7 @@
 .tradeRoot :global(.range-control) {
   border-radius: 16px;
   border-color: color-mix(in srgb, var(--line-strong) 38%, var(--line));
-  background: color-mix(in srgb, var(--input) 82%, var(--surface));
+  background: var(--input);
   transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
 }
 
@@ -451,13 +451,11 @@
 .tradeRoot :global(.range-control:focus-within) { border-color: var(--mint); background: var(--surface); box-shadow: 0 0 0 3px var(--mint-dim), inset 0 1px 0 color-mix(in srgb, var(--text) 4%, transparent); }
 
 .tradeRoot :global(.amount-control),
-.positionsRoot :global(.amount-control) { min-height: 92px; padding-inline: 18px; }
-.tradeRoot :global(.amount-control) input { font-size: clamp(16px, calc(80vw / var(--amount-entry-length, 10)), 36px); font-size: clamp(16px, calc(65cqi / var(--amount-entry-length, 10)), 36px); }
-.positionsRoot :global(.amount-control) input { font-size: clamp(30px, 6vw, 40px); }
+.positionsRoot :global(.amount-control) { min-height: 84px; padding-inline: 16px; }
 .tradeRoot :global(.field-control),
-.positionsRoot :global(.field-control) { min-height: 56px; }
-.tradeRoot :global(.token-pill) { border: 1px solid color-mix(in srgb, var(--line-strong) 34%, var(--line)); border-radius: 999px; background: color-mix(in srgb, var(--surface-3) 76%, var(--surface)); padding: 8px 12px; }
-.positionsRoot :global(.token-pill) { border-radius: 999px; background: var(--surface-3); padding: 8px 12px; }
+.positionsRoot :global(.field-control) { min-height: 52px; }
+.tradeRoot :global(.token-pill) { border: 1px solid color-mix(in srgb, var(--line-strong) 34%, var(--line)); border-radius: 12px; background: var(--surface-2); padding: 8px 12px; }
+.positionsRoot :global(.token-pill) { border-radius: 12px; background: var(--surface-2); padding: 8px 12px; }
 .tradeRoot :global(label),
 .positionsRoot :global(label) { font-size: 13px; }
 .tradeRoot :global(.fraction-button) { min-height: 44px; border-radius: 11px; background: var(--surface-2); transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease, transform 140ms ease; }
@@ -467,13 +465,12 @@
 
 .tradeRoot :global(.button-primary),
 .positionsRoot :global(.button-primary) {
-  border-radius: 999px;
   background: var(--mint);
   border-color: var(--mint);
   color: var(--on-accent, var(--bg));
 }
 .tradeRoot :global(.button-ghost),
-.positionsRoot :global(.button-ghost) { border-radius: 999px; background: var(--surface-2); }
+.positionsRoot :global(.button-ghost) { background: var(--surface-2); }
 
 @media (min-width: 840px) {
   .tradeLayout { grid-template-columns: minmax(0, 1fr) minmax(360px, 420px); align-items: start; gap: 24px; }
@@ -505,7 +502,7 @@
 
   .tradeRoot :global([data-product-layout='action']).tradeWorkspace { gap: 10px; }
   .positionsWorkspace { gap: 10px; }
-  .tradePositionActions a { font-size: 10.5px; }
+  .tradePositionActions a { font-size: 12px; }
 
   /* The market header remains the single price authority, but uses a short
    * compact row while the ticket owns the phone viewport. */
@@ -546,18 +543,18 @@
   .marketColumn :global(.market-chart-content) { grid-column: 1 / -1; }
 
   .tradeTicket,
-  .actionPanel { padding: 12px; border-radius: 18px; }
+  .actionPanel { padding: 14px; border-radius: 20px; }
   .tradeTicket {
     display: grid;
     grid-template-columns: minmax(104px, .72fr) minmax(0, 1.28fr);
-    gap: 6px;
-    padding: 8px 10px;
+    gap: 8px;
+    padding: 12px;
   }
   .tradeTicketReview {
     display: block;
     padding: 0;
   }
-  .tradeTicketReview :global(.reviewInlineContent) { padding: 12px; }
+  .tradeTicketReview :global(.reviewInlineContent) { padding: 14px; }
   .tradeTicketReview :global(.reviewInlineContent .reviewInlineActions) { margin-top: 10px; padding-top: 8px; }
   .tradeTicketReview :global(.reviewInlineContent .reviewStep) { padding: 9px; }
   /* ActionReview returns the editor and trigger as siblings. Span the full
@@ -578,14 +575,14 @@
     gap: 3px;
     margin-bottom: 0;
   }
-  .ticketHeader h2 { margin-top: 1px; font-size: 15px; white-space: nowrap; }
-  .ticketHeader > span { padding: 3px 6px; font-size: 10px; }
-  .ticketHeader :global(details > summary) { min-height: 44px; gap: 5px; padding-inline: 7px; font-size: 11px; white-space: nowrap; }
+  .ticketHeader h2 { margin-top: 1px; font-size: 17px; white-space: nowrap; }
+  .ticketHeader > span { padding: 4px 8px; font-size: 12px; }
+  .ticketHeader :global(details > summary) { min-height: 44px; gap: 6px; padding-inline: 8px; font-size: 12px; white-space: nowrap; }
   .ticketHeader :global(details[open]) { grid-column: 1 / -1; width: 100%; }
-  .ticketKicker { font-size: 10px; }
+  .ticketKicker { font-size: 12px; }
   .sideControl :global(.segmented-option) { min-height: 44px; padding-block: 3px; font-size: 12px; }
   .sideControl { grid-column: 1 / -1; }
-  .sideControl :global(.segmented-option) > span:last-child { margin-top: 1px; font-size: 11px; line-height: 1.1; white-space: nowrap; }
+  .sideControl :global(.segmented-option) > span:last-child { margin-top: 2px; font-size: 12px; line-height: 1.2; white-space: nowrap; }
   .fieldStack {
     grid-column: 1 / -1;
     display: grid;
@@ -611,18 +608,17 @@
   /* Keep the verified balance readable on phones and give the four percentage
    * targets their own full-width row. Sharing one narrow row clipped the
    * balance and hid the 25% target when the wallet returned a live value. */
-  .tradeRoot :global([data-amount-field][data-compact] > div:first-child > span) { max-width: 64%; font-size: 11px; }
+  .tradeRoot :global([data-amount-field][data-compact] > div:first-child > span) { max-width: 64%; font-size: 12px; }
   .tradeRoot :global([data-amount-field][data-compact] [role='group'][aria-label$='shortcuts']) { gap: 2px; }
   .tradeRoot :global([data-amount-field][data-compact] [role='group'][aria-label$='shortcuts'] button) { min-width: 44px; min-height: 44px; }
-  .tradeRoot :global(.amount-control) { min-height: 52px; padding-inline: 10px; }
-  .tradeRoot :global(.amount-control) input { font-size: clamp(16px, calc(80vw / var(--amount-entry-length, 10)), 24px); font-size: clamp(16px, calc(65cqi / var(--amount-entry-length, 10)), 24px); }
+  .tradeRoot :global(.amount-control) { min-height: 72px; padding-inline: 12px; }
   .tradeRoot .compactTokenSelect > button { min-height: 44px; max-width: 126px; padding: 5px 8px; }
   .tradeRoot :global(.range-control) { padding: 8px; }
   .tradeRoot .tradeCompactLeverageValue { width: 92px; flex-basis: 92px; }
   .tradeRoot .tradeCompactLeverageValue :global(.field-control) { min-height: 44px; padding-inline: 5px; font-size: 16px; }
   .tradeRoot :global(.range-control) .lever { margin-top: 2px; }
   .tradeTicket :global(details > summary) { min-height: 44px; }
-  .ticketColumn { gap: 6px; }
+  .ticketColumn { gap: 8px; }
   .ticketColumn :global(.wallet-connect-cta-compact) { padding: 7px 9px !important; border-radius: 16px; }
   .ticketColumn :global(.wallet-connect-cta-compact) > div { align-items: center; gap: 8px; }
   .ticketColumn :global(.wallet-connect-cta-compact) > div > span { width: 32px; height: 32px; border-radius: 10px; }
@@ -634,7 +630,7 @@
   }
   .ticketColumn :global(.wallet-connect-cta-compact) > div > div > p { grid-column: 1; }
   .ticketColumn :global(.wallet-connect-cta-compact) > div > div > p:first-child { font-size: 12px; }
-  .ticketColumn :global(.wallet-connect-cta-compact) > div > div > p:nth-child(2) { margin-top: 1px; font-size: 10px; line-height: 1.25; }
+  .ticketColumn :global(.wallet-connect-cta-compact) > div > div > p:nth-child(2) { margin-top: 1px; font-size: 12px; line-height: 1.35; }
   .ticketColumn :global(.wallet-connect-cta-compact) button {
     grid-column: 2;
     grid-row: 1 / span 2;
@@ -649,58 +645,7 @@
   .positionActions :global(.segmented-option) span { font-size: 12px; }
 }
 
-@media (max-width: 640px) and (max-height: 700px) {
-  .tradeRoot :global([data-product-layout='action']).tradeWorkspace { gap: 6px; }
-  .tradePageHeading { min-height: 36px; }
-  .tradePageHeading h1 { font-size: 22px; }
-  .tradePageHeading > a { min-height: 36px; }
-  .marketColumn { gap: 6px; }
-  .marketColumn :global(.market-chart-header) { padding-block: 5px; }
-  .marketColumn :global(.market-chart-token) { width: 28px; height: 28px; }
-  .marketColumn :global(.market-chart-header h2) { font-size: 14px; }
-  .marketColumn :global(.market-chart-header .text-display) { font-size: 18px; }
-  .marketColumn :global(.market-chart-header p:last-child) { margin-top: 0; font-size: 10px; }
-  .marketColumn :global(.market-chart-market-switch .segmented-option) { min-height: 44px; }
-  .marketColumn :global(.market-chart-market-switch .market-option-icon svg) { width: 16px; height: 16px; }
-  .marketColumn :global(.market-chart-market-switch .segmented-option span) { font-size: 12px; }
-  .marketColumn :global(.market-chart-toggle) { min-height: 46px; }
-}
 
-/* 320px Telegram/webview screens have a hard fold. Keep the collapsed ticket
- * compact without shrinking touch targets below 44px;
- * only the redundant chrome and field spacing are compressed. The expanded
- * chart remains the intentional scroll exception. */
-@media (max-width: 359px) and (max-height: 700px) {
-  .tradeRoot :global([data-product-layout='action']).tradeWorkspace { gap: 4px; }
-  .tradeRoot .tradePageHeading { min-height: 30px; }
-  .tradeRoot .tradePageHeading h1 { font-size: 20px; }
-  .tradeRoot .tradePageHeading > a { min-height: 44px; padding-block: 2px; }
-  .tradeRoot .marketColumn { gap: 4px; }
-  .tradeRoot .marketColumn :global(.market-chart-header) { padding-block: 3px; }
-  .tradeRoot .marketColumn :global(.market-chart-token) { width: 28px; height: 28px; }
-  .tradeRoot .marketColumn :global(.market-chart-header h2) { font-size: 14px; }
-  .tradeRoot .marketColumn :global(.market-chart-header .text-display) { font-size: 18px; }
-  .tradeRoot .marketColumn :global(.market-chart-market-switch .segmented-option) { min-height: 44px; }
-  .tradeRoot .marketColumn :global(.market-chart-market-switch .segmented-option span) { font-size: 12px; }
-  .tradeRoot .marketColumn :global(.market-chart-market-switch .segmented-option > span:last-child) { display: none; }
-  .tradeRoot .marketColumn :global(.market-chart-market-switch .segmented-option > span:first-child) { gap: 4px; }
-  .tradeRoot .marketColumn :global(.market-chart-toggle) { min-height: 44px; padding-inline: 7px; font-size: 11px; }
-  .tradeRoot .tradeTicket { gap: 3px; padding: 6px 8px; }
-  .tradeRoot .ticketHeader h2 { font-size: 14px; }
-  .tradeRoot .sideControl :global(.segmented-option) { min-height: 44px; font-size: 11px; }
-  .tradeRoot .sideControl :global(.segmented-option > span:last-child) { font-size: 11px; }
-  .tradeRoot .fieldStack { grid-template-columns: minmax(0, 1.1fr) minmax(82px, .9fr); gap: 4px; }
-  .tradeRoot .fieldStack > :first-child { grid-column: 1; }
-  .tradeRoot .fieldStack > :nth-child(2) { grid-column: 2; }
-  .tradeRoot .fieldStack > :nth-child(3) { grid-column: 1 / -1; }
-  .tradeRoot :global(.amount-control) { min-height: 46px; padding-inline: 8px; }
-  .tradeRoot :global(.amount-control) input { font-size: clamp(16px, calc(80vw / var(--amount-entry-length, 10)), 21px); font-size: clamp(16px, calc(65cqi / var(--amount-entry-length, 10)), 21px); }
-  .tradeRoot .compactTokenSelect > button { min-height: 44px; max-width: 96px; padding: 4px 6px; font-size: 10px; }
-  .tradeRoot :global([data-amount-field][data-compact] [data-amount-usd]) { min-height: 11px; margin-top: 0; font-size: 12px; }
-  .tradeRoot :global(.range-control) { padding: 5px; }
-  .tradeRoot .tradeTicket :global(details > summary) { min-height: 44px; font-size: 11px; }
-  .tradeRoot .tradeTicket :global(details[open] > div) { padding-block: 5px; }
-}
 
 @media (max-width: 359px) {
   /* Give amount and leverage complete rows on the narrowest phones. The
@@ -727,13 +672,12 @@
   .positionsCompactRoot .positionListItem { border-radius: 18px; }
   .positionsCompactRoot .positionQuickActions { gap: 6px; padding: 7px 8px 9px; }
   .positionsCompactRoot .positionQuickActions button,
-  .positionsCompactRoot .positionQuickActions a { min-height: 44px; font-size: 10.5px; }
+  .positionsCompactRoot .positionQuickActions a { min-height: 44px; font-size: 12px; }
   .positionsCompactRoot .positionManageColumn { gap: 8px; }
   .positionsCompactRoot .actionPanel { padding: 12px; border-radius: 18px; }
   .positionsCompactRoot .fieldStack { gap: 8px; }
   .positionsCompactRoot :global(.field-control) { min-height: 48px; padding-inline: 10px; }
   .positionsCompactRoot :global(.amount-control) { min-height: 64px; padding-inline: 10px; }
-  .positionsCompactRoot :global(.amount-control) input { font-size: 26px; }
   .positionsCompactRoot :global(.range-control) { padding: 8px; }
   .positionsCompactRoot .advancedDetails { margin-top: 8px !important; }
   .positionsCompactRoot .advancedDetails summary { min-height: 44px; }
@@ -746,28 +690,7 @@
   .positionsCompactRoot .reviewInlineActions { position: sticky; bottom: var(--tabbar-reserve, 84px); z-index: 12; margin-inline: -2px; padding: 8px 2px 4px; background: linear-gradient(to top, var(--surface) 72%, transparent); }
 }
 
-@media (max-width: 359px) and (max-height: 700px) {
-  .positionsCompactRoot .positionsWorkspace { gap: 6px; }
-  .positionsCompactRoot .positionManagerGrid { gap: 7px; }
-  .positionsCompactRoot .positionActions :global(.segmented-option) { min-height: 44px; padding-inline: 2px; font-size: 11px; }
-  .positionsCompactRoot .actionPanel { padding: 8px; }
-  .positionsCompactRoot .positionActionCard { padding: 8px; }
-  .positionsCompactRoot .fieldStack { gap: 6px; }
-  .positionsCompactRoot :global(.field-control) { min-height: 46px; padding-inline: 8px; }
-  .positionsCompactRoot :global(.amount-control) { min-height: 56px; padding-inline: 8px; }
-  .positionsCompactRoot :global(.amount-control) input { font-size: 22px; }
-  .positionsCompactRoot .closeNotice { padding: 9px; }
-  .positionsCompactRoot .closeNotice small { font-size: 10px; line-height: 1.3; }
-  .positionsCompactRoot .positionQuickActions button,
-  .positionsCompactRoot .positionQuickActions a {
-    min-width: 0;
-    gap: 3px;
-    padding-inline: 2px;
-    font-size: 10px;
-    white-space: nowrap;
-  }
-  .positionsCompactRoot .positionQuickActions svg { width: 12px; height: 12px; }
-}
+
 
 @media (prefers-reduced-motion: reduce) {
   .formSegmented :global(.segmented-option), .sideControl :global(.segmented-option), .tradeRoot .tradeTicket,
