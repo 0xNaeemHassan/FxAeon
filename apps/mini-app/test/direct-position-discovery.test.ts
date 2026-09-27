@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   DIRECT_POSITION_CANDIDATE_SESSION_KEY,
+  DIRECT_POSITION_CANDIDATE_CACHE_MAX_ENTRIES,
   discoverDirectWalletPositionIds,
   DIRECT_POSITION_SCAN_MAX_IDS,
   parsePositionCandidateCache,
@@ -267,6 +268,18 @@ test('SDK index hydration may exceed three seconds without triggering historical
   });
   assert.deepEqual(result.map((info) => info.positionId), [7]);
   assert.equal(client.calls.includes('getNextPositionId'), false);
+});
+
+test('verified indexer fast paths keep the in-memory candidate cache bounded', async () => {
+  const memoryCandidates = new Map<string, number[]>();
+  for (let index = 1; index <= DIRECT_POSITION_CANDIDATE_CACHE_MAX_ENTRIES + 1; index += 1) {
+    const walletAddress = `0x${index.toString(16).padStart(40, '0')}` as `0x${string}`;
+    await discoverDirectWalletPositionIds({
+      client: mockClient({ balance: 1n, ownedIds: [7] }), group, walletAddress,
+      verifiedIndexerIds: [7], expectedCount: 1n, memoryCandidates,
+    });
+  }
+  assert.equal(memoryCandidates.size, DIRECT_POSITION_CANDIDATE_CACHE_MAX_ENTRIES);
 });
 
 test('a fast index result is rejected when the wallet NFT count changes before completion', async () => {

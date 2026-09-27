@@ -132,6 +132,16 @@ function removeStoredPositionCandidateIds(storage: PositionCandidateStorage | un
   } catch { /* Storage denial must not affect the canonical read. */ }
 }
 
+function rememberCandidateIds(cache: Map<string, number[]>, key: string, ids: readonly number[]): void {
+  cache.delete(key);
+  cache.set(key, [...ids]);
+  while (cache.size > DIRECT_POSITION_CANDIDATE_CACHE_MAX_ENTRIES) {
+    const oldest = cache.keys().next().value;
+    if (oldest === undefined) break;
+    cache.delete(oldest);
+  }
+}
+
 export interface DirectPositionDiscoveryParams {
   client: DiscoveryClient;
   group: PositionGroup;
@@ -335,7 +345,7 @@ export async function discoverDirectWalletPositionIds(
   const cacheKey = `1:${pool.toLowerCase()}:${params.walletAddress.toLowerCase()}`;
   if (expectedCount === 0n) return { ids: [], expectedCount, usedScan: false };
   if (BigInt(indexedIds.length) === expectedCount) {
-    memoryCandidates.set(cacheKey, indexedIds);
+    rememberCandidateIds(memoryCandidates, cacheKey, indexedIds);
     storePositionCandidateIds(storage, cacheKey, indexedIds);
     return { ids: indexedIds, expectedCount, usedScan: false };
   }
@@ -351,7 +361,7 @@ export async function discoverDirectWalletPositionIds(
       deadline,
     });
     if (reused) {
-      memoryCandidates.set(cacheKey, reused);
+      rememberCandidateIds(memoryCandidates, cacheKey, reused);
       return { ids: reused, expectedCount, usedScan: true };
     }
     memoryCandidates.delete(cacheKey);
@@ -365,13 +375,7 @@ export async function discoverDirectWalletPositionIds(
   } as Parameters<ReadContract>[0]), deadline);
   const nextId = asNextId(nextIdValue);
   const ids = await scanOwners({ client: params.client, pool, walletAddress: params.walletAddress, nextId, expectedCount, deadline });
-  memoryCandidates.delete(cacheKey);
-  memoryCandidates.set(cacheKey, ids);
+  rememberCandidateIds(memoryCandidates, cacheKey, ids);
   storePositionCandidateIds(storage, cacheKey, ids);
-  while (memoryCandidates.size > DIRECT_POSITION_CANDIDATE_CACHE_MAX_ENTRIES) {
-    const oldest = memoryCandidates.keys().next().value;
-    if (oldest === undefined) break;
-    memoryCandidates.delete(oldest);
-  }
   return { ids, expectedCount, usedScan: true };
 }
