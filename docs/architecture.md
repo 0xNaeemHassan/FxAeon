@@ -7,7 +7,7 @@ protocol integration.
 ```mermaid
 flowchart LR
   B[Browser or Telegram] --> A[Static Next.js app]
-  A --> S[Locked official f(x) SDK]
+  A --> S["Locked official f(x) SDK"]
   A --> R[Public Ethereum and Base RPC]
   A --> P[Display-only market data]
   A --> W[Selected user wallet]
