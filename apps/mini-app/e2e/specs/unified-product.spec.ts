@@ -113,7 +113,7 @@ test.describe('unified product presentation', () => {
       window.dispatchEvent(new CustomEvent('fxaeon:settings-updated', { detail: { slippageBps: 100 } }));
     });
     await expect(settings).toContainText('1% slippage');
-    await settings.click();
+    await expect(settings.locator('..')).toHaveAttribute('open', '');
     await expect(slippage).toHaveValue('1');
     await page.evaluate(() => {
       const value = JSON.stringify({ slippageBps: 200 });
@@ -121,7 +121,7 @@ test.describe('unified product presentation', () => {
       window.dispatchEvent(new StorageEvent('storage', { key: 'fxaeon.settings.v1', newValue: value }));
     });
     await expect(settings).toContainText('2% slippage');
-    await settings.click();
+    await expect(settings.locator('..')).toHaveAttribute('open', '');
     await expect(slippage).toHaveValue('2');
     assertNoBackendRequests(requests);
   });

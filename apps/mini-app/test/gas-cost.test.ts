@@ -110,11 +110,17 @@ test('does not spend an RPC request on optional block provenance before estimati
 
 test('keeps approval estimate when dependent action estimation fails', async () => {
   const planned = route(true);
-  const estimate = await estimatePlannedRouteCost(planned, {
-    client: clientFor(async (to) => {
+  const estimatedTargets: Address[] = [];
+  const client = {
+    ...clientFor(async (to) => {
+      estimatedTargets.push(to);
       if (to.toLowerCase() === actionTarget.toLowerCase()) throw new Error('ERC20: insufficient allowance');
       return 46_000n;
     }),
+    simulateCalls: async () => ({ results: [{ status: 'success', gasUsed: 46_000n }] }),
+  } as unknown as FxPublicClient;
+  const estimate = await estimatePlannedRouteCost(planned, {
+    client,
   });
   assert.equal(estimate.status, 'partial');
   assert.equal(estimate.steps[0].status, 'estimated');
@@ -124,6 +130,37 @@ test('keeps approval estimate when dependent action estimation fails', async () 
   assert.equal(estimate.executionGasFeeWei, undefined);
   assert.equal(estimate.totalNativeCostWei, undefined);
   assert.equal(estimate.nativeValueWei, 12n);
+  assert.deepEqual(estimatedTargets.map((target) => target.toLowerCase()), [token.toLowerCase(), actionTarget.toLowerCase()]);
+  assert.equal(formatRouteGasCost(estimate).gasFee, undefined, 'an approval-only subtotal must not be presented as route gas');
+});
+
+test('uses ordered simulation gas for approval routes when every call succeeds', async () => {
+  const planned = route(true);
+  let simulatedCalls = 0;
+  let independentEstimates = 0;
+  const client = {
+    ...clientFor(async () => {
+      independentEstimates += 1;
+      throw new Error('ordered simulation should provide route gas');
+    }),
+    simulateCalls: async ({ calls }: { calls: readonly { to: Address }[] }) => {
+      simulatedCalls = calls.length;
+      return {
+        results: [
+          { status: 'success', gasUsed: 46_000n },
+          { status: 'success', gasUsed: 180_000n },
+        ],
+      };
+    },
+  } as unknown as FxPublicClient;
+  const estimate = await estimatePlannedRouteCost(planned, { client });
+  assert.equal(simulatedCalls, planned.transactions.length);
+  assert.equal(independentEstimates, 0);
+  assert.equal(estimate.status, 'current');
+  assert.deepEqual(estimate.steps.map((step) => step.gas), [46_000n, 180_000n]);
+  assert.equal(estimate.estimatedGasUnits, 226_000n);
+  assert.equal(estimate.executionGasFeeWei, 678_000n);
+  assert.equal(formatRouteGasCost(estimate).gasFee, '0.000678 Gwei (max)');
 });
 
 test('route key is scoped to account, chain, calldata, value, and operation', () => {

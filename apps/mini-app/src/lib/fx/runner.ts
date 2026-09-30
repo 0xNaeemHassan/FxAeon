@@ -254,6 +254,10 @@ async function verifySubmittedTransaction(params: {
   }
 }
 
+function isApprovalTransaction(transaction: PlannedRoute["transactions"][number]): boolean {
+  return transaction.kind === "approval" || transaction.type === "approveToken" || transaction.type === "approvePosition";
+}
+
 /** Fail-closed ordered eth_simulateV1 gate. */
 export async function simulatePlannedRoute(
   route: PlannedRoute,
@@ -474,6 +478,23 @@ export async function runTransactionRoute(params: {
         steps.push(step);
         const label = `transaction ${index + 1} of ${route.transactions.length}`;
         try {
+          // Once an approval receipt is canonical, recheck the remaining
+          // protocol calls against the current allowance before the next
+          // signature, catching state changes since the ordered preflight.
+          if (options.simulate !== false && index > 0 && route.transactions.some(isApprovalTransaction)) {
+            notifyStatus("reviewing", `Checking ${label} against the confirmed approval`);
+            const remainingRoute: PlannedRoute = {
+              ...route,
+              transactions: route.transactions.slice(index),
+            };
+            const simulation = params.callbacks.simulate
+              ? await params.callbacks.simulate(remainingRoute, client)
+              : await simulatePlannedRoute(remainingRoute, client);
+            if (simulation !== true && !simulation.success) {
+              const detail = "error" in simulation ? simulation.error : "simulation failed";
+              throw new Error(detail);
+            }
+          }
           // Storage leases can expire while a Telegram WebView is suspended
           // inside another tab's wallet prompt. Revalidate immediately before
           // each reviewed step and again after nonce reconciliation, directly

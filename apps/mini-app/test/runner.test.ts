@@ -638,6 +638,53 @@ test("simulation fails closed when the RPC omits an ordered route result", async
   assert.match(result.error ?? "", /returned 1 results for 2 transactions/);
 });
 
+test("approval route preflight simulates the action and blocks signing when it reverts", async () => {
+  const token = "0x3333333333333333333333333333333333333333" as Address;
+  const planned = route(2);
+  const approvalData = encodeFunctionData({
+    abi: parseAbi(["function approve(address spender,uint256 amount)"]),
+    functionName: "approve",
+    args: [DESTINATION, 100n],
+  });
+  planned.transactions[0] = {
+    ...planned.transactions[0]!, to: token, data: approvalData,
+    nonce: 4, kind: "approval", type: "approveToken",
+  };
+  planned.transactions[1] = { ...planned.transactions[1]!, nonce: 5 };
+  const policy: TransactionPolicy = {
+    walletAddress: WALLET,
+    chainId: 1,
+    allowedDestinations: [DESTINATION, token],
+    allowedSelectors: { [DESTINATION.toLowerCase()]: ["0x12345678"], [token.toLowerCase()]: ["0x095ea7b3"] },
+    allowedApprovalDestinations: [token],
+    allowedApprovalSpenders: [DESTINATION],
+    allowedTokenApprovalDestinations: [token],
+    allowActionBoundTokenApproval: true,
+  };
+  let simulatedCalls: Array<{ to: Address; data: Hex; value: bigint }> = [];
+  let walletSends = 0;
+  const result = await runTransactionRoute({
+    route: planned,
+    policy,
+    publicClient: {
+      chain: { id: 1 },
+      getChainId: async () => 1,
+      simulateCalls: async ({ calls }: { calls: typeof simulatedCalls }) => {
+        simulatedCalls = calls;
+        return { results: [{ status: "success" }, { status: "failure", error: new Error("action reverted") }] };
+      },
+    } as unknown as FxPublicClient,
+    callbacks: { requestSignature: async () => { walletSends += 1; return HASH_1; } },
+    options: { pollMs: 0, receiptTimeoutMs: 100 },
+  });
+
+  assert.equal(result.status, "failed");
+  assert.match(result.error ?? "", /action reverted/i);
+  assert.deepEqual(simulatedCalls, planned.transactions.map(({ to, data, value }) => ({ to, data, value })));
+  assert.equal(walletSends, 0);
+  assert.equal(result.steps.length, 0);
+});
+
 test("simulation maps nested viem debt-ratio reverts with operation-specific guidance", async () => {
   const tooLittleDebt = new CallExecutionError(
     new RawContractError({ data: "0xe91ee887" }),

@@ -33,7 +33,7 @@ import { useActionReviewLifecycle } from '@/components/review/useActionReviewLif
 import { selectExecutionTask } from '@/lib/taskState';
 import { buildReceiptPresentation, receiptTransfersFromLogs } from '@/lib/receiptPresentation';
 import { receiptMintedPositionIdentity } from '@/lib/confirmedPositions';
-import { rawQuoteReviewFacts, type ReviewFact } from '@/lib/fx/reviewFormatting';
+import { rawQuoteReviewFacts, tokenAmountReviewFact, type ReviewFact } from '@/lib/fx/reviewFormatting';
 import { buildStatusPresentation } from '@/components/review/actionReviewStatusModel';
 import { PositionOutcomeSummary, TransactionProgressPresentation, UpdatedQuoteSummary } from '@/components/review/ActionReviewSummary';
 import { TransactionResultView } from '@/components/review/TransactionResultView';
@@ -278,10 +278,12 @@ export function ActionReview(props: ActionReviewProps) {
     .map((transaction) => {
       const approval = approvalFacts(transaction);
       if (!approval) return null;
-      const amount = approval.valueLabel === 'Position NFT ID' ? `#${approval.value.toString()}` : formatTokenAmount(approval.value, transaction.to);
-      return `${amount} → ${compactAddress(approval.spender)}`;
+      const amount = approval.valueLabel === 'Position NFT ID'
+        ? { value: `#${approval.value}`, title: `#${approval.value}` }
+        : tokenAmountReviewFact('Approval', approval.value, transaction.to);
+      return { value: `${amount.value} → ${compactAddress(approval.spender)}`, title: `${amount.title} → ${approval.spender}` };
     })
-    .filter((value): value is string => Boolean(value));
+    .filter((value): value is { value: string; title: string } => value !== null);
   const progress = statusPresentation({ stage, status, detail: statusDetail, stepResults, stepCount, operation: route.operation, refreshing, networkSwitching });
   const showExecutionProgress = stage === 'executing' || stepResults.some(hasTransactionHash);
   const wrongNetwork = wallet.chainId !== undefined && wallet.chainId !== route.chainId;
@@ -345,7 +347,7 @@ export function ActionReview(props: ActionReviewProps) {
       <div className={styles.reviewFacts}>
         <ReviewRow label="Wallet" value={compactAddress(route.walletAddress)} title={route.walletAddress} />
         {[...actionConsequences, ...remainingSummaryFacts].map((fact) => <ReviewRow key={`${fact.label}-${fact.value}`} label={fact.label} value={fact.value} title={fact.title} />)}
-        {approvals.length > 0 && <ReviewRow label="Approvals" value={approvals.join('; ')} />}
+        {approvals.length > 0 && <ReviewRow label="Approvals" value={approvals.map((approval) => approval.value).join('; ')} title={approvals.map((approval) => approval.title).join('; ')} />}
      </div>
 
       {quoteExpired && <div role="status" className="mt-3 rounded-xl border border-[rgba(255,194,102,.28)] bg-[var(--warn-dim)] px-3 py-2 text-[12px] text-warn">This reviewed quote expired. Refresh and review the updated terms before signing.</div>}

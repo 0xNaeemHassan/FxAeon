@@ -3,17 +3,31 @@
 ## Current candidate
 
 - Pull request: [#208](https://github.com/0xNaeemHassan/FxAeon/pull/208)
-- Candidate commit: `3663bdc60f15aa1788df7ed68ef2b3027f5e7a8b`.
-- Final `pnpm verify` is running. Focused fee-tier tests passed 60/60, and
-  TypeScript and lint checks passed; final verification, build, and current-head
-  CI are not yet recorded as complete.
-- The protected protocol suite last passed 4/4 at pinned fork block `26065969`.
-  The new fee-tier wallet-request assertions still need the fork browser rerun.
-- The latest fork browser attempt stopped before signing because transaction
-  simulation was unavailable. Its retry was stopped during warmup for edits;
-  there is no active fork run and no browser pass is claimed.
-- History previously verified matching receipt/router-bound opening and closing
-  events. Public documentation contains no wallet or transaction identifiers.
+- Repository HEAD at this update: `794f965`, with uncommitted refinement changes
+  in the shared working tree. This is an in-progress candidate, not a release
+  approval.
+- The `anvil-all` suite completed successfully with 4/4 protocol, Earn, and
+  stress tests, and its manifests were verified. The log is
+  [`artifacts/refinement/anvil-all-20260929.log`](../artifacts/refinement/anvil-all-20260929.log).
+- The serial verification attempt recorded in
+  [`artifacts/refinement/verify-20260929-serial.log`](../artifacts/refinement/verify-20260929-serial.log)
+  passed its build and unit checks but had 18 browser failures involving test
+  mocks and disclosure expectations. Those issues were corrected; the
+  corrective browser run passed 26/26 in
+  [`artifacts/refinement/browser-corrective-20260930.log`](../artifacts/refinement/browser-corrective-20260930.log).
+- Full `pnpm verify` completed successfully (exit 0) in
+  [`artifacts/refinement/verify-20260930.log`](../artifacts/refinement/verify-20260930.log).
+  It recorded 495 unit tests passed and 4 fork-dependent skips, completed the
+  production build, passed 165 production browser tests, 6 Borrow harness
+  tests, 24 overlay tests, 5 state-lab tests, and all 14 landing-browser states.
+- The refreshed screenshot gallery completed with 64 views and 101 frames in
+  [`artifacts/refinement/generated/run-20260930T015019Z/`](../artifacts/refinement/generated/run-20260930T015019Z/).
+  The fork-browser rerun is still running; release readiness, current-head CI,
+  visual review, and fork-browser proof remain pending. Public documentation
+  omits private addresses and secrets.
+- The refinement includes ordered gas estimation, full ordered route
+  simulation, compact approval presentation, and pastel code-native landing
+  illustrations. Validation of these changes remains in progress.
 
 Gas speed is now a saved device preference with Standard, Fast, and Rapid
 choices. Changing the tier while a review is open invalidates that review and
@@ -38,17 +52,19 @@ candidate. Private balances, wallet identity, and screenshots are omitted.
 
 ## Visual evidence
 
-The fixture gallery at
-[`artifacts/refinement/generated/run-20260927T154147Z/`](../artifacts/refinement/generated/run-20260927T154147Z/)
-contains 66 views and 101 frames from build `34400ef`. It predates the current
-fee-tier changes and needs refresh. Its connected test-wallet shim and market
-fixtures document rendered UI only; they do not establish live balances or
-transaction behavior. Final screenshot promotion remains pending the browser
-proof.
+The current gallery at
+[`artifacts/refinement/generated/run-20260930T015019Z/`](../artifacts/refinement/generated/run-20260930T015019Z/)
+contains 64 views and 101 frames captured from the local production export.
+The capture reported no page or console errors. Its connected test-wallet
+shim, read-only illustrative balances, ready-empty positions, and deterministic
+market data document rendered UI only; they do not establish live balances,
+transaction behavior, or production performance. Final screenshot promotion
+remains pending the fork-browser rerun.
 
 The Cloudflare preview lacks RPC environment values. The earlier authenticated
 local spot-check confirmed healthy reads, but not transaction submission or
-production behavior.
+production behavior. The gallery is local visual evidence and does not establish
+live RPC health or production performance.
 
 ## Release workflow boundaries
 

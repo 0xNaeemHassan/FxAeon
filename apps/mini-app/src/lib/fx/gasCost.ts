@@ -379,9 +379,38 @@ export async function estimatePlannedRouteCost(
       feeAbortError: isAbortError(error) ? error : undefined,
     }));
   const steps: GasStepEstimate[] = [];
+  let orderedGas: bigint[] | undefined;
+  if (route.transactions.some((transaction) => transaction.kind === 'approval')) {
+    try {
+      const result = await boundedCall(client.simulateCalls({
+        account: route.walletAddress,
+        calls: route.transactions.map((transaction) => ({
+          to: transaction.to,
+          data: transaction.data,
+          value: transaction.value,
+        })),
+      }), timeoutMs, options.signal);
+      if (Array.isArray(result.results) && result.results.length === route.transactions.length) {
+        const gasValues = result.results.map((item) => {
+          if (item.status !== 'success') return undefined;
+          return boundedPositiveBigint(item.gasUsed, MAX_GAS_UNITS_PER_STEP);
+        });
+        if (gasValues.every((gas): gas is bigint => gas !== undefined)) orderedGas = gasValues;
+      }
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      // Fall back to per-transaction estimates when the RPC does not support
+      // ordered simulation or cannot return a complete successful route.
+    }
+  }
   for (let index = 0; index < route.transactions.length; index += 1) {
     throwIfAborted(options.signal);
     const transaction = route.transactions[index];
+    const simulatedGas = orderedGas?.[index];
+    if (simulatedGas !== undefined) {
+      steps.push({ index, kind: transaction.kind, status: 'estimated', gas: simulatedGas });
+      continue;
+    }
     if (!client.estimateGas) {
       steps.push({ index, kind: transaction.kind, status: 'unavailable', error: 'RPC client does not expose estimateGas' });
       continue;

@@ -133,7 +133,13 @@ export const useInvalidateWalletData = () => async () => {
     export const TransactionHashLink = () => null;
   `,
   '@/components/review/executionResult': `export const resultPresentation = (result) => result.status === 'partial' ? ({ title: 'Partially completed', body: 'An earlier step confirmed before the action stopped.', tone: 'warning', icon: () => null }) : ({ title: 'Confirmed', body: 'Mock confirmed.', tone: 'success', icon: () => null }); export const resultBodyDuringRefresh = ({ status, refreshing, positionAction, body }) => status === 'confirmed' && refreshing && positionAction ? 'Transaction confirmed. Position details are refreshing.' : body;`,
-  '@/lib/fx/reviewFormatting': `export const rawQuoteReviewFacts = () => []; export const routeFinancialReviewFacts = () => [];`,
+  '@/lib/fx/reviewFormatting': `
+    export const rawQuoteReviewFacts = () => [];
+    export const routeFinancialReviewFacts = () => [];
+    // This isolated harness measures orchestration; exact token formatting is
+    // covered by review-formatting.test.ts and the fork browser review.
+    export const tokenAmountReviewFact = (label, value) => ({ label, value: String(value), title: String(value) });
+  `,
   'lucide-react': `
     import React from 'react';
     const Icon = (props) => <span {...props} />;

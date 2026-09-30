@@ -135,21 +135,42 @@ h1, h2, h3 { font-weight: 620; }
 .preview-position > span + span { color: #b9aecb; font-size: 10px; }
 .preview-position svg { width: 18px; height: 18px; fill: none; stroke: #c9a6ff; stroke-width: 1.5; }
 .preview-position b { font-weight: 400; }
-.product { position: relative; color: #f9f6ff; background: var(--dark); }
-.product-inner { width: min(var(--max),calc(100% - 96px)); margin-inline: auto; padding-block: 44px; }
-.feature-list { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); }
-.feature { display: flex; flex-direction: column; gap: 26px; min-width: 0; padding: 4px 32px 8px; border-left: 1px solid var(--dark-line); transition: background .2s; }
-.feature:first-child { padding-left: 0; border-left: 0; }
-.feature:last-child { padding-right: 0; }
-.feature-icon { display: block; height: 28px; color: var(--lavender); }
+.product { position: relative; background: var(--paper); }
+.product-inner { width: min(var(--max),calc(100% - 96px)); margin-inline: auto; padding-block: 72px; }
+.feature-list { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 16px; }
+.feature { display: grid; grid-template-columns: 28px 1fr; grid-template-rows: auto auto; align-content: start; column-gap: 12px; row-gap: 20px; min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); transition: border-color .2s, transform .2s var(--ease); }
+.feature:hover { border-color: #b9a4dd; transform: translateY(-3px); }
+.feature-art { display: grid; grid-column: 1 / -1; place-items: center; height: 132px; overflow: hidden; border-radius: 8px; }
+.feature-art svg { width: min(100%,240px); height: 128px; overflow: visible; fill: none; stroke: #49425a; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.feature-art .art-ground { stroke: #bdb7c8; stroke-width: 1.5; }
+.feature-art .art-line { fill: none; stroke: #66528a; stroke-width: 2.5; }
+.feature-art .art-point { fill: #fffefa; stroke: #6e56a1; stroke-width: 2.5; }
+.feature-art .art-soft { fill: #d5c7ec; stroke: none; opacity: .6; }
+.trade-art { background: #eee7fa; }
+.trade-art .trade-line { fill: none; stroke: #8c68c8; stroke-width: 3; }
+.earn-art { background: #e8f1e8; }
+.earn-art .earn-vessel { fill: #fffefa; stroke: #677d69; }
+.earn-art .earn-water { fill: #c9dfca; stroke: #769778; }
+.earn-art .art-coin { fill: #f6ddbb; stroke: #b88a56; }
+.borrow-art { background: #f8e9dd; }
+.borrow-art .collateral { fill: #d9c9f0; stroke: #756195; }
+.borrow-art .collateral-face { stroke: #756195; }
+.borrow-art .borrow-token { fill: #fffefa; stroke: #a67655; }
+.move-art { background: #e7ebf8; }
+.move-art .chain-orb { fill: #fffefa; stroke-width: 2; }
+.move-art .chain-one { stroke: #8065ba; }
+.move-art .chain-two { stroke: #7690c8; }
+.move-art .move-arrow { stroke: #66528a; stroke-width: 2.5; }
+.feature-icon { display: grid; place-items: center; width: 28px; height: 28px; color: var(--accent); }
 .feature-icon svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.feature-copy { min-width: 0; }
 .feature-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.feature-heading h3 { font-size: 21px; font-weight: 540; letter-spacing: -.03em; }
-.feature-heading > span { color: #b9aecb; font-size: 14px; transition: transform .2s var(--ease); }
-.feature-body { display: block; margin-top: 9px; color: var(--dark-muted); font-size: 13px; line-height: 1.65; }
-.feature:hover .feature-heading > span { transform: translate(2px,-2px); color: #f8f3ff; }
-.feature:hover h3 { color: var(--lavender); }
-.feature:focus-visible { outline-color: var(--lavender); outline-offset: 6px; }
+.feature-heading h3 { font-size: 18px; font-weight: 560; letter-spacing: -.03em; }
+.feature-heading > span { color: var(--muted); font-size: 14px; transition: transform .2s var(--ease); }
+.feature-body { display: block; margin-top: 7px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.feature:hover .feature-heading > span { transform: translate(2px,-2px); color: var(--accent); }
+.feature:hover h3 { color: var(--accent); }
+.feature:focus-visible { outline-color: var(--accent); outline-offset: 4px; }
 .mechanics { display: grid; grid-template-columns: 1fr 1fr; gap: 110px; width: min(var(--max),calc(100% - 96px)); margin-inline: auto; padding-block: 100px 105px; }
 .protocol-mark { width: 48px; height: 48px; }
 .mechanics h2 { margin-top: 20px; font-size: 52px; line-height: 1.02; letter-spacing: -.065em; }
@@ -179,7 +200,7 @@ footer p b { margin-inline: 7px; font-weight: 400; }
 
 
 
-  .feature { padding-inline: 16px; }
+  .feature-list { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .mechanics { gap: 60px; }
 }
 @media (max-width: 800px) {
@@ -201,7 +222,6 @@ footer p b { margin-inline: 7px; font-weight: 400; }
   .preview-summary strong { font-size: 32px; }
   .preview-mark { width: 38px; height: 50px; }
   .product-inner { padding-block: 36px; }
-  .feature:first-child { padding-left: 0; border-left: 0; }
   .mechanics { gap: 38px; padding-block: 68px; }
   .mechanics h2 { font-size: 44px; }
   .mechanic-title h3 { font-size: 20px; }
@@ -226,11 +246,13 @@ footer p b { margin-inline: 7px; font-weight: 400; }
   .preview-mark { width: 44px; }
   .preview-actions { padding-block: 20px 19px; }
   .preview-asset { min-height: 65px; }
-  .product-inner { padding-block: 8px; }
-  .feature-list { grid-template-columns: 1fr; }
-  .feature, .feature:first-child, .feature:last-child { flex-direction: row; align-items: center; gap: 18px; padding: 20px 0; border-left: 0; border-top: 1px solid var(--dark-line); }
-  .feature-icon { width: 28px; flex: 0 0 28px; }
-  .feature-copy { flex: 1; min-width: 0; }
+  .product-inner { padding-block: 30px; }
+  .feature-list { grid-template-columns: 1fr; gap: 12px; }
+  .feature { grid-template-columns: 96px 28px 1fr; grid-template-rows: 1fr; align-items: center; column-gap: 12px; padding: 10px; }
+  .feature-art { grid-column: auto; grid-row: 1; height: 92px; }
+  .feature-art svg { height: 88px; }
+  .feature-icon { grid-column: 2; grid-row: 1; }
+  .feature-copy { grid-column: 3; grid-row: 1; }
   .feature-heading h3 { font-size: 16px; }
   .feature-body { margin-top: 4px; font-size: 12px; }
   .mechanics { grid-template-columns: 1fr; gap: 32px; padding-block: 48px 32px; }

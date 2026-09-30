@@ -39,12 +39,17 @@ function SummaryRow({ label, value, title }: { label: string; value: string; tit
 }
 
 export function UpdatedQuoteSummary({ changes }: { changes: readonly ChangedReviewFact[] }) {
-  if (!changes.length) return null;
+  // Keep route changes visible without repeating the full review in a second
+  // card. Amount, fee, and approval changes still receive explicit comparison.
+  const visibleChanges = changes.filter((change) => change.label !== 'Transaction route');
+  if (!visibleChanges.length) return changes.length
+    ? <p className="mt-2 text-[12px] text-mut" role="status">Route updated. Check the details before confirming.</p>
+    : null;
   return (
     <section className="mt-3 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.025)] px-3 py-2.5" aria-label="Updated transaction consequences">
       <p className="text-[11px] font-semibold text-mut">Changed since your previous review</p>
       <div className="mt-1.5 flex flex-col gap-1.5">
-        {changes.map((change) => <div key={change.label} className="grid grid-cols-[minmax(80px,.7fr)_minmax(0,1.3fr)] gap-x-3 text-[11px]">
+        {visibleChanges.map((change) => <div key={change.label} className="grid grid-cols-[minmax(80px,.7fr)_minmax(0,1.3fr)] gap-x-3 text-[11px]">
           <span className="text-mut">{change.label}</span>
           <span>{change.before ? `${change.before} → ` : ''}{change.after ?? 'No longer included'}</span>
         </div>)}

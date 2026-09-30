@@ -51,6 +51,12 @@ function amountFact(label: string, raw: string | undefined, unit: Unit | undefin
   };
 }
 
+/** Compact display only; the exact amount remains available for inspection. */
+export function tokenAmountReviewFact(label: string, value: bigint, address: string): ReviewFact {
+  return amountFact(label, value.toString(), unitForAddress(address))
+    ?? { label, value: `${value} raw units`, title: `${value} raw units` };
+}
+
 function quoteUnits(intent: ReviewedActionIntent, pool: Pool): { collateral?: Unit; debt: Unit } {
   // Pinned fx-sdk 1.0.5 quote/accounting amounts are WAD (18 decimals),
   // including WBTC. Converter minimums below use ERC-20 decimals instead.

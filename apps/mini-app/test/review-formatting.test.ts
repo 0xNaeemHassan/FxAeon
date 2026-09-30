@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { positionCollateralTokenAddress, positionDebtTokenAddress, positionPoolAddress } from '../src/lib/fx/policy';
-import { rawQuoteReviewFacts, routeFinancialReviewFacts } from '../src/lib/fx/reviewFormatting';
+import { rawQuoteReviewFacts, routeFinancialReviewFacts, tokenAmountReviewFact } from '../src/lib/fx/reviewFormatting';
 import { FX_TOKENS } from '../src/lib/fx/tokens';
 import { factsOutsideConsequenceSummary, primaryReviewFacts, routeFacts } from '../src/components/review/actionReviewPresentation';
 import { consequenceSummary } from '../src/components/review/actionReviewModel';
@@ -10,6 +10,15 @@ import type { OfficialFxMethod, PlannedRoute, ReviewedActionIntent, RouteDetails
 
 const WALLET = '0x1111111111111111111111111111111111111111';
 const UNKNOWN = '0x2222222222222222222222222222222222222222';
+
+test('approval summaries stay compact without losing exact token quantities', () => {
+  const fact = tokenAmountReviewFact('Approval', 89237941012345678901n, FX_TOKENS.fxSAVE.address);
+  assert.equal(fact.value, '≈ 89.23794101 fxSAVE');
+  assert.equal(fact.title, '89.237941012345678901 fxSAVE');
+  assert.equal(tokenAmountReviewFact('Approval', 1n, FX_TOKENS.fxSAVE.address).value, '<0.00000001 fxSAVE');
+  assert.equal(tokenAmountReviewFact('Approval', 1234567n, FX_TOKENS.USDC.address).value, '1.234567 USDC');
+  assert.equal(tokenAmountReviewFact('Approval', 123n, UNKNOWN).value, '123 raw units');
+});
 const operations: Record<ReviewedActionIntent['kind'], OfficialFxMethod> = {
   'position-increase': 'increasePosition',
   'position-reduce': 'reducePosition',

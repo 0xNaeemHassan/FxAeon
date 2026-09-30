@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, type BrowserContext, type Page } from '@playwright/test';
 import { installBrowserAppFixtures } from './fixtures/test';
+import { installRefinementGalleryFixtures } from './fixtures/refinement-gallery';
 import { browserWalletInitScript, type BrowserWalletShimOptions } from './fixtures/wallet';
 
 type Theme = 'official' | 'dark' | 'light';
@@ -58,7 +59,9 @@ function encodeHtml(value: string): string {
 }
 
 async function pageReady(page: Page, route: string, walletConnected: boolean): Promise<void> {
-  const response = await page.goto(`${appUrl}${route}`, { waitUntil: 'domcontentloaded' });
+  // Next dev may compile each route on its first visit. This capture harness
+  // measures layout, not cold compilation performance.
+  const response = await page.goto(`${appUrl}${route}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
   if (!response?.ok()) throw new Error(`${route} returned HTTP ${response?.status() ?? 'no response'}`);
   await page.locator('main').last().waitFor({ state: 'visible', timeout: 30_000 });
   await page.waitForFunction(() => !document.querySelector('.loading-line'), null, { timeout: 30_000 });
@@ -93,6 +96,7 @@ async function createAppPage(context: BrowserContext, theme: Theme, viewId: stri
   const page = await context.newPage();
   watchPage(page, viewId);
   await installBrowserAppFixtures(page, { telegram: false, marketPrices: true });
+  await installRefinementGalleryFixtures(page);
   // tsx adds an esbuild __name helper to imported fixture functions; Playwright
   // serializes the function into the browser, where that helper is otherwise absent.
   const browserWalletScript = browserWalletInitScript(walletOptions).toString();
@@ -186,14 +190,16 @@ async function captureAppView(browser: Awaited<ReturnType<typeof chromium.launch
     const page = await createAppPage(context, theme, options.id, walletOptions);
     await pageReady(page, options.route, walletConnected);
     if (new URL(options.route, appUrl).pathname === '/portfolio') {
+      await page.getByRole('button', { name: /View .* on Ethereum/ }).first().waitFor({ state: 'visible', timeout: 30_000 });
+      await page.locator('section[aria-label="Positions"] details summary').filter({ hasText: /\d+ open/ }).waitFor({ state: 'visible', timeout: 30_000 });
       const positions = page.locator('section[aria-label="Positions"] details');
       await positions.locator('summary').waitFor({ state: 'visible', timeout: 20_000 });
       if (await positions.evaluate((element) => (element as HTMLDetailsElement).open)) {
         throw new Error(`portfolio positions should be compact by default in ${options.id}`);
       }
-      const earn = page.locator('section[aria-labelledby="portfolio-earn-heading"] details');
+      const earn = page.locator('section[aria-labelledby="portfolio-earn-heading"] details').first();
       if (await earn.count()) {
-        await earn.locator('summary').waitFor({ state: 'visible', timeout: 20_000 });
+        await earn.locator(':scope > summary').waitFor({ state: 'visible', timeout: 20_000 });
         if (await earn.evaluate((element) => (element as HTMLDetailsElement).open)) {
           throw new Error(`portfolio fxSAVE should be compact by default in ${options.id}`);
         }
@@ -295,15 +301,14 @@ async function ensureStateLab(): Promise<{ url: string; child?: ChildProcessWith
 function writeGallery(): void {
   const sections = views.map((view) => `<section><h2>${encodeHtml(view.id)}</h2><p>${encodeHtml(view.note)} · ${view.viewport.width}×${view.viewport.height} · ${encodeHtml(view.theme)}</p><div class="frames">${view.sections.map((section) => `<figure><a href="${encodeHtml(section.file)}"><img loading="lazy" src="${encodeHtml(section.file)}" alt="${encodeHtml(view.id)} scroll section at ${section.scrollTop}px"></a><figcaption>${section.scrollTop}px · ${section.scrollHeight}px total</figcaption></figure>`).join('')}</div></section>`).join('\n');
   const unsupportedStates = [
-    { flow: 'Trade ETH/BTC long/short route review', reason: 'The deterministic static E2E build has no configured RPC planner; capture only the editable form and generic ActionReview lab stages.' },
-    { flow: 'Earn deposit/withdraw route review', reason: 'The deterministic static E2E build has no vault RPC balances/quotes; capture the editable route states and generic ActionReview lab stages.' },
+    { flow: 'Trade ETH/BTC long/short route review', reason: 'The gallery RPC fixture is read-only and returns no route-planning contract state; captures show editable forms and generic ActionReview lab stages.' },
+    { flow: 'Earn deposit/withdraw route review', reason: 'The gallery RPC fixture provides illustrative wallet and vault balances only; it does not synthesize vault quotes or transaction routes.' },
     { flow: 'Borrow ETH/WBTC route review', reason: 'No deterministic quote/balance fixture exists in this harness; do not synthesize protocol terms.' },
     { flow: 'Move both direction route review', reason: 'Bridge quote and contract reads require RPC-backed route planning; do not synthesize a bridge quote.' },
-    { flow: 'Wallet asset detail', reason: 'No deterministic wallet balance rows exist without RPC; the wallet profile screenshot records unavailable balance state.' },
   ];
   const report = {
-    schemaVersion: 1, capturedAt, source: 'built app served at local URL plus source-built UI state lab', appUrl,
-    dataProvenance: 'Connected test-wallet EIP-1193 shim; deterministic market data from e2e/fixtures/test.ts; no app backend; visible provenance label on app screenshots.',
+    schemaVersion: 1, capturedAt, source: 'Local Next app plus source-built UI state lab; see release validation for build mode', appUrl,
+    dataProvenance: 'Connected test-wallet EIP-1193 shim; gallery-local read-only RPC values and ready-empty position index; deterministic market data from e2e/fixtures/test.ts; no app backend; visible provenance label on app screenshots.',
     transactionInteraction: 'No confirmation, sendTransaction, signature, or chain mutation invoked.',
     viewportCoverage: { mobile: '393×852 requested, device scale 1', desktop: '1440×1000 spot captures' },
     viewCount: views.length, views, unsupportedStates, pageErrors, consoleErrors, externalRequestFailures,
@@ -320,13 +325,13 @@ async function main(): Promise<void> {
   const lab = await ensureStateLab();
   const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-dev-shm-usage'] });
   try {
-    await captureAppView(browser, { id: 'portfolio-official-mobile', route: '/portfolio', theme: 'official', note: 'Connected test wallet; chain balances unavailable in this static fixture. Any market prices are illustrative and visibly labeled.' });
-    await captureAppView(browser, { id: 'portfolio-dark-mobile', route: '/portfolio', theme: 'dark', note: 'Connected test wallet; chain balances unavailable in this static fixture. Any market prices are illustrative and visibly labeled.' });
-    await captureAppView(browser, { id: 'portfolio-light-mobile', route: '/portfolio', theme: 'light', note: 'Connected test wallet; chain balances unavailable in this static fixture. Any market prices are illustrative and visibly labeled.' });
-    await captureAppView(browser, { id: 'portfolio-official-desktop', route: '/portfolio', theme: 'official', viewport: desktop, note: 'Desktop spot; connected test wallet and unavailable chain balances in a deterministic UI fixture.' });
+    await captureAppView(browser, { id: 'portfolio-official-mobile', route: '/portfolio', theme: 'official', note: 'Read-only connected test wallet with deterministic token balances; positions are verified ready-empty. All values are illustrative gallery fixtures.' });
+    await captureAppView(browser, { id: 'portfolio-dark-mobile', route: '/portfolio', theme: 'dark', note: 'Read-only connected test wallet with deterministic token balances; positions are verified ready-empty. All values are illustrative gallery fixtures.' });
+    await captureAppView(browser, { id: 'portfolio-light-mobile', route: '/portfolio', theme: 'light', note: 'Read-only connected test wallet with deterministic token balances; positions are verified ready-empty. All values are illustrative gallery fixtures.' });
+    await captureAppView(browser, { id: 'portfolio-official-desktop', route: '/portfolio', theme: 'official', viewport: desktop, note: 'Desktop spot with deterministic read-only token balances and a verified ready-empty position state; illustrative gallery fixtures.' });
     for (const theme of ['official', 'dark', 'light'] as const) {
       await captureAppView(browser, {
-        id: `wallet-profile-${theme}-mobile`, route: '/portfolio', theme, note: 'Connected test wallet; wallet chain balances unavailable in this static fixture, shown as unavailable.',
+        id: `wallet-profile-${theme}-mobile`, route: '/portfolio', theme, note: 'Wallet profile with deterministic read-only token balances; all values are illustrative gallery fixtures.',
         prepare: async (page) => {
           const opener = page.getByRole('button', { name: 'Open wallet profile', exact: true });
           await opener.waitFor({ state: 'visible', timeout: 20_000 });
@@ -337,8 +342,18 @@ async function main(): Promise<void> {
       });
     }
     await captureAppView(browser, {
+      id: 'wallet-asset-eth', route: '/portfolio', theme: 'official',
+      note: 'ETH asset detail with an illustrative read-only balance and test wallet address.',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: 'Open wallet profile', exact: true }).click();
+        await page.getByRole('button', { name: 'View ETH details on Ethereum', exact: true }).click();
+        await page.getByRole('dialog', { name: 'ETH on Ethereum', exact: true }).waitFor({ state: 'visible' });
+      },
+      scrollTarget: '[class*="WalletAssetDetails_modalBody"]', requireScrollTarget: true,
+    });
+    await captureAppView(browser, {
       id: 'wallet-profile-official-desktop', route: '/portfolio', theme: 'official', viewport: desktop,
-      note: 'Wallet profile desktop spot; fixture wallet, balances unavailable without RPC.',
+      note: 'Wallet profile desktop spot with deterministic read-only token balances; illustrative gallery fixtures.',
       prepare: async (page) => { await page.getByRole('button', { name: 'Open wallet profile', exact: true }).click(); await page.getByRole('dialog').waitFor({ state: 'visible' }); },
       scrollTarget: '.wallet-profile-backdrop [class*="WalletProfile_body"]', requireScrollTarget: true,
     });
@@ -356,7 +371,7 @@ async function main(): Promise<void> {
       }
     }
     await captureAppView(browser, { id: 'trade-official-desktop', route: '/trade', theme: 'official', viewport: desktop, note: 'Trade desktop spot, editable form; no route quote is asserted.' });
-    await captureAppView(browser, { id: 'earn-deposit', route: '/earn', theme: 'official', note: 'Earn deposit editor with deterministic test wallet; vault balance/quote unavailable.' });
+    await captureAppView(browser, { id: 'earn-deposit', route: '/earn', theme: 'official', note: 'Earn deposit editor with illustrative wallet and vault balances; no transaction quote.' });
     await captureAppView(browser, {
       id: 'earn-withdraw-instant', route: '/earn', theme: 'official', note: 'Earn instant withdrawal editor; fixture selection only, no withdrawal quote.',
       prepare: async (page) => {

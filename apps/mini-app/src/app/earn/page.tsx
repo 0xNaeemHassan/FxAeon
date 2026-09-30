@@ -190,8 +190,6 @@ export default function EarnPage() {
     const onSettingsUpdated = (event: Event) => {
       if (event.type === 'storage' && (event as StorageEvent).key !== SETTINGS_KEY) return;
       setSlippage(String(readSlippagePercent()));
-      setReviewStage('input');
-      setReviewRevision((revision) => revision + 1);
     };
     window.addEventListener(SETTINGS_UPDATED_EVENT, onSettingsUpdated);
     window.addEventListener('storage', onSettingsUpdated);
