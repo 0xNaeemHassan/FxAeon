@@ -22,17 +22,25 @@ test("fork proofs validate the configured base through Anvil metadata", () => {
   }
 });
 
-test("browser proof retries changed direct actions with bounded revalidation", () => {
-  assert.match(browserProof, /attempt < 3/);
-  assert.match(browserProof, /Details changed\. Check the updated action before continuing\./);
+test("browser proof revalidates changed quotes before the first signature", () => {
+  assert.match(browserProof, /for \(let attempt = 0; attempt < 3 && !firstSignatureObserved; attempt \+= 1\)/);
+  assert.match(browserProof, /name: 'Review updated quote'/);
+  assert.match(browserProof, /reviewedTransactions = await readReviewedTransactions\(\);/);
+  assert.match(browserProof, /timed out waiting for the first signature or quote expiry/);
+  assert.match(browserProof, /reviewed quote expired repeatedly before the first signature/);
   assert.match(browserProof, /firstSignatureObserved/);
   assert.match(browserProof, /driveDirectAction/);
   assert.match(browserProof, /readReviewedTransactions/);
   assert.match(browserProof, /read-only action details must never request a signature/);
+  assert.match(browserProof, /read-only alternate session must never send/);
+  assert.match(browserProof, /tx\.from\.toLowerCase\(\), wallet\.toLowerCase\(\)/);
   assert.match(browserProof, /target differs from action details/);
   assert.match(browserProof, /calldata differs from action details/);
   assert.match(browserProof, /actual signatures must match the reviewed transaction count/);
   assert.match(browserProof, /no later step may sign before this receipt is delivered/);
+  assert.match(browserProof, /only the real submitted receipt may be delayed/);
+  assert.match(browserProof, /await Promise\.all\(held\.map\(\(\{ hold \}\) => hold\.waiting\)\)/);
+  assert.match(browserProof, /hold\.release\(\);/);
   assert.doesNotMatch(browserProof, /Quote updated—review again\./);
 });
 

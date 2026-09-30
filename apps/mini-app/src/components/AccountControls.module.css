@@ -1,0 +1,16 @@
+.account { display: flex; width: 100%; min-width: 0; min-height: 84px; align-items: center; gap: 12px; padding: 17px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); color: var(--text); text-align: left; }
+button.account:hover { border-color: var(--line-strong); background: var(--surface-2); }
+.accountIcon { display: inline-grid; flex: 0 0 40px; width: 40px; height: 40px; place-items: center; border-radius: 13px; color: var(--mint); background: var(--mint-dim); }
+.copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 5px; }
+.copy > strong { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.copy > small { font-size: 12px; color: var(--mut); }
+.account > svg { flex: 0 0 auto; color: var(--mut); }
+.connect { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; min-height: 44px; padding: 9px 13px; border-radius: 12px; background: var(--mint); color: var(--on-accent); font-size: 12px; font-weight: 600; }
+.iconButton { display: grid; place-items: center; min-height: 44px; min-width: 44px; margin-left: auto; color: var(--mint); }
+.session { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 4px; }
+.session > button { display: flex; width: 100%; min-height: 48px; align-items: center; justify-content: center; gap: 8px; border-radius: 12px; color: var(--danger); font-size: 13px; }
+.session > button:hover { background: var(--danger-dim); }
+.session > button:disabled { cursor: not-allowed; opacity: .6; }
+.session > p { color: var(--danger); font-size: 12px; line-height: 1.5; text-align: center; }
+.loading { min-height: 84px; }
+@media (max-width: 360px) { .account { padding: 14px; gap: 10px; } .copy > strong { font-size: 14px; } .accountIcon { flex-basis: 36px; height: 36px; } }

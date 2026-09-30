@@ -28,6 +28,9 @@ interface TgButton {
 
 export interface TgWebApp {
   initData: string;
+  /** Bot API version advertised by the Telegram client (for example `7.10`). */
+  version?: string;
+  isVersionAtLeast?: (version: string) => boolean;
   /** 'android' | 'ios' | 'tdesktop' | ... — 'unknown' outside Telegram. */
   platform: string;
   colorScheme: 'light' | 'dark';
@@ -129,6 +132,47 @@ export function isTMA(): boolean {
 }
 
 /**
+ * Do not infer host support from the presence of the injected script alone.
+ * Telegram's script is also loaded in ordinary browsers for wallet/auth
+ * integration, where the object can exist without a Telegram client behind
+ * it. `getWebApp` intentionally remains unfiltered for those integrations.
+ */
+function telegramApiAvailable(apiVersion: string): TgWebApp | null {
+  const tg = getWebApp();
+  if (!tg || !isTMA()) return null;
+  try {
+    if (tg.isVersionAtLeast) return tg.isVersionAtLeast(apiVersion) ? tg : null;
+  } catch {
+    return null;
+  }
+  if (!tg.version) return null;
+  const actual = tg.version.split('.').map((part) => Number.parseInt(part, 10));
+  const required = apiVersion.split('.').map((part) => Number.parseInt(part, 10));
+  if (actual.some((part) => !Number.isFinite(part)) || required.some((part) => !Number.isFinite(part))) return null;
+  for (let index = 0; index < required.length; index += 1) {
+    const difference = (actual[index] ?? 0) - required[index];
+    if (difference !== 0) return difference > 0 ? tg : null;
+  }
+  return tg;
+}
+
+/** Apply Telegram chrome colors only when the real host supports each API. */
+export function applyTelegramChromeColors(color: string): void {
+  const baseline = telegramApiAvailable('6.1');
+  try {
+    baseline?.setHeaderColor?.(telegramApiAvailable('6.9') ? color : 'bg_color');
+    baseline?.setBackgroundColor?.(color);
+  } catch {
+    // Host chrome updates are best-effort.
+  }
+  try {
+    telegramApiAvailable('7.10')?.setBottomBarColor?.(color);
+  } catch {
+    // Older clients do not implement the bottom bar color API.
+  }
+}
+
+/**
  * True when this document is a Telegram launch, including the short window
  * where the host bridge is still loading or has already consumed the launch
  * hash. This is an intent signal only; signed initData remains the authority
@@ -149,7 +193,7 @@ export function openExternalLink(url: string): boolean {
   }
   if (parsed.protocol !== 'https:') return false;
   haptic('light');
-  const telegram = getWebApp();
+  const telegram = telegramApiAvailable('6.1');
   if (telegram?.openLink) {
     try {
       telegram.openLink(parsed.toString());
@@ -206,12 +250,10 @@ export function restoreTelegramLaunchHash(): void {
 /** Signal readiness + expand to full height. Safe to call repeatedly. */
 export function initTelegram(): void {
   const tg = getWebApp();
-  if (!tg) return;
+  if (!tg || !isTMA()) return;
   try {
     tg.ready();
-    tg.setHeaderColor?.('#07070d');
-    tg.setBackgroundColor?.('#07070d');
-    tg.setBottomBarColor?.('#07070d');
+    applyTelegramChromeColors('#07070d');
     if (!tg.isExpanded) tg.expand();
   } catch {
     /* older clients */
@@ -222,7 +264,7 @@ export function initTelegram(): void {
 export function haptic(
   kind: 'light' | 'medium' | 'heavy' | 'success' | 'error' | 'warning' | 'selection' = 'light'
 ): void {
-  const h = getWebApp()?.HapticFeedback;
+  const h = telegramApiAvailable('6.1')?.HapticFeedback;
   if (!h) return;
   try {
     if (kind === 'selection') h.selectionChanged();
@@ -240,7 +282,7 @@ export function haptic(
  * params were applied.
  */
 export function applyThemeParams(): boolean {
-  const tg = getWebApp();
+  const tg = isTMA() ? getWebApp() : null;
   if (!tg?.themeParams) return false;
   const root = document.documentElement;
   const map: Record<string, string | undefined> = {
@@ -302,7 +344,7 @@ export function bindViewportHeight(): () => void {
 
 /** Native BackButton: show + wire a handler. Returns cleanup. */
 export function showBackButton(onBack: () => void): () => void {
-  const tg = getWebApp();
+  const tg = telegramApiAvailable('6.1');
   if (!tg?.BackButton) return () => {};
   const handler = () => {
     haptic('light');

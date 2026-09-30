@@ -10,10 +10,36 @@ const builtHtml = await readFile(resolve(root, 'dist/index.html'), 'utf8');
 const headers = await readFile(resolve(root, 'dist/_headers'), 'utf8');
 
 test('landing has required brand assets and metadata', async () => {
-  for (const asset of ['assets/fxaeon-mark.svg', 'assets/fxaeon-sculpture.webp', 'assets/fxaeon-banner.png', 'assets/portfolio-preview.png', 'assets/portfolio-mobile.png']) await access(resolve(root, asset));
+  for (const asset of ['assets/fxaeon-mark.svg', 'assets/fxaeon-banner.png', 'assets/inter-latin.woff2']) await access(resolve(root, asset));
   assert.match(html, /rel="canonical" href="https:\/\/fxaeon\.xyz\//);
   assert.match(html, /property="og:image"/);
   assert.match(html, /name="twitter:image"/);
+  assert.deepEqual(
+    await readFile(resolve(root, '../mini-app/public/brand/fx-official-mark.svg')),
+    await readFile(resolve(root, 'dist/assets/fx-protocol.svg')),
+    'Landing should reuse the official protocol logo without altering its source',
+  );
+});
+
+test('landing provides an illustrative, semantic portfolio preview and clear product routes', () => {
+  assert.match(html, /<section class="hero" id="positions" aria-labelledby="hero-title">/);
+  assert.match(html, /Trade ETH and BTC,<br \/>earn with fxSAVE,<br \/>and borrow fxUSD<br \/><em>In Telegram\.<\/em>/);
+  assert.match(html, /<p class="lede">Powered by f\(x\) SDK<\/p>/);
+  assert.match(html, /<figure class="hero-art" aria-label="FxAeon portfolio preview with illustrative balances">[\s\S]*?<div class="product-preview"[\s\S]*?<\/figure>/);
+  assert.match(html, /class="preview-actions" aria-hidden="true"/);
+  const previewStart = html.indexOf('<div class="product-preview"');
+  const previewEnd = html.indexOf('</figure>', previewStart);
+  assert.ok(previewStart >= 0 && previewEnd > previewStart, 'Illustrative portfolio should be inside a figure');
+  assert.doesNotMatch(html.slice(previewStart, previewEnd), /<(?:button|a)\b/, 'Preview-only controls must not be interactive');
+  assert.match(html, /id="product" aria-labelledby="product-title"/);
+  assert.match(html, /href="https:\/\/fxaeon\.com\/(trade|earn|borrow|move)" class="feature"/);
+  assert.match(html, /Borrow at 0% annual interest/);
+  assert.match(html, /Protocol fees and liquidation risk still apply/);
+  assert.match(html, /Liquidation remains possible/);
+  assert.match(html, /https:\/\/fxprotocol\.gitbook\.io\/fx-docs/);
+  assert.match(html, /<a class="pill primary" href="https:\/\/t\.me\/FxAeonBot"/);
+  assert.match(html, /<a class="web-link" href="https:\/\/fxaeon\.com\/">Open web app/);
+  for (const icon of ['receive', 'trade', 'move', 'earn', 'borrow']) assert.match(html, new RegExp(`assets/icons/${icon}\\.svg`));
 });
 
 test('product and Telegram destinations are explicit', () => {
@@ -21,7 +47,8 @@ test('product and Telegram destinations are explicit', () => {
   assert.match(html, /https:\/\/fxaeon\.com\//);
   assert.match(html, /https:\/\/t\.me\/FxAeonBot/);
   assert.match(html, /f\(x\) protocol docs/);
-  assert.match(html, /Built with f\(x\) SDK/);
+  assert.match(html, /<a class="pill primary" href="https:\/\/t\.me\/FxAeonBot"/);
+  assert.match(html, /<a class="web-link" href="https:\/\/fxaeon\.com\/">Open web app/);
 });
 
 test('external links use a safe target policy', () => {

@@ -11,9 +11,9 @@ const nextConfig = {
   // export is generated avoids a duplicate check and prevents Next's cleanup
   // of `.next/types` from racing the standalone TypeScript process.
   typescript: { ignoreBuildErrors: true },
-  // Keep hot-reload artifacts separate from the static export. A production
-  // build replaces `dist`; sharing it with `next dev` can delete the running
-  // server's routes-manifest mid-request (especially during parallel CI/QA).
+  // Export static pages to `dist`. Next's export build can still use `.next`
+  // as an intermediate directory, so never run `next dev` and `next build`
+  // concurrently in this checkout, even with different final output paths.
   distDir: process.env.NODE_ENV === 'development' ? '.next' : 'dist',
   images: { unoptimized: true },
   webpack: (config, { webpack, isServer }) => {

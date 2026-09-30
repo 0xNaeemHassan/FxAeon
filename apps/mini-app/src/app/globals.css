@@ -5,15 +5,15 @@
 /* FxAeon — a focused canvas with a little atmosphere and clear surface depth. */
 :root {
   /* Color roles: one source of truth for CSS and Tailwind utilities. */
-  --bg: #100e18;
-  --bg-raised: #15121e;
-  --surface: #1a1726;
-  --surface-2: #242033;
-  --surface-3: #302a42;
-  --card: #1a1726;
-  --input: #221e30;
-  --line: #322b43;
-  --line-strong: #57496d;
+  --bg: #101018;
+  --bg-raised: #14131d;
+  --surface: #181721;
+  --surface-2: #211f2c;
+  --surface-3: #2b2739;
+  --card: #181721;
+  --input: #1d1b28;
+  --line: #302c3f;
+  --line-strong: #504760;
   --text: #f7f5fc;
   --mut: #b1a9bf;
   --mut-2: #93889f;
@@ -141,18 +141,18 @@
 
 :root[data-theme='light'] {
   color-scheme: light;
-  --bg: #f7f5fb;
-  --bg-raised: #ffffff;
-  --surface: #ffffff;
-  --surface-2: #f0ecf7;
-  --surface-3: #e7e0f2;
-  --card: #ffffff;
-  --input: #f2eef8;
-  --line: #e8e1f0;
-  --line-strong: #b6a8cb;
-  --text: #251b35;
-  --mut: #71637f;
-  --mut-2: #7c6d8c;
+  --bg: #faf8f4;
+  --bg-raised: #fffdfa;
+  --surface: #fffdfa;
+  --surface-2: #eee7f7;
+  --surface-3: #e7def2;
+  --card: #fffdfa;
+  --input: #f4f0f8;
+  --line: #ded5e7;
+  --line-strong: #ad9cc3;
+  --text: #302340;
+  --mut: #6c617b;
+  --mut-2: #786987;
   --mint: #7341c8;
   --mint-bright: #5f2cb4;
   --mint-dim: rgba(115, 65, 200, 0.09);
@@ -165,8 +165,8 @@
   --warn: #90630c;
   --elevation-1: 0 8px 24px rgba(54, 34, 79, 0.07), 0 1px 0 rgba(255, 255, 255, 0.85) inset;
   --elevation-2: 0 18px 52px rgba(54, 34, 79, 0.13), 0 1px 0 rgba(255, 255, 255, 0.9) inset;
-  --canvas-wash: rgba(135, 89, 207, 0.17);
-  --canvas-wash-secondary: rgba(163, 98, 196, 0.075);
+  --canvas-wash: rgba(135, 89, 207, 0.065);
+  --canvas-wash-secondary: rgba(163, 98, 196, 0.025);
   --surface-highlight: rgba(255, 255, 255, 0.9);
   --surface-shadow: rgba(58, 34, 84, 0.1);
 }
@@ -301,14 +301,11 @@ summary:focus-visible {
   color: var(--text);
 }
 
-::-webkit-scrollbar {
-  width: 5px;
+/* Keep scrolling and focus navigation; omit scrollbar chrome in the app. */
+:where(html, body, .app-shell, .app-shell *, [role='dialog'], [role='dialog'] *) {
+  scrollbar-width: none;
 }
-
-::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.15);
-}
+::-webkit-scrollbar { display: none; width: 0; height: 0; }
 
 .app-shell {
   position: relative;
@@ -353,21 +350,6 @@ summary:focus-visible {
   overscroll-behavior: contain;
   padding-bottom: var(--content-bottom-clearance);
   scroll-padding-bottom: var(--content-bottom-clearance);
-}
-
-/* App content stays scrollable for wheel, touch, keyboard, and focus scrolling;
-   desktop scrollbar chrome is visual noise at the edge. */
-@media (min-width: 840px) {
-  .app-content-tabs {
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-
-  .app-content-tabs::-webkit-scrollbar {
-    display: none;
-    width: 0;
-    height: 0;
-  }
 }
 
 .app-topbar {
@@ -1372,9 +1354,14 @@ select.field-control option {
   animation: missing-value-shimmer 1.35s ease-in-out infinite;
 }
 
-.missing-value-unavailable .missing-value-bar {
-  background: color-mix(in srgb, var(--mut) 28%, transparent);
-  animation: none;
+.missing-value-unavailable {
+  color: var(--mut);
+}
+
+.missing-value-icon {
+  width: .9em;
+  height: .9em;
+  flex: 0 0 auto;
 }
 
 @keyframes missing-value-shimmer {
@@ -1511,40 +1498,6 @@ input[type='range'].lever::-moz-range-thumb {
   .app-topbar > a { gap: 8px; }
   .app-topbar > a > svg { width: 28px; height: 28px; }
   .brand-wordmark { font-size: 20px; }
-  /* The fixed tab bar already names every primary route. Keep mobile action
-     surfaces focused on their first control instead of repeating the route
-     title and subtitle above it. Documentation keeps its heading because it
-     is a reading surface and intentionally remains scrollable. */
-  :where(
-    .app-workspace[data-route='/'],
-    .app-workspace[data-route='/portfolio'],
-    .app-workspace[data-route='/trade'],
-    .app-workspace[data-route='/earn'],
-    .app-workspace[data-route='/borrow'],
-    .app-workspace[data-route='/move'],
-    .app-workspace[data-route='/more'],
-    .app-workspace[data-route='/positions'],
-    .app-workspace[data-route='/activity'],
-    .app-workspace[data-route='/history'],
-    .app-workspace[data-route='/settings'],
-    .app-workspace[data-route='/qr'],
-    .app-workspace[data-route='/login']
-  ) > .app-content > .page-header {
-    /* Keep a route-level h1 in the accessibility tree after the visual
-       heading is removed from the compact mobile fold. The shell and the
-       first product card remain in the same geometry, while screen readers
-       still get a reliable page name and focus target. */
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    clip-path: inset(50%);
-    white-space: nowrap;
-    border: 0;
-  }
   .page-header { margin-bottom: 6px; }
   .page-header h1 { font-size: 24px; line-height: 1.05; }
   .page-subtitle { margin-top: 2px; font-size: 12px; line-height: 1.35; }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { FX_TOKENS, type FxTokenKey } from "../src/lib/fx/tokens";
+import { freshDisplayPrices } from "../src/lib/displayPrices";
 import {
   formatUsd,
   coinGeckoTokenPriceEndpoint,
@@ -11,6 +12,7 @@ import {
   priceKeyForSymbol,
   usdValueForDecimal,
   usdValueForUnits,
+  USD_PRICE_MAX_AGE_MS,
 } from "../src/lib/prices";
 
 const keys = Object.keys(FX_TOKENS) as FxTokenKey[];
@@ -49,10 +51,46 @@ test("preserves each quote timestamp when another token is older", () => {
   assert.equal(snapshot.updatedAts.FXN, (now - 120) * 1_000);
 });
 
+test('accepts provider quotes inside one hour and isolates an older token', () => {
+  const now = 2_000_000_000;
+  const payload = validPayload(now);
+  payload.coins[`ethereum:${FX_TOKENS.FXN.address.toLowerCase()}`].timestamp = now - (USD_PRICE_MAX_AGE_MS / 1_000 + 1);
+  const snapshot = parseUsdPriceResponse(payload, now);
+  assert.equal(snapshot.prices.ETH, 2_400);
+  assert.equal(snapshot.updatedAts.ETH, (now - 12) * 1_000);
+  assert.equal(snapshot.prices.FXN, undefined, 'a quote older than the provider freshness window is excluded independently');
+  const sevenMinutesOld = validPayload(now);
+  for (const coin of Object.values(sevenMinutesOld.coins)) coin.timestamp = now - 7 * 60;
+  assert.equal(parseUsdPriceResponse(sevenMinutesOld, now).prices.ETH, 2_400);
+});
+
+test('display surfaces retain seven-minute quotes and filter each token at one hour', () => {
+  const now = 2_000_000_000_000;
+  const sevenMinutesAgo = now - 7 * 60_000;
+  assert.deepEqual(freshDisplayPrices({
+    prices: { ETH: 2_400, FXN: 1 }, status: 'stale', updatedAt: sevenMinutesAgo,
+    updatedAts: { ETH: sevenMinutesAgo, FXN: now - USD_PRICE_MAX_AGE_MS - 1 },
+  }, now), { ETH: 2_400 });
+});
+
+test('accepts the exact one-hour display boundary and rejects one millisecond older', () => {
+  const now = 2_000_000_000_000;
+  const boundary = now - USD_PRICE_MAX_AGE_MS;
+  const snapshot = { prices: { ETH: 2_400 }, status: 'stale' as const, updatedAt: boundary, updatedAts: { ETH: boundary } };
+  assert.deepEqual(freshDisplayPrices(snapshot, now), { ETH: 2_400 });
+  assert.deepEqual(freshDisplayPrices({ ...snapshot, updatedAts: { ETH: boundary - 1 } }, now), {});
+  const providerNow = Math.floor(now / 1_000);
+  const providerPayload = validPayload(providerNow);
+  providerPayload.coins[`ethereum:${FX_TOKENS.FXN.address.toLowerCase()}`].timestamp = providerNow - USD_PRICE_MAX_AGE_MS / 1_000;
+  assert.equal(parseUsdPriceResponse(providerPayload, providerNow).prices.FXN, 1);
+  providerPayload.coins[`ethereum:${FX_TOKENS.FXN.address.toLowerCase()}`].timestamp -= 1;
+  assert.equal(parseUsdPriceResponse(providerPayload, providerNow).prices.FXN, undefined);
+});
+
 test("rejects stale and low-confidence prices without discarding independently valid tokens", () => {
   const now = 2_000_000_000;
   const stale = validPayload(now);
-  for (const coin of Object.values(stale.coins)) coin.timestamp = now - 901;
+  for (const coin of Object.values(stale.coins)) coin.timestamp = now - (USD_PRICE_MAX_AGE_MS / 1_000 + 1);
   assert.throws(() => parseUsdPriceResponse(stale, now), /no validated prices/);
 
   const lowConfidence = validPayload(now);
@@ -61,7 +99,7 @@ test("rejects stale and low-confidence prices without discarding independently v
 
   const incomplete = validPayload(now);
   delete incomplete.coins[`ethereum:${FX_TOKENS.WBTC.address.toLowerCase()}`];
-  incomplete.coins[`ethereum:${FX_TOKENS.fxUSD.address.toLowerCase()}`].timestamp = now - 901;
+  incomplete.coins[`ethereum:${FX_TOKENS.fxUSD.address.toLowerCase()}`].timestamp = now - (USD_PRICE_MAX_AGE_MS / 1_000 + 1);
   const partial = parseUsdPriceResponse(incomplete, now);
   assert.equal(partial.prices.ETH, 2_400);
   assert.equal(partial.prices.WBTC, undefined);
@@ -79,14 +117,22 @@ test("calculates display-only USD values without changing token units", () => {
   assert.equal(formatUsd(0.001), "<$0.01");
 });
 
-test("restores only a recent, validated USD snapshot", () => {
+test("restores validated USD snapshots through the quote freshness window", () => {
   const now = 2_000_000_000_000;
   const prices = parseUsdPriceResponse(validPayload(Math.floor(now / 1_000)), Math.floor(now / 1_000)).prices;
   assert.deepEqual(parseUsdPriceCache({ prices, updatedAt: now - 12_000 }, now), {
     prices,
     updatedAt: now - 12_000,
   });
-  assert.equal(parseUsdPriceCache({ prices, updatedAt: now - 121_000 }, now), null);
+  assert.deepEqual(parseUsdPriceCache({ prices, updatedAt: now - 7 * 60_000 }, now), {
+    prices,
+    updatedAt: now - 7 * 60_000,
+  });
+  assert.equal(parseUsdPriceCache({ prices, updatedAt: now - USD_PRICE_MAX_AGE_MS - 1 }, now), null);
+  const perToken = parseUsdPriceCache({ prices, updatedAt: now - 7 * 60_000,
+    updatedAts: { ETH: now - 7 * 60_000, FXN: now - USD_PRICE_MAX_AGE_MS - 1 } }, now);
+  assert.equal(perToken?.prices.ETH, prices.ETH);
+  assert.equal(perToken?.prices.FXN, undefined);
   assert.equal(parseUsdPriceCache({ prices: { ...prices, fxUSD: 0 }, updatedAt: now - 12_000 }, now)?.prices.fxUSD, undefined);
   assert.equal(parseUsdPriceCache({ prices: { fxUSD: 0 }, updatedAt: now - 12_000 }, now), null);
 });
@@ -96,7 +142,7 @@ test("CoinGecko fallback validates the exact contract, numeric price, and timest
   const address = FX_TOKENS.fxUSD.address.toLowerCase();
   assert.deepEqual(parseCoinGeckoTokenPriceResponse({ [address]: { usd: 0.997, last_updated_at: now - 20 } }, 'fxUSD', now), { price: 0.997, timestamp: now - 20 });
   for (const entry of [
-    { usd: 1, last_updated_at: now - 901 },
+    { usd: 1, last_updated_at: now - (USD_PRICE_MAX_AGE_MS / 1_000 + 1) },
     { usd: 1, last_updated_at: now + 121 },
     { usd: 1 }, { usd: 0, last_updated_at: now },
     { usd: Infinity, last_updated_at: now }, { usd: '1', last_updated_at: now },
@@ -110,7 +156,7 @@ test("a delayed protocol price uses a fresh CoinGecko quote without replacing fr
   const now = Math.floor(Date.now() / 1000);
   const payload = validPayload(now);
   const address = FX_TOKENS.fxUSD.address.toLowerCase();
-  payload.coins[`ethereum:${address}`].timestamp = now - 901;
+  payload.coins[`ethereum:${address}`].timestamp = now - (USD_PRICE_MAX_AGE_MS / 1_000 + 1);
   const calls: string[] = [];
   const request = (async (input) => {
     const url = String(input); calls.push(url);

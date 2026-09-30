@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { CheckCircle2, ChevronRight, CircleAlert, Clock3, RefreshCw, XCircle, type LucideIcon } from 'lucide-react';
+import { CheckCircle2, CircleAlert, Clock3, RefreshCw, XCircle, type LucideIcon } from 'lucide-react';
 import type { Address } from 'viem';
 import { Card, SectionTitle } from '@/components/ui';
 import {
@@ -15,8 +15,10 @@ import { haptic } from '@/lib/telegram';
 import { useInvalidateWalletData } from '@/components/WalletDataProvider';
 import { createRecoveryWalletRefresh, createWalletReadScope } from '@/lib/walletDataRefresh';
 import styles from '@/app/AccountWorkspace.module.css';
+import { selectWalletTasks } from '@/lib/taskState';
+import ProtocolPositionHistory from '@/components/ProtocolPositionHistory';
 
-export default function RecentActivityPreview({ walletAddress }: { walletAddress: Address }) {
+export default function RecentActivityPreview({ walletAddress, attentionOnly = false }: { walletAddress: Address; attentionOnly?: boolean }) {
   const identity = walletAddress.toLowerCase();
   const readScope = useRef(createWalletReadScope(walletAddress));
   readScope.current.select(walletAddress);
@@ -27,6 +29,7 @@ export default function RecentActivityPreview({ walletAddress }: { walletAddress
   const items = current ? snapshot.items : [];
   const loading = !current || snapshot.loading;
   const loadError = current ? snapshot.error : '';
+  const attention = selectWalletTasks({ walletAddress, transactions: items }).filter((task) => task.kind === 'transaction');
 
   const load = useCallback(async () => {
     const isCurrent = readScope.current.start(walletAddress);
@@ -43,13 +46,16 @@ export default function RecentActivityPreview({ walletAddress }: { walletAddress
       await refreshWallet(reconciled, walletAddress, isCurrent);
       if (!isCurrent()) return;
       if (reconciled.length === 0) {
-        setSnapshot({ identity, items: [], loading: false, error: 'Saved history is on this device, but transaction status is unavailable. Retry when network access is available.' });
+        setSnapshot({ identity, items: [], loading: false, error: 'Couldn’t verify saved transaction status. Saved history remains on this device.' });
         return;
       }
-      setSnapshot({ identity, items: [...reconciled].reverse().slice(0, 3), loading: false, error: '' });
+      const ordered = [...reconciled].reverse();
+      const unresolved = ordered.filter((item) => item.status === 'pending');
+      const terminal = ordered.filter((item) => item.status !== 'pending');
+      setSnapshot({ identity, items: [...unresolved, ...terminal].slice(0, 3), loading: false, error: '' });
     } catch {
       if (!isCurrent()) return;
-      setSnapshot({ identity, items: [], loading: false, error: 'Saved history could not be checked against chain receipts. Nothing was treated as complete or failed.' });
+      setSnapshot({ identity, items: [], loading: false, error: 'Couldn’t check saved transactions. None were marked complete or failed.' });
     }
   }, [identity, refreshWallet, walletAddress]);
 
@@ -59,14 +65,29 @@ export default function RecentActivityPreview({ walletAddress }: { walletAddress
     return () => scope.cancel();
   }, [load]);
 
+  if (attentionOnly) {
+    if (!loading && !loadError && attention.length === 0) return null;
+    return <section aria-labelledby="wallet-task-attention-title" className={styles.section}>
+      <SectionTitle><span id="wallet-task-attention-title">Needs attention</span></SectionTitle>
+      <Card className="p-3">
+        {loading ? <p role="status" className="text-[11px] text-mut">Checking submitted transactions…</p>
+          : loadError ? <p role="status" className="text-[11px] text-warn">Couldn’t verify confirmation. <Link href="/history" className="font-semibold text-mint">Open History</Link> to check.</p>
+            : <ul className="space-y-1">{attention.map((task) => <li key={task.id} className="flex items-center justify-between gap-3 text-[11px]">
+              <span>{task.title}</span><Link href={task.href} className="inline-flex min-h-11 shrink-0 items-center font-semibold text-mint">View progress</Link>
+            </li>)}</ul>}
+      </Card>
+    </section>;
+  }
+
   return (
-    <section className={styles.section} aria-labelledby="recent-activity-title">
+    <section className={styles.section} aria-label="Recent history">
+      {(loading || loadError || items.length > 0) && <>
       <SectionTitle right={(
         <button type="button" aria-label="Refresh recent history" onClick={() => { haptic('light'); void load(); }} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-lg text-mut hover:text-mint">
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
         </button>
       )}>
-        <span id="recent-activity-title">Recent history</span>
+        <span id="recent-activity-title">Saved transactions</span>
       </SectionTitle>
       <Card className={`${styles.activityCard} portfolio-activity-card p-0`}>
         {loading ? (
@@ -76,23 +97,34 @@ export default function RecentActivityPreview({ walletAddress }: { walletAddress
         ) : loadError ? (
           <div className="flex items-center gap-3 px-4 py-5" role="status" aria-live="polite">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--warn-dim)] text-warn"><CircleAlert className="h-5 w-5" aria-hidden="true" /></span>
-            <span className="min-w-0 flex-1 text-[11px] leading-relaxed text-warn">Transaction status is unavailable. Retry before relying on this history.</span>
+            <span className="min-w-0 flex-1 text-[11px] leading-relaxed text-warn">Couldn’t load transaction details.</span>
             <button type="button" aria-label="Retry recent history" onClick={() => { haptic('light'); void load(); }} className="glass-press flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-mut"><RefreshCw className="h-4 w-4" aria-hidden="true" /></button>
           </div>
         ) : items.length ? (
           <>
+            {attention.length > 0 && (
+              <section aria-labelledby="portfolio-attention-title" className="mx-3 mt-3 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3">
+                <h3 id="portfolio-attention-title" className="text-[11px] font-semibold">Needs attention</h3>
+                <ul className="mt-2 space-y-2">
+                  {attention.map((task) => <li key={task.id} className="flex items-center justify-between gap-3 text-[11px]">
+                    <span className="min-w-0">{task.title}</span>
+                    <Link href={task.href} className="min-h-11 shrink-0 inline-flex items-center font-semibold text-mint">View progress</Link>
+                  </li>)}
+                </ul>
+              </section>
+            )}
             {items.some((item) => item.verification === 'rpc-error') && (
-              <div role="status" aria-live="polite" className="mx-3 mt-3 flex items-center gap-2 rounded-lg bg-[var(--warn-dim)] px-3 py-2"><span className="min-w-0 flex-1 text-[11px] text-warn">Some transaction details are unavailable. Retry before relying on this history.</span><button type="button" aria-label="Retry receipt details" onClick={() => { haptic('light'); void load(); }} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-lg text-warn"><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /></button></div>
+              <div role="status" aria-live="polite" className="mx-3 mt-3 flex items-center gap-2 rounded-lg bg-[var(--warn-dim)] px-3 py-2"><span className="min-w-0 flex-1 text-[11px] text-warn">Some transaction details couldn’t load.</span><button type="button" aria-label="Retry receipt details" onClick={() => { haptic('light'); void load(); }} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-lg text-warn"><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /></button></div>
             )}
             <ul className={`${styles.activityList} divide-y divide-[var(--line)] px-3`}>
               {items.map((item) => <ActivityRow key={item.record.id} item={item} />)}
             </ul>
           </>
         ) : null}
-        <Link href="/history" className={`${styles.activityLink} glass-press flex min-h-12 items-center justify-between border-t border-[var(--line)] px-4 text-[12px] font-semibold text-mint`}>
-          Open full history <ChevronRight className="h-4 w-4" aria-hidden="true" />
-        </Link>
+
       </Card>
+      </>}
+      <ProtocolPositionHistory walletAddress={walletAddress} compact />
     </section>
   );
 }

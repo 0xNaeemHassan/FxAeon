@@ -38,8 +38,10 @@ test('unavailable placeholders are neutral, explicit, and support value or child
   assert.match(unavailable, /missing-value-sm missing-value-unavailable/);
   assert.match(unavailable, /aria-label="Value unavailable"/);
   assert.doesNotMatch(unavailable, /aria-label="Loading value"/);
+  assert.match(unavailable, /lucide-circle-alert/);
+  assert.match(unavailable, /class="[^"]*missing-value-icon[^"]*" aria-hidden="true"/);
   assert.doesNotMatch(unavailable, /missing-value-bar/);
-  assert.match(unavailable, /<span aria-hidden="true">—<\/span>/);
+  assert.doesNotMatch(unavailable, />—</);
 
   const unavailableByLoading = render(React.createElement(MissingValue, { loading: false }));
   assert.match(unavailableByLoading, /missing-value-unavailable/);

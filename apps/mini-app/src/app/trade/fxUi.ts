@@ -13,6 +13,9 @@ export type UiSide = 'long' | 'short';
 export type UiToken = 'ETH' | 'WETH' | 'stETH' | 'wstETH' | 'WBTC' | 'USDC' | 'USDT' | 'fxUSD';
 export type SaveToken = 'usdc' | 'fxUSD' | 'fxUSDBasePool';
 
+/** Allow ordinary browser SDK multicall hydration to finish before direct discovery. */
+export const POSITION_INDEXER_READ_TIMEOUT_MS = 8_000;
+
 export const FXSAVE_ADDRESS = '0x7743e50F534a7f9F1791DdE7dCD89F7783Eefc39' as Address;
 
 export const TOKEN_META: Record<UiToken | 'fxSAVE' | 'fxUSDBasePool', { address: Address; decimals: number }> = {
@@ -248,18 +251,30 @@ export async function verifyPositionGroupOwnership(params: {
   });
   const checks = await Promise.allSettled(valid.map(async (info) => {
     const tokenId = BigInt(info.positionId);
-    const state = await readCanonicalPositionState({ client: params.client, group: params.group, positionId: info.positionId });
-    // A fully closed position may burn its ERC-721 before the indexer drops
-    // the historical record. Canonical zero accounting is sufficient to
-    // remove that non-actionable row; active positions still require ownerOf.
-    if (state[0] === 0n && state[1] === 0n) return null;
-    const owner = await withReadDeadline(params.client.readContract({
-      address: pool,
-      abi: [{ type: 'function', name: 'ownerOf', stateMutability: 'view', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ type: 'address' }] }] as const,
-      functionName: 'ownerOf',
-      args: [tokenId],
-    }));
+    const [collateral, debt] = await readCanonicalPositionState({ client: params.client, group: params.group, positionId: info.positionId });
+    const closed = collateral === 0n && debt === 0n;
+    // Retain a still-owned zero-accounting NFT in the verified ID set so it
+    // satisfies balanceOf completeness and avoids a full historical ID scan.
+    // settlePositionGroups removes closed rows from the actionable UI after
+    // ownership reconciliation. Burned/stale indexer IDs still fail ownerOf
+    // and fall through to direct discovery.
+    let owner: unknown;
+    try {
+      owner = await withReadDeadline(params.client.readContract({
+        address: pool,
+        abi: [{ type: 'function', name: 'ownerOf', stateMutability: 'view', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ type: 'address' }] }] as const,
+        functionName: 'ownerOf',
+        args: [tokenId],
+      }));
+    } catch (cause) {
+      // Closed indexer rows may outlive a burned NFT. Their accounting is
+      // already canonical zero, so discard only that stale row; uncertainty
+      // for a position with live accounting must remain a hard failure.
+      if (closed) return null;
+      throw cause;
+    }
     if (typeof owner !== 'string' || owner.toLowerCase() !== params.walletAddress.toLowerCase()) {
+      if (closed) return null;
       throw new Error(`${params.group.market} ${params.group.side} position ownership verification was incomplete`);
     }
     return info;
@@ -304,7 +319,7 @@ export async function readPositionGroupWithDirectFallback(params: {
         userAddress: params.walletAddress,
         market: params.group.market,
         type: params.group.side,
-      }), Math.min(params.indexerTimeoutMs ?? 3_000, Math.max(1, deadlineAt - Date.now())));
+      }), Math.min(params.indexerTimeoutMs ?? POSITION_INDEXER_READ_TIMEOUT_MS, Math.max(1, deadlineAt - Date.now())));
   } catch {
     // A failed indexer query is precisely the case the direct wallet path is
     // intended to cover. The canonical balance/read below remains authoritative.

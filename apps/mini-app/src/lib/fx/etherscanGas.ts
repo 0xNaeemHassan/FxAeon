@@ -4,9 +4,18 @@ export interface EthereumGasFallbackSnapshot {
   source: "etherscan";
   chainId: 1;
   gasPriceWei: string;
+  /** Optional enriched oracle data; old server snapshots remain valid. */
+  baseFeePerGasWei?: string;
+  tiers?: EthereumGasFallbackTiers;
   blockNumber?: string;
   fetchedAt: number;
   stale: boolean;
+}
+
+export interface EthereumGasFallbackTiers {
+  standard: string;
+  fast: string;
+  rapid: string;
 }
 
 export interface EthereumGasFallbackOptions {
@@ -54,9 +63,33 @@ function isSnapshot(value: unknown, now: number): value is EthereumGasFallbackSn
         || value.blockNumber.length > MAX_BLOCK_DIGITS
         || !/^\d+$/.test(value.blockNumber)))) return false;
   try {
-    return BigInt(value.gasPriceWei) > 0n && BigInt(value.gasPriceWei) <= MAX_GAS_PRICE_WEI;
+    const gasPrice = BigInt(value.gasPriceWei);
+    if (gasPrice <= 0n || gasPrice > MAX_GAS_PRICE_WEI) return false;
+    const hasEnrichedFields = value.baseFeePerGasWei !== undefined || value.tiers !== undefined;
+    if (!hasEnrichedFields) return true;
+    if (typeof value.baseFeePerGasWei !== 'string'
+      || value.baseFeePerGasWei.length > MAX_GAS_PRICE_DIGITS
+      || !/^\d+$/.test(value.baseFeePerGasWei)
+      || !isRecord(value.tiers)) return false;
+    const baseFee = BigInt(value.baseFeePerGasWei);
+    const standard = boundedTier(value.tiers.standard);
+    const fast = boundedTier(value.tiers.fast);
+    const rapid = boundedTier(value.tiers.rapid);
+    return baseFee > 0n && baseFee <= MAX_GAS_PRICE_WEI
+      && standard !== undefined && fast !== undefined && rapid !== undefined
+      && baseFee <= standard && standard <= fast && fast <= rapid;
   } catch {
     return false;
+  }
+}
+
+function boundedTier(value: unknown): bigint | undefined {
+  if (typeof value !== 'string' || value.length > MAX_GAS_PRICE_DIGITS || !/^\d+$/.test(value)) return undefined;
+  try {
+    const parsed = BigInt(value);
+    return parsed > 0n && parsed <= MAX_GAS_PRICE_WEI ? parsed : undefined;
+  } catch {
+    return undefined;
   }
 }
 

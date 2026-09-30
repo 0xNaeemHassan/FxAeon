@@ -18,12 +18,17 @@ import {
 } from "../src/lib/web3/config";
 import {
   createWalletQueryClient,
+  fxSaveClaimableQueryKey,
+  fxSaveClaimableQueryOptions,
+  FX_SAVE_CLAIMABLE_REFETCH_MS,
+  FX_SAVE_CLAIMABLE_STALE_MS,
   invalidateWalletQueries,
   moveBalanceQueryOptions,
   readCanonicalWalletAssets,
   readWagmiWalletBalances,
   walletBalanceQueryKey,
   walletBalanceQueryOptions,
+  walletQueryResultFresh,
 } from "../src/lib/web3/walletQueries";
 import { FX_TOKENS } from "../src/lib/fx/tokens";
 import { canonicalMoveSourceTokenAddress } from "../src/lib/moveBalances";
@@ -205,6 +210,59 @@ test("deduplicates concurrent observers and direct QueryClient calls by session/
   queryClient.clear();
 });
 
+test("fxSAVE claimability is shared, receipt-invalidated, and isolated by session", async () => {
+  const queryClient = createWalletQueryClient();
+  let reads = 0;
+  let amount = 4n;
+  let fail = false;
+  const options = { ...fxSaveClaimableQueryOptions("session-a", wallet, async (address) => {
+    reads += 1;
+    assert.equal(address.toLowerCase(), wallet.toLowerCase());
+    if (fail) throw new Error("claim read unavailable");
+    return { pendingSharesWei: amount, hasPendingRedeem: amount > 0n } as never;
+  }, async () => undefined), retry: false };
+  const observerA = new QueryObserver(queryClient, options);
+  const observerB = new QueryObserver(queryClient, options);
+  const unsubscribeA = observerA.subscribe(() => undefined);
+  const unsubscribeB = observerB.subscribe(() => undefined);
+  await Promise.all([observerA.refetch(), observerB.refetch()]);
+  assert.equal(reads, 1, "two consumers issued duplicate claim reads");
+  assert.equal(queryClient.getQueryData<{ pendingSharesWei: bigint }>(fxSaveClaimableQueryKey("session-a", wallet))?.pendingSharesWei, 4n);
+
+  amount = 0n;
+  await invalidateWalletQueries(queryClient, wallet, 1);
+  assert.equal(reads, 2, "receipt invalidation did not refresh the active claim query");
+  assert.equal(queryClient.getQueryData<{ pendingSharesWei: bigint }>(options.queryKey)?.pendingSharesWei, 0n);
+
+  const nextSessionOptions = fxSaveClaimableQueryOptions("session-b", wallet, async () => {
+    reads += 1;
+    return { pendingSharesWei: 9n, hasPendingRedeem: true } as never;
+  }, async () => undefined);
+  assert.notDeepEqual(options.queryKey, nextSessionOptions.queryKey);
+  await queryClient.fetchQuery(nextSessionOptions);
+  assert.equal(queryClient.getQueryData<{ pendingSharesWei: bigint }>(fxSaveClaimableQueryKey("session-b", wallet))?.pendingSharesWei, 9n);
+  assert.equal(queryClient.getQueryData<{ pendingSharesWei: bigint }>(fxSaveClaimableQueryKey("session-a", wallet))?.pendingSharesWei, 0n);
+
+  fail = true;
+  await invalidateWalletQueries(queryClient, wallet, 1);
+  assert.equal(queryClient.getQueryState(options.queryKey)?.status, "error");
+
+  unsubscribeA();
+  unsubscribeB();
+  queryClient.clear();
+});
+
+test("claim freshness outlasts its polling interval and expires before stale data can authorize", () => {
+  const now = 100_000;
+  assert.ok(FX_SAVE_CLAIMABLE_REFETCH_MS < FX_SAVE_CLAIMABLE_STALE_MS);
+  assert.equal(walletQueryResultFresh(now - FX_SAVE_CLAIMABLE_REFETCH_MS, false, false, now, FX_SAVE_CLAIMABLE_STALE_MS), true);
+  assert.equal(walletQueryResultFresh(now - FX_SAVE_CLAIMABLE_STALE_MS + 1, false, false, now, FX_SAVE_CLAIMABLE_STALE_MS), true);
+  assert.equal(walletQueryResultFresh(now - FX_SAVE_CLAIMABLE_STALE_MS, false, false, now, FX_SAVE_CLAIMABLE_STALE_MS), false);
+  assert.equal(walletQueryResultFresh(now, true, false, now, FX_SAVE_CLAIMABLE_STALE_MS), false);
+  assert.equal(walletQueryResultFresh(now, false, true, now, FX_SAVE_CLAIMABLE_STALE_MS), false);
+  assert.equal(walletQueryResultFresh(0, false, false, now, FX_SAVE_CLAIMABLE_STALE_MS), false);
+});
+
 test("expires stale wallet data and retries a previously failed query", async () => {
   const state = makeState();
   const config = configFor(state);
@@ -286,6 +344,28 @@ test("in-flight pre-receipt reads are canceled before active refresh can replace
   queryClient.clear();
 });
 
+test("overlapping manual wallet refreshes join one actual network read", async () => {
+  const state = makeState();
+  const config = configFor(state);
+  const queryClient = createWalletQueryClient();
+  const options = walletBalanceQueryOptions(config, "session-a", wallet, 1);
+  const observer = new QueryObserver(queryClient, options);
+  const unsubscribe = observer.subscribe(() => undefined);
+  await observer.refetch();
+  state.calls = [];
+  state.delayMs = 15;
+  const first = invalidateWalletQueries(queryClient, wallet, 1);
+  while (state.calls.filter((method) => method === "eth_getBalance").length < 1) {
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+  const second = invalidateWalletQueries(queryClient, wallet, 1);
+  await Promise.all([first, second]);
+  assert.equal(state.calls.filter((method) => method === "eth_getBalance").length, 1, "duplicate manual refresh issued another read");
+  assert.equal(queryClient.getQueryState(options.queryKey)?.status, "success");
+  unsubscribe();
+  queryClient.clear();
+});
+
 test("a later receipt refresh during an earlier read gets a trailing network read", async () => {
   const state = makeState();
   const config = configFor(state);
@@ -301,7 +381,7 @@ test("a later receipt refresh during an earlier read gets a trailing network rea
     await new Promise((resolve) => setTimeout(resolve, 1));
   }
   state.nativeBalances.set(wallet.toLowerCase(), 777n);
-  const trailingRefresh = invalidateWalletQueries(queryClient, wallet, 1);
+  const trailingRefresh = invalidateWalletQueries(queryClient, wallet, 1, { afterReceipt: true });
   await Promise.all([firstRefresh, trailingRefresh]);
   const current = queryClient.getQueryData(options.queryKey);
   assert.equal(current?.balances.find((balance) => balance.key === "ETH")?.amountWei, 777n);

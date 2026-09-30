@@ -1,0 +1,91 @@
+.control {
+  display: inline-flex;
+  flex: 0 0 auto;
+  min-width: 0;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.control :global(.network-selector-wrap) {
+  flex: 0 0 auto;
+}
+
+.control :global(.network-selector) {
+  display: inline-flex;
+  width: auto;
+  max-width: none;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-radius: 999px 0 0 999px;
+  background: transparent;
+}
+
+.control :global(.network-selector-visual-label) {
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.trigger {
+  display: inline-flex;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 0 999px 999px 0;
+  background: transparent;
+  color: var(--text);
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.identityTrigger {
+  max-width: 174px;
+}
+
+.identityName {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.control :global(.network-selector):hover:not(:disabled),
+.trigger:hover:not(:disabled) {
+  background: var(--mint-dim);
+  color: var(--mint);
+}
+
+.control :global(.network-selector):focus-visible,
+.trigger:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--mint);
+  outline-offset: 1px;
+}
+
+@media (max-width: 430px) {
+  .control :global(.network-selector) { gap: 5px; padding-inline: 8px; }
+  .control :global(.network-selector-visual-label) { display: none; }
+  .identityTrigger { max-width: 136px; padding-inline: 9px; }
+}
+
+@media (max-width: 359px) {
+  .control :global(.network-selector) { gap: 4px; padding-inline: 6px; }
+  .control :global(.network-selector-visual-label) { font-size: 10px; }
+  .identityTrigger { max-width: 112px; padding-inline: 7px; }
+}

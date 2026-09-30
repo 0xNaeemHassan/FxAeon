@@ -1,17 +1,18 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import { WagmiProvider, useConfig, useWatchBlockNumber } from 'wagmi';
 import { usePrivyWallet } from '@/lib/wallet';
 import { createWalletDataConfig, type WalletDataConfig } from '@/lib/web3/config';
 import {
-  canonicalWalletAssetQueryOptions, createWalletQueryClient, invalidateWalletQueries, moveBalanceQueryOptions, walletBalanceQueryOptions, WALLET_QUERY_ROOT,
+  canonicalWalletAssetQueryOptions, createWalletQueryClient, fxSaveClaimableQueryOptions, FX_SAVE_CLAIMABLE_REFETCH_MS, FX_SAVE_CLAIMABLE_STALE_MS, invalidateWalletQueries, moveBalanceQueryOptions, walletBalanceQueryOptions, walletQueryResultFresh, WALLET_QUERY_ROOT,
 } from '@/lib/web3/walletQueries';
 import type { WalletBalancesResult } from '@/lib/fx/balances';
+import type { FxSaveClaimable } from '@/lib/fx';
 import type { CanonicalMoveBalanceMap } from '@/lib/moveBalances';
 import {
-  alchemyDataApiKey, fetchAlchemyWalletAssets, mergeCanonicalWalletAssets,
+  alchemyDataApiKey, fetchAlchemyWalletAssets, mergeCanonicalWalletAssets, walletAssetSourcesFailed,
   type CanonicalAssetRead, type WalletAssetSnapshot,
 } from '@/lib/walletAssets';
 import { useUsdPrices } from '@/components/PriceProvider';
@@ -19,6 +20,7 @@ import { createAlchemyChainPulse, initialRealtimeChainState, type RealtimeChainE
 import { priceDemandRegistry } from '@/lib/priceDemand';
 import type { FxChainId } from '@/lib/fx/types';
 import { subscribeToForegroundResume } from '@/lib/foreground';
+import { createDeferredQueryCacheNotification } from '@/lib/deferredQueryCacheNotification';
 
 const WalletDataSession = createContext('disconnected');
 
@@ -91,7 +93,7 @@ export function useWalletBalances({ address, chainId = 1, enabled = true }: {
   isFetching: boolean;
   updatedAt: number | null;
   error: string;
-  refresh: () => Promise<WalletBalancesResult | undefined>;
+  refresh: (afterReceipt?: boolean) => Promise<WalletBalancesResult | undefined>;
 } {
   const config = useConfig<WalletDataConfig>();
   const queryClient = useQueryClient();
@@ -103,9 +105,9 @@ export function useWalletBalances({ address, chainId = 1, enabled = true }: {
   const supported = chainId === 1;
   const options = walletBalanceQueryOptions(config, session, address ?? '', chainId);
   const query = useQuery({ ...options, enabled: active && supported, refetchInterval: 60_000 });
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (afterReceipt = false) => {
     if (!active || !supported || !address || latestSession.current !== session) return;
-    await invalidateWalletQueries(queryClient, address, chainId);
+    await invalidateWalletQueries(queryClient, address, chainId, { afterReceipt });
     // Invalidation already refetched this active observer. Never recreate an
     // old session's query if the wallet changed while that read was pending.
     if (latestSession.current !== session) return;
@@ -125,10 +127,44 @@ export function useWalletBalances({ address, chainId = 1, enabled = true }: {
   }), [active, query.data, query.dataUpdatedAt, query.isFetching, refresh, status]);
 }
 
+export function useFxSaveClaimable({ address, enabled = true }: { address?: string; enabled?: boolean }): {
+  data: FxSaveClaimable | null;
+  status: 'idle' | 'loading' | 'ready' | 'unavailable';
+  isFetching: boolean;
+  updatedAt: number | null;
+  refresh: () => Promise<FxSaveClaimable | undefined>;
+} {
+  const client = useQueryClient();
+  const session = useContext(WalletDataSession);
+  const latestSession = useRef(session);
+  latestSession.current = session;
+  const active = enabled && Boolean(address) && session !== 'disconnected'
+    && session.split(':')[0] === address?.toLowerCase();
+  const options = fxSaveClaimableQueryOptions(session, address ?? '');
+  const query = useQuery({ ...options, enabled: active, refetchInterval: FX_SAVE_CLAIMABLE_REFETCH_MS });
+  const refresh = useCallback(async () => {
+    if (!active || !address || latestSession.current !== session) return;
+    await invalidateWalletQueries(client, address, 1);
+    if (latestSession.current !== session) return;
+    const key = fxSaveClaimableQueryOptions(session, address).queryKey;
+    if (client.getQueryState(key)?.status !== 'success') return;
+    return client.getQueryData(key);
+  }, [active, address, client, session]);
+  const fresh = Boolean(query.data && walletQueryResultFresh(query.dataUpdatedAt, query.isStale, query.isFetching, Date.now(), FX_SAVE_CLAIMABLE_STALE_MS));
+  const status = !active ? 'idle' : query.isError ? 'unavailable' : fresh ? 'ready' : 'loading';
+  return useMemo(() => ({
+    data: status === 'ready' ? query.data ?? null : null,
+    status,
+    isFetching: active && query.isFetching,
+    updatedAt: status === 'ready' && query.dataUpdatedAt > 0 ? query.dataUpdatedAt : null,
+    refresh,
+  }), [active, query.data, query.dataUpdatedAt, query.isFetching, refresh, status]);
+}
+
 export function useInvalidateWalletData() {
   const client = useQueryClient();
   return useCallback(async (address: string, chainId: number) => {
-    await invalidateWalletQueries(client, address, chainId);
+    await invalidateWalletQueries(client, address, chainId, { afterReceipt: true });
     await client.invalidateQueries({ queryKey: walletAssetsQueryKey(address), refetchType: 'active' });
   }, [client]);
 }
@@ -159,6 +195,7 @@ function WalletAssetLayer({ address, enabled, expandedAssets, chainPulse, childr
   const priceRef = useRef({ prices, status: priceStatus, updatedAt: priceUpdatedAt, updatedAts: priceUpdatedAts });
   priceRef.current = { prices, status: priceStatus, updatedAt: priceUpdatedAt, updatedAts: priceUpdatedAts };
   const active = enabled && expandedAssets && Boolean(address) && session !== 'disconnected' && session.split(':')[0] === address?.toLowerCase();
+  const indexedEnabled = active && Boolean(alchemyDataApiKey());
   const pulseActive = enabled && chainPulse && Boolean(address) && session !== 'disconnected' && session.split(':')[0] === address?.toLowerCase();
   const [chainStates, setChainStates] = useState<Record<FxChainId, RealtimeChainState>>(EMPTY_CHAIN_STATE);
   const mergedRef = useRef<WalletAssetSnapshot | null>(null);
@@ -174,7 +211,7 @@ function WalletAssetLayer({ address, enabled, expandedAssets, chainPulse, childr
   const indexed = useQuery({
     queryKey: address ? [WALLET_QUERY_ROOT, 'assets', address.toLowerCase()] as const : [WALLET_QUERY_ROOT, 'assets', 'disconnected'] as const,
     queryFn: ({ signal }) => fetchAlchemyWalletAssets(address ?? '', signal),
-    enabled: active && Boolean(alchemyDataApiKey()),
+    enabled: indexedEnabled,
     // Discovery is event-driven; bounded polling is reserved for exact reads.
     refetchInterval: false,
   });
@@ -340,7 +377,7 @@ function WalletAssetLayer({ address, enabled, expandedAssets, chainPulse, childr
     : merged ? Object.values(merged.networks).some((network) => network.status === 'pending') ? 'loading'
       : Object.values(merged.networks).some((network) => network.status === 'unavailable') ? 'unavailable'
         : Object.values(merged.networks).some((network) => network.status === 'partial') ? 'partial' : 'ready'
-      : indexed.isError && ethereum.isError && base.isError ? 'unavailable' : 'loading';
+      : walletAssetSourcesFailed(indexedEnabled, indexed.isError, ethereum.isError, base.isError) ? 'unavailable' : 'loading';
   const error = '';
   const value = useMemo<WalletAssetsHookResult>(() => ({ data: merged, status, isFetching: indexed.isFetching || ethereum.isFetching || base.isFetching, error, refresh }), [base.isFetching, error, ethereum.isFetching, indexed.isFetching, merged, refresh, status]);
   return <WalletAssetsContext.Provider value={value}><RealtimeChainContext.Provider value={chainStates}><BalanceBlockWatcher chainId={1} /><BalanceBlockWatcher chainId={8453} />{children}</RealtimeChainContext.Provider></WalletAssetsContext.Provider>;
@@ -352,25 +389,39 @@ function BalanceBlockWatcher({ chainId }: { chainId: 1 | 8453 }) {
   const client = useQueryClient();
   const session = useContext(WalletDataSession);
   const realtime = useContext(RealtimeChainContext)[chainId];
-  const [watching, setWatching] = useState(false);
-  useEffect(() => {
-    const update = () => {
-      const active = realtime.status !== 'live' && session !== 'disconnected' && document.visibilityState === 'visible' && navigator.onLine
-        && client.getQueryCache().findAll({ predicate: ({ queryKey }) =>
-          queryKey[0] === WALLET_QUERY_ROOT && queryKey[1] === session && queryKey[2] === chainId,
-        }).some((query) => query.isActive());
-      // A public/no-RPC build must show the normal unavailable state, not
-      // throw while installing a watcher from a React effect.
-      try { if (active) config.getClient({ chainId }); setWatching(active); }
-      catch { setWatching(false); }
+  const subscribe = useCallback((onStoreChange: () => void) => {
+    // QueryCache can notify synchronously while a route component registers a
+    // useQuery observer during render. Use TanStack's scheduler just as its own
+    // React adapter does, so React never receives this store update mid-render.
+    const notification = createDeferredQueryCacheNotification(onStoreChange);
+    const unsubscribe = client.getQueryCache().subscribe(notification.notify);
+    document.addEventListener('visibilitychange', notification.notify);
+    window.addEventListener('online', notification.notify);
+    window.addEventListener('offline', notification.notify);
+    return () => {
+      notification.dispose();
+      unsubscribe();
+      document.removeEventListener('visibilitychange', notification.notify);
+      window.removeEventListener('online', notification.notify);
+      window.removeEventListener('offline', notification.notify);
     };
-    const unsubscribe = client.getQueryCache().subscribe(update);
-    document.addEventListener('visibilitychange', update);
-    window.addEventListener('online', update);
-    window.addEventListener('offline', update);
-    update();
-    return () => { unsubscribe(); document.removeEventListener('visibilitychange', update); window.removeEventListener('online', update); window.removeEventListener('offline', update); };
+  }, [client]);
+  const getSnapshot = useCallback(() => {
+    const active = typeof document !== 'undefined' && typeof navigator !== 'undefined'
+      && realtime.status !== 'live' && session !== 'disconnected'
+      && document.visibilityState === 'visible' && navigator.onLine
+      && client.getQueryCache().findAll({ predicate: ({ queryKey }) =>
+        queryKey[0] === WALLET_QUERY_ROOT && queryKey[1] === session && queryKey[2] === chainId,
+      }).some((query) => query.isActive());
+    // A public/no-RPC build must show the normal unavailable state, not throw
+    // while React reads the external query-cache snapshot.
+    try { if (active) config.getClient({ chainId }); return active; }
+    catch { return false; }
   }, [chainId, client, config, realtime.status, session]);
+  // QueryCache notifies synchronously, so subscribe schedules its change
+  // callback outside the current render stack. useSyncExternalStore then keeps
+  // React's snapshot reads consistent as route queries activate or settle.
+  const watching = useSyncExternalStore(subscribe, getSnapshot, () => false);
   useWatchBlockNumber({
     config, chainId, enabled: watching, poll: true, pollingInterval: 12_000, emitOnBegin: false,
     onBlockNumber: (_block, previous) => {

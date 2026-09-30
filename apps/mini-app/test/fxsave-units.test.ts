@@ -49,3 +49,9 @@ test('a successful zero-share SDK balance exposes zero base-pool assets', () => 
   assert.equal(normalizedFxSaveAssetsWei(10n, 12n), 12n);
   assert.equal(normalizedFxSaveAssetsWei(10n, undefined), undefined);
 });
+
+test('verified zero base-pool assets are valued without a quote while positive unknown stays unavailable', () => {
+  assert.equal(fxSaveUsdValue('assetsWei', '0', {}), 0);
+  assert.equal(fxSaveUsdValue('assetsWei', 0n, {}), 0);
+  assert.equal(fxSaveUsdValue('assetsWei', '1', {}), null);
+});

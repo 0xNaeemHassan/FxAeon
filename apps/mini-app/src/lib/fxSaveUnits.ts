@@ -34,6 +34,7 @@ export function fxSaveUsdValue(
   prices: UsdPriceMap,
 ): number | null {
   if (value === null || value === undefined) return null;
+  if ((typeof value === 'bigint' && value === 0n) || (typeof value === 'string' && /^(?:0+(?:\.0*)?|\.0+)$/.test(value.trim()))) return 0;
   const { priceKey } = FX_SAVE_UNITS[field];
   return typeof value === 'bigint'
     ? usdValueForUnits(value, FX_TOKENS[priceKey].decimals, prices[priceKey])

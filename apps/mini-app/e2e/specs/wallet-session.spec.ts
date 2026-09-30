@@ -58,6 +58,23 @@ test.describe('wallet session isolation', () => {
     assertNoBackendRequests(requests);
   });
 
+  test('navigation from the wallet drawer preserves the real Back destination', async ({ page, requests }) => {
+    await page.goto('/settings', { waitUntil: 'domcontentloaded' });
+    await page.goto('/portfolio', { waitUntil: 'domcontentloaded' });
+    await page.getByRole('button', { name: 'Open wallet profile' }).click();
+    const profile = page.getByRole('dialog');
+    await profile.getByRole('link', { name: /History/ }).click();
+    await expect(page).toHaveURL(/\/history\/?$/);
+
+    await page.goBack();
+    await expect(page).toHaveURL(/\/portfolio\/?$/);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+
+    await page.goBack();
+    await expect(page).toHaveURL(/\/settings\/?$/);
+    assertNoBackendRequests(requests);
+  });
+
   test('mobile wallet profile keeps the address fallback when ENS and wallet reads are unavailable', async ({ page, requests }, testInfo: TestInfo) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/portfolio', { waitUntil: 'domcontentloaded' });
@@ -67,12 +84,12 @@ test.describe('wallet session isolation', () => {
     const profile = page.getByRole('dialog', { name: `Wallet ${ACCOUNT_A}`, exact: true });
     await expect(profile).toBeVisible();
     await expect(profile.getByRole('heading', { level: 2 })).toHaveText('0x930f…98b9');
-    await expect(profile.getByText('Wallet value', { exact: true })).toBeVisible();
+    await expect(profile.getByRole('status', { name: /Wallet value/i })).toBeVisible();
 
     // The deterministic E2E build has no RPC endpoint or ENS gateway. Wait for
     // the honest unavailable state, then ensure the drawer still identifies
     // the connected address rather than blocking on reverse-name lookup.
-    await expect(profile.getByRole('status', { name: 'Wallet value unavailable because no priced balances are available' })).toBeVisible({ timeout: 20_000 });
+    await expect(profile.getByRole('status', { name: /Wallet value unavailable/i })).toBeVisible({ timeout: 20_000 });
     await expect(profile.getByRole('heading', { level: 2 })).toHaveText('0x930f…98b9');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
     expect(await page.evaluate(() => (window as unknown as { __wallet: { requests: Array<{ method: string }> } }).__wallet.requests.some((request) => request.method === 'eth_sendTransaction'))).toBe(false);

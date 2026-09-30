@@ -55,6 +55,7 @@ export function telegramInitScript(_opts: TelegramShimOptions = {}): (o: Telegra
       initData,
       initDataUnsafe: { user: { id: 777, first_name: 'Aeon', language_code: language } },
       platform,
+      version: '8.0',
       colorScheme: 'dark',
       themeParams: { bg_color: '#0a0a12', text_color: '#ffffff' },
       viewportStableHeight: 844,

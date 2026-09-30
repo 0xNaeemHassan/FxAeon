@@ -1,12 +1,24 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { positionCollateralTokenAddress, positionDebtTokenAddress, positionPoolAddress } from '../src/lib/fx/policy';
-import { rawQuoteReviewFacts, routeFinancialReviewFacts } from '../src/lib/fx/reviewFormatting';
+import { rawQuoteReviewFacts, routeFinancialReviewFacts, tokenAmountReviewFact } from '../src/lib/fx/reviewFormatting';
 import { FX_TOKENS } from '../src/lib/fx/tokens';
+import { factsOutsideConsequenceSummary, primaryReviewFacts, routeFacts } from '../src/components/review/actionReviewPresentation';
+import { consequenceSummary } from '../src/components/review/actionReviewModel';
+import { resultBodyDuringRefresh } from '../src/components/review/executionResult';
 import type { OfficialFxMethod, PlannedRoute, ReviewedActionIntent, RouteDetails } from '../src/lib/fx/types';
 
 const WALLET = '0x1111111111111111111111111111111111111111';
 const UNKNOWN = '0x2222222222222222222222222222222222222222';
+
+test('approval summaries stay compact without losing exact token quantities', () => {
+  const fact = tokenAmountReviewFact('Approval', 89237941012345678901n, FX_TOKENS.fxSAVE.address);
+  assert.equal(fact.value, '≈ 89.23794101 fxSAVE');
+  assert.equal(fact.title, '89.237941012345678901 fxSAVE');
+  assert.equal(tokenAmountReviewFact('Approval', 1n, FX_TOKENS.fxSAVE.address).value, '<0.00000001 fxSAVE');
+  assert.equal(tokenAmountReviewFact('Approval', 1234567n, FX_TOKENS.USDC.address).value, '1.234567 USDC');
+  assert.equal(tokenAmountReviewFact('Approval', 123n, UNKNOWN).value, '123 raw units');
+});
 const operations: Record<ReviewedActionIntent['kind'], OfficialFxMethod> = {
   'position-increase': 'increasePosition',
   'position-reduce': 'reducePosition',
@@ -58,6 +70,72 @@ test('new ETH review formats the actual quoted collateral, debt, and decimal exe
     { label: 'Execution price (unrounded)', value: planned.details!.executionPrice },
     { label: 'Collateral quote (raw units)', value: planned.details!.colls },
     { label: 'Debt quote (raw units)', value: planned.details!.debts },
+  ]);
+});
+
+test('review consequence facts have one visible owner without a generic risk filler', () => {
+  const facts = [
+    { label: 'Amount', value: '10 fxUSD' },
+    { label: 'Slippage', value: '0.5%' },
+    { label: 'Gas fee', value: '0.001 ETH' },
+  ];
+  assert.deepEqual(factsOutsideConsequenceSummary(facts, [facts[0]!]), facts.slice(1));
+  assert.equal(primaryReviewFacts(route(opening(), {})).some((fact) => fact.label === 'Risk'), false);
+});
+
+test('refresh copy never describes partial or failed position actions as confirmed', () => {
+  for (const status of ['partial', 'failed'] as const) {
+    assert.equal(resultBodyDuringRefresh({ status, refreshing: true, positionAction: true, body: 'Partially completed.' }), 'Partially completed.');
+  }
+  assert.equal(resultBodyDuringRefresh({ status: 'confirmed', refreshing: true, positionAction: true, body: 'Confirmed.' }), 'Transaction confirmed. Position details are refreshing.');
+});
+
+test('pure ActionReview presentation builder keeps verified action facts and authoritative costs together', () => {
+  const planned = route(opening(), { colls: '670412512785242112', debts: '1010000000000000000000' });
+  const primary = primaryReviewFacts(planned);
+  assert.deepEqual(primary.slice(0, 2), [
+    { label: 'Amount', value: '1 USDC', title: '1 USDC' },
+    { label: 'Position', value: 'New position' },
+  ]);
+  const facts = routeFacts(planned, { estimate: undefined, estimateIsCurrent: false }, { protocolFee: '0.2 fxUSD' });
+  assert.equal(facts.find((fact) => fact.label === 'Protocol fee')?.value, '0.2 fxUSD');
+  assert.equal(facts.some((fact) => fact.label === 'Estimated debt'), true);
+});
+
+test('estimated leverage is concise while the exact quote and requested target are preserved', () => {
+  const planned = route(opening(), { leverage: 2.0276220198182835, requestedLeverage: 2 });
+  const facts = routeFacts(planned, { estimate: undefined, estimateIsCurrent: false }, {});
+  assert.deepEqual(facts.find((fact) => fact.label === 'Leverage'), {
+    label: 'Leverage', value: '≈ 2.02×', title: '2.0276220198182835×',
+  });
+  assert.equal(facts.find((fact) => fact.label === 'Target leverage')?.value, '2×');
+  assert.equal(planned.details?.leverage, 2.0276220198182835);
+});
+
+test('bridge review keeps validated source, destination, asset, recipient, receive bound, and fee together', () => {
+  const planned = {
+    operation: 'buildBridgeTx',
+    walletAddress: WALLET,
+    chainId: 1,
+    transactions: [],
+    quote: {
+      nativeFee: 1_000_000_000_000_000n,
+      destinationChainId: 8453,
+      recipient: WALLET,
+      bridgeToken: 'fxUSD',
+      bridgeAmount: 3_000_000_000_000_000_000n,
+      minAmountLD: 2_990_000_000_000_000_000n,
+    },
+  } as unknown as PlannedRoute;
+
+  assert.deepEqual(consequenceSummary(primaryReviewFacts(planned)), [
+    { label: 'Source network', value: 'Ethereum' },
+    { label: 'Destination network', value: 'Base' },
+    { label: 'Asset', value: 'fxUSD' },
+    { label: 'Amount', value: '3 fxUSD', title: '3 fxUSD' },
+    { label: 'Minimum received', value: '2.99 fxUSD', title: '2.99 fxUSD' },
+    { label: 'Recipient', value: WALLET },
+    { label: 'Bridge fee', value: '0.001 ETH', title: '0.001 ETH' },
   ]);
 });
 
@@ -125,6 +203,8 @@ test('borrow quotes use pool accounting, not the deposit input units', () => {
   }));
   assert.equal(facts.find((fact) => fact.label === 'Estimated collateral')?.value, '1 stETH');
   assert.equal(facts.find((fact) => fact.label === 'Estimated debt')?.value, '2 fxUSD');
+  assert.equal(facts.some((fact) => fact.label === 'Receive'), false, 'Do not invent net proceeds when the SDK only quotes debt');
+  assert.equal(primaryReviewFacts(route(intent, { colls: '1000000000000000000', debts: '2000000000000000000' })).find((fact) => fact.label === 'Borrow')?.title, '0.000000000000000001 fxUSD');
   assert.equal(facts.find((fact) => fact.label === 'Minimum converted deposit')?.value, '0.2 wstETH');
   assert.equal(facts.some((fact) => fact.label === 'Execution price'), false, 'An oracle price is not a swap execution price');
 });
@@ -162,6 +242,43 @@ test('fxSAVE deposits show independent input-conversion and share minimum units'
     assert.equal(facts[0].value, `1.234567 ${token.key}`);
     assert.equal(facts[1].value, '2.5 fxSAVE');
   }
+});
+
+test('identity fxSAVE deposits omit only the zero converter no-op and retain the positive share floor', () => {
+  const intent: ReviewedActionIntent = {
+    kind: 'fxsave-deposit', tokenInAddress: FX_TOKENS.USDC.address, amount: 1_000_000n,
+    receiver: WALLET, directBasePool: false,
+  };
+  const planned = route(intent, {
+    economicLimits: [
+      { label: 'fxSAVE deposit conversion minimum output', value: '0' },
+      { label: 'fxSAVE minimum shares', value: '892022464500000000000' },
+    ],
+    conversionPaths: [{ label: 'fxSAVE deposit conversion', fingerprint: `0x${'1'.repeat(64)}` }],
+  });
+  const facts = routeFinancialReviewFacts(planned);
+  assert.deepEqual(facts.map(({ label, value }) => ({ label, value })), [
+    { label: 'Minimum fxSAVE received', value: '892.0224645 fxSAVE' },
+  ]);
+});
+
+test('routed fxSAVE deposit conversion floors, including zero-valued other limits, remain visible', () => {
+  const intent: ReviewedActionIntent = {
+    kind: 'fxsave-deposit', tokenInAddress: FX_TOKENS.USDC.address, amount: 1_000_000n,
+    receiver: WALLET, directBasePool: false,
+  };
+  const planned = route(intent, {
+    economicLimits: [
+      { label: 'fxSAVE deposit conversion minimum output', value: '900000' },
+      { label: 'unrecognized route limit', value: '0' },
+      { label: 'fxSAVE minimum shares', value: '800000000000000000' },
+    ],
+    conversionPaths: [{ label: 'fxSAVE deposit conversion', fingerprint: `0x${'2'.repeat(64)}` }],
+  });
+  const facts = routeFinancialReviewFacts(planned);
+  assert.equal(facts.find((fact) => fact.label === 'Minimum converted deposit')?.value, '0.9 USDC');
+  assert.equal(facts.find((fact) => fact.label === 'Additional limits')?.value, 'See advanced details');
+  assert.equal(facts.find((fact) => fact.label === 'Minimum fxSAVE received')?.value, '0.8 fxSAVE');
 });
 
 test('both instant fxSAVE output legs use the destination token decimals', () => {

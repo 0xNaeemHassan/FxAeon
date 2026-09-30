@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { FX_TOKENS } from '../src/lib/fx/tokens';
+import { USD_PRICE_MAX_AGE_MS } from '../src/lib/prices';
 import { canonicalWalletBalancesSnapshot, knownFreshPortfolioSubtotal, mergeFreshCanonicalWalletBalances } from '../src/lib/portfolioValuation';
 import { parseAlchemyWalletAssets, walletAssetValuation } from '../src/lib/walletAssets';
 
@@ -104,7 +105,7 @@ test('keeps the subtotal unavailable when no verified fresh quote or balance exi
   assert.deepEqual(knownFreshPortfolioSubtotal(null, {
     balances: [{ key: 'ETH', address: FX_TOKENS.ETH.address, decimals: 18, amountWei: 600_000_000_000_000n }],
     failedTokens: [],
-  }, now, { prices: { ETH: 2_000 }, status: 'stale', updatedAt: now - 10 * 60_000 }, now), {
+  }, now, { prices: { ETH: 2_000 }, status: 'stale', updatedAt: now - USD_PRICE_MAX_AGE_MS - 1 }, now), {
     totalUsd: null, assetCount: 1, hasKnownValue: false,
   });
   assert.deepEqual(knownFreshPortfolioSubtotal(null, {

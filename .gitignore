@@ -85,4 +85,8 @@ __pycache__/
 # Playwright (mini-app E2E)
 **/playwright-report/
 **/test-results/
+**/.borrow-harness-results/
+**/.move-harness-results/
+**/.positions-harness-results/
 **/.last-run.json
+/apps/mini-app/e2e/state-lab/captures/*.png

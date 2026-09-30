@@ -228,6 +228,30 @@ export function deriveConfirmedPositionHint(params: {
 }
 
 /**
+ * Receipt-observed mint identity from a runner-confirmed, reviewed action.
+ * Proves the NFT was minted and delivered to that transaction wallet in the
+ * confirmed receipt; it does not prove current ownership after that block.
+ * Use provider-verified hints when current ownership is required.
+ */
+export type ReceiptMintedPositionIdentity = Pick<ConfirmedPositionHint, 'market' | 'side' | 'positionId' | 'transactionHash'>;
+export function receiptMintedPositionIdentity(input: {
+  route: PlannedRoute;
+  result: TransactionExecutionResult;
+}): ReceiptMintedPositionIdentity | null {
+  const hint = deriveConfirmedPositionHint({
+    route: input.route,
+    result: input.result,
+    walletAddress: input.result.walletAddress,
+  });
+  return hint ? {
+    market: hint.market,
+    side: hint.side,
+    positionId: hint.positionId,
+    transactionHash: hint.transactionHash,
+  } : null;
+}
+
+/**
  * A stored hint proves nothing until its successful receipt, original mint,
  * current ownership are rechecked. RPC failures and a not-yet-observable
  * receipt block reject so callers retain the retry hint; an invalid, reorged,

@@ -29,7 +29,15 @@ protected values to GitHub Actions for the release workflow:
 | `NEXT_PUBLIC_TELEGRAM_APP_URL` | Variable | `https://t.me/FxAeonBot` or a configured Mini App launcher |
 | `TELEGRAM_BOT_TOKEN` | Secret | Bot metadata and menu synchronization; never a `NEXT_PUBLIC_*` value |
 | `ETHERSCAN_API_KEY` | Optional secret | Read-only `/api/gas` Pages Function binding; when absent, the app uses its bounded RPC gas estimate fallback |
+| `LIVE_GAS_ORACLE_URL` | GitHub Actions environment value | URL the release workflow probes after deploying; it does not configure the Pages Function or replace `ETHERSCAN_API_KEY` |
 | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | Secrets | Set or verify the Pages gas-oracle secret |
+
+The `/api/gas` response uses the same `503 {"error":"gas oracle unavailable"}`
+for a missing `ETHERSCAN_API_KEY` binding and an unavailable Etherscan upstream.
+The public health check can confirm whether a valid snapshot is being served,
+but cannot tell which failure caused that response. Set `ETHERSCAN_API_KEY` as
+a Cloudflare Pages production secret; `LIVE_GAS_ORACLE_URL` only selects the
+public URL checked by GitHub Actions.
 
 All `NEXT_PUBLIC_*` values are exposed in the compiled client. The production
 validator requires the Privy ID, both Alchemy RPCs, Data API key, Telegram URL,

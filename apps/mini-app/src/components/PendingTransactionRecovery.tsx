@@ -25,11 +25,19 @@ import {
 import { haptic, openExternalLink } from '@/lib/telegram';
 import { useInvalidateWalletData } from '@/components/WalletDataProvider';
 import { createRecoveryWalletRefresh, createWalletReadScope } from '@/lib/walletDataRefresh';
+import { selectWalletTasks, type WalletTask } from '@/lib/taskState';
+import { buildReceiptPresentation, verifiedReceiptPositionIdentity } from '@/lib/receiptPresentation';
+import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
+import type { ConfirmedPositionHint } from '@/lib/confirmedPositions';
+import { useWalletDemand } from '@/components/WalletDemandProvider';
 
 type Props = {
   walletAddress: Address;
   embedded?: boolean;
+  hideWhenEmpty?: boolean;
 };
+
+const RECOVERY_POSITION_DEMAND = { expandedAssets: false, chainPulse: false, positions: true } as const;
 
 function chainName(chainId: RecoveryViewModel['record']['chainId']): string {
   return chainId === 8453 ? 'Base' : 'Ethereum';
@@ -50,6 +58,17 @@ function operationName(operation: string, intent?: string): string {
   };
   return labels[operation]
     ?? operation.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (value) => value.toUpperCase());
+}
+
+function nextAction(operation: string, positionHint?: Pick<ConfirmedPositionHint, 'market' | 'side' | 'positionId'>): { href: string; label: string } | null {
+  if (positionHint) return {
+    href: `/positions?position=${encodeURIComponent(`${positionHint.market}:${positionHint.side}:${positionHint.positionId}`)}`,
+    label: `View ${positionHint.market} ${positionHint.side} #${positionHint.positionId}`,
+  };
+  if (['increasePosition', 'reducePosition', 'adjustPositionLeverage'].includes(operation)) return { href: '/positions', label: 'View positions' };
+  if (['depositAndMint', 'repayAndWithdraw'].includes(operation)) return { href: '/borrow', label: 'View Borrow' };
+  if (['depositFxSave', 'withdrawFxSave', 'getRedeemTx'].includes(operation)) return { href: '/earn', label: 'View Earn' };
+  return null;
 }
 
 function draftOperationName(operation: string): string {
@@ -97,8 +116,11 @@ function statusCopy(view: RecoveryViewModel): {
   return { label: 'Submitted', icon: view.verification === 'rpc-error' || view.verification === 'mismatch' ? CircleAlert : Clock3, className: view.verification === 'rpc-error' || view.verification === 'mismatch' ? 'text-warn' : 'text-mint' };
 }
 
-function statusSummary(view: RecoveryViewModel): string {
+function statusSummary(view: RecoveryViewModel, positionRefreshing = false): string {
   if (view.status === 'confirmed' && view.record.bridge) return 'Source confirmed after 1 confirmation. Destination delivery is tracked below.';
+  if (view.status === 'confirmed' && positionRefreshing && ['increasePosition', 'reducePosition', 'adjustPositionLeverage', 'depositAndMint', 'repayAndWithdraw'].includes(view.record.operation)) {
+    return 'Transaction confirmed. Position details are refreshing.';
+  }
   if (view.status === 'confirmed') return 'Confirmed on-chain after 1 confirmation.';
   if (view.status === 'failed') return 'Transaction reverted on-chain. No later step is resumed automatically.';
   if (view.verification === 'not-found') return 'No receipt yet. The transaction may still be pending.';
@@ -134,8 +156,19 @@ function DraftItem({ draft, onCancel }: { draft: SignatureRequiredDraft; onCance
   );
 }
 
-function RecoveryItem({ view, trackBridge, autoTrackBridge }: { view: RecoveryViewModel; trackBridge: boolean; autoTrackBridge: boolean }) {
+function RecoveryItem({ view, trackBridge, autoTrackBridge, task, positionHint, positionRefreshing = false }: { view: RecoveryViewModel; trackBridge: boolean; autoTrackBridge: boolean; task?: WalletTask; positionHint?: ConfirmedPositionHint; positionRefreshing?: boolean }) {
   const status = statusCopy(view);
+  const verifiedPosition = verifiedReceiptPositionIdentity({ status: view.status, verification: view.verification,
+    transactionHash: view.record.hash, hint: positionHint });
+  const action = nextAction(view.record.operation, verifiedPosition ?? undefined);
+  const receiptFacts = view.verification === 'receipt' ? buildReceiptPresentation({
+    chainId: view.record.chainId,
+    walletAddress: view.record.walletAddress,
+    status: view.status === 'confirmed' ? 'success' : 'reverted',
+    transfers: view.receiptTransfers,
+    executionCostWei: view.receiptExecutionCostWei,
+    nativeValueWei: view.receiptNativeValueWei,
+  }) : null;
   const Icon = status.icon;
   return (
     <li className="rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.025)] p-3">
@@ -149,9 +182,9 @@ function RecoveryItem({ view, trackBridge, autoTrackBridge }: { view: RecoveryVi
               <p className="text-[12.5px] font-semibold">{operationName(view.record.operation, view.record.intent)}</p>
               <p className="mt-0.5 text-[10.5px] text-mut">{chainName(view.record.chainId)} · {submittedAt(view.record.submittedAt)}</p>
             </div>
-            <span className={`shrink-0 text-[10px] font-semibold uppercase tracking-[0.1em] ${status.className}`}>{status.label}</span>
+              <span className={`shrink-0 text-[10px] font-semibold uppercase tracking-[0.1em] ${status.className}`}>{task?.title ?? status.label}</span>
           </div>
-          <p className="mt-2 break-words text-[11.5px] leading-relaxed text-mut">{statusSummary(view)}</p>
+          <p className="mt-2 break-words text-[11.5px] leading-relaxed text-mut">{statusSummary(view, positionRefreshing)}</p>
           <div className="mt-2.5 flex items-center justify-between gap-2">
             <span className="font-mono text-[10px] text-[var(--mut-2)]">{shortHash(view.record.hash)}</span>
             <a
@@ -174,6 +207,23 @@ function RecoveryItem({ view, trackBridge, autoTrackBridge }: { view: RecoveryVi
             <div className="pb-2 text-[10.5px] leading-relaxed text-mut">
               <p>{view.message}</p>
               {view.receiptBlockNumber !== undefined && <p className="mt-1">Block {view.receiptBlockNumber.toString()}</p>}
+              {receiptFacts && (
+                <div className="mt-2 space-y-1">
+                  <p className="font-semibold text-[var(--text)]">Verified receipt facts</p>
+                  {verifiedPosition && <p>Created position: {verifiedPosition.market} {verifiedPosition.side} #{verifiedPosition.positionId}</p>}
+                  {view.status === 'failed' ? <p>Transaction reverted; token movements were not recorded.</p>
+                    : receiptFacts.movements.length ? receiptFacts.movements.map((movement, index) => <p key={`${movement}:${index}`}>{movement}</p>)
+                      : <p>Token movements could not be established from the verified receipt.</p>}
+                  {receiptFacts.nativeValue && <p>Native value sent: {receiptFacts.nativeValue}</p>}
+                  {receiptFacts.executionFee ? <p>{receiptFacts.feeLabel}: {receiptFacts.executionFee}{receiptFacts.feeCaveat ? ` · ${receiptFacts.feeCaveat}` : ''}</p>
+                    : <p>Actual transaction fee is unavailable from this RPC response.</p>}
+                  {receiptFacts.technicalMovements.length > 0 && <details className="pt-1">
+                    <summary className="min-h-11 cursor-pointer">Technical token details</summary>
+                    {receiptFacts.technicalMovements.map((movement) => <p key={movement} className="break-all">{movement}</p>)}
+                  </details>}
+                  {action && <Link className="mt-1 inline-flex min-h-11 items-center text-mint" href={action.href}>{action.label}</Link>}
+                </div>
+              )}
               <p className="mt-1 font-mono text-[10px] text-[var(--mut-2)]">{view.record.hash}</p>
             </div>
           </details>
@@ -215,11 +265,13 @@ function formatBridgeAmount(value: string): string {
  * only reopen the original product route; that route must rebuild and simulate
  * its transaction from current state before asking the wallet to sign.
  */
-export default function PendingTransactionRecovery({ walletAddress, embedded = false }: Props) {
+export default function PendingTransactionRecovery({ walletAddress, embedded = false, hideWhenEmpty = false }: Props) {
   const identity = walletAddress.toLowerCase();
+  useWalletDemand(RECOVERY_POSITION_DEMAND, Boolean(walletAddress));
   const readScope = useRef(createWalletReadScope(walletAddress));
   readScope.current.select(walletAddress);
   const invalidateWalletData = useInvalidateWalletData();
+  const positionState = useProtocolPositions();
   const refreshWallet = useMemo(() => createRecoveryWalletRefresh(invalidateWalletData), [invalidateWalletData]);
   const [snapshot, setSnapshot] = useState({ identity: '', views: [] as RecoveryViewModel[], drafts: [] as SignatureRequiredDraft[], loading: true, refreshing: false, error: '' });
   const current = snapshot.identity === identity;
@@ -260,12 +312,15 @@ export default function PendingTransactionRecovery({ walletAddress, embedded = f
       .slice(0, 2)
       .map((view) => view.record.id),
   ), [views]);
+  const walletTasks = useMemo(() => new Map(selectWalletTasks({ walletAddress, transactions: views }).map((task) => [task.id, task])), [views, walletAddress]);
+  const positionHints = positionState.walletAddress?.toLowerCase() === identity ? positionState.pendingPositions : [];
   const cancelDraft = useCallback((id: string) => {
     cancelSignatureRequiredDraft(id);
     setSnapshot((previous) => previous.identity === identity
       ? { ...previous, drafts: previous.drafts.map((draft) => draft.id === id ? { ...draft, status: 'cancelled', updatedAt: Date.now() } : draft) }
       : previous);
   }, [identity]);
+  if (hideWhenEmpty && !loading && !error && views.length === 0 && drafts.length === 0) return null;
   return (
     <section aria-labelledby="transaction-recovery-title">
       {!embedded && <SectionTitle
@@ -323,6 +378,9 @@ export default function PendingTransactionRecovery({ walletAddress, embedded = f
                       // later transfers permanently unverified in the recovery UI.
                       trackBridge={view.status === 'confirmed' && Boolean(view.record.bridge)}
                       autoTrackBridge={autoBridgeIds.has(view.record.id)}
+                      task={walletTasks.get(`transaction:${view.record.id}`)}
+                      positionHint={positionHints.find((hint) => hint.transactionHash.toLowerCase() === view.record.hash.toLowerCase())}
+                      positionRefreshing={positionState.walletAddress?.toLowerCase() === identity && positionState.refreshing}
                     />
                   ))}
                 </ul>

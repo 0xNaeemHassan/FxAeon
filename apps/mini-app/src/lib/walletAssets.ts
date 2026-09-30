@@ -1,7 +1,7 @@
 import { formatUnits, type Address } from 'viem';
 import { FX_TOKENS, type FxTokenKey } from './fx/tokens';
 import { canonicalMoveSourceTokenAddress } from './moveBalances';
-import type { UsdPriceSnapshot } from './prices';
+import { USD_PRICE_MAX_AGE_MS, type UsdPriceSnapshot } from './prices';
 
 export type WalletAssetChain = 1 | 8453;
 export type WalletAsset = {
@@ -17,6 +17,16 @@ export type WalletAssetSnapshot = {
   totalUsdValue: number; unpricedAssetCount: number; updatedAt: number; source: 'alchemy' | 'canonical' | 'mixed';
 };
 export type WalletAssetCountState = 'loading' | 'unavailable' | 'partial' | 'ready';
+
+/** All configured asset sources have failed; disabled optional indexing is settled. */
+export function walletAssetSourcesFailed(
+  indexedEnabled: boolean,
+  indexedFailed: boolean,
+  ethereumFailed: boolean,
+  baseFailed: boolean,
+): boolean {
+  return (!indexedEnabled || indexedFailed) && ethereumFailed && baseFailed;
+}
 export type WalletAssetValuation = {
   complete: boolean;
   totalUsd: number | null;
@@ -24,7 +34,7 @@ export type WalletAssetValuation = {
   unpricedAssetCount: number;
   reason: string;
 };
-export const ASSET_PRICE_MAX_AGE_MS = 2 * 60_000;
+export const ASSET_PRICE_MAX_AGE_MS = USD_PRICE_MAX_AGE_MS;
 export const ASSET_BALANCE_MAX_AGE_MS = 2 * 60_000;
 const ADDRESS = /^0x[0-9a-f]{40}$/i;
 const record = (value: unknown): Record<string, unknown> | null => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
@@ -407,8 +417,7 @@ export function mergeCanonicalWalletAssets(indexed: WalletAssetSnapshot | null, 
       const indexedAsset = priorAssets.get(id);
       const candidate = prices.prices[balance.key];
       const candidateUpdatedAt = prices.updatedAts?.[balance.key] ?? prices.updatedAt;
-      const hasCurrentPrice = prices.status !== 'stale'
-        && prices.status !== 'unavailable'
+      const hasCurrentPrice = prices.status !== 'unavailable'
         && prices.status !== 'loading'
         && typeof candidateUpdatedAt === 'number'
         && Number.isFinite(candidateUpdatedAt)
@@ -422,7 +431,7 @@ export function mergeCanonicalWalletAssets(indexed: WalletAssetSnapshot | null, 
       assets.set(id, { id, chainId: read.chainId, network: read.chainId === 1 ? 'ethereum' : 'base', tokenAddress: balance.address,
         canonicalKey: balance.key, symbol: balance.key, name: balance.key === 'ETH' ? 'Ethereum' : balance.key, decimals: balance.decimals,
         balanceWei: balance.amountWei, balance: formatUnits(balance.amountWei, balance.decimals), balanceUpdatedAt: read.updatedAt,
-        priceUsd, priceUpdatedAt, priceStatus: prices.status === 'stale' ? 'stale' : 'unavailable', usdValue: null,
+        priceUsd, priceUpdatedAt, priceStatus: priceUsd === null ? 'unavailable' : 'fresh', usdValue: null,
         logoUrl: indexedAsset?.logoUrl ?? null, source: 'canonical' });
     }
   }

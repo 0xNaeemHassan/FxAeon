@@ -29,7 +29,7 @@ async function installTelegram(page: Page, telegram: boolean | TelegramShimOptio
   }
 }
 
-async function installMarketPrices(page: Page, enabled: boolean): Promise<void> {
+export async function installMarketPrices(page: Page, enabled: boolean): Promise<void> {
   if (enabled) {
     // Keep price-context E2E assertions deterministic. The production app
     // still owns the Coinbase socket; this fixture only prevents a live
@@ -130,6 +130,47 @@ async function installMarketPrices(page: Page, enabled: boolean): Promise<void> 
   });
 }
 
+/** Enriched, deterministic quote used by the gas-tier settings E2E. */
+export async function installGasTierFixture(page: Page): Promise<void> {
+  // Replace the legacy-only default installed by the general browser fixture.
+  await page.unroute('**/api/gas');
+  await page.route('**/api/gas', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      source: 'etherscan', chainId: 1, gasPriceWei: '25000000000',
+      baseFeePerGasWei: '20000000000',
+      tiers: { standard: '25000000000', fast: '30000000000', rapid: '40000000000' },
+      blockNumber: '21000000', fetchedAt: Date.now(), stale: false,
+    }),
+  }));
+}
+
+/** Install the same deterministic browser-only fixtures for standalone visual captures. */
+export async function installBrowserAppFixtures(page: Page, options: {
+  telegram?: boolean | TelegramShimOptions;
+  browserWallet?: false | BrowserWalletShimOptions;
+  marketPrices?: boolean;
+} = {}): Promise<void> {
+  const telegram = options.telegram ?? false;
+  const browserWallet = options.browserWallet ?? false;
+  const marketPrices = options.marketPrices ?? true;
+  await installTelegram(page, telegram);
+  await installMarketPrices(page, marketPrices);
+  await page.route('https://api.goldsky.com/api/public/**', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({ data: { positions: [], orders: [] } }),
+  }));
+  // The deployed app's optional read-only gas fallback is a public endpoint;
+  // keep its schema deterministic while all other same-origin API requests
+  // remain blocked by the client-first request assertion below.
+  await page.route('**/api/gas', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ source: 'etherscan', chainId: 1, gasPriceWei: '25000000000', blockNumber: '21000000', fetchedAt: Date.now(), stale: false }),
+  }));
+  if (browserWallet !== false) await page.addInitScript(browserWalletInitScript(browserWallet), browserWallet);
+}
+
 export const test = base.extend<{
   telegram: boolean | TelegramShimOptions;
   browserWallet: false | BrowserWalletShimOptions;
@@ -150,8 +191,11 @@ export const test = base.extend<{
         // That is an asset host, not an FxAeon application backend; keep the
         // client-first assertion focused on same-origin/unknown API routes.
         const host = new URL(url).hostname;
-        const publicDataHosts = new Set(["assets.smold.app", "api.coingecko.com", "api.g.alchemy.com", "api.exchange.coinbase.com"]);
-        if (/\/api(?:\/|$)/i.test(pathname) && !publicDataHosts.has(host)) observed.backend.push(url);
+        const publicDataHosts = new Set(["assets.smold.app", "api.coingecko.com", "api.g.alchemy.com", "api.exchange.coinbase.com", "api.goldsky.com"]);
+        const explicitPublicGasRead = pathname === "/api/gas"
+          && new URL(url).origin === new URL(page.url()).origin
+          && request.method() === "GET";
+        if (/\/api(?:\/|$)/i.test(pathname) && !publicDataHosts.has(host) && !explicitPublicGasRead) observed.backend.push(url);
       } catch {
         // Ignore malformed URLs; Playwright normally supplies absolute URLs.
       }
@@ -159,9 +203,7 @@ export const test = base.extend<{
     await use(observed);
   },
   page: async ({ page, telegram, browserWallet, marketPrices }, use) => {
-    await installTelegram(page, telegram);
-    await installMarketPrices(page, marketPrices);
-    if (browserWallet !== false) await page.addInitScript(browserWalletInitScript(browserWallet), browserWallet);
+    await installBrowserAppFixtures(page, { telegram, browserWallet, marketPrices });
     await use(page);
   },
 });

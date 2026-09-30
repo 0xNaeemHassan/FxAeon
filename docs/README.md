@@ -8,10 +8,14 @@ product guide is available under **More → FxAeon docs** and at `/docs`.
 
 | Guide | Purpose |
 | --- | --- |
+| [Design contract](../DESIGN.md) | Shared app surfaces, themes, responsive controls, and transaction presentation |
 | [Architecture](architecture.md) | App boundaries, transaction flow, and state ownership |
+| [Product behavior](product-behavior.md) | App areas, transaction reviews, and compact mobile layout |
 | [SDK scope](sdk-scope.md) | Locked f(x) SDK method contract and reviewed package patch |
 | [Security](security.md) | Trust assumptions and controls |
 | [Testing](testing.md) | Local, CI, browser, and protected fork checks |
+| [Release validation record](release-validation.md) | Revision-specific automated and visual evidence |
+| [Product review captures](review/README.md) | Curated mobile screenshots from the implementation |
 | [Deployment](deployment.md) | App and landing Cloudflare Pages configuration |
 | [Brand assets](brand-assets.md) | Marks, themes, and image-use rules |
 | [Position screenshot fixture](position-screenshot-fixture.md) | Capture provenance and regeneration commands |

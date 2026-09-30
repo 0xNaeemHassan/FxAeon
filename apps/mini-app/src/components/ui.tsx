@@ -4,7 +4,7 @@
  * FxAeon shared UI kit — every screen composes these so the app feels like
  * one product instead of disconnected pages.
  */
-import { forwardRef, ReactNode, useEffect, useRef, useState, type ButtonHTMLAttributes, type MouseEventHandler } from 'react';
+import { forwardRef, ReactNode, useEffect, useRef, useState, type ButtonHTMLAttributes, type HTMLAttributes, type MouseEventHandler } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -25,6 +25,7 @@ import WalletProfile from '@/components/WalletProfile';
 import NetworkSelector from '@/components/NetworkSelector';
 import { ValueOrSkeleton } from '@/components/MissingValue';
 import { compactAddress } from '@/lib/addressPresentation';
+import headerWalletControl from '@/components/HeaderWalletControl.module.css';
 
 /* ------------------------------------------------------------------ shell */
 
@@ -40,7 +41,6 @@ const PAGE_TITLES: Record<string, string> = {
   '/more': 'More',
   '/settings': 'Settings',
   '/history': 'History',
-  '/activity': 'History',
   '/docs': 'Docs',
   '/login': 'Sign in',
 };
@@ -75,6 +75,7 @@ export function AppShell({
 
   return (
     <div
+      data-product-ui="v2"
       data-shell-tabs={tabs ? 'true' : 'false'}
       className={`app-shell mx-auto w-full ${tabs ? 'app-shell-tabs' : 'app-shell-no-tabs pb-[calc(env(safe-area-inset-bottom,0px)+1rem)]'}`}
     >
@@ -88,9 +89,11 @@ export function AppShell({
             </Link>
             <DesktopNavigation />
             <span className="app-topbar-actions">
-              <NetworkSelector />
+              <span className={headerWalletControl.control} data-header-wallet-control="true" role="group" aria-label="Wallet and network controls">
+                <NetworkSelector />
+                <WalletProfile />
+              </span>
               <ThemeToggle />
-              <WalletProfile />
             </span>
           </header>
         )}
@@ -122,7 +125,7 @@ const TABS: { href: string; labelKey: string; icon: LucideIcon; also?: string[] 
   { href: '/trade', labelKey: 'nav.trade', icon: CandlestickChart, also: ['/positions'] },
   { href: '/earn', labelKey: 'nav.earn', icon: PiggyBank, also: ['/borrow'] },
   { href: '/move', labelKey: 'nav.move', icon: ArrowLeftRight, also: ['/qr'] },
-  { href: '/more', labelKey: 'nav.more', icon: LayoutGrid, also: ['/settings', '/history', '/activity', '/docs'] },
+  { href: '/more', labelKey: 'nav.more', icon: LayoutGrid, also: ['/settings', '/history', '/docs'] },
 ];
 
 function isTabActive(pathname: string | null, href: string, also?: string[]) {
@@ -180,21 +183,9 @@ function DesktopNavigation() {
 
 /* ------------------------------------------------------------------ atoms */
 
-export function Card({
-  children,
-  className = '',
-  glow = false,
-  elevation = 1,
-}: {
-  children: ReactNode;
-  className?: string;
-  glow?: boolean;
-  elevation?: 1 | 2 | 3;
-}) {
+export function Card({ children, className = '', glow = false, elevation = 1, ...props }: HTMLAttributes<HTMLDivElement> & { glow?: boolean; elevation?: 1 | 2 | 3 }) {
   const elevationClass = elevation === 2 || elevation === 3 ? 'astryx-card-elevated' : 'astryx-card';
-  return (
-    <div className={`ui-card ${elevationClass} p-5 ${glow ? 'card-glow' : ''} ${className}`}>{children}</div>
-  );
+  return <div {...props} className={`ui-card ${elevationClass} p-5 ${glow ? 'card-glow' : ''} ${className}`}>{children}</div>;
 }
 
 function buttonClasses(variant: 'primary' | 'ghost' | 'danger' | 'outline' | 'glass', className = ''): string {
@@ -294,7 +285,7 @@ export async function copyText(value: string): Promise<boolean> {
   }
 }
 
-export function AddressChip({ address }: { address: string }) {
+export function AddressChip({ address, iconOnly = false }: { address: string; iconOnly?: boolean }) {
   const [copied, setCopied] = useState(false);
   const short = compactAddress(address);
   return (
@@ -311,9 +302,9 @@ export function AddressChip({ address }: { address: string }) {
           haptic('error');
         }
       }}
-      className="address-chip glass glass-press inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-1.5 font-mono text-[12px] text-mut"
+      className={`address-chip glass glass-press inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-1.5 font-mono text-[12px] text-mut${iconOnly ? ' min-w-11' : ''}`}
     >
-      {short}
+      {!iconOnly && short}
       {copied ? (
         <Check aria-hidden="true" className="h-3.5 w-3.5 text-success" />
       ) : (
@@ -348,7 +339,7 @@ export function EmptyState({
 
 export function SectionTitle({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
-    <div className="section-heading mb-2.5 mt-6 flex items-center justify-between">
+    <div className="section-heading mb-2 flex items-center justify-between">
       <h2 className="text-[16px] font-semibold tracking-tight text-[var(--text)]">
         {children}
       </h2>

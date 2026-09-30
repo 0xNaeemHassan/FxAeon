@@ -5,7 +5,7 @@ const ALWAYS_VISIBLE = new Set([
   'Action', 'Position', 'Mode', 'Slippage', 'Minimum received', 'Quoted minimum received',
   'Minimum fxSAVE received', 'Minimum converted input', 'Minimum converted deposit',
   'Minimum debt repaid', 'Minimum received (fxUSD leg)', 'Minimum received (USDC leg)',
-  'Gas fee', 'Protocol fee', 'Total cost', 'Bridge fee', 'Risk',
+  'Gas tier', 'Gas fee', 'Protocol fee', 'Total cost', 'Bridge fee',
 ]);
 
 /** Separate concise decision facts from exact quote and route metadata. */
@@ -23,7 +23,7 @@ export function splitReviewFacts(facts: readonly ReviewFact[]): {
       details.push({ ...fact, label: 'Quoted leverage' });
       continue;
     }
-    const identity = fact.label === 'Risk' ? 'Risk' : `${fact.label}:${fact.value}`;
+    const identity = `${fact.label}:${fact.value}`;
     if (seen.has(identity)) continue;
     seen.add(identity);
     (ALWAYS_VISIBLE.has(fact.label) || fact.label === 'Target leverage' ? summary : details).push(fact);

@@ -1,4 +1,5 @@
 import { test, expect, assertNoBackendRequests } from '../fixtures/test';
+import { USD_PRICE_MAX_AGE_MS } from '../../src/lib/prices';
 
 const FXUSD_ADDRESS = '0x085780639cc2cacd35e474e71f4d000e2405d8f6';
 
@@ -31,7 +32,7 @@ test.describe('independent USD price availability', () => {
         const now = Math.floor(Date.now() / 1000);
         const coins = Object.fromEntries(ids.map(id => [id, {
           price: id.includes('c02aaa39') ? 2400 : id.includes('2260fac5') ? 104000 : 1,
-          timestamp: id.endsWith(FXUSD_ADDRESS) ? now - 901 : now,
+          timestamp: id.endsWith(FXUSD_ADDRESS) ? now - (USD_PRICE_MAX_AGE_MS / 1_000 + 1) : now,
           confidence: 0.99,
         }]));
         await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ coins }) });

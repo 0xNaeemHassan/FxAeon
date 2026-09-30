@@ -66,6 +66,33 @@ test('estimates every route step and separates gas from native transaction value
   assert.equal(estimate.steps[0].gasFeeWei, 63_000n);
 });
 
+test('route estimate uses the reviewed tier cap and does not re-read an RPC fee', async () => {
+  let feeReads = 0;
+  const selected = {
+    tier: 'fast' as const,
+    gasPriceWei: 20n,
+    maxFeePerGas: 40n,
+    maxPriorityFeePerGas: 5n,
+    validUntil: Date.now() + 30_000,
+    source: 'rpc' as const,
+  };
+  const client = {
+    ...clientFor(async () => 21_000n),
+    estimateFeesPerGas: async () => { feeReads += 1; return { maxFeePerGas: 999n, maxPriorityFeePerGas: 10n }; },
+  } as FxPublicClient;
+  const estimate = await estimatePlannedRouteCost(route(), {
+    client,
+    feeTierQuote: selected,
+  });
+  assert.equal(feeReads, 0);
+  assert.equal(estimate.fee?.tier, 'fast');
+  assert.equal(estimate.fee?.feePerGasWei, 40n);
+  assert.equal(estimate.fee?.displayFeePerGasWei, 20n);
+  assert.equal(estimate.executionGasFeeWei, 840_000n);
+  assert.match(formatRouteGasCost(estimate).gasFee ?? '', /max/);
+  assert.match(formatRouteGasCost(estimate).gasTier ?? '', /^Fast · /);
+});
+
 test('does not spend an RPC request on optional block provenance before estimating gas', async () => {
   let blockReads = 0;
   const client = {
@@ -83,11 +110,17 @@ test('does not spend an RPC request on optional block provenance before estimati
 
 test('keeps approval estimate when dependent action estimation fails', async () => {
   const planned = route(true);
-  const estimate = await estimatePlannedRouteCost(planned, {
-    client: clientFor(async (to) => {
+  const estimatedTargets: Address[] = [];
+  const client = {
+    ...clientFor(async (to) => {
+      estimatedTargets.push(to);
       if (to.toLowerCase() === actionTarget.toLowerCase()) throw new Error('ERC20: insufficient allowance');
       return 46_000n;
     }),
+    simulateCalls: async () => ({ results: [{ status: 'success', gasUsed: 46_000n }] }),
+  } as unknown as FxPublicClient;
+  const estimate = await estimatePlannedRouteCost(planned, {
+    client,
   });
   assert.equal(estimate.status, 'partial');
   assert.equal(estimate.steps[0].status, 'estimated');
@@ -97,6 +130,37 @@ test('keeps approval estimate when dependent action estimation fails', async () 
   assert.equal(estimate.executionGasFeeWei, undefined);
   assert.equal(estimate.totalNativeCostWei, undefined);
   assert.equal(estimate.nativeValueWei, 12n);
+  assert.deepEqual(estimatedTargets.map((target) => target.toLowerCase()), [token.toLowerCase(), actionTarget.toLowerCase()]);
+  assert.equal(formatRouteGasCost(estimate).gasFee, undefined, 'an approval-only subtotal must not be presented as route gas');
+});
+
+test('uses ordered simulation gas for approval routes when every call succeeds', async () => {
+  const planned = route(true);
+  let simulatedCalls = 0;
+  let independentEstimates = 0;
+  const client = {
+    ...clientFor(async () => {
+      independentEstimates += 1;
+      throw new Error('ordered simulation should provide route gas');
+    }),
+    simulateCalls: async ({ calls }: { calls: readonly { to: Address }[] }) => {
+      simulatedCalls = calls.length;
+      return {
+        results: [
+          { status: 'success', gasUsed: 46_000n },
+          { status: 'success', gasUsed: 180_000n },
+        ],
+      };
+    },
+  } as unknown as FxPublicClient;
+  const estimate = await estimatePlannedRouteCost(planned, { client });
+  assert.equal(simulatedCalls, planned.transactions.length);
+  assert.equal(independentEstimates, 0);
+  assert.equal(estimate.status, 'current');
+  assert.deepEqual(estimate.steps.map((step) => step.gas), [46_000n, 180_000n]);
+  assert.equal(estimate.estimatedGasUnits, 226_000n);
+  assert.equal(estimate.executionGasFeeWei, 678_000n);
+  assert.equal(formatRouteGasCost(estimate).gasFee, '0.000678 Gwei (max)');
 });
 
 test('route key is scoped to account, chain, calldata, value, and operation', () => {
@@ -153,6 +217,22 @@ test('Base stays partial when L1/operator fee accounting is unavailable', async 
   assert.equal(estimate.status, 'partial');
   assert.equal(estimate.executionGasFeeWei, 30n);
   assert.equal(estimate.totalNativeCostWei, undefined);
+});
+
+test('cache follows the current browser clock after initialization', async (t) => {
+  const cache = new RouteGasCostCache({ ttlMs: 1000 });
+  const planned = route();
+  let now = Date.now() + 31_000;
+  t.mock.method(Date, 'now', () => now);
+  const estimate = await cache.refresh(planned, { client: clientFor(async () => 21_000n) });
+  assert.equal(estimate.fetchedAt, now);
+  assert.equal(estimate.validUntil, now + 1000);
+  assert.equal(cache.view(planned).current, estimate);
+  now += 1001;
+  assert.equal(cache.view(planned).current, undefined);
+  const refreshed = await cache.refresh(planned, { client: clientFor(async () => 21_000n) });
+  assert.equal(refreshed.fetchedAt, now);
+  assert.equal(cache.view(planned).current, refreshed);
 });
 
 test('cache never exposes an expired estimate as current while refreshing', async () => {

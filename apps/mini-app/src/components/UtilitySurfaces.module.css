@@ -167,7 +167,6 @@
   .moreWorkspace .themePanel > :first-child > div > p { display: none; }
   .moreWorkspace .themeChoices { margin-top: 6px; }
   .moreWorkspace .themeChoice { min-height: 56px; padding: 4px; }
-  .moreWorkspace .themePreview { height: 20px; padding: 3px; }
   .moreWorkspace .themeChoice :global(.mt-2) { margin-top: 2px; }
   .moreWorkspace .themeChoice :global(.mt-0\.5) { display: none; }
 }
@@ -219,30 +218,6 @@
   border-color: var(--mint);
   box-shadow: 0 0 0 3px var(--mint-dim);
 }
-
-.themePreview {
-  display: flex;
-  height: 56px;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: 5px;
-  padding: 8px;
-  overflow: hidden;
-  border-radius: 10px;
-}
-
-.moreWorkspace .themePreview { height: 28px; gap: 3px; padding: 5px; border-radius: 7px; }
-.moreWorkspace .themePreview .previewBar { height: 3px; }
-.moreWorkspace .themePreview .previewLine { height: 2px; }
-
-.themePreviewOfficial { background: #100e18; }
-.themePreviewDark { background: #090a0c; }
-.themePreviewLight { background: #f7f5fb; }
-.previewBar { width: 46%; height: 5px; border-radius: 999px; background: #b9a0ff; }
-.previewLine { width: 72%; height: 4px; border-radius: 999px; background: color-mix(in srgb, var(--preview-text) 50%, transparent); }
-.themePreviewOfficial .previewLine,
-.themePreviewDark .previewLine { --preview-text: #f7f5fc; }
-.themePreviewLight .previewLine { --preview-text: #251b35; }
 
 .loginPanel { width: 100%; max-width: 460px; height: 100dvh; min-height: 0 !important; overflow-y: auto; overscroll-behavior: contain; }
 .loginCard { border-radius: 24px; background: color-mix(in srgb, var(--surface) 94%, var(--surface-2)); }
@@ -410,7 +385,6 @@
   .settingsWorkspace .themePanel > :first-child > div > p { display: none; }
   .settingsWorkspace .themeChoices { gap: 4px; margin-top: 6px; }
   .settingsWorkspace .themeChoice { min-height: 50px; padding: 4px; border-radius: 10px; }
-  .settingsWorkspace .themePreview { height: 18px; padding: 3px; }
   .settingsWorkspace .themeChoice :global(.mt-2) { margin-top: 2px; }
   .settingsWorkspace .themeChoice :global(.mt-0\.5) { display: none; }
 }
@@ -436,7 +410,6 @@
   .settingsWorkspace .themePanel > :first-child > div > p { display: none; }
   .settingsWorkspace .themeChoices { gap: 4px; margin-top: 6px; }
   .settingsWorkspace .themeChoice { min-height: 50px; padding: 4px; border-radius: 10px; }
-  .settingsWorkspace .themePreview { height: 18px; padding: 3px; }
   .settingsWorkspace .themeChoice :global(.mt-2) { margin-top: 2px; }
   .settingsWorkspace .themeChoice :global(.mt-0\.5) { display: none; }
   .settingsWorkspace :global(.ui-card) { padding: 10px !important; }
@@ -467,7 +440,6 @@
 .actionGrid > * { min-width: 0; }
 .preferenceChoice,
 .themeChoice { overflow-wrap: anywhere; }
-.themePreview { min-width: 0; }
 
 .settingsWorkspace .utilityCard,
 .settingsWorkspace :global(.ui-card),

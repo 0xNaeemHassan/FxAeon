@@ -31,3 +31,15 @@ export function resultPresentation(result: TransactionExecutionResult, bridge: b
   if (looksLikeWalletRejection(result.error)) return { title: 'Wallet request declined', body: 'This transaction was not submitted. No later step was opened.', tone: 'danger', icon: XCircle };
   return { title: 'Not submitted', body: userSafeError(result.error, 'The route stopped before a transaction could be confirmed.'), tone: 'danger', icon: CircleAlert };
 }
+
+/** State-refresh copy may claim confirmation only after every step is confirmed. */
+export function resultBodyDuringRefresh(input: {
+  status: TransactionExecutionResult['status'];
+  refreshing: boolean;
+  positionAction: boolean;
+  body: string;
+}): string {
+  return input.status === 'confirmed' && input.refreshing && input.positionAction
+    ? 'Transaction confirmed. Position details are refreshing.'
+    : input.body;
+}

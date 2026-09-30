@@ -10,6 +10,7 @@ import {
 } from "viem";
 import { clearPendingHashJournalForTests, readPendingHashJournal, readPendingHashes } from "../src/lib/fx/journal";
 import { runTransactionRoute, simulatePlannedRoute, waitForReceipt } from "../src/lib/fx/runner";
+import type { GasFeeSelection } from "../src/lib/fx/gasFeePolicy";
 import type { FxPublicClient, PlannedRoute, PlannedTransaction, TransactionPolicy } from "../src/lib/fx/types";
 
 const WALLET = "0x1111111111111111111111111111111111111111" as Address;
@@ -178,6 +179,84 @@ test("runner signs SDK steps in order, waits every receipt, then performs post-r
   assert.ok(events.some((event) => event.startsWith("confirmed:All route steps")));
   assert.deepEqual(seenBlocks, [13n]);
   assert.deepEqual(readPendingHashes(), []);
+});
+
+test('runner applies the frozen fee selection to both exact approval and action wallet requests', async () => {
+  const token = '0x3333333333333333333333333333333333333333' as Address;
+  const planned = route(2);
+  const approvalData = encodeFunctionData({
+    abi: parseAbi(['function approve(address spender,uint256 amount)']),
+    functionName: 'approve',
+    args: [DESTINATION, 100n],
+  });
+  planned.transactions[0] = {
+    ...planned.transactions[0]!, to: token, data: approvalData,
+    nonce: 4, kind: 'approval', type: 'approveToken',
+  };
+  planned.transactions[1] = { ...planned.transactions[1]!, nonce: 5 };
+  const policy: TransactionPolicy = {
+    walletAddress: WALLET,
+    chainId: 1,
+    allowedDestinations: [DESTINATION, token],
+    allowedSelectors: { [DESTINATION.toLowerCase()]: ['0x12345678'], [token.toLowerCase()]: ['0x095ea7b3'] },
+    allowedApprovalDestinations: [token],
+    allowedApprovalSpenders: [DESTINATION],
+    allowedTokenApprovalDestinations: [token],
+    allowActionBoundTokenApproval: true,
+  };
+  const transactions = planned.transactions;
+  const hashes = [HASH_1, HASH_2];
+  let nonceRead = 0;
+  const requests: Array<{ to: Address; maxFeePerGas?: bigint; maxPriorityFeePerGas?: bigint; gasPrice?: bigint }> = [];
+  const rpcClient = {
+    chain: { id: 1 },
+    getChainId: async () => 1,
+    simulateCalls: async () => ({ results: [] }),
+    getTransactionCount: async () => 4 + nonceRead++,
+    getTransactionReceipt: async ({ hash }: { hash: Hex }) => {
+      const index = hashes.indexOf(hash);
+      const tx = transactions[index]!;
+      return {
+        transactionHash: hash, status: 'success', blockNumber: 10n + BigInt(index),
+        blockHash: index === 0 ? BLOCK_HASH_1 : BLOCK_HASH_2,
+        from: WALLET, to: tx.to,
+      };
+    },
+    getTransaction: async ({ hash }: { hash: Hex }) => {
+      const index = hashes.indexOf(hash);
+      const tx = transactions[index]!;
+      return { hash, from: WALLET, to: tx.to, input: tx.data, value: tx.value, nonce: 4 + index };
+    },
+    getBlockNumber: async () => 20n,
+  } as unknown as FxPublicClient;
+  const now = Date.now();
+  const feeSelection: GasFeeSelection = {
+    tier: 'standard',
+    snapshot: {
+      chainId: 1, fetchedAt: now, validUntil: now + 60_000, source: 'rpc', baseFeePerGasWei: 100n,
+      tiers: {
+        standard: { tier: 'standard', gasPriceWei: 120n, maxFeePerGas: 220n, maxPriorityFeePerGas: 20n, source: 'rpc' },
+        fast: { tier: 'fast', gasPriceWei: 140n, maxFeePerGas: 240n, maxPriorityFeePerGas: 40n, source: 'rpc' },
+        rapid: { tier: 'rapid', gasPriceWei: 180n, maxFeePerGas: 280n, maxPriorityFeePerGas: 80n, source: 'rpc' },
+      },
+    },
+  };
+  const result = await runTransactionRoute({
+    route: planned, policy, publicClient: rpcClient, feeSelection,
+    callbacks: {
+      requestSignature: async (request) => {
+        requests.push({ to: request.to, maxFeePerGas: request.maxFeePerGas, maxPriorityFeePerGas: request.maxPriorityFeePerGas, gasPrice: request.gasPrice });
+        return hashes[requests.length - 1]!;
+      },
+    },
+    options: { simulate: false, pollMs: 0, receiptTimeoutMs: 100 },
+  });
+
+  assert.equal(result.status, 'confirmed');
+  assert.deepEqual(requests, [
+    { to: token, maxFeePerGas: 220n, maxPriorityFeePerGas: 20n, gasPrice: undefined },
+    { to: DESTINATION, maxFeePerGas: 220n, maxPriorityFeePerGas: 20n, gasPrice: undefined },
+  ]);
 });
 
 test("runner performs the default post-confirm read at the receipt block", async () => {
@@ -557,6 +636,53 @@ test("simulation fails closed when the RPC omits an ordered route result", async
   const result = await simulatePlannedRoute(route(2), partialClient);
   assert.equal(result.success, false);
   assert.match(result.error ?? "", /returned 1 results for 2 transactions/);
+});
+
+test("approval route preflight simulates the action and blocks signing when it reverts", async () => {
+  const token = "0x3333333333333333333333333333333333333333" as Address;
+  const planned = route(2);
+  const approvalData = encodeFunctionData({
+    abi: parseAbi(["function approve(address spender,uint256 amount)"]),
+    functionName: "approve",
+    args: [DESTINATION, 100n],
+  });
+  planned.transactions[0] = {
+    ...planned.transactions[0]!, to: token, data: approvalData,
+    nonce: 4, kind: "approval", type: "approveToken",
+  };
+  planned.transactions[1] = { ...planned.transactions[1]!, nonce: 5 };
+  const policy: TransactionPolicy = {
+    walletAddress: WALLET,
+    chainId: 1,
+    allowedDestinations: [DESTINATION, token],
+    allowedSelectors: { [DESTINATION.toLowerCase()]: ["0x12345678"], [token.toLowerCase()]: ["0x095ea7b3"] },
+    allowedApprovalDestinations: [token],
+    allowedApprovalSpenders: [DESTINATION],
+    allowedTokenApprovalDestinations: [token],
+    allowActionBoundTokenApproval: true,
+  };
+  let simulatedCalls: Array<{ to: Address; data: Hex; value: bigint }> = [];
+  let walletSends = 0;
+  const result = await runTransactionRoute({
+    route: planned,
+    policy,
+    publicClient: {
+      chain: { id: 1 },
+      getChainId: async () => 1,
+      simulateCalls: async ({ calls }: { calls: typeof simulatedCalls }) => {
+        simulatedCalls = calls;
+        return { results: [{ status: "success" }, { status: "failure", error: new Error("action reverted") }] };
+      },
+    } as unknown as FxPublicClient,
+    callbacks: { requestSignature: async () => { walletSends += 1; return HASH_1; } },
+    options: { pollMs: 0, receiptTimeoutMs: 100 },
+  });
+
+  assert.equal(result.status, "failed");
+  assert.match(result.error ?? "", /action reverted/i);
+  assert.deepEqual(simulatedCalls, planned.transactions.map(({ to, data, value }) => ({ to, data, value })));
+  assert.equal(walletSends, 0);
+  assert.equal(result.steps.length, 0);
 });
 
 test("simulation maps nested viem debt-ratio reverts with operation-specific guidance", async () => {

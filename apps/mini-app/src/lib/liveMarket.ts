@@ -1,6 +1,7 @@
 import {
   fetchMarketHistory,
   type MarketHistorySnapshot,
+  type MarketRange,
   type MarketSymbol,
 } from '@/lib/marketData';
 
@@ -414,6 +415,35 @@ export async function fetchMarketCandles(
   const fallbackSignal = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(15_000)]);
   const history = await fetchMarketHistory(market, fallbackRange, request, fallbackSignal);
   return marketHistoryToCandles(history, range);
+}
+
+/**
+ * Read the compact-card history with the same validated Coinbase candle
+ * fallback used by the expanded chart. A provider failure never fabricates a
+ * point or refreshes its timestamp; the returned source identifies which
+ * provider supplied the accepted snapshot.
+ */
+export async function fetchMarketHistoryWithCoinbaseFallback(
+  market: MarketSymbol,
+  range: MarketRange,
+  request: typeof fetch = fetch,
+  signal?: AbortSignal,
+): Promise<MarketHistorySnapshot> {
+  try {
+    return await fetchMarketHistory(market, range, request, signal);
+  } catch (cause) {
+    if (signal?.aborted) throw cause;
+    const candles = await fetchMarketCandles(market, range, request, signal);
+    return {
+      market,
+      range,
+      points: candles.points,
+      currentPrice: candles.currentPrice,
+      percentChange: candles.percentChange,
+      updatedAt: candles.updatedAt,
+      source: candles.source,
+    };
+  }
 }
 
 /** Build the current OHLC bucket without mutating the fetched snapshot. */

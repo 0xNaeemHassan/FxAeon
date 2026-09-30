@@ -15,7 +15,7 @@ test('recognizes a valid public gas-oracle snapshot without logging its payload'
   assert.deepEqual(inspectGasOracleResponse(200, JSON.stringify(validSnapshot)), { configured: true });
 });
 
-test('requests only the fixed oracle URL and detects an unavailable optional binding', async () => {
+test('requests the configured oracle URL and reports the shared unavailable response without diagnosing its cause', async () => {
   let observed;
   const result = await checkLiveGasOracle({
     url: 'https://fxaeon.com/api/gas',
@@ -31,7 +31,7 @@ test('requests only the fixed oracle URL and detects an unavailable optional bin
   assert.equal(observed.options.cache, 'no-store');
 });
 
-test('treats the exact upstream-unavailable response as optional during the first probe', () => {
+test('treats the shared unavailable response as not currently serving a valid snapshot', () => {
   assert.deepEqual(inspectGasOracleResponse(502, JSON.stringify({ error: 'gas oracle unavailable' })), { configured: false });
 });
 

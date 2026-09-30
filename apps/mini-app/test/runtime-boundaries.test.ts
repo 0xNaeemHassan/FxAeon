@@ -59,7 +59,10 @@ function receipt(blockNumber: bigint, blockHash: Hex = BLOCK_HASH): TransactionR
   } as TransactionReceipt;
 }
 
-test('confirmation gate rechecks inclusion and supports an explicit deeper confirmation depth', async () => {
+test('confirmation gate rechecks inclusion and supports an explicit deeper confirmation depth', async (context) => {
+  // This case advances chain heads, not wall time. Scheduler contention must
+  // not turn the three deterministic inclusion reads into a timeout test.
+  context.mock.timers.enable({ apis: ['Date'], now: 1_700_000_000_000 });
   const heads = [10n, 11n, 12n];
   let receiptReads = 0;
   const progress: number[] = [];
@@ -150,7 +153,7 @@ test('position discovery drops an indexer-retained NFT after canonical accountin
     positions: [info],
   });
   assert.deepEqual(result, []);
-  assert.equal(calls, 1, 'closed positions must not require ownerOf after canonical zero state');
+  assert.equal(calls, 2, 'the stale zero-state NFT must be rejected by ownerOf before it is dropped');
 });
 
 test('application read facade bounds a stalled SDK/indexer promise', async () => {

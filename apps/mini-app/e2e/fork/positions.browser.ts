@@ -12,8 +12,9 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, expect as playwrightExpect, type Locator, type Page, type Route } from '@playwright/test';
-import { createPublicClient, encodeFunctionData, formatUnits, http, parseUnits, type Address, type Hex } from 'viem';
+import { createPublicClient, decodeFunctionData, encodeFunctionData, formatUnits, http, multicall3Abi, parseAbi, parseUnits, type Address, type Hex } from 'viem';
 import { formatExactDecimal } from '../../src/lib/amount';
+import { formatGasPriceGwei } from '../../src/lib/fx/gasFeePolicy';
 import { formatAmount, readPositionGroupWithDirectFallback, tokenAddress } from '../../src/app/trade/fxUi';
 import { readCanonicalPositionInfo } from '../../src/app/trade/canonicalPositionReader';
 import { DIRECT_POSITION_SCAN_MAX_IDS, DIRECT_POSITION_SCAN_BATCH_SIZE } from '../../src/app/trade/directPositionDiscovery';
@@ -22,6 +23,7 @@ import { runTransactionRoute } from '../../src/lib/fx/runner';
 import { getFxReadFacade } from '../../src/lib/fx/readFacade';
 import type { FxPublicClient } from '../../src/lib/fx/types';
 import { positionPoolAddress } from '../../src/lib/fx/policy';
+import { decodePositionRouterEvent, positionRouterEventMatchesRecipient } from '../../src/lib/positionRouterEvents';
 import { mainnet } from 'viem/chains';
 
 const appRoot = fileURLToPath(new URL('../..', import.meta.url));
@@ -36,6 +38,9 @@ assert.ok(parsedRpc.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(
 const port = Number(process.env.FX_FORK_BROWSER_PORT ?? '4325');
 assert.ok(Number.isInteger(port) && port >= 1024 && port <= 65535, 'invalid browser proof port');
 const baseUrl = `http://127.0.0.1:${port}`;
+const warmupConcurrency = Number(process.env.FX_FORK_WARMUP_CONCURRENCY ?? '1');
+assert.ok(Number.isInteger(warmupConcurrency) && warmupConcurrency >= 1 && warmupConcurrency <= 2,
+  'FX_FORK_WARMUP_CONCURRENCY must be 1 or 2');
 const client = createPublicClient({ chain: mainnet, transport: http(rpcUrl, { timeout: 120_000 }) });
 const scenarios = [
   { market: 'ETH', side: 'long', pool: '0x6Ecfa38FeE8a5277B91eFdA204c235814F0122E8', graphSubgraph: 'fx-v2-wsteth/3.0.0' },
@@ -56,6 +61,16 @@ const tokenAbi = [
 const usdc = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48' as const;
 const fxUsd = tokenAddress('fxUSD');
 const donor = '0xc3d688b66703497daa19211eedff47f25384cdc3' as const;
+const instantRedeemAbi = parseAbi([
+  'function instantRedeemFromFxSave((address tokenOut,address converter,uint256 encodings,uint256[] routes,uint256 minOut,bytes signature) fxusdParams,(address tokenOut,address converter,uint256 encodings,uint256[] routes,uint256 minOut,bytes signature) usdcParams,uint256 amount,address receiver)',
+]);
+const depositToFxSaveAbi = parseAbi([
+  'function depositToFxSave((address tokenIn,uint256 amount,address target,bytes data,uint256 minOut,bytes signature) convertInParams,address tokenInAddress,uint256 minShares,address receiver)',
+]);
+const queuedRedeemAbi = parseAbi(['function requestRedeem(uint256 amount)']);
+const fxSave = tokenAddress('fxSAVE');
+const router = '0x33636D49FbefBE798e15e7F356E8DBef543CC708' as Address;
+const multicall3 = '0xca11bde05977b3631167028862be2a173976ca11' as Address;
 
 function receiptHold() {
   let releasePromise: () => void = () => undefined;
@@ -80,6 +95,27 @@ async function rpc<T = unknown>(method: string, params: unknown[] = []): Promise
   return body.result;
 }
 
+type ForkFeeHistory = { baseFeePerGas: string[]; reward: string[][] };
+
+function expectedForkGasFee(history: ForkFeeHistory, tier: 'fast' | 'rapid'): {
+  gasPriceWei: bigint;
+  maxFeePerGas: bigint;
+  maxPriorityFeePerGas: bigint;
+} {
+  assert.ok(Array.isArray(history.baseFeePerGas) && history.baseFeePerGas.length === 6,
+    'fork feeHistory must return five base-fee intervals and the next-block estimate');
+  assert.ok(Array.isArray(history.reward) && history.reward.length === 5,
+    'fork feeHistory must return five reward samples');
+  const base = BigInt(history.baseFeePerGas[history.baseFeePerGas.length - 2]!);
+  const priorityIndex = tier === 'fast' ? 1 : 2;
+  const tips = history.reward.map((row) => {
+    assert.ok(Array.isArray(row) && row.length === 3, 'fork feeHistory reward rows must have three percentiles');
+    return BigInt(row[priorityIndex]!);
+  }).sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
+  const tip = tips[2]!;
+  return { gasPriceWei: base + tip, maxFeePerGas: base * 2n + tip, maxPriorityFeePerGas: tip };
+}
+
 function hexQuantity(value: bigint): Hex {
   return `0x${value.toString(16)}` as Hex;
 }
@@ -102,6 +138,29 @@ function normalizeForkBlock(value: string | number): bigint {
 
 async function runProof(captureStage: string) {
   await mkdir(artifactRoot, { recursive: true });
+  const reviewRunName = `run-${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z')}`;
+  const reviewEvidenceRoot = resolve(artifactRoot, 'reviews', reviewRunName);
+  let reviewEvidenceInitialized = false;
+  const reviewCaptures: Array<{
+    file: string;
+    action: string;
+    route: string;
+    viewport: { width: 393; height: 852 };
+    scrollTop: number;
+    overflowReason: string | null;
+    provenance: string;
+  }> = [];
+  const writeReviewManifest = async () => writeFile(resolve(reviewEvidenceRoot, 'manifest.json'), JSON.stringify({
+    schemaVersion: 1,
+    generatedAt: new Date().toISOString(),
+    provenance: 'Actual protected browser actions on a disposable local Anvil fork of Ethereum mainnet. Each image is captured after the real app opens its preconfirm review and before a wallet signature is requested. Values shown are fork-backed reads; this evidence does not represent live mainnet state.',
+    walletAddress: 'omitted; local fork account',
+    captures: reviewCaptures,
+    unavailableReviewCoverage: [
+      { action: 'Move Ethereum to Base review', reason: 'The protected browser proof does not submit or review bridge actions.' },
+      { action: 'Move Base to Ethereum review', reason: 'The protected browser proof does not submit or review bridge actions.' },
+    ],
+  }, null, 2));
   assert.equal(await rpc('eth_chainId'), '0x1');
   assert.match(await rpc<string>('web3_clientVersion'), /anvil/i, 'never use a real RPC for this test');
   const [wallet, alternateWallet] = await rpc<Address[]>('eth_accounts');
@@ -122,13 +181,18 @@ async function runProof(captureStage: string) {
   let page: Page | undefined;
   const miningTasks: Promise<unknown>[] = [];
   const miningErrors: string[] = [];
-  const submitted: Array<{ hash: Hex; to: string; data: string; value?: string }> = [];
+  const submitted: Array<{
+    hash: Hex; to: string; data: string; value?: string;
+    maxFeePerGas?: string | bigint; maxPriorityFeePerGas?: string | bigint;
+  }> = [];
   const heldReceipts = new Map<string, ReturnType<typeof receiptHold>>();
+  let latestFeeHistory: ForkFeeHistory | undefined;
   const submittedExplorerHashes = new Set<string>();
   const candidates: Array<(typeof scenarios)[number] & { positionId: number }> = [];
   const delayedDiscoveries = new Map<string, number>();
   const blockedDiscoveries = new Set<string>();
   const emittedDiscoveries = new Set<string>();
+  const forkReceiptCache = new Map<string, Promise<Awaited<ReturnType<typeof client.getTransactionReceipt>>>>();
   const confirmedBeforeIndexer = new Set<string>();
   const restoredConfirmed = new Set<string>();
   const positions: Array<(typeof scenarios)[number] & {
@@ -150,6 +214,7 @@ async function runProof(captureStage: string) {
     createdBy: Address; transferredTo: Address; transferredBackTo: Address; finalOwner: Address;
     rawCollateral: string; rawDebt: string; transactions: Array<{ kind: string; hash: Hex; blockNumber: string }>;
   } | undefined;
+  let quoteExpiryBlockedUntilRefresh = false;
   const browserErrors: string[] = [];
   const routeErrors: string[] = [];
   let tearingDown = false;
@@ -175,29 +240,60 @@ async function runProof(captureStage: string) {
   };
   let completed = false;
   try {
+    const buildEnv = { ...process.env, NEXT_PUBLIC_PRIVY_APP_ID: '', NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL: '',
+      NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL: '', NEXT_PUBLIC_FX_SCREENSHOT_MODE: '', NEXT_PUBLIC_FX_LOCAL_FORK_TEST_MODE: '1',
+      NEXT_PUBLIC_FX_LOCAL_FORK_RPC_URL: rpcUrl, NEXT_PUBLIC_TELEGRAM_APP_URL: 'https://t.me/FxAeonBot' };
+    console.log('Building browser acceptance artifact with localhost-only RPC');
+    await waitForExit(spawn(process.execPath, [resolve(appRoot, 'node_modules/next/dist/bin/next'), 'build'],
+      { cwd: appRoot, env: buildEnv, stdio: 'inherit', windowsHide: true }));
+    server = spawn(process.execPath, ['e2e/serve.mjs'], { cwd: appRoot, env: { ...buildEnv, E2E_BUILD: '0', PORT: String(port) }, stdio: 'inherit', windowsHide: true });
+    await expect.poll(async () => {
+      if (server?.exitCode !== null) throw new Error('browser test server stopped');
+      return fetch(`${baseUrl}/trade`).then(r => r.status).catch(() => 0);
+    }, { timeout: 30_000 }).toBe(200);
+
     // Anvil fetches untouched historical storage from the upstream provider
     // lazily. Preload ownership slots as fixture setup so the browser reads a
     // locally hydrated fork, like a full RPC node. No returned state is changed
     // or injected into the app, and the product's 12-second deadline is intact.
     // This is functional evidence, not a cold-provider performance benchmark.
-    for (const group of scenarios) {
+    const hydrateGroup = async (group: (typeof scenarios)[number]): Promise<void> => {
       const nextId = Number(await client.readContract({ address: group.pool, abi: poolAbi, functionName: 'getNextPositionId' }));
       assert.ok(nextId >= 1 && nextId - 1 <= DIRECT_POSITION_SCAN_MAX_IDS, 'fixture pool must fit the supported direct discovery range');
       for (let start = 1; start < nextId; start += DIRECT_POSITION_SCAN_BATCH_SIZE) {
         const count = Math.min(DIRECT_POSITION_SCAN_BATCH_SIZE, nextId - start);
-        await client.multicall({
-          contracts: Array.from({ length: count }, (_, offset) => ({
-            address: group.pool,
-            abi: poolAbi,
-            functionName: 'ownerOf' as const,
-            args: [BigInt(start + offset)] as const,
-          })),
-          allowFailure: true,
-          batchSize: 0,
+        // Keep individual burned/unminted NFTs non-fatal, but let the outer
+        // Multicall3 request reject if the fork transport/upstream fails. The
+        // viem client multicall helper intentionally normalizes outer failures
+        // into per-call failures, which can make a broken warmup look valid.
+        await client.readContract({
+          address: multicall3,
+          abi: multicall3Abi,
+          functionName: 'aggregate3',
+          args: [Array.from({ length: count }, (_, offset) => ({
+            target: group.pool,
+            allowFailure: true,
+            callData: encodeFunctionData({
+              abi: poolAbi,
+              functionName: 'ownerOf',
+              args: [BigInt(start + offset)],
+            }),
+          }))],
         });
       }
       console.log(`Hydrated historical NFT ownership storage for ${group.market} ${group.side}`);
-    }
+    };
+    let nextGroup = 0;
+    const workers = Array.from({ length: Math.min(warmupConcurrency, scenarios.length) }, async () => {
+      while (true) {
+        const group = scenarios[nextGroup++];
+        if (!group) return;
+        await hydrateGroup(group);
+      }
+    });
+    const workerResults = await Promise.allSettled(workers);
+    const warmupFailure = workerResults.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+    if (warmupFailure) throw warmupFailure.reason;
     const funding = parseUnits('4000', 6);
     const before = await client.readContract({ address: usdc, abi: tokenAbi, functionName: 'balanceOf', args: [wallet] });
     assert.ok(await client.readContract({ address: usdc, abi: tokenAbi, functionName: 'balanceOf', args: [donor] }) >= funding);
@@ -210,18 +306,6 @@ async function runProof(captureStage: string) {
     } finally { await rpc('anvil_stopImpersonatingAccount', [donor]); }
     assert.equal(await client.readContract({ address: usdc, abi: tokenAbi, functionName: 'balanceOf', args: [wallet] }) - before, funding);
     await rpc('anvil_setBalance', [wallet, '0x4563918244f40000']); // 5 fork-only ETH for gas.
-
-    const buildEnv = { ...process.env, NEXT_PUBLIC_PRIVY_APP_ID: '', NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL: '',
-      NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL: '', NEXT_PUBLIC_FX_SCREENSHOT_MODE: '', NEXT_PUBLIC_FX_LOCAL_FORK_TEST_MODE: '1',
-      NEXT_PUBLIC_FX_LOCAL_FORK_RPC_URL: rpcUrl, NEXT_PUBLIC_TELEGRAM_APP_URL: 'https://t.me/FxAeonBot' };
-    console.log('Building browser acceptance artifact with localhost-only RPC');
-    await waitForExit(spawn(process.execPath, [resolve(appRoot, 'node_modules/next/dist/bin/next'), 'build'],
-      { cwd: appRoot, env: buildEnv, stdio: 'inherit', windowsHide: true }));
-    server = spawn(process.execPath, ['e2e/serve.mjs'], { cwd: appRoot, env: { ...buildEnv, E2E_BUILD: '0', PORT: String(port) }, stdio: 'inherit', windowsHide: true });
-    await expect.poll(async () => {
-      if (server?.exitCode !== null) throw new Error('browser test server stopped');
-      return fetch(`${baseUrl}/trade`).then(r => r.status).catch(() => 0);
-    }, { timeout: 30_000 }).toBe(200);
 
     browser = await chromium.launch({ args: ['--no-sandbox', '--disable-dev-shm-usage'] });
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1,
@@ -248,11 +332,15 @@ async function runProof(captureStage: string) {
       }
       assert.equal(request.method, 'eth_sendTransaction', 'unexpected wallet method');
       assert.equal(selectedWallet, wallet, 'read-only alternate session must never send');
-      const tx = request.params?.[0] as { from: string; to: string; data?: string; value?: string };
+      const tx = request.params?.[0] as {
+        from: string; to: string; data?: string; value?: string;
+        maxFeePerGas?: string | bigint; maxPriorityFeePerGas?: string | bigint;
+      };
       assert.equal(tx.from.toLowerCase(), wallet.toLowerCase());
       const hash = await rpc<Hex>('eth_sendTransaction', [tx]);
       heldReceipts.set(hash.toLowerCase(), receiptHold());
-      submitted.push({ hash, to: tx.to, data: tx.data ?? '0x', value: tx.value });
+      submitted.push({ hash, to: tx.to, data: tx.data ?? '0x', value: tx.value,
+        maxFeePerGas: tx.maxFeePerGas, maxPriorityFeePerGas: tx.maxPriorityFeePerGas });
       // Mine the runner's post-receipt boundary without continuously advancing
       // fork time while slow route simulation/quoting is in progress.
       miningTasks.push(new Promise(resolveMine => setTimeout(resolveMine, 750))
@@ -289,6 +377,27 @@ async function runProof(captureStage: string) {
         const hold = hash ? heldReceipts.get(hash) : undefined;
         return hash && hold && !hold.released ? [{ hash, hold, id: request.id }] : [];
       });
+      if (!held.length && requests.some(request => request.method === 'eth_feeHistory')) {
+        const response = await route.fetch({ maxRedirects: 0, timeout: 120_000 });
+        assert.ok(response.ok(), 'feeHistory used by the browser must come from the localhost fork');
+        const payload = JSON.parse((await response.body()).toString('utf8')) as
+          | { id: number; result?: { baseFeePerGas?: unknown; reward?: unknown } }
+          | Array<{ id: number; result?: { baseFeePerGas?: unknown; reward?: unknown } }>;
+        const responses = Array.isArray(payload) ? payload : [payload];
+        for (const request of requests.filter(candidate => candidate.method === 'eth_feeHistory')) {
+          const result = responses.find(candidate => candidate.id === request.id)?.result;
+          if (Array.isArray(result?.baseFeePerGas) && Array.isArray(result.reward)
+            && result.baseFeePerGas.every(value => typeof value === 'string')
+            && result.reward.every(row => Array.isArray(row) && row.every(value => typeof value === 'string'))) {
+            latestFeeHistory = {
+              baseFeePerGas: result.baseFeePerGas as string[],
+              reward: result.reward as string[][],
+            };
+          }
+        }
+        await route.fulfill({ response });
+        return;
+      }
       if (!held.length) return route.continue();
       // Fetch the actual fork receipt first, then withhold only its delivery
       // to the browser. All receipt fields and the response body stay intact.
@@ -317,13 +426,84 @@ async function runProof(captureStage: string) {
       const url = new URL(route.request().url());
       const group = scenarios.find(s => url.pathname === `/api/public/project_cmgz5g9sl0065xhp2aqd9c6sv/subgraphs/${s.graphSubgraph}/gn`);
       const body = route.request().postDataJSON() as { query?: string };
-      const queryWallet = [wallet, alternateWallet].find(account => {
-        const expectedQuery = `query MyQuery { positions(first: 1000 where: {owner: "${account.toLowerCase()}"} orderBy: blockNumber orderDirection: desc) { id } }`;
-        return body.query?.replace(/\s/g, '') === expectedQuery.replace(/\s/g, '');
+      const query = body.query?.replace(/\s/g, '') ?? '';
+      const positionQuery = query.match(/^queryWalletPositionHistory\{positions\(first:25,skip:(0|[1-9][0-9]*),where:\{(.+)\},orderBy:blockNumber,orderDirection:desc\)\{idisClosedblockNumber\}\}$/);
+      const sdkQueryWallet = group && [wallet, alternateWallet].find(account => {
+        const expectedQuery = `queryMyQuery{positions(first:1000where:{owner:"${account.toLowerCase()}"}orderBy:blockNumberorderDirection:desc){id}}`;
+        return query === expectedQuery;
       });
+      const historyQueryWallet = group && [wallet, alternateWallet].find(account => {
+        const owner = account.toLowerCase();
+        const walletFilter = group.market === 'ETH' && group.side === 'short'
+          ? `owner:"${owner}"`
+          : `or:[{owner:"${owner}"},{realOwner:"${owner}"}]`;
+        return positionQuery?.[2] !== undefined && positionQuery[2] === walletFilter;
+      });
+      const queryWallet = sdkQueryWallet ?? historyQueryWallet;
+      if (group && query.startsWith('queryWalletPositionOrders{')) {
+        const match = query.match(/^queryWalletPositionOrders\{orders\(first:5,skip:(0|[1-9][0-9]*),where:\{positionId_in:\[([0-9,\"]*)\],type_in:\["Open","Close"\]\},orderBy:blockNumber,orderDirection:desc\)\{idtypehashblockNumbertimestamp\}\}$/);
+        assert.ok(!url.search && !url.hash && route.request().method() === 'POST'
+          && Object.keys(body).length === 1 && match, 'unexpected indexer order query');
+        const queriedIds = [...match[2].matchAll(/"([1-9][0-9]{0,15})"/g)].map(value => Number(value[1]));
+        assert.ok(queriedIds.length > 0 && queriedIds.every(id => candidates.some(candidate => candidate.pool === group.pool && candidate.positionId === id)),
+          'indexer order query must refer only to positions discovered by this fork proof');
+        const hashes = [...new Set([
+          ...submitted.map(transaction => transaction.hash),
+          ...(externalPositionProof?.transactions.map(transaction => transaction.hash as Hex) ?? []),
+        ])];
+        const orders: Array<{ id: string; type: 'Open' | 'Close'; hash: Hex; blockNumber: string; timestamp: string }> = [];
+        for (const hash of hashes) {
+          if (!hash) continue;
+          const receipt = await (forkReceiptCache.get(hash.toLowerCase()) ?? (() => {
+            const pending = client.getTransactionReceipt({ hash }).catch(() => null as never);
+            forkReceiptCache.set(hash.toLowerCase(), pending);
+            return pending;
+          })());
+          if (!receipt) continue;
+          const block = await client.getBlock({ blockNumber: receipt.blockNumber });
+          for (const log of receipt.logs) {
+            const event = decodePositionRouterEvent(log);
+            if (!event || event.pool.toLowerCase() !== group.pool.toLowerCase()) continue;
+            // Orders are scoped by the already-discovered position IDs, not
+            // by a wallet field. Return real matching events just as the
+            // indexer does; the app verifies their wallet/receipt provenance.
+            const positionId = Number(event.positionId);
+            if (!queriedIds.includes(positionId)) continue;
+            orders.push({ id: `${positionId}_${hash}`, type: event.operation === 'open' ? 'Open' : 'Close',
+              hash, blockNumber: receipt.blockNumber.toString(), timestamp: block.timestamp.toString() });
+          }
+        }
+        orders.sort((a, b) => BigInt(a.blockNumber) === BigInt(b.blockNumber) ? 0 : BigInt(a.blockNumber) > BigInt(b.blockNumber) ? -1 : 1);
+        const orderOffset = Number(match[1]);
+        await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: { orders: orders.slice(orderOffset, orderOffset + 5) } }) });
+        return;
+      }
       assert.ok(group && !url.search && !url.hash && route.request().method() === 'POST'
-        && Object.keys(body).length === 1 && queryWallet, 'unexpected indexer operation');
-      const ids: Array<{ id: string }> = [];
+        && Object.keys(body).length === 1 && queryWallet, 'unexpected indexer position query');
+      const ids: Array<{ id: string; isClosed: boolean; blockNumber: string }> = [];
+      const hashes = [...new Set([
+        ...submitted.map(transaction => transaction.hash),
+        ...(externalPositionProof?.transactions.map(transaction => transaction.hash as Hex) ?? []),
+      ])];
+      const candidateOrderEvents = new Map<number, Array<{ type: 'Open' | 'Close'; blockNumber: bigint }>>();
+      for (const hash of hashes) {
+        if (!hash) continue;
+        const receipt = await (forkReceiptCache.get(hash.toLowerCase()) ?? (() => {
+          const pending = client.getTransactionReceipt({ hash }).catch(() => null as never);
+          forkReceiptCache.set(hash.toLowerCase(), pending);
+          return pending;
+        })());
+        if (!receipt) continue;
+        for (const log of receipt.logs) {
+          const event = decodePositionRouterEvent(log);
+          if (!event || event.pool.toLowerCase() !== group.pool.toLowerCase()) continue;
+          if (!positionRouterEventMatchesRecipient(event, log, receipt.logs, queryWallet)) continue;
+          const positionId = Number(event.positionId);
+          const list = candidateOrderEvents.get(positionId) ?? [];
+          list.push({ type: event.operation === 'open' ? 'Open' : 'Close', blockNumber: receipt.blockNumber });
+          candidateOrderEvents.set(positionId, list);
+        }
+      }
       for (const candidate of candidates.filter(c => c.pool === group.pool)) {
         try {
           const owner = await client.readContract({ address: candidate.pool, abi: poolAbi, functionName: 'ownerOf', args: [BigInt(candidate.positionId)] });
@@ -334,13 +514,17 @@ async function runProof(captureStage: string) {
             // Keep a real, already-owned NFT withheld from GraphQL so the UI
             // must prove canonical wallet discovery. Never fabricate an ID.
             if (!blockedDiscoveries.has(key)) {
-              ids.push({ id: String(candidate.positionId) });
+              const events = candidateOrderEvents.get(candidate.positionId) ?? [];
+              const latest = events.reduce((max, event) => event.blockNumber > max ? event.blockNumber : max, 0n);
+              ids.push({ id: String(candidate.positionId), isClosed: events.some(event => event.type === 'Close' && event.blockNumber === latest), blockNumber: latest.toString() });
               emittedDiscoveries.add(key);
             }
           }
         } catch { /* Candidate has not yet minted. No fabricated position. */ }
       }
-      await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: { positions: ids } }) });
+      ids.sort((a, b) => Number(b.blockNumber) - Number(a.blockNumber));
+      const positionOffset = Number(positionQuery?.[1] ?? 0);
+      await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: { positions: ids.slice(positionOffset, positionOffset + 25) } }) });
     }));
     page = await context.newPage();
     page.setDefaultTimeout(120_000);
@@ -351,9 +535,10 @@ async function runProof(captureStage: string) {
       heading: string;
       contract: string;
       calldata: string;
+      valueWei: string;
     };
     const readReviewedTransactions = async (): Promise<ReviewedTransaction[]> => {
-      const actionDetails = activePage.locator('section[aria-label="Review details"]');
+      const actionDetails = activePage.locator('.reviewInlineContent');
       await expect(actionDetails).toBeVisible({ timeout: 180_000 });
       const advanced = actionDetails.locator('details').filter({ hasText: /^Advanced details/ }).first();
       await expect(advanced).toHaveCount(1);
@@ -377,6 +562,7 @@ async function runProof(captureStage: string) {
             heading: card.querySelector('p')?.textContent?.trim() ?? '',
             contract: rows.Contract ?? '',
             calldata: card.querySelector('pre[aria-label="Transaction calldata"]')?.textContent?.trim() ?? '',
+            valueWei: rows['Transaction value (wei)'] ?? '',
           };
         });
       });
@@ -387,21 +573,189 @@ async function runProof(captureStage: string) {
         assert.equal(headingNumber, String(index + 1), `transaction ${index + 1} must have an ordered heading`);
         assert.match(transaction.contract, /^0x[0-9a-fA-F]{40}$/, `transaction ${index + 1} must show its contract`);
         assert.match(transaction.calldata, /^0x[0-9a-fA-F]*$/, `transaction ${index + 1} must show its calldata`);
+        assert.match(transaction.valueWei, /^\d+$/, `transaction ${index + 1} must show its exact native value in wei`);
       });
+      await advanced.locator('summary').click();
       return reviewed;
     };
-    const driveDirectAction = async (buttonName: string, screenshotPrefix: string): Promise<{ signedBefore: number; transactionCount: number }> => {
-      const actionButton = activePage.getByRole('button', { name: buttonName, exact: true });
+    const reviewedFactRow = (label: string): Locator => {
+      const row = activePage
+        .locator('.reviewInlineContent')
+        .locator('div.flex.items-start.justify-between')
+        .filter({ hasText: label })
+        .filter({ visible: true });
+      return label === 'Gas tier'
+        ? row.filter({ hasText: /(?:Standard|Fast|Rapid)/ }).first().locator('span').nth(1)
+        : row.first();
+    };
+    const capturePreconfirmReview = async (action: string, actionButton: Locator): Promise<void> => {
+      const viewportBefore = activePage.viewportSize();
+      if (!viewportBefore) throw new Error('review evidence requires a finite browser viewport');
+      const appContent = activePage.locator('.app-content').first();
+      await expect(appContent, 'review evidence requires the app scroll container').toHaveCount(1);
+      const scrollBefore = await appContent.evaluate((element) => element.scrollTop);
+      const windowScrollBefore = await activePage.evaluate(() => window.scrollY);
+      try {
+        await activePage.setViewportSize({ width: 393, height: 852 });
+        await appContent.evaluate((element) => element.scrollTo({ top: 0, behavior: 'instant' }));
+        await activePage.evaluate(() => new Promise<void>((resolveFrame) => requestAnimationFrame(() => requestAnimationFrame(() => resolveFrame()))));
+        const scrollAtTop = await appContent.evaluate((element) => element.scrollTop);
+        assert.equal(scrollAtTop, 0, `${action} review evidence must start at the top of the app content`);
+        const warningTexts = (await activePage.locator('.reviewInlineContent [data-tone="warning"], .reviewInlineContent [data-tone="danger"], .reviewInlineContent [role="alert"], .reviewInlineContent [role="status"]').allTextContents())
+          .map((value) => value.trim()).filter((value) => value && /expired|unavailable|warning|failed|partial|stale|error/i.test(value));
+        const warningReason = warningTexts.join(' | ') || null;
+        const buttonIsAboveNav = async () => {
+          const box = await actionButton.boundingBox();
+          if (!box) return false;
+          const navTop = await activePage.evaluate(() => {
+            const nav = document.querySelector<HTMLElement>('nav.mobile-tabbar[aria-label="Primary navigation"]');
+            return !nav || getComputedStyle(nav).display === 'none' ? window.innerHeight : nav.getBoundingClientRect().top;
+          });
+          return box.y >= 0 && box.y + box.height <= navTop + 1;
+        };
+        let scrollTop = scrollAtTop;
+        if (!await buttonIsAboveNav()) {
+          assert.ok(warningReason, `${action} healthy review CTA must be visible above the bottom navigation at app-content scrollTop 0`);
+          await actionButton.evaluate((element) => element.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' }));
+          await activePage.evaluate(() => new Promise<void>((resolveFrame) => requestAnimationFrame(() => requestAnimationFrame(() => resolveFrame()))));
+          scrollTop = await appContent.evaluate((element) => element.scrollTop);
+          assert.ok(await buttonIsAboveNav(), `${action} warning-state review CTA must be reachable above the bottom navigation`);
+        }
+        const prefix = `${action.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-review-393x852`;
+        if (!reviewEvidenceInitialized) {
+          await mkdir(dirname(reviewEvidenceRoot), { recursive: true });
+          await mkdir(reviewEvidenceRoot, { recursive: false });
+          reviewEvidenceInitialized = true;
+        }
+        const capturePositions = new Set<number>([scrollTop]);
+        const metrics = await appContent.evaluate((element) => ({ maxTop: Math.max(0, element.scrollHeight - element.clientHeight), client: element.clientHeight }));
+        if (metrics.maxTop > 0) {
+          capturePositions.add(0);
+          const step = Math.max(1, Math.floor(metrics.client * 0.78));
+          for (let top = step; top < metrics.maxTop; top += step) capturePositions.add(top);
+          capturePositions.add(metrics.maxTop);
+        }
+        const sortedCapturePositions = [...capturePositions].sort((a, b) => a - b);
+        for (let index = 0; index < sortedCapturePositions.length; index += 1) {
+          const top = sortedCapturePositions[index];
+          await appContent.evaluate((element, value) => element.scrollTo({ top: value, behavior: 'instant' }), top);
+          await activePage.evaluate(() => new Promise<void>((resolveFrame) => requestAnimationFrame(() => requestAnimationFrame(() => resolveFrame()))));
+          const file = `${prefix}${index === 0 ? '' : `-scroll-${String(index + 1).padStart(2, '0')}`}.png`;
+          await activePage.screenshot({ path: resolve(reviewEvidenceRoot, file), fullPage: false, animations: 'disabled', caret: 'hide' });
+          reviewCaptures.push({ file, action, route: new URL(activePage.url()).pathname, viewport: { width: 393, height: 852 }, scrollTop: top, overflowReason: warningReason,
+            provenance: 'Actual preconfirm review from protected browser flow against local mainnet fork; zero signatures requested at capture.' });
+          await writeReviewManifest();
+        }
+      } finally {
+        await activePage.setViewportSize(viewportBefore);
+        await activePage.evaluate(({ windowTop, rootTop }) => {
+          window.scrollTo({ top: windowTop, behavior: 'instant' });
+          const root = document.querySelector<HTMLElement>('.app-content');
+          root?.scrollTo({ top: rootTop, behavior: 'instant' });
+        }, { windowTop: windowScrollBefore, rootTop: scrollBefore });
+        await activePage.evaluate(() => new Promise<void>((resolveFrame) => requestAnimationFrame(() => requestAnimationFrame(() => resolveFrame()))));
+      }
+    };
+    const driveDirectAction = async (
+      buttonName: string,
+      screenshotPrefix: string,
+      options: {
+        beforeSigning?: (reviewed: ReviewedTransaction[]) => Promise<void>;
+        probeQuoteExpiry?: boolean;
+        expectedGasTier?: 'Fast' | 'Rapid';
+        changeGasTierToRapid?: boolean;
+      } = {},
+    ): Promise<{ signedBefore: number; transactionCount: number }> => {
       const signedBefore = submitted.length;
+      let fakeClockInstalled = false;
+      let expectedGasTier: 'fast' | 'rapid' | undefined = options.expectedGasTier === 'Fast'
+        ? 'fast'
+        : options.expectedGasTier === 'Rapid' ? 'rapid' : undefined;
+      let expectedFee: { gasPriceWei: bigint; maxFeePerGas: bigint; maxPriorityFeePerGas: bigint } | undefined;
+      let reviewedFeeHistory: ForkFeeHistory | undefined;
+      try {
+      await activePage.getByRole('button', { name: buttonName, exact: true }).click();
+      const actionButton = activePage.getByRole('button', { name: /^Confirm (?:in wallet|\d+ transactions)$/ });
+      await expect(actionButton).toBeVisible({ timeout: 180_000 });
+      reviewedFeeHistory = latestFeeHistory;
+      assert.equal(submitted.length, signedBefore, 'Review must prepare details without signing');
+      if (options.probeQuoteExpiry) {
+        // Let the real route quote and RPC simulation complete on wall-clock
+        // timers. Freeze time only for the deliberate expiry assertion.
+        await activePage.clock.install();
+        fakeClockInstalled = true;
+        await activePage.clock.fastForward(31_000);
+        await activePage.clock.runFor(1);
+        await expect(actionButton, 'an expired reviewed quote must remove the confirm action').toHaveCount(0);
+        const refreshQuote = activePage.getByRole('button', { name: 'Review updated quote', exact: true });
+        await expect(refreshQuote).toBeVisible();
+        await expect(activePage.locator('.reviewInlineContent [role="status"]').filter({ hasText: 'reviewed quote expired' })).toBeVisible();
+        assert.equal(submitted.length, signedBefore, 'quote expiry must not request a wallet signature');
+        await activePage.clock.resume();
+        fakeClockInstalled = false;
+        await refreshQuote.click();
+        await expect(actionButton, 'refreshing an expired quote must prepare a new confirm action').toBeVisible({ timeout: 180_000 });
+        reviewedFeeHistory = latestFeeHistory;
+        assert.equal(submitted.length, signedBefore, 'refreshing an expired quote must remain read-only');
+      }
+      const initialReviewedTransactions = await readReviewedTransactions();
+      if (options.expectedGasTier) {
+        assert.ok(reviewedFeeHistory, 'browser review must use a captured localhost feeHistory snapshot');
+        const initialFee = expectedForkGasFee(reviewedFeeHistory, options.expectedGasTier === 'Fast' ? 'fast' : 'rapid');
+        await expect(reviewedFactRow('Gas tier')).toHaveText(`${options.expectedGasTier} · ${formatGasPriceGwei(initialFee.gasPriceWei)} Gwei`);
+        await expect(reviewedFactRow('Gas fee')).toContainText(/max/i);
+      }
+      await options.beforeSigning?.(initialReviewedTransactions);
+      await capturePreconfirmReview(screenshotPrefix, actionButton);
+      await activePage.screenshot({ path: resolve(artifactRoot, `${screenshotPrefix}-review.png`), fullPage: true });
+      if (options.changeGasTierToRapid) {
+        assert.equal(options.expectedGasTier, 'Fast', 'the tier-change probe must begin from a Fast review');
+        const oldTierValue = await reviewedFactRow('Gas tier').innerText();
+        await activePage.evaluate(() => {
+          const key = 'fxaeon.settings.v1';
+          const current = JSON.parse(window.localStorage.getItem(key) || '{}') as { slippageBps?: number; [key: string]: unknown };
+          const next = { ...current, gasTier: 'rapid' };
+          window.localStorage.setItem(key, JSON.stringify(next));
+          window.dispatchEvent(new CustomEvent('fxaeon:settings-updated', {
+            detail: { slippageBps: current.slippageBps ?? 100, gasTier: 'rapid' },
+          }));
+        });
+        await expect(actionButton, 'changing the saved gas tier must invalidate the prepared review').toHaveCount(0);
+        const refreshTier = activePage.getByRole('button', { name: 'Review updated quote', exact: true });
+        await expect(refreshTier, 'a changed gas tier must require explicit updated review').toBeVisible();
+        await expect(activePage.locator('.reviewInlineContent [role="alert"]')).toContainText('Network fee preference changed');
+        assert.equal(submitted.length, signedBefore, 'gas-tier invalidation must not request a signature');
+        await refreshTier.click();
+        await expect(actionButton, 'the updated review must be rebuilt before signing').toBeVisible({ timeout: 180_000 });
+        reviewedFeeHistory = latestFeeHistory;
+        assert.ok(reviewedFeeHistory, 'rapid review must use a captured localhost feeHistory snapshot');
+        const rapidFee = expectedForkGasFee(reviewedFeeHistory, 'rapid');
+        await expect(reviewedFactRow('Gas tier')).toHaveText(`Rapid · ${formatGasPriceGwei(rapidFee.gasPriceWei)} Gwei`);
+        await expect(reviewedFactRow('Gas fee')).toContainText(/max/i);
+        const updatedConsequences = activePage.locator('[aria-label="Updated transaction consequences"]');
+        await expect(updatedConsequences).toContainText('Gas tier');
+        await expect(updatedConsequences).toContainText(oldTierValue.replace(/^Gas tier\s*/, '').trim());
+        await expect(updatedConsequences).toContainText(/Rapid.*Gwei/);
+        assert.equal(submitted.length, signedBefore, 're-reviewing the changed gas tier must remain read-only');
+        expectedGasTier = 'rapid';
+      }
       let firstSignatureObserved = false;
       let reviewedTransactions: ReviewedTransaction[] = [];
       for (let attempt = 0; attempt < 3 && !firstSignatureObserved; attempt += 1) {
+        const refresh = activePage.getByRole('button', { name: 'Review updated quote', exact: true });
+        const refreshed = await refresh.isVisible();
+        if (refreshed) await refresh.click();
         await expect(actionButton).toBeVisible({ timeout: 180_000 });
+        if (refreshed) reviewedFeeHistory = latestFeeHistory;
+        if (expectedGasTier) {
+          assert.ok(reviewedFeeHistory, 'browser review must use a captured localhost feeHistory snapshot');
+          expectedFee = expectedForkGasFee(reviewedFeeHistory, expectedGasTier);
+          const tierLabel = expectedGasTier === 'fast' ? 'Fast' : 'Rapid';
+          await expect(reviewedFactRow('Gas tier')).toHaveText(`${tierLabel} · ${formatGasPriceGwei(expectedFee.gasPriceWei)} Gwei`);
+        }
         reviewedTransactions = await readReviewedTransactions();
         assert.equal(submitted.length, signedBefore, 'read-only action details must never request a signature');
         await actionButton.click();
-        const changedNotice = activePage.locator('[role="status"]')
-          .filter({ hasText: 'Details changed. Check the updated action before continuing.' }).first();
         const deadline = Date.now() + 180_000;
         let changed = false;
         while (Date.now() < deadline) {
@@ -410,14 +764,14 @@ async function runProof(captureStage: string) {
             firstSignatureObserved = true;
             break;
           }
-          if (await changedNotice.isVisible().catch(() => false)) {
+          if (await refresh.isVisible().catch(() => false)) {
             changed = true;
             break;
           }
           await activePage.waitForTimeout(250);
         }
-        if (!firstSignatureObserved && !changed) throw new Error('timed out waiting for the first signature or a changed-action notice');
-        if (!firstSignatureObserved && attempt === 2) throw new Error('action details changed repeatedly before the first signature');
+        if (!firstSignatureObserved && !changed) throw new Error('timed out waiting for the first signature or quote expiry');
+        if (!firstSignatureObserved && attempt === 2) throw new Error('reviewed quote expired repeatedly before the first signature');
       }
       assert.equal(firstSignatureObserved, true, 'the explicit action must submit its first transaction');
 
@@ -427,7 +781,7 @@ async function runProof(captureStage: string) {
         const deadline = Date.now() + 180_000;
         while (Date.now() < deadline && submitted.length < expected) {
           if (routeErrors.length) throw new Error(routeErrors[0]);
-          if (await activePage.getByRole('button', { name: 'Done', exact: true }).isVisible().catch(() => false)) {
+          if (await activePage.getByRole('button', { name: 'View position', exact: true }).isVisible().catch(() => false)) {
             throw new Error('action completed before all reviewed transactions were broadcast');
           }
           await activePage.waitForTimeout(250);
@@ -438,6 +792,13 @@ async function runProof(captureStage: string) {
         assert.ok(reviewedTransaction, `broadcast ${transactionIndex + 1} has no reviewed transaction`);
         assert.equal(tx.to.toLowerCase(), reviewedTransaction.contract.toLowerCase(), `broadcast ${transactionIndex + 1} target differs from action details`);
         assert.equal(tx.data.toLowerCase(), reviewedTransaction.calldata.toLowerCase(), `broadcast ${transactionIndex + 1} calldata differs from action details`);
+        assert.equal(BigInt(tx.value ?? '0x0'), BigInt(reviewedTransaction.valueWei), `broadcast ${transactionIndex + 1} native value differs from action details`);
+        if (expectedFee) {
+          assert.notEqual(tx.maxFeePerGas, undefined, 'selected gas tier must set an EIP-1559 fee cap on the wallet request');
+          assert.notEqual(tx.maxPriorityFeePerGas, undefined, 'selected gas tier must set an EIP-1559 priority fee on the wallet request');
+          assert.equal(BigInt(tx.maxFeePerGas!), expectedFee.maxFeePerGas, 'wallet fee cap must match the selected fork fee tier');
+          assert.equal(BigInt(tx.maxPriorityFeePerGas!), expectedFee.maxPriorityFeePerGas, 'wallet priority fee must match the selected fork fee tier');
+        }
         const hold = heldReceipts.get(tx.hash.toLowerCase());
         assert.ok(hold, 'each actual broadcast must be held before browser receipt completion');
         await expect.poll(() => proofValue(hold.intercepted)).toBeGreaterThan(0);
@@ -448,7 +809,7 @@ async function runProof(captureStage: string) {
         await expect(explorer).toHaveAccessibleName(new RegExp(`^${kind} ${transactionIndex + 1}: Submitted\\.`));
         const bounds = await explorer.boundingBox();
         assert.ok(bounds && bounds.height >= 44 && bounds.width >= 44, 'submitted explorer target must be at least 44px');
-        await expect(activePage.getByRole('button', { name: 'Done', exact: true })).toHaveCount(0);
+        await expect(activePage.getByRole('button', { name: 'View position', exact: true })).toHaveCount(0);
         assert.equal(submitted.length, expected, 'no later step may sign before this receipt is delivered');
         submittedExplorerHashes.add(tx.hash.toLowerCase());
         await activePage.screenshot({ path: resolve(artifactRoot, `${screenshotPrefix}-submitted-${transactionIndex + 1}.png`), fullPage: true });
@@ -458,6 +819,35 @@ async function runProof(captureStage: string) {
       assert.ok(transactionIndex > 0, 'the explicit action must submit at least one transaction');
       assert.equal(transactionIndex, reviewedTransactions.length, 'actual signatures must match the reviewed transaction count');
       return { signedBefore, transactionCount: reviewedTransactions.length };
+      } finally {
+        if (fakeClockInstalled) await activePage.clock.resume().catch(() => undefined);
+      }
+    };
+    const captureReviewOnly = async (
+      buttonName: string,
+      screenshotPrefix: string,
+      verifyReview?: (reviewed: ReviewedTransaction[]) => Promise<void>,
+      expectedGasTier?: 'Fast' | 'Rapid',
+    ): Promise<void> => {
+      const signedBefore = submitted.length;
+      await activePage.getByRole('button', { name: buttonName, exact: true }).click();
+      const actionButton = activePage.getByRole('button', { name: /^Confirm (?:in wallet|\d+ transactions)$/ });
+      await expect(actionButton, `${screenshotPrefix} must wait for the real route quote`).toBeVisible({ timeout: 180_000 });
+      await expect(actionButton, `${screenshotPrefix} review must be enabled only after planning succeeds`).toBeEnabled();
+      const reviewedFeeHistory = latestFeeHistory;
+      const reviewedTransactions = await readReviewedTransactions();
+      assert.ok(reviewedTransactions.some((transaction) => transaction.heading.startsWith('Action ')), `${screenshotPrefix} must show a real protocol action`);
+      if (expectedGasTier) {
+        assert.ok(reviewedFeeHistory, `${screenshotPrefix} must use a captured localhost feeHistory snapshot`);
+        const tier = expectedGasTier === 'Fast' ? 'fast' : 'rapid';
+        const expectedFee = expectedForkGasFee(reviewedFeeHistory, tier);
+        await expect(reviewedFactRow('Gas tier')).toHaveText(`${expectedGasTier} · ${formatGasPriceGwei(expectedFee.gasPriceWei)} Gwei`);
+        await expect(reviewedFactRow('Gas fee')).toContainText(/max/i);
+      }
+      await verifyReview?.(reviewedTransactions);
+      assert.equal(submitted.length, signedBefore, `${screenshotPrefix} preconfirm review must not request a signature`);
+      await capturePreconfirmReview(screenshotPrefix, actionButton);
+      assert.equal(submitted.length, signedBefore, `${screenshotPrefix} screenshot capture must remain read-only`);
     };
     const ensureInputAssetPickerOpen = async (): Promise<void> => {
       const trigger = activePage.getByRole('button', { name: 'Input asset', exact: true });
@@ -467,8 +857,7 @@ async function runProof(captureStage: string) {
     };
     const ensureFormAdvancedDetailsOpen = async (): Promise<void> => {
       const summary = activePage.locator('summary')
-        .filter({ has: activePage.locator('span[aria-hidden="true"]') })
-        .filter({ hasText: /^Advanced/ }).first();
+        .filter({ hasText: /^(?:Advanced|Settings)/ }).first();
       await expect(summary).toBeVisible();
       const open = await summary.evaluate((element) => (element.parentElement as HTMLDetailsElement).open);
       if (!open) await summary.click();
@@ -500,7 +889,7 @@ async function runProof(captureStage: string) {
     await expect(sessionUsdcOption).toContainText(availableLabel(fundedUsdc));
     await page.evaluate(`window.__fxForkChangeAccount(${JSON.stringify(alternateWallet)})`);
     await expect(page.getByRole('button', { name: 'Open wallet profile' }))
-      .toContainText(`${alternateWallet.slice(0, 5)}…${alternateWallet.slice(-4)}`);
+      .toContainText(`${alternateWallet.slice(0, 6)}…${alternateWallet.slice(-4)}`);
     // ProtocolPositionSession may remount account-owned UI while the outer
     // Wagmi cache remains mounted; preserve an already-open picker or open it.
     await ensureInputAssetPickerOpen();
@@ -515,7 +904,7 @@ async function runProof(captureStage: string) {
     await expect(sessionUsdcOption).not.toContainText(/Available: [\d,]/);
     await page.evaluate(`window.__fxForkChangeAccount(${JSON.stringify(wallet)})`);
     await expect(page.getByRole('button', { name: 'Open wallet profile' }))
-      .toContainText(`${wallet.slice(0, 5)}…${wallet.slice(-4)}`);
+      .toContainText(`${wallet.slice(0, 6)}…${wallet.slice(-4)}`);
     await ensureInputAssetPickerOpen();
     await expect(sessionUsdcOption).toContainText(availableLabel(fundedUsdc));
     assert.equal(submitted.length, 0, 'session checks must never request a signature');
@@ -539,8 +928,8 @@ async function runProof(captureStage: string) {
       await expect(responsiveUsdc).toContainText(`Available: ${formatExactDecimal(formatUnits(responsiveBalance, 6), 4)} USDC`);
       await responsiveUsdc.click();
       const responsiveAmount = page.getByLabel('Amount in USDC', { exact: true });
-      const responsiveMeta = page.locator('[class*="amountBalanceMeta"]').filter({ hasText: /Available:/ }).first();
-      const responsiveBalanceLabel = responsiveMeta.locator(':scope > :first-child > span').first();
+      const responsiveMeta = page.locator('[data-amount-usd]').filter({ hasText: /Available:/ }).first();
+      const responsiveBalanceLabel = responsiveMeta.locator('[id$="-balance"]');
       await expect(responsiveBalanceLabel).toBeVisible();
       const responsiveMetaBox = await responsiveMeta.boundingBox();
       const responsiveAmountBox = await responsiveAmount.boundingBox();
@@ -558,8 +947,8 @@ async function runProof(captureStage: string) {
       `live Available balance must be visible without clipping at ${viewport.width}x${viewport.height}`);
       if (viewport.width <= 640) assert.ok(responsiveMetaBox!.width >= responsiveAmountBox!.width - 2,
         `live balance metadata must span the compact amount field at ${viewport.width}x${viewport.height}`);
-      for (const label of ['25%', '50%', '75%', '100%']) {
-        const fraction = page.locator('.fraction-button').filter({ hasText: label }).first();
+      for (const label of ['25%', '50%', '75%', 'Max']) {
+        const fraction = page.locator('[data-amount-field] button').filter({ hasText: new RegExp(`^${label}$`) }).first();
         await fraction.evaluate((element) => element.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' }));
         await expect(fraction, `${label} must remain visible at ${viewport.width}x${viewport.height}`).toBeVisible();
         const box = await fraction.boundingBox();
@@ -578,11 +967,24 @@ async function runProof(captureStage: string) {
           return topmost === element || Boolean(topmost && element.contains(topmost));
         }), `${label} must be hit-testable at ${viewport.width}x${viewport.height}`);
       }
-      await page.locator('.fraction-button').filter({ hasText: '25%' }).first().click();
+      await page.locator('[data-amount-field] button').filter({ hasText: /^25%$/ }).first().click();
       await expect(responsiveAmount).toHaveValue(formatUnits(responsiveBalance / 4n, 6));
       console.log(`Responsive live-balance shortcuts verified at ${viewport.width}x${viewport.height}`);
     }
-    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setViewportSize({ width: 393, height: 852 });
+    // Set both preferences through Settings before opening a real fork-backed
+    // review. The same-tab preference event below must invalidate that review
+    // without silently retaining or signing with the older fee tier.
+    await page.goto(`${baseUrl}/settings`);
+    const settingsSlippage = page.getByRole('radiogroup').filter({ has: page.getByRole('radio', { name: '0.1%', exact: true }) });
+    await settingsSlippage.getByRole('radio', { name: '1%', exact: true }).click();
+    const settingsGasTier = page.getByRole('radiogroup', { name: 'Gas speed', exact: true });
+    const settingsFast = settingsGasTier.getByRole('radio', { name: /^Fast\b/ });
+    await expect(settingsFast).toContainText(/[\d.]+/);
+    await settingsFast.click();
+    await page.getByRole('button', { name: 'Save preferences', exact: true }).click();
+    await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+    assert.equal(submitted.length, 0, 'saving transaction preferences must not request a signature');
     for (const scenario of scenarios) {
       console.log(`Browser preparing ${scenario.market} ${scenario.side}`);
       const positionId = Number(await client.readContract({ address: scenario.pool, abi: poolAbi, functionName: 'getNextPositionId' }));
@@ -604,13 +1006,22 @@ async function runProof(captureStage: string) {
       await page.getByRole('spinbutton', { name: 'Target leverage', exact: true }).fill(scenario.side === 'short' ? '0.5' : '2');
       await ensureFormAdvancedDetailsOpen();
       await page.getByLabel('Slippage tolerance percentage').fill('1');
-      const actionButtonName = `Open ${scenario.market} ${scenario.side === 'long' ? 'Long' : 'Short'}`;
+      const actionButtonName = `Review ${scenario.market} ${scenario.side === 'long' ? 'Long' : 'Short'}`;
       const actionButton = page.getByRole('button', { name: actionButtonName, exact: true });
       await expect(actionButton).toBeVisible({ timeout: 180_000 });
       console.log(`Browser prepared ${scenario.market} ${scenario.side} action details`);
       assert.equal(submitted.length, signedBefore, 'review must never request a signature');
       await page.screenshot({ path: resolve(artifactRoot, `${scenario.market}-${scenario.side}-review.png`), fullPage: true });
-      const { signedBefore: tradeSignedBefore, transactionCount } = await driveDirectAction(actionButtonName, `${scenario.market}-${scenario.side}`);
+      const { signedBefore: tradeSignedBefore, transactionCount } = await driveDirectAction(
+        actionButtonName,
+        `${scenario.market}-${scenario.side}`,
+        {
+          probeQuoteExpiry: scenario.market === 'ETH' && scenario.side === 'long',
+          expectedGasTier: scenario.market === 'ETH' && scenario.side === 'long' ? 'Fast' : 'Rapid',
+          changeGasTierToRapid: scenario.market === 'ETH' && scenario.side === 'long',
+        },
+      );
+      if (scenario.market === 'ETH' && scenario.side === 'long') quoteExpiryBlockedUntilRefresh = true;
       assert.equal(tradeSignedBefore, signedBefore);
 
       // The GraphQL response is deliberately held empty for this candidate.
@@ -626,16 +1037,22 @@ async function runProof(captureStage: string) {
       assert.equal(emittedDiscoveries.has(key), false, 'GraphQL index response must remain withheld during direct discovery');
       await assertCanonicalCard(scenario, positionId, positionCard);
       confirmedBeforeIndexer.add(key);
-      await expect(page.getByRole('button', { name: 'Done', exact: true })).toBeVisible({ timeout: 180_000 });
+      await expect(page.getByRole('button', { name: 'View position', exact: true })).toBeVisible({ timeout: 180_000 });
       await expect(page.getByRole('heading', { name: 'Confirmed', exact: true })).toBeVisible();
       const own = await client.readContract({ address: scenario.pool, abi: poolAbi, functionName: 'ownerOf', args: [BigInt(positionId)] });
       assert.equal(own.toLowerCase(), wallet.toLowerCase());
       const [collateral, debt] = await client.readContract({ address: scenario.pool, abi: poolAbi, functionName: 'getPosition', args: [BigInt(positionId)] });
       assert.ok(collateral > 0n && debt > 0n);
       assert.equal(Number(await client.readContract({ address: scenario.pool, abi: poolAbi, functionName: 'getNextPositionId' })), positionId + 1);
-      await page.getByRole('button', { name: 'Done', exact: true }).click();
+      await page.getByRole('button', { name: 'View position', exact: true }).click();
+      await expect(page).toHaveURL(/\/positions\?/);
+      await page.goto(`${baseUrl}/trade`);
+      await page.getByRole('radiogroup', { name: 'Market', exact: true }).getByRole('radio', { name: scenario.market, exact: true }).click();
+      await page.getByRole('radiogroup', { name: 'Position side' }).getByRole('radio', { name: scenario.side === 'long' ? 'Long' : 'Short', exact: true }).click();
+      await ensureInputAssetPickerOpen();
+      await page.getByRole('option', { name: /^USDC\b/i }).click();
       const remainingUsdc = await client.readContract({ address: usdc, abi: tokenAbi, functionName: 'balanceOf', args: [wallet] });
-      await expect(page.locator('.trade-ticket')).toContainText(`Available: ${formatExactDecimal(formatUnits(remainingUsdc, 6), 4)} USDC`);
+      await expect(page.locator('.trade-ticket')).toContainText(`Available: ${formatExactDecimal(formatUnits(remainingUsdc, 6), 8)} USDC`);
       await expect(positionCard).toBeVisible();
       const transactions = [];
       for (const tx of submitted.slice(signedBefore)) {
@@ -757,17 +1174,18 @@ async function runProof(captureStage: string) {
     await page.reload();
     await assertVisiblePositionSet(originalWalletKeys);
     await page.evaluate(`window.__fxForkChangeAccount(${JSON.stringify(alternateWallet)})`);
-    await expect(page.getByRole('button', { name: 'Open wallet profile' })).toContainText(`${alternateWallet.slice(0, 5)}…${alternateWallet.slice(-4)}`);
+    await expect(page.getByRole('button', { name: 'Open wallet profile' })).toContainText(`${alternateWallet.slice(0, 6)}…${alternateWallet.slice(-4)}`);
     await page.goto(`${baseUrl}/positions`);
     await assertVisiblePositionSet([externalKey]);
     await transferPosition(alternateWallet, wallet);
     await page.evaluate(`window.__fxForkChangeAccount(${JSON.stringify(wallet)})`);
-    await expect(page.getByRole('button', { name: 'Open wallet profile' })).toContainText(`${wallet.slice(0, 5)}…${wallet.slice(-4)}`);
+    await expect(page.getByRole('button', { name: 'Open wallet profile' })).toContainText(`${wallet.slice(0, 6)}…${wallet.slice(-4)}`);
     await page.goto(`${baseUrl}/positions`);
     await assertVisiblePositionSet([...originalWalletKeys, externalKey]);
     await transferPosition(wallet, alternateWallet);
+    assert.equal((await client.readContract({ address: externalPool, abi: poolAbi, functionName: 'ownerOf', args: [BigInt(externalPositionId)] })).toLowerCase(), alternateWallet.toLowerCase(), 'external position final owner must be the alternate wallet');
     await page.evaluate(`window.__fxForkChangeAccount(${JSON.stringify(wallet)})`);
-    await expect(page.getByRole('button', { name: 'Open wallet profile' })).toContainText(`${wallet.slice(0, 5)}…${wallet.slice(-4)}`);
+    await expect(page.getByRole('button', { name: 'Open wallet profile' })).toContainText(`${wallet.slice(0, 6)}…${wallet.slice(-4)}`);
     await page.goto(`${baseUrl}/positions`);
     await assertVisiblePositionSet(originalWalletKeys);
     console.log(`External SDK position #${externalPositionId} discovered canonically, then isolated across ownership transfers`);
@@ -872,7 +1290,7 @@ async function runProof(captureStage: string) {
       }
       console.log(`Responsive four-position cards verified at ${viewport.width}x${viewport.height}`);
     }
-    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setViewportSize({ width: 393, height: 852 });
     await page.goto(`${baseUrl}/positions`);
     const leveragePosition = positions[0];
     assert.ok(leveragePosition, 'browser proof requires a position for the direct leverage check');
@@ -909,8 +1327,8 @@ async function runProof(captureStage: string) {
     await expect(page).toHaveURL(new RegExp(`/borrow\\?market=ETH&position=${borrowTarget.positionId}$`));
     const linkedPosition = page.getByRole('combobox', { name: 'Collateral position', exact: true });
     await expect(linkedPosition).toHaveValue(borrowTargetKey);
-    await expect(linkedPosition.locator('option:checked')).toContainText(`Trade position #${borrowTarget.positionId}`);
-    await expect(page.getByRole('heading', { name: `Borrow against position #${borrowTarget.positionId}`, exact: true })).toBeVisible();
+    await expect(linkedPosition.locator('option:checked')).toContainText(`ETH position #${borrowTarget.positionId}`);
+    await expect(page.getByRole('heading', { name: 'Add collateral or borrow', exact: true })).toBeVisible();
 
     // Exercise the CTA's real borrowing path, not just its navigation and
     // selection state. A native collateral top-up avoids an ERC-20 approval,
@@ -922,10 +1340,10 @@ async function runProof(captureStage: string) {
     const requestedFxUsd = parseUnits('1', 18);
     await page.getByLabel('Collateral to add in ETH', { exact: true }).fill('0.001');
     await page.getByLabel('Additional fxUSD to borrow in fxUSD', { exact: true }).fill('1');
-    const borrowActionName = 'Update collateral position';
+    const borrowActionName = 'Review borrowing';
     await expect(page.getByRole('button', { name: borrowActionName, exact: true })).toBeVisible({ timeout: 180_000 });
     assert.equal(submitted.length, borrowSignedBefore, 'borrow details must not request a signature');
-    const { signedBefore: borrowSignedBeforeActual, transactionCount: borrowTransactionCount } = await driveDirectAction(borrowActionName, 'ETH-long-borrow');
+    const { signedBefore: borrowSignedBeforeActual, transactionCount: borrowTransactionCount } = await driveDirectAction(borrowActionName, 'ETH-long-borrow', { expectedGasTier: 'Rapid' });
     assert.equal(borrowSignedBeforeActual, borrowSignedBefore);
     await expect(page.getByRole('heading', { name: 'Confirmed', exact: true })).toBeVisible({ timeout: 180_000 });
     const [borrowCollateralAfter, borrowDebtAfter] = await client.readContract({ address: borrowTarget.pool, abi: poolAbi, functionName: 'getPosition', args: [BigInt(borrowTarget.positionId)] });
@@ -951,19 +1369,159 @@ async function runProof(captureStage: string) {
     borrowTarget.rawCollateral = borrowCollateralAfter.toString();
     borrowTarget.rawDebt = borrowDebtAfter.toString();
     await page.screenshot({ path: resolve(artifactRoot, 'ETH-long-borrow-confirmed.png'), fullPage: true });
-    await page.getByRole('button', { name: 'Done', exact: true }).click();
+    await page.getByRole('button', { name: 'View position', exact: true }).click();
     await page.goto(`${baseUrl}/positions`);
     await page.screenshot({ path: resolve(artifactRoot, 'positions-mobile.png'), fullPage: true });
+
+    // Exercise Earn reviews with the same real fork-backed SDK route used by
+    // the separate earn.anvil proof. The browser confirms only the deposit
+    // needed to mint real fxSAVE shares; both withdrawal reviews stay
+    // preconfirm and must not request another signature.
+    const earnDepositAmount = parseUnits('1000', 6);
+    const earnUsdcBeforeFunding = await client.readContract({ address: usdc, abi: tokenAbi, functionName: 'balanceOf', args: [wallet] });
+    if (earnUsdcBeforeFunding < earnDepositAmount) {
+      const earnDonorCandidates = [donor, '0xf977814e90da44bfa03b6295a0616a897441acec', '0x55fe002aeff02f77364de339a1292923a15844b8'] as const;
+      let earnDonor: Address | undefined;
+      for (const candidate of earnDonorCandidates) {
+        const available = await client.readContract({ address: usdc, abi: tokenAbi, functionName: 'balanceOf', args: [candidate] });
+        if (available >= earnDepositAmount - earnUsdcBeforeFunding) { earnDonor = candidate; break; }
+      }
+      assert.ok(earnDonor, 'Earn review fixture requires a real fork USDC holder with enough balance');
+      const fundingAmount = earnDepositAmount - earnUsdcBeforeFunding;
+      await rpc('anvil_impersonateAccount', [earnDonor]);
+      try {
+        await rpc('anvil_setBalance', [earnDonor, '0x8ac7230489e80000']);
+        const fundingHash = await rpc<Hex>('eth_sendTransaction', [{ from: earnDonor, to: usdc,
+          data: encodeFunctionData({ abi: tokenAbi, functionName: 'transfer', args: [wallet, fundingAmount] }) }]);
+        assert.equal((await client.waitForTransactionReceipt({ hash: fundingHash })).status, 'success', 'Earn fork funding transfer must succeed');
+        await rpc('anvil_mine', ['0x1']);
+      } finally { await rpc('anvil_stopImpersonatingAccount', [earnDonor]); }
+      assert.equal(await client.readContract({ address: usdc, abi: tokenAbi, functionName: 'balanceOf', args: [wallet] }), earnDepositAmount,
+        'Earn fixture must expose the exact real USDC deposit amount');
+    }
+    await page.goto(`${baseUrl}/earn`);
+    await expect(page.getByRole('button', { name: 'Open wallet profile' })).toBeVisible({ timeout: 30_000 });
+    await page.getByLabel('Asset', { exact: true }).click();
+    await page.getByRole('listbox', { name: 'Asset options', exact: true }).getByRole('option', { name: /^USDC\b/i }).click();
+    await page.getByLabel('Deposit amount in USDC', { exact: true }).fill('1000');
+    await expect(page.getByRole('button', { name: 'Review deposit', exact: true })).toBeEnabled({ timeout: 180_000 });
+    const earnDepositSignatureBaseline = submitted.length;
+    const { signedBefore: earnDepositSignedBefore, transactionCount: earnDepositTransactionCount } = await driveDirectAction(
+      'Review deposit',
+      'earn-usdc-deposit',
+      {
+        expectedGasTier: 'Rapid',
+        beforeSigning: async (reviewed) => {
+          const action = reviewed.find((transaction) => transaction.heading.startsWith('Action '));
+          assert.ok(action, 'Earn deposit review must expose its action transaction');
+          assert.equal(action.contract.toLowerCase(), router.toLowerCase(), 'Earn deposit review action must target the fx router');
+          const decoded = decodeFunctionData({ abi: depositToFxSaveAbi, data: action.calldata as Hex });
+          assert.equal(decoded.functionName, 'depositToFxSave', 'Earn deposit review must use the fxSAVE deposit action');
+          const [convertInParams, tokenInAddress, minShares, receiver] = decoded.args;
+          assert.equal(convertInParams.amount, earnDepositAmount, 'reviewed deposit calldata must bind the selected 1,000 USDC amount');
+          assert.equal(tokenInAddress.toLowerCase(), usdc.toLowerCase(), 'reviewed deposit calldata must bind USDC as the input');
+          assert.equal(receiver.toLowerCase(), wallet.toLowerCase(), 'reviewed deposit calldata must bind the connected wallet recipient');
+          assert.equal(minShares > 0n, true, 'reviewed deposit calldata must retain a positive minimum fxSAVE share output');
+          const deposit = reviewedFactRow('Deposit');
+          await expect(deposit).toContainText(/1,?000(?:\.0+)? USDC/i);
+          await expect(reviewedFactRow('Recipient')).toBeVisible();
+          await expect(reviewedFactRow('Minimum fxSAVE received')).toBeVisible();
+        },
+      },
+    );
+    assert.equal(earnDepositSignedBefore, earnDepositSignatureBaseline);
+    assert.ok(earnDepositTransactionCount > 0, 'Earn deposit review must bind at least one real fork transaction');
+    await expect(page.getByRole('heading', { name: 'Confirmed', exact: true })).toBeVisible({ timeout: 180_000 });
+    const fxSaveShares = await client.readContract({ address: fxSave, abi: tokenAbi, functionName: 'balanceOf', args: [wallet] });
+    assert.ok(fxSaveShares > 0n, 'real Earn deposit must mint the wallet fxSAVE shares needed for withdrawal reviews');
+
+    const withdrawalReviewSignatureBaseline = submitted.length;
+    const withdrawalShares = fxSaveShares / 10n;
+    assert.ok(withdrawalShares > 0n, 'Earn fixture must have a positive verified fxSAVE amount for both withdrawal reviews');
+    const withdrawalAmount = formatUnits(withdrawalShares, 18);
+    await page.goto(`${baseUrl}/earn?mode=withdraw`);
+    await expect(page.getByRole('button', { name: 'Open wallet profile' })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('radio', { name: 'Withdraw', exact: true })).toHaveAttribute('aria-checked', 'true');
+    await page.getByLabel('Amount in fxSAVE', { exact: true }).fill(withdrawalAmount);
+    await page.getByRole('group', { name: 'Withdrawal method', exact: true }).getByRole('radio', { name: /Instant/ }).click();
+    await expect(page.getByRole('button', { name: 'Review withdrawal', exact: true })).toBeEnabled({ timeout: 180_000 });
+    await expect(page.getByRole('group', { name: 'Withdrawal method', exact: true }).getByRole('radio', { name: /Instant/ })).toBeChecked();
+    await expect(page.getByRole('group', { name: 'Withdrawal method', exact: true })).toContainText(/instant fee/i);
+    await captureReviewOnly('Review withdrawal', 'earn-instant-withdrawal', async (reviewed) => {
+      const action = reviewed.find((transaction) => {
+        try {
+          return decodeFunctionData({ abi: instantRedeemAbi, data: transaction.calldata as Hex }).functionName === 'instantRedeemFromFxSave';
+        } catch { return false; }
+      });
+      assert.ok(action, 'instant withdrawal review must expose its action transaction');
+      assert.equal(action.contract.toLowerCase(), router.toLowerCase(), 'instant withdrawal review must target the fx router');
+      const decoded = decodeFunctionData({ abi: instantRedeemAbi, data: action.calldata as Hex });
+      assert.equal(decoded.functionName, 'instantRedeemFromFxSave', 'instant withdrawal review must use the instant redemption action');
+      const [fxusdOutput, usdcOutput, amount, receiver] = decoded.args;
+      assert.equal(amount, withdrawalShares, 'instant withdrawal calldata must bind the actual selected fxSAVE shares');
+      assert.equal(receiver.toLowerCase(), wallet.toLowerCase(), 'instant withdrawal calldata must bind the connected wallet recipient');
+      // The router may legitimately use an identity leg with a zero floor
+      // while the other leg carries the conversion bound. The safety
+      // invariant is an aggregate positive minimum, which mirrors the
+      // production action validator and keeps the review honest without
+      // rejecting valid identity routes.
+      assert.ok(fxusdOutput.minOut > 0n || usdcOutput.minOut > 0n, 'instant withdrawal calldata must retain a positive minimum across its output legs');
+      await expect(reviewedFactRow('fxSAVE')).toBeVisible();
+      await expect(reviewedFactRow('Receive')).toBeVisible();
+      await expect(reviewedFactRow('Mode')).toContainText('Instant');
+      await expect(reviewedFactRow('Minimum received (USDC leg)')).toBeVisible();
+    }, 'Rapid');
+    assert.equal(submitted.length, withdrawalReviewSignatureBaseline, 'instant withdrawal review must not request a signature');
+
+    await page.goto(`${baseUrl}/earn?mode=withdraw`);
+    await expect(page.getByRole('button', { name: 'Open wallet profile' })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('radio', { name: 'Withdraw', exact: true })).toHaveAttribute('aria-checked', 'true');
+    await page.getByLabel('Amount in fxSAVE', { exact: true }).fill(withdrawalAmount);
+    await page.getByRole('group', { name: 'Withdrawal method', exact: true }).getByRole('radio', { name: /After cooldown/ }).click();
+    await expect(page.getByRole('button', { name: 'Review withdrawal', exact: true })).toBeEnabled({ timeout: 180_000 });
+    await expect(page.getByRole('group', { name: 'Withdrawal method', exact: true }).getByRole('radio', { name: /After cooldown/ })).toBeChecked();
+    await expect(page.getByRole('group', { name: 'Withdrawal method', exact: true })).toContainText(/no instant fee/i);
+    await captureReviewOnly('Review withdrawal', 'earn-after-cooldown-withdrawal', async (reviewed) => {
+      const action = reviewed.find((transaction) => {
+        try {
+          return decodeFunctionData({ abi: queuedRedeemAbi, data: transaction.calldata as Hex }).functionName === 'requestRedeem';
+        } catch { return false; }
+      });
+      assert.ok(action, 'after-cooldown withdrawal review must expose its action transaction');
+      assert.equal(action.contract.toLowerCase(), fxSave.toLowerCase(), 'after-cooldown withdrawal must call fxSAVE directly');
+      const decoded = decodeFunctionData({ abi: queuedRedeemAbi, data: action.calldata as Hex });
+      assert.equal(decoded.functionName, 'requestRedeem', 'after-cooldown review must use the queued redemption method');
+      assert.equal(decoded.args[0], withdrawalShares, 'queued withdrawal calldata must bind the actual selected fxSAVE shares');
+      await expect(reviewedFactRow('fxSAVE')).toBeVisible();
+      await expect(reviewedFactRow('Receive')).toBeVisible();
+      await expect(reviewedFactRow('Mode')).toContainText('Queued');
+    }, 'Rapid');
+    assert.equal(submitted.length, withdrawalReviewSignatureBaseline, 'after-cooldown withdrawal review must not request a signature');
+
     for (const route of ['portfolio', 'earn', 'move']) {
       await page.goto(`${baseUrl}/${route}`);
       if (route === 'portfolio') {
-        await expect(page.locator('.portfolio-value-metrics span').filter({ has: page.locator('small', { hasText: /^Open positions$/ }) }).locator('strong')).toHaveText('4');
+        const portfolioPositions = page.locator('section[aria-label="Positions"] details').first();
+        const portfolioPositionsSummary = portfolioPositions.locator('summary');
+        await expect(portfolioPositionsSummary).toContainText(/\d+ open/);
+        await expect(portfolioPositions.locator('[data-position-key]').first()).toBeHidden();
+        await page.screenshot({ path: resolve(artifactRoot, 'portfolio-positions-collapsed-mobile.png'), fullPage: false });
+        await portfolioPositionsSummary.click();
+        await expect(portfolioPositions.locator('[data-position-key]')).toHaveCount(2);
+        await expect(page.getByRole('link', { name: 'Manage all', exact: true })).toHaveAttribute('href', '/positions');
         for (const position of positions.filter(p => p.market === 'ETH')) {
           await expect(page.locator(`[data-position-key="${position.market}:${position.side}:${position.positionId}"]`)).toBeVisible();
         }
+        const fxSaveSection = page.locator('section[aria-labelledby="portfolio-earn-heading"]');
+        await expect(fxSaveSection).toHaveCount(1, { timeout: 180_000 });
+        const fxSaveDisclosure = fxSaveSection.locator('details').first();
+        await expect(fxSaveDisclosure.locator(':scope > summary')).toContainText('fxSAVE');
+        await fxSaveDisclosure.locator(':scope > summary').click();
+        await expect(fxSaveDisclosure.getByRole('link', { name: 'Deposit', exact: true })).toBeVisible();
+        await page.screenshot({ path: resolve(artifactRoot, 'portfolio-expanded-mobile.png'), fullPage: true });
       }
       await page.getByRole('button', { name: 'Open wallet profile' }).click();
-      const drawer = page.getByRole('dialog', { name: `Wallet ${wallet}`, exact: true });
+      const drawer = page.getByRole('dialog', { name: new RegExp(`^(?:Wallet ${wallet}|Wallet profile for .*; address ${wallet})$`, 'i') });
       await expect(drawer).toBeVisible();
       await expect(drawer.locator('[data-position-key]')).toHaveCount(2);
       for (const position of positions.filter(p => p.market === 'ETH')) {
@@ -986,11 +1544,39 @@ async function runProof(captureStage: string) {
     assert.ok(externalPositionProof, 'external SDK position proof must complete before browser closes');
     await Promise.all(miningTasks);
     assert.deepEqual(miningErrors, [], 'fork post-receipt block mining must succeed');
+    // The docs helper can only answer history queries from the same real fork
+    // receipts used by this acceptance proof. Serialize those verified rows;
+    // never let the screenshot process invent an empty or synthetic history.
+    const historyRows: Array<{ market: string; side: string; pool: string; positionId: number; id: string;
+      type: 'Open' | 'Close'; hash: Hex; blockNumber: string; timestamp: string }> = [];
+    for (const position of positions) {
+      for (const transaction of position.transactions) {
+        const receipt = await client.getTransactionReceipt({ hash: transaction.hash });
+        assert.equal(receipt.status, 'success', 'history rows must come from successful fork receipts');
+        const block = await client.getBlock({ blockNumber: receipt.blockNumber });
+        for (const log of receipt.logs) {
+          const event = decodePositionRouterEvent(log);
+          if (!event || event.pool.toLowerCase() !== position.pool.toLowerCase()
+            || Number(event.positionId) !== position.positionId) continue;
+          if (!positionRouterEventMatchesRecipient(event, log, receipt.logs, wallet)) continue;
+          historyRows.push({ market: position.market, side: position.side, pool: position.pool,
+            positionId: position.positionId, id: `${position.positionId}_${transaction.hash}`,
+            type: event.operation === 'open' ? 'Open' : 'Close', hash: transaction.hash,
+            blockNumber: receipt.blockNumber.toString(), timestamp: block.timestamp.toString() });
+        }
+      }
+    }
+    for (const position of positions) {
+      assert.equal((await client.readContract({ address: position.pool, abi: poolAbi, functionName: 'ownerOf',
+        args: [BigInt(position.positionId)] })).toLowerCase(), wallet.toLowerCase(), 'history fixture NFT must still belong to the wallet');
+      assert.ok(historyRows.some(row => row.positionId === position.positionId && row.pool === position.pool
+        && row.type === 'Open'), 'every serialized history position requires its actual open event');
+    }
     // Reuse the positions this browser actually opened. The capture process
     // receives only a read-only wallet shim, never the signing transport.
     const fixturePath = resolve(captureStage, 'fixture.json');
     await writeFile(fixturePath, JSON.stringify({ schemaVersion: 1, proof: 'fxaeon-position-screenshot-fixture',
-      chainId: 1, forkBlock: Number(forkBlock), wallet, executionSurface: 'browser', positions }));
+      chainId: 1, forkBlock: Number(forkBlock), wallet, executionSurface: 'browser', positions, historyRows }));
     await waitForExit(spawn(process.execPath, [resolve(repoRoot, 'scripts/capture_docs_screenshots.mjs')], {
       cwd: repoRoot, windowsHide: true, stdio: 'inherit', env: { ...buildEnv,
         FX_SCREENSHOT_BASE_URL: baseUrl, FX_SCREENSHOT_POSITION_MANIFEST: fixturePath,
@@ -1023,11 +1609,11 @@ async function runProof(captureStage: string) {
       await closeUsdcOption.click();
       await ensureFormAdvancedDetailsOpen();
       await page.getByLabel('Slippage tolerance percentage').fill('1');
-      const closeActionName = `Close ${position.market} ${position.side} position`;
+      const closeActionName = `Review Close ${position.market} ${position.side} position`;
       await expect(page.getByRole('button', { name: closeActionName, exact: true })).toBeVisible({ timeout: 180_000 });
       assert.equal(submitted.length, signedBefore, 'close details must never request a signature');
       await page.screenshot({ path: resolve(artifactRoot, `${position.market}-${position.side}-close-review.png`), fullPage: true });
-      const { signedBefore: closeSignedBefore, transactionCount: closeTransactionCount } = await driveDirectAction(closeActionName, `${position.market}-${position.side}-close`);
+      const { signedBefore: closeSignedBefore, transactionCount: closeTransactionCount } = await driveDirectAction(closeActionName, `${position.market}-${position.side}-close`, { expectedGasTier: 'Rapid' });
       assert.equal(closeSignedBefore, signedBefore);
       const confirmedHeading = page.getByRole('heading', { name: 'Confirmed', exact: true });
       const closedPositionRow = page.locator(`[data-position-key="${key}"]`);
@@ -1039,7 +1625,7 @@ async function runProof(captureStage: string) {
         (await confirmedHeading.isVisible().catch(() => false)) || await closedPositionRow.count() === 0
       ), { timeout: 180_000 }).toBe(true);
       if (await confirmedHeading.isVisible().catch(() => false)) {
-        await expect(page.getByRole('button', { name: 'Done', exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'View position', exact: true })).toBeVisible();
       }
       await expect(closedPositionRow).toHaveCount(0);
       const [remainingCollateral, remainingDebt] = await client.readContract({ address: position.pool, abi: poolAbi, functionName: 'getPosition', args: [BigInt(position.positionId)] });
@@ -1059,6 +1645,30 @@ async function runProof(captureStage: string) {
       console.log(`Browser closed and removed ${position.market} ${position.side} #${position.positionId}`);
     }
     assert.equal(closedPositions.length, scenarios.length, 'every supported position must close through the browser');
+    await page.goto(`${baseUrl}/history`);
+    for (const position of closedPositions) {
+      const row = page.getByRole('listitem').filter({ hasText: `Closed ${position.market} ${position.side} #${position.positionId}` });
+      await expect(row).toBeVisible({ timeout: 180_000 });
+      let closeHash: Hex | undefined;
+      for (const transaction of position.transactions) {
+        const receipt = await client.getTransactionReceipt({ hash: transaction.hash });
+        let hasClose = false;
+        for (const log of receipt.logs) {
+          const event = decodePositionRouterEvent(log);
+          if (event?.operation === 'close'
+            && event.pool.toLowerCase() === positionPoolAddress(position.market, position.side).toLowerCase()
+            && event.positionId === BigInt(position.positionId)
+            && positionRouterEventMatchesRecipient(event, log, receipt.logs, wallet)) {
+            hasClose = true;
+            break;
+          }
+        }
+        if (hasClose) { closeHash = transaction.hash; break; }
+      }
+      assert.ok(closeHash, `closed ${position.market} ${position.side} #${position.positionId} must have a real router receipt`);
+      await expect(row.getByRole('link', { name: 'Receipt', exact: true })).toHaveAttribute('href', `https://etherscan.io/tx/${closeHash}`);
+    }
+    await page.goto(`${baseUrl}/positions`);
     // A delayed/unavailable indexer is allowed to leave the product in its
     // honest partial-empty state. Every position has already passed the
     // receipt-bound canonical zero assertion above, so accepting that state
@@ -1083,6 +1693,14 @@ async function runProof(captureStage: string) {
   } catch (error) {
     // Capture the actual failed snapshot before teardown reverts it. These
     // read-only diagnostics cannot make the acceptance assertions pass.
+    // Save the browser before diagnostic RPC reads warm caches or allow the
+    // failed screen to change. Successful runs and failed runs have distinct
+    // trace names so a historical success cannot look like current evidence.
+    if (page) {
+      await page.screenshot({ path: resolve(artifactRoot, 'failure.png'), fullPage: true }).catch(() => undefined);
+      await writeFile(resolve(artifactRoot, 'failure.txt'), `${String(error)}\nBrowser errors: ${JSON.stringify(browserErrors)}\nRoute errors: ${JSON.stringify(routeErrors)}\n${await page.locator('body').innerText().catch(() => '')}`);
+      await page.context().tracing.stop({ path: resolve(artifactRoot, 'failure-trace.zip') }).catch(() => undefined);
+    }
     const discoveryDiagnostics = [];
     for (const candidate of candidates) {
       const startedAt = Date.now();
@@ -1105,10 +1723,6 @@ async function runProof(captureStage: string) {
       }
     }
     await writeFile(resolve(artifactRoot, 'failure-discovery.json'), JSON.stringify(discoveryDiagnostics, null, 2));
-    if (page) {
-      await page.screenshot({ path: resolve(artifactRoot, 'failure.png'), fullPage: true }).catch(() => undefined);
-      await writeFile(resolve(artifactRoot, 'failure.txt'), `${String(error)}\nBrowser errors: ${JSON.stringify(browserErrors)}\nRoute errors: ${JSON.stringify(routeErrors)}\n${await page.locator('body').innerText().catch(() => '')}`);
-    }
     throw error;
   } finally {
     tearingDown = true;
@@ -1124,7 +1738,10 @@ async function runProof(captureStage: string) {
   assert.ok(completed);
   assert.ok(captureStage);
   const captureReport = JSON.parse(await readFile(resolve(captureStage, 'capture-report.json'), 'utf8'));
-  const expectedAssets = ['fxaeon-portfolio-positions.png', 'fxaeon-positions.png', 'fxaeon-trade-connected.png', 'fxaeon-positions-mobile.png'];
+  const expectedAssets = [
+    'fxaeon-portfolio-positions.png', 'fxaeon-positions.png', 'fxaeon-trade-connected.png', 'fxaeon-positions-mobile.png',
+    'fxaeon-portfolio-populated-mobile.png', 'fxaeon-wallet-profile-populated-mobile.png', 'fxaeon-wallet-asset-detail-mobile.png',
+  ];
   assert.equal(captureReport.captures.length, expectedAssets.length);
   const docsArtifactRoot = resolve(artifactRoot, 'docs');
   await mkdir(docsArtifactRoot, { recursive: true });
@@ -1150,6 +1767,15 @@ async function runProof(captureStage: string) {
       existingLongBorrowDeepLinkVerified: true, existingLongBorrowExecuted: true,
       borrowedFxUsdReceived: true, existingLongPositionIdPreserved: true,
       instantReviewVerified: true,
+      quoteExpiryBlockedUntilRefresh,
+      earnDepositReviewVerified: true,
+      earnDepositCalldataBoundToReviewedAmountAndRecipient: true,
+      earnInstantWithdrawalReviewVerified: true,
+      earnInstantWithdrawalCalldataBoundToSelectedShares: true,
+      earnAfterCooldownReviewVerified: true,
+      earnAfterCooldownCalldataBoundToSelectedShares: true,
+      moveExecutionVerified: false,
+      moveExecutionNotTestedReason: 'The protected browser proof uses an Ethereum mainnet fork only; it does not execute bridge actions on a Base fork.',
       everySupportedPositionClosed: true, closeOutputBalanceRefreshVerified: true,
       readSurfaces: ['trade', 'positions', 'portfolio', 'earn', 'move'] }, positions, externalPosition: externalPositionProof, existingBorrow: existingBorrowProof, closedPositions }, null, 2));
   console.log('Real browser four-position open-and-close acceptance proof complete; fork snapshot reverted.');

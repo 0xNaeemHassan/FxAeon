@@ -1,4 +1,6 @@
 /** FxAeon palettes shared by the compact toggle and full appearance control. */
+import { applyTelegramChromeColors } from './telegram';
+
 export type ThemeId = 'official' | 'dark' | 'light';
 
 const THEME_STORAGE_KEY = 'fxaeon_theme_id_v2';
@@ -17,9 +19,9 @@ export const THEMES: Record<ThemeId, ThemeConfig> = {
     name: 'Official',
     accent: '#b9a0ff',
     colors: {
-      '--bg': '#100e18', '--bg-raised': '#15121e', '--surface': '#1a1726',
-      '--surface-2': '#242033', '--surface-3': '#302a42', '--card': '#1a1726',
-      '--input': '#221e30', '--line': '#322b43', '--line-strong': '#57496d',
+      '--bg': '#101018', '--bg-raised': '#14131d', '--surface': '#181721',
+      '--surface-2': '#211f2c', '--surface-3': '#2b2739', '--card': '#181721',
+      '--input': '#1d1b28', '--line': '#302c3f', '--line-strong': '#504760',
       '--text': '#f7f5fc', '--mut': '#b1a9bf', '--mut-2': '#93889f',
       '--mint': '#b9a0ff', '--mint-bright': '#d1bfff', '--on-accent': '#211737',
       '--mint-dim': 'rgba(185, 160, 255, 0.12)', '--mint-glow': 'rgba(185, 160, 255, 0.20)',
@@ -47,10 +49,10 @@ export const THEMES: Record<ThemeId, ThemeConfig> = {
     name: 'Light',
     accent: '#7341c8',
     colors: {
-      '--bg': '#f7f5fb', '--bg-raised': '#ffffff', '--surface': '#ffffff',
-      '--surface-2': '#f0ecf7', '--surface-3': '#e7e0f2', '--card': '#ffffff',
-      '--input': '#f2eef8', '--line': '#e8e1f0', '--line-strong': '#b6a8cb',
-      '--text': '#251b35', '--mut': '#71637f', '--mut-2': '#7c6d8c',
+      '--bg': '#faf8f4', '--bg-raised': '#fffdfa', '--surface': '#fffdfa',
+      '--surface-2': '#eee7f7', '--surface-3': '#e7def2', '--card': '#fffdfa',
+      '--input': '#f4f0f8', '--line': '#ded5e7', '--line-strong': '#ad9cc3',
+      '--text': '#302340', '--mut': '#6c617b', '--mut-2': '#786987',
       '--mint': '#7341c8', '--mint-bright': '#5f2cb4', '--on-accent': '#ffffff',
       '--mint-dim': 'rgba(115, 65, 200, 0.09)', '--mint-glow': 'rgba(115, 65, 200, 0.16)',
       '--cyan': '#8655c7', '--brand-coral': '#a362c4',
@@ -80,14 +82,7 @@ export function applyTheme(themeId: ThemeId) {
   root.style.colorScheme = themeId === 'light' ? 'light' : 'dark';
   root.setAttribute('data-theme', themeId);
   document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute('content', theme.colors['--bg']);
-  const telegram = (window as unknown as { Telegram?: { WebApp?: { setHeaderColor?: (color: string) => void; setBackgroundColor?: (color: string) => void; setBottomBarColor?: (color: string) => void } } }).Telegram?.WebApp;
-  try {
-    telegram?.setHeaderColor?.(theme.colors['--bg']);
-    telegram?.setBackgroundColor?.(theme.colors['--bg']);
-    telegram?.setBottomBarColor?.(theme.colors['--bg']);
-  } catch {
-    // Older Telegram clients can reject dynamic chrome colors.
-  }
+  applyTelegramChromeColors(theme.colors['--bg']);
   try {
     localStorage.setItem(THEME_STORAGE_KEY, themeId);
     const settings = JSON.parse(localStorage.getItem('fxaeon.settings.v1') || '{}') as Record<string, unknown>;

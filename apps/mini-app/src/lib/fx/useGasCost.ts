@@ -9,12 +9,14 @@ import {
   type GasCostCacheView,
   type RouteGasCostEstimate,
 } from './gasCost';
+import type { GasTierQuote } from './gasFeePolicy';
 
 export interface UseGasCostOptions {
   enabled?: boolean;
   client?: FxPublicClient;
   /** Refresh at most once per cache TTL while this route remains mounted. */
   refresh?: boolean;
+  feeTierQuote?: GasTierQuote;
 }
 
 export interface UseGasCostResult extends GasCostCacheView {
@@ -38,7 +40,7 @@ export function useRouteGasCost(
 ): UseGasCostResult {
   const enabled = options.enabled ?? true;
   const refresh = options.refresh ?? true;
-  const routeKey = route ? routeGasCostKey(route) : '';
+  const routeKey = route ? routeGasCostKey(route, options.feeTierQuote) : '';
   const [state, setState] = useState<{ key: string; view: GasCostCacheView }>({ key: '', view: EMPTY_VIEW });
   const [errorState, setErrorState] = useState<{ key: string; value?: string }>({ key: '' });
   const routeRef = useRef(route);
@@ -61,7 +63,7 @@ export function useRouteGasCost(
       return;
     }
     const controller = new AbortController();
-    const initial = routeGasCostCache.view(activeRoute);
+    const initial = routeGasCostCache.view(activeRoute, options.feeTierQuote);
     setState({ key: routeKey, view: initial });
     setErrorState({ key: routeKey });
     if (!refresh) return () => controller.abort();
@@ -83,17 +85,17 @@ export function useRouteGasCost(
     const refreshRoute = async (): Promise<void> => {
       if (controller.signal.aborted) return;
       if (!isOnline() || !isVisible()) return;
-      setState({ key: routeKey, view: routeGasCostCache.view(activeRoute) });
+      setState({ key: routeKey, view: routeGasCostCache.view(activeRoute, options.feeTierQuote) });
       try {
-        await routeGasCostCache.refresh(activeRoute, { client: options.client, signal: controller.signal });
+        await routeGasCostCache.refresh(activeRoute, { client: options.client, signal: controller.signal, feeTierQuote: options.feeTierQuote });
         if (controller.signal.aborted) return;
-        const next = routeGasCostCache.view(activeRoute);
+        const next = routeGasCostCache.view(activeRoute, options.feeTierQuote);
         setState({ key: routeKey, view: next });
         setErrorState({ key: routeKey });
         scheduleRefresh(next.current ? Math.max(1, next.current.validUntil - Date.now()) : 15_000);
       } catch (cause: unknown) {
         if (controller.signal.aborted) return;
-        setState({ key: routeKey, view: routeGasCostCache.view(activeRoute) });
+        setState({ key: routeKey, view: routeGasCostCache.view(activeRoute, options.feeTierQuote) });
         setErrorState({ key: routeKey, value: safeGasCostError(cause) });
         scheduleRefresh(15_000);
       }
@@ -125,7 +127,7 @@ export function useRouteGasCost(
         window.removeEventListener('offline', onVisibilityOrNetwork);
       }
     };
-  }, [enabled, options.client, refresh, routeKey]);
+  }, [enabled, options.client, options.feeTierQuote, refresh, routeKey]);
 
   const estimate = view.current ?? view.previous;
   return {

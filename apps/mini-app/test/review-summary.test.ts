@@ -10,14 +10,13 @@ test('keeps action essentials visible while suppressing duplicate route and leve
     { label: 'Route', value: 'FxRoute' },
     { label: 'Slippage', value: '0.5%' },
     { label: 'Minimum received', value: '1.2 ETH' },
+    { label: 'Gas tier', value: 'Fast · 2 Gwei' },
     { label: 'Gas fee', value: '0.0004 ETH' },
     { label: 'Execution price', value: '2,300 fxUSD / stETH' },
-    { label: 'Risk', value: 'Changing leverage can alter liquidation exposure' },
-    { label: 'Risk', value: 'Changing leverage can alter liquidation exposure' },
   ]);
 
   assert.deepEqual(result.summary.map(({ label }) => label), [
-    'Amount', 'Target leverage', 'Slippage', 'Minimum received', 'Gas fee', 'Risk',
+    'Amount', 'Target leverage', 'Slippage', 'Minimum received', 'Gas tier', 'Gas fee',
   ]);
   assert.deepEqual(result.details.map(({ label }) => label), ['Quoted leverage', 'Route', 'Execution price']);
   assert.equal(result.summary[0].title, '1.234567890123 ETH');

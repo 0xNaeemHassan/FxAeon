@@ -8,6 +8,8 @@ import { recordPendingHash, updatePendingHashRecord } from "./journal";
 import { withWalletChainLock } from "./lock";
 import { defaultTransactionPolicy } from "./policy";
 import { normalizeFxProtocolError } from "./errorNormalization";
+import { selectedGasTierQuote, type GasFeeSelection } from "./gasFeePolicy";
+import { readGasTier } from "@/lib/settings";
 import type {
   BridgeRouteQuote,
   FxPublicClient,
@@ -252,6 +254,10 @@ async function verifySubmittedTransaction(params: {
   }
 }
 
+function isApprovalTransaction(transaction: PlannedRoute["transactions"][number]): boolean {
+  return transaction.kind === "approval" || transaction.type === "approveToken" || transaction.type === "approvePosition";
+}
+
 /** Fail-closed ordered eth_simulateV1 gate. */
 export async function simulatePlannedRoute(
   route: PlannedRoute,
@@ -326,6 +332,7 @@ export async function runTransactionRoute(params: {
   callbacks: TransactionRunnerCallbacks;
   policy?: TransactionPolicy;
   publicClient?: FxPublicClient;
+  feeSelection?: GasFeeSelection;
   options?: TransactionRunnerOptions;
 }): Promise<TransactionExecutionResult> {
   // Snapshot the reviewed route before acquiring the cross-tab lock. A
@@ -340,6 +347,19 @@ export async function runTransactionRoute(params: {
     quote: cloneReviewValue(params.route.quote),
     policy: params.route.policy ? clonePolicy(params.route.policy) : undefined,
   };
+  const feeSelection: GasFeeSelection | undefined = params.feeSelection
+    ? {
+        tier: params.feeSelection.tier,
+        snapshot: {
+          ...params.feeSelection.snapshot,
+          tiers: {
+            standard: { ...params.feeSelection.snapshot.tiers.standard },
+            fast: { ...params.feeSelection.snapshot.tiers.fast },
+            rapid: { ...params.feeSelection.snapshot.tiers.rapid },
+          },
+        },
+      }
+    : undefined;
   const policy = clonePolicy(params.policy ?? defaultTransactionPolicy(route));
   const options = params.options ?? {};
   if (
@@ -458,6 +478,23 @@ export async function runTransactionRoute(params: {
         steps.push(step);
         const label = `transaction ${index + 1} of ${route.transactions.length}`;
         try {
+          // Once an approval receipt is canonical, recheck the remaining
+          // protocol calls against the current allowance before the next
+          // signature, catching state changes since the ordered preflight.
+          if (options.simulate !== false && index > 0 && route.transactions.some(isApprovalTransaction)) {
+            notifyStatus("reviewing", `Checking ${label} against the confirmed approval`);
+            const remainingRoute: PlannedRoute = {
+              ...route,
+              transactions: route.transactions.slice(index),
+            };
+            const simulation = params.callbacks.simulate
+              ? await params.callbacks.simulate(remainingRoute, client)
+              : await simulatePlannedRoute(remainingRoute, client);
+            if (simulation !== true && !simulation.success) {
+              const detail = "error" in simulation ? simulation.error : "simulation failed";
+              throw new Error(detail);
+            }
+          }
           // Storage leases can expire while a Telegram WebView is suspended
           // inside another tab's wallet prompt. Revalidate immediately before
           // each reviewed step and again after nonce reconciliation, directly
@@ -487,6 +524,16 @@ export async function runTransactionRoute(params: {
             data: transaction.data,
             value: transaction.value,
             nonce,
+            ...(feeSelection ? (() => {
+              if (readGasTier() !== feeSelection.tier) {
+                throw new Error("Network fee preference changed; review the action again before signing.");
+              }
+              if (feeSelection.snapshot.chainId !== route.chainId) {
+                throw new Error("Network fee quote does not match the transaction network; review the action again.");
+              }
+              const fee = selectedGasTierQuote(feeSelection.snapshot, feeSelection.tier);
+              return { maxFeePerGas: fee.maxFeePerGas, maxPriorityFeePerGas: fee.maxPriorityFeePerGas };
+            })() : {}),
           };
           const hash = normalizeHash(await params.callbacks.requestSignature(request));
           step.hash = hash;

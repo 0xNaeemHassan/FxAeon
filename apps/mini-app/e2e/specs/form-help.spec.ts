@@ -16,11 +16,18 @@ test.describe("protocol form help and picker keyboard behavior", () => {
     await page.setViewportSize({ width: 320, height: 844 });
     await page.goto("/trade", { waitUntil: "domcontentloaded" });
 
-    // Trade keeps this disclosure collapsed on mobile. The aria-hidden arrow
-    // is part of summary textContent, so match its leading visible label.
-    const advanced = page.locator("summary").filter({ hasText: /^Advanced/ }).first();
-    await expect(advanced).toBeVisible();
-    await advanced.click();
+    // Trade keeps slippage collapsed under the compact Settings disclosure.
+    // The aria-hidden arrow is part of summary textContent, so match its label.
+    const settings = page.locator(".trade-ticket summary").filter({ hasText: /^Settings/ }).first();
+    await expect(settings).toBeVisible();
+    await settings.click();
+    const settingsPanel = settings.locator("xpath=..");
+    const disclosureGeometry = await settingsPanel.evaluate((element) => ({
+      width: element.getBoundingClientRect().width,
+      ticketWidth: element.closest(".trade-ticket")?.getBoundingClientRect().width ?? 0,
+    }));
+    expect(disclosureGeometry.width, "expanded Trade settings must use the ticket width on mobile")
+      .toBeGreaterThan(disclosureGeometry.ticketWidth - 32);
     await expect(page.getByRole("button", { name: "About slippage tolerance", exact: true })).toBeVisible();
 
     const helpButton = page.getByRole("button", { name: "About slippage tolerance", exact: true });

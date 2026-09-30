@@ -4,8 +4,8 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { BarChart3, ChevronDown, RefreshCw } from 'lucide-react';
 import TokenIcon from '@/components/TokenIcon';
 import { useLiveMarketQuote, useUsdPrices } from '@/components/PriceProvider';
-import { fetchMarketHistory, type MarketHistorySnapshot, type MarketRange, type MarketSymbol } from '@/lib/marketData';
-import { fetchMarketCandles, liveQuoteCandle, type LiveMarketRange, type MarketCandleSnapshot } from '@/lib/liveMarket';
+import { type MarketHistorySnapshot, type MarketRange, type MarketSymbol } from '@/lib/marketData';
+import { fetchMarketCandles, fetchMarketHistoryWithCoinbaseFallback, liveQuoteCandle, type LiveMarketRange, type MarketCandleSnapshot } from '@/lib/liveMarket';
 import { formatUsdPrice } from '@/lib/prices';
 import { haptic } from '@/lib/telegram';
 import { subscribeToForegroundResume } from '@/lib/foreground';
@@ -39,7 +39,7 @@ export function useMarketHistory(market: MarketSymbol, range: MarketRange): Hist
     if (cached) return () => { active = false; };
     void historyCache.read(key, () => {
       const controller = new AbortController();
-      return fetchMarketHistory(market, range, fetch, boundedSignal(controller.signal));
+      return fetchMarketHistoryWithCoinbaseFallback(market, range, fetch, boundedSignal(controller.signal));
     }).then((snapshot) => {
       if (!active) return;
       setState({ status: 'ready', snapshot });

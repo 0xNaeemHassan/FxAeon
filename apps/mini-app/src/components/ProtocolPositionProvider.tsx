@@ -28,7 +28,7 @@ import { deriveConfirmedPositionHint, readConfirmedPosition, verifyConfirmedPosi
 import { confirmedPositionHintKey, confirmedPositionStorageKey, parseStoredPositionHints, savePositionHints, type StoredPositionHint } from '@/lib/confirmedPositionStorage';
 import { getEthereumClient, type PlannedRoute, type TransactionExecutionResult } from '@/lib/fx';
 import { useRealtimeChainState } from '@/components/WalletDataProvider';
-import { subscribeToForegroundResume } from '@/lib/foreground';
+import { isForegroundOnline, subscribeToForegroundResume } from '@/lib/foreground';
 
 export type ProtocolPositionStatus = 'idle' | 'loading' | 'ready' | 'partial' | 'unavailable';
 
@@ -62,6 +62,8 @@ const EMPTY_RESULT: ProtocolPositionRefreshResult = {
   status: 'unavailable',
   newPositions: [],
 };
+
+const POSITION_READ_RETRY_DELAYS_MS = [2_000, 5_000] as const;
 
 function emptySnapshot(walletAddress: string | null = null): ProtocolPositionSnapshot {
   return {
@@ -102,6 +104,9 @@ function ProtocolPositionSession({ address, enabled, children }: { address: stri
   const hintSequence = useRef(0);
   const closedPositionKeysRef = useRef(new Set<string>());
   const fullRefreshRef = useRef<((wallet: string) => Promise<ProtocolPositionRefreshResult>) | null>(null);
+  const positionRetryTimerRef = useRef<number | null>(null);
+  const positionRetryAttemptsRef = useRef(0);
+  const schedulePositionRetryRef = useRef<((walletAddress: string, generation: number) => void) | null>(null);
   const realtimeEthereum = useRealtimeChainState(1) as import('@/lib/realtimeChain').RealtimeChainState;
 
   const commit = useCallback((next: ProtocolPositionSnapshot) => {
@@ -186,6 +191,7 @@ function ProtocolPositionSession({ address, enabled, children }: { address: stri
   const loadAddressImpl = useCallback(async (walletAddress: string): Promise<ProtocolPositionRefreshResult> => {
     const requestId = readGuardRef.current.begin();
     if (requestId === null) return EMPTY_RESULT;
+    const walletGeneration = sessionGeneration.current;
     const current = snapshotRef.current.walletAddress?.toLowerCase() === walletAddress.toLowerCase()
       ? snapshotRef.current
       : emptySnapshot(walletAddress);
@@ -218,6 +224,13 @@ function ProtocolPositionSession({ address, enabled, children }: { address: stri
         refreshing: false,
         verifiedGroups: result.successfulGroups,
       });
+      if (result.failedGroups.length === 0) {
+        positionRetryAttemptsRef.current = 0;
+        if (positionRetryTimerRef.current !== null) window.clearTimeout(positionRetryTimerRef.current);
+        positionRetryTimerRef.current = null;
+      } else {
+        schedulePositionRetryRef.current?.(walletAddress, walletGeneration);
+      }
       return { ...result, newPositions };
     } catch (reason) {
       if (readGuardRef.current.isCurrent(requestId)) {
@@ -230,6 +243,7 @@ function ProtocolPositionSession({ address, enabled, children }: { address: stri
           refreshing: false,
           verifiedGroups: [],
         });
+        schedulePositionRetryRef.current?.(walletAddress, walletGeneration);
       }
       return EMPTY_RESULT;
     }
@@ -244,6 +258,22 @@ function ProtocolPositionSession({ address, enabled, children }: { address: stri
     pendingLoadRef.current = { address: normalized, promise };
     return promise;
   }, [loadAddressImpl]);
+
+  const schedulePositionRetry = useCallback((walletAddress: string, generation: number) => {
+    if (positionRetryTimerRef.current !== null || positionRetryAttemptsRef.current >= POSITION_READ_RETRY_DELAYS_MS.length
+      || !sessionActive.current || generation !== sessionGeneration.current
+      || address?.toLowerCase() !== walletAddress.toLowerCase()
+      || !isForegroundOnline()) return;
+    const delay = POSITION_READ_RETRY_DELAYS_MS[positionRetryAttemptsRef.current++];
+    positionRetryTimerRef.current = window.setTimeout(() => {
+      positionRetryTimerRef.current = null;
+      if (!sessionActive.current || generation !== sessionGeneration.current
+        || address?.toLowerCase() !== walletAddress.toLowerCase()
+        || !isForegroundOnline()) return;
+      void fullRefreshRef.current?.(walletAddress);
+    }, delay);
+  }, [address]);
+  schedulePositionRetryRef.current = schedulePositionRetry;
 
   const lastRealtimeBlock = useRef<bigint | null>(null);
   useEffect(() => {
@@ -293,6 +323,9 @@ function ProtocolPositionSession({ address, enabled, children }: { address: stri
     hintSequence.current += 1;
     hintRecords.current = [];
     closedPositionKeysRef.current = new Set<string>();
+    if (positionRetryTimerRef.current !== null) window.clearTimeout(positionRetryTimerRef.current);
+    positionRetryTimerRef.current = null;
+    positionRetryAttemptsRef.current = 0;
     pendingLoadRef.current = null;
     lastRealtimeBlock.current = null;
     commit(emptySnapshot(enabled ? address : null));
@@ -313,11 +346,16 @@ function ProtocolPositionSession({ address, enabled, children }: { address: stri
     const timer = window.setInterval(() => {
       if (document.visibilityState === 'visible' && hintRecords.current.some((record) => Date.now() - record.addedAt < 90_000)) void refreshConfirmedPositions();
     }, 5_000);
-    const unsubscribeResume = subscribeToForegroundResume(() => { void refreshConfirmedPositions(); });
+    const unsubscribeResume = subscribeToForegroundResume(() => {
+      void refreshConfirmedPositions();
+      if (address) void loadAddress(address);
+    });
     return () => {
       guard.invalidate();
       sessionActive.current = false;
       sessionGeneration.current += 1;
+      if (positionRetryTimerRef.current !== null) window.clearTimeout(positionRetryTimerRef.current);
+      positionRetryTimerRef.current = null;
       window.clearInterval(timer);
       unsubscribeResume();
     };
@@ -326,6 +364,9 @@ function ProtocolPositionSession({ address, enabled, children }: { address: stri
   const refresh = useCallback(async () => {
     if (!enabled || !address) return EMPTY_RESULT;
     void refreshConfirmedPositions();
+    if (positionRetryTimerRef.current !== null) window.clearTimeout(positionRetryTimerRef.current);
+    positionRetryTimerRef.current = null;
+    positionRetryAttemptsRef.current = 0;
     return loadAddress(address);
   }, [address, enabled, loadAddress, refreshConfirmedPositions]);
 

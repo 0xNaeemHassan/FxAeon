@@ -51,6 +51,20 @@ export function decimalInputError(
   return null;
 }
 
+/** Normalize a pasted amount only under an explicit decimal separator policy.
+ * Grouped values such as `1,000` are rejected because their meaning is ambiguous. */
+export function normalizeAmountInput(
+  input: string,
+  policy: 'dot-decimal' | 'comma-decimal' = 'dot-decimal',
+): string | null {
+  const value = input.trim();
+  if (value.length > 100) return null;
+  if (policy === 'dot-decimal') return value.includes(',') ? null : value;
+  if (value.includes('.') || (value.match(/,/g)?.length ?? 0) > 1) return null;
+  if (/^\d{1,3}(?:,\d{3})+$/.test(value)) return null;
+  return value.replace(',', '.');
+}
+
 /**
  * Format an API decimal without first coercing it to a JavaScript number.
  * This keeps balances above Number.MAX_SAFE_INTEGER and 18-decimal values

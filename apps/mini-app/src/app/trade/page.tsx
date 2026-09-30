@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowDownRight, ArrowUpRight, ChevronRight, Layers2 } from 'lucide-react';
 import { AppShell, Card } from '@/components/ui';
+import { Disclosure } from '@/components/ProductUI';
+import { ActionWorkspace } from '@/components/ProductLayout';
 import { ActionReview, type ActionReviewStage } from '@/components/ActionReview';
 import { TradeMarketChart } from '@/components/MarketChart';
 import {
@@ -22,7 +24,7 @@ import { usePrivyWallet } from '@/lib/wallet';
 import styles from '@/components/trade-surfaces.module.css';
 import { positiveDecimal } from '@/lib/amount';
 import { formatUnits } from 'viem';
-import { DEFAULT_SLIPPAGE_PERCENT, readSlippagePercent } from '@/lib/settings';
+import { DEFAULT_SLIPPAGE_PERCENT, readSlippagePercent, SETTINGS_KEY, SETTINGS_UPDATED_EVENT } from '@/lib/settings';
 import { readTradeDeepLinkContext, resetTransactionAmounts, type TradeDeepLinkContext } from '@/lib/transactionState';
 import {
   parseAmount,
@@ -144,6 +146,10 @@ export default function TradePage() {
     // its editable ticket while the address/chain arrive in separate React
     // updates; identity changes after an established session still reset it.
     if (previous !== null && previous !== context && previousAddress && (walletChanged || chainChanged)) {
+      // Keep ActionReview mounted after execution starts and through its
+      // result screen. Its submitted route and progress belong to that wallet.
+      // Leave the refs untouched so Edit can apply this reset on input.
+      if (reviewStage === 'executing' || reviewStage === 'result') return;
       const explicit = explicitDeepLinkRef.current;
       const market = explicit?.market ?? 'ETH';
       const side = explicit?.side ?? 'long';
@@ -158,7 +164,7 @@ export default function TradePage() {
     previousWalletContextRef.current = context;
     if (currentAddress) lastConnectedWalletRef.current = currentAddress;
     if (wallet.chainId !== undefined) lastConnectedChainRef.current = wallet.chainId;
-  }, [resetTradeContext, wallet.address, wallet.chainId]);
+  }, [resetTradeContext, reviewStage, wallet.address, wallet.chainId]);
 
   useEffect(() => {
     const deepLink = readTradeDeepLinkContext(window.location.search);
@@ -193,6 +199,7 @@ export default function TradePage() {
   // route is planned and simulated afresh by ActionReview; no executable
   // transaction data is restored from storage.
   useEffect(() => {
+    if (reviewStage === 'executing' || reviewStage === 'result') return;
     if (restoredDraftRef.current || !wallet.address || wallet.chainId !== 1) return;
     const draftId = signatureDraftIdFromSearch(window.location.search);
     if (!draftId) return;
@@ -238,10 +245,19 @@ export default function TradePage() {
     const nextUrl = new URL(window.location.href);
     nextUrl.searchParams.delete('fxDraft');
     window.history.replaceState(window.history.state, '', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
-  }, [wallet.address, wallet.chainId]);
+  }, [reviewStage, wallet.address, wallet.chainId]);
 
   useEffect(() => {
     setSlippage(String(readSlippagePercent()));
+  }, []);
+  useEffect(() => {
+    const onSettingsUpdated = (event: Event) => {
+      if (event.type === 'storage' && (event as StorageEvent).key !== SETTINGS_KEY) return;
+      setSlippage(String(readSlippagePercent()));
+    };
+    window.addEventListener(SETTINGS_UPDATED_EVENT, onSettingsUpdated);
+    window.addEventListener('storage', onSettingsUpdated);
+    return () => { window.removeEventListener(SETTINGS_UPDATED_EVENT, onSettingsUpdated); window.removeEventListener('storage', onSettingsUpdated); };
   }, []);
 
   const tokenOptions = positionInputTokenOptions(market);
@@ -503,20 +519,19 @@ export default function TradePage() {
   return (
     <AppShell tabs>
       <div className={styles.tradeRoot}>
-      <div className={`${styles.tradeWorkspace} trade-workspace`}>
+      <ActionWorkspace className={`${styles.tradeWorkspace} trade-workspace`}>
         <header className={`${styles.tradePageHeading} trade-page-heading`}>
           <div><h1 className="text-display text-[30px] font-semibold leading-tight">Trade</h1></div>
           <Link href="/positions" className={`${styles.positionsShortcut} glass-press inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 text-[12px] font-semibold text-mut hover:text-mint`}><Layers2 className="h-4 w-4" aria-hidden="true" />Positions</Link>
         </header>
 
-        <div className={styles.tradeLayout}>
-        <div className={styles.marketColumn}>
+        <div className={styles.tradeLayout} data-trade-layout data-review={reviewStage !== 'input' || undefined}>
+        {reviewStage === 'input' && <div className={styles.marketColumn} data-trade-market>
           <TradeMarketChart market={market} onMarketChange={changeMarket} />
-        </div>
-        <div className={styles.ticketColumn}>
+        </div>}
+        <div className={styles.ticketColumn} data-trade-ticket>
           {/* The editor and review deliberately share one card. ActionReview
-              replaces this content in place, keeping the market context and
-              the user's exact draft stable while the wallet is opened. */}
+              replaces this content in place, keeping the user's exact draft stable while the wallet is opened. */}
           <Card className={`${styles.tradeTicket} trade-ticket ${reviewStage === 'input' ? '' : styles.tradeTicketReview}`}>
             <ActionReview
               key={reviewRevision}
@@ -536,6 +551,9 @@ export default function TradePage() {
                     <div>
                       <h2 className="text-[18px] font-semibold">Open position</h2>
                     </div>
+                    <Disclosure title="Settings" summary={`${slippage}% slippage`}>
+                      <SlippageField value={slippage} onChange={changeSlippage} max={MAX_FX_SLIPPAGE_PERCENT} />
+                    </Disclosure>
                   </div>
 
                   <div className={styles.sideControl}><Segmented tone="sides" value={side} onChange={changeSide} ariaLabel="Position side" options={[{ value: 'long', label: 'Long', sub: 'Price rises' }, { value: 'short', label: 'Short', sub: 'Price falls' }]} /></div>
@@ -543,10 +561,6 @@ export default function TradePage() {
                   <div className={styles.fieldStack}>
                     <AmountField compact label="Amount" symbol={token} value={amount} onChange={changeAmount} maxDecimals={tokenDecimals(token)} showMax showUnitPrice={false} constraintError={token === 'ETH' ? nativeMaxError : undefined} maxAmount={token === 'ETH' ? nativeMaxAmount : undefined} onMax={token === 'ETH' ? resolveNativeMax : undefined} maxPending={token === 'ETH' && nativeMaxPending} balanceState={selectedTokenBalance} tokenSelector={<TokenSelect compact label="Input asset" value={token} options={tokenOptions} onChange={changeToken} balances={wallet.address ? walletBalances.balances : undefined} balanceStatus={wallet.address ? (walletBalances.status !== 'idle' ? walletBalances.status : undefined) : 'disconnected'} />} />
                     <LeverageField label="Target leverage" value={leverage} onChange={changeLeverage} min={leverageBounds.min} max={leverageBounds.max} error={leverageError} compact />
-                    <details className={`${styles.advancedDetails} group rounded-xl border border-[var(--line)] px-3`}>
-                      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-[13px] font-semibold [&::-webkit-details-marker]:hidden">Advanced <span aria-hidden="true" className="text-mut transition-transform group-open:rotate-180">⌄</span></summary>
-                      <div className="border-t border-[var(--line)] py-3"><SlippageField value={slippage} onChange={changeSlippage} max={MAX_FX_SLIPPAGE_PERCENT} /></div>
-                    </details>
                   </div>
                 </>
               }
@@ -584,7 +598,7 @@ export default function TradePage() {
             )}
           </section>
         )}
-      </div>
+      </ActionWorkspace>
       </div>
     </AppShell>
   );

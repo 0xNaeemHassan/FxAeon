@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   createCoinbaseTickerController,
   fetchMarketCandles,
+  fetchMarketHistoryWithCoinbaseFallback,
   liveMarketReconnectDelay,
   liveQuoteCandle,
   parseCoinbaseCandlesResponse,
@@ -86,6 +87,29 @@ test('Coinbase candle failures fall back to validated CoinGecko history', async 
   assert.equal(snapshot.source, 'coingecko');
   assert.ok(snapshot.candles.length >= 6);
   assert.equal(snapshot.market, 'BTC');
+});
+
+test('CoinGecko history rate limits fall back to validated Coinbase candles for compact history', async () => {
+  const now = Date.now();
+  const requests: string[] = [];
+  const request = (async (input) => {
+    const url = String(input);
+    requests.push(url);
+    if (url.includes('/coins/')) return Response.json({ error: 'rate limit' }, { status: 429, headers: { 'retry-after': '7' } });
+    return Response.json(Array.from({ length: 96 }, (_, index) => {
+      const time = Math.floor((now - (95 - index) * 5 * 60_000) / 1_000);
+      const close = 2_300 + index;
+      return [time, close - 2, close + 3, close - 1, close];
+    }));
+  }) as typeof fetch;
+  const snapshot = await fetchMarketHistoryWithCoinbaseFallback('ETH', '1D', request);
+  assert.equal(snapshot.source, 'coinbase');
+  assert.equal(snapshot.currentPrice, 2_395);
+  assert.equal(snapshot.updatedAt, Math.floor(now / 1_000) * 1_000);
+  assert.equal(snapshot.points.length, 96);
+  assert.equal(requests.length, 2);
+  assert.ok(requests[0]?.includes('/coins/ethereum/market_chart'));
+  assert.ok(requests[1]?.includes('/products/ETH-USD/candles'));
 });
 
 test('reconnect delay is bounded and the controller tears down when paused', () => {

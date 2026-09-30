@@ -3,9 +3,9 @@ const THEME_KEY = "fxaeon-theme";
 const readTheme = () => {
   try {
     const saved = window.localStorage.getItem(THEME_KEY);
-    return saved === "light" || saved === "dark" ? saved : "dark";
+    return saved === "light" || saved === "dark" ? saved : "light";
   } catch {
-    return "dark";
+    return "light";
   }
 };
 
@@ -30,7 +30,7 @@ const init = () => {
     const dark = theme !== "light";
     themeToggle?.setAttribute("aria-pressed", String(!dark));
     themeToggle?.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
-    if (themeColor) themeColor.setAttribute("content", dark ? "#0d0b14" : "#e8def7");
+    if (themeColor) themeColor.setAttribute("content", dark ? "#18171d" : "#f8f7f3");
   };
   setThemeUI(document.documentElement.dataset.theme);
   themeToggle?.addEventListener("click", () => {
@@ -69,7 +69,7 @@ const init = () => {
 
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
   let observer;
-  const heroArt = document.querySelector(".hero-art");
+
   const enter = (element, delay = 0, distance = 18) => {
     if (!element?.animate || reduce.matches) return;
     element.animate(
@@ -81,7 +81,7 @@ const init = () => {
   if (!reduce.matches) {
     document.querySelectorAll(".hero-copy > *").forEach((element, index) => enter(element, index * 55));
     enter(document.querySelector(".hero-art"), 120, 0);
-    const revealItems = [...document.querySelectorAll(".showcase-intro, .showcase-art, .section-heading, .feature, .brake-panel, .closing")];
+    const revealItems = [...document.querySelectorAll(".feature, .mechanics")];
     revealItems.forEach((element) => {
       if ("IntersectionObserver" in window) {
         observer ??= new IntersectionObserver((entries) => {
@@ -89,7 +89,7 @@ const init = () => {
             if (!entry.isIntersecting) return;
             const order = revealItems.indexOf(entry.target);
             const delay = entry.target.classList.contains("feature") ? (order % 2) * 70 : 0;
-            const distance = entry.target.classList.contains("brake-panel") ? 24 : 18;
+            const distance = 18;
             enter(entry.target, delay, distance);
             observer.unobserve(entry.target);
           });
@@ -98,23 +98,10 @@ const init = () => {
       } else enter(element);
     });
 
-    heroArt?.addEventListener("pointermove", (event) => {
-      if (reduce.matches || (event.pointerType && event.pointerType !== "mouse")) return;
-      const rect = heroArt.getBoundingClientRect();
-      const x = ((event.clientX - rect.left) / rect.width - 0.5) * 2;
-      const y = ((event.clientY - rect.top) / rect.height - 0.5) * 2;
-      heroArt.style.setProperty("--hero-shift-x", `${x * 5}px`);
-      heroArt.style.setProperty("--hero-shift-y", `${y * 5}px`);
-    });
-    heroArt?.addEventListener("pointerleave", () => {
-      heroArt.style.removeProperty("--hero-shift-x");
-      heroArt.style.removeProperty("--hero-shift-y");
-    });
   }
   reduce.addEventListener("change", () => {
     if (!reduce.matches) return;
-    heroArt?.style.removeProperty("--hero-shift-x");
-    heroArt?.style.removeProperty("--hero-shift-y");
+
     observer?.disconnect();
     document.getAnimations().forEach((animation) => animation.cancel());
   });

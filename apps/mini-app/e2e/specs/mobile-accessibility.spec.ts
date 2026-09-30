@@ -47,4 +47,17 @@ test.describe("mobile web and Telegram accessibility contract", () => {
     await expect(page.locator("body")).not.toContainText(/0x[a-fA-F0-9]{40}/);
     assertNoBackendRequests(requests);
   });
+
+  test("asset picker closes on browser Back and restores focus to its trigger", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 740 });
+    await page.goto("/trade", { waitUntil: "domcontentloaded" });
+    const trigger = page.getByRole("button", { name: "Input asset" });
+    await trigger.click();
+    const dialog = page.getByRole("dialog", { name: "Input asset" });
+    await expect(dialog).toBeVisible();
+    await page.goBack();
+    await expect(dialog).toBeHidden();
+    await expect(trigger).toBeFocused();
+    await expect(page).toHaveURL(/\/trade$/);
+  });
 });

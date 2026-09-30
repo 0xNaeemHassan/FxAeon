@@ -1,9 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowLeftRight } from 'lucide-react';
+import { AlertTriangle, ArrowLeftRight, ChevronDown, Code2, UserRound } from 'lucide-react';
 import { formatUnits, type Address } from 'viem';
 import { AppShell, Card } from '@/components/ui';
+import { PageHeading } from '@/components/ProductUI';
+import { ActionWorkspace } from '@/components/ProductLayout';
 import { ActionReview, type ActionReviewStage } from '@/components/ActionReview';
 import { AmountField, TokenSelect, type TokenBalanceView } from '@/components/ProtocolForm';
 import { useMoveBalances } from '@/components/WalletDataProvider';
@@ -177,6 +179,7 @@ export default function MovePage() {
   // stable caller-known action key all match. The route is still rebuilt and
   // simulated by ActionReview; no executable route data is restored.
   useEffect(() => {
+    if (reviewStage === 'executing' || reviewStage === 'result') return;
     if (!wallet.ready || !wallet.authenticated || !wallet.address || typeof window === 'undefined') return;
     const search = window.location.search;
     if (draftRestoreRef.current === search) return;
@@ -214,7 +217,7 @@ export default function MovePage() {
       setResumeReview((revision) => revision + 1);
       break;
     }
-  }, [wallet.address, wallet.authenticated, wallet.ready]);
+  }, [reviewStage, wallet.address, wallet.authenticated, wallet.ready]);
 
   useEffect(() => {
     if (contextAppliedRef.current || typeof window === 'undefined') return;
@@ -271,11 +274,16 @@ export default function MovePage() {
     const chainChanged = wallet.chainId !== undefined
       && lastConnectedChainRef.current !== undefined
       && lastConnectedChainRef.current !== wallet.chainId;
-    if (previous !== null && previous !== context && (walletChanged || chainChanged)) resetBridgeContext();
+    if (previous !== null && previous !== context && (walletChanged || chainChanged)) {
+      // A network switch can be part of the bridge execution itself. Retain
+      // its progress/result, then reset the form when Edit returns to input.
+      if (reviewStage === 'executing' || reviewStage === 'result') return;
+      resetBridgeContext();
+    }
     previousWalletContextRef.current = context;
     if (currentAddress) lastConnectedWalletRef.current = currentAddress;
     if (wallet.chainId !== undefined) lastConnectedChainRef.current = wallet.chainId;
-  }, [resetBridgeContext, wallet.address, wallet.chainId]);
+  }, [resetBridgeContext, reviewStage, wallet.address, wallet.chainId]);
 
   const balanceQuery = useMoveBalances({ address: wallet.address, chainId: sourceChainId, enabled: !advanced });
   const moveBalances = !advanced ? balanceQuery.data?.balances : undefined;
@@ -462,7 +470,9 @@ export default function MovePage() {
 
   return (
     <AppShell>
-      <div className={`${styles.workspace} ${styles.moveWorkspace} ${moveStyles.moveWorkspace}`}>
+      <ActionWorkspace density="compact" className={`${styles.workspace} ${styles.moveWorkspace} ${moveStyles.moveWorkspace}`}>
+        <PageHeading title="Move" />
+        <div className={moveStyles.centerStage}>
         <Card
           data-flow-stage={reviewStage}
           className={`${styles.focusCard} ${styles.moveCard} ${moveStyles.moveCard} p-5`}
@@ -471,19 +481,13 @@ export default function MovePage() {
             key={reviewRevision}
             surface="content"
             editor={<>
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h1 className="text-[22px] font-semibold tracking-[-.03em]">Move</h1>
-            </div>
-          </div>
-
-          <div className={`mt-5 ${styles.networkFlow} ${styles.moveNetworkFlow}`}>
+          <div className={`${styles.networkFlow} ${styles.moveNetworkFlow} ${moveStyles.moveNetworkFlow}`}>
             <NetworkField label="From" name={sourceName} chainId={sourceChainId} />
             <button
               type="button"
               aria-label={`Reverse route to ${sourceName}`}
               onClick={changeDirection}
-              className={`glass-press ${styles.networkArrow}`}
+              className={`glass-press ${styles.networkArrow} ${moveStyles.routeSwap}`}
             >
               <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
             </button>
@@ -492,25 +496,22 @@ export default function MovePage() {
 
           <div className="my-4 hairline" />
           <div className={`${styles.moveFormFields} ${moveStyles.moveFormFields}`}>
-            {!advanced && (
-              <TokenSelect label="Asset" value={token} options={['fxUSD', 'fxSAVE'] as const} onChange={changeToken} balances={moveBalances} balanceStatus={wallet.address ? moveBalanceStatusForPicker : 'disconnected'} />
-            )}
-
             <div className={`${styles.amountHero} ${styles.moveAmountHero} ${moveStyles.moveAmountHero}`}>
               <AmountField
                 label="Amount"
-                hint={`Available on ${sourceName}`}
                 symbol={advanced ? 'OFT' : token}
                 value={amount}
                 onChange={setAmount}
                 maxDecimals={18}
                 balanceState={moveBalanceState}
+                showUnitPrice={false}
+                tokenSelector={!advanced ? <TokenSelect compact label="Asset" value={token} options={['fxUSD', 'fxSAVE'] as const} onChange={changeToken} balances={moveBalances} balanceStatus={wallet.address ? moveBalanceStatusForPicker : 'disconnected'} /> : undefined}
               />
             </div>
 
             <div className={styles.recipientSection}>
               <div className="mb-2 flex items-center justify-between gap-3">
-                <span className="text-[12px] font-medium text-mut">Recipient</span>
+                <span className="text-[12px] font-medium text-mut">Recipient on {destinationName}</span>
                 <button
                   type="button"
                   onClick={changeRecipientMode}
@@ -528,9 +529,10 @@ export default function MovePage() {
                 />
               ) : (
                 <div className="flex min-h-[56px] items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--input)] px-3">
-                  <span className="text-[12px] text-mut">{wallet.address ? 'Your wallet' : 'Connect wallet'}</span>
+                  <span className={moveStyles.recipientMark}><UserRound className="h-4 w-4" aria-hidden="true" /></span>
+                  <span className={`${moveStyles.recipientLabel} mr-auto text-[12px] text-mut`}>{wallet.address ? 'Your wallet' : 'Connect wallet'}</span>
                   {wallet.address ? (
-                    <span className="font-mono text-[12px] font-semibold">
+                    <span className={`${moveStyles.recipientAddress} font-mono text-[12px] font-semibold`}>
                       {`${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)}`}
                     </span>
                   ) : null}
@@ -544,8 +546,8 @@ export default function MovePage() {
               className={`${styles.advancedPanel} ${moveStyles.expertDisclosure}`}
             >
               <summary className={`${moveStyles.expertSummary} group flex cursor-pointer list-none items-center justify-between gap-3 px-3 text-[12px] font-semibold text-mut [&::-webkit-details-marker]:hidden`}>
-                <span>Custom contracts</span>
-                <span aria-hidden="true" className="text-[15px] leading-none text-[var(--mut-2)] transition-transform group-open:rotate-180">⌄</span>
+                <span className="flex min-w-0 items-center gap-2"><Code2 aria-hidden="true" className="h-4 w-4 shrink-0 text-[var(--mut-2)]" />Custom contracts</span>
+                <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 text-[var(--mut-2)] transition-transform group-open:rotate-180" />
               </summary>
               <div className="border-t border-[var(--line)] p-3">
                 <AdvancedAddressFields
@@ -581,7 +583,8 @@ export default function MovePage() {
             }}
           />
         </Card>
-      </div>
+        </div>
+      </ActionWorkspace>
     </AppShell>
   );
 }
@@ -658,9 +661,9 @@ function AddressField({ label, hint, value, onChange, placeholder }: { label: st
 
 function NetworkField({ label, name, chainId }: { label: 'From' | 'To'; name: string; chainId: FxChainId }) {
   return (
-    <div className={styles.networkNode}>
+    <div className={`${styles.networkNode} ${moveStyles.routeNode}`}>
       <span className="block text-[11px] text-mut">{label}</span>
-      <span className="mt-1 flex items-center gap-1.5 text-[14px] font-semibold"><ChainIcon chainId={chainId} size={18} />{name}</span>
+      <span className={`${moveStyles.routeIdentity} mt-1 flex items-center text-[14px] font-semibold`}><ChainIcon chainId={chainId} size={22} className={moveStyles.chainLogo} /><span className={moveStyles.routeName}>{name}</span></span>
     </div>
   );
 }
