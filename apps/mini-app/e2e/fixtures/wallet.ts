@@ -17,6 +17,10 @@ export interface BrowserWalletShimOptions {
 
 export function browserWalletInitScript(_opts: BrowserWalletShimOptions = {}): (o: BrowserWalletShimOptions) => void {
   return (o: BrowserWalletShimOptions) => {
+    // tsx emits calls to this helper while serializing the fixture function.
+    // Install it on the browser global before those calls execute, so separate
+    // Playwright init-script ordering cannot cause a reference error.
+    (globalThis as Record<string, unknown>)['__name'] = function (target: unknown): unknown { return target; };
     let address = o.address ?? '0x930f0000000000000000000000000000000098b9';
     let connected = o.initiallyConnected ?? false;
     let chainId = o.chainId ?? '0x1';

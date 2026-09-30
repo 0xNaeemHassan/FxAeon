@@ -12,10 +12,10 @@
  */
 import { createServer } from 'node:http';
 import { spawnSync } from 'node:child_process';
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, readdir, lstat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join, extname, normalize, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, extname, posix } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { E2E_BUILD_ENV } from '../../../scripts/e2e_build_env.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
@@ -74,62 +74,118 @@ const MIME = {
   '.map': 'application/json; charset=utf-8',
 };
 
-async function resolveFile(pathname) {
-  // Strip query, normalise, prevent path traversal.
-  let p = decodeURIComponent(pathname.split('?')[0]);
-  p = normalize(p).replace(/^[/\\]+/, '');
-  if (p === '/' || p === '') return join(DIST, 'index.html');
+export async function createExportManifest(distRoot) {
+  // Build all request keys from the export tree once. Symlinks are deliberately
+  // ignored so neither routes nor assets can point outside the static export.
+  const rootInfo = await lstat(distRoot);
+  if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) {
+    throw new Error('static export root must be a real directory');
+  }
 
-  const direct = resolve(DIST, p);
-  if (direct !== DIST && !direct.startsWith(`${DIST}${sep}`)) return null;
-  // Exact file (assets like /_next/..., /favicon.ico, /file.html).
-  try {
-    const s = await stat(direct);
-    if (s.isFile()) return direct;
-    if (s.isDirectory()) {
-      const idx = join(direct, 'index.html');
-      if (existsSync(idx)) return idx;
+  const files = new Map();
+  const directoryRoutes = new Map();
+  const cleanRoutes = new Map();
+
+  async function collect(directory, relativeDirectory = '') {
+    const entries = await readdir(directory, { withFileTypes: true });
+    for (const entry of entries) {
+      const relativePath = relativeDirectory
+        ? `${relativeDirectory}/${entry.name}`
+        : entry.name;
+      const absolutePath = join(directory, entry.name);
+
+      if (entry.isDirectory()) {
+        await collect(absolutePath, relativePath);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+
+      const urlPath = `/${relativePath}`;
+      const file = { path: absolutePath, urlPath };
+      files.set(urlPath, file);
+
+      if (relativePath === 'index.html') {
+        directoryRoutes.set('/', file);
+      } else if (relativePath.endsWith('/index.html')) {
+        const directoryRoute = `/${relativePath.slice(0, -'index.html'.length).replace(/\/$/, '')}`;
+        directoryRoutes.set(directoryRoute, file);
+        directoryRoutes.set(`${directoryRoute}/`, file);
+      }
+
+      if (relativePath.endsWith('.html')) {
+        const cleanRoute = `/${relativePath.slice(0, -'.html'.length)}`;
+        cleanRoutes.set(cleanRoute, file);
+        cleanRoutes.set(`${cleanRoute}/`, file);
+      }
     }
-  } catch {
-    /* not a direct file */
   }
-  // Clean URL → <route>.html (how the export emits routes).
-  if (!extname(p)) {
-    const asHtml = join(DIST, `${p.replace(/\/$/, '')}.html`);
-    if (existsSync(asHtml)) return asHtml;
+
+  await collect(distRoot);
+
+  // Exact exported paths win, then directory indexes, then clean .html routes.
+  const manifest = new Map(files);
+  for (const [route, file] of directoryRoutes) {
+    if (!manifest.has(route)) manifest.set(route, file);
   }
-  return null;
+  for (const [route, file] of cleanRoutes) {
+    if (!manifest.has(route)) manifest.set(route, file);
+  }
+  return manifest;
 }
 
-buildIfNeeded();
+export function normalizeRequestPath(requestTarget) {
+  const rawPath = String(requestTarget).split('?', 1)[0];
+  if (!rawPath.startsWith('/')) return null;
 
-const server = createServer(async (req, res) => {
+  let decodedPath;
   try {
-    const file = await resolveFile(req.url || '/');
-    if (!file) {
-      const notFound = join(DIST, '404.html');
-      const body = existsSync(notFound) ? await readFile(notFound) : Buffer.from('Not found');
-      res.writeHead(404, { 'content-type': 'text/html; charset=utf-8' });
-      res.end(body);
-      return;
-    }
-    const body = await readFile(file);
-    const type = MIME[extname(file)] || 'application/octet-stream';
-    // Immutable hashed assets can cache; HTML must not (deterministic test runs).
-    const cache = file.includes(`${'/_next/'}`) && extname(file) !== '.html'
-      ? 'public, max-age=31536000, immutable'
-      : 'no-store';
-    res.writeHead(200, { 'content-type': type, 'cache-control': cache });
-    res.end(body);
-  } catch (err) {
-    res.writeHead(500, { 'content-type': 'text/plain' });
-    res.end(`server error: ${err?.message ?? err}`);
+    decodedPath = decodeURIComponent(rawPath).replace(/\\/g, '/');
+  } catch {
+    return null;
   }
-});
 
-// Test and screenshot builds can contain disposable local-fork configuration.
-// Never expose their server on the machine's LAN interfaces.
-server.listen(PORT, '127.0.0.1', () => {
-   
-  console.log(`[e2e] serving ${DIST} at http://localhost:${PORT}`);
-});
+  // Reject traversal segments instead of normalizing them onto another route.
+  if (decodedPath.split('/').includes('..')) return null;
+  const normalizedPath = posix.normalize(decodedPath);
+  return normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`;
+}
+
+export function createStaticServer(manifest) {
+  return createServer(async (req, res) => {
+    try {
+      const requestPath = normalizeRequestPath(req.url || '/');
+      const entry = requestPath ? manifest.get(requestPath) : null;
+      if (!entry) {
+        const notFound = manifest.get('/404.html');
+        const body = notFound ? await readFile(notFound.path) : Buffer.from('Not found');
+        res.writeHead(404, { 'content-type': 'text/html; charset=utf-8' });
+        res.end(body);
+        return;
+      }
+
+      const body = await readFile(entry.path);
+      const type = MIME[extname(entry.path)] || 'application/octet-stream';
+      // Immutable hashed assets can cache; HTML must not (deterministic test runs).
+      const cache = entry.urlPath.startsWith('/_next/') && extname(entry.path) !== '.html'
+        ? 'public, max-age=31536000, immutable'
+        : 'no-store';
+      res.writeHead(200, { 'content-type': type, 'cache-control': cache });
+      res.end(body);
+    } catch (err) {
+      res.writeHead(500, { 'content-type': 'text/plain' });
+      res.end(`server error: ${err?.message ?? err}`);
+    }
+  });
+}
+
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+  buildIfNeeded();
+  const manifest = await createExportManifest(DIST);
+  const server = createStaticServer(manifest);
+
+  // Test and screenshot builds can contain disposable local-fork configuration.
+  // Never expose their server on the machine's LAN interfaces.
+  server.listen(PORT, '127.0.0.1', () => {
+    console.log(`[e2e] serving ${DIST} at http://localhost:${PORT}`);
+  });
+}

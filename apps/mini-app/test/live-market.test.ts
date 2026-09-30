@@ -13,6 +13,17 @@ import {
 
 const NOW = Date.parse('2026-09-05T12:00:00.000Z');
 
+function isCoinbaseCandlesRequest(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:'
+      && url.hostname === 'api.exchange.coinbase.com'
+      && /^\/products\/(?:ETH|BTC)-USD\/candles$/.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
 function ticker(overrides: Record<string, unknown> = {}) {
   return {
     type: 'ticker',
@@ -80,7 +91,7 @@ test('Coinbase candle failures fall back to validated CoinGecko history', async 
   const now = Date.now();
   const request = (async (input) => {
     const url = String(input);
-    if (url.includes('exchange.coinbase.com')) return Response.json({}, { status: 503 });
+    if (isCoinbaseCandlesRequest(url)) return Response.json({}, { status: 503 });
     return Response.json({ prices: Array.from({ length: 96 }, (_, index) => [now - (95 - index) * 5 * 60_000, 2_300 + index]) });
   }) as typeof fetch;
   const snapshot = await fetchMarketCandles('BTC', '1H', request);
