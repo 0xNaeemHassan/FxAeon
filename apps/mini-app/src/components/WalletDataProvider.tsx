@@ -21,6 +21,7 @@ import { priceDemandRegistry } from '@/lib/priceDemand';
 import type { FxChainId } from '@/lib/fx/types';
 import { subscribeToForegroundResume } from '@/lib/foreground';
 import { createDeferredQueryCacheNotification } from '@/lib/deferredQueryCacheNotification';
+import { createWalletBlockRefreshGate } from '@/lib/walletDataRefresh';
 
 const WalletDataSession = createContext('disconnected');
 
@@ -200,8 +201,13 @@ function WalletAssetLayer({ address, enabled, expandedAssets, chainPulse, childr
   const [chainStates, setChainStates] = useState<Record<FxChainId, RealtimeChainState>>(EMPTY_CHAIN_STATE);
   const mergedRef = useRef<WalletAssetSnapshot | null>(null);
   const requestRef = useRef(new Map<string, { controller: AbortController; promise: Promise<WalletAssetSnapshot | undefined>; session: string; address: string }>());
+  const [blockRefreshGate] = useState(() => createWalletBlockRefreshGate(
+    (walletAddress, chainId) => invalidateWalletQueries(client, walletAddress, chainId),
+  ));
   const latestSession = useRef(session);
   latestSession.current = session;
+
+  useEffect(() => { blockRefreshGate.reset(); }, [blockRefreshGate, session]);
 
   // Keep a bounded per-chain HTTP fallback while its websocket is reconnecting
   // or unavailable. One chain's outage must not add polling to the healthy
@@ -320,7 +326,9 @@ function WalletAssetLayer({ address, enabled, expandedAssets, chainPulse, childr
     return promise;
   }, [active, address, client, config, session]);
 
-  const triggerRefresh = useCallback((event?: RealtimeChainEvent) => { void refresh(event?.chainId); }, [refresh]);
+  const triggerRefresh = useCallback((event?: RealtimeChainEvent) => {
+    void refresh(event?.chainId).catch(() => undefined);
+  }, [refresh]);
   useEffect(() => {
     if (!pulseActive || !address) {
       setChainStates(EMPTY_CHAIN_STATE);
@@ -339,7 +347,7 @@ function WalletAssetLayer({ address, enabled, expandedAssets, chainPulse, childr
           onState: (next) => { if (!disposed) setChainStates((current) => ({ ...current, [chainId]: next })); },
           onEvent: (event) => {
             if (disposed) return;
-            if (event.kind === 'block') void invalidateWalletQueries(client, address, chainId);
+            if (event.kind === 'block') void blockRefreshGate.refresh(address, chainId);
             else triggerRefresh(event);
           },
         });
@@ -359,7 +367,7 @@ function WalletAssetLayer({ address, enabled, expandedAssets, chainPulse, childr
       window.removeEventListener('offline', update);
       Object.values(controllers).forEach((controller) => controller?.stop());
     };
-  }, [active, address, client, pulseActive, refresh, triggerRefresh]);
+  }, [active, address, blockRefreshGate, client, pulseActive, refresh, triggerRefresh]);
   useEffect(() => {
     for (const [key, request] of requestRef.current) {
       if (request.session !== session) {

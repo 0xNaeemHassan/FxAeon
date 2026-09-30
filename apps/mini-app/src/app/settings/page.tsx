@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { Check } from 'lucide-react';
 import { formatUnits } from 'viem';
@@ -13,6 +13,7 @@ import { useLocale } from '@/lib/i18n';
 import { haptic } from '@/lib/telegram';
 import { announceSettingsUpdated, GAS_TIERS, readGasTier, readSlippagePercent, SETTINGS_KEY, type GasTier } from '@/lib/settings';
 import { fetchGasTierQuotes, type GasTierQuotes } from '@/lib/fx/gasFeePolicy';
+import { createCoalescedRefresh } from '@/lib/coalescedRefresh';
 import styles from '@/components/SettingsWorkspace.module.css';
 import { AccountWorkspace } from '@/components/ProductLayout';
 
@@ -38,6 +39,7 @@ export default function SettingsPage() {
   const [gas, setGas] = useState<GasTierQuotes | null>(null);
   const [gasLoading, setGasLoading] = useState(true);
   const [gasError, setGasError] = useState(false);
+  const gasRefreshRef = useRef<ReturnType<typeof createCoalescedRefresh<GasTierQuotes>> | null>(null);
   const id = useId();
   const dirty = slippageBps !== savedBps || gasTier !== savedGasTier;
   useEffect(() => {
@@ -47,15 +49,27 @@ export default function SettingsPage() {
     setSlippageBps(value); setSavedBps(value); setReady(true);
   }, []);
   const refreshGas = useCallback(() => {
-    setGasLoading(true); setGasError(false);
-    void fetchGasTierQuotes(1).then((snapshot) => setGas(snapshot)).catch(() => setGasError(true)).finally(() => setGasLoading(false));
+    void gasRefreshRef.current?.refresh();
   }, []);
   useEffect(() => {
+    const refresh = createCoalescedRefresh<GasTierQuotes>({
+      fetch: () => fetchGasTierQuotes(1),
+      onStart: () => { setGasLoading(true); setGasError(false); },
+      onSuccess: setGas,
+      onError: () => setGasError(true),
+      onSettled: () => setGasLoading(false),
+    });
+    gasRefreshRef.current = refresh;
     refreshGas();
     const refreshVisible = () => { if (document.visibilityState === 'visible') refreshGas(); };
     const timer = setInterval(refreshVisible, 30_000);
     document.addEventListener('visibilitychange', refreshVisible);
-    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', refreshVisible); };
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', refreshVisible);
+      refresh.dispose();
+      if (gasRefreshRef.current === refresh) gasRefreshRef.current = null;
+    };
   }, [refreshGas]);
   const select = (value: number) => { setSlippageBps(value); setSaved(false); setError(''); haptic('selection'); };
   const selectGas = (value: GasTier) => { setGasTier(value); setSaved(false); setError(''); haptic('selection'); };

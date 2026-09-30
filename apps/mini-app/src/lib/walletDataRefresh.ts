@@ -4,6 +4,31 @@ import type { PlannedRoute, TransactionExecutionResult } from './fx/types';
 type WalletDataScope = { address: string; chainId: number };
 type WalletDataInvalidator = (address: string, chainId: number) => Promise<void>;
 
+export const WALLET_BLOCK_REFRESH_MIN_INTERVAL_MS = 12_000;
+
+/** Limit block-driven reads per wallet and chain while letting event-driven
+ * transfer refreshes use their immediate path. A failed cache refresh is
+ * contained because block notifications are fire-and-forget UI work.
+ */
+export function createWalletBlockRefreshGate(
+  invalidate: WalletDataInvalidator,
+  intervalMs = WALLET_BLOCK_REFRESH_MIN_INTERVAL_MS,
+  now: () => number = Date.now,
+) {
+  const lastRefreshAt = new Map<string, number>();
+  return {
+    refresh(address: string, chainId: number): Promise<void> {
+      const key = `${address.toLowerCase()}:${chainId}`;
+      const at = now();
+      const last = lastRefreshAt.get(key);
+      if (last !== undefined && at - last < intervalMs) return Promise.resolve();
+      lastRefreshAt.set(key, at);
+      return Promise.resolve().then(() => invalidate(address, chainId)).catch(() => undefined);
+    },
+    reset() { lastRefreshAt.clear(); },
+  };
+}
+
 const ADDRESS = /^0x[0-9a-f]{40}$/i;
 const HASH = /^0x[0-9a-f]{64}$/i;
 const supportedChain = (chainId: number) => chainId === 1 || chainId === 8453;

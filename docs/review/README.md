@@ -1,10 +1,14 @@
 # Product visual review
 
-## Current source candidate
+## Historical source candidate and validation
 
-Candidate source commit: `ae59fe17a89c22f2728cac381b81f1d6889deb99`. All four required GitHub checks passed. Client CI reported 499 unit tests passed (4 fork tests skipped), 172 main-browser tests, 7 Borrow tests, 1 Move test, 2 Positions tests, 25 overlay tests, and 5 state-lab tests, with no retry or flaky markers.
+The gallery and full CI summary below describe PR [#208](https://github.com/0xNaeemHassan/FxAeon/pull/208), source commit `ae59fe17a89c22f2728cac381b81f1d6889deb99`. All four required GitHub checks passed for that candidate. Client CI reported 499 unit tests passed (4 fork tests skipped), 172 main-browser tests, 7 Borrow tests, 1 Move test, 2 Positions tests, 25 overlay tests, and 5 state-lab tests, with no retry or flaky markers.
 
-The local Anvil suite passed 4/4 protocol, Earn, and stress tests without skips. The Anvil browser proof passed, its redacted manifest was verified, and the disposable fork snapshot was reverted. Browser coverage includes fxSAVE deposit execution and instant/after-cooldown withdrawal review with selected-share calldata; actual fxSAVE withdrawal and claim execution are covered by the separate Earn Anvil suite. See [release validation](../release-validation.md) for covered flows and evidence boundaries. Current check and release status is tracked at [PR #208](https://github.com/0xNaeemHassan/FxAeon/pull/208/checks) and [GitHub Actions](https://github.com/0xNaeemHassan/FxAeon/actions?query=branch%3Afeat%2Funified-product-redesign).
+The local Anvil suite passed 4/4 protocol, Earn, and stress tests without skips. The Anvil browser proof passed, its redacted manifest was verified, and the disposable fork snapshot was reverted. Browser coverage includes fxSAVE deposit execution and instant/after-cooldown withdrawal review with selected-share calldata; actual fxSAVE withdrawal and claim execution are covered by the separate Earn Anvil suite. See [release validation](../release-validation.md) for covered flows and evidence boundaries. These test results are historical evidence for `ae59fe1`; they were not rerun for the later release.
+
+## Latest deployed release
+
+The later release merged as `d66a7f7cd658b32fc947bd70ddefa06bc1bf3a96`, including PR [#215](https://github.com/0xNaeemHassan/FxAeon/pull/215) for the compact mobile header and PR [#216](https://github.com/0xNaeemHassan/FxAeon/pull/216) for idempotent Telegram metadata synchronization. [Deployment run 36720447137](https://github.com/0xNaeemHassan/FxAeon/actions/runs/36720447137) succeeded and its job logs record a valid public gas snapshot, expected public wallet configuration, and successful Telegram metadata and Mini App menu synchronization. A separate connected-browser check verified the compact production header. This deployment record does not extend the PR #208 test or visual-gallery evidence. See [release validation](../release-validation.md) for the evidence boundary.
 
 ## Product gallery
 
