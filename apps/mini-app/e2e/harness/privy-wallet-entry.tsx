@@ -19,6 +19,8 @@ type HarnessState = {
   wallets: HarnessWallet[];
   loginCalls: unknown[];
   connectCalls: number;
+  logoutCalls: number;
+  telegramReconnectCalls: number;
   loginCallbacks?: { onComplete?: (params: { user: { wallet?: { address: string } } }) => void; onError?: (cause: string) => void };
   walletCallbacks?: { onSuccess?: (params: { wallet: HarnessWallet }) => void; onError?: (cause: string) => void };
   result: string;
@@ -37,6 +39,8 @@ const state: HarnessState = globalThis.__privyHarness ?? {
   wallets: [],
   loginCalls: [],
   connectCalls: 0,
+  logoutCalls: 0,
+  telegramReconnectCalls: 0,
   result: 'idle',
 };
 globalThis.__privyHarness = state;
@@ -59,11 +63,16 @@ function Harness() {
     }
     state.rerender?.();
   };
+  const disconnect = async () => {
+    await wallet.disconnect();
+    state.rerender?.();
+  };
   return (
-    <main data-harness-ready="true">
+    <main data-harness-ready="true" data-authenticated={String(state.authenticated)}>
       <p data-result={state.result}>{state.result}</p>
       <button type="button" onClick={() => void runConnect()}>Connect</button>
       <button type="button" onClick={() => void runConnect(true)}>Connect another wallet</button>
+      <button type="button" onClick={() => void disconnect()}>Disconnect</button>
       <p data-address={wallet.address ?? ''}>{wallet.address ?? 'No wallet'}</p>
     </main>
   );

@@ -8,11 +8,10 @@
  * signer grant, or transaction authority. Protocol components ask the
  * user's selected wallet to sign each planned transaction explicitly.
  *
- * Keep this provider mounted once, above all authenticated routes. Nested
- * providers create independent sessions and can make a wallet appear to
- * change between screens.
+ * Keep one provider above all authenticated routes. Only an explicit native
+ * Telegram reconnect restarts it; normal route changes retain the session.
  */
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { PrivyProvider } from '@privy-io/react-auth';
 import { base, mainnet } from 'viem/chains';
@@ -20,6 +19,7 @@ import { PRIVY_APP_ID } from '@/lib/privyConfig';
 import { getSavedTheme, type ThemeId } from '@/lib/theme';
 import { getWebApp, isTelegramLaunchContext, restoreTelegramLaunchHash, waitForTelegramWebApp } from '@/lib/telegram';
 import { PrivyWalletBridge, UnavailableWalletProvider } from '@/lib/wallet';
+import { TelegramReconnectContext } from '@/lib/wallet/telegramReconnect';
 import WalletRecoveryCoordinator from '@/components/WalletRecoveryCoordinator';
 import ProtocolPositionProvider from '@/components/ProtocolPositionProvider';
 import WalletDataProvider from '@/components/WalletDataProvider';
@@ -28,6 +28,16 @@ import WalletDemandProvider, { useEffectiveWalletDemand } from '@/components/Wal
 
 export default function PrivyClientProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? '/';
+  const [telegramSession, setTelegramSession] = useState(0);
+  const reconnectTelegram = useCallback(() => {
+    // The installed SDK's explicit Telegram login opens the legacy web widget.
+    // Seamless Mini App auth instead runs at provider initialization. Restart
+    // that boundary only after an explicit reconnect, never after logout.
+    if (!restoreTelegramLaunchHash()) {
+      throw new Error('Reopen FxAeon from Telegram to sign in again.');
+    }
+    setTelegramSession((session) => session + 1);
+  }, []);
   // Keep the first client render identical to the server. Reading localStorage
   // in the state initializer can change Privy's provider tree before hydration
   // (for example, when a visitor has saved the light palette), which shifts
@@ -90,7 +100,9 @@ export default function PrivyClientProvider({ children }: { children: React.Reac
   // bridge becomes available.  ConnectWalletButton queues the user's intent
   // during that hand-off.
   return (
+    <TelegramReconnectContext.Provider value={reconnectTelegram}>
     <PrivyProvider
+      key={telegramSession}
       appId={PRIVY_APP_ID}
       config={{
         appearance: {
@@ -125,6 +137,7 @@ export default function PrivyClientProvider({ children }: { children: React.Reac
         <WalletDemandProvider routeDemand={demand} routeKey={pathname}><RouteDataProviders>{children}</RouteDataProviders></WalletDemandProvider>
       </PrivyWalletBridge>
     </PrivyProvider>
+    </TelegramReconnectContext.Provider>
   );
 }
 
