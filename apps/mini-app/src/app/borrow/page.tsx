@@ -246,6 +246,9 @@ export default function BorrowPage() {
       && lastConnectedChainRef.current !== undefined
       && lastConnectedChainRef.current !== wallet.chainId;
     if (previous !== null && previous !== context && (walletChanged || chainChanged)) {
+      // Preserve an in-flight execution and its result for the wallet that
+      // submitted it. Keeping the refs lets Edit apply this reset on input.
+      if (reviewStage === 'executing' || reviewStage === 'result') return;
       setManagementAction('none');
       setMode('mint');
       setMarket('ETH');
@@ -255,13 +258,14 @@ export default function BorrowPage() {
     previousWalletContextRef.current = context;
     if (currentAddress) lastConnectedWalletRef.current = currentAddress;
     if (wallet.chainId !== undefined) lastConnectedChainRef.current = wallet.chainId;
-  }, [resetTransactionContext, wallet.address, wallet.chainId]);
+  }, [resetTransactionContext, reviewStage, wallet.address, wallet.chainId]);
 
   // History links carry only an opaque local-draft id. Restore the validated
   // primitive form after the exact Ethereum wallet is available, then consume
   // the query id so a reload cannot replay the same snapshot. ActionReview
   // still plans and simulates a fresh SDK route before signing.
   useEffect(() => {
+    if (reviewStage === 'executing' || reviewStage === 'result') return;
     if (typeof window === 'undefined' || !wallet.address || wallet.chainId !== 1) return;
     const draftId = signatureDraftIdFromSearch(window.location.search);
     if (!draftId) return;
@@ -330,11 +334,13 @@ export default function BorrowPage() {
       // History is optional in embedded/older webviews; restoration is still
       // complete when the URL cannot be rewritten.
     }
-  }, [positions, sharedPositions.status, sharedPositions.walletAddress, wallet.address, wallet.chainId]);
+  }, [positions, reviewStage, sharedPositions.status, sharedPositions.walletAddress, wallet.address, wallet.chainId]);
 
   useEffect(() => {
     if (
-      deepLinkApplied.current
+      reviewStage === 'executing'
+      || reviewStage === 'result'
+      || deepLinkApplied.current
       || !wallet.address
       || sharedPositions.walletAddress?.toLowerCase() !== wallet.address.toLowerCase()
     ) return;
@@ -354,7 +360,7 @@ export default function BorrowPage() {
     setMarket(requested.market);
     setSelectedKey(positionKey(requested));
     resetTransactionContext(collateralTokensForMarket(requested.market)[0]);
-  }, [positions, resetTransactionContext, sharedPositions.walletAddress, wallet.address]);
+  }, [positions, resetTransactionContext, reviewStage, sharedPositions.walletAddress, wallet.address]);
 
   useEffect(() => {
     setSelectedKey((current) => {

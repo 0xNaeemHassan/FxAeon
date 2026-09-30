@@ -73,6 +73,9 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
   // repeated clicks in the same frame cannot start a second execution.
   const busyRef = useRef(false);
   const executionStepsRef = useRef<TransactionStepResult[]>([]);
+  // A submitted execution keeps its route and progress visible if the active
+  // wallet changes. The latch still blocks every later wallet request.
+  const executionSessionInvalidatedRef = useRef(false);
   const signatureDraftIdRef = useRef<string | null>(null);
   const resumedReviewRef = useRef<number | null>(null);
   // Every asynchronous planning/execution attempt owns a generation. Route,
@@ -249,11 +252,23 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
       chainId: wallet.chainId, connectionVersion: wallet.connectionVersion,
     });
     if (mismatch) {
-      invalidatePreparedRoute(mismatch === 'wallet'
-        ? 'The selected wallet changed. Check the action again before signing.'
+      const message = mismatch === 'wallet'
+        ? 'The selected wallet changed during this action. No later transaction will be requested.'
         : mismatch === 'network'
           ? 'The wallet network changed. Check the action again before signing.'
-          : 'The wallet connection changed. Check the action again before signing.');
+          : 'The wallet connection changed during this action. No later transaction will be requested.';
+      if (stage === 'executing') {
+        // Keep the original route mounted while an already-open wallet prompt
+        // settles. A returned hash still needs to reach the journal and UI.
+        executionSessionInvalidatedRef.current = true;
+        setError(message);
+      } else {
+        invalidatePreparedRoute(mismatch === 'wallet'
+          ? 'The selected wallet changed. Check the action again before signing.'
+          : mismatch === 'network'
+            ? 'The wallet network changed. Check the action again before signing.'
+            : 'The wallet connection changed. Check the action again before signing.');
+      }
     }
   }, [invalidatePreparedRoute, reviewSession, sessionMismatch, stage, wallet.address, wallet.authenticated, wallet.chainId, wallet.connectionVersion]);
 
@@ -466,9 +481,11 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
     const executionWalletAddress = startingRoute.walletAddress.toLowerCase();
     const generation = generationRef.current + 1;
     generationRef.current = generation;
+    executionSessionInvalidatedRef.current = false;
     const executionConnectionVersion = wallet.connectionVersion;
+    const isMountedExecution = () => isCurrentGeneration(generation);
     const isCurrentExecution = () => {
-      if (!isCurrentGeneration(generation)) return false;
+      if (!isMountedExecution() || executionSessionInvalidatedRef.current) return false;
       const liveWallet = liveWalletRef.current;
       return liveWallet.authenticated
         && liveWallet.address?.toLowerCase() === executionWalletAddress
@@ -507,7 +524,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
               await wallet.switchChain(chainId);
               if (!isCurrentExecution()) throw new Error('The selected wallet changed during the network switch.');
             } finally {
-              if (isCurrentExecution()) setNetworkSwitching(false);
+              if (isMountedExecution()) setNetworkSwitching(false);
             }
           },
           requestSignature: async (request) => {
@@ -552,19 +569,22 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
               description: `Check this transaction on ${chainName(request.chainId)} before approving it.`,
               buttonText: 'Confirm transaction',
             });
-            if (isCurrentExecution() && signatureDraftIdRef.current) {
+            // Once sendTransaction resolves, the route runner journals the
+            // returned hash even if the account changed while the prompt was
+            // open. It is no longer an unsigned resume draft.
+            if (signatureDraftIdRef.current) {
               removeSignatureRequiredDraft(signatureDraftIdRef.current);
               signatureDraftIdRef.current = null;
             }
             return signed.hash;
           },
           onStatus: (next, detail) => {
-            if (!isCurrentExecution()) return;
+            if (!isMountedExecution()) return;
             setStatus(next);
             setStatusDetail(detail ? userSafeError(detail, 'The transaction could not continue. Check the network and try again.') : '');
           },
           onStep: (step) => {
-            if (!isCurrentExecution()) return;
+            if (!isMountedExecution()) return;
             const next = [...executionStepsRef.current];
             next[step.index] = step;
             executionStepsRef.current = next;
@@ -575,10 +595,11 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
           // result before the optional state refresh so the user sees the
           // confirmed action immediately while the read runs in the background.
           postConfirmRead: async (confirmedRoute, execution) => {
-            if (!isCurrentExecution()) return;
+            if (!isMountedExecution()) return;
             postConfirmReadStarted = true;
             setResult(execution);
             transition('completed');
+            if (!isCurrentExecution()) return;
             setRefreshing(true);
             try {
               // These reads have independent cache boundaries. Start both
@@ -599,23 +620,28 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
               const rejected = outcomes.find((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');
               if (rejected) throw rejected.reason;
             } finally {
-              if (isCurrentExecution()) setRefreshing(false);
+              if (isMountedExecution()) setRefreshing(false);
             }
           },
         },
       });
-      if (!isCurrentExecution()) return;
+      if (signatureDraftIdRef.current) {
+        if (execution.steps.some(hasTransactionHash)) removeSignatureRequiredDraft(signatureDraftIdRef.current);
+        else cancelSignatureRequiredDraft(signatureDraftIdRef.current);
+        signatureDraftIdRef.current = null;
+      }
+      if (!isMountedExecution()) return;
       // A finality/confirmation timeout can skip postConfirmRead despite
       // inclusion. Mark wallet data stale for gas/approvals/reverts without
       // duplicating the refresh already running behind the result view.
-      if (!postConfirmReadStarted) await refreshWallet(currentRoute, execution);
-      if (!isCurrentExecution()) return;
+      if (!postConfirmReadStarted && isCurrentExecution()) await refreshWallet(currentRoute, execution);
+      if (!isMountedExecution()) return;
       setResult(execution);
       transition('completed');
       const uncertain = execution.steps.some((step) => ['unknown', 'unverified'].includes(transactionStepProgress(step).state));
       haptic(execution.status === 'confirmed' ? 'success' : execution.status === 'partial' || uncertain ? 'warning' : 'error');
     } catch (cause) {
-      if (!isCurrentExecution()) return;
+      if (!isMountedExecution()) return;
       const message = userSafeError(cause, 'The transaction could not continue. No later step was submitted.');
       const submittedSteps = executionStepsRef.current;
       if (submittedSteps.some(hasTransactionHash)) {
@@ -629,8 +655,23 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
           steps: submittedSteps.map((step) => step.status === 'submitted' ? { ...step, status: 'failed', error: message } : step),
           error: message,
         };
-        await refreshWallet(currentRoute, interrupted);
+        if (isCurrentExecution()) await refreshWallet(currentRoute, interrupted);
+        if (!isMountedExecution()) return;
         setResult(interrupted);
+        transition('interrupted');
+      } else if (executionSessionInvalidatedRef.current) {
+        if (signatureDraftIdRef.current) {
+          cancelSignatureRequiredDraft(signatureDraftIdRef.current);
+          signatureDraftIdRef.current = null;
+        }
+        setResult({
+          status: 'failed',
+          operation: currentRoute.operation,
+          chainId: currentRoute.chainId,
+          walletAddress: currentRoute.walletAddress,
+          steps: submittedSteps,
+          error: message,
+        });
         transition('interrupted');
       } else {
         if (signatureDraftIdRef.current) {

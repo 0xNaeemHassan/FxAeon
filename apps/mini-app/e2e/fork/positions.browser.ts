@@ -240,6 +240,18 @@ async function runProof(captureStage: string) {
   };
   let completed = false;
   try {
+    const buildEnv = { ...process.env, NEXT_PUBLIC_PRIVY_APP_ID: '', NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL: '',
+      NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL: '', NEXT_PUBLIC_FX_SCREENSHOT_MODE: '', NEXT_PUBLIC_FX_LOCAL_FORK_TEST_MODE: '1',
+      NEXT_PUBLIC_FX_LOCAL_FORK_RPC_URL: rpcUrl, NEXT_PUBLIC_TELEGRAM_APP_URL: 'https://t.me/FxAeonBot' };
+    console.log('Building browser acceptance artifact with localhost-only RPC');
+    await waitForExit(spawn(process.execPath, [resolve(appRoot, 'node_modules/next/dist/bin/next'), 'build'],
+      { cwd: appRoot, env: buildEnv, stdio: 'inherit', windowsHide: true }));
+    server = spawn(process.execPath, ['e2e/serve.mjs'], { cwd: appRoot, env: { ...buildEnv, E2E_BUILD: '0', PORT: String(port) }, stdio: 'inherit', windowsHide: true });
+    await expect.poll(async () => {
+      if (server?.exitCode !== null) throw new Error('browser test server stopped');
+      return fetch(`${baseUrl}/trade`).then(r => r.status).catch(() => 0);
+    }, { timeout: 30_000 }).toBe(200);
+
     // Anvil fetches untouched historical storage from the upstream provider
     // lazily. Preload ownership slots as fixture setup so the browser reads a
     // locally hydrated fork, like a full RPC node. No returned state is changed
@@ -294,18 +306,6 @@ async function runProof(captureStage: string) {
     } finally { await rpc('anvil_stopImpersonatingAccount', [donor]); }
     assert.equal(await client.readContract({ address: usdc, abi: tokenAbi, functionName: 'balanceOf', args: [wallet] }) - before, funding);
     await rpc('anvil_setBalance', [wallet, '0x4563918244f40000']); // 5 fork-only ETH for gas.
-
-    const buildEnv = { ...process.env, NEXT_PUBLIC_PRIVY_APP_ID: '', NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL: '',
-      NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL: '', NEXT_PUBLIC_FX_SCREENSHOT_MODE: '', NEXT_PUBLIC_FX_LOCAL_FORK_TEST_MODE: '1',
-      NEXT_PUBLIC_FX_LOCAL_FORK_RPC_URL: rpcUrl, NEXT_PUBLIC_TELEGRAM_APP_URL: 'https://t.me/FxAeonBot' };
-    console.log('Building browser acceptance artifact with localhost-only RPC');
-    await waitForExit(spawn(process.execPath, [resolve(appRoot, 'node_modules/next/dist/bin/next'), 'build'],
-      { cwd: appRoot, env: buildEnv, stdio: 'inherit', windowsHide: true }));
-    server = spawn(process.execPath, ['e2e/serve.mjs'], { cwd: appRoot, env: { ...buildEnv, E2E_BUILD: '0', PORT: String(port) }, stdio: 'inherit', windowsHide: true });
-    await expect.poll(async () => {
-      if (server?.exitCode !== null) throw new Error('browser test server stopped');
-      return fetch(`${baseUrl}/trade`).then(r => r.status).catch(() => 0);
-    }, { timeout: 30_000 }).toBe(200);
 
     browser = await chromium.launch({ args: ['--no-sandbox', '--disable-dev-shm-usage'] });
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1,
@@ -535,6 +535,7 @@ async function runProof(captureStage: string) {
       heading: string;
       contract: string;
       calldata: string;
+      valueWei: string;
     };
     const readReviewedTransactions = async (): Promise<ReviewedTransaction[]> => {
       const actionDetails = activePage.locator('.reviewInlineContent');
@@ -561,6 +562,7 @@ async function runProof(captureStage: string) {
             heading: card.querySelector('p')?.textContent?.trim() ?? '',
             contract: rows.Contract ?? '',
             calldata: card.querySelector('pre[aria-label="Transaction calldata"]')?.textContent?.trim() ?? '',
+            valueWei: rows['Transaction value (wei)'] ?? '',
           };
         });
       });
@@ -571,6 +573,7 @@ async function runProof(captureStage: string) {
         assert.equal(headingNumber, String(index + 1), `transaction ${index + 1} must have an ordered heading`);
         assert.match(transaction.contract, /^0x[0-9a-fA-F]{40}$/, `transaction ${index + 1} must show its contract`);
         assert.match(transaction.calldata, /^0x[0-9a-fA-F]*$/, `transaction ${index + 1} must show its calldata`);
+        assert.match(transaction.valueWei, /^\d+$/, `transaction ${index + 1} must show its exact native value in wei`);
       });
       await advanced.locator('summary').click();
       return reviewed;
@@ -665,12 +668,16 @@ async function runProof(captureStage: string) {
     ): Promise<{ signedBefore: number; transactionCount: number }> => {
       const signedBefore = submitted.length;
       let fakeClockInstalled = false;
-      let expectedGasTier = options.expectedGasTier?.toLowerCase() as 'fast' | 'rapid' | undefined;
+      let expectedGasTier: 'fast' | 'rapid' | undefined = options.expectedGasTier === 'Fast'
+        ? 'fast'
+        : options.expectedGasTier === 'Rapid' ? 'rapid' : undefined;
       let expectedFee: { gasPriceWei: bigint; maxFeePerGas: bigint; maxPriorityFeePerGas: bigint } | undefined;
+      let reviewedFeeHistory: ForkFeeHistory | undefined;
       try {
       await activePage.getByRole('button', { name: buttonName, exact: true }).click();
       const actionButton = activePage.getByRole('button', { name: /^Confirm (?:in wallet|\d+ transactions)$/ });
       await expect(actionButton).toBeVisible({ timeout: 180_000 });
+      reviewedFeeHistory = latestFeeHistory;
       assert.equal(submitted.length, signedBefore, 'Review must prepare details without signing');
       if (options.probeQuoteExpiry) {
         // Let the real route quote and RPC simulation complete on wall-clock
@@ -688,19 +695,19 @@ async function runProof(captureStage: string) {
         fakeClockInstalled = false;
         await refreshQuote.click();
         await expect(actionButton, 'refreshing an expired quote must prepare a new confirm action').toBeVisible({ timeout: 180_000 });
+        reviewedFeeHistory = latestFeeHistory;
         assert.equal(submitted.length, signedBefore, 'refreshing an expired quote must remain read-only');
       }
-      await capturePreconfirmReview(screenshotPrefix, actionButton);
-      await activePage.screenshot({ path: resolve(artifactRoot, `${screenshotPrefix}-review.png`), fullPage: true });
       const initialReviewedTransactions = await readReviewedTransactions();
       if (options.expectedGasTier) {
-        assert.ok(latestFeeHistory, 'browser review must use a captured localhost feeHistory snapshot');
-        const initialTier = options.expectedGasTier.toLowerCase() as 'fast' | 'rapid';
-        const initialFee = expectedForkGasFee(latestFeeHistory, initialTier);
+        assert.ok(reviewedFeeHistory, 'browser review must use a captured localhost feeHistory snapshot');
+        const initialFee = expectedForkGasFee(reviewedFeeHistory, options.expectedGasTier === 'Fast' ? 'fast' : 'rapid');
         await expect(reviewedFactRow('Gas tier')).toHaveText(`${options.expectedGasTier} · ${formatGasPriceGwei(initialFee.gasPriceWei)} Gwei`);
         await expect(reviewedFactRow('Gas fee')).toContainText(/max/i);
       }
       await options.beforeSigning?.(initialReviewedTransactions);
+      await capturePreconfirmReview(screenshotPrefix, actionButton);
+      await activePage.screenshot({ path: resolve(artifactRoot, `${screenshotPrefix}-review.png`), fullPage: true });
       if (options.changeGasTierToRapid) {
         assert.equal(options.expectedGasTier, 'Fast', 'the tier-change probe must begin from a Fast review');
         const oldTierValue = await reviewedFactRow('Gas tier').innerText();
@@ -720,8 +727,9 @@ async function runProof(captureStage: string) {
         assert.equal(submitted.length, signedBefore, 'gas-tier invalidation must not request a signature');
         await refreshTier.click();
         await expect(actionButton, 'the updated review must be rebuilt before signing').toBeVisible({ timeout: 180_000 });
-        assert.ok(latestFeeHistory, 'rapid review must use a captured localhost feeHistory snapshot');
-        const rapidFee = expectedForkGasFee(latestFeeHistory, 'rapid');
+        reviewedFeeHistory = latestFeeHistory;
+        assert.ok(reviewedFeeHistory, 'rapid review must use a captured localhost feeHistory snapshot');
+        const rapidFee = expectedForkGasFee(reviewedFeeHistory, 'rapid');
         await expect(reviewedFactRow('Gas tier')).toHaveText(`Rapid · ${formatGasPriceGwei(rapidFee.gasPriceWei)} Gwei`);
         await expect(reviewedFactRow('Gas fee')).toContainText(/max/i);
         const updatedConsequences = activePage.locator('[aria-label="Updated transaction consequences"]');
@@ -735,11 +743,13 @@ async function runProof(captureStage: string) {
       let reviewedTransactions: ReviewedTransaction[] = [];
       for (let attempt = 0; attempt < 3 && !firstSignatureObserved; attempt += 1) {
         const refresh = activePage.getByRole('button', { name: 'Review updated quote', exact: true });
-        if (await refresh.isVisible()) await refresh.click();
+        const refreshed = await refresh.isVisible();
+        if (refreshed) await refresh.click();
         await expect(actionButton).toBeVisible({ timeout: 180_000 });
+        if (refreshed) reviewedFeeHistory = latestFeeHistory;
         if (expectedGasTier) {
-          assert.ok(latestFeeHistory, 'browser review must use a captured localhost feeHistory snapshot');
-          expectedFee = expectedForkGasFee(latestFeeHistory, expectedGasTier);
+          assert.ok(reviewedFeeHistory, 'browser review must use a captured localhost feeHistory snapshot');
+          expectedFee = expectedForkGasFee(reviewedFeeHistory, expectedGasTier);
           const tierLabel = expectedGasTier === 'fast' ? 'Fast' : 'Rapid';
           await expect(reviewedFactRow('Gas tier')).toHaveText(`${tierLabel} · ${formatGasPriceGwei(expectedFee.gasPriceWei)} Gwei`);
         }
@@ -782,6 +792,7 @@ async function runProof(captureStage: string) {
         assert.ok(reviewedTransaction, `broadcast ${transactionIndex + 1} has no reviewed transaction`);
         assert.equal(tx.to.toLowerCase(), reviewedTransaction.contract.toLowerCase(), `broadcast ${transactionIndex + 1} target differs from action details`);
         assert.equal(tx.data.toLowerCase(), reviewedTransaction.calldata.toLowerCase(), `broadcast ${transactionIndex + 1} calldata differs from action details`);
+        assert.equal(BigInt(tx.value ?? '0x0'), BigInt(reviewedTransaction.valueWei), `broadcast ${transactionIndex + 1} native value differs from action details`);
         if (expectedFee) {
           assert.notEqual(tx.maxFeePerGas, undefined, 'selected gas tier must set an EIP-1559 fee cap on the wallet request');
           assert.notEqual(tx.maxPriorityFeePerGas, undefined, 'selected gas tier must set an EIP-1559 priority fee on the wallet request');
@@ -816,14 +827,23 @@ async function runProof(captureStage: string) {
       buttonName: string,
       screenshotPrefix: string,
       verifyReview?: (reviewed: ReviewedTransaction[]) => Promise<void>,
+      expectedGasTier?: 'Fast' | 'Rapid',
     ): Promise<void> => {
       const signedBefore = submitted.length;
       await activePage.getByRole('button', { name: buttonName, exact: true }).click();
       const actionButton = activePage.getByRole('button', { name: /^Confirm (?:in wallet|\d+ transactions)$/ });
       await expect(actionButton, `${screenshotPrefix} must wait for the real route quote`).toBeVisible({ timeout: 180_000 });
       await expect(actionButton, `${screenshotPrefix} review must be enabled only after planning succeeds`).toBeEnabled();
+      const reviewedFeeHistory = latestFeeHistory;
       const reviewedTransactions = await readReviewedTransactions();
       assert.ok(reviewedTransactions.some((transaction) => transaction.heading.startsWith('Action ')), `${screenshotPrefix} must show a real protocol action`);
+      if (expectedGasTier) {
+        assert.ok(reviewedFeeHistory, `${screenshotPrefix} must use a captured localhost feeHistory snapshot`);
+        const tier = expectedGasTier === 'Fast' ? 'fast' : 'rapid';
+        const expectedFee = expectedForkGasFee(reviewedFeeHistory, tier);
+        await expect(reviewedFactRow('Gas tier')).toHaveText(`${expectedGasTier} · ${formatGasPriceGwei(expectedFee.gasPriceWei)} Gwei`);
+        await expect(reviewedFactRow('Gas fee')).toContainText(/max/i);
+      }
       await verifyReview?.(reviewedTransactions);
       assert.equal(submitted.length, signedBefore, `${screenshotPrefix} preconfirm review must not request a signature`);
       await capturePreconfirmReview(screenshotPrefix, actionButton);
@@ -1163,6 +1183,7 @@ async function runProof(captureStage: string) {
     await page.goto(`${baseUrl}/positions`);
     await assertVisiblePositionSet([...originalWalletKeys, externalKey]);
     await transferPosition(wallet, alternateWallet);
+    assert.equal((await client.readContract({ address: externalPool, abi: poolAbi, functionName: 'ownerOf', args: [BigInt(externalPositionId)] })).toLowerCase(), alternateWallet.toLowerCase(), 'external position final owner must be the alternate wallet');
     await page.evaluate(`window.__fxForkChangeAccount(${JSON.stringify(wallet)})`);
     await expect(page.getByRole('button', { name: 'Open wallet profile' })).toContainText(`${wallet.slice(0, 6)}…${wallet.slice(-4)}`);
     await page.goto(`${baseUrl}/positions`);
@@ -1322,7 +1343,7 @@ async function runProof(captureStage: string) {
     const borrowActionName = 'Review borrowing';
     await expect(page.getByRole('button', { name: borrowActionName, exact: true })).toBeVisible({ timeout: 180_000 });
     assert.equal(submitted.length, borrowSignedBefore, 'borrow details must not request a signature');
-    const { signedBefore: borrowSignedBeforeActual, transactionCount: borrowTransactionCount } = await driveDirectAction(borrowActionName, 'ETH-long-borrow');
+    const { signedBefore: borrowSignedBeforeActual, transactionCount: borrowTransactionCount } = await driveDirectAction(borrowActionName, 'ETH-long-borrow', { expectedGasTier: 'Rapid' });
     assert.equal(borrowSignedBeforeActual, borrowSignedBefore);
     await expect(page.getByRole('heading', { name: 'Confirmed', exact: true })).toBeVisible({ timeout: 180_000 });
     const [borrowCollateralAfter, borrowDebtAfter] = await client.readContract({ address: borrowTarget.pool, abi: poolAbi, functionName: 'getPosition', args: [BigInt(borrowTarget.positionId)] });
@@ -1389,6 +1410,7 @@ async function runProof(captureStage: string) {
       'Review deposit',
       'earn-usdc-deposit',
       {
+        expectedGasTier: 'Rapid',
         beforeSigning: async (reviewed) => {
           const action = reviewed.find((transaction) => transaction.heading.startsWith('Action '));
           assert.ok(action, 'Earn deposit review must expose its action transaction');
@@ -1448,7 +1470,7 @@ async function runProof(captureStage: string) {
       await expect(reviewedFactRow('Receive')).toBeVisible();
       await expect(reviewedFactRow('Mode')).toContainText('Instant');
       await expect(reviewedFactRow('Minimum received (USDC leg)')).toBeVisible();
-    });
+    }, 'Rapid');
     assert.equal(submitted.length, withdrawalReviewSignatureBaseline, 'instant withdrawal review must not request a signature');
 
     await page.goto(`${baseUrl}/earn?mode=withdraw`);
@@ -1473,7 +1495,7 @@ async function runProof(captureStage: string) {
       await expect(reviewedFactRow('fxSAVE')).toBeVisible();
       await expect(reviewedFactRow('Receive')).toBeVisible();
       await expect(reviewedFactRow('Mode')).toContainText('Queued');
-    });
+    }, 'Rapid');
     assert.equal(submitted.length, withdrawalReviewSignatureBaseline, 'after-cooldown withdrawal review must not request a signature');
 
     for (const route of ['portfolio', 'earn', 'move']) {
@@ -1591,7 +1613,7 @@ async function runProof(captureStage: string) {
       await expect(page.getByRole('button', { name: closeActionName, exact: true })).toBeVisible({ timeout: 180_000 });
       assert.equal(submitted.length, signedBefore, 'close details must never request a signature');
       await page.screenshot({ path: resolve(artifactRoot, `${position.market}-${position.side}-close-review.png`), fullPage: true });
-      const { signedBefore: closeSignedBefore, transactionCount: closeTransactionCount } = await driveDirectAction(closeActionName, `${position.market}-${position.side}-close`);
+      const { signedBefore: closeSignedBefore, transactionCount: closeTransactionCount } = await driveDirectAction(closeActionName, `${position.market}-${position.side}-close`, { expectedGasTier: 'Rapid' });
       assert.equal(closeSignedBefore, signedBefore);
       const confirmedHeading = page.getByRole('heading', { name: 'Confirmed', exact: true });
       const closedPositionRow = page.locator(`[data-position-key="${key}"]`);

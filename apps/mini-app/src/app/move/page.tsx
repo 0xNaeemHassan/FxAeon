@@ -179,6 +179,7 @@ export default function MovePage() {
   // stable caller-known action key all match. The route is still rebuilt and
   // simulated by ActionReview; no executable route data is restored.
   useEffect(() => {
+    if (reviewStage === 'executing' || reviewStage === 'result') return;
     if (!wallet.ready || !wallet.authenticated || !wallet.address || typeof window === 'undefined') return;
     const search = window.location.search;
     if (draftRestoreRef.current === search) return;
@@ -216,7 +217,7 @@ export default function MovePage() {
       setResumeReview((revision) => revision + 1);
       break;
     }
-  }, [wallet.address, wallet.authenticated, wallet.ready]);
+  }, [reviewStage, wallet.address, wallet.authenticated, wallet.ready]);
 
   useEffect(() => {
     if (contextAppliedRef.current || typeof window === 'undefined') return;
@@ -273,11 +274,16 @@ export default function MovePage() {
     const chainChanged = wallet.chainId !== undefined
       && lastConnectedChainRef.current !== undefined
       && lastConnectedChainRef.current !== wallet.chainId;
-    if (previous !== null && previous !== context && (walletChanged || chainChanged)) resetBridgeContext();
+    if (previous !== null && previous !== context && (walletChanged || chainChanged)) {
+      // A network switch can be part of the bridge execution itself. Retain
+      // its progress/result, then reset the form when Edit returns to input.
+      if (reviewStage === 'executing' || reviewStage === 'result') return;
+      resetBridgeContext();
+    }
     previousWalletContextRef.current = context;
     if (currentAddress) lastConnectedWalletRef.current = currentAddress;
     if (wallet.chainId !== undefined) lastConnectedChainRef.current = wallet.chainId;
-  }, [resetBridgeContext, wallet.address, wallet.chainId]);
+  }, [resetBridgeContext, reviewStage, wallet.address, wallet.chainId]);
 
   const balanceQuery = useMoveBalances({ address: wallet.address, chainId: sourceChainId, enabled: !advanced });
   const moveBalances = !advanced ? balanceQuery.data?.balances : undefined;

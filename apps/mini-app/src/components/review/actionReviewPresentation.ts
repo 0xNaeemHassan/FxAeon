@@ -156,13 +156,44 @@ export function factsOutsideConsequenceSummary(summaryFacts: readonly ReviewFact
 export function routeFacts(route: PlannedRoute, gasCost: Pick<UseGasCostResult, 'estimate' | 'estimateIsCurrent'>, executionCost?: ExecutionCost, feeTierQuote?: GasTierQuote): ReviewFact[] {
   const facts = primaryReviewFacts(route);
   if (feeTierQuote) addFact(facts, 'Gas tier', formatGasTierQuote(feeTierQuote));
+  const currentEstimate = gasCost.estimateIsCurrent ? gasCost.estimate : undefined;
   const currentGasCost = gasCost.estimateIsCurrent && gasCost.estimate
     ? formatRouteGasCost(gasCost.estimate)
     : undefined;
   if (currentGasCost?.gasFee) addNativeCostFact(facts, 'Gas fee', currentGasCost.gasFee);
-  if (currentGasCost?.totalCost) addNativeCostFact(facts, 'Total cost', currentGasCost.totalCost);
+  const totalIsOnlyTheGasFee = currentEstimate?.nativeValueWei === 0n
+    && currentEstimate.totalNativeCostWei !== undefined
+    && currentEstimate.executionGasFeeWei !== undefined
+    && currentEstimate.totalNativeCostWei === currentEstimate.executionGasFeeWei;
+  if (currentGasCost?.totalCost && !totalIsOnlyTheGasFee) addNativeCostFact(facts, 'Total cost', currentGasCost.totalCost);
   if (executionCost?.gasFee) addNativeCostFact(facts, 'Gas fee', executionCost.gasFee);
   if (executionCost?.protocolFee) addFact(facts, 'Protocol fee', executionCost.protocolFee);
   if (executionCost?.totalCost) addNativeCostFact(facts, 'Total cost', executionCost.totalCost);
   return facts;
+}
+
+/** Keep the gas row present while its optional estimate settles. */
+export function missingGasFeeFact(gasCost: Pick<UseGasCostResult, 'estimate' | 'estimateIsCurrent' | 'status' | 'error'>): ReviewFact | undefined {
+  if (gasCost.estimateIsCurrent && gasCost.estimate?.status === 'current') return undefined;
+  if (gasCost.status === 'refreshing') {
+    return { label: 'Gas fee', value: '—' };
+  }
+  return {
+    label: 'Gas fee',
+    value: gasCost.estimate?.status === 'partial'
+      ? 'Partial estimate; wallet will show final gas'
+      : 'Unavailable; wallet will show final gas',
+  };
+}
+
+/** Reserve a total-cost row only when the reviewed transactions send native value. */
+export function missingTotalCostFact(
+  route: PlannedRoute,
+  gasCost: Pick<UseGasCostResult, 'estimateIsCurrent' | 'status'>,
+): ReviewFact | undefined {
+  if (!route.transactions.some((transaction) => transaction.value > 0n)) return undefined;
+  if (gasCost.status === 'refreshing' && !gasCost.estimateIsCurrent) {
+    return { label: 'Total cost', value: '—' };
+  }
+  return { label: 'Total cost', value: 'Unavailable; wallet will show final total' };
 }

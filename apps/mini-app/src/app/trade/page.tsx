@@ -146,6 +146,10 @@ export default function TradePage() {
     // its editable ticket while the address/chain arrive in separate React
     // updates; identity changes after an established session still reset it.
     if (previous !== null && previous !== context && previousAddress && (walletChanged || chainChanged)) {
+      // Keep ActionReview mounted after execution starts and through its
+      // result screen. Its submitted route and progress belong to that wallet.
+      // Leave the refs untouched so Edit can apply this reset on input.
+      if (reviewStage === 'executing' || reviewStage === 'result') return;
       const explicit = explicitDeepLinkRef.current;
       const market = explicit?.market ?? 'ETH';
       const side = explicit?.side ?? 'long';
@@ -160,7 +164,7 @@ export default function TradePage() {
     previousWalletContextRef.current = context;
     if (currentAddress) lastConnectedWalletRef.current = currentAddress;
     if (wallet.chainId !== undefined) lastConnectedChainRef.current = wallet.chainId;
-  }, [resetTradeContext, wallet.address, wallet.chainId]);
+  }, [resetTradeContext, reviewStage, wallet.address, wallet.chainId]);
 
   useEffect(() => {
     const deepLink = readTradeDeepLinkContext(window.location.search);
@@ -195,6 +199,7 @@ export default function TradePage() {
   // route is planned and simulated afresh by ActionReview; no executable
   // transaction data is restored from storage.
   useEffect(() => {
+    if (reviewStage === 'executing' || reviewStage === 'result') return;
     if (restoredDraftRef.current || !wallet.address || wallet.chainId !== 1) return;
     const draftId = signatureDraftIdFromSearch(window.location.search);
     if (!draftId) return;
@@ -240,7 +245,7 @@ export default function TradePage() {
     const nextUrl = new URL(window.location.href);
     nextUrl.searchParams.delete('fxDraft');
     window.history.replaceState(window.history.state, '', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
-  }, [wallet.address, wallet.chainId]);
+  }, [reviewStage, wallet.address, wallet.chainId]);
 
   useEffect(() => {
     setSlippage(String(readSlippagePercent()));

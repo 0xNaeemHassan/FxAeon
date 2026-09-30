@@ -27,7 +27,7 @@ import { BridgeTracker } from '@/components/BridgeTracker';
 import { CalldataDisclosure, InlineError, StatusNotice, stepProgress, chainName } from '@/components/review/ReviewProgress';
 import { resultPresentation } from '@/components/review/executionResult';
 import { splitReviewFacts } from '@/components/review/reviewSummary';
-import { factsOutsideConsequenceSummary, primaryReviewFacts, routeFacts as buildRouteFacts } from '@/components/review/actionReviewPresentation';
+import { factsOutsideConsequenceSummary, missingGasFeeFact, missingTotalCostFact, primaryReviewFacts, routeFacts as buildRouteFacts } from '@/components/review/actionReviewPresentation';
 import { consequenceSummary, pairVerifiedPositionFacts, reviewActionLabel } from '@/components/review/actionReviewModel';
 import { useActionReviewLifecycle } from '@/components/review/useActionReviewLifecycle';
 import { selectExecutionTask } from '@/lib/taskState';
@@ -54,11 +54,6 @@ function formatTokenAmount(value: bigint, tokenAddress?: string, fallback = 'raw
   const token = tokenForAddress(tokenAddress);
   if (!token) return `${value.toString()} ${fallback}`;
   return `${trimDecimal(formatUnits(value, token.decimals))} ${token.key}`;
-}
-
-function addFact(facts: ReviewFact[], label: string, value: string | undefined): void {
-  if (!value || facts.some((fact) => fact.label === label)) return;
-  facts.push({ label, value });
 }
 
 const APPROVE_ABI = [{
@@ -258,22 +253,16 @@ export function ActionReview(props: ActionReviewProps) {
     ? feeSelection.snapshot.tiers[feeSelection.tier]
     : undefined;
   const facts = buildRouteFacts(route, gasCost, executionCost, feeTierQuote);
+  const missingGasFee = missingGasFeeFact(gasCost);
+  if (missingGasFee && !facts.some((fact) => fact.label === 'Gas fee')) facts.push(missingGasFee);
+  const missingTotalCost = missingTotalCostFact(route, gasCost);
+  if (missingTotalCost && !facts.some((fact) => fact.label === 'Total cost')) facts.push(missingTotalCost);
   const reviewFacts = splitReviewFacts(facts);
   const consequenceFacts = consequenceSummary(primaryReviewFacts(route));
   const positionChanges = pairVerifiedPositionFacts(decisionBefore ?? [], facts);
   const pairedOutcomeLabels = new Set(positionChanges.paired.map((fact) => `estimated ${fact.label.toLowerCase()}`));
   const actionConsequences = consequenceFacts.filter((fact) => !pairedOutcomeLabels.has(fact.label.toLowerCase()));
   const remainingSummaryFacts = factsOutsideConsequenceSummary(reviewFacts.summary, actionConsequences);
-  const gasEstimateStatus = gasCost.estimate?.status === 'partial'
-    ? 'Partial route estimate'
-    : gasCost.estimate?.status === 'unavailable'
-      ? 'Unavailable; wallet will show final gas'
-    : gasCost.estimateIsCurrent
-      ? 'Current for reviewed route'
-      : gasCost.status === 'refreshing'
-        ? 'Refreshing for reviewed route'
-        : 'Unavailable; wallet will show final gas';
-  addFact(facts, 'Gas quote', gasEstimateStatus);
   const approvals = route.transactions
     .map((transaction) => {
       const approval = approvalFacts(transaction);

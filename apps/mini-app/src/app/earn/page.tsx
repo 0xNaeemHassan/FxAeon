@@ -177,11 +177,16 @@ export default function EarnPage() {
     const chainChanged = wallet.chainId !== undefined
       && lastConnectedChainRef.current !== undefined
       && lastConnectedChainRef.current !== wallet.chainId;
-    if (previous !== null && previous !== context && (walletChanged || chainChanged)) resetEarnContext();
+    if (previous !== null && previous !== context && (walletChanged || chainChanged)) {
+      // Keep a submitted hash and its result tied to the original wallet.
+      // Preserve the old refs so Edit applies this reset on input.
+      if (reviewStage === 'executing' || reviewStage === 'result') return;
+      resetEarnContext();
+    }
     previousWalletContextRef.current = context;
     if (currentAddress) lastConnectedWalletRef.current = currentAddress;
     if (wallet.chainId !== undefined) lastConnectedChainRef.current = wallet.chainId;
-  }, [resetEarnContext, wallet.address, wallet.chainId]);
+  }, [resetEarnContext, reviewStage, wallet.address, wallet.chainId]);
 
   useEffect(() => {
     setSlippage(String(readSlippagePercent()));
@@ -211,6 +216,7 @@ export default function EarnPage() {
   // matching wallet is available, then remove it with replaceState so a
   // reload cannot repeatedly reapply an old form snapshot.
   useEffect(() => {
+    if (reviewStage === 'executing' || reviewStage === 'result') return;
     if (typeof window === 'undefined' || !wallet.address || wallet.chainId !== 1) return;
     const draftId = signatureDraftIdFromSearch(window.location.search);
     if (!draftId || restoredDraftIdRef.current === draftId) return;
@@ -236,7 +242,7 @@ export default function EarnPage() {
       // History is optional in embedded/older webviews; restoration is still
       // complete when the URL cannot be rewritten.
     }
-  }, [wallet.address, wallet.chainId]);
+  }, [reviewStage, wallet.address, wallet.chainId]);
 
   const draftState = useMemo<SignatureDraftState>(() => ({
     mode,

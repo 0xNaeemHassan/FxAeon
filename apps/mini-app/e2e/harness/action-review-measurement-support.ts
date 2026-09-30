@@ -16,7 +16,7 @@ const mocks: Record<string, string> = {
     const H = () => globalThis.__actionReviewHarness;
     export const FX_TOKENS = { fxUSD: { address: '0x00000000000000000000000000000000000000c1' }, fxSAVE: { address: '0x00000000000000000000000000000000000000c2' } };
     export const formatRouteGasCost = () => ({ gasFee: '', totalCost: '' });
-    export const useRouteGasCost = () => ({ estimate: null, estimateIsCurrent: false, status: 'idle' });
+    export const useRouteGasCost = () => H().gasCost;
     export async function prepareRoutesForReview(planned, walletAddress) {
       const h = H(); h.prepareCount += 1;
       if (h.previewDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, h.previewDelayMs));
@@ -46,17 +46,31 @@ const mocks: Record<string, string> = {
       h.lastExecutedRouteVersion = route.harnessRouteVersion;
       if (h.deferRunner) { h.deferRunner = false; await new Promise((resolve) => h.executionResolvers.push(resolve)); }
       if (h.failRunner) { h.failRunner = false; throw new Error('mock execution failure'); }
-      callbacks.onStatus?.('submitted', 'mock submitted');
-      const hash = await callbacks.requestSignature(route.transactions[0]);
-      callbacks.onStep?.({ index: 0, transaction: route.transactions[0], status: 'confirmed', hash });
-      callbacks.onStatus?.('confirmed', 'mock confirmed');
-      const result = { status: h.partialResult ? 'partial' : 'confirmed', operation: route.operation, chainId: route.chainId, walletAddress: route.walletAddress, steps: [{ index: 0, transaction: route.transactions[0], status: 'confirmed', hash }] };
+      const steps = [];
+      for (let index = 0; index < route.transactions.length; index += 1) {
+        const transaction = route.transactions[index];
+        callbacks.onStatus?.('submitted', 'mock submitted');
+        try {
+          await callbacks.ensureChain?.(route.chainId);
+          const hash = await callbacks.requestSignature(transaction);
+          const step = { index, transaction, status: 'confirmed', hash };
+          steps.push(step);
+          callbacks.onStep?.(step);
+          callbacks.onStatus?.('confirmed', 'mock confirmed');
+        } catch (cause) {
+          const result = { status: steps.length ? 'partial' : 'failed', operation: route.operation, chainId: route.chainId, walletAddress: route.walletAddress, steps, error: cause instanceof Error ? cause.message : String(cause) };
+          callbacks.onStatus?.('failed', result.error);
+          await callbacks.postConfirmRead?.(route, result);
+          return result;
+        }
+      }
+      const result = { status: h.partialResult ? 'partial' : 'confirmed', operation: route.operation, chainId: route.chainId, walletAddress: route.walletAddress, steps };
       await callbacks.postConfirmRead?.(route, result);
       return result;
     }
     export const saveSignatureRequiredDraft = () => { const h = H(); h.draftSaveCount += 1; return { id: 'mock-draft' }; };
-    export const removeSignatureRequiredDraft = () => {};
-    export const cancelSignatureRequiredDraft = () => {};
+    export const removeSignatureRequiredDraft = () => { H().draftRemoveCount += 1; };
+    export const cancelSignatureRequiredDraft = () => { H().draftCancelCount += 1; };
   `,
   '@/lib/fx/gasFeePolicy': `
     const H = () => globalThis.__actionReviewHarness;
@@ -83,8 +97,8 @@ const mocks: Record<string, string> = {
       const h = globalThis.__actionReviewHarness;
       return { ...h.wallet, isEmbedded: false, wallets: [], selectedWallet: undefined,
         connect: async () => { h.wallet = { ready: true, authenticated: true, connectionVersion: h.wallet.connectionVersion + 1, address: '0x00000000000000000000000000000000000000aa', chainId: 1 }; h.rerender?.(); },
-        disconnect: async () => {}, selectWallet: () => {}, switchChain: async () => {},
-        sendTransaction: async () => { h.sendCount += 1; if (h.deferWalletResponse) { h.deferWalletResponse = false; await new Promise((resolve) => h.walletResolvers.push(resolve)); } return { hash: '0x1111111111111111111111111111111111111111111111111111111111111111' }; },
+        disconnect: async () => {}, selectWallet: () => {}, switchChain: async (chainId) => { h.wallet = { ...h.wallet, chainId }; h.rerender?.(); },
+        sendTransaction: async () => { h.sendCount += 1; if (h.deferWalletResponse) { h.deferWalletResponse = false; await new Promise((resolve, reject) => h.walletResolvers.push((shouldReject) => shouldReject ? reject(new Error('User rejected the wallet request')) : resolve())); } return { hash: '0x1111111111111111111111111111111111111111111111111111111111111111' }; },
       };
     }
   `,
@@ -130,9 +144,9 @@ export const useInvalidateWalletData = () => async () => {
     export const CalldataDisclosure = ({ data }) => <div><button type="button">Copy</button><pre>{data}</pre></div>;
     export const StatusNotice = ({ label, body }) => <div role="status"><strong>{label}</strong><span>{body}</span></div>;
     export const InlineError = ({ message }) => <div role="alert">{message}</div>;
-    export const TransactionHashLink = () => null;
+    export const TransactionHashLink = ({ step }) => <span>{step.hash}</span>;
   `,
-  '@/components/review/executionResult': `export const resultPresentation = (result) => result.status === 'partial' ? ({ title: 'Partially completed', body: 'An earlier step confirmed before the action stopped.', tone: 'warning', icon: () => null }) : ({ title: 'Confirmed', body: 'Mock confirmed.', tone: 'success', icon: () => null }); export const resultBodyDuringRefresh = ({ status, refreshing, positionAction, body }) => status === 'confirmed' && refreshing && positionAction ? 'Transaction confirmed. Position details are refreshing.' : body;`,
+  '@/components/review/executionResult': `export const resultPresentation = (result) => result.status === 'partial' ? ({ title: 'Partially completed', body: 'An earlier step confirmed before the action stopped.', tone: 'warning', icon: () => null }) : result.status === 'failed' ? ({ title: 'Not completed', body: result.error ?? 'Mock failed.', tone: 'danger', icon: () => null }) : ({ title: 'Confirmed', body: 'Mock confirmed.', tone: 'success', icon: () => null }); export const resultBodyDuringRefresh = ({ status, refreshing, positionAction, body }) => status === 'confirmed' && refreshing && positionAction ? 'Transaction confirmed. Position details are refreshing.' : body;`,
   '@/lib/fx/reviewFormatting': `
     export const rawQuoteReviewFacts = () => [];
     export const routeFinancialReviewFacts = () => [];

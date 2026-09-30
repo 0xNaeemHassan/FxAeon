@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDownRight, ArrowUpRight, Gauge, Layers2, RefreshCw, X } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell, Card, EmptyState } from '@/components/ui';
-import { ActionReview } from '@/components/ActionReview';
+import { ActionReview, type ActionReviewStage } from '@/components/ActionReview';
 import WalletConnectCTA from '@/components/WalletConnectCTA';
 import {
   positionIsStale,
@@ -62,6 +62,8 @@ export default function PositionsPage() {
   const [leverageBounds, setLeverageBounds] = useState<LeverageBounds>(() => leverageBoundsFor('ETH', 'long'));
   const [reviewRevision, setReviewRevision] = useState(0);
   const [resumeReview, setResumeReview] = useState(0);
+  const [reviewStage, setReviewStage] = useState<ActionReviewStage>('input');
+  const [reviewPosition, setReviewPosition] = useState<UiPosition | null>(null);
   const managerRef = useRef<HTMLElement>(null);
   const handledDeepLinkRef = useRef('');
   const previousWalletContextRef = useRef<string | null>(null);
@@ -96,6 +98,8 @@ export default function PositionsPage() {
     setAmount(defaults.amount);
     setFraction(nextAction === 'close' ? 100 : defaults.fraction);
     setLeverage(defaults.leverage);
+    setReviewStage('input');
+    setReviewPosition(null);
     // Remounting the review state machine immediately discards a prepared
     // route, including a route that was just displayed in the review sheet.
     setReviewRevision((revision) => revision + 1);
@@ -129,20 +133,21 @@ export default function PositionsPage() {
     const chainChanged = wallet.chainId !== undefined
       && lastConnectedChainRef.current !== undefined
       && lastConnectedChainRef.current !== wallet.chainId;
-    if (previous !== null && previous !== context && (walletChanged || chainChanged)) {
+    const preserveSubmittedResult = reviewStage === 'executing' || reviewStage === 'result';
+    if (previous !== null && previous !== context && (walletChanged || chainChanged) && !preserveSubmittedResult) {
       setSelectedKey('');
       resetTransactionContext();
     }
+    if (previous !== null && previous !== context && (walletChanged || chainChanged) && preserveSubmittedResult) return;
     previousWalletContextRef.current = context;
     if (currentAddress) lastConnectedWalletRef.current = currentAddress;
     if (wallet.chainId !== undefined) lastConnectedChainRef.current = wallet.chainId;
-  }, [resetTransactionContext, wallet.address, wallet.chainId]);
+  }, [resetTransactionContext, reviewStage, wallet.address, wallet.chainId]);
 
   useEffect(() => {
     const onSettingsUpdated = (event: Event) => {
       if (event.type === 'storage' && (event as StorageEvent).key !== SETTINGS_KEY) return;
       setSlippage(String(readSlippagePercent()));
-      setReviewRevision((revision) => revision + 1);
     };
     window.addEventListener(SETTINGS_UPDATED_EVENT, onSettingsUpdated);
     window.addEventListener('storage', onSettingsUpdated);
@@ -162,6 +167,7 @@ export default function PositionsPage() {
   // manager. Keep this query-driven so browser refreshes and shared links have
   // the same behavior as an in-app selection.
   useEffect(() => {
+    if (reviewStage === 'executing' || reviewStage === 'result') return;
     if (typeof window === 'undefined' || !positions.length) return;
     const params = new URLSearchParams(window.location.search);
     const key = params.get('position');
@@ -177,14 +183,21 @@ export default function PositionsPage() {
     setSelectedKey(key);
     resetTransactionContext(nextAction, tokenForPositionAction(linkedPosition, nextAction));
     window.requestAnimationFrame(() => managerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-  }, [positions, resetTransactionContext, wallet.address, wallet.chainId]);
+  }, [positions, resetTransactionContext, reviewStage, wallet.address, wallet.chainId]);
 
   const selected = positions.find((position) => positionKey(position) === selectedKey);
+  const managerPosition = reviewStage === 'input' ? selected : reviewPosition ?? selected;
+  const preserveActionReview = reviewStage !== 'input' && Boolean(reviewPosition);
+  const handleReviewStageChange = useCallback((nextStage: ActionReviewStage) => {
+    setReviewStage(nextStage);
+    if (nextStage === 'input') setReviewPosition(null);
+    else if (reviewStage === 'input' && selected) setReviewPosition(selected);
+  }, [reviewStage, selected]);
   const selectedStale = selected ? positionIsStale(selected, positionState.failedGroups) : false;
-  const decisionBefore = useMemo(() => selected ? [
-    { label: 'Collateral', value: `${formatAmount(selected.info.rawColls, positionCollateralDecimals(selected))} ${selected.info.rawCollsToken}` },
-    { label: 'Debt', value: `${formatAmount(selected.info.rawDebts, positionDebtDecimals(selected))} ${selected.info.rawDebtsToken}` },
-  ] : undefined, [selected]);
+  const decisionBefore = useMemo(() => managerPosition ? [
+    { label: 'Collateral', value: `${formatAmount(managerPosition.info.rawColls, positionCollateralDecimals(managerPosition))} ${managerPosition.info.rawCollsToken}` },
+    { label: 'Debt', value: `${formatAmount(managerPosition.info.rawDebts, positionDebtDecimals(managerPosition))} ${managerPosition.info.rawDebtsToken}` },
+  ] : undefined, [managerPosition]);
   const marketTokens = selected
     ? action === 'reduce' || action === 'close'
       ? positionOutputTokenOptions(selected.market, selected.side)
@@ -234,6 +247,7 @@ export default function PositionsPage() {
   // route before restoring them. ActionReview still rebuilds and simulates a
   // fresh SDK route; no saved route or calldata is ever reused.
   useEffect(() => {
+    if (reviewStage === 'executing' || reviewStage === 'result') return;
     if (typeof window === 'undefined' || !wallet.address || !wallet.chainId || !positions.length) return;
     const draftId = signatureDraftIdFromSearch(window.location.search);
     if (!draftId || restoredDraftRef.current === draftId) return;
@@ -303,7 +317,7 @@ export default function PositionsPage() {
     // cannot re-consume an already restored draft. The saved draft itself
     // remains available in History until the fresh route is signed/cancelled.
     window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.hash}`);
-  }, [positions, slippage, wallet.address, wallet.chainId]);
+  }, [positions, reviewStage, slippage, wallet.address, wallet.chainId]);
 
   const leverageError = leverage > 0 && leverage < leverageBounds.min
     ? `Minimum pool leverage is ${leverageBounds.min.toFixed(1)}×.`
@@ -389,7 +403,7 @@ export default function PositionsPage() {
   };
 
   const reviewLabel = action === 'close' ? 'Close position' : action === 'increase' ? 'Add to position' : action === 'reduce' ? 'Reduce position' : 'Adjust position leverage';
-  const selectedLabel = selected ? `${selected.market} ${selected.side} position` : 'position';
+  const selectedLabel = managerPosition ? `${managerPosition.market} ${managerPosition.side} position` : 'position';
   const operationLabel = action === 'close'
     ? `Close ${selectedLabel}`
     : action === 'increase'
@@ -406,35 +420,35 @@ export default function PositionsPage() {
 
   return (
     <AppShell>
-      <div className={`${styles.positionsRoot} ${styles.positionsCompactRoot} ${!wallet.address ? styles.positionsDisconnectedRoot : ''}`}>
+      <div className={`${styles.positionsRoot} ${styles.positionsCompactRoot} ${!wallet.address ? styles.positionsDisconnectedRoot : ''}`} data-position-stage={reviewStage}>
       <div className={styles.positionsWorkspace}>
         <h1 className={styles.positionsHeading}>Positions</h1>
-        <nav className="grid grid-cols-2 rounded-xl border border-[var(--line)] bg-[var(--input)] p-1" aria-label="Trade views">
+        {reviewStage === 'input' && <nav className="grid grid-cols-2 rounded-xl border border-[var(--line)] bg-[var(--input)] p-1" aria-label="Trade views">
           <Link href="/trade" className="glass-press flex min-h-11 items-center justify-center rounded-lg px-3 text-[13px] font-semibold text-mut">New position</Link>
           <span aria-current="page" className="flex min-h-11 items-center justify-center rounded-lg bg-[var(--mint-dim)] px-3 text-[13px] font-semibold text-[var(--text)]">Positions</span>
-        </nav>
-        {!wallet.address ? (
+        </nav>}
+        {!wallet.address && !preserveActionReview ? (
           <WalletConnectCTA compact ready={wallet.ready} authenticated={wallet.authenticated} body="Choose or connect a wallet to see and manage your open positions." />
         ) : positions.length > 0 || positionState.pendingPositions.length > 0 ? (
-          <ProtocolPositionNotice
+          reviewStage === 'input' ? <ProtocolPositionNotice
             status={positionState.status}
             failedGroups={positionState.failedGroups}
             hasPositions={positions.length + positionState.pendingPositions.length > 0}
             refreshing={positionState.refreshing}
             onRefresh={() => void positionState.refresh()}
-          />
+          /> : null
         ) : null}
-        <ConfirmedPositionCards />
-        {wallet.address && positionState.status === 'loading' && !positions.length && !positionState.pendingPositions.length ? (
+        {reviewStage === 'input' && <ConfirmedPositionCards />}
+        {wallet.address && positionState.status === 'loading' && !positions.length && !positionState.pendingPositions.length && reviewStage === 'input' ? (
           <div className="flex flex-col gap-3"><ProtocolPositionSkeleton /><ProtocolPositionSkeleton /></div>
-        ) : wallet.address && positionState.status === 'unavailable' && !positions.length && !positionState.pendingPositions.length ? (
+        ) : wallet.address && positionState.status === 'unavailable' && !positions.length && !positionState.pendingPositions.length && reviewStage === 'input' ? (
           <div role="status" aria-live="polite" className="flex items-center gap-3 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-4"><span className="text-[12px] text-warn">Position data is unavailable.</span><button type="button" aria-label="Retry positions" onClick={() => void positionState.refresh()} className="glass-press ml-auto flex min-h-11 min-w-11 items-center justify-center rounded-xl text-mut"><RefreshCw className="h-4 w-4" aria-hidden="true" /></button></div>
-        ) : wallet.address && positionState.status === 'partial' && !positions.length && !positionState.pendingPositions.length ? (
+        ) : wallet.address && positionState.status === 'partial' && !positions.length && !positionState.pendingPositions.length && reviewStage === 'input' ? (
           <div role="status" aria-live="polite" className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-4 text-[12px] text-warn">Some position data couldn’t load, so results may be incomplete.<button type="button" onClick={() => void positionState.refresh()} className="mt-2 min-h-11 rounded-lg px-2 font-semibold text-mint">Retry positions</button></div>
-        ) : wallet.address && positionState.status === 'ready' && !positions.length && !positionState.pendingPositions.length ? (
+        ) : wallet.address && positionState.status === 'ready' && !positions.length && !positionState.pendingPositions.length && reviewStage === 'input' ? (
           <EmptyState icon={Layers2} title="No open positions" body="Open an ETH or BTC position to get started." action={<Link href="/trade" className="button button-primary flex min-h-12 items-center justify-center rounded-xl px-4 font-semibold">Open a position</Link>} />
-        ) : wallet.address && positions.length > 0 ? (
-          <div className={styles.positionManagerGrid}>
+        ) : wallet.address && positions.length > 0 || preserveActionReview ? (
+          <div className={styles.positionManagerGrid} data-review={reviewStage !== 'input' || undefined}>
             <section className={styles.positionsColumn} aria-labelledby="open-positions-heading">
               <div className={styles.positionSectionHeader}>
                 <div><h2 id="open-positions-heading">Open positions</h2></div>
@@ -464,12 +478,12 @@ export default function PositionsPage() {
               </div>
             </section>
 
-            <section ref={managerRef} className={styles.positionManageColumn} aria-labelledby="manage-position-heading">
-              {selected && <div className={styles.manageHeading}><div><h2 id="manage-position-heading">{selected.market} {selected.side} · #{selected.info.positionId}</h2></div>{selected.side === 'long' && <Link href={`/borrow?market=${selected.market}&position=${selected.info.positionId}`} className="glass-press inline-flex min-h-11 items-center gap-2 rounded-xl px-2 text-[12px] font-semibold text-mint">Borrow against <span aria-hidden="true">→</span></Link>}</div>}
-              {selectedStale && <span role="status" aria-label="Refreshing selected position" className="skeleton block h-8 rounded-xl" />}
+            <section ref={managerRef} className={styles.positionManageColumn} aria-label={reviewStage === 'input' ? undefined : `${operationLabel} review`} aria-labelledby={reviewStage === 'input' ? 'manage-position-heading' : undefined}>
+              {reviewStage === 'input' && selected && <div className={styles.manageHeading}><div><h2 id="manage-position-heading">{selected.market} {selected.side} · #{selected.info.positionId}</h2></div>{selected.side === 'long' && <Link href={`/borrow?market=${selected.market}&position=${selected.info.positionId}`} className="glass-press inline-flex min-h-11 items-center gap-2 rounded-xl px-2 text-[12px] font-semibold text-mint">Borrow against <span aria-hidden="true">→</span></Link>}</div>}
+              {reviewStage === 'input' && selectedStale && <span role="status" aria-label="Refreshing selected position" className="skeleton block h-8 rounded-xl" />}
 
-              <Card className={`${styles.actionPanel} ${styles.positionActionCard}`}>
-                <div className={styles.positionActions}><Segmented value={action} onChange={changeAction} ariaLabel="Position action" options={[{ value: 'increase', label: 'Add' }, { value: 'reduce', label: 'Reduce' }, { value: 'close', label: 'Close' }, { value: 'leverage', label: 'Leverage' }]} /></div>
+              <Card className={`${styles.actionPanel} ${styles.positionActionCard} ${reviewStage === 'input' ? '' : styles.positionActionCardReview}`}>
+                {reviewStage === 'input' && <div className={styles.positionActions}><Segmented value={action} onChange={changeAction} ariaLabel="Position action" options={[{ value: 'increase', label: 'Add' }, { value: 'reduce', label: 'Reduce' }, { value: 'close', label: 'Close' }, { value: 'leverage', label: 'Leverage' }]} /></div>}
                 <ActionReview
                   key={reviewRevision}
                   surface="content"
@@ -477,6 +491,7 @@ export default function PositionsPage() {
                   label={reviewLabel}
                   operationLabel={operationLabel}
                   destructive={action === 'close'}
+                  onStageChange={handleReviewStageChange}
                   draftState={draftState}
                   draftActionKey={draftActionKey}
                   draftResumePath={draftResumePath}
@@ -493,8 +508,9 @@ export default function PositionsPage() {
                   )}
                   onComplete={async (_execution, confirmedRoute) => {
                     await Promise.all([positionState.refresh(), walletBalances.refresh()]);
-                    if (action === 'close' && selected && confirmedRoute.details?.positionId === selected.info.positionId) {
-                      await positionState.reconcileClosedPosition(selected);
+                    const completedPosition = reviewPosition ?? selected;
+                    if (action === 'close' && completedPosition && confirmedRoute.details?.positionId === completedPosition.info.positionId) {
+                      await positionState.reconcileClosedPosition(completedPosition);
                     }
                   }}
                 />

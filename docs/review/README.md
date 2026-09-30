@@ -2,41 +2,39 @@
 
 ## Current candidate gallery
 
-Candidate source commit: `624f725`; all four GitHub checks passed for that
-commit. The gas-clock correction described below is being verified separately.
+Current candidate: `dad36853a3616c6666534dfc39c00647b6b1d9e3`; all four GitHub
+checks passed. Its Client CI passed 496 unit tests (4 skipped), 165
+main-browser tests, 6 Borrow tests, 25 overlay tests, 5 state-lab tests, and
+14 landing states, with no Playwright retries. The `artifacts/refinement/generated/run-20260930T015019Z/`
+gallery contains 64 views and 101 frames at mobile and desktop sizes, captured from a
+local production-placeholder export. It uses a connected test-wallet shim and
+read-only illustrative balances with ready-empty positions; no private or live
+wallet captures are included. The displayed APY comes from the public feed.
+Trade's 24-hour change remains a skeleton because the fixture has no Coinbase
+ticker value. These images show UI states, not live balances, transaction
+behavior, or production performance.
 
-Local gallery: `artifacts/refinement/generated/run-20260930T015019Z/`
-contains 64 views and 101 PNG frames at 393×852 mobile and 1440×1000 desktop.
-The capture used the local production-placeholder export with read-only gallery
-fixtures. It reported no page or console errors. The gallery is visual evidence
-only: its balances are illustrative, its positions are ready-empty, and it
-does not establish live RPC behavior, transaction submission, or production
-performance. Earlier images remain historical references until the current
-fork-browser proof is complete.
+Selected current screenshots:
 
-The reviewed before-and-after is concrete: the earlier 2026-09-27 gallery
-predates the current presentation; the 2026-09-30 candidate shows a borderless
-Portfolio and Wallet hierarchy with a single address in the header. Trade,
-Earn instant and queued withdrawal, Borrow, and Move each show their primary
-action in the baseline view. Move is centered. Only the optional vault-details
-section extends below Earn's baseline action. Across all 101 frames, 75 Portfolio, Wallet, form, theme,
-and state-lab frames and the 26 remaining requested frames were reviewed.
+- [Portfolio](assets/portfolio-20260930-mobile.png)
+- [Wallet profile](assets/wallet-profile-20260930-mobile.png)
+- [ETH wallet detail](assets/wallet-eth-detail-20260930-mobile.png)
+- [Trade input](assets/trade-input-20260930-mobile.png)
+- [Earn instant withdrawal](assets/earn-instant-withdrawal-20260930-mobile.png)
+- [Move from Ethereum to Base](assets/move-ethereum-base-20260930-mobile.png)
 
-One Trade 24-hour change is shown as a skeleton because the deterministic
-fixture has no Coinbase ticker value. This is a known fixture limitation and
-does not demonstrate a production loading defect. The only failed request in
-the capture was a localhost prefetch aborted when its browser context closed;
-there were no page or console errors.
+The current presentation uses a borderless Portfolio and Wallet hierarchy with
+a single address in the header. Trade, Earn instant and queued withdrawal,
+Borrow, and Move show their primary action in the baseline view; Move is
+centered. Only optional vault details continue below Earn's baseline action.
+All 101 frames have been visually reviewed.
 
-The 2026-09-30 Anvil browser run failed because the Gas fee row disappeared
-after the quote-expiry probe. The gas-cost cache had captured the original
-`Date.now` function before the browser fake clock was installed, leading to
-repeated estimate refreshes. The cache default now calls live `Date.now()`;
-focused gas tests pass 18/18. Full `pnpm verify` is rerunning, and the Anvil
-browser proof will rerun afterward. No pass is claimed for the rerun. See
-[release validation](../release-validation.md) for current gate status.
+The previous fork-browser run on `337fd1e` opened all four position types, then
+failed on a stale Close button locator. The corrected `dad3685` Anvil run
+reached the close review, then failed because its CTA was hidden under the
+bottom navigation. An uncommitted follow-up batch is being focused-tested; full
+gates have not been rerun. No release or merge pass is claimed. See
+[release validation](../release-validation.md) for gate status.
 
-## Historical references
-
-Earlier galleries and captures remain as before-state evidence. They do not
-establish the current release gates or production behavior.
+Earlier screenshots remain historical references; they are not promoted as
+current evidence.

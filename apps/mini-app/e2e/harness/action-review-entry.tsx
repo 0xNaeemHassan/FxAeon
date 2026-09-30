@@ -17,8 +17,9 @@ type PreviewRequest = {
 };
 type HarnessState = {
   wallet: WalletState; version: number; mode: 'auto' | 'deferred'; failNextPrepare: boolean; executeVersion?: number; partialResult: boolean;
-  deferRunner: boolean; failRunner: boolean; executionResolvers: Array<() => void>; deferWalletResponse: boolean; walletResolvers: Array<() => void>; lastExecutedRouteVersion?: number;
-  prepareCount: number; planCount: number; runnerCount: number; sendCount: number; draftSaveCount: number;
+  deferRunner: boolean; failRunner: boolean; executionResolvers: Array<() => void>; deferWalletResponse: boolean; walletResolvers: Array<(reject?: boolean) => void>; lastExecutedRouteVersion?: number;
+  multiStepExecution: boolean; gasCost: { status: 'refreshing' | 'unavailable'; estimate?: undefined; estimateIsCurrent: false; error?: string };
+  prepareCount: number; planCount: number; runnerCount: number; sendCount: number; draftSaveCount: number; draftCancelCount: number; draftRemoveCount: number;
   feeQuoteCount: number;
   previewRequests: PreviewRequest[]; nextPreviewRequestId: number;
   deferRefresh: boolean; refreshStarted: boolean; completeStarted: boolean; refreshResolvers: Array<() => void>; rerender?: () => void;
@@ -29,7 +30,8 @@ const initialOptions = (globalThis as typeof globalThis & { __actionReviewHarnes
 const H = (globalThis as typeof globalThis & { __actionReviewHarness?: HarnessState }).__actionReviewHarness ??= {
   wallet: { ready: true, authenticated: true, connectionVersion: 1, address: '0x00000000000000000000000000000000000000aa', chainId: 1 },
   version: 1, mode: initialOptions?.mode ?? 'auto', failNextPrepare: false, executeVersion: undefined, partialResult: false, deferRunner: false, failRunner: false, executionResolvers: [], deferWalletResponse: false, walletResolvers: [],
-  prepareCount: 0, planCount: 0, runnerCount: 0, sendCount: 0, draftSaveCount: 0, feeQuoteCount: 0,
+  multiStepExecution: false, gasCost: { status: 'refreshing', estimateIsCurrent: false },
+  prepareCount: 0, planCount: 0, runnerCount: 0, sendCount: 0, draftSaveCount: 0, draftCancelCount: 0, draftRemoveCount: 0, feeQuoteCount: 0,
   previewRequests: [], nextPreviewRequestId: 1,
   deferRefresh: false, refreshStarted: false, completeStarted: false, refreshResolvers: [],
   previewDelayMs: initialOptions?.previewDelayMs ?? 0, refreshDelayMs: initialOptions?.refreshDelayMs ?? 0, accountRefreshCount: 0,
@@ -40,7 +42,10 @@ type HarnessRoute = PlannedRoute & { harnessRouteVersion: number; harnessConnect
 const routeFor = (version: number): HarnessRoute => ({
   operation: 'increasePosition', chainId: 1, walletAddress: H.wallet.address! as Address,
   harnessRouteVersion: version, harnessConnectionVersion: H.wallet.connectionVersion,
-  transactions: [{ chainId: 1, from: H.wallet.address! as Address, to: '0x00000000000000000000000000000000000000bb' as Address, data: '0x12345678' as Hex, value: 0n, kind: 'action', type: 'increasePosition', operation: 'increasePosition' }],
+  transactions: [
+    { chainId: 1, from: H.wallet.address! as Address, to: '0x00000000000000000000000000000000000000bb' as Address, data: '0x12345678' as Hex, value: 0n, kind: 'action', type: 'increasePosition', operation: 'increasePosition' },
+    ...(H.multiStepExecution ? [{ chainId: 1, from: H.wallet.address! as Address, to: '0x00000000000000000000000000000000000000cc' as Address, data: '0x87654321' as Hex, value: 0n, kind: 'action', type: 'increasePosition', operation: 'increasePosition' }] : []),
+  ],
   details: { routeType: `Terms ${version}` },
 });
 
@@ -51,6 +56,7 @@ function Harness() {
   const [resumeReview, setResumeReview] = useState(0);
   const [disabled, setDisabled] = useState(false);
   const [builderAvailable, setBuilderAvailable] = useState(true);
+  const [reviewMounted, setReviewMounted] = useState(true);
   const draftState = useMemo(() => ({ action: 'increase', amount: String(version), side: 'long' }), [version]);
   // Expose the redraw callback during the first render as well as the effect;
   // the readiness marker is rendered before effects flush, and the reconnect
@@ -65,6 +71,8 @@ function Harness() {
   const setTerms = () => { H.version = version + 1; setVersion((value) => value + 1); };
   const disconnect = () => { H.wallet = { ...H.wallet, ready: true, authenticated: false, address: undefined, chainId: undefined }; H.rerender?.(); };
   const connect = () => { H.wallet = { ready: true, authenticated: true, connectionVersion: H.wallet.connectionVersion + 1, address: '0x00000000000000000000000000000000000000aa', chainId: 1 }; H.rerender?.(); };
+  const switchAccount = () => { H.wallet = { ready: true, authenticated: true, connectionVersion: H.wallet.connectionVersion + 1, address: '0x00000000000000000000000000000000000000dd', chainId: 1 }; H.rerender?.(); };
+  const startOnBase = () => { H.wallet = { ...H.wallet, chainId: 8453 }; H.rerender?.(); };
   return <>
     <div data-harness-ready="true" />
     <div role="toolbar">
@@ -74,11 +82,14 @@ function Harness() {
       <button type="button" onClick={() => setBuilderAvailable((value) => !value)}>{builderAvailable ? 'Remove planner' : 'Restore planner'}</button>
       <button type="button" onClick={disconnect}>Disconnect</button>
       <button type="button" onClick={connect}>Reconnect</button>
+      <button type="button" onClick={switchAccount}>Switch account</button>
+      <button type="button" onClick={startOnBase}>Start on Base</button>
       <button type="button" onClick={() => { H.mode = 'deferred'; }}>Defer preview</button>
       <button type="button" onClick={() => setResumeReview((value) => value + 1)}>Resume review</button>
       <button type="button" onClick={() => { H.deferRunner = true; }}>Defer before wallet request</button>
       <button type="button" onClick={() => { H.deferWalletResponse = true; }}>Defer wallet response</button>
       <button type="button" onClick={() => { H.walletResolvers.shift()?.(); }}>Resolve wallet response</button>
+      <button type="button" onClick={() => { H.walletResolvers.shift()?.(true); }}>Reject wallet response</button>
       <button type="button" onClick={() => { H.failRunner = true; }}>Fail before wallet request</button>
       <button type="button" onClick={() => { H.executeVersion = version + 1; }}>Change planner after quote</button>
       <button type="button" onClick={() => { H.executeVersion = version + 1; H.rerender?.(); }}>Change quote terms to v{version + 1}</button>
@@ -91,8 +102,11 @@ function Harness() {
       <button type="button" onClick={() => { H.deferRefresh = true; }}>Defer wallet refresh</button>
       <button type="button" onClick={() => { H.partialResult = true; }}>Return partial result</button>
       <button type="button" onClick={() => { H.refreshResolvers.shift()?.(); }}>Resolve wallet refresh</button>
+      <button type="button" onClick={() => { H.multiStepExecution = true; H.rerender?.(); }}>Use multi-step route</button>
+      <button type="button" onClick={() => { H.gasCost = { status: 'unavailable', estimateIsCurrent: false, error: 'RPC unavailable' }; H.rerender?.(); }}>Gas estimate unavailable</button>
+      <button type="button" onClick={() => setReviewMounted((mounted) => !mounted)}>{reviewMounted ? 'Unmount review' : 'Mount review'}</button>
     </div>
-    <ActionReview
+    {reviewMounted && <ActionReview
       planBuilder={builderAvailable ? planBuilder : null}
       label="Review position"
       operationLabel={`Open position v${version}`}
@@ -105,7 +119,7 @@ function Harness() {
         H.completeStarted = true;
         H.rerender?.();
       }}
-    />
+    />}
     <p>Account value: <output aria-label="Refreshed account value">{H.accountRefreshCount > 0 ? '1.25 ETH' : 'Waiting for account refresh'}</output></p>
     <output data-metrics>{JSON.stringify({ prepare: H.prepareCount, plan: H.planCount, runner: H.runnerCount, send: H.sendCount, draftSave: H.draftSaveCount, refreshStarted: H.refreshStarted, completeStarted: H.completeStarted })}</output>
   </>;

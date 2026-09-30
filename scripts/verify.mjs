@@ -108,6 +108,8 @@ if (builtFailures.length) {
 // at a time after the shared build gates to keep browser memory bounded.
 const isolatedBrowserChecks = [
   { args: ['test:e2e:borrow-harness'], label: 'Borrow selection browser harness' },
+  { args: ['test:e2e:move-harness'], label: 'Move review layout browser harness' },
+  { args: ['test:e2e:positions-harness'], label: 'Positions review layout browser harness' },
   { args: ['test:e2e:overlay'], label: 'Overlay lifecycle browser harness' },
   { args: ['test:e2e:state-lab'], label: 'UI state lab browser suite' },
 ];
