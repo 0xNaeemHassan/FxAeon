@@ -85,6 +85,16 @@ test('contains keyboard focus and restores focus through nested dialogs', async 
   await expect(page.locator('body')).toHaveCSS('overflow', 'auto');
 });
 
+test('route focus during opening does not replace the dialog return target', async ({ page }) => {
+  await page.evaluate(() => { (window as Window & { __overlayRouteFocusRace?: boolean }).__overlayRouteFocusRace = true; });
+  const trigger = page.getByRole('button', { name: 'Open wallet profile', exact: true });
+  await trigger.click();
+  await expect(page.getByRole('dialog', { name: 'Wallet profile' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: 'Wallet profile' })).toBeHidden();
+  await expect(trigger).toBeFocused();
+});
+
 test('browser Back dismisses one overlay at a time without leaving the page', async ({ page }) => {
   await page.getByRole('button', { name: 'Open wallet profile' }).click();
   const parent = page.getByRole('dialog', { name: 'Wallet profile' });

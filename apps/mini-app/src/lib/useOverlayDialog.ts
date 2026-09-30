@@ -167,11 +167,17 @@ export function useOverlayDialog<T extends HTMLElement = HTMLElement>({ open, on
     const dialog = dialogRef.current;
     if (!dialog) return;
     const activeElement = document.activeElement;
-    const trigger = activeElement instanceof HTMLElement
+    const outsideActive = activeElement instanceof HTMLElement
       && activeElement !== document.body
       && !dialog.contains(activeElement)
       ? activeElement
-      : triggerRef.current;
+      : null;
+    // Preserve alternate opening controls, but do not mistake a route's
+    // programmatically focused heading/main for the dialog's opener.
+    const trigger = outsideActive && outsideActive.tabIndex >= 0
+      ? outsideActive
+      : triggerRef.current ?? outsideActive;
+    const usedTriggerRef = trigger === triggerRef.current;
     const id = ++nextOverlayId;
     const historyKey = '__fxaeonOverlayId';
     const historyEntry = beginLocalHistoryEntry(historyKey, id);
@@ -233,7 +239,8 @@ export function useOverlayDialog<T extends HTMLElement = HTMLElement>({ open, on
       if (overlayStack.length === 0) document.body.style.overflow = originalBodyOverflow;
       historyEntry.finish(consumedBack);
       if (wasTopOnClose) {
-        trigger?.focus({ preventScroll: true });
+        const returnTarget = usedTriggerRef && triggerRef.current?.isConnected ? triggerRef.current : trigger;
+        if (returnTarget?.isConnected) returnTarget.focus({ preventScroll: true });
       }
     };
   }, [open, triggerRef, initialFocusRef]);
