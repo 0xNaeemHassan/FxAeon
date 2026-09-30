@@ -73,6 +73,7 @@ const quickChecks = await runGroup([
   { args: ['test:architecture:contract'], label: 'Architecture import contract' },
   { args: ['exec', 'node', '--test', 'scripts/generate_csp_headers.contract.test.mjs'], label: 'CSP generation contract' },
   { args: ['exec', 'node', '--test', 'scripts/cloudflare_headers.contract.test.mjs'], label: 'Cloudflare headers contract' },
+  { args: ['exec', 'node', '--test', 'apps/mini-app/test/e2e-serve.test.mjs'], label: 'Static E2E server route contract' },
   { args: ['test:landing'], label: 'Standalone landing contract' },
   { args: ['exec', 'node', '--test', 'scripts/verify_frontend_secrets.test.mjs', 'scripts/launch_readiness.test.mjs'], label: 'Launch readiness contracts' },
   { args: ['exec', 'node', 'scripts/verify_frontend_secrets.mjs'], label: 'Frontend secret scan' },

@@ -97,10 +97,9 @@ async function createAppPage(context: BrowserContext, theme: Theme, viewId: stri
   watchPage(page, viewId);
   await installBrowserAppFixtures(page, { telegram: false, marketPrices: true });
   await installRefinementGalleryFixtures(page);
-  // tsx adds an esbuild __name helper to imported fixture functions; Playwright
-  // serializes the function into the browser, where that helper is otherwise absent.
-  const browserWalletScript = browserWalletInitScript(walletOptions).toString();
-  await page.addInitScript({ content: `const __name=(target)=>target;(${browserWalletScript})(${JSON.stringify(walletOptions)});` });
+  // Pass wallet options through Playwright's structured argument channel. The
+  // serialized fixture owns its esbuild helper, so init-script ordering is safe.
+  await page.addInitScript(browserWalletInitScript(walletOptions), walletOptions);
   return page;
 }
 

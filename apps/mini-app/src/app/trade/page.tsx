@@ -38,7 +38,13 @@ import {
 } from '@/app/trade/fxUi';
 
 function createPrefetchSessionId(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `trade-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const cryptoApi = globalThis.crypto;
+  if (cryptoApi?.randomUUID) return cryptoApi.randomUUID();
+  if (cryptoApi?.getRandomValues) {
+    const words = cryptoApi.getRandomValues(new Uint32Array(2));
+    return `trade-${words[0].toString(16)}-${words[1].toString(16)}`;
+  }
+  throw new Error('Secure randomness is unavailable for the trade prefetch session');
 }
 
 function positionHref(market: UiMarket, side: UiSide, positionId: string | number, action?: 'close'): string {

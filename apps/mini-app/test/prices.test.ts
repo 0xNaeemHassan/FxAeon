@@ -16,6 +16,16 @@ import {
 } from "../src/lib/prices";
 
 const keys = Object.keys(FX_TOKENS) as FxTokenKey[];
+const isCoinGeckoTokenPriceRequest = (value: string): boolean => {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:'
+      && url.hostname === 'api.coingecko.com'
+      && url.pathname === '/api/v3/simple/token_price/ethereum';
+  } catch {
+    return false;
+  }
+};
 
 function validPayload(now: number) {
   const coins: Record<string, { price: number; timestamp: number; confidence: number }> = {};
@@ -169,7 +179,7 @@ test("a delayed protocol price uses a fresh CoinGecko quote without replacing fr
   assert.equal(first.updatedAt, (now - 12) * 1000, 'freshness uses the oldest included price');
   const second = await fetchPrices(request);
   assert.equal(second.prices.fxUSD, 0.998);
-  assert.equal(calls.filter(url => url.includes('api.coingecko.com')).length, 1, 'fallback cached for one minute');
+  assert.equal(calls.filter(isCoinGeckoTokenPriceRequest).length, 1, 'fallback cached for one minute');
 });
 
 test("publishes validated primary prices before a slow optional fallback completes", async () => {
@@ -222,7 +232,7 @@ test("fallback traffic is bounded and respects rate-limit backoff", async () => 
 
   let boundedRequests = 0;
   const failing = (async input => {
-    if (String(input).includes('api.coingecko.com')) boundedRequests += 1;
+    if (isCoinGeckoTokenPriceRequest(String(input))) boundedRequests += 1;
     return Response.json({}, { status: 503 });
   }) as typeof fetch;
   await assert.rejects(createUsdPriceFetcher()(failing), /no validated prices/);

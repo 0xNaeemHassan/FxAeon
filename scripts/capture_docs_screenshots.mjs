@@ -368,10 +368,18 @@ async function waitForStandardLogin(page) {
 }
 
 function classifyConsoleErrors() {
-  const blockedFallbacks = consoleErrors.filter(({ message }) => (
-    message.includes('https://api.coingecko.com/api/v3/simple/token_price/ethereum')
-    && message.includes('blocked by CORS policy')
-  ));
+  const blockedFallbacks = consoleErrors.filter(({ message }) => {
+    const requestedUrl = message.match(/https?:\/\/[^\s'"<>]+/)?.[0];
+    if (!requestedUrl || !message.includes('blocked by CORS policy')) return false;
+    try {
+      const url = new URL(requestedUrl);
+      return url.protocol === 'https:'
+        && url.hostname === 'api.coingecko.com'
+        && url.pathname === '/api/v3/simple/token_price/ethereum';
+    } catch {
+      return false;
+    }
+  });
   const externalFailuresByPage = new Map();
   for (const failure of externalRequestFailures) {
     externalFailuresByPage.set(failure.pageId, (externalFailuresByPage.get(failure.pageId) ?? 0) + 1);
