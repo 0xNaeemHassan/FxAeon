@@ -219,6 +219,22 @@ test('Base stays partial when L1/operator fee accounting is unavailable', async 
   assert.equal(estimate.totalNativeCostWei, undefined);
 });
 
+test('cache follows the current browser clock after initialization', async (t) => {
+  const cache = new RouteGasCostCache({ ttlMs: 1000 });
+  const planned = route();
+  let now = Date.now() + 31_000;
+  t.mock.method(Date, 'now', () => now);
+  const estimate = await cache.refresh(planned, { client: clientFor(async () => 21_000n) });
+  assert.equal(estimate.fetchedAt, now);
+  assert.equal(estimate.validUntil, now + 1000);
+  assert.equal(cache.view(planned).current, estimate);
+  now += 1001;
+  assert.equal(cache.view(planned).current, undefined);
+  const refreshed = await cache.refresh(planned, { client: clientFor(async () => 21_000n) });
+  assert.equal(refreshed.fetchedAt, now);
+  assert.equal(cache.view(planned).current, refreshed);
+});
+
 test('cache never exposes an expired estimate as current while refreshing', async () => {
   let now = 1000;
   let release: (() => void) | undefined;

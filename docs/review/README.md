@@ -1,28 +1,40 @@
 # Product visual review
 
-## Latest captured gallery
+## Current candidate gallery
 
-[`artifacts/refinement/generated/run-20260927T154147Z/`](../artifacts/refinement/generated/run-20260927T154147Z/)
-contains 66 views and 101 PNG frames at 393×852 mobile and 1440×1000 desktop,
-captured against build `34400ef`. It predates the current gas-tier feature and
-needs a refreshed capture and final screenshot promotion.
+Candidate source commit: `624f725`; all four GitHub checks passed for that
+commit. The gas-clock correction described below is being verified separately.
 
-Candidate `3663bdc` adds saved Standard, Fast, and Rapid gas choices, invalidates
-an open review when the saved tier changes, and requires explicit review of the
-updated quote. Focused fee-tier tests passed 60/60, and TypeScript and lint
-checks passed; full `pnpm verify` is still running. The protected protocol suite
-last passed 4/4 at fork block `26065969`, but the current fee-tier browser gate
-remains pending.
-The latest browser attempt stopped before signing when simulation was
-unavailable; its retry was stopped during warmup for edits. No browser pass is
-claimed. See [release validation](../release-validation.md).
+Local gallery: `artifacts/refinement/generated/run-20260930T015019Z/`
+contains 64 views and 101 PNG frames at 393×852 mobile and 1440×1000 desktop.
+The capture used the local production-placeholder export with read-only gallery
+fixtures. It reported no page or console errors. The gallery is visual evidence
+only: its balances are illustrative, its positions are ready-empty, and it
+does not establish live RPC behavior, transaction submission, or production
+performance. Earlier images remain historical references until the current
+fork-browser proof is complete.
 
-The gallery uses fixture prices, Goldsky responses, and a test-wallet shim. The
-Cloudflare preview lacks RPC environment values. Earlier user-authenticated
-local checks confirmed healthy reads and matching opening/closed History
-events; they do not establish transaction submission or current-candidate
-behavior. Public evidence omits private wallet identity, balances, and
-screenshots.
+The reviewed before-and-after is concrete: the earlier 2026-09-27 gallery
+predates the current presentation; the 2026-09-30 candidate shows a borderless
+Portfolio and Wallet hierarchy with a single address in the header. Trade,
+Earn instant and queued withdrawal, Borrow, and Move each show their primary
+action in the baseline view. Move is centered. Only the optional vault-details
+section extends below Earn's baseline action. Across all 101 frames, 75 Portfolio, Wallet, form, theme,
+and state-lab frames and the 26 remaining requested frames were reviewed.
+
+One Trade 24-hour change is shown as a skeleton because the deterministic
+fixture has no Coinbase ticker value. This is a known fixture limitation and
+does not demonstrate a production loading defect. The only failed request in
+the capture was a localhost prefetch aborted when its browser context closed;
+there were no page or console errors.
+
+The 2026-09-30 Anvil browser run failed because the Gas fee row disappeared
+after the quote-expiry probe. The gas-cost cache had captured the original
+`Date.now` function before the browser fake clock was installed, leading to
+repeated estimate refreshes. The cache default now calls live `Date.now()`;
+focused gas tests pass 18/18. Full `pnpm verify` is rerunning, and the Anvil
+browser proof will rerun afterward. No pass is claimed for the rerun. See
+[release validation](../release-validation.md) for current gate status.
 
 ## Historical references
 

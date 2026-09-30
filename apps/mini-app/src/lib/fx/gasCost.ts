@@ -602,7 +602,10 @@ export class RouteGasCostCache {
       throw new RangeError('gas cache maxEntries must be an integer between 1 and 128');
     }
     this.ttlMs = assertTimeout(options.ttlMs, DEFAULT_TTL_MS, MAX_TTL_MS, 'gas cache TTL');
-    this.now = options.now ?? Date.now;
+    // Resolve the clock when used, just like the review's freshness checks.
+    // Capturing Date.now here would leave a long-lived cache on a different
+    // clock when the browser's clock is replaced after initialization.
+    this.now = options.now ?? (() => Date.now());
   }
 
   view(route: PlannedRoute, feeTierQuote?: GasTierQuote): GasCostCacheView {

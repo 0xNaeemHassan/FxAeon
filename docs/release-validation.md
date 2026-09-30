@@ -3,28 +3,23 @@
 ## Current candidate
 
 - Pull request: [#208](https://github.com/0xNaeemHassan/FxAeon/pull/208)
-- Repository HEAD at this update: `794f965`, with uncommitted refinement changes
-  in the shared working tree. This is an in-progress candidate, not a release
-  approval.
+- Candidate commit: `624f725`. All four GitHub checks passed for this commit.
+  This is not a release approval.
 - The `anvil-all` suite completed successfully with 4/4 protocol, Earn, and
   stress tests, and its manifests were verified. The log is
   [`artifacts/refinement/anvil-all-20260929.log`](../artifacts/refinement/anvil-all-20260929.log).
-- The serial verification attempt recorded in
-  [`artifacts/refinement/verify-20260929-serial.log`](../artifacts/refinement/verify-20260929-serial.log)
-  passed its build and unit checks but had 18 browser failures involving test
-  mocks and disclosure expectations. Those issues were corrected; the
-  corrective browser run passed 26/26 in
-  [`artifacts/refinement/browser-corrective-20260930.log`](../artifacts/refinement/browser-corrective-20260930.log).
-- Full `pnpm verify` completed successfully (exit 0) in
-  [`artifacts/refinement/verify-20260930.log`](../artifacts/refinement/verify-20260930.log).
-  It recorded 495 unit tests passed and 4 fork-dependent skips, completed the
-  production build, passed 165 production browser tests, 6 Borrow harness
-  tests, 24 overlay tests, 5 state-lab tests, and all 14 landing-browser states.
-- The refreshed screenshot gallery completed with 64 views and 101 frames in
-  [`artifacts/refinement/generated/run-20260930T015019Z/`](../artifacts/refinement/generated/run-20260930T015019Z/).
-  The fork-browser rerun is still running; release readiness, current-head CI,
-  visual review, and fork-browser proof remain pending. Public documentation
-  omits private addresses and secrets.
+- The 2026-09-30 Anvil browser run failed because the fee estimate disappeared
+  after the quote-expiry probe. The cache had captured the original `Date.now`
+  function before the browser's fake clock was installed, causing repeated
+  gas-estimate refreshes. `gasCost.ts` now uses a live `() => Date.now()`
+  default, and its focused gas tests pass 18/18.
+- Full `pnpm verify` is rerunning in
+  [`artifacts/refinement/verify-clock-20260930.log`](../artifacts/refinement/verify-clock-20260930.log).
+  The Anvil browser proof will rerun after verification. Neither a release pass
+  nor a merge is claimed.
+- Visual review of all 101 frames in
+  [`artifacts/refinement/generated/run-20260930T015019Z/`](../artifacts/refinement/generated/run-20260930T015019Z/)
+  is complete. Public documentation omits private addresses and secrets.
 - The refinement includes ordered gas estimation, full ordered route
   simulation, compact approval presentation, and pastel code-native landing
   illustrations. Validation of these changes remains in progress.
@@ -54,12 +49,13 @@ candidate. Private balances, wallet identity, and screenshots are omitted.
 
 The current gallery at
 [`artifacts/refinement/generated/run-20260930T015019Z/`](../artifacts/refinement/generated/run-20260930T015019Z/)
-contains 64 views and 101 frames captured from the local production export.
-The capture reported no page or console errors. Its connected test-wallet
-shim, read-only illustrative balances, ready-empty positions, and deterministic
-market data document rendered UI only; they do not establish live balances,
-transaction behavior, or production performance. Final screenshot promotion
-remains pending the fork-browser rerun.
+contains 64 views and 101 frames captured from the local production-placeholder
+export. The capture reported no page or console errors. Its connected
+test-wallet shim, read-only illustrative balances, ready-empty positions, and
+deterministic market data document rendered UI only; they do not establish live
+balances, transaction behavior, or production performance. Visual review is
+complete; earlier images remain historical until the current fork-browser
+proof is complete.
 
 The Cloudflare preview lacks RPC environment values. The earlier authenticated
 local spot-check confirmed healthy reads, but not transaction submission or
