@@ -42,9 +42,10 @@ signing. Position value is not P&L, ROI, health, or liquidation value.
 - `NEXT_PUBLIC_*` settings are public build inputs. Privy secrets,
   `TELEGRAM_BOT_TOKEN`, and the optional gas-oracle key stay in deployment
   secrets; none belongs in the client bundle.
-- CSP, security headers, bundle checks, dependency auditing, and frontend secret
-  scans are part of `pnpm verify` and the release workflow. These checks reduce
-  risk but cannot prove a deployment or dependency is uncompromised.
+- CSP, security headers, bundle checks, dependency auditing, CodeQL analysis,
+  and frontend secret scans are part of the repository's verification and
+  security workflows. These checks reduce risk but cannot prove a deployment
+  or dependency is uncompromised.
 - The optional `/api/gas` Pages Function accepts a fixed read-only Ethereum gas
   oracle request. It has no wallet or protocol authority.
 - Production deployment and Telegram bot synchronization use protected GitHub

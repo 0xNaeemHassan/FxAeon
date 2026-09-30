@@ -4,7 +4,7 @@ FxAeon is unaudited application software that prepares financial transactions in
 
 ## Report a vulnerability privately
 
-Do not publish exploit details, private keys, wallet data, Telegram launch data, Privy tokens, raw calldata, or provider credentials in an issue, chat, or pull request. Use the repository's **Security** tab to create a private GitHub security advisory. Include the affected commit or release, component, reproducible steps, impact, and a proposed mitigation when known.
+Do not publish exploit details, private keys, wallet data, Telegram launch data, Privy tokens, raw calldata, or provider credentials in an issue, chat, or pull request. [Create a private GitHub security advisory](https://github.com/0xNaeemHassan/FxAeon/security/advisories/new) instead. Include the affected commit or release, component, reproducible steps, impact, and a proposed mitigation when known.
 
 Maintainers will acknowledge a valid report, coordinate a fix and disclosure window, and credit the reporter when requested. Do not probe wallets, contracts, or infrastructure that you do not own.
 
