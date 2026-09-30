@@ -5,6 +5,7 @@ import type { PlannedRoute, TransactionExecutionResult, TransactionStepResult } 
 import {
   createRecoveryWalletRefresh,
   createRouteWalletRefresh,
+  createWalletBlockRefreshGate,
   createWalletReadScope,
   includedRouteWalletScope,
   verifiedRecoveryWalletRefreshes,
@@ -233,4 +234,30 @@ test('wallet read scope rejects overlapping and A-B-A stale responses', () => {
   assert.equal(currentA(), true);
   scope.cancel();
   assert.equal(currentA(), false);
+});
+
+test('block refreshes are bounded per wallet and chain, reset on session changes, and contain read errors', async () => {
+  let now = 1_000;
+  const calls: [string, number][] = [];
+  const gate = createWalletBlockRefreshGate(async (address, chainId) => {
+    calls.push([address, chainId]);
+    if (chainId === 8453 && calls.filter(([, chain]) => chain === 8453).length === 1) throw new Error('offline');
+  }, 12_000, () => now);
+
+  await gate.refresh(WALLET, 8453);
+  await gate.refresh(WALLET, 8453);
+  await gate.refresh(WALLET, 1);
+  await gate.refresh(OTHER, 8453);
+  assert.deepEqual(calls, [[WALLET, 8453], [WALLET, 1], [OTHER, 8453]]);
+
+  now += 11_999;
+  await gate.refresh(WALLET, 8453);
+  assert.equal(calls.length, 3, 'the same chain stays inside its throttle window');
+  now += 1;
+  await gate.refresh(WALLET, 8453);
+  assert.equal(calls.length, 4, 'a block refresh resumes at the interval boundary');
+
+  gate.reset();
+  await gate.refresh(WALLET, 8453);
+  assert.equal(calls.length, 5, 'a wallet-session change clears prior throttle state');
 });

@@ -1,9 +1,9 @@
 # Release validation record
 
-## Verified source candidate
+## Historical source and test evidence
 
-Pull request [#208](https://github.com/0xNaeemHassan/FxAeon/pull/208) source commit:
-`ae59fe17a89c22f2728cac381b81f1d6889deb99`.
+The comprehensive CI and local fork evidence below was collected for pull request [#208](https://github.com/0xNaeemHassan/FxAeon/pull/208), source commit:
+`ae59fe17a89c22f2728cac381b81f1d6889deb99`. It records validation of that candidate; it does not claim that the full suite was rerun against the later release.
 
 All four required GitHub checks passed for that source commit. Client CI reported 499 unit tests passed with 4 fork tests skipped, 172 main-browser tests, 7 Borrow tests, 1 Move test, 2 Positions tests, 25 overlay tests, and 5 state-lab tests. The log contained no retry or flaky markers.
 
@@ -27,8 +27,14 @@ The separate Anvil review gallery contains pre-confirm screenshots from actual a
 
 The source evidence and manifests are in the ignored local `artifacts/anvil/browser-proof.json`, `artifacts/anvil/protocol-proof.json`, `artifacts/anvil/earn-proof.json`, and `artifacts/anvil/browser/reviews/run-20260930T041648Z/manifest.json`.
 
+## Latest deployed release
+
+The later release merged as `d66a7f7cd658b32fc947bd70ddefa06bc1bf3a96` after PR [#215](https://github.com/0xNaeemHassan/FxAeon/pull/215) compacted the mobile header while preserving 44px control targets, and PR [#216](https://github.com/0xNaeemHassan/FxAeon/pull/216) made Telegram bot metadata synchronization idempotent. Production [deployment run 36720447137](https://github.com/0xNaeemHassan/FxAeon/actions/runs/36720447137) succeeded: the gas oracle returned a valid public snapshot, expected public wallet configuration was present, and Telegram bot metadata and Mini App menu synchronization succeeded. A separate connected-browser check verified the compact production header. The local release record is `artifacts/refinement/header-compact-20260930/release-verified.json`.
+
+This later deployment evidence does not rerun or extend the PR #208 unit, browser, Anvil, or visual-gallery results. Those remain evidence for commit `ae59fe1`. Neither record establishes live cross-chain delivery on Base, native Telegram wallet handoff, or production performance.
+
 ## Release boundary
 
-The results above describe validation of source commit `ae59fe1`. Current pull-request checks and release status are tracked at [PR #208](https://github.com/0xNaeemHassan/FxAeon/pull/208/checks) and [GitHub Actions](https://github.com/0xNaeemHassan/FxAeon/actions?query=branch%3Afeat%2Funified-product-redesign). These fork and UI results do not establish production deployment, live cross-chain delivery, or production performance.
+The fork and UI results above describe commit `ae59fe1`; the later production checks describe merge `d66a7f7`. They are separate evidence records with different scopes.
 
 See [testing](testing.md), [browser test gates](browser-test-gates.md), and [visual review](review/README.md) for test scope and screenshot provenance.
