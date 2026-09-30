@@ -4,7 +4,7 @@
 
 Candidate source commit: `ae59fe17a89c22f2728cac381b81f1d6889deb99`. All four required GitHub checks passed. Client CI reported 499 unit tests passed (4 fork tests skipped), 172 main-browser tests, 7 Borrow tests, 1 Move test, 2 Positions tests, 25 overlay tests, and 5 state-lab tests, with no retry or flaky markers.
 
-The local Anvil suite passed 4/4 protocol, Earn, and stress tests without skips. The Anvil browser proof passed, its redacted manifest was verified, and the disposable fork snapshot was reverted. See [release validation](../release-validation.md) for covered flows and release boundaries. A docs-only follow-up commit is being prepared; its CI remains pending.
+The local Anvil suite passed 4/4 protocol, Earn, and stress tests without skips. The Anvil browser proof passed, its redacted manifest was verified, and the disposable fork snapshot was reverted. Browser coverage includes fxSAVE deposit execution and instant/after-cooldown withdrawal review with selected-share calldata; actual fxSAVE withdrawal and claim execution are covered by the separate Earn Anvil suite. See [release validation](../release-validation.md) for covered flows and evidence boundaries. Current check and release status is tracked at [PR #208](https://github.com/0xNaeemHassan/FxAeon/pull/208/checks) and [GitHub Actions](https://github.com/0xNaeemHassan/FxAeon/actions?query=branch%3Afeat%2Funified-product-redesign).
 
 ## Product gallery
 
@@ -23,7 +23,7 @@ The portfolio and wallet views use a borderless hierarchy with one address in th
 
 ## Actual pre-confirm review captures
 
-A separate gallery was captured from actual app flows against a disposable local Ethereum mainnet fork. Captures are 393×852 at scrollTop 0 with no overflow reported, taken before requesting a wallet signature. Trade, Borrow, Earn, and all four position-close review screens were manually inspected. The captures show only an abbreviated disposable Anvil account; they contain no private wallet identity or secrets.
+A separate gallery was captured from actual app flows against a disposable local Ethereum mainnet fork. The three linked examples are baseline captures at 393×852 and scrollTop 0 with no overflow reported; the full manifest also records scrolled review coverage. Screenshots were taken before requesting a wallet signature. Trade, Borrow, Earn, and all four position-close review screens were manually inspected. The captures show only an abbreviated disposable Anvil account; they contain no private wallet identity or secrets.
 
 - [ETH long close review](assets/eth-long-close-review-anvil-20260930-mobile.png)
 - [Earn instant withdrawal review](assets/earn-instant-withdrawal-review-anvil-20260930-mobile.png)
