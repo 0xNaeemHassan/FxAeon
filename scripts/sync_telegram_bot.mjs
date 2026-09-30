@@ -126,14 +126,16 @@ export async function syncTelegramBot({
   };
   const requestOptions = { fetchImpl, timeoutMs };
   const request = (method, payload) => callBotApi(token, method, payload, requestOptions);
-  const verify = async (writeMethod, writePayload, readMethod, expected, {
+  const ensure = async (writeMethod, writePayload, readMethod, expected, {
     compare = matches,
     attempts = 1,
     retryDelayMs = 0,
     mismatchSummary = () => '',
   } = {}) => {
+    let actual = await request(readMethod, {});
+    if (compare(expected, actual)) return;
+
     await request(writeMethod, writePayload);
-    let actual;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       actual = await request(readMethod, {});
       if (compare(expected, actual)) return;
@@ -144,20 +146,20 @@ export async function syncTelegramBot({
     throw new Error(`Telegram Bot API ${readMethod} readback mismatch${mismatchSummary(expected, actual)}`);
   };
 
-  await verify('setMyName', { name: metadata.name }, 'getMyName', { name: metadata.name });
-  await verify('setMyShortDescription', { short_description: metadata.shortDescription }, 'getMyShortDescription', { short_description: metadata.shortDescription });
-  await verify('setMyDescription', { description: metadata.description }, 'getMyDescription', { description: metadata.description });
+  await ensure('setMyName', { name: metadata.name }, 'getMyName', { name: metadata.name });
+  await ensure('setMyShortDescription', { short_description: metadata.shortDescription }, 'getMyShortDescription', { short_description: metadata.shortDescription });
+  await ensure('setMyDescription', { description: metadata.description }, 'getMyDescription', { description: metadata.description });
 
   // FxAeon has no Telegram command handler. An empty default list removes
   // stale command suggestions instead of advertising commands that do nothing.
-  await verify('setMyCommands', { commands: [] }, 'getMyCommands', []);
+  await ensure('setMyCommands', { commands: [] }, 'getMyCommands', []);
 
   const menuButton = {
     type: 'web_app',
     text: 'Open FxAeon',
     web_app: { url: validatedMenuUrl },
   };
-  await verify('setChatMenuButton', { menu_button: menuButton }, 'getChatMenuButton', menuButton, {
+  await ensure('setChatMenuButton', { menu_button: menuButton }, 'getChatMenuButton', menuButton, {
     compare: matchesMenuButton,
     attempts: MENU_READBACK_ATTEMPTS,
     retryDelayMs: MENU_READBACK_DELAY_MS,
