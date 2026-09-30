@@ -12,7 +12,8 @@ import {
   type SendTransactionModalUIOptions,
 } from '@privy-io/react-auth';
 import { assertLocalForkRpcUrl } from '@/lib/fx/config';
-import { getInitData, isTelegramLaunchContext, restoreTelegramLaunchHash } from '@/lib/telegram';
+import { getInitData, isTelegramLaunchContext } from '@/lib/telegram';
+import { useTelegramReconnect } from '@/lib/wallet/telegramReconnect';
 import { switchBrowserChain as switchBrowserChainWithConfig } from './switchBrowserChain';
 import { eip6963FocusTrapDestination, getDiscoveredEip6963Providers, recordEip6963Announcement, selectEip6963Provider, shouldBindEip6963ProviderEvents, shouldPromptEip6963Provider, waitForWalletProvider, type DiscoveredEip6963Provider, type Eip6963Announcement } from './eip6963';
 
@@ -215,6 +216,7 @@ async function switchBrowserChain(provider: Eip1193Provider, chainId: FxChainId)
  */
 function usePrivyWalletAdapter(): FxPrivyWallet {
   const { ready, authenticated } = usePrivy();
+  const reconnectTelegram = useTelegramReconnect();
   const { logout } = useLogout();
   const [selectedAddress, setSelectedAddress] = useState<string>();
   const [connectionVersion, setConnectionVersion] = useState(0);
@@ -362,16 +364,16 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
       return;
     }
     if (isTelegramLaunchContext()) {
-      // Restore signed launch data when it is already available. A missing or
-      // late Telegram bridge must still fall through to a usable Privy modal;
-      // never make a financial CTA wait for bridge hydration.
-      if (getInitData()) restoreTelegramLaunchHash();
       if (authenticatedRef.current && isEmbedded(selectedWalletRef.current)) return;
       if (authenticatedRef.current) {
         await connectExternalWallet();
         return;
       }
-      await connectWithPrivyLogin();
+      // Generic login opens Telegram's legacy web widget and can copy the
+      // signed launch hash into its return URL. Reinitialize seamless auth
+      // instead; signed data is consumed by Privy at the provider boundary.
+      if (!getInitData()) throw new Error('Reopen FxAeon from Telegram to sign in again.');
+      reconnectTelegram();
       return;
     }
     if (authenticated) {
@@ -379,13 +381,14 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
       return;
     }
     await connectWithPrivyLogin();
-  }, [authenticated, connectExternalWallet, connectWithPrivyLogin]);
+  }, [authenticated, connectExternalWallet, connectWithPrivyLogin, reconnectTelegram]);
 
   const disconnect = useCallback(async () => {
     const pending = connectPendingRef.current;
     connectPendingRef.current = null;
     pending?.reject(new Error('Wallet connection was cancelled.'));
     await logout();
+    authenticatedRef.current = false;
     setSelectedAddress(undefined);
   }, [logout]);
 

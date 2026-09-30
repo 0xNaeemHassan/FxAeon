@@ -26,7 +26,13 @@ const mocks: Record<string, string> = {
       return { ready: h.ready, wallets: h.wallets };
     }
     export function useSendTransaction() { return { sendTransaction: async () => ({ hash: '0x' + '1'.repeat(64) }) }; }
-    export function useLogout() { return { logout: async () => {} }; }
+    export function useLogout() { const h = globalThis.__privyHarness; return { logout: async () => {
+      h.logoutCalls += 1;
+      h.authenticated = false;
+      h.wallets = [];
+      h.adapterRerender?.();
+      h.rerender?.();
+    } }; }
     export function useLogin(callbacks) { const h = globalThis.__privyHarness; h.loginCallbacks = callbacks; return { login: (options) => { h.loginCalls.push(options ?? null); } }; }
     export function useConnectWallet(callbacks) { const h = globalThis.__privyHarness; h.walletCallbacks = callbacks; return { connectWallet: () => { h.connectCalls += 1; } }; }
   `,
@@ -34,6 +40,26 @@ const mocks: Record<string, string> = {
     export const getInitData = () => globalThis.__privyHarness?.initData ?? '';
     export const isTelegramLaunchContext = () => Boolean(globalThis.__privyHarness?.telegram);
     export const restoreTelegramLaunchHash = () => {};
+  `,
+  '@/lib/wallet/telegramReconnect': `
+    export function useTelegramReconnect() {
+      const h = globalThis.__privyHarness;
+      return () => {
+        h.telegramReconnectCalls += 1;
+        // Model the new PrivyProvider mount completing its native Telegram
+        // seamless-auth startup; never route through Privy's login widget.
+        if (h.initData) {
+          h.authenticated = true;
+          h.wallets = [{
+            address: '0x00000000000000000000000000000000000000cc',
+            type: 'ethereum', walletClientType: 'privy-v2', chainId: 'eip155:1',
+            getEthereumProvider: async () => ({ request: async () => '0x1' }), switchChain: async () => {},
+          }];
+          h.adapterRerender?.();
+          h.rerender?.();
+        }
+      };
+    }
   `,
   '@/lib/fx/config': `export const assertLocalForkRpcUrl = (url) => url;`,
   './switchBrowserChain': `export const switchBrowserChain = async () => {};`,
@@ -181,12 +207,55 @@ test.describe('Privy wallet bridge isolated callbacks', () => {
     await expect.poll(() => page.evaluate(() => (globalThis as any).__privyHarness.connectCalls)).toBe(1);
   });
 
-  test('Telegram missing launch data falls back to the same full login modal', async ({ page }) => {
+  test('Telegram missing launch data asks the user to reopen Telegram without starting OAuth', async ({ page }) => {
     await openHarness(page);
     await setState(page, { telegram: true, initData: '' });
     await page.getByRole('button', { name: 'Connect', exact: true }).click();
-    await expect.poll(() => page.evaluate(() => (globalThis as any).__privyHarness.loginCalls.length)).toBe(1);
-    expect(await page.evaluate(() => (globalThis as any).__privyHarness.loginCalls[0])).toBeNull();
+    await expect.poll(() => result(page)).toMatch(/^rejected:.*(?:Telegram|reopen|open)/i);
+    const calls = await page.evaluate(() => {
+      const h = (globalThis as any).__privyHarness;
+      return { login: h.loginCalls.length, external: h.connectCalls, reconnect: h.telegramReconnectCalls, href: location.href };
+    });
+    expect(calls.login).toBe(0);
+    expect(calls.external).toBe(0);
+    expect(calls.reconnect).toBe(0);
+    expect(calls.href).not.toMatch(/tgWebAppData=/i);
+  });
+
+  test('Telegram disconnect remains explicit and reconnect restarts native auth without OAuth or external selection', async ({ page }) => {
+    await openHarness(page);
+    await setState(page, {
+      telegram: true,
+      initData: 'synthetic-launch-data-marker-do-not-forward',
+      authenticated: true,
+      walletClientType: 'privy-v2',
+      walletAddress: '0x00000000000000000000000000000000000000cc',
+    });
+    await expect(page.locator('[data-address]')).toHaveAttribute('data-address', '0x00000000000000000000000000000000000000cc');
+
+    await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
+    await expect(page.locator('main')).toHaveAttribute('data-authenticated', 'false');
+    await expect(page.locator('[data-address]')).toHaveAttribute('data-address', '');
+    expect(await page.evaluate(() => {
+      const h = (globalThis as any).__privyHarness;
+      return { logout: h.logoutCalls, login: h.loginCalls.length, external: h.connectCalls, reconnect: h.telegramReconnectCalls };
+    })).toEqual({ logout: 1, login: 0, external: 0, reconnect: 0 });
+
+    await page.getByRole('button', { name: 'Connect', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => (globalThis as any).__privyHarness.telegramReconnectCalls)).toBe(1);
+    await expect.poll(() => result(page)).toBe('resolved');
+    await expect(page.locator('main')).toHaveAttribute('data-authenticated', 'true');
+    await expect(page.locator('[data-address]')).toHaveAttribute('data-address', '0x00000000000000000000000000000000000000cc');
+    const handoff = await page.evaluate(() => {
+      const h = (globalThis as any).__privyHarness;
+      return { login: h.loginCalls.length, external: h.connectCalls, href: location.href };
+    });
+    expect(handoff.login).toBe(0);
+    expect(handoff.external).toBe(0);
+    // The launch payload lives only in the Telegram bridge fixture. It is not
+    // copied into the document URL or passed as a login/return-url option.
+    expect(handoff.href).not.toContain('synthetic-launch-data-marker-do-not-forward');
+    expect(handoff.href).not.toMatch(/tgWebAppData=/i);
   });
 
   test('Telegram seamless embedded auth does not open an external selector', async ({ page }) => {

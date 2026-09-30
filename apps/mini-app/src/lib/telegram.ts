@@ -227,23 +227,26 @@ export function getInitData(): string {
  * half DOES complete server-side).
  *
  * `WebApp.initData` is the same signed payload, available on every page, so
- * we rebuild the hash from it right before the provider mounts. The SDK
- * consumes and cleans the hash; this is idempotent and a no-op outside
- * Telegram or on keyboard launches (empty initData).
+ * we rebuild the hash immediately before the provider initializes (including
+ * an explicit reconnect). Never restore it before opening a web login modal:
+ * that modal can include location.href in its external return URL. The SDK
+ * consumes and cleans the hash. False means no valid hand-off was prepared.
  */
-export function restoreTelegramLaunchHash(): void {
-  if (typeof window === 'undefined') return;
+export function restoreTelegramLaunchHash(): boolean {
+  if (typeof window === 'undefined') return false;
   const initData = getWebApp()?.initData;
-  if (!initData) return;
-  if (window.location.hash.startsWith('#tgWebAppData')) return;
+  if (!initData) return false;
+  const launchHash = `#tgWebAppData=${encodeURIComponent(initData)}`;
+  if (window.location.hash === launchHash) return true;
   try {
     window.history.replaceState(
       window.history.state,
       '',
-      `${window.location.pathname}${window.location.search}#tgWebAppData=${encodeURIComponent(initData)}`
+      `${window.location.pathname}${window.location.search}${launchHash}`
     );
+    return true;
   } catch {
-    /* best-effort — worst case the flow falls back to explicit sign-in */
+    return false;
   }
 }
 
