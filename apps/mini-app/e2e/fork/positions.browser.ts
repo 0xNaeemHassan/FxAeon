@@ -1587,7 +1587,7 @@ async function runProof(captureStage: string) {
       await closeUsdcOption.click();
       await ensureFormAdvancedDetailsOpen();
       await page.getByLabel('Slippage tolerance percentage').fill('1');
-      const closeActionName = 'Close position';
+      const closeActionName = `Review Close ${position.market} ${position.side} position`;
       await expect(page.getByRole('button', { name: closeActionName, exact: true })).toBeVisible({ timeout: 180_000 });
       assert.equal(submitted.length, signedBefore, 'close details must never request a signature');
       await page.screenshot({ path: resolve(artifactRoot, `${position.market}-${position.side}-close-review.png`), fullPage: true });
