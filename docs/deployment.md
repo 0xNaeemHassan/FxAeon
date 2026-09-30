@@ -30,7 +30,7 @@ protected values to GitHub Actions for the release workflow:
 | `TELEGRAM_BOT_TOKEN` | Secret | Bot metadata and menu synchronization; never a `NEXT_PUBLIC_*` value |
 | `ETHERSCAN_API_KEY` | Optional secret | Read-only `/api/gas` Pages Function binding; when absent, the app uses its bounded RPC gas estimate fallback |
 | `LIVE_GAS_ORACLE_URL` | GitHub Actions environment value | URL the release workflow probes after deploying; it does not configure the Pages Function or replace `ETHERSCAN_API_KEY` |
-| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | Secrets | Set or verify the Pages gas-oracle secret |
+| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | Required secrets | Upload the verified Pages artifact and sync the optional gas-oracle secret; token requires Pages Edit on the deployment account |
 
 The `/api/gas` response uses the same `503 {"error":"gas oracle unavailable"}`
 for a missing `ETHERSCAN_API_KEY` binding and an unavailable Etherscan upstream.
@@ -50,20 +50,36 @@ defaults in its source when no Telegram URL is set.
 
 ## Release workflow
 
-`.github/workflows/deploy-mini-app.yml` runs on `main` or manual dispatch. It
-validates production inputs, runs `pnpm verify`, builds the static app, waits
-for the commit-matched Cloudflare Pages check for project `fxaeon`, verifies
-the optional live gas-oracle binding when its secret is configured, verifies the
-public Privy configuration, then synchronizes the Telegram bot metadata and
-default Mini App menu. A Telegram sync does not
+Before enabling the release workflow, turn off automatic production Git
+deployments for the `fxaeon` Pages project and ensure no main-branch build is
+still running. The Git integration can remain available for isolated preview
+deployments. This prevents a provider build from publishing over the artifact
+uploaded by GitHub Actions.
+
+`.github/workflows/deploy-mini-app.yml` runs for pushes to `main` or manual
+dispatch. Manual dispatch must target the latest `main` commit. The workflow
+validates production inputs, runs `pnpm verify`, builds the
+production static app, checks the built artifact, stamps its revision, and
+uploads `apps/mini-app/dist` with Wrangler Pages to project `fxaeon` on branch
+`main`. Immediately before uploading, it checks that the commit is still the
+remote `main` head. It verifies the deployed revision before checking the optional live
+gas-oracle binding, the public Privy configuration, and synchronizing the
+Telegram bot metadata and default Mini App menu. A Telegram sync does not
 configure the native Main Mini App or profile launch button; those remain
 BotFather settings.
 
-Cloudflare Pages Git integration publishes the static output. The release
-workflow may use Wrangler Pages commands to bind the gas-oracle secret or
-republish the already-verified artifact; it does not deploy a Worker. The
-standalone landing build is tested in CI but is deployed by its separate Pages
-project.
+The upload uses the existing Pages project, so its custom domains and runtime
+bindings remain attached to that project. Wrangler uploads the repository's
+`functions/` directory along with the static output, including the `/api/gas`
+Pages Function; generated `_headers` and CSP files are part of the build output.
+The release workflow deploys the prebuilt artifact and does not run a Cloudflare
+build or deploy a Worker. The standalone landing build is tested in CI and is
+deployed by its separate Pages project.
+
+If production needs a rollback, select a known-good deployment in the
+Cloudflare dashboard and roll back to it, then make a corrective commit on
+`main` so the repository and the next workflow deployment return to the same
+revision.
 
 Protected fork testing is separate from deployment. It uses a disposable local
 Anvil fork and a protected Ethereum RPC secret; see

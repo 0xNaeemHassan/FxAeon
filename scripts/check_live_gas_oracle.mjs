@@ -98,7 +98,7 @@ async function main() {
   await writeGitHubOutput(result.configured);
   console.log(result.configured
     ? 'PASS: live gas-oracle endpoint returned a valid public snapshot.'
-    : 'The Pages Function returned its unavailable response (missing binding or upstream failure); the verified-artifact redeploy step will run if the deployment secret was synced.');
+    : 'The Pages Function returned its unavailable response (missing binding or upstream failure); the app uses its bounded RPC fallback when the optional oracle is unavailable.');
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

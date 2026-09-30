@@ -200,10 +200,11 @@ test('explicit Telegram menu URLs are validated before any API request', async (
 });
 
 test('deployment sync uses only the CI secret after Pages deploy', () => {
-  const deployIndex = workflow.indexOf('Wait for Cloudflare Pages deployment');
+  const deployIndex = workflow.indexOf('Deploy verified production artifact');
+  const revisionVerifyIndex = workflow.indexOf('Verify deployed revision');
   const liveConfigIndex = workflow.indexOf('Verify live wallet configuration');
   const syncIndex = workflow.indexOf('Sync Telegram bot metadata and menu');
-  assert.ok(deployIndex >= 0 && liveConfigIndex > deployIndex && syncIndex > liveConfigIndex);
+  assert.ok(deployIndex >= 0 && revisionVerifyIndex > deployIndex && liveConfigIndex > revisionVerifyIndex && syncIndex > liveConfigIndex);
   assert.match(workflow.slice(syncIndex), /TELEGRAM_BOT_TOKEN:\s*\$\{\{\s*secrets\.TELEGRAM_BOT_TOKEN\s*\}\}/);
   assert.match(workflow.slice(syncIndex), /TELEGRAM_WEB_APP_URL:\s*https:\/\/fxaeon\.com\//);
   assert.doesNotMatch(workflow, /NEXT_PUBLIC_TELEGRAM_BOT_TOKEN/);

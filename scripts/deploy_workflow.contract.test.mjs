@@ -17,19 +17,22 @@ function step(name) {
 }
 
 test('production validation, deterministic verification, and deployment build are ordered', () => {
-  const secretSync = workflow.indexOf('Sync production Pages gas-oracle secret');
   const validation = workflow.indexOf('run: pnpm verify:production-env');
   const verification = workflow.indexOf('run: pnpm verify\n');
   const productionBuild = workflow.indexOf('run: pnpm build\n');
-  const wait = workflow.indexOf('Wait for Cloudflare Pages deployment');
+  const artifactCheck = workflow.indexOf('Check production artifact');
+  const stamp = workflow.indexOf('Stamp production revision');
+  const secretSync = workflow.indexOf('Sync production Pages gas-oracle secret');
+  const deploy = workflow.indexOf('Deploy verified production artifact');
+  const revisionVerify = workflow.indexOf('Verify deployed revision');
   const gasCheck = workflow.indexOf('Check live gas-oracle binding');
-  const gasRedeploy = workflow.indexOf('Redeploy verified artifact after syncing the Pages secret');
   const gasVerify = workflow.indexOf('Verify live gas oracle');
   const liveConfig = workflow.indexOf('Verify live wallet configuration');
   const sync = workflow.indexOf('Sync Telegram bot metadata and menu');
-  assert.ok(secretSync >= 0 && secretSync < validation && validation < verification);
-  assert.ok(verification < productionBuild && productionBuild < wait);
-  assert.ok(wait < gasCheck && gasCheck < gasRedeploy && gasRedeploy < gasVerify);
+  assert.ok(validation >= 0 && validation < verification);
+  assert.ok(verification < productionBuild && productionBuild < artifactCheck);
+  assert.ok(artifactCheck < stamp && stamp < secretSync && secretSync < deploy);
+  assert.ok(deploy < revisionVerify && revisionVerify < gasCheck && gasCheck < gasVerify);
   assert.ok(gasVerify < liveConfig && liveConfig < sync);
 });
 
@@ -53,16 +56,33 @@ test('the deployed artifact is rebuilt with every required production public var
   }
 });
 
-test('native deployment remains SHA-gated and Pages credentials are limited to secret sync and fallback upload', () => {
-  assert.match(workflow, /permissions:\s*\n\s+contents: read\s*\n\s+checks: read/);
+test('the verified production artifact is revision-stamped and uploaded only for the current main head', () => {
+  assert.match(workflow, /permissions:\s*\n\s+contents: read\s*\n(?!\s+checks:)/);
   assert.match(workflow, /jobs:\s*\n\s+deploy:\s*\n\s+name: Build and deploy Cloudflare Pages\s*\n\s+if: github\.ref == 'refs\/heads\/main'/);
-  const wait = step('Wait for Cloudflare Pages deployment');
-  assert.match(wait, /run: node scripts\/wait_for_cloudflare_check\.mjs/);
-  assert.match(wait, /GITHUB_TOKEN:\s*\$\{\{\s*github\.token\s*\}\}/);
-  assert.match(wait, /GITHUB_REPOSITORY:\s*\$\{\{\s*github\.repository\s*\}\}/);
-  assert.match(wait, /GITHUB_SHA:\s*\$\{\{\s*github\.sha\s*\}\}/);
-  assert.match(wait, /CLOUDFLARE_CHECK_NAME:\s*["']?Cloudflare Pages["']?/);
-  assert.match(wait, /CLOUDFLARE_PAGES_PROJECT:\s*fxaeon/);
+  assert.doesNotMatch(workflow, /wait_for_cloudflare_check|checks: read|github\.token/);
+
+  const artifactCheck = step('Check production artifact');
+  assert.match(artifactCheck, /verify_frontend_secrets\.mjs --built/);
+  assert.match(artifactCheck, /pnpm check:bundle/);
+
+  const stamp = step('Stamp production revision');
+  assert.match(stamp, /node scripts\/release_revision\.mjs write "\$GITHUB_SHA"/);
+  assert.match(stamp, /GITHUB_SHA:\s*\$\{\{\s*github\.sha\s*\}\}/);
+
+  const deploy = step('Deploy verified production artifact');
+  assert.match(deploy, /git ls-remote origin refs\/heads\/main/);
+  assert.match(deploy, /\$GITHUB_SHA/);
+  assert.match(deploy, /wrangler pages deploy apps\/mini-app\/dist --project-name=fxaeon --branch=main --commit-hash=/);
+  assert.match(deploy, /CLOUDFLARE_API_TOKEN:\s*\$\{\{\s*secrets\.CLOUDFLARE_API_TOKEN\s*\}\}/);
+  assert.match(deploy, /CLOUDFLARE_ACCOUNT_ID:\s*\$\{\{\s*secrets\.CLOUDFLARE_ACCOUNT_ID\s*\}\}/);
+  assert.match(deploy, /WRANGLER_SEND_METRICS:\s*['"]?false/);
+  assert.doesNotMatch(deploy, /working-directory:/);
+  assert.match(deploy, /apps\/mini-app\/dist/);
+
+  const revisionVerify = step('Verify deployed revision');
+  assert.match(revisionVerify, /node scripts\/release_revision\.mjs verify "\$GITHUB_SHA"/);
+  assert.match(revisionVerify, /GITHUB_SHA:\s*\$\{\{\s*github\.sha\s*\}\}/);
+  assert.match(workflow, /concurrency:\s*\n\s+group: fxaeon-production\s*\n\s+cancel-in-progress: false/);
 
   const secretSync = step('Sync production Pages gas-oracle secret');
   assert.match(secretSync, /id: gas_secret/);
@@ -80,14 +100,7 @@ test('native deployment remains SHA-gated and Pages credentials are limited to s
   const gasCheck = step('Check live gas-oracle binding');
   assert.match(gasCheck, /run: node scripts\/check_live_gas_oracle\.mjs/);
   assert.match(gasCheck, /LIVE_GAS_ORACLE_URL:\s*https:\/\/fxaeon\.com\/api\/gas/);
-  const gasRedeploy = step('Redeploy verified artifact after syncing the Pages secret');
-  assert.match(gasRedeploy, /if: steps\.gas_secret\.outputs\.configured == 'true' && steps\.gas_oracle\.outputs\.configured == 'false'/);
-  assert.match(gasRedeploy, /wrangler pages deploy apps\/mini-app\/dist --project-name=fxaeon --branch=main --commit-hash=/);
-  assert.match(gasRedeploy, /CLOUDFLARE_API_TOKEN:\s*\$\{\{\s*secrets\.CLOUDFLARE_API_TOKEN\s*\}\}/);
-  assert.match(gasRedeploy, /CLOUDFLARE_ACCOUNT_ID:\s*\$\{\{\s*secrets\.CLOUDFLARE_ACCOUNT_ID\s*\}\}/);
-  assert.match(gasRedeploy, /WRANGLER_SEND_METRICS:\s*['"]?false/);
-  assert.doesNotMatch(gasRedeploy, /working-directory:/);
-  assert.match(gasRedeploy, /apps\/mini-app\/dist/);
+  assert.doesNotMatch(workflow, /Redeploy verified artifact after syncing the Pages secret/);
   assert.match(pagesConfig, /^name = "fxaeon"$/m);
   assert.match(pagesConfig, /^pages_build_output_dir = "apps\/mini-app\/dist"$/m);
   assert.match(gasFunction, /export const onRequestGet/);
