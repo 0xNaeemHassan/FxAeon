@@ -34,7 +34,7 @@
   --tg-viewport-stable-height: 100dvh;
   --shell-max-width: 680px;
   --shell-inline-padding: 16px;
-  --shell-top-padding: calc(env(safe-area-inset-top, 0px) + 12px);
+  --shell-top-padding: 4px;
   --shell-bottom-padding: 0px;
   --header-height: 52px;
   /* Keep the first actionable surface close to the shell chrome. Product
@@ -304,6 +304,17 @@ summary:focus-visible {
 /* Keep scrolling and focus navigation; omit scrollbar chrome in the app. */
 :where(html, body, .app-shell, .app-shell *, [role='dialog'], [role='dialog'] *) {
   scrollbar-width: none;
+}
+
+/* Ordinary browser viewports already exclude their host chrome. Respect the
+   device inset only when the app owns the fullscreen viewport or Telegram
+   reports its WebView host. */
+:root[data-tma-safe-area='true'] {
+  --shell-top-padding: max(env(safe-area-inset-top, 0px), 4px);
+}
+
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  :root { --shell-top-padding: max(env(safe-area-inset-top, 0px), 4px); }
 }
 ::-webkit-scrollbar { display: none; width: 0; height: 0; }
 
@@ -1436,7 +1447,6 @@ input[type='range'].lever::-moz-range-thumb {
   :root {
     --shell-max-width: 1344px;
     --shell-inline-padding: 32px;
-    --shell-top-padding: 20px;
     /* Desktop has no fixed bottom navigation, so reserve no phantom rail. */
     --shell-bottom-padding: 0px;
     --header-gap: 14px;
@@ -1483,7 +1493,6 @@ input[type='range'].lever::-moz-range-thumb {
 
 @media (max-width: 640px) {
   :root {
-    --shell-top-padding: calc(env(safe-area-inset-top, 0px) + 8px);
     --header-height: 48px;
     --header-gap: 8px;
   }

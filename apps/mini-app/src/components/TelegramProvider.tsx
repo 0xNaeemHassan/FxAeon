@@ -82,6 +82,12 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     applyTheme(getSavedTheme());
     let disposed = false;
+    const root = document.documentElement;
+    const previousSafeAreaMarker = root.getAttribute('data-tma-safe-area');
+    const markTelegramSafeArea = () => {
+      if (isTMA()) root.setAttribute('data-tma-safe-area', 'true');
+    };
+    markTelegramSafeArea();
     let unbindViewport = bindViewportHeight();
     let cleanupTheme = () => {};
 
@@ -91,6 +97,7 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
 
       unbindViewport();
       initTelegram();
+      markTelegramSafeArea();
       applyThemeParams();
       applyTheme(getSavedTheme());
       unbindViewport = bindViewportHeight();
@@ -113,6 +120,8 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
       disposed = true;
       unbindViewport();
       cleanupTheme();
+      if (previousSafeAreaMarker === null) root.removeAttribute('data-tma-safe-area');
+      else root.setAttribute('data-tma-safe-area', previousSafeAreaMarker);
     };
   }, []);
 
