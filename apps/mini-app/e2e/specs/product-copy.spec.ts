@@ -42,7 +42,9 @@ test.describe('product copy and session visibility', () => {
       await expect(account).toBeVisible();
       await account.click();
       const profile = page.getByRole('dialog');
-      await expect(profile.getByRole('heading', { level: 2 })).toHaveText('0x930f…98b9');
+      // An asynchronous balance error may add its own section heading.
+      // Assert the wallet identity without matching those unrelated headings.
+      await expect(profile.getByRole('heading', { level: 2, name: '0x930f…98b9', exact: true })).toBeVisible();
       await expect(profile.getByRole('link', { name: 'View on Etherscan' })).toHaveAttribute('href', /etherscan\.io\/address\/0x930f/i);
       await profile.getByRole('button', { name: 'Close wallet profile' }).click();
       const changeWallet = page.locator('details').filter({ has: page.locator('summary', { hasText: 'Change wallet' }) });

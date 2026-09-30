@@ -443,7 +443,7 @@ async function runProof(captureStage: string) {
       if (group && query.startsWith('queryWalletPositionOrders{')) {
         const match = query.match(/^queryWalletPositionOrders\{orders\(first:5,skip:(0|[1-9][0-9]*),where:\{positionId_in:\[([0-9,\"]*)\],type_in:\["Open","Close"\]\},orderBy:blockNumber,orderDirection:desc\)\{idtypehashblockNumbertimestamp\}\}$/);
         assert.ok(!url.search && !url.hash && route.request().method() === 'POST'
-          && Object.keys(body).length === 1 && match && queryWallet, 'unexpected indexer order query');
+          && Object.keys(body).length === 1 && match, 'unexpected indexer order query');
         const queriedIds = [...match[2].matchAll(/"([1-9][0-9]{0,15})"/g)].map(value => Number(value[1]));
         assert.ok(queriedIds.length > 0 && queriedIds.every(id => candidates.some(candidate => candidate.pool === group.pool && candidate.positionId === id)),
           'indexer order query must refer only to positions discovered by this fork proof');
@@ -464,7 +464,9 @@ async function runProof(captureStage: string) {
           for (const log of receipt.logs) {
             const event = decodePositionRouterEvent(log);
             if (!event || event.pool.toLowerCase() !== group.pool.toLowerCase()) continue;
-            if (!positionRouterEventMatchesRecipient(event, log, receipt.logs, queryWallet)) continue;
+            // Orders are scoped by the already-discovered position IDs, not
+            // by a wallet field. Return real matching events just as the
+            // indexer does; the app verifies their wallet/receipt provenance.
             const positionId = Number(event.positionId);
             if (!queriedIds.includes(positionId)) continue;
             orders.push({ id: `${positionId}_${hash}`, type: event.operation === 'open' ? 'Open' : 'Close',
@@ -1491,8 +1493,8 @@ async function runProof(captureStage: string) {
         const fxSaveSection = page.locator('section[aria-labelledby="portfolio-earn-heading"]');
         await expect(fxSaveSection).toHaveCount(1, { timeout: 180_000 });
         const fxSaveDisclosure = fxSaveSection.locator('details').first();
-        await expect(fxSaveDisclosure.locator('summary')).toContainText('fxSAVE');
-        await fxSaveDisclosure.locator('summary').click();
+        await expect(fxSaveDisclosure.locator(':scope > summary')).toContainText('fxSAVE');
+        await fxSaveDisclosure.locator(':scope > summary').click();
         await expect(fxSaveDisclosure.getByRole('link', { name: 'Deposit', exact: true })).toBeVisible();
         await page.screenshot({ path: resolve(artifactRoot, 'portfolio-expanded-mobile.png'), fullPage: true });
       }
