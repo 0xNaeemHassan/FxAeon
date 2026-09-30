@@ -10,15 +10,16 @@ npm run build
 npm run serve
 ```
 
-The build copies the static site to `dist/`; the server previews it at `http://localhost:4173` (or `PORT`). Any static host can deploy the contents of `dist/`.
+The build copies the static site to `dist/`; the server previews it at `http://localhost:4173` (or `PORT`). Any static host can deploy the contents of `dist/`. Build-time assets are checked in, so building needs Node.js but no installed package dependencies. The five static feature icons are generated from the app's pinned Lucide components and license; the landing test suite verifies them against those workspace dependencies.
 
 From the repository root, use `pnpm build:landing` and `pnpm preview:landing`.
 For Cloudflare Pages set the root directory to `apps/landing`, build command
 to `node build.mjs`, and output directory to `dist`. Attach only `fxaeon.xyz`
 to this project; `fxaeon.com` belongs to the financial app project.
 The Wrangler config pins the Pages build image to Node `22.23.2` and sets
-`SKIP_DEPENDENCY_INSTALL=true`; keep these build controls in `wrangler.toml`
-instead of duplicating them in dashboard variables. Set the Pages build watch
+`SKIP_DEPENDENCY_INSTALL=true`; the standalone build uses the checked-in SVGs
+and must remain independent of `node_modules`. Keep these build controls in
+`wrangler.toml` instead of duplicating them in dashboard variables. Set the Pages build watch
 include path to `apps/landing/*` (leave excludes empty) so changes elsewhere in
 the monorepo do not start another landing build.
 

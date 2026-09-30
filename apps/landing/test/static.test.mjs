@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
-import { access, readFile } from 'node:fs/promises';
+import { access, cp, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
 import { test } from 'node:test';
-import { resolve } from 'node:path';
+import { relative, resolve, sep } from 'node:path';
 import { escapeAttribute, telegramLauncher } from '../config.mjs';
 
 const root = resolve(import.meta.dirname, '..');
@@ -87,6 +90,54 @@ test('landing 404 is branded, nonindexable, and links home', async () => {
   assert.match(missing, /<h1>Page not found<\/h1>/);
   assert.match(missing, /href="\/"/);
   for (const file of ['assets/fxaeon-mark.svg', 'document.css']) await access(resolve(root, 'dist', file));
+});
+
+test('standalone build succeeds in a minimal checkout with no node_modules', async () => {
+  const tempRoot = await mkdtemp(resolve(tmpdir(), 'fxaeon-landing-build-'));
+  const tempLanding = resolve(tempRoot, 'apps', 'landing');
+  try {
+    const excluded = new Set(['dist', 'node_modules', 'test']);
+    await mkdir(resolve(tempRoot, 'apps'), { recursive: true });
+    await cp(root, tempLanding, {
+      recursive: true,
+      filter(source) {
+        const path = relative(root, source).split(sep).join('/');
+        return path === '' || ![...excluded].some((name) => path === name || path.startsWith(`${name}/`));
+      },
+    });
+    const brandPath = resolve(tempRoot, 'apps/mini-app/public/brand');
+    await mkdir(brandPath, { recursive: true });
+    await cp(resolve(root, '../mini-app/public/brand/fx-official-mark.svg'), resolve(brandPath, 'fx-official-mark.svg'));
+
+    execFileSync(process.execPath, ['build.mjs'], { cwd: tempLanding, stdio: 'pipe' });
+
+    await assert.rejects(access(resolve(tempRoot, 'node_modules')));
+    await assert.rejects(access(resolve(tempLanding, 'node_modules')));
+    for (const file of ['assets/icons/receive.svg', 'assets/icons/trade.svg', 'assets/icons/move.svg', 'assets/icons/earn.svg', 'assets/icons/borrow.svg', 'assets/icons/LICENSE.txt']) {
+      await access(resolve(tempLanding, 'dist', file));
+    }
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('checked-in icons match the app’s pinned Lucide renderer and license', async () => {
+  const appRequire = createRequire(resolve(root, '../mini-app/package.json'));
+  const react = appRequire('react');
+  const { renderToStaticMarkup } = appRequire('react-dom/server');
+  const lucide = appRequire('lucide-react');
+  const lucidePackagePath = appRequire.resolve('lucide-react/package.json');
+
+  const icons = { receive: lucide.ArrowDownToLine, trade: lucide.CandlestickChart, move: lucide.ArrowLeftRight, earn: lucide.PiggyBank, borrow: lucide.Layers };
+  for (const [name, Icon] of Object.entries(icons)) {
+    const rendered = renderToStaticMarkup(react.createElement(Icon, { size: 24, color: '#c6a7ff', strokeWidth: 2 }));
+    assert.equal(await readFile(resolve(root, 'assets/icons', `${name}.svg`), 'utf8'), rendered, `${name}.svg should match the pinned app icon`);
+  }
+  assert.deepEqual(
+    await readFile(resolve(root, 'assets/icons/LICENSE.txt')),
+    await readFile(resolve(lucidePackagePath, '../LICENSE')),
+    'Include the same Lucide license as the app dependency',
+  );
 });
 
 test('all landing images declare text alternatives and all local resources exist', async () => {
