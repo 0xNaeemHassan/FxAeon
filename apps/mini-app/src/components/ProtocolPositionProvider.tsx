@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { PositionRefreshActivityContext } from './PositionRefreshActivity';
 import {
   createPositionReadGuard,
   mergeVerifiedPositions,
@@ -92,6 +93,19 @@ export default function ProtocolPositionProvider({ children, enabled = true }: {
 }
 
 function ProtocolPositionSession({ address, enabled, children }: { address: string | null; enabled: boolean; children: ReactNode }) {
+  const [automaticRefreshPauses, setAutomaticRefreshPauses] = useState(0);
+  const automaticRefreshPausesRef = useRef(0);
+  const acquireRefreshPause = useCallback(() => {
+    automaticRefreshPausesRef.current += 1;
+    setAutomaticRefreshPauses(automaticRefreshPausesRef.current);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      automaticRefreshPausesRef.current -= 1;
+      setAutomaticRefreshPauses(automaticRefreshPausesRef.current);
+    };
+  }, []);
   const [snapshot, setSnapshot] = useState<ProtocolPositionSnapshot>(() => emptySnapshot(enabled ? address : null));
   const snapshotRef = useRef(snapshot);
   const readGuardRef = useRef(createPositionReadGuard());
@@ -277,11 +291,14 @@ function ProtocolPositionSession({ address, enabled, children }: { address: stri
 
   const lastRealtimeBlock = useRef<bigint | null>(null);
   useEffect(() => {
+    // Keep the last snapshot while review work has priority. Do not consume
+    // the block here: releasing the final pause catches up once to the latest.
+    if (automaticRefreshPausesRef.current > 0) return;
     if (!enabled || !address || !realtimeEthereum.latestBlockNumber || (realtimeEthereum.status !== 'live' && realtimeEthereum.status !== 'polling')) return;
     if (lastRealtimeBlock.current === realtimeEthereum.latestBlockNumber) return;
     lastRealtimeBlock.current = realtimeEthereum.latestBlockNumber;
     void loadAddress(address);
-  }, [address, enabled, loadAddress, realtimeEthereum.latestBlockNumber, realtimeEthereum.status]);
+  }, [address, automaticRefreshPauses, enabled, loadAddress, realtimeEthereum.latestBlockNumber, realtimeEthereum.status]);
 
   fullRefreshRef.current = loadAddress;
 
@@ -389,7 +406,9 @@ function ProtocolPositionSession({ address, enabled, children }: { address: stri
     pendingPositions: visiblePendingPositions.filter((hint) => !visibleSnapshot.positions.some((position) => positionKey(position) === confirmedPositionHintKey(hint))),
     checkingConfirmedPositions: visibleCheckingConfirmedPositions, refreshConfirmedPositions, trackConfirmedPosition, reconcileClosedPosition,
   }), [refresh, visibleSnapshot, visiblePendingPositions, visibleCheckingConfirmedPositions, refreshConfirmedPositions, trackConfirmedPosition, reconcileClosedPosition]);
-  return <ProtocolPositionContext.Provider value={value}>{children}</ProtocolPositionContext.Provider>;
+  return <PositionRefreshActivityContext.Provider value={acquireRefreshPause}>
+    <ProtocolPositionContext.Provider value={value}>{children}</ProtocolPositionContext.Provider>
+  </PositionRefreshActivityContext.Provider>;
 }
 
 export function useProtocolPositions(): ProtocolPositionContextValue {

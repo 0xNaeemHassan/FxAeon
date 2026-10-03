@@ -40,6 +40,20 @@
   padding-block: 1px;
 }
 
+.primaryAmount {
+  align-items: baseline;
+  padding-block: 5px 9px;
+  margin-bottom: 3px;
+  border-bottom: 1px solid var(--line);
+}
+
+.primaryAmount > span:last-child {
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -.025em;
+}
+
 .previewFactRow {
   flex-direction: row;
   align-items: baseline;

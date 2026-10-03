@@ -38,7 +38,7 @@ const mocks: Record<string, string> = {
   '@/lib/confirmedPositions': `export const deriveConfirmedPositionHint = () => null; export const readConfirmedPosition = async () => null; export const verifyConfirmedPositionHint = async () => false;`,
   '@/lib/confirmedPositionStorage': `export const confirmedPositionHintKey = () => ''; export const confirmedPositionStorageKey = () => ''; export const parseStoredPositionHints = () => []; export const savePositionHints = () => {};`,
   '@/lib/fx': `export const getEthereumClient = () => ({});`,
-  '@/components/WalletDataProvider': `export const useRealtimeChainState = () => ({ status: 'idle', latestBlockNumber: null });`,
+  '@/components/WalletDataProvider': `export const useRealtimeChainState = () => ({ status: 'live', latestBlockNumber: globalThis.__positionRetryHarness.block });`,
   '@/lib/foreground': `export const isForegroundOnline = () => globalThis.__positionRetryHarness.foreground; export const subscribeToForegroundResume = (callback) => { globalThis.__positionRetryHarness.resume = callback; return () => {}; };`,
 };
 
@@ -80,6 +80,34 @@ async function mount(page: import('@playwright/test').Page, failAttempts: Record
 
 const walletA = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const walletB = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+
+test('review pauses coalesce block refreshes while manual refresh and wallet changes remain available', async ({ page }) => {
+  await mount(page, {}, true, {}, 'ready');
+  const activity = async (pauses: number, block: number) => {
+    await page.evaluate(({ pauses, block }) => {
+      (window as Window & { __positionRetryHarness: { setActivity: (pauses: number, block: number) => void } }).__positionRetryHarness.setActivity(pauses, block);
+    }, { pauses, block });
+    // Flush effects, including the pause lease update, before the next block.
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  };
+  await activity(2, 100);
+  const baseline = await page.getByTestId('reads').textContent();
+  expect(baseline).toBe('1');
+  await activity(2, 101);
+  await activity(2, 102);
+  await expect(page.getByTestId('reads')).toHaveText(baseline!);
+  await expect(page.getByTestId('position')).toHaveText('BTC:long:927');
+  await page.getByRole('button', { name: 'Manual refresh' }).click();
+  await expect(page.getByTestId('reads')).toHaveText(String(Number(baseline) + 1));
+  await activity(1, 103);
+  await expect(page.getByTestId('reads')).toHaveText(String(Number(baseline) + 1));
+  await page.evaluate((address) => (window as Window & { __positionRetryHarness: { setWallet: (address: string) => void } }).__positionRetryHarness.setWallet(address), walletB);
+  await expect(page.getByTestId('reads')).toHaveText(String(Number(baseline) + 2));
+  await activity(0, 104);
+  await expect(page.getByTestId('reads')).toHaveText(String(Number(baseline) + 3));
+  await activity(0, 104);
+  await expect(page.getByTestId('reads')).toHaveText(String(Number(baseline) + 3));
+});
 
 test('a failed initial position read recovers automatically', async ({ page }) => {
   await mount(page, { [walletA]: 1 });

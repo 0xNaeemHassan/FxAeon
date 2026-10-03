@@ -1,6 +1,7 @@
 'use client';
 
 import { type ReactNode } from 'react';
+import { usePauseAutomaticPositionRefresh } from './PositionRefreshActivity';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -112,6 +113,7 @@ export function ActionReview(props: ActionReviewProps) {
   const lifecycle = useActionReviewLifecycle(props);
   const { label = 'Review action', disabled = false, operationLabel, destructive = false, editor, decisionBefore, executionCost, surface = 'card', planBuilder } = props;
   const { canSelectReviewedRoute, endConnectFlow, error, execute, feeSelection, gasCost, headingRef, loading, networkSwitching, quoteChanges, quoteExpired, refreshReviewedQuote, refreshing, reset, result, review, reviewTitle, route, routeSummaries, routes, selectedRoute, selectReviewedRoute, selectGasTier, startConnectFlow, stage, status, statusDetail, stepResults, triggerRef, wallet } = lifecycle;
+  usePauseAutomaticPositionRefresh(stage === 'planning' || stage === 'review' || stage === 'executing' || refreshing);
 
   if (stage === 'input') {
     const progress = statusPresentation({ stage, status, detail: statusDetail, stepResults, stepCount: 0 });
@@ -277,6 +279,8 @@ export function ActionReview(props: ActionReviewProps) {
   const pairedOutcomeLabels = new Set(positionChanges.paired.map((fact) => `estimated ${fact.label.toLowerCase()}`));
   const actionConsequences = consequenceFacts.filter((fact) => !pairedOutcomeLabels.has(fact.label.toLowerCase()));
   const remainingSummaryFacts = factsOutsideConsequenceSummary(reviewFacts.summary, actionConsequences);
+  const summaryFacts = [...actionConsequences, ...remainingSummaryFacts].filter((fact) => !['Gas tier', 'Action'].includes(fact.label));
+  const primaryAmount = summaryFacts.find((fact) => ['Amount', 'Input amount', 'Deposit', 'Repay', 'fxSAVE'].includes(fact.label));
   const approvals = route.transactions
     .map((transaction) => {
       const approval = approvalFacts(transaction);
@@ -346,7 +350,7 @@ export function ActionReview(props: ActionReviewProps) {
       )}
 
       <div className={styles.reviewFacts}>
-        {[...actionConsequences, ...remainingSummaryFacts].filter((fact) => !['Gas tier', 'Action'].includes(fact.label)).map((fact) => <ReviewRow key={`${fact.label}-${fact.value}`} label={fact.label} value={fact.value} title={fact.title} />)}
+        {summaryFacts.map((fact) => <ReviewRow key={`${fact.label}-${fact.value}`} label={fact.label} value={fact.value} title={fact.title} className={fact === primaryAmount ? presentationStyles.primaryAmount : undefined} />)}
         {approvals.map((approval, index) => <ReviewRow key={`${approval.label}-${index}`} label={approval.label} value={approval.value} title={approval.title} />)}
      </div>
 

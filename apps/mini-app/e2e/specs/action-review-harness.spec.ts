@@ -196,6 +196,16 @@ test.describe('ActionReview isolated orchestration', () => {
     expect(Number.parseFloat(duration)).toBeLessThanOrEqual(0.00001);
     expect(navBox!.y + navBox!.height).toBeLessThanOrEqual(852);
     await page.screenshot({ path: testInfo.outputPath('action-review-393x852.png') });
+    // A narrow review on a wide viewport must remain one label/value column.
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    const amountRow = page.getByText('Amount', { exact: true }).locator('..');
+    const leverageRow = page.getByText('Target leverage', { exact: true }).locator('..');
+    const amountBox = await amountRow.boundingBox();
+    const leverageBox = await leverageRow.boundingBox();
+    expect(leverageBox!.y).toBeGreaterThanOrEqual(amountBox!.y + amountBox!.height);
+    expect(Math.abs(leverageBox!.x - amountBox!.x)).toBeLessThan(1);
+    expect(await review.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath('action-review-desktop.png') });
   });
 
   test('explicit review never signs until the separate confirmation action', async ({ page }) => {
