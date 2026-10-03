@@ -93,6 +93,21 @@ test("rejects malformed or unusably narrow debt-ratio ranges", () => {
   assert.throws(() => leverageBoundsFromRatios(500_000_000_000_000_000n, 510_000_000_000_000_000n, "long"), /safe 0.1x target/);
 });
 
+test("a tightened leverage limit corrects immediately without waiting for unusable pricing", async () => {
+  let rejectPlan!: (error: Error) => void;
+  const adjusted = await prepareLeverageReview({
+    leverage: 6,
+    currentBounds: leverageBoundsFor("ETH", "long"),
+    readBounds: async () => ({ min: 1.2, max: 4.9, source: "live" }),
+    buildPlan: () => new Promise<string>((_, reject) => { rejectPlan = reject; }),
+  });
+  assert.equal(adjusted.adjusted, true);
+  assert.equal(adjusted.leverage, 4.9);
+  assert.equal(adjusted.plan, null);
+  rejectPlan(new Error("irrelevant quote failed after the limit correction"));
+  await Promise.resolve();
+});
+
 test("prices in parallel with live-bound refresh and stops a newly out-of-range review", async () => {
   const events: string[] = [];
   const adjusted = await prepareLeverageReview({

@@ -181,8 +181,8 @@ export function missingGasFeeFact(gasCost: Pick<UseGasCostResult, 'estimate' | '
   return {
     label: 'Gas fee',
     value: gasCost.estimate?.status === 'partial'
-      ? 'Partial estimate; wallet will show final gas'
-      : 'Unavailable; wallet will show final gas',
+      ? 'Partial estimate'
+      : 'Unavailable',
   };
 }
 
@@ -195,5 +195,5 @@ export function missingTotalCostFact(
   if (gasCost.status === 'refreshing' && !gasCost.estimateIsCurrent) {
     return { label: 'Total cost', value: '—' };
   }
-  return { label: 'Total cost', value: 'Unavailable; wallet will show final total' };
+  return { label: 'Total cost', value: 'Unavailable' };
 }

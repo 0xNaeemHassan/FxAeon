@@ -28,6 +28,52 @@ function descriptor(overrides: Partial<RoutePrefetchDescriptor> = {}): RoutePref
 
 const ROUTE = {} as PlannedRoute;
 
+test("a stalled warm-up releases Review at its remaining TTL and ignores its late result", async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const store = new RoutePrefetchStore();
+  let now = 1_000;
+  let resolve!: (route: PlannedRoute) => void;
+  let snapshotReads = 0;
+  void store.prime(descriptor(), () => new Promise<PlannedRoute>((done) => { resolve = done; }), now);
+  now += ROUTE_PREFETCH_TTL_MS - 100;
+  const pending = store.readValidated(descriptor(), async () => { snapshotReads++; return descriptor(); }, () => now);
+  t.mock.timers.tick(100);
+  assert.equal(await pending, null);
+  // A late result must not displace a newer quote or spend a block read.
+  const next = descriptor({ blockNumber: 101n });
+  await store.prime(next, async () => ROUTE, now);
+  resolve(ROUTE);
+  await Promise.resolve();
+  assert.equal(snapshotReads, 0);
+  assert.equal(await store.read(next, now), ROUTE);
+});
+
+test("a stalled validation block read is also bounded by the quote TTL", async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const store = new RoutePrefetchStore();
+  const now = 1_000;
+  await store.prime(descriptor(), async () => ROUTE, now);
+  let snapshotReads = 0;
+  const pending = store.readValidated(descriptor(), () => {
+    snapshotReads++;
+    return new Promise(() => undefined);
+  }, () => now);
+  await Promise.resolve();
+  assert.equal(snapshotReads, 1);
+  t.mock.timers.tick(ROUTE_PREFETCH_TTL_MS);
+  assert.equal(await pending, null);
+  assert.equal(store.read(descriptor(), now), null);
+});
+
+test("a completed lookup clears its deadline instead of invalidating the cache later", async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const store = new RoutePrefetchStore();
+  await store.prime(descriptor(), async () => ROUTE, 1_000);
+  assert.equal(await store.readValidated(descriptor(), async () => descriptor(), () => 1_000), ROUTE);
+  t.mock.timers.tick(ROUTE_PREFETCH_TTL_MS);
+  assert.equal(await store.read(descriptor(), 1_000), ROUTE);
+});
+
 test("failed warm-up falls back to fresh planning without reading a stale chain snapshot", async () => {
   const store = new RoutePrefetchStore();
   let reject!: (error: Error) => void;

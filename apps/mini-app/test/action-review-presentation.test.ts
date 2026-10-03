@@ -37,10 +37,10 @@ test('gas fee row remains stable while the optional estimate loads and reports f
 
   const unavailable = { status: 'unavailable' as const, estimateIsCurrent: false, estimate: undefined, error: 'RPC unavailable' };
   assert.deepEqual(missingGasFeeFact(unavailable), {
-    label: 'Gas fee', value: 'Unavailable; wallet will show final gas',
+    label: 'Gas fee', value: 'Unavailable',
   });
   assert.deepEqual(missingGasFeeFact({ status: 'unavailable', estimateIsCurrent: false, estimate: undefined, error: undefined }), {
-    label: 'Gas fee', value: 'Unavailable; wallet will show final gas',
+    label: 'Gas fee', value: 'Unavailable',
   });
 });
 
@@ -50,7 +50,7 @@ test('reserves a total-cost row only for a route that sends native value', () =>
     label: 'Total cost', value: '—',
   });
   assert.deepEqual(missingTotalCostFact(route(1n), { status: 'unavailable', estimateIsCurrent: false }), {
-    label: 'Total cost', value: 'Unavailable; wallet will show final total',
+    label: 'Total cost', value: 'Unavailable',
   });
 });
 

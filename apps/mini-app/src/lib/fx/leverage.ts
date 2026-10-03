@@ -165,7 +165,8 @@ export async function prepareLeverageReview<T>({
   const bounds = await readBounds().catch(() => currentBounds);
   const adjustedLeverage = clampLeverage(leverage, bounds);
   if (adjustedLeverage !== leverage) {
-    await planPromise.catch(() => undefined);
+    // The plan cannot be used after a bounds change. Its rejection handler is
+    // already attached; don't delay the correction on an irrelevant quote.
     return { adjusted: true, bounds, leverage: adjustedLeverage, plan: null };
   }
   return { adjusted: false, bounds, leverage, plan: await planPromise };
