@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowDownRight, ArrowUpRight, ChevronRight, Layers2 } from 'lucide-react';
 import { AppShell, Card } from '@/components/ui';
-import { Disclosure } from '@/components/ProductUI';
+import { SettingsPopover } from '@/components/SettingsPopover';
 import { ActionWorkspace } from '@/components/ProductLayout';
 import { ActionReview, type ActionReviewStage } from '@/components/ActionReview';
 import { TradeMarketChart } from '@/components/MarketChart';
@@ -570,9 +570,9 @@ export default function TradePage() {
                     <div>
                       <h2 className="text-[18px] font-semibold">Open position</h2>
                     </div>
-                    <Disclosure title="Settings" summary={`${slippage}% slippage`}>
+                    <SettingsPopover summary={`${slippage}% slippage`}>
                       <SlippageField value={slippage} onChange={changeSlippage} max={MAX_FX_SLIPPAGE_PERCENT} />
-                    </Disclosure>
+                    </SettingsPopover>
                   </div>
 
                   <div className={styles.sideControl}><Segmented tone="sides" value={side} onChange={changeSide} ariaLabel="Position side" options={[{ value: 'long', label: 'Long', sub: 'Price rises' }, { value: 'short', label: 'Short', sub: 'Price falls' }]} /></div>
