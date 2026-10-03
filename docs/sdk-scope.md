@@ -22,6 +22,36 @@ and [60-bit decoder](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e
 Zero and equal limits remain representable; this patch does not change the
 contracts' separate full-close handling.
 
+## Protocol fee review data
+
+The local SDK patch also preserves `PoolConfiguration.getPoolFeeRatio` results
+already fetched during planning. It adds no RPC calls and changes no transaction
+amounts, routes, calldata or signatures. The app validates the four raw ratios
+(supply, withdraw, borrow, repay; precision `1e9`) and binds them to the quoted
+pool and action router. Position operations use Router_Diamond's schedule;
+Borrow operations use FxMintRouter's schedule. Missing or invalid metadata is
+not interpreted as a zero fee.
+
+Review shows the applicable **protocol fee rate**. A rate is not a fee amount:
+flash-loan/conversion amounts cannot be replaced with the user's input balance.
+For `depositAndMint`, when borrowing is the only charged leg, the exact reviewed
+mint amount is the fee base and the app calculates `floor(amount * ratio / 1e9)`
+in fxUSD units. This fee is deducted from the borrowed amount. Other cases show
+rates until their chargeable amounts can be independently bound. Network gas,
+DEX conversion costs and retained slippage are separate from this fee.
+
+Source references at contracts commit `5e198e93657db008a57129e7eea21a996618f17f`:
+[fee schedule](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/core/PoolConfiguration.sol#L258),
+[long fee arithmetic](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/core/PoolManager.sol#L902),
+[short fee arithmetic](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/core/short/ShortPoolManager.sol#L710),
+and [mint amount forwarding](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/periphery/facets/PositionOperateFacet.sol#L128).
+
+Rebalance/liquidation prices are not yet integrated. They require the pool's
+live thresholds, oracle denomination, funding and band accounting; the documented
+global LTV values must not be hardcoded. Neither the pinned SDK nor inspected
+contracts exposes a per-position rebalancing opt-out. Extending read-only review
+calculations is separate from introducing new transaction primitives.
+
 ## Locked public surface
 
 The active product exposes exactly these 15 methods:

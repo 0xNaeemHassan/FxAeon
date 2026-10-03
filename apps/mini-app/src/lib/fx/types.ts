@@ -50,6 +50,13 @@ export interface PlannedTransaction {
 }
 
 export interface RouteDetails {
+  /** Live fee tuple already read by the pinned SDK for this route's pool/router.
+   * Display only; ratios use 1e9 precision and are not gas or swap fees. */
+  protocolFeeQuote?: {
+    poolAddress: Address;
+    routerAddress: Address;
+    ratios: readonly [string, string, string, string];
+  };
   routeType?: string;
   positionId?: number;
   leverage?: number;
