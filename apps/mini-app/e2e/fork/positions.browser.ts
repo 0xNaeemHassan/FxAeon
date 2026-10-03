@@ -219,6 +219,7 @@ async function runProof(captureStage: string) {
     }
   };
   let completed = false;
+  let documentationCaptureFailure: string | undefined;
   try {
     const buildEnv = { ...process.env, NEXT_PUBLIC_PRIVY_APP_ID: '', NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL: '',
       NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL: '', NEXT_PUBLIC_FX_SCREENSHOT_MODE: '', NEXT_PUBLIC_FX_LOCAL_FORK_TEST_MODE: '1',
@@ -1492,16 +1493,22 @@ async function runProof(captureStage: string) {
     const fixturePath = resolve(captureStage, 'fixture.json');
     await writeFile(fixturePath, JSON.stringify({ schemaVersion: 1, proof: 'fxaeon-position-screenshot-fixture',
       chainId: 1, forkBlock: Number(forkBlock), wallet, executionSurface: 'browser', positions, historyRows }));
-    await waitForExit(spawn(process.execPath, [resolve(repoRoot, 'scripts/capture_docs_screenshots.mjs')], {
-      cwd: repoRoot, windowsHide: true, stdio: 'inherit', env: { ...buildEnv,
-        FX_SCREENSHOT_BASE_URL: baseUrl, FX_SCREENSHOT_POSITION_MANIFEST: fixturePath,
-        // Marketing captures need stable display charts, not third-party uptime.
-        // The capture adds a visible fixture label; positions and transactions
-        // still come from the real isolated fork exercised above and below.
-        FX_SCREENSHOT_CAPTURE_PROFILE: 'positions', FX_SCREENSHOT_MARKET_DATA: 'fixture',
-        FX_SCREENSHOT_OUTPUT_DIR: captureStage, FX_SCREENSHOT_CAPTURE_REPORT: resolve(captureStage, 'capture-report.json'),
-      },
-    }), 'documentation capture');
+    try {
+      await waitForExit(spawn(process.execPath, [resolve(repoRoot, 'scripts/capture_docs_screenshots.mjs')], {
+        cwd: repoRoot, windowsHide: true, stdio: 'inherit', env: { ...buildEnv,
+          FX_SCREENSHOT_BASE_URL: baseUrl, FX_SCREENSHOT_POSITION_MANIFEST: fixturePath,
+          // Marketing captures need stable display charts, not third-party uptime.
+          // The capture adds a visible fixture label; positions and transactions
+          // still come from the real isolated fork exercised above and below.
+          FX_SCREENSHOT_CAPTURE_PROFILE: 'positions', FX_SCREENSHOT_MARKET_DATA: 'fixture',
+          FX_SCREENSHOT_OUTPUT_DIR: captureStage, FX_SCREENSHOT_CAPTURE_REPORT: resolve(captureStage, 'capture-report.json'),
+        },
+      }), 'documentation capture');
+    } catch (error) {
+      documentationCaptureFailure = String(error);
+      await writeFile(resolve(artifactRoot, 'documentation-capture-failure.txt'), `${documentationCaptureFailure}\n`);
+      console.error(`Documentation screenshots failed; continuing the protected close acceptance before reporting the capture failure: ${documentationCaptureFailure}`);
+    }
 
     // Exercise the complete close lifecycle through the same browser UI for
     // every supported market and side. This is intentionally after the docs
@@ -1597,6 +1604,9 @@ async function runProof(captureStage: string) {
       return 'waiting';
     }, { timeout: 120_000 }).toMatch(/^(ready-empty|partial-empty)$/);
     await page.screenshot({ path: resolve(artifactRoot, 'positions-all-closed.png'), fullPage: true });
+    if (documentationCaptureFailure) {
+      throw new Error(`documentation capture failed after close acceptance: ${documentationCaptureFailure}`);
+    }
     assert.ok(existingBorrowProof, 'existing-position borrow must complete through the browser');
     completed = true;
     await context.tracing.stop({ path: resolve(artifactRoot, 'trace.zip') });
