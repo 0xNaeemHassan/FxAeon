@@ -25,6 +25,7 @@ import type { FxPublicClient } from '../../src/lib/fx/types';
 import { positionPoolAddress } from '../../src/lib/fx/policy';
 import { decodePositionRouterEvent, positionRouterEventMatchesRecipient } from '../../src/lib/positionRouterEvents';
 import { mainnet } from 'viem/chains';
+import { readReviewedTransactions as readReviewedTransactionsFromUi, type ReviewedTransaction } from './reviewedTransactions';
 
 const browserChannel = configuredBrowserChannel();
 const appRoot = fileURLToPath(new URL('../..', import.meta.url));
@@ -499,53 +500,8 @@ async function runProof(captureStage: string) {
     page.on('pageerror', error => browserErrors.push(error.message));
 
     const activePage = page;
-    type ReviewedTransaction = {
-      heading: string;
-      contract: string;
-      calldata: string;
-      valueWei: string;
-    };
-    const readReviewedTransactions = async (): Promise<ReviewedTransaction[]> => {
-      const actionDetails = activePage.locator('.reviewInlineContent');
-      await expect(actionDetails).toBeVisible({ timeout: 180_000 });
-      const advanced = actionDetails.locator('details').filter({ hasText: /^Advanced details/ }).first();
-      await expect(advanced).toHaveCount(1);
-      await expect(advanced).toBeVisible();
-      const isOpen = await advanced.evaluate((element) => (element as HTMLDetailsElement).open);
-      if (!isOpen) await advanced.locator('summary').click();
-      const reviewed = await advanced.evaluate((root) => {
-        const cards = Array.from(root.querySelectorAll('p'))
-          .filter((heading) => /^(?:Confirm|Approve\b)/.test(heading.textContent?.trim() ?? ''))
-          .map((heading) => heading.parentElement)
-          .filter((card): card is HTMLElement => Boolean(card));
-        return cards.map((card) => {
-          const rows: Record<string, string> = {};
-          for (const row of Array.from(card.querySelectorAll('div.flex.items-start'))) {
-            const children = Array.from(row.children);
-            const label = children[0]?.textContent?.trim();
-            const value = children[1]?.textContent?.trim();
-            if (label && value) rows[label] = value;
-          }
-          return {
-            heading: card.querySelector('p')?.textContent?.trim() ?? '',
-            contract: rows.Contract ?? '',
-            calldata: card.querySelector('pre[aria-label="Transaction calldata"]')?.textContent?.trim() ?? '',
-            valueWei: rows['Transaction value (wei)'] ?? '',
-          };
-        });
-      });
-      assert.ok(reviewed.length > 0 && reviewed.length <= 10, 'action details must list one to ten transactions');
-      assert.ok(reviewed.some((transaction) => /^Confirm\s+\d+$/.test(transaction.heading)), 'action details must include the protocol action');
-      reviewed.forEach((transaction, index) => {
-        const headingNumber = transaction.heading.match(/^(?:Confirm|Approve\b).*\s(\d+)$/)?.[1];
-        assert.equal(headingNumber, String(index + 1), `transaction ${index + 1} must have an ordered heading`);
-        assert.match(transaction.contract, /^0x[0-9a-fA-F]{40}$/, `transaction ${index + 1} must show its contract`);
-        assert.match(transaction.calldata, /^0x[0-9a-fA-F]*$/, `transaction ${index + 1} must show its calldata`);
-        assert.match(transaction.valueWei, /^\d+$/, `transaction ${index + 1} must show its exact native value in wei`);
-      });
-      await advanced.locator('summary').click();
-      return reviewed;
-    };
+    const readReviewedTransactions = (): Promise<ReviewedTransaction[]> =>
+      readReviewedTransactionsFromUi(activePage.locator('.reviewInlineContent'));
     const reviewedFactRow = (label: string): Locator => activePage
         .locator('.reviewInlineContent')
         .locator('div.flex.items-start.justify-between')

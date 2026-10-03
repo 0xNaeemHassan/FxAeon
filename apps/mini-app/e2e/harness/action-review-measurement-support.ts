@@ -164,16 +164,17 @@ export const useInvalidateWalletData = () => async () => {
   `,
   '@/lib/errors': `export const userSafeError = (cause, fallback) => cause instanceof Error ? cause.message : fallback;`,
   '@/lib/transactionProgress': `
+    export { transactionStepProgress } from './src/lib/transactionProgress';
     export const hasTransactionHash = (step) => Boolean(step?.hash);
-    export const transactionStepProgress = () => ({ state: 'confirmed', label: 'Confirmed' });
+    export const transactionExplorerUrl = () => null;
+    export const transactionStepKind = () => 'Action';
     export const confirmedUpdateCopy = () => ({ label: 'Confirmed', body: 'Mock confirmed.' });
   `,
   '@/components/BridgeTracker': `export const BridgeTracker = () => null;`,
   '@/components/review/ReviewProgress': `
     import React from 'react';
+    export { CalldataDisclosure, stepProgress } from './src/components/review/ReviewProgress';
     export const chainName = (id) => id === 8453 ? 'Base' : 'Ethereum';
-    export const stepProgress = () => ({ label: 'Confirmed', className: '', icon: null });
-    export const CalldataDisclosure = ({ data }) => <div><button type="button">Copy</button><pre>{data}</pre></div>;
     export const StatusNotice = ({ label, body }) => <div role="status"><strong>{label}</strong><span>{body}</span></div>;
     export const InlineError = ({ message }) => <div role="alert">{message}</div>;
     export const TransactionHashLink = ({ step }) => <span>{step.hash}</span>;
@@ -193,7 +194,7 @@ export const useInvalidateWalletData = () => async () => {
     const Icon = (props) => <span {...props} />;
     export const AlertTriangle = Icon; export const ArrowLeft = Icon; export const CheckCircle2 = Icon; export const CircleAlert = Icon;
     export const Clock3 = Icon; export const LoaderCircle = Icon; export const ShieldCheck = Icon; export const ExternalLink = Icon;
-    export const Circle = Icon; export const XCircle = Icon; export const ChevronDown = Icon;
+    export const Circle = Icon; export const XCircle = Icon; export const ChevronDown = Icon; export const Check = Icon; export const Copy = Icon;
   `,
 };
 
