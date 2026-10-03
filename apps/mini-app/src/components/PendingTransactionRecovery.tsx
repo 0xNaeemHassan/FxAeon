@@ -19,6 +19,7 @@ import {
   reconcileWalletJournal,
   readSignatureRequiredDrafts,
   signatureDraftResumePath,
+  FX_TOKENS,
   type RecoveryViewModel,
   type SignatureRequiredDraft,
 } from '@/lib/fx';
@@ -43,7 +44,12 @@ function chainName(chainId: RecoveryViewModel['record']['chainId']): string {
   return chainId === 8453 ? 'Base' : 'Ethereum';
 }
 
-function operationName(operation: string, intent?: string): string {
+function operationName(operation: string, intent?: string, stepKind?: RecoveryViewModel['record']['stepKind'], to?: string): string {
+  if (stepKind === 'approval') {
+    const token = to ? Object.values(FX_TOKENS).find((candidate) => candidate.address.toLowerCase() === to.toLowerCase()) : undefined;
+    return `Approve ${token?.key ?? 'token'}`;
+  }
+  if (stepKind === 'unknown' || stepKind === undefined) return 'Transaction';
   if (intent) return intent;
   const labels: Record<string, string> = {
     increasePosition: 'Opened or increased position',
@@ -105,7 +111,7 @@ function statusCopy(view: RecoveryViewModel): {
   className: string;
 } {
   if (view.status === 'confirmed') {
-    return { label: 'Completed', icon: CheckCircle2, className: 'text-success' };
+    return { label: view.record.stepKind === 'approval' ? 'Approval confirmed' : 'Completed', icon: CheckCircle2, className: 'text-success' };
   }
   if (view.status === 'failed') {
     return { label: 'Failed', icon: XCircle, className: 'text-danger' };
@@ -117,6 +123,22 @@ function statusCopy(view: RecoveryViewModel): {
 }
 
 function statusSummary(view: RecoveryViewModel, positionRefreshing = false): string {
+  if (view.record.stepKind === 'approval') {
+    if (view.status === 'confirmed') return 'Approval transaction confirmed on-chain. Check other saved transactions for action progress.';
+    if (view.status === 'failed') return 'Approval transaction reverted on-chain. Check other saved transactions for action progress.';
+    if (view.verification === 'confirming') return 'Approval receipt included. Waiting for 1 confirmation.';
+    if (view.verification === 'not-found') return 'No approval receipt yet. The transaction may still be pending.';
+    if (view.verification === 'rpc-error') return 'Network check unavailable. Approval status remains unverified.';
+    return 'Approval transaction details did not match, so it remains unverified.';
+  }
+  if (view.record.stepKind !== 'action') {
+    if (view.status === 'confirmed') return 'Transaction confirmed on-chain. No position outcome is inferred from this receipt.';
+    if (view.status === 'failed') return 'Transaction reverted on-chain. No later step is resumed automatically.';
+    if (view.verification === 'not-found') return 'No receipt yet. The transaction may still be pending.';
+    if (view.verification === 'confirming') return 'Receipt included. Waiting for 1 confirmation.';
+    if (view.verification === 'rpc-error') return 'Network check unavailable. Nothing was marked failed.';
+    return 'Chain data did not match the saved transaction details, so it remains unverified.';
+  }
   if (view.status === 'confirmed' && view.record.bridge) return 'Source confirmed after 1 confirmation. Destination delivery is tracked below.';
   if (view.status === 'confirmed' && positionRefreshing && ['increasePosition', 'reducePosition', 'adjustPositionLeverage', 'depositAndMint', 'repayAndWithdraw'].includes(view.record.operation)) {
     return 'Transaction confirmed. Position details are refreshing.';
@@ -158,9 +180,9 @@ function DraftItem({ draft, onCancel }: { draft: SignatureRequiredDraft; onCance
 
 function RecoveryItem({ view, trackBridge, autoTrackBridge, task, positionHint, positionRefreshing = false }: { view: RecoveryViewModel; trackBridge: boolean; autoTrackBridge: boolean; task?: WalletTask; positionHint?: ConfirmedPositionHint; positionRefreshing?: boolean }) {
   const status = statusCopy(view);
-  const verifiedPosition = verifiedReceiptPositionIdentity({ status: view.status, verification: view.verification,
-    transactionHash: view.record.hash, hint: positionHint });
-  const action = nextAction(view.record.operation, verifiedPosition ?? undefined);
+  const verifiedPosition = view.record.stepKind === 'action' ? verifiedReceiptPositionIdentity({ status: view.status, verification: view.verification,
+    transactionHash: view.record.hash, hint: positionHint }) : undefined;
+  const action = view.record.stepKind === 'action' ? nextAction(view.record.operation, verifiedPosition ?? undefined) : null;
   const receiptFacts = view.verification === 'receipt' ? buildReceiptPresentation({
     chainId: view.record.chainId,
     walletAddress: view.record.walletAddress,
@@ -179,10 +201,10 @@ function RecoveryItem({ view, trackBridge, autoTrackBridge, task, positionHint, 
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <p className="text-[12.5px] font-semibold">{operationName(view.record.operation, view.record.intent)}</p>
+              <p className="text-[12.5px] font-semibold">{operationName(view.record.operation, view.record.intent, view.record.stepKind, view.record.to)}</p>
               <p className="mt-0.5 text-[10.5px] text-mut">{chainName(view.record.chainId)} · {submittedAt(view.record.submittedAt)}</p>
             </div>
-              <span className={`shrink-0 text-[10px] font-semibold uppercase tracking-[0.1em] ${status.className}`}>{task?.title ?? status.label}</span>
+              <span className={`shrink-0 text-[10px] font-semibold uppercase tracking-[0.1em] ${status.className}`}>{view.record.stepKind === 'approval' ? status.label : task?.title ?? status.label}</span>
           </div>
           <p className="mt-2 break-words text-[11.5px] leading-relaxed text-mut">{statusSummary(view, positionRefreshing)}</p>
           <div className="mt-2.5 flex items-center justify-between gap-2">

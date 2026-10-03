@@ -3,6 +3,7 @@ import { assertPublicClientChain, getPublicClient } from './clients';
 import { fetchEthereumGasFallback } from './etherscanGas';
 import type { FxPublicClient, PlannedRoute, PlannedTransaction } from './types';
 import { formatGasPriceGwei, validateGasTierQuote, type GasTierQuote } from './gasFeePolicy';
+import { gasLimitMaxFeeCost } from './gasLimit';
 
 /**
  * Gas is a property of the exact reviewed route. It is deliberately kept
@@ -65,6 +66,8 @@ export interface RouteGasCostEstimate {
   layerZeroTokenFeeWei?: bigint;
   /** Native value plus execution gas; absent while either side is unavailable. */
   totalNativeCostWei?: bigint;
+  /** Funds needed for wallet preflight using runner gas limits and fee caps. */
+  requiredNativeCostWei?: bigint;
   /** Why a total is absent or what its component scope covers. */
   totalNativeCostScope?: 'execution-plus-value' | 'execution-plus-l1-plus-operator-plus-value';
   error?: string;
@@ -526,6 +529,12 @@ export async function estimatePlannedRouteCost(
     layerZeroTokenFeeWei: bridgeQuoteFee(route, 'lzTokenFee'),
     totalNativeCostWei: allCosts && executionGasFeeWei !== undefined
       ? nativeValueWei + executionGasFeeWei + (l1DataFeeWei ?? 0n) + (operatorFeeWei ?? 0n)
+      : undefined,
+    requiredNativeCostWei: allCosts && usableFee
+      ? nativeValueWei
+        + steps.reduce((sum, step) => sum + gasLimitMaxFeeCost(step.gas!, usableFee.feePerGasWei), 0n)
+        + (l1DataFeeWei ?? 0n)
+        + (operatorFeeWei ?? 0n)
       : undefined,
     totalNativeCostScope: route.chainId === 8453
       ? (allCosts ? 'execution-plus-l1-plus-operator-plus-value' : undefined)

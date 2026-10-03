@@ -4,11 +4,12 @@ import {
   type TransactionReceipt,
 } from "viem";
 import { assertPublicClientChain, getPublicClient } from "./clients";
+import { gasLimitWithHeadroom } from "./gasLimit";
 import { recordPendingHash, updatePendingHashRecord } from "./journal";
 import { withWalletChainLock } from "./lock";
 import { defaultTransactionPolicy } from "./policy";
 import { normalizeFxProtocolError } from "./errorNormalization";
-import { selectedGasTierQuote, type GasFeeSelection } from "./gasFeePolicy";
+import { fetchGasTierQuotes, selectedGasTierQuote, type GasFeeSelection, type GasTierQuotes } from "./gasFeePolicy";
 import { readGasTier } from "@/lib/settings";
 import type {
   BridgeRouteQuote,
@@ -333,6 +334,8 @@ export async function runTransactionRoute(params: {
   policy?: TransactionPolicy;
   publicClient?: FxPublicClient;
   feeSelection?: GasFeeSelection;
+  /** Injectable read dependency; production uses the shared gas oracle. */
+  refreshFeeQuotes?: (chainId: PlannedRoute['chainId']) => Promise<GasTierQuotes>;
   options?: TransactionRunnerOptions;
 }): Promise<TransactionExecutionResult> {
   // Snapshot the reviewed route before acquiring the cross-tab lock. A
@@ -361,6 +364,9 @@ export async function runTransactionRoute(params: {
       }
     : undefined;
   const policy = clonePolicy(params.policy ?? defaultTransactionPolicy(route));
+  // A refreshed quote may carry an ongoing approval flow, but a new execution
+  // must start from a fee selection that was still current when accepted.
+  if (feeSelection) selectedGasTierQuote(feeSelection.snapshot, feeSelection.tier);
   const options = params.options ?? {};
   if (
     options.confirmations !== undefined
@@ -478,6 +484,10 @@ export async function runTransactionRoute(params: {
         steps.push(step);
         const label = `transaction ${index + 1} of ${route.transactions.length}`;
         try {
+          // The previous wallet may have returned a broadcast hash while
+          // leaving its success screen open. Let the caller wait here, before
+          // re-simulating and refreshing nonce/fees for the next step.
+          await params.callbacks.beforeTransaction?.(index, transaction);
           // Once an approval receipt is canonical, recheck the remaining
           // protocol calls against the current allowance before the next
           // signature, catching state changes since the ordered preflight.
@@ -517,6 +527,40 @@ export async function runTransactionRoute(params: {
           const pendingNonce = Number(pendingNonceValue);
           const nonce = assertNonceMatches(transaction, pendingNonce);
           assertLockOwned();
+          let feeFields: Pick<WalletTransactionRequest, 'maxFeePerGas' | 'maxPriorityFeePerGas'> = {};
+          if (feeSelection) {
+            if (readGasTier() !== feeSelection.tier) {
+              throw new Error("Network fee preference changed; review the action again before signing.");
+            }
+            if (feeSelection.snapshot.chainId !== route.chainId) {
+              throw new Error("Network fee quote does not match the transaction network; review the action again.");
+            }
+            // An approval can take longer than the display quote's TTL. Refresh
+            // the chosen tier without increasing either reviewed fee ceiling.
+            const reviewed = selectedGasTierQuote(feeSelection.snapshot, feeSelection.tier, feeSelection.snapshot.fetchedAt);
+            let fee = reviewed;
+            if (feeSelection.snapshot.validUntil <= Date.now()) {
+              const fresh = await (params.refreshFeeQuotes ?? ((chainId) => fetchGasTierQuotes(chainId, { forceRefresh: true })))(route.chainId);
+              if (fresh.chainId !== route.chainId) throw new Error("Refreshed network fee belongs to a different chain.");
+              fee = selectedGasTierQuote(fresh, feeSelection.tier);
+              if (fee.gasPriceWei > reviewed.maxFeePerGas || fee.maxPriorityFeePerGas > reviewed.maxPriorityFeePerGas) {
+                throw new Error("Network fees increased above your reviewed limit. Your approval is saved; review the action again.");
+              }
+            }
+            feeFields = {
+              maxFeePerGas: fee.maxFeePerGas < reviewed.maxFeePerGas ? fee.maxFeePerGas : reviewed.maxFeePerGas,
+              maxPriorityFeePerGas: fee.maxPriorityFeePerGas,
+            };
+          }
+          // Nested protocol/bridge calls need headroom over eth_estimateGas.
+          // Unused gas is not charged. Estimate only after prior approvals mine.
+          const estimatedGas = client.estimateGas ? await client.estimateGas({
+            account: route.walletAddress, to: transaction.to, data: transaction.data, value: transaction.value,
+          }) : undefined;
+          if (estimatedGas !== undefined && (estimatedGas <= 0n || estimatedGas > 50_000_000n)) {
+            throw new Error("The network returned an invalid gas estimate.");
+          }
+          assertLockOwned();
           const request: WalletTransactionRequest = {
             chainId: route.chainId,
             from: route.walletAddress,
@@ -524,21 +568,14 @@ export async function runTransactionRoute(params: {
             data: transaction.data,
             value: transaction.value,
             nonce,
-            ...(feeSelection ? (() => {
-              if (readGasTier() !== feeSelection.tier) {
-                throw new Error("Network fee preference changed; review the action again before signing.");
-              }
-              if (feeSelection.snapshot.chainId !== route.chainId) {
-                throw new Error("Network fee quote does not match the transaction network; review the action again.");
-              }
-              const fee = selectedGasTierQuote(feeSelection.snapshot, feeSelection.tier);
-              return { maxFeePerGas: fee.maxFeePerGas, maxPriorityFeePerGas: fee.maxPriorityFeePerGas };
-            })() : {}),
+            ...(estimatedGas !== undefined ? { gasLimit: gasLimitWithHeadroom(estimatedGas) } : {}),
+            ...feeFields,
           };
-          const hash = normalizeHash(await params.callbacks.requestSignature(request));
+          const hash = normalizeHash(await params.callbacks.requestSignature(request, transaction));
           step.hash = hash;
           const pendingRecord = recordPendingHash({
             operation: route.operation,
+            stepKind: transaction.kind,
             intent: pendingActionIntent(route),
             walletAddress: route.walletAddress,
             chainId: route.chainId,

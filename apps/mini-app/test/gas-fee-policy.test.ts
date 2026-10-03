@@ -3,7 +3,9 @@ import { test } from 'node:test';
 import {
   buildGasTierQuotesFromPrices,
   buildRpcGasTierQuotes,
+  fetchGasTierQuotes,
   formatGasTierQuote,
+  resetGasTierQuoteCacheForTests,
   selectedGasTierQuote,
 } from '../src/lib/fx/gasFeePolicy';
 
@@ -63,4 +65,27 @@ test('fee policy rejects inverted tiers and malformed selected caps', () => {
     validUntil: Date.now() + 60_000,
     tiers: { ...quotes.tiers, rapid: { ...quotes.tiers.rapid, maxPriorityFeePerGas: 999n } },
   }, 'rapid'), /unavailable/);
+});
+
+test('gas quote snapshots are cached, coalesced, and force refresh bypasses cache', async () => {
+  resetGasTierQuoteCacheForTests();
+  let calls = 0;
+  let release!: (value: ReturnType<typeof buildGasTierQuotesFromPrices>) => void;
+  const fetchSnapshot = () => {
+    calls += 1;
+    return new Promise<ReturnType<typeof buildGasTierQuotesFromPrices>>((resolve) => { release = resolve; });
+  };
+  const first = fetchGasTierQuotes(8453, { now: () => 1_000, fetchSnapshot });
+  const concurrent = fetchGasTierQuotes(8453, { now: () => 1_000, fetchSnapshot });
+  assert.equal(calls, 1);
+  release(buildGasTierQuotesFromPrices(8453, 100n, { standard: 110n, fast: 120n, rapid: 130n }, 'rpc', 1_000, 1_000));
+  const [snapshot, coalesced] = await Promise.all([first, concurrent]);
+  assert.equal(snapshot, coalesced);
+  assert.equal(await fetchGasTierQuotes(8453, { now: () => 1_001, fetchSnapshot }), snapshot);
+  assert.equal(calls, 1);
+
+  const refreshed = buildGasTierQuotesFromPrices(8453, 200n, { standard: 210n, fast: 220n, rapid: 230n }, 'rpc', 1_002, 1_002);
+  assert.equal(await fetchGasTierQuotes(8453, { now: () => 1_002, forceRefresh: true, fetchSnapshot: async () => refreshed }), refreshed);
+  assert.equal(await fetchGasTierQuotes(8453, { now: () => 1_003, fetchSnapshot }), refreshed);
+  resetGasTierQuoteCacheForTests();
 });

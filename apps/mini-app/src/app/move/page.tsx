@@ -10,6 +10,7 @@ import { ActionReview, type ActionReviewStage } from '@/components/ActionReview'
 import { AmountField, TokenSelect, type TokenBalanceView } from '@/components/ProtocolForm';
 import { useMoveBalances } from '@/components/WalletDataProvider';
 import {
+  asFxSdkRpcTransport,
   assertAddress,
   assertBridgeActionTarget,
   advancedBridgePolicy,
@@ -28,6 +29,8 @@ import {
   validateAdvancedBridgeContracts,
   type FxChainId,
 } from '@/lib/fx';
+import { configuredRpcUrls } from '@/lib/fx/config';
+import { getRpcTransport } from '@/lib/fx/clients';
 import { usePrivyWallet } from '@/lib/wallet';
 import { parseAmount } from '@/app/trade/fxUi';
 import { resetTransactionAmounts } from '@/lib/transactionState';
@@ -396,20 +399,19 @@ export default function MovePage() {
         approvalTokenAddress = sourceChainId === 1 ? resolveBridgeApprovalTokenAddress(token, sourceChainId) : undefined;
       }
 
-      // Capture a destination-chain block before the source route can reach a
-      // wallet prompt. Delivery is later correlated by LayerZero GUID and
-      // OFTReceived logs from this block onward; a balance delta is never used
-      // as proof.
-      const destinationBaselineBlock = await getPublicClient(destinationChainId).getBlockNumber();
-
-      const quote = await sdk.getBridgeQuote({ sourceChainId, destChainId: destinationChainId, token: sourceToken, amount: amountWei, recipient, sourceRpcUrl: requireRpcUrl(sourceChainId) });
-      if (advanced) {
-        // A source quote alone cannot prove the destination OFT is its
-        // configured counterpart. The validator already checks peers; this
-        // reverse quote confirms the destination contract exposes the same
-        // official quoteSend capability on the live destination RPC.
-        await sdk.getBridgeQuote({ sourceChainId: destinationChainId, destChainId: sourceChainId, token: destinationOftAddress, amount: amountWei, recipient, sourceRpcUrl: requireRpcUrl(destinationChainId) });
-      }
+      const sourceRpcUrls = configuredRpcUrls(sourceChainId);
+      // Capture the destination baseline before any source route can reach a
+      // wallet prompt. The baseline and quote probes are read-only and
+      // independent, so observe them together without changing their safety
+      // boundary. Advanced mode also observes the reverse quote concurrently.
+      const destinationRpcUrls = configuredRpcUrls(destinationChainId);
+      const [destinationBaselineBlock, quote] = await Promise.all([
+        getPublicClient(destinationChainId).getBlockNumber(),
+        sdk.getBridgeQuote({ sourceChainId, destChainId: destinationChainId, token: sourceToken, amount: amountWei, recipient, sourceRpcUrl: sourceRpcUrls[0], sourceRpcTransport: asFxSdkRpcTransport(getRpcTransport(sourceRpcUrls, sourceChainId)) }),
+        advanced
+          ? sdk.getBridgeQuote({ sourceChainId: destinationChainId, destChainId: sourceChainId, token: destinationOftAddress, amount: amountWei, recipient, sourceRpcUrl: destinationRpcUrls[0], sourceRpcTransport: asFxSdkRpcTransport(getRpcTransport(destinationRpcUrls, destinationChainId)) })
+          : Promise.resolve(undefined),
+      ]);
       // Build once without an approval so the exact SDK bridge destination is
       // known, then read the allowance for that exact spender. The final route
       // adds one exact approval only when it is still needed.

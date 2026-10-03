@@ -55,6 +55,18 @@ export function canonicalAsset(chainId: WalletAssetChain, address: Address | nul
   return null;
 }
 
+/** Strip rows retained by older caches that predate the supported-token filter. */
+export function filterSupportedWalletAssets(snapshot: WalletAssetSnapshot): WalletAssetSnapshot {
+  let changed = false;
+  const assets = snapshot.assets.flatMap((asset) => {
+    const canonical = canonicalAsset(asset.chainId, asset.tokenAddress);
+    if (!canonical) { changed = true; return []; }
+    if (asset.canonicalKey !== canonical.key || asset.decimals !== canonical.decimals) changed = true;
+    return [{ ...asset, canonicalKey: canonical.key, decimals: canonical.decimals }];
+  });
+  return changed ? summarizeWalletAssets({ ...snapshot, assets }) : snapshot;
+}
+
 export function parseAssetBalance(value: unknown): bigint | null {
   if (typeof value !== 'string' || !/^(0x[0-9a-f]{1,64}|[0-9]{1,78})$/i.test(value)) return null;
   const parsed = BigInt(value);
@@ -160,14 +172,17 @@ export function parseAlchemyWalletAssets(payload: unknown, walletAddress: string
     if (!row || typeof row.address !== 'string' || row.address.toLowerCase() !== walletAddress.toLowerCase()) continue;
     const chainId = row.network === 'eth-mainnet' ? 1 : row.network === 'base-mainnet' ? 8453 : null;
     if (!chainId || snapshot.networks[chainId].status === 'unavailable') continue;
-    // A token row can carry an independent metadata/pricing error while its
-    // balance is still valid. Keep the balance visible, but leave its USD
-    // value unpriced and mark only that network partial.
-    const tokenError = row.error !== undefined && row.error !== null;
-    if (tokenError) snapshot.networks[chainId] = { chainId, status: 'partial', error: 'Some token metadata or prices could not be refreshed.' };
     const tokenAddress = row.tokenAddress === null ? null : typeof row.tokenAddress === 'string' && ADDRESS.test(row.tokenAddress) ? row.tokenAddress.toLowerCase() as Address : undefined;
     const balanceWei = parseAssetBalance(row.tokenBalance), metadata = record(row.tokenMetadata);
     const canonical = tokenAddress !== undefined ? canonicalAsset(chainId, tokenAddress) : null;
+    // Alchemy discovers every token in an address, while FxAeon only supports
+    // the configured protocol assets. Unknown tokens must not appear in the
+    // wallet list or make a complete supported-token valuation look pending.
+    if (tokenAddress !== undefined && canonical === null) continue;
+    // Only errors attached to a supported asset should affect its network's
+    // completeness. Alchemy also returns metadata errors for arbitrary tokens.
+    const tokenError = row.error !== undefined && row.error !== null;
+    if (tokenError) snapshot.networks[chainId] = { chainId, status: 'partial', error: 'Some token metadata or prices could not be refreshed.' };
     const decimals = canonical?.decimals ?? metadata?.decimals;
     if (tokenAddress === undefined || balanceWei === null || !Number.isInteger(decimals) || Number(decimals) < 0 || Number(decimals) > 255) {
       snapshot.networks[chainId] = { chainId, status: 'partial', error: 'Some assets could not be refreshed.' }; continue;
@@ -361,7 +376,9 @@ export async function fetchAlchemyWalletAssets(walletAddress: string, signal?: A
 export type CanonicalAssetRead = { chainId: WalletAssetChain; balances: { key: FxTokenKey; address: Address | null; decimals: number; amountWei: bigint }[]; failedTokens: FxTokenKey[]; updatedAt: number; status?: 'pending' | 'ready' | 'partial' | 'unavailable' };
 
 export function mergeCanonicalWalletAssets(indexed: WalletAssetSnapshot | null, walletAddress: string, canonical: readonly CanonicalAssetRead[], prices: UsdPriceSnapshot, now = Date.now()): WalletAssetSnapshot {
-  const snapshot = indexed?.walletAddress === walletAddress.toLowerCase() ? { ...indexed, networks: { ...indexed.networks } } : emptyWalletSnapshot(walletAddress, now);
+  const snapshot = indexed?.walletAddress === walletAddress.toLowerCase()
+    ? filterSupportedWalletAssets({ ...indexed, assets: [...indexed.assets], networks: { ...indexed.networks } })
+    : emptyWalletSnapshot(walletAddress, now);
   // Keep indexed rows until an exact read proves their replacement. This is
   // important during a background refresh: a pending query is not a zero read,
   // and an unavailable query must not make a verified account row disappear.
@@ -378,7 +395,6 @@ export function mergeCanonicalWalletAssets(indexed: WalletAssetSnapshot | null, 
     }
   }
   for (const read of canonical) {
-    const indexedStatus = snapshot.networks[read.chainId].status;
     // Retain the previous row's validated quote and metadata while replacing
     // the authoritative balance set. Deleting rows first is correct for
     // exact zero reads, but must not erase the fallback row before a positive
@@ -388,10 +404,8 @@ export function mergeCanonicalWalletAssets(indexed: WalletAssetSnapshot | null, 
       ? { chainId: read.chainId, status: 'pending', error: 'Canonical balances are still being verified.' }
       : read.status === 'unavailable'
         ? { chainId: read.chainId, status: 'unavailable', error: 'Canonical balances could not be refreshed.' }
-        : read.failedTokens.length
+      : read.failedTokens.length
       ? { chainId: read.chainId, status: 'partial', error: 'Some balances could not be refreshed.' }
-      : indexed?.source === 'alchemy' && indexedStatus !== 'ready'
-      ? { chainId: read.chainId, status: 'partial', error: 'Some assets could not be refreshed.' }
         : { chainId: read.chainId, status: 'ready', error: '' };
     const pending = read.status === 'pending';
     const unavailable = read.status === 'unavailable';

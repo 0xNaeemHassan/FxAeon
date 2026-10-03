@@ -85,6 +85,7 @@ function validRecord(value: unknown): value is PendingHashRecord {
     && record.id === expectedId
     && typeof record.operation === "string"
     && (OFFICIAL_FX_METHODS as readonly string[]).includes(record.operation)
+    && (record.stepKind === undefined || record.stepKind === "approval" || record.stepKind === "action" || record.stepKind === "unknown")
     && typeof record.walletAddress === "string"
     && isAddress(record.walletAddress)
     && (record.chainId === 1 || record.chainId === 8453)
@@ -218,6 +219,7 @@ export function readPendingHashes(): PendingHashRecord[] {
 
 export function recordPendingHash(params: {
   operation: OfficialFxMethod;
+  stepKind?: PendingHashRecord["stepKind"];
   intent?: PendingActionIntent;
   walletAddress: Address;
   chainId: FxChainId;
@@ -237,6 +239,7 @@ export function recordPendingHash(params: {
   const record: PendingHashRecord = {
     id: `${params.chainId}:${params.walletAddress.toLowerCase()}:${params.hash.toLowerCase()}`,
     operation: params.operation,
+    stepKind: params.stepKind,
     intent: params.intent,
     walletAddress: params.walletAddress,
     chainId: params.chainId,

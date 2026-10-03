@@ -23,11 +23,11 @@ test('records usable quote and refreshed account timings in the deterministic Ac
     'Review click until prepared terms are visible; harness inserts 125 ms before route preparation resolves.',
     async () => {
       await page.getByRole('button', { name: 'Review position', exact: true }).click();
-      await expect(page.getByRole('button', { name: 'Confirm in wallet', exact: true })).toBeEnabled();
+      await expect(page.getByRole('button', { name: 'Confirm', exact: true })).toBeEnabled();
     },
   );
 
-  const confirm = page.getByRole('button', { name: 'Confirm in wallet', exact: true });
+  const confirm = page.getByRole('button', { name: 'Confirm', exact: true });
   await expect(confirm).toBeVisible();
   const refreshSample = await measureUntil(
     page,

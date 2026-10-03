@@ -45,18 +45,18 @@ export function TransactionResultView({
       : 'bg-[var(--danger-dim)] text-danger';
   return (
     <div className="flex flex-col items-center text-center">
-      <span className={`flex h-12 w-12 items-center justify-center rounded-xl ${tone}`}>
-        <ResultIcon className="h-6 w-6" aria-hidden="true" />
+      <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${tone}`}>
+        <ResultIcon className="h-5 w-5" aria-hidden="true" />
       </span>
-      <h3 ref={headingRef} data-review-focus tabIndex={-1} className="text-display mt-4 text-[21px] font-semibold outline-none">{presentation.title}</h3>
-      <p className="mt-1.5 text-[12px] leading-relaxed text-mut">
+      <h3 ref={headingRef} data-review-focus tabIndex={-1} className="text-display mt-2.5 text-[19px] font-semibold outline-none">{presentation.title}</h3>
+      <p className="mt-1 text-[13px] leading-snug text-mut">
         {resultBodyDuringRefresh({ status: result.status, refreshing, positionAction, body: presentation.body })}
       </p>
-      <p className="mt-2 text-[11px] text-mut" title={result.walletAddress}>
+      <p className="mt-1.5 text-[12px] text-mut" title={result.walletAddress}>
         {chainName(result.chainId)} · Wallet {compactAddress(result.walletAddress)}
       </p>
       {result.steps.some(hasTransactionHash) && (
-        <div className="mt-4 flex w-full flex-col gap-2 text-left">
+        <div className="mt-3 flex w-full flex-col gap-1.5 text-left">
           {result.steps.map((step: TransactionStepResult) => hasTransactionHash(step)
             ? <TransactionHashLink key={`${step.index}-${step.hash}`} step={step} chainId={result.chainId} />
             : null)}
@@ -65,7 +65,7 @@ export function TransactionResultView({
       <ReceiptSummary receipts={receipts} />
       {positionLabel && <p className="mt-2 text-[11px] text-mut">Position: {positionLabel}</p>}
       {bridgeTracker}
-      <Button variant="ghost" aria-label={nextAriaLabel} className="mt-4" onClick={onNext}>{nextLabel}</Button>
+      <Button variant="ghost" aria-label={nextAriaLabel} className="mt-3" onClick={onNext}>{nextLabel}</Button>
     </div>
   );
 }

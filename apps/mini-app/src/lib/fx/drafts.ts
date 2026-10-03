@@ -17,6 +17,11 @@ export type SignatureDraftStatus = "signature-required" | "cancelled";
 export type SignatureDraftStateValue = string | number | boolean | null;
 export type SignatureDraftState = Readonly<Record<string, SignatureDraftStateValue>>;
 
+/** A partial route keeps its editable draft until the action itself is submitted. */
+export function shouldRemoveSignatureDraft(params: { actionSubmitted: boolean; routeCompleted: boolean }): boolean {
+  return params.actionSubmitted || params.routeCompleted;
+}
+
 export interface SignatureRequiredDraft {
   id: string;
   walletAddress: Address;

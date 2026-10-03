@@ -88,5 +88,9 @@ __pycache__/
 **/.borrow-harness-results/
 **/.move-harness-results/
 **/.positions-harness-results/
+**/.action-review-harness-results/
+**/.fee-policy-harness-results/
+**/.privy-send-harness-results/
+**/.trade-harness-results/
 **/.last-run.json
 /apps/mini-app/e2e/state-lab/captures/*.png

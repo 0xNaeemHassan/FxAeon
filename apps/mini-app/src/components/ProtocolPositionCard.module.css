@@ -19,7 +19,7 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-.compact { padding: 13px 14px; }
+.compact { padding: 11px 12px; border-radius: 16px; }
 
 .interactive { cursor: pointer; }
 .interactive:hover {
@@ -41,8 +41,12 @@
 }
 
 .content { min-width: 0; }
-.compactContent .positionValue { margin-top: 12px; padding: 10px 12px; }
-.compactContent .metrics { gap: 7px; margin-top: 8px; }
+.compactContent .identity { gap: 10px; }
+.compactContent .positionValue { margin-top: 9px; padding: 8px 10px; border-radius: 12px; }
+.compactContent .metrics { gap: 6px; margin-top: 6px; }
+.compactContent .metric { padding: 7px 8px; border-radius: 10px; }
+.compactContent .metricValue { margin-top: 3px; font-size: 13px; }
+.compactContent .metricDetail { font-size: 11px; }
 .identity {
   display: flex;
   min-width: 0;
@@ -80,7 +84,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  margin: 5px 0 0;
+  margin: 4px 0 0;
   color: var(--mut-2);
   font-size: 11px;
   line-height: 1.3;
@@ -185,7 +189,7 @@
   .card { padding: 11px; }
   .compact { padding: 10px; }
   .identity { gap: 9px; }
-  .positionValue { gap: 8px; margin-top: 11px; padding: 9px 10px; }
+  .positionValue { gap: 8px; margin-top: 9px; padding: 8px 9px; }
   .metrics { gap: 6px; }
   .metric { padding: 8px; }
   .metricValue { font-size: 11px; }

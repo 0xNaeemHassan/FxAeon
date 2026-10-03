@@ -56,9 +56,9 @@ export function TransactionHashLink({ step, chainId }: { step: TransactionStepRe
 
 export function StatusNotice({ label, body, className, icon }: { label: string; body: string; className: string; icon: ReactNode }) {
   return (
-    <div role="status" aria-live="polite" aria-atomic="true" className="flex items-start gap-2.5 rounded-xl bg-[rgba(255,255,255,.035)] p-3 text-[11.5px] leading-relaxed">
+    <div role="status" aria-live="polite" aria-atomic="true" className="flex items-start gap-2 rounded-xl bg-[rgba(255,255,255,.035)] px-2.5 py-2 text-[11px] leading-snug">
       <span className={`mt-0.5 shrink-0 ${className}`}>{icon}</span>
-      <span><span className={`font-semibold ${className}`}>{label}</span><span className="mt-0.5 block text-mut">{body}</span></span>
+      <span className="min-w-0"><span className={`font-semibold ${className}`}>{label}</span><span className="mt-0.5 block text-mut">{body}</span></span>
     </div>
   );
 }

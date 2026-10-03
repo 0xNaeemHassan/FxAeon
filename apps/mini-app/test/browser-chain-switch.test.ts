@@ -67,6 +67,27 @@ test('4902 with missing or unvalidated RPC metadata never asks the wallet to add
   }
 });
 
+test('unknown networks receive the full validated provider list without duplicate URLs', async () => {
+  const requests: Request[] = [];
+  const infura = 'https://mainnet.infura.io/v3/test-project';
+  const secondAlchemy = 'https://eth-mainnet.g.alchemy.com/v2/second-key';
+  await switchBrowserChain({ request: async (request) => {
+    requests.push(request);
+    if (requests.length === 1) throw unknownChain;
+    return null;
+  } }, 1, () => ({ configuredRpcUrls: [ETH_RPC, secondAlchemy, infura, ETH_RPC] }));
+  assert.deepEqual((requests[1].params?.[0] as { rpcUrls: string[] }).rpcUrls, [ETH_RPC, secondAlchemy, infura]);
+
+  for (const urls of [[], [ETH_RPC, BASE_RPC], [ETH_RPC, 'https://evil.infura.io/v3/key']]) {
+    let calls = 0;
+    await assert.rejects(switchBrowserChain({ request: async () => {
+      calls += 1;
+      throw unknownChain;
+    } }, 1, () => ({ configuredRpcUrls: urls })), /Add Ethereum or Base/);
+    assert.equal(calls, 1, 'Invalid fallback metadata must not reach wallet_addEthereumChain');
+  }
+});
+
 test('explicit disposable-fork metadata remains localhost-only before add and switch', async () => {
   const requests: Request[] = [];
   await switchBrowserChain({ request: async (request) => {

@@ -1,6 +1,6 @@
 import type { ChangedReviewFact } from './actionReviewModel';
 import type { ReviewFact } from '@/lib/fx/reviewFormatting';
-import type { ReceiptPresentation } from '@/lib/receiptPresentation';
+import { shouldShowReceiptMovementFallback, type ReceiptPresentation } from '@/lib/receiptPresentation';
 import { StatusNotice, TransactionHashLink } from '@/components/review/ReviewProgress';
 import presentationStyles from './ActionReviewPresentation.module.css';
 import { ValueOrSkeleton } from '@/components/MissingValue';
@@ -33,8 +33,8 @@ export function CompactQuoteMetrics({ facts, gasStatus }: {
 }
 
 function SummaryRow({ label, value, title }: { label: string; value: string; title?: string }) {
-  return <div className="grid min-w-0 grid-cols-[minmax(80px,.7fr)_minmax(0,1.3fr)] gap-x-3 py-0.5 text-[11px]">
-    <span className="text-mut">{label}</span><span className="min-w-0 break-words font-medium" title={title}>{value}</span>
+  return <div className="grid min-w-0 grid-cols-[minmax(76px,.72fr)_minmax(0,1.28fr)] gap-x-2 py-0.5 text-[11px] leading-snug">
+    <span className="text-mut">{label}</span><span className="min-w-0 break-words text-right font-medium" title={title}>{value}</span>
   </div>;
 }
 
@@ -46,9 +46,9 @@ export function UpdatedQuoteSummary({ changes }: { changes: readonly ChangedRevi
     ? <p className="mt-2 text-[12px] text-mut" role="status">Route updated. Check the details before confirming.</p>
     : null;
   return (
-    <section className="mt-3 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.025)] px-3 py-2.5" aria-label="Updated transaction consequences">
+    <section className="mt-2 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.025)] px-3 py-2" aria-label="Updated transaction consequences">
       <p className="text-[11px] font-semibold text-mut">Changed since your previous review</p>
-      <div className="mt-1.5 flex flex-col gap-1.5">
+      <div className="mt-1 flex flex-col gap-1">
         {visibleChanges.map((change) => <div key={change.label} className="grid grid-cols-[minmax(80px,.7fr)_minmax(0,1.3fr)] gap-x-3 text-[11px]">
           <span className="text-mut">{change.label}</span>
           <span>{change.before ? `${change.before} → ` : ''}{change.after ?? 'No longer included'}</span>
@@ -61,9 +61,9 @@ export function UpdatedQuoteSummary({ changes }: { changes: readonly ChangedRevi
 export function ActionConsequenceSummary({ facts }: { facts: readonly ReviewFact[] }) {
   if (!facts.length) return null;
   return (
-    <section className="mt-3 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.02)] px-3 py-2.5" aria-label="Action consequences">
+    <section className="mt-2 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.02)] px-3 py-2" aria-label="Action consequences">
       <p className="text-[11px] font-semibold text-mut">What changes</p>
-      <div className="mt-1.5 flex flex-col gap-1">
+      <div className="mt-1 flex flex-col gap-0.5">
         {facts.map((fact) => <SummaryRow key={`${fact.label}-${fact.value}`} label={fact.label} value={fact.value} title={fact.title} />)}
       </div>
     </section>
@@ -86,14 +86,21 @@ export function ReceiptSummary({ receipts }: { receipts: readonly ReceiptPresent
   if (!receipts.length) return null;
   const movements = receipts.flatMap((receipt) => receipt.movements);
   const technicalMovements = receipts.flatMap((receipt) => receipt.technicalMovements);
+  const showMovementFallback = shouldShowReceiptMovementFallback(receipts);
   return (
     <section className="mt-4 w-full rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.025)] p-3 text-left" aria-label="Verified receipt">
       <p className="text-[12px] font-semibold">Verified receipt</p>
       {movements.map((movement, index) => <p key={`movement-${index}`} className="mt-1 text-[11px] text-mut">{movement}</p>)}
-      {movements.length === 0 && <p className="mt-1 text-[11px] text-mut">Token movements could not be established from the verified receipt logs.</p>}
+      {movements.length === 0 && showMovementFallback && <p className="mt-1 text-[11px] text-mut">Token movements could not be established from the verified receipt logs.</p>}
       {technicalMovements.length > 0 && <details className="mt-2 text-[11px]"><summary className="cursor-pointer text-mut">Technical movement details</summary>{technicalMovements.map((movement, index) => <p key={`technical-${index}`} className="mt-1 break-all font-mono text-[10px] text-mut">{movement}</p>)}</details>}
-      {receipts.map((receipt, index) => receipt.executionFee && <p key={`fee-${index}`} className="mt-1 text-[11px] text-mut">{receipt.feeLabel}: {receipt.executionFee}{receipt.feeCaveat ? ` · ${receipt.feeCaveat}` : ''}</p>)}
-      {receipts.flatMap((receipt) => receipt.nativeValue ? [receipt.nativeValue] : []).map((value, index) => <p key={`native-${index}`} className="mt-1 text-[11px] text-mut">Native value sent: {value}</p>)}
+      {receipts.map((receipt, index) => <div key={`fees-${index}`} className="mt-1 text-[11px] text-mut">
+        {receipt.executionFee && <p>{receipt.feeLabel}: {receipt.executionFee}</p>}
+        {receipt.l1DataFee && <p>Base L1 data fee: {receipt.l1DataFee}</p>}
+        {receipt.operatorFee && <p>Base operator fee: {receipt.operatorFee}</p>}
+        {receipt.totalExecutionFee && receipt.totalFeeLabel && <p>{receipt.totalFeeLabel}: {receipt.totalExecutionFee}</p>}
+        {receipt.feeCaveat && <p>{receipt.feeCaveat}</p>}
+      </div>)}
+      {receipts.map((receipt, index) => receipt.nativeValue && <p key={`native-${index}`} className="mt-1 text-[11px] text-mut">{receipt.nativeValueLabel}: {receipt.nativeValue}</p>)}
     </section>
   );
 }

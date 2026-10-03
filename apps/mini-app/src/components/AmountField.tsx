@@ -75,7 +75,9 @@ export function AmountFieldView({ value, onChange, symbol, label, hint, balance,
   const chooseMax = async () => {
     haptic('selection'); setMaxError('');
     if (allowAll) { change('all'); return; }
-    if (maxAmount === null) {
+    // Route-aware maxima must be priced again on every click: gas can change
+    // even when the amount and wallet balance have not.
+    if (onMax) {
       try { await onMax?.(); } catch { setMaxError('The spendable maximum could not be checked. Try again.'); }
       return;
     }
@@ -91,8 +93,8 @@ export function AmountFieldView({ value, onChange, symbol, label, hint, balance,
           haptic('selection'); const next = calculateFractionDecimal(available, percent, maxDecimals); if (next) change(next);
         }}><span>{percent}%</span></button>)}
         {showMax && <button type="button" onClick={() => void chooseMax()} disabled={inactive || !canUseMax || maxPending || !allowAll && maxAmount === null && !onMax}
-          aria-busy={maxPending || undefined} aria-label={allowAll ? 'Use all' : maxAmount === null ? 'Calculate 100% after gas reserve' : 'Use 100% of available balance'}
-          title={maxAmount === null ? 'Reserve network fees before using the maximum' : undefined} data-selected={isMax || undefined}><span>{maxPending ? '…' : 'Max'}</span></button>}
+          aria-busy={maxPending || undefined} aria-label={allowAll ? 'Use all' : onMax ? 'Calculate 100% after gas reserve' : 'Use 100% of available balance'}
+          title={onMax ? 'Reserve network fees before using the maximum' : undefined} data-selected={isMax || undefined}><span>Max{maxPending && <span className={styles.maxSpinner} aria-hidden="true" />}</span></button>}
       </div>}
       </div>
       {hint && <span className={styles.meta} id={`${id}-hint`}>{hint}</span>}

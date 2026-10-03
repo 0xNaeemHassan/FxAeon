@@ -3,6 +3,7 @@ import test from 'node:test';
 import { FX_TOKENS } from '../src/lib/fx/tokens';
 import {
   fetchAlchemyWalletAssets,
+  filterSupportedWalletAssets,
   mergeCanonicalWalletAssets,
   parseAlchemyWalletAssets,
   summarizeWalletAssets,
@@ -43,7 +44,7 @@ test('parses exact Alchemy native and ERC-20 balances with validated metadata an
   assert.equal(eth?.priceUsd, 2400.25);
   assert.equal(usdc?.balanceWei, 900719925474099312345678n);
   assert.equal(usdc?.canonicalKey, 'USDC');
-  assert.equal(snapshot.assets.find((asset) => asset.symbol === 'TEST')?.logoUrl, null);
+  assert.equal(snapshot.assets.some((asset) => asset.symbol === 'TEST'), false);
 });
 
 test('canonical reads replace indexed values and keep unpriced assets visible', () => {
@@ -54,12 +55,12 @@ test('canonical reads replace indexed values and keep unpriced assets visible', 
   const merged = mergeCanonicalWalletAssets(indexed, wallet, [{ chainId: 1, balances: [{ key: 'ETH', address: null, decimals: 18, amountWei: 2n * 10n ** 18n }], failedTokens: [], updatedAt: now }], { prices: { ETH: 2400 }, status: 'ready', updatedAt: now }, now);
   const eth = merged.assets.find((asset) => asset.chainId === 1 && asset.canonicalKey === 'ETH');
   assert.equal(eth?.balanceWei, 2n * 10n ** 18n);
-  assert.equal(merged.assets.some((asset) => asset.symbol === 'TEST'), true);
-  assert.equal(merged.unpricedAssetCount, 1);
+  assert.equal(merged.assets.some((asset) => asset.symbol === 'TEST'), false);
+  assert.equal(merged.unpricedAssetCount, 0);
   const summarized = summarizeWalletAssets(merged, now);
   assert.equal(summarized.totalUsdValue, 4800, 'fresh priced rows remain available as a subtotal');
-  assert.equal(summarized.assets.find((asset) => asset.symbol === 'TEST')?.usdValue, null, 'unpriced balances stay excluded');
-  assert.equal(walletAssetValuation(summarized).totalUsd, null, 'a partial subtotal is not marked as a complete total');
+  assert.equal(summarized.assets.some((asset) => asset.symbol === 'TEST'), false, 'unsupported balances stay outside the FxAeon wallet list');
+  assert.equal(walletAssetValuation(summarized).totalUsd, null, 'Base remains incomplete until its exact read arrives');
   assert.equal(walletAssetValuation(summarized).complete, false);
 });
 
@@ -126,17 +127,67 @@ test('canonical rows use their own quote timestamp instead of the oldest unrelat
   assert.equal(eth?.usdValue, 2400);
 });
 
-test('conflicting duplicates remain excluded even when a third row repeats an earlier balance', () => {
+test('unsupported duplicates are excluded without making supported network reads partial', () => {
   const row = { address: wallet, network: 'base-mainnet', tokenAddress: '0x1111111111111111111111111111111111111111', tokenBalance: '10', tokenMetadata: { symbol: 'TEST', decimals: 18 } };
   const snapshot = parseAlchemyWalletAssets({ data: { tokens: [row, { ...row, tokenBalance: '20' }, row] } }, wallet, now);
   assert.equal(snapshot.assets.length, 0);
-  assert.equal(snapshot.networks[8453].status, 'partial');
+  assert.equal(snapshot.networks[8453].status, 'ready');
 });
 
-test('canonical successes do not claim complete discovery after an indexed network failure', () => {
+test('removes unsupported rows retained in snapshots created before the token filter', () => {
+  const current = parseAlchemyWalletAssets({ data: { tokens: [
+    { address: wallet, network: 'eth-mainnet', tokenAddress: null, tokenBalance: '0x1', tokenMetadata: { symbol: 'ETH', decimals: 18 }, tokenPrices: [] },
+  ] } }, wallet, now);
+  const oldRow = { ...current.assets[0], id: '1:0x1111111111111111111111111111111111111111', tokenAddress: '0x1111111111111111111111111111111111111111' as `0x${string}`, canonicalKey: null, symbol: 'TEST' };
+  const restored = { ...current, assets: [...current.assets, oldRow], unpricedAssetCount: 1 };
+  const sanitized = filterSupportedWalletAssets(restored);
+  assert.deepEqual(sanitized.assets.map((asset) => asset.canonicalKey), ['ETH']);
+  assert.equal(sanitized.unpricedAssetCount, 1);
+});
+
+test('complete canonical supported-token reads settle an optional indexer outage', () => {
+  const indexed = parseAlchemyWalletAssets({ data: { tokens: [] }, error: { partialErrors: [
+    { network: 'eth-mainnet' }, { network: 'base-mainnet' },
+  ] } }, wallet, now);
+  const reads = [1, 8453].map((chainId) => ({
+    chainId: chainId as 1 | 8453,
+    balances: [{ key: 'ETH' as const, address: null, decimals: 18, amountWei: 1n * 10n ** 18n }],
+    failedTokens: [], updatedAt: now,
+  }));
+  const prices = { prices: { ETH: 2_000 }, status: 'ready' as const, updatedAt: now, updatedAts: { ETH: now } };
+  const merged = mergeCanonicalWalletAssets(indexed, wallet, reads, prices, now);
+  assert.equal(merged.networks[1].status, 'ready');
+  assert.equal(merged.networks[8453].status, 'ready');
+  assert.equal(walletAssetValuation(merged).complete, true);
+  assert.equal(walletAssetValuation(merged).totalUsd, 4_000);
+});
+
+test('canonical balances with missing quotes remain incomplete after indexer failure', () => {
+  const indexed = parseAlchemyWalletAssets({ data: { tokens: [] }, error: { partialErrors: [
+    { network: 'eth-mainnet' }, { network: 'base-mainnet' },
+  ] } }, wallet, now);
+  const reads = [1, 8453].map((chainId) => ({
+    chainId: chainId as 1 | 8453,
+    balances: [{ key: 'ETH' as const, address: null, decimals: 18, amountWei: 1n * 10n ** 18n }],
+    failedTokens: [], updatedAt: now,
+  }));
+  const merged = mergeCanonicalWalletAssets(indexed, wallet, reads, { prices: {}, status: 'unavailable', updatedAt: null }, now);
+  assert.equal(merged.networks[1].status, 'ready');
+  assert.equal(merged.networks[8453].status, 'ready');
+  assert.equal(walletAssetValuation(merged).complete, false);
+  assert.equal(walletAssetValuation(merged).totalUsd, null);
+  assert.equal(walletAssetValuation(merged).unpricedAssetCount, 2);
+});
+
+test('actual canonical failures remain incomplete despite successful sibling or indexed reads', () => {
   const indexed = parseAlchemyWalletAssets({ data: { tokens: [] }, error: { partialErrors: [{ network: 'base-mainnet' }] } }, wallet, now);
-  const merged = mergeCanonicalWalletAssets(indexed, wallet, [{ chainId: 8453, balances: [], failedTokens: [], updatedAt: now }], { prices: {}, status: 'ready', updatedAt: now }, now);
+  const merged = mergeCanonicalWalletAssets(indexed, wallet, [
+    { chainId: 1 as const, balances: [], failedTokens: [], updatedAt: now },
+    { chainId: 8453 as const, balances: [], failedTokens: ['ETH'], updatedAt: now },
+  ], { prices: {}, status: 'ready', updatedAt: now }, now);
+  assert.equal(merged.networks[1].status, 'ready');
   assert.equal(merged.networks[8453].status, 'partial');
+  assert.equal(walletAssetValuation(merged).complete, false);
 });
 
 test('pending canonical reads keep the aggregate incomplete', () => {
@@ -186,7 +237,7 @@ test('freshly retries only networks reported in Alchemy partialErrors and keeps 
   assert.equal(snapshot.networks[8453].status, 'ready');
   assert.equal(snapshot.assets.find((asset) => asset.chainId === 1)?.balanceWei, 3n);
   assert.equal(snapshot.assets.find((asset) => asset.chainId === 8453 && asset.tokenAddress === null)?.balanceWei, 1n);
-  assert.equal(snapshot.assets.find((asset) => asset.symbol === 'TEST')?.balanceWei, 2n);
+  assert.equal(snapshot.assets.some((asset) => asset.symbol === 'TEST'), false);
 });
 
 test('pending refresh preserves canonical rows without restamping cached values', () => {
@@ -223,9 +274,9 @@ test('portfolio and wallet profile hide an incomplete headline total', () => {
     { address: wallet, network: 'base-mainnet', tokenAddress: '0x1111111111111111111111111111111111111111', tokenBalance: '10', tokenMetadata: { symbol: 'TEST', decimals: 18 }, tokenPrices: [] },
   ] } }, wallet, now);
   const valuation = walletAssetValuation(snapshot);
-  assert.equal(valuation.assetCount, 2);
-  assert.equal(valuation.unpricedAssetCount, 1);
-  assert.equal(valuation.totalUsd, null);
-  assert.equal(valuation.complete, false);
-  assert.match(valuation.reason, /1 asset is waiting/);
+  assert.equal(valuation.assetCount, 1);
+  assert.equal(valuation.unpricedAssetCount, 0);
+  assert.equal(valuation.totalUsd, 2000);
+  assert.equal(valuation.complete, true);
+  assert.equal(valuation.reason, '');
 });

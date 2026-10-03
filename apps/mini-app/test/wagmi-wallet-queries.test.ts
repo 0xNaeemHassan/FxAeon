@@ -10,7 +10,7 @@ import {
   type Hex,
 } from "viem";
 import { erc20Abi } from "viem";
-import { mainnet } from "viem/chains";
+import { base, mainnet } from "viem/chains";
 import { QueryObserver } from "@tanstack/react-query";
 import {
   createWalletDataConfig,
@@ -18,6 +18,7 @@ import {
 } from "../src/lib/web3/config";
 import {
   createWalletQueryClient,
+  canonicalWalletAssetQueryOptions,
   fxSaveClaimableQueryKey,
   fxSaveClaimableQueryOptions,
   FX_SAVE_CLAIMABLE_REFETCH_MS,
@@ -26,6 +27,7 @@ import {
   moveBalanceQueryOptions,
   readCanonicalWalletAssets,
   readWagmiWalletBalances,
+  refreshStaleWalletQueries,
   walletBalanceQueryKey,
   walletBalanceQueryOptions,
   walletQueryResultFresh,
@@ -58,7 +60,7 @@ function encodedBalance(value: bigint): Hex {
   return encodeFunctionResult({ abi: erc20Abi, functionName: "balanceOf", result: value });
 }
 
-function createMockClient(state: MockRpcState, chain = mainnet) {
+function createMockClient(state: MockRpcState, chain: typeof mainnet | typeof base = mainnet) {
   const provider = {
     request: async ({ method, params }: { method: string; params?: readonly unknown[] }) => {
       state.calls.push(method);
@@ -207,6 +209,84 @@ test("deduplicates concurrent observers and direct QueryClient calls by session/
     queryClient.getQueryData(walletBalanceQueryKey("session-a", wallet, 1)),
     queryClient.getQueryData(walletBalanceQueryKey("session-a", otherWallet, 1)),
   );
+  queryClient.clear();
+});
+
+test("shares one Ethereum read between exact and canonical portfolio consumers", async () => {
+  const state = makeState();
+  const queryClient = createWalletQueryClient();
+  const config = configFor(state);
+  const exact = new QueryObserver(queryClient, walletBalanceQueryOptions(config, "session-a", wallet, 1));
+  const canonical = new QueryObserver(queryClient, canonicalWalletAssetQueryOptions(config, "session-a", wallet, 1));
+  const unsubscribeExact = exact.subscribe(() => undefined);
+  const unsubscribeCanonical = canonical.subscribe(() => undefined);
+  await Promise.all([exact.refetch(), canonical.refetch()]);
+  assert.equal(state.calls.filter((method) => method === "eth_chainId").length, 1);
+  assert.equal(state.calls.filter((method) => method === "eth_getBalance").length, 1);
+  assert.equal(state.calls.filter((method) => method === "eth_call").length, 1);
+  assert.equal(canonical.getCurrentResult().data?.chainId, 1);
+  unsubscribeExact();
+  unsubscribeCanonical();
+  queryClient.clear();
+});
+
+test("block refresh respects query freshness and only refetches stale active reads", async () => {
+  const state = makeState();
+  const queryClient = createWalletQueryClient();
+  const config = configFor(state);
+  let claimReads = 0;
+  const balanceObserver = new QueryObserver(queryClient, walletBalanceQueryOptions(config, "session-a", wallet, 1));
+  const claimOptions = { ...fxSaveClaimableQueryOptions("session-a", wallet, async () => {
+    claimReads += 1;
+    return { pendingSharesWei: 0n, hasPendingRedeem: false } as never;
+  }, async () => undefined), retry: false };
+  const claimObserver = new QueryObserver(queryClient, claimOptions);
+  const unsubscribeBalance = balanceObserver.subscribe(() => undefined);
+  const unsubscribeClaim = claimObserver.subscribe(() => undefined);
+  await Promise.all([balanceObserver.refetch(), claimObserver.refetch()]);
+  const initialRpcCalls = state.calls.length;
+  const initialClaimReads = claimReads;
+
+  await refreshStaleWalletQueries(queryClient, wallet, 1);
+  assert.equal(state.calls.length, initialRpcCalls, "a fresh block head refetched wallet RPC data");
+  assert.equal(claimReads, initialClaimReads, "a fresh block head refetched claimability");
+
+  const balanceKey = walletBalanceQueryKey("session-a", wallet, 1);
+  queryClient.setQueryData(balanceKey, queryClient.getQueryData(balanceKey), { updatedAt: Date.now() - 60_000 });
+  await refreshStaleWalletQueries(queryClient, wallet, 1);
+  assert.equal(state.calls.filter((method) => method === "eth_chainId").length, 2);
+  assert.equal(state.calls.filter((method) => method === "eth_getBalance").length, 2);
+  assert.equal(state.calls.filter((method) => method === "eth_call").length, 2);
+  assert.equal(claimReads, initialClaimReads, "stale balance refresh pulled fresh claimability along with it");
+  unsubscribeBalance();
+  unsubscribeClaim();
+  queryClient.clear();
+});
+
+test("reuses a fresh Ethereum read across portfolio/profile navigation without crossing account or chain scope", async () => {
+  const state = makeState();
+  const queryClient = createWalletQueryClient();
+  const config = configFor(state);
+  await queryClient.fetchQuery(walletBalanceQueryOptions(config, "session-a", wallet, 1));
+  await queryClient.fetchQuery(canonicalWalletAssetQueryOptions(config, "session-a", wallet, 1));
+  assert.equal(state.calls.filter((method) => method === "eth_chainId").length, 1);
+  assert.equal(state.calls.filter((method) => method === "eth_getBalance").length, 1);
+  assert.equal(state.calls.filter((method) => method === "eth_call").length, 1);
+
+  await queryClient.fetchQuery(walletBalanceQueryOptions(config, "session-a", otherWallet, 1));
+  await queryClient.fetchQuery(walletBalanceQueryOptions(config, "session-b", wallet, 1));
+  assert.equal(state.calls.filter((method) => method === "eth_chainId").length, 3);
+  assert.equal(state.calls.filter((method) => method === "eth_getBalance").length, 3);
+  assert.equal(state.calls.filter((method) => method === "eth_call").length, 3);
+
+  // A different chain remains an independent snapshot even when the wallet
+  // address and session are unchanged.
+  state.remoteChainId = 8453;
+  const baseConfig = createWalletDataConfig(() => createMockClient(state, base) as never);
+  await queryClient.fetchQuery(canonicalWalletAssetQueryOptions(baseConfig, "session-a", wallet, 8453));
+  assert.equal(state.calls.filter((method) => method === "eth_chainId").length, 4);
+  assert.equal(state.calls.filter((method) => method === "eth_getBalance").length, 4);
+  assert.equal(state.calls.filter((method) => method === "eth_call").length, 4);
   queryClient.clear();
 });
 

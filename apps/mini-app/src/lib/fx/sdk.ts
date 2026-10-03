@@ -1,12 +1,14 @@
 import {
   FxSdk,
+  type BuildBridgeTxRequest,
   type FxSdkConfig,
 } from "@aladdindao/fx-sdk";
 import {
   ETHEREUM_CHAIN_ID,
   FX_SDK_MAIN_COMMIT,
-  requireRpcUrl,
+  configuredRpcUrls,
 } from "./config";
+import { getRpcTransport } from "./clients";
 import {
   OFFICIAL_FX_METHODS,
   type FxSdkFacade,
@@ -14,6 +16,11 @@ import {
 } from "./types";
 
 let ethereumSdk: FxSdk | undefined;
+
+/** The app and SDK bundle different viem minor versions; keep this cast at the boundary. */
+export function asFxSdkRpcTransport(transport: ReturnType<typeof getRpcTransport>): NonNullable<BuildBridgeTxRequest["sourceRpcTransport"]> {
+  return transport as unknown as NonNullable<BuildBridgeTxRequest["sourceRpcTransport"]>;
+}
 
 /**
  * Return the single Ethereum SDK instance used by the Mini App.
@@ -24,9 +31,12 @@ let ethereumSdk: FxSdk | undefined;
  */
 export function getFxSdk(): FxSdk {
   if (!ethereumSdk) {
+    const rpcUrls = configuredRpcUrls(ETHEREUM_CHAIN_ID);
     const config: FxSdkConfig = {
       chainId: ETHEREUM_CHAIN_ID,
-      rpcUrl: requireRpcUrl(ETHEREUM_CHAIN_ID),
+      rpcUrl: rpcUrls[0],
+      rpcUrls,
+      rpcTransport: asFxSdkRpcTransport(getRpcTransport(rpcUrls, ETHEREUM_CHAIN_ID)),
     };
     ethereumSdk = new FxSdk(config);
   }

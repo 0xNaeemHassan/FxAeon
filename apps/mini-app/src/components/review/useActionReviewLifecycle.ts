@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { prepareRoutesForReview, runTransactionRoute, type PlannedRoute, type PlanStatus, type TransactionExecutionResult, type TransactionStepResult } from '@/lib/fx';
-import { cancelSignatureRequiredDraft, removeSignatureRequiredDraft, saveSignatureRequiredDraft } from '@/lib/fx';
+import { FX_TOKENS, prepareRoutesForReview, runTransactionRoute, type PlannedRoute, type PlanStatus, type TransactionExecutionResult, type TransactionStepResult } from '@/lib/fx';
+import { cancelSignatureRequiredDraft, removeSignatureRequiredDraft, saveSignatureRequiredDraft, shouldRemoveSignatureDraft } from '@/lib/fx';
 import { useRouteGasCost } from '@/lib/fx';
 import { usePrivyWallet } from '@/lib/wallet';
 import { useInvalidateWalletData } from '@/components/WalletDataProvider';
@@ -13,7 +13,7 @@ import { hasTransactionHash, transactionStepProgress } from '@/lib/transactionPr
 import { chainName } from '@/components/review/ReviewProgress';
 import { primaryReviewFacts } from '@/components/review/actionReviewPresentation';
 import { fetchGasTierQuotes, formatGasTierQuote, selectedGasTierQuote, type GasFeeSelection } from '@/lib/fx/gasFeePolicy';
-import { readGasTier, SETTINGS_KEY, SETTINGS_UPDATED_EVENT } from '@/lib/settings';
+import { announceSettingsUpdated, readGasTier, readSlippagePercent, SETTINGS_KEY, SETTINGS_UPDATED_EVENT, type GasTier } from '@/lib/settings';
 import { changedConsequenceFacts, reviewGenerationIsCurrent, updatedRouteTermsRequired, type ChangedReviewFact, type ReviewTransition } from '@/components/review/actionReviewModel';
 import { useActionReviewController } from '@/components/review/useActionReviewController';
 import type { ActionReviewProps } from './actionReviewTypes';
@@ -72,6 +72,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
   // React state updates are asynchronous; latch before any wallet request so
   // repeated clicks in the same frame cannot start a second execution.
   const busyRef = useRef(false);
+  const changingFeeRef = useRef(false);
   const executionStepsRef = useRef<TransactionStepResult[]>([]);
   // A submitted execution keeps its route and progress visible if the active
   // wallet changes. The latch still blocks every later wallet request.
@@ -89,6 +90,8 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
     address: wallet.address,
     chainId: wallet.chainId,
     connectionVersion: wallet.connectionVersion,
+    isEmbedded: wallet.isEmbedded,
+    waitForPreviousConfirmationClose: wallet.waitForPreviousConfirmationClose,
   });
   const onStageChangeRef = useRef(onStageChange);
   onStageChangeRef.current = onStageChange;
@@ -115,6 +118,8 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
     address: wallet.address,
     chainId: wallet.chainId,
     connectionVersion: wallet.connectionVersion,
+    isEmbedded: wallet.isEmbedded,
+    waitForPreviousConfirmationClose: wallet.waitForPreviousConfirmationClose,
   };
 
   const route = (stage === 'executing' || stage === 'result') && executionRoute
@@ -123,12 +128,16 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
   const routeChainId = route?.chainId;
   const currentGasTier = readGasTier();
   const selectedFeeQuote = useMemo(() => {
-    if (!routeChainId || feeSelection?.snapshot.chainId !== routeChainId || feeSelection.tier !== currentGasTier) return undefined;
+    if (!wallet.isEmbedded || !routeChainId || feeSelection?.snapshot.chainId !== routeChainId || feeSelection.tier !== currentGasTier) return undefined;
     try { return selectedGasTierQuote(feeSelection.snapshot, feeSelection.tier); } catch { return undefined; }
-  }, [currentGasTier, feeSelection, routeChainId]);
-  const gasCost = useRouteGasCost(route, { enabled: Boolean(route && stage !== 'planning' && selectedFeeQuote), feeTierQuote: selectedFeeQuote });
+  }, [currentGasTier, feeSelection, routeChainId, wallet.isEmbedded]);
+  const gasCost = useRouteGasCost(route, {
+    enabled: Boolean(route && stage !== 'planning' && (!wallet.isEmbedded || selectedFeeQuote)),
+    feeTierQuote: selectedFeeQuote,
+  });
   const intentKey = draftState === undefined ? planBuilder : JSON.stringify(draftState);
   const previousIntentKey = useRef<typeof intentKey>(intentKey);
+  const previousWalletMode = useRef(wallet.isEmbedded);
 
   useEffect(() => {
     if (stage !== 'review' || preparedAt === null) return undefined;
@@ -176,7 +185,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
 
   useEffect(() => {
     const invalidateForTierChange = () => {
-      if (stage === 'review' && feeSelection && readGasTier() !== feeSelection.tier) {
+      if (wallet.isEmbedded && !changingFeeRef.current && stage === 'review' && feeSelection && readGasTier() !== feeSelection.tier) {
         expireQuote();
         setError('Network fee preference changed. Review the updated fee before signing.');
         setStatus('reviewing');
@@ -191,7 +200,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
       window.removeEventListener(SETTINGS_UPDATED_EVENT, invalidateForTierChange);
       window.removeEventListener('storage', onStorage);
     };
-  }, [expireQuote, feeSelection, stage]);
+  }, [expireQuote, feeSelection, stage, wallet.isEmbedded]);
 
   useEffect(() => {
     const onTelegramBack = (event: Event) => {
@@ -229,6 +238,18 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
     busyRef.current = false;
     setError(message);
   }, [clearSession, expireQuote, transition]);
+
+  useEffect(() => {
+    if (previousWalletMode.current === wallet.isEmbedded) return;
+    previousWalletMode.current = wallet.isEmbedded;
+    setFeeSelection(null);
+    if (stage === 'executing') {
+      executionSessionInvalidatedRef.current = true;
+      setError('Wallet connection changed during this action. No later transaction will be requested.');
+    } else if (stage === 'review' || stage === 'planning') {
+      invalidatePreparedRoute('Wallet connection changed. Review the action again before signing.');
+    }
+  }, [invalidatePreparedRoute, stage, wallet.isEmbedded]);
 
   // Bind the reviewed route to logical form intent. Callers with a primitive
   // draft snapshot may recreate planners during claim/balance polling without
@@ -282,7 +303,8 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
     generationRef.current = generation;
     const reviewWalletAddress = wallet.address.toLowerCase();
     const reviewChainId = wallet.chainId;
-    const requestedGasTier = readGasTier();
+    const requestedGasTier = wallet.isEmbedded ? readGasTier() : undefined;
+    const reviewIsEmbedded = wallet.isEmbedded;
     const reviewConnectionVersion = wallet.connectionVersion;
     const reviewSessionSnapshot = { walletAddress: reviewWalletAddress, chainId: reviewChainId, connectionVersion: reviewConnectionVersion };
     const assertReviewSession = () => {
@@ -292,6 +314,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
         walletAddress: liveWallet.address?.toLowerCase() ?? '', authenticated: liveWallet.authenticated,
         chainId: liveWallet.chainId, connectionVersion: liveWallet.connectionVersion,
       });
+      if (liveWallet.isEmbedded !== reviewIsEmbedded) throw new Error('The wallet connection changed while preparing the review.');
       if (mismatch) throw new Error(mismatch === 'wallet'
         ? 'The selected wallet changed while preparing the review.'
         : mismatch === 'network'
@@ -315,21 +338,28 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
       const walletAddress = reviewWalletAddress;
       // Alternatives are independent; checking them concurrently removes one
       // RPC round trip per extra route from the review's critical path.
-      const { viable, failures } = await prepareRoutesForReview(planned, walletAddress);
+      const [{ viable, failures }, feeSnapshot] = await Promise.all([
+        prepareRoutesForReview(planned, walletAddress),
+        wallet.isEmbedded ? fetchGasTierQuotes(planned[0].chainId) : Promise.resolve(undefined),
+      ]);
       if (!assertReviewSession()) return;
       if (!viable.length) {
         throw new Error(`The transaction could not be simulated: ${failures.join('; ')}`);
       }
-      const feeSnapshot = await fetchGasTierQuotes(viable[0].chainId);
       if (!assertReviewSession()) return;
-      selectedGasTierQuote(feeSnapshot, requestedGasTier);
-      if (readGasTier() !== requestedGasTier) throw new Error('Network fee preference changed while preparing the review. Try reviewing again.');
+      if (wallet.isEmbedded) {
+        if (!feeSnapshot || requestedGasTier === undefined) throw new Error('Selected network fee is unavailable. Review the action again.');
+        selectedGasTierQuote(feeSnapshot, requestedGasTier);
+        if (readGasTier() !== requestedGasTier) throw new Error('Network fee preference changed while preparing the review. Try reviewing again.');
+      }
       setRoutes(viable);
       setSelectedRoute(0);
       setStepResults([]);
       executionStepsRef.current = [];
       setExecutionRoute(null);
-      setFeeSelection({ snapshot: feeSnapshot, tier: requestedGasTier });
+      setFeeSelection(wallet.isEmbedded && feeSnapshot && requestedGasTier
+        ? { snapshot: feeSnapshot, tier: requestedGasTier }
+        : null);
       // Snapshot the action with its calldata so later form changes cannot
       // rename the route the user reviewed.
       setReviewTitle(operationLabel ?? viable[0].operation);
@@ -338,7 +368,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
       setStatusDetail('Route ready.');
       // Align the ordinary review freshness window with the earlier of route
       // quote and gas quote expiry; neither can silently outlive the other.
-      const preparedAt = Math.min(Date.now(), feeSnapshot.validUntil - REVIEW_FRESHNESS_MS);
+      const preparedAt = feeSnapshot ? Math.min(Date.now(), feeSnapshot.validUntil - REVIEW_FRESHNESS_MS) : Date.now();
       acceptRoute(viable[0], intentKey);
       setQuoteChanges([]);
       preparedAtRef.current = preparedAt;
@@ -357,7 +387,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
         setLoading(false);
       }
     }
-  }, [acceptRoute, bindSession, checkSession, disabled, isCurrentGeneration, loading, operationLabel, planBuilder, prefetchedPlan, intentKey, setQuoteChanges, stage, transition, wallet.address, wallet.authenticated, wallet.chainId, wallet.connectionVersion]);
+  }, [acceptRoute, bindSession, checkSession, disabled, isCurrentGeneration, loading, operationLabel, planBuilder, prefetchedPlan, intentKey, setQuoteChanges, stage, transition, wallet.address, wallet.authenticated, wallet.chainId, wallet.connectionVersion, wallet.isEmbedded]);
 
   const refreshReviewedQuote = useCallback(async () => {
     if (stage !== 'review' || !quoteExpired || !planBuilder || disabled || busyRef.current) return;
@@ -368,14 +398,16 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
     const walletAddress = reviewed.walletAddress.toLowerCase();
     const sessionChainId = wallet.chainId;
     const connectionVersion = wallet.connectionVersion;
-    const requestedGasTier = readGasTier();
+    const requestedGasTier = wallet.isEmbedded ? readGasTier() : undefined;
+    const reviewIsEmbedded = wallet.isEmbedded;
     const sessionMatches = () => {
       if (!isCurrentGeneration(generation)) return false;
       const live = liveWalletRef.current;
       return live.authenticated
         && live.address?.toLowerCase() === walletAddress
         && live.chainId === sessionChainId
-        && live.connectionVersion === connectionVersion;
+        && live.connectionVersion === connectionVersion
+        && live.isEmbedded === reviewIsEmbedded;
     };
     busyRef.current = true;
     setLoading(true);
@@ -386,14 +418,26 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
       const planned = asRoutes(await planBuilder());
       if (!sessionMatches()) return;
       setStatus('reviewing');
-      const { viable, failures } = await prepareRoutesForReview(planned, walletAddress);
+      const [preparedRoutes, preparedFeeSnapshot] = await Promise.all([
+        prepareRoutesForReview(planned, walletAddress),
+        wallet.isEmbedded ? fetchGasTierQuotes(reviewed.chainId) : Promise.resolve(undefined),
+      ]);
       if (!sessionMatches()) return;
+      const { viable, failures } = preparedRoutes;
       if (!viable.length) throw new Error(`The updated transaction could not be simulated: ${failures.join('; ')}`);
       const next = viable[0];
-      const feeSnapshot = await fetchGasTierQuotes(next.chainId);
-      const nextFeeQuote = selectedGasTierQuote(feeSnapshot, requestedGasTier);
+      let feeSnapshot: Awaited<ReturnType<typeof fetchGasTierQuotes>> | undefined;
+      if (wallet.isEmbedded) {
+        feeSnapshot = preparedFeeSnapshot?.chainId === next.chainId
+          ? preparedFeeSnapshot
+          : await fetchGasTierQuotes(next.chainId);
+      }
+      if (wallet.isEmbedded && (!feeSnapshot || requestedGasTier === undefined)) {
+        throw new Error('Selected network fee is unavailable. Review the action again.');
+      }
+      const nextFeeQuote = feeSnapshot && requestedGasTier ? selectedGasTierQuote(feeSnapshot, requestedGasTier) : undefined;
       if (!sessionMatches()) return;
-      if (readGasTier() !== requestedGasTier) throw new Error('Network fee preference changed while preparing the updated review. Try again.');
+      if (wallet.isEmbedded && requestedGasTier && readGasTier() !== requestedGasTier) throw new Error('Network fee preference changed while preparing the updated review. Try again.');
       const termsChanged = updatedRouteTermsRequired(acceptedTerms, next);
       const previousFacts = primaryReviewFacts(reviewed);
       const nextFacts = primaryReviewFacts(next);
@@ -403,24 +447,24 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
       if (previousRouteType !== nextRouteType && (previousRouteType || nextRouteType)) {
         factChanges.push({ label: 'Route', before: previousRouteType, after: nextRouteType });
       }
-      const previousFeeQuote = feeSelection?.snapshot.chainId === reviewed.chainId
+      const previousFeeQuote = wallet.isEmbedded && feeSelection?.snapshot.chainId === reviewed.chainId
         ? feeSelection.snapshot.tiers[feeSelection.tier]
         : undefined;
       const previousFeeValue = previousFeeQuote ? formatGasTierQuote(previousFeeQuote) : undefined;
-      const nextFeeValue = formatGasTierQuote(nextFeeQuote);
+      const nextFeeValue = nextFeeQuote ? formatGasTierQuote(nextFeeQuote) : undefined;
       if (previousFeeValue !== nextFeeValue) {
         factChanges.push({ label: 'Gas tier', before: previousFeeValue, after: nextFeeValue });
       }
       setQuoteChanges(factChanges);
       setRoutes(viable);
-      setFeeSelection({ snapshot: feeSnapshot, tier: requestedGasTier });
+      setFeeSelection(feeSnapshot && requestedGasTier ? { snapshot: feeSnapshot, tier: requestedGasTier } : null);
       setSelectedRoute(0);
       setStepResults([]);
       executionStepsRef.current = [];
       setReviewTitle(operationLabel ?? next.operation);
       bindSession({ walletAddress, chainId: sessionChainId, connectionVersion });
       acceptRoute(next, intentKey);
-      const updatedPreparedAt = Math.min(Date.now(), feeSnapshot.validUntil - REVIEW_FRESHNESS_MS);
+      const updatedPreparedAt = feeSnapshot ? Math.min(Date.now(), feeSnapshot.validUntil - REVIEW_FRESHNESS_MS) : Date.now();
       setPreparedAt(updatedPreparedAt);
       preparedAtRef.current = updatedPreparedAt;
       if (termsChanged && factChanges.length === 0) {
@@ -440,7 +484,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
         setLoading(false);
       }
     }
-  }, [acceptRoute, acceptedTerms, bindSession, disabled, feeSelection, isCurrentGeneration, operationLabel, planBuilder, intentKey, quoteExpired, routes, selectedRoute, stage, wallet.chainId, wallet.connectionVersion]);
+  }, [acceptRoute, acceptedTerms, bindSession, disabled, feeSelection, isCurrentGeneration, operationLabel, planBuilder, intentKey, quoteExpired, routes, selectedRoute, stage, wallet.chainId, wallet.connectionVersion, wallet.isEmbedded]);
 
   // History restores editable primitives only. Once the route owner has
   // applied those values and exposes its planner, immediately reopen the
@@ -462,10 +506,10 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
   const execute = useCallback(async () => {
     const startingRoute = route;
     if (disabled || !planBuilder || !startingRoute || loading || busyRef.current || stage !== 'review' || status === 'failed' || stepResults.some(hasTransactionHash)) return;
-    if (!feeSelection
+    if (wallet.isEmbedded && (!feeSelection
       || feeSelection.snapshot.chainId !== startingRoute.chainId
       || feeSelection.tier !== readGasTier()
-      || feeSelection.snapshot.validUntil <= Date.now()) {
+      || feeSelection.snapshot.validUntil <= Date.now())) {
       expireQuote();
       setError('The selected network fee changed or expired. Review the updated fee before signing.');
       setStatus('reviewing');
@@ -483,13 +527,15 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
     generationRef.current = generation;
     executionSessionInvalidatedRef.current = false;
     const executionConnectionVersion = wallet.connectionVersion;
+    const executionIsEmbedded = wallet.isEmbedded;
     const isMountedExecution = () => isCurrentGeneration(generation);
     const isCurrentExecution = () => {
       if (!isMountedExecution() || executionSessionInvalidatedRef.current) return false;
       const liveWallet = liveWalletRef.current;
       return liveWallet.authenticated
         && liveWallet.address?.toLowerCase() === executionWalletAddress
-        && liveWallet.connectionVersion === executionConnectionVersion;
+        && liveWallet.connectionVersion === executionConnectionVersion
+        && liveWallet.isEmbedded === executionIsEmbedded;
     };
     busyRef.current = true;
     setLoading(true);
@@ -515,8 +561,21 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
       setExecutionRoute(currentRoute);
       const execution = await runTransactionRoute({
         route: currentRoute,
-        feeSelection,
+        feeSelection: executionIsEmbedded ? feeSelection ?? undefined : undefined,
         callbacks: {
+          beforeTransaction: async (index) => {
+            if (index === 0) return;
+            const liveWallet = liveWalletRef.current;
+            if (!isCurrentExecution()
+              || !liveWallet.authenticated
+              || liveWallet.address?.toLowerCase() !== startingRoute.walletAddress.toLowerCase()
+              || liveWallet.connectionVersion !== executionConnectionVersion
+              || liveWallet.isEmbedded !== executionIsEmbedded) {
+              throw new Error('The selected wallet changed before the next transaction review.');
+            }
+            await liveWallet.waitForPreviousConfirmationClose?.();
+            if (!isCurrentExecution()) throw new Error('The selected wallet changed while waiting to continue.');
+          },
           ensureChain: async (chainId) => {
             if (!isCurrentExecution()) throw new Error('The selected wallet changed before the network switch.');
             setNetworkSwitching(true);
@@ -527,12 +586,13 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
               if (isMountedExecution()) setNetworkSwitching(false);
             }
           },
-          requestSignature: async (request) => {
+          requestSignature: async (request, transaction) => {
             const liveWallet = liveWalletRef.current;
             if (!isCurrentExecution()
               || !liveWallet.authenticated
               || liveWallet.address?.toLowerCase() !== request.from.toLowerCase()
-              || liveWallet.connectionVersion !== executionConnectionVersion) {
+              || liveWallet.connectionVersion !== executionConnectionVersion
+              || liveWallet.isEmbedded !== executionIsEmbedded) {
               throw new Error('The selected wallet changed before signing.');
             }
             setStatus('awaiting-user');
@@ -554,6 +614,10 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
                 signatureDraftIdRef.current = null;
               }
             }
+            const approvalToken = Object.values(FX_TOKENS).find((token) => token.address.toLowerCase() === transaction.to.toLowerCase());
+            const signingLabel = transaction.kind === 'approval'
+              ? transaction.type === 'approvePosition' ? 'Approve position' : `Approve ${approvalToken?.key ?? 'token'}`
+              : 'Confirm';
             const signed = await wallet.sendTransaction({
               chainId: request.chainId,
               from: request.from,
@@ -561,18 +625,21 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
               data: request.data,
               value: request.value,
               nonce: request.nonce,
+              gasLimit: request.gasLimit,
               gasPrice: request.gasPrice,
               maxFeePerGas: request.maxFeePerGas,
               maxPriorityFeePerGas: request.maxPriorityFeePerGas,
             }, {
-              action: `${reviewTitle ?? currentRoute.operation} · ${request.to}`,
-              description: `Check this transaction on ${chainName(request.chainId)} before approving it.`,
-              buttonText: 'Confirm transaction',
+              action: transaction.kind === 'approval' ? signingLabel : reviewTitle ?? currentRoute.operation,
+              description: transaction.kind === 'approval' ? `${signingLabel} for this action.` : `${reviewTitle ?? 'Confirm action'} on ${chainName(request.chainId)}.`,
+              buttonText: signingLabel,
+              successHeader: transaction.kind === 'approval' ? 'Approval submitted' : 'Transaction submitted',
+              successDescription: transaction.kind === 'approval' ? 'Approval submitted. Close this screen to continue.' : 'Waiting for confirmation on-chain.',
             });
-            // Once sendTransaction resolves, the route runner journals the
-            // returned hash even if the account changed while the prompt was
-            // open. It is no longer an unsigned resume draft.
-            if (signatureDraftIdRef.current) {
+            // Preserve the primitive-only resume hint through approvals. If
+            // the later action prompt is declined, the user can reopen this
+            // form and rebuild the route from current chain state.
+            if (signatureDraftIdRef.current && transaction.kind === 'action') {
               removeSignatureRequiredDraft(signatureDraftIdRef.current);
               signatureDraftIdRef.current = null;
             }
@@ -626,9 +693,11 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
         },
       });
       if (signatureDraftIdRef.current) {
-        if (execution.steps.some(hasTransactionHash)) removeSignatureRequiredDraft(signatureDraftIdRef.current);
-        else cancelSignatureRequiredDraft(signatureDraftIdRef.current);
-        signatureDraftIdRef.current = null;
+        const actionSubmitted = execution.steps.some((step) => step.transaction.kind === 'action' && hasTransactionHash(step));
+        if (shouldRemoveSignatureDraft({ actionSubmitted, routeCompleted: execution.status === 'confirmed' })) {
+          removeSignatureRequiredDraft(signatureDraftIdRef.current);
+          signatureDraftIdRef.current = null;
+        }
       }
       if (!isMountedExecution()) return;
       // A finality/confirmation timeout can skip postConfirmRead despite
@@ -655,15 +724,18 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
           steps: submittedSteps.map((step) => step.status === 'submitted' ? { ...step, status: 'failed', error: message } : step),
           error: message,
         };
+        const actionSubmitted = submittedSteps.some((step) => step.transaction.kind === 'action' && hasTransactionHash(step));
+        if (signatureDraftIdRef.current && shouldRemoveSignatureDraft({ actionSubmitted, routeCompleted: false })) {
+          removeSignatureRequiredDraft(signatureDraftIdRef.current);
+          signatureDraftIdRef.current = null;
+        }
         if (isCurrentExecution()) await refreshWallet(currentRoute, interrupted);
         if (!isMountedExecution()) return;
         setResult(interrupted);
         transition('interrupted');
       } else if (executionSessionInvalidatedRef.current) {
-        if (signatureDraftIdRef.current) {
-          cancelSignatureRequiredDraft(signatureDraftIdRef.current);
-          signatureDraftIdRef.current = null;
-        }
+        // Keep the wallet-scoped editable draft available if the active
+        // account changed before an action hash was submitted.
         setResult({
           status: 'failed',
           operation: currentRoute.operation,
@@ -674,10 +746,8 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
         });
         transition('interrupted');
       } else {
-        if (signatureDraftIdRef.current) {
-          cancelSignatureRequiredDraft(signatureDraftIdRef.current);
-          signatureDraftIdRef.current = null;
-        }
+        // A declined signature or stale quote is not an explicit draft
+        // cancellation. History can restore the same primitive form state.
         setError(message);
         transition('signing-failed');
       }
@@ -721,12 +791,34 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
   }, [acceptRoute, intentKey, routes, stage]);
   const startConnectFlow = useCallback(() => { setError(null); setResumeAfterConnect(true); }, []);
   const endConnectFlow = useCallback(() => setResumeAfterConnect(false), []);
+  const selectGasTier = useCallback(async (tier: GasTier) => {
+    if (!wallet.isEmbedded || !route || stage !== 'review' || busyRef.current) return;
+    const generation = generationRef.current;
+    busyRef.current = true;
+    setLoading(true);
+    try {
+      const snapshot = await fetchGasTierQuotes(route.chainId);
+      if (!isCurrentGeneration(generation)) return;
+      selectedGasTierQuote(snapshot, tier);
+      const previous = JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || '{}');
+      window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...previous, gasTier: tier }));
+      changingFeeRef.current = true;
+      setFeeSelection({ snapshot, tier });
+      announceSettingsUpdated(readSlippagePercent() * 100, tier);
+      setError(null);
+    } catch (cause) {
+      if (isCurrentGeneration(generation)) setError(userSafeError(cause, 'Could not update the network fee. Try again.'));
+    } finally {
+      changingFeeRef.current = false;
+      if (isCurrentGeneration(generation)) { busyRef.current = false; setLoading(false); }
+    }
+  }, [isCurrentGeneration, route, stage, wallet.isEmbedded]);
 
   return {
     stage, wallet, route, routes, selectedRoute, routeSummaries,
     status, statusDetail, stepResults, loading, networkSwitching, refreshing,
     error, result, reviewTitle, quoteExpired, quoteChanges,
-    gasCost, feeSelection,
+    gasCost, feeSelection, selectGasTier,
     triggerRef, headingRef, review, execute, refreshReviewedQuote, reset,
     selectReviewedRoute,
     canSelectReviewedRoute: stage === 'review' && !busyRef.current,

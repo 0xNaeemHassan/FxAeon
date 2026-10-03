@@ -43,7 +43,7 @@ overrides:
   ws: '8.21.3'
 
 patchedDependencies:
-  '@aladdindao/fx-sdk': patches/@aladdindao__fx-sdk.patch
+  '@aladdindao/fx-sdk@1.0.5': patches/@aladdindao__fx-sdk@1.0.5.patch
   query-string@7.1.3: patches/query-string@7.1.3.patch
 
 peerDependencyRules:

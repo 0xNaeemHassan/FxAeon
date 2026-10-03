@@ -27,7 +27,8 @@ const mocks: Record<string, string> = {
       const reset = () => { setStage('input'); setAccepted(null); };
       const selected = accepted ?? route(wallet.address);
       const result = stage === 'result' ? {status:'confirmed',operation:'reducePosition',chainId:1,walletAddress:selected.walletAddress,steps:[{index:1,transaction:selected.transactions[1],status:'confirmed',hash:'0x'+'1'.repeat(64)}]} : null;
-      return { canSelectReviewedRoute:false,endConnectFlow:()=>{},error:null,execute:async()=>{},feeSelection:{snapshot:{chainId:1,tiers:{standard:{tier:'standard',gasPriceWei:30000000000n,maxFeePerGas:40000000000n,maxPriorityFeePerGas:10000000000n,source:'rpc'}}},tier:'standard'},gasCost:{estimate:{status:'current',gas:240000n,executionGasFeeWei:2400000000000000n,totalNativeCostWei:2400000000000000n,nativeValueWei:0n},estimateIsCurrent:true,status:'ready'},headingRef:{current:null},loading,networkSwitching:false,quoteChanges:[],quoteExpired:false,refreshReviewedQuote:async()=>{},refreshing:false,reset,result,review,reviewTitle:'Close ETH long position',route:stage==='input'?null:selected,routeSummaries:[],routes:[selected],selectedRoute:0,selectReviewedRoute:()=>{},startConnectFlow:()=>{},stage,status:stage==='executing'?'submitted':'reviewing',statusDetail:'',stepResults:[],triggerRef:{current:null},wallet:{...wallet,ready:true,authenticated:true} };
+      const feeTiers={standard:{tier:'standard',gasPriceWei:25000000000n,maxFeePerGas:30000000000n,maxPriorityFeePerGas:5000000000n,source:'rpc'},fast:{tier:'fast',gasPriceWei:30000000000n,maxFeePerGas:50000000000n,maxPriorityFeePerGas:10000000000n,source:'rpc'},rapid:{tier:'rapid',gasPriceWei:40000000000n,maxFeePerGas:60000000000n,maxPriorityFeePerGas:20000000000n,source:'rpc'}};
+      return { canSelectReviewedRoute:false,endConnectFlow:()=>{},error:null,execute:async()=>{},feeSelection:wallet.isEmbedded?{snapshot:{chainId:1,tiers:feeTiers},tier:'standard'}:null,gasCost:{estimate:{status:'current',gas:240000n,executionGasFeeWei:2400000000000000n,totalNativeCostWei:2400000000000000n,nativeValueWei:0n},estimateIsCurrent:true,status:'ready'},headingRef:{current:null},loading,networkSwitching:false,quoteChanges:[],quoteExpired:false,refreshReviewedQuote:async()=>{},refreshing:false,reset,result,review,reviewTitle:'Close ETH long position',route:stage==='input'?null:selected,routeSummaries:[],routes:[selected],selectedRoute:0,selectReviewedRoute:()=>{},startConnectFlow:()=>{},stage,status:stage==='executing'?'submitted':'reviewing',statusDetail:'',stepResults:[],triggerRef:{current:null},wallet:{...wallet,ready:true,authenticated:true,isEmbedded:wallet.isEmbedded} };
     }`,
   '@/components/MissingValue': `import React from 'react'; export const ValueOrSkeleton = ({value,label}) => value ? <>{value}</> : <span aria-label={label}>Loading</span>;`,
   '@/lib/addressPresentation': `export const compactAddress = value => value ? value.slice(0,6)+'…'+value.slice(-4) : '';`,
@@ -48,7 +49,9 @@ const mocks: Record<string, string> = {
   '@/lib/fx/policy': `import {FX_TOKENS} from '@/lib/fx'; const pools={long:['0x6Ecfa38FeE8a5277B91eFdA204c235814F0122E8','0xAB709e26Fa6B0A30c119D8c55B887DeD24952473'],short:['0x25707b9e6690B52C60aE6744d711cf9C1dFC1876','0xA0cC8162c523998856D59065fAa254F87D20A5b0']}; export const positionPoolAddress=(market,type)=>pools[type][market==='ETH'?0:1]; export const positionCollateralTokenAddress=(market,type)=>type==='short'?FX_TOKENS.fxUSD.address:market==='ETH'?FX_TOKENS.wstETH.address:FX_TOKENS.WBTC.address; export const positionDebtTokenAddress=(market,type)=>type==='long'?FX_TOKENS.fxUSD.address:market==='ETH'?FX_TOKENS.wstETH.address:FX_TOKENS.WBTC.address;`,
   '@/lib/wallet': `export const usePrivyWallet=()=>({...globalThis.__positionsReviewHarness.wallet,sendTransaction:async()=>{globalThis.__positionsReviewHarness.walletRequests+=1;}});`,
   '@/lib/amount': `export const positiveDecimal=value=>/^\\d+(\\.\\d+)?$/.test(value)&&Number(value)>0?value:null;`,
-  '@/lib/settings': `export const DEFAULT_SLIPPAGE_PERCENT=1; export const readSlippagePercent=()=>1; export const SETTINGS_KEY='settings'; export const SETTINGS_UPDATED_EVENT='settings-updated';`,
+  '@/lib/settings': `export const DEFAULT_SLIPPAGE_PERCENT=1; export const GAS_TIERS=['standard','fast','rapid']; export const readSlippagePercent=()=>1; export const SETTINGS_KEY='settings'; export const SETTINGS_UPDATED_EVENT='settings-updated';`,
+  '@/lib/fx/gasFeePolicy': `export const formatGasPriceGwei=value=>Number(value)/1000000000+' Gwei'; export const formatGasTierQuote=quote=>quote.tier+' · '+Number(quote.gasPriceWei)/1000000000+' Gwei';`,
+  '@/lib/receiptPresentation': `export const buildReceiptPresentation=()=>({movements:[],technicalMovements:[],executionFee:null,feeLabel:'Network fee',feeCaveat:null,nativeValue:null}); export const receiptTransfersFromLogs=()=>[]; export const shouldShowReceiptMovementFallback=receipts=>receipts.length>0&&receipts.some(receipt=>receipt.transactionKind!=='approval');`,
   '@/lib/telegram': `export const haptic=()=>{};`,
   '@/lib/transactionState': `export const resetTransactionAmounts=()=>({amount:'',fraction:25,leverage:2});`,
   '@/app/trade/fxUi': `export const getSdkReductionAmountWei=async()=>1n; export const formatAmount=(value,decimals=18)=>String(Number(value)/10**decimals); export const parseAmount=()=>1n; export const positionKey=position=>position.market+':'+position.side+':'+position.info.positionId; export const positionCollateralDecimals=()=>18; export const positionDebtDecimals=()=>18; export const positionInputTokenOptions=()=>['ETH','USDC']; export const positionOutputTokenOptions=()=>['USDC','ETH']; export const positionTargetLeverage=()=>2; export const tokenAddress=()=> '0x0000000000000000000000000000000000000001'; export const tokenDecimals=token=>token==='USDC'?6:18;`,
@@ -96,10 +99,11 @@ test('four-position Close review hides siblings, keeps its action above navigati
   await expect(reviewAction).toBeVisible();
   await reviewAction.scrollIntoViewIfNeeded();
   await reviewAction.click();
-  const confirm = page.getByRole('button', { name: 'Confirm 2 transactions', exact: true });
+  const confirm = page.getByRole('button', { name: 'Approve position', exact: true });
   await expect(confirm).toBeVisible();
   await expect(page.locator('[data-review="true"] .reviewInlineContent')).toHaveCSS('padding', '12px');
-  await expect(page.getByText('Gas tier', { exact: true })).toBeVisible();
+  await expect(page.locator('input[name="review-gas-tier"]')).toHaveCount(0);
+  await expect(page.getByText('Gas tier', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Gas fee', { exact: true })).toBeVisible();
   await expect(page.getByText('Minimum received', { exact: true })).toBeVisible();
   await page.evaluate(() => { document.querySelector<HTMLElement>('[data-shell-content]')!.scrollTop = 0; });
@@ -123,6 +127,47 @@ test('four-position Close review hides siblings, keeps its action above navigati
   await expect(reviewAction).toBeVisible();
   await page.evaluate(() => { document.querySelector<HTMLElement>('[data-shell-content]')!.scrollTop = 0; });
   expect(await page.evaluate(() => (globalThis as typeof globalThis & { __positionsReviewHarness: { walletRequests: number } }).__positionsReviewHarness.walletRequests)).toBe(0);
+
+  await page.evaluate(() => {
+    const harness = (globalThis as typeof globalThis & { __positionsReviewHarness: { wallet: { isEmbedded: boolean; connectionVersion: number }; rerender?: () => void } }).__positionsReviewHarness;
+    harness.wallet.isEmbedded = true;
+    harness.wallet.connectionVersion += 1;
+    harness.rerender?.();
+  });
+  await page.getByRole('group', { name: 'Actions for ETH long position 11', exact: true }).getByRole('button', { name: 'Close', exact: true }).click();
+  await reviewAction.scrollIntoViewIfNeeded();
+  await reviewAction.click();
+  const embeddedConfirm = page.getByRole('button', { name: 'Approve position', exact: true });
+  await expect(embeddedConfirm).toBeVisible();
+  await expect(page.locator('input[name="review-gas-tier"]')).toHaveCount(3);
+  await expect(page.getByText('Gas fee', { exact: true })).toBeVisible();
+  const embeddedBox = await embeddedConfirm.boundingBox();
+  const embeddedNavBox = await page.locator('[data-app-navigation]').boundingBox();
+  expect(embeddedBox).not.toBeNull();
+  expect(embeddedNavBox).not.toBeNull();
+  expect(embeddedBox!.y + embeddedBox!.height).toBeLessThanOrEqual(embeddedNavBox!.y);
+  await page.evaluate(() => {
+    const content = document.querySelector<HTMLElement>('[data-shell-content]')!;
+    content.scrollTop = content.scrollHeight;
+  });
+  // Expand the disclosure panels to exercise the actual scroll path, rather
+  // than relying on this short fixture to overflow by default.
+  for (const label of ['Quote details', 'Advanced details', 'Steps · 2']) {
+    await page.getByText(label, { exact: true }).click();
+  }
+  await embeddedConfirm.scrollIntoViewIfNeeded();
+  await expect.poll(async () => {
+    const contentScrollTop = await page.locator('[data-shell-content]').evaluate((node) => (node as HTMLElement).scrollTop);
+    const action = await embeddedConfirm.boundingBox();
+    const nav = await page.locator('[data-app-navigation]').boundingBox();
+    return contentScrollTop > 0 && Boolean(action && nav && action.y >= 0 && action.y + action.height <= nav.y);
+  }).toBe(true);
+  const clipping = await page.locator('[data-review="true"] .reviewInlineContent').evaluate((node) => ({
+    clientWidth: (node as HTMLElement).clientWidth,
+    scrollWidth: (node as HTMLElement).scrollWidth,
+  }));
+  expect(clipping.scrollWidth).toBeLessThanOrEqual(clipping.clientWidth);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(393);
 });
 
 test('Add, Reduce, Close, and Leverage use one review column; context changes reset input and an empty final read keeps the review mounted', async ({ page }) => {
@@ -146,7 +191,7 @@ test('Add, Reduce, Close, and Leverage use one review column; context changes re
     const reviewAction = page.getByRole('button', { name: nameByAction[action], exact: true });
     await expect(reviewAction).toBeVisible();
     await reviewAction.click();
-    await expect(page.getByRole('button', { name: 'Confirm 2 transactions', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Approve position', exact: true })).toBeVisible();
     await expect(page.locator('section[aria-labelledby="open-positions-heading"]')).toBeHidden();
     await expect(page.getByRole('navigation', { name: 'Trade views', exact: true })).toHaveCount(0);
     await expect(actions).toHaveCount(0);
@@ -156,13 +201,13 @@ test('Add, Reduce, Close, and Leverage use one review column; context changes re
   }
 
   await page.getByRole('button', { name: 'Review Adjust ETH long position leverage', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Confirm 2 transactions', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Approve position', exact: true })).toBeVisible();
   await page.evaluate(() => {
     const h = (globalThis as typeof globalThis & { __positionsReviewHarness: { wallet: { address: string; connectionVersion: number }; rerender?: () => void } }).__positionsReviewHarness;
     h.wallet = { ...h.wallet, address: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', connectionVersion: h.wallet.connectionVersion + 1 };
     h.rerender?.();
   });
-  await expect(page.getByRole('button', { name: 'Confirm 2 transactions', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Approve position', exact: true })).toHaveCount(0);
   await expect(page.locator('section[aria-labelledby="open-positions-heading"]')).toBeVisible();
   await expect(actions).toBeVisible();
 
@@ -173,7 +218,7 @@ test('Add, Reduce, Close, and Leverage use one review column; context changes re
   await page.getByRole('textbox', { name: 'Amount to add', exact: true }).fill('1');
   const closeReview = page.getByRole('button', { name: 'Review Add to ETH long position', exact: true });
   await closeReview.click();
-  await expect(page.getByRole('button', { name: 'Confirm 2 transactions', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Approve position', exact: true })).toBeVisible();
   await page.evaluate(() => {
     const h = (globalThis as typeof globalThis & { __positionsReviewHarness: { setReviewStage?: (stage: string) => void; rerender?: () => void } }).__positionsReviewHarness;
     h.setReviewStage?.('executing');

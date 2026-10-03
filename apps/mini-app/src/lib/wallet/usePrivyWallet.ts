@@ -4,6 +4,7 @@ import { createContext, createElement, useCallback, useContext, useEffect, useMe
 import {
   useConnectWallet,
   useLogin,
+  useModalStatus,
   useLogout,
   usePrivy,
   useSendTransaction,
@@ -11,7 +12,7 @@ import {
   type ConnectedWallet,
   type SendTransactionModalUIOptions,
 } from '@privy-io/react-auth';
-import { assertLocalForkRpcUrl } from '@/lib/fx/config';
+import { assertLocalForkRpcUrl, configuredRpcUrls } from '@/lib/fx/config';
 import { getInitData, isTelegramLaunchContext } from '@/lib/telegram';
 import { useTelegramReconnect } from '@/lib/wallet/telegramReconnect';
 import { switchBrowserChain as switchBrowserChainWithConfig } from './switchBrowserChain';
@@ -21,6 +22,9 @@ export const FX_CHAIN_IDS = {
   ethereum: 1,
   base: 8453,
 } as const;
+
+const PRIVY_SUCCESS_MODAL_CLOSE_TIMEOUT_MS = 60_000;
+const PRIVY_SUCCESS_MODAL_POLL_INTERVAL_MS = 100;
 
 export type FxChainId = (typeof FX_CHAIN_IDS)[keyof typeof FX_CHAIN_IDS];
 
@@ -76,6 +80,8 @@ export type FxPrivyWallet = {
     transaction: FxWalletTransaction,
     options?: FxWalletTransactionOptions
   ) => Promise<{ hash: `0x${string}` }>;
+  /** Wait for the preceding embedded-wallet success screen before revalidating a later step. */
+  waitForPreviousConfirmationClose?: () => Promise<void>;
 };
 
 function asChainNumber(chainId: string | undefined): number | undefined {
@@ -194,15 +200,12 @@ function walletDescriptor(provider: Eip1193Provider, address: string, chainId?: 
 }
 
 async function switchBrowserChain(provider: Eip1193Provider, chainId: FxChainId): Promise<void> {
-  return switchBrowserChainWithConfig(provider, chainId, () => ({
-    // Keep literal env accesses so Next can inline the static browser build.
-    configuredRpcUrl: chainId === FX_CHAIN_IDS.ethereum
-      ? process.env.NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL
-      : process.env.NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL,
-    localForkRpcUrl: process.env.NEXT_PUBLIC_FX_SCREENSHOT_MODE === '1'
+  return switchBrowserChainWithConfig(provider, chainId, () => {
+    const localForkRpcUrl = process.env.NEXT_PUBLIC_FX_SCREENSHOT_MODE === '1'
       ? process.env.NEXT_PUBLIC_FX_ANVIL_RPC_URL
-      : undefined,
-  }));
+      : undefined;
+    return localForkRpcUrl ? { localForkRpcUrl } : { configuredRpcUrls: configuredRpcUrls(chainId) };
+  });
 }
 
 /**
@@ -215,12 +218,16 @@ async function switchBrowserChain(provider: Eip1193Provider, chainId: FxChainId)
  * - No FxAeon backend or private-key material is involved.
  */
 function usePrivyWalletAdapter(): FxPrivyWallet {
-  const { ready, authenticated } = usePrivy();
+  const { ready, authenticated, user } = usePrivy();
+  const { isOpen: privyModalOpen } = useModalStatus();
   const reconnectTelegram = useTelegramReconnect();
   const { logout } = useLogout();
   const [selectedAddress, setSelectedAddress] = useState<string>();
   const [connectionVersion, setConnectionVersion] = useState(0);
   const mountedRef = useRef(false);
+  const privyModalOpenRef = useRef(privyModalOpen);
+  const walletSessionKeyRef = useRef('');
+  const previousEmbeddedPromptRef = useRef<{ walletSessionKey: string } | null>(null);
   const connectPendingRef = useRef<PendingConnection | null>(null);
   const { login } = useLogin({
     onComplete: ({ user, loginAccount }) => {
@@ -314,6 +321,53 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
       : undefined;
   }, [selectedWallet]);
 
+  // Privy's send promise resolves on broadcast, while its confirmation UI may
+  // remain on the submitted screen. Record only the session identity here;
+  // the next embedded send consults useModalStatus before opening another UI.
+  const walletSessionKey = JSON.stringify([
+    user?.id ?? '',
+    selectedWallet?.address.toLowerCase() ?? '',
+    selectedChainId ?? null,
+    connectionVersion,
+    authenticated,
+    ready,
+  ]);
+  privyModalOpenRef.current = privyModalOpen;
+  walletSessionKeyRef.current = walletSessionKey;
+
+  const awaitPreviousEmbeddedPromptClose = useCallback(async (sessionKey: string) => {
+    const previous = previousEmbeddedPromptRef.current;
+    if (!previous) return;
+    if (previous.walletSessionKey !== sessionKey) {
+      previousEmbeddedPromptRef.current = null;
+      throw new Error('Wallet or session changed after the previous transaction. Reopen the action to continue.');
+    }
+    if (!privyModalOpenRef.current) {
+      previousEmbeddedPromptRef.current = null;
+      return;
+    }
+
+    const deadline = Date.now() + PRIVY_SUCCESS_MODAL_CLOSE_TIMEOUT_MS;
+    while (true) {
+      if (!mountedRef.current) {
+        previousEmbeddedPromptRef.current = null;
+        throw new Error('Wallet session ended while waiting for the transaction screen to close. Reopen the action to continue.');
+      }
+      if (walletSessionKeyRef.current !== sessionKey) {
+        previousEmbeddedPromptRef.current = null;
+        throw new Error('Wallet or session changed while waiting for the transaction screen to close. Reopen the action to continue.');
+      }
+      if (!privyModalOpenRef.current) {
+        previousEmbeddedPromptRef.current = null;
+        return;
+      }
+      if (Date.now() >= deadline) {
+        throw new Error('Close the Privy transaction screen, then retry to continue.');
+      }
+      await new Promise<void>((resolve) => setTimeout(resolve, PRIVY_SUCCESS_MODAL_POLL_INTERVAL_MS));
+    }
+  }, []);
+
   useEffect(() => {
     if (!selectedAddress || !wallets.some((wallet) => wallet.address.toLowerCase() === selectedAddress.toLowerCase())) {
       const next = selectedWallet?.address;
@@ -397,6 +451,11 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
     await selectedWallet.switchChain(chainId);
   }, [selectedWallet]);
 
+  const waitForPreviousConfirmationClose = useCallback(async () => {
+    if (!isEmbedded(selectedWallet)) return;
+    await awaitPreviousEmbeddedPromptClose(walletSessionKey);
+  }, [selectedWallet, awaitPreviousEmbeddedPromptClose, walletSessionKey]);
+
   const sendTransaction = useCallback(async (
     transaction: FxWalletTransaction,
     options?: FxWalletTransactionOptions
@@ -406,6 +465,21 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
     }
     if (!authenticated || !selectedWallet || !selectedWallet.address) {
       throw new Error('Connect a wallet before signing a transaction.');
+    }
+    const sessionKey = walletSessionKey;
+    if (isEmbedded(selectedWallet) && previousEmbeddedPromptRef.current) {
+      const previous = previousEmbeddedPromptRef.current;
+      if (previous.walletSessionKey !== sessionKey) {
+        previousEmbeddedPromptRef.current = null;
+        throw new Error('Wallet or session changed after the previous transaction. Reopen the action to continue.');
+      }
+      if (privyModalOpenRef.current) {
+        throw new Error('Close the Privy transaction screen and retry so the action can be checked again.');
+      }
+      previousEmbeddedPromptRef.current = null;
+    }
+    if (!mountedRef.current || walletSessionKeyRef.current !== sessionKey) {
+      throw new Error('Wallet or session changed before the next transaction. Reopen the action to continue.');
     }
     if (transaction.from && transaction.from.toLowerCase() !== selectedWallet.address.toLowerCase()) {
       throw new Error('Transaction sender does not match the selected wallet.');
@@ -459,10 +533,15 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
     }
 
     if (isEmbedded(selectedWallet)) {
-      return sendEmbeddedTransaction(request, {
+      const result = await sendEmbeddedTransaction(request, {
         address: selectedWallet.address,
         uiOptions,
       });
+      // Return the broadcast hash immediately so the transaction runner can
+      // journal and receipt-track it. Only a later send may wait for this
+      // success screen to close.
+      previousEmbeddedPromptRef.current = { walletSessionKey: sessionKey };
+      return result;
     }
 
     const providerRequest: Record<string, string> = {
@@ -477,12 +556,9 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
     if (nonce !== undefined) providerRequest.nonce = nonce;
     const gas = asHexQuantity(transaction.gasLimit);
     if (gas !== undefined) providerRequest.gas = gas;
-    const gasPrice = asHexQuantity(transaction.gasPrice);
-    if (gasPrice !== undefined) providerRequest.gasPrice = gasPrice;
-    const maxFeePerGas = asHexQuantity(transaction.maxFeePerGas);
-    if (maxFeePerGas !== undefined) providerRequest.maxFeePerGas = maxFeePerGas;
-    const maxPriorityFeePerGas = asHexQuantity(transaction.maxPriorityFeePerGas);
-    if (maxPriorityFeePerGas !== undefined) providerRequest.maxPriorityFeePerGas = maxPriorityFeePerGas;
+    // Application-selected fee tiers are part of Privy's embedded signing
+    // request. External wallet providers own their fee UI and pricing, so do
+    // not pin app gas caps into eth_sendTransaction.
     const result = await provider.request({
       method: 'eth_sendTransaction',
       params: [providerRequest],
@@ -491,7 +567,7 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
       throw new Error('The connected wallet returned an invalid transaction hash.');
     }
     return { hash: result as `0x${string}` };
-  }, [authenticated, selectedWallet, sendEmbeddedTransaction]);
+  }, [authenticated, selectedWallet, sendEmbeddedTransaction, walletSessionKey]);
 
   return {
     // Privy's provider readiness is the gate for opening its login and wallet
@@ -514,6 +590,7 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
     selectWallet,
     switchChain,
     sendTransaction,
+    waitForPreviousConfirmationClose,
   };
 }
 

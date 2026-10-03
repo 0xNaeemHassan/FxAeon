@@ -10,7 +10,7 @@ import {
 } from "viem";
 import { clearPendingHashJournalForTests, readPendingHashJournal, readPendingHashes } from "../src/lib/fx/journal";
 import { runTransactionRoute, simulatePlannedRoute, waitForReceipt } from "../src/lib/fx/runner";
-import type { GasFeeSelection } from "../src/lib/fx/gasFeePolicy";
+import type { GasFeeSelection, GasTierQuotes } from "../src/lib/fx/gasFeePolicy";
 import type { FxPublicClient, PlannedRoute, PlannedTransaction, TransactionPolicy } from "../src/lib/fx/types";
 
 const WALLET = "0x1111111111111111111111111111111111111111" as Address;
@@ -130,6 +130,75 @@ function callbacks(signatures: Hex[], onRequest?: (index: number) => Promise<Hex
       return signatures[index++];
     },
   };
+}
+
+function approvalActionFixture() {
+  const token = '0x3333333333333333333333333333333333333333' as Address;
+  const planned = route(2);
+  const approvalData = encodeFunctionData({
+    abi: parseAbi(['function approve(address spender,uint256 amount)']),
+    functionName: 'approve',
+    args: [DESTINATION, 100n],
+  });
+  planned.transactions[0] = { ...planned.transactions[0]!, to: token, data: approvalData, nonce: 4, kind: 'approval', type: 'approveToken' };
+  planned.transactions[1] = { ...planned.transactions[1]!, nonce: 5 };
+  const policy: TransactionPolicy = {
+    walletAddress: WALLET,
+    chainId: 1,
+    allowedDestinations: [DESTINATION, token],
+    allowedSelectors: { [DESTINATION.toLowerCase()]: ['0x12345678'], [token.toLowerCase()]: ['0x095ea7b3'] },
+    allowedApprovalDestinations: [token],
+    allowedApprovalSpenders: [DESTINATION],
+    allowedTokenApprovalDestinations: [token],
+    allowActionBoundTokenApproval: true,
+  };
+  const snapshot = (now: number, standard: GasTierQuotes['tiers']['standard']): GasTierQuotes => ({
+    chainId: 1, fetchedAt: now, validUntil: now + 30_000, source: 'rpc', baseFeePerGasWei: 100n,
+    tiers: {
+      standard,
+      fast: { tier: 'fast', gasPriceWei: 140n, maxFeePerGas: 240n, maxPriorityFeePerGas: 40n, source: 'rpc' },
+      rapid: { tier: 'rapid', gasPriceWei: 180n, maxFeePerGas: 280n, maxPriorityFeePerGas: 80n, source: 'rpc' },
+    },
+  });
+  const feeSelection = (now: number): GasFeeSelection => ({
+    tier: 'standard',
+    snapshot: snapshot(now, { tier: 'standard', gasPriceWei: 120n, maxFeePerGas: 220n, maxPriorityFeePerGas: 20n, source: 'rpc' }),
+  });
+  const fresh = (now: number, standard: GasTierQuotes['tiers']['standard']): GasTierQuotes => snapshot(now, standard);
+  const hashes = [HASH_1, HASH_2];
+  return { token, planned, policy, feeSelection, fresh, hashes };
+}
+
+function feeTestClient(params: {
+  transactions: PlannedTransaction[];
+  hashes: Hex[];
+  estimateGas?: FxPublicClient['estimateGas'];
+  onReceipt?: (hash: Hex) => void;
+}): FxPublicClient {
+  let nonceRead = 0;
+  return {
+    chain: { id: 1 },
+    getChainId: async () => 1,
+    simulateCalls: async () => ({ results: [] }),
+    getTransactionCount: async () => 4 + nonceRead++,
+    getTransactionReceipt: async ({ hash }: { hash: Hex }) => {
+      params.onReceipt?.(hash);
+      const index = params.hashes.indexOf(hash);
+      const tx = params.transactions[index]!;
+      return {
+        transactionHash: hash, status: 'success', blockNumber: 10n + BigInt(index),
+        blockHash: index === 0 ? BLOCK_HASH_1 : BLOCK_HASH_2,
+        from: WALLET, to: tx.to,
+      } as never;
+    },
+    getTransaction: async ({ hash }: { hash: Hex }) => {
+      const index = params.hashes.indexOf(hash);
+      const tx = params.transactions[index]!;
+      return { hash, from: WALLET, to: tx.to, input: tx.data, value: tx.value, nonce: 4 + index } as never;
+    },
+    getBlockNumber: async () => 20n,
+    estimateGas: params.estimateGas,
+  } as unknown as FxPublicClient;
 }
 
 test.beforeEach(() => clearPendingHashJournalForTests());
@@ -257,6 +326,219 @@ test('runner applies the frozen fee selection to both exact approval and action 
     { to: token, maxFeePerGas: 220n, maxPriorityFeePerGas: 20n, gasPrice: undefined },
     { to: DESTINATION, maxFeePerGas: 220n, maxPriorityFeePerGas: 20n, gasPrice: undefined },
   ]);
+});
+
+test('refreshes stale fees after a mined approval within reviewed caps and journals step kinds', async () => {
+  const fixture = approvalActionFixture();
+  const realNow = Date.now;
+  let now = 1_800_000_000_000;
+  Date.now = () => now;
+  const signatureRequests: Array<{ maxFeePerGas?: bigint; maxPriorityFeePerGas?: bigint; gasLimit?: bigint; kind?: PlannedTransaction['kind'] }> = [];
+  const estimates: Address[] = [];
+  let refreshes = 0;
+  const rpcClient = feeTestClient({
+    transactions: fixture.planned.transactions,
+    hashes: fixture.hashes,
+    onReceipt: (hash) => { if (hash === HASH_1) now = 1_800_000_030_001; },
+    estimateGas: async ({ to }) => { estimates.push(to); return to === fixture.token ? 100_001n : 200_001n; },
+  });
+  try {
+    const result = await runTransactionRoute({
+      route: fixture.planned,
+      policy: fixture.policy,
+      publicClient: rpcClient,
+      feeSelection: fixture.feeSelection(now),
+      refreshFeeQuotes: async (chainId) => {
+        refreshes += 1;
+        assert.equal(chainId, 1);
+        return fixture.fresh(now, { tier: 'standard', gasPriceWei: 110n, maxFeePerGas: 180n, maxPriorityFeePerGas: 10n, source: 'rpc' });
+      },
+      callbacks: { requestSignature: async (request, transaction) => {
+        signatureRequests.push({ ...request, kind: transaction?.kind });
+        return fixture.hashes[signatureRequests.length - 1]!;
+      } },
+      options: { simulate: false, pollMs: 0, receiptTimeoutMs: 100 },
+    });
+
+    assert.equal(result.status, 'confirmed');
+    assert.equal(refreshes, 1, 'fees refresh once for the action submitted after approval expiry');
+    assert.deepEqual(estimates, [fixture.token, DESTINATION]);
+    assert.deepEqual(signatureRequests.map(({ maxFeePerGas, maxPriorityFeePerGas, gasLimit, kind }) => ({ maxFeePerGas, maxPriorityFeePerGas, gasLimit, kind })), [
+      { maxFeePerGas: 220n, maxPriorityFeePerGas: 20n, gasLimit: 120_002n, kind: 'approval' },
+      { maxFeePerGas: 180n, maxPriorityFeePerGas: 10n, gasLimit: 240_002n, kind: 'action' },
+    ]);
+    assert.deepEqual(readPendingHashJournal().map((record) => record.stepKind), ['approval', 'action']);
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+test('waits for the previous wallet screen before fresh simulation and fees; cancellation submits no next step', async () => {
+  const fixture = approvalActionFixture();
+  const realNow = Date.now;
+  let now = 1_800_000_000_000;
+  Date.now = () => now;
+  try {
+    const events: string[] = [];
+    const gate = new Promise<void>((resolve) => {
+      (globalThis as any).__releaseNextStep = resolve;
+    });
+    const rpcClient = feeTestClient({
+      transactions: fixture.planned.transactions,
+      hashes: fixture.hashes,
+      onReceipt: (hash) => { if (hash === HASH_1) now += 2; },
+      estimateGas: async () => 100_000n,
+    });
+    const execution = runTransactionRoute({
+      route: fixture.planned,
+      policy: fixture.policy,
+      publicClient: rpcClient,
+      feeSelection: {
+        ...fixture.feeSelection(now),
+        snapshot: { ...fixture.feeSelection(now).snapshot, validUntil: now + 1 },
+      },
+      refreshFeeQuotes: async (chainId) => {
+        events.push('fees');
+        assert.equal(chainId, 1);
+        return fixture.fresh(now, { tier: 'standard', gasPriceWei: 110n, maxFeePerGas: 180n, maxPriorityFeePerGas: 10n, source: 'rpc' });
+      },
+      callbacks: {
+        beforeTransaction: async (index) => {
+          if (index !== 1) return;
+          events.push('wait-start');
+          await gate;
+          events.push('wait-end');
+        },
+        simulate: async (remaining) => {
+          events.push(remaining.transactions.length === 2 ? 'initial-sim' : 'remaining-sim');
+          return true;
+        },
+        requestSignature: async (_request, transaction) => {
+          events.push(`sign-${transaction.kind}`);
+          return fixture.hashes[events.filter((event) => event.startsWith('sign-')).length - 1]!;
+        },
+      },
+      options: { pollMs: 0, receiptTimeoutMs: 100 },
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.ok(events.includes('wait-start'));
+    assert.equal(events.includes('remaining-sim'), false);
+    (globalThis as any).__releaseNextStep();
+    const result = await execution;
+    assert.equal(result.status, 'confirmed');
+    assert.ok(events.indexOf('wait-end') < events.indexOf('remaining-sim'));
+    assert.ok(events.indexOf('remaining-sim') < events.indexOf('fees'));
+    assert.ok(events.indexOf('fees') < events.indexOf('sign-action'));
+
+    const cancelled = await runTransactionRoute({
+      route: fixture.planned,
+      policy: fixture.policy,
+      publicClient: feeTestClient({ transactions: fixture.planned.transactions, hashes: fixture.hashes, estimateGas: async () => 100_000n }),
+      callbacks: {
+        beforeTransaction: async (index) => { if (index === 1) throw new Error('Close the Privy transaction screen, then retry to continue.'); },
+        requestSignature: async (_request, transaction) => {
+          events.push(`cancel-sign-${transaction.kind}`);
+          return fixture.hashes[events.filter((event) => event.startsWith('cancel-sign-')).length - 1]!;
+        },
+      },
+      options: { simulate: false, pollMs: 0, receiptTimeoutMs: 100 },
+    });
+    assert.equal(cancelled.status, 'partial');
+    assert.equal(cancelled.steps[0]?.status, 'confirmed');
+    assert.equal(cancelled.steps[1]?.hash, undefined);
+    assert.deepEqual(events.filter((event) => event.startsWith('cancel-sign-')), ['cancel-sign-approval']);
+  } finally {
+    delete (globalThis as any).__releaseNextStep;
+    Date.now = realNow;
+  }
+});
+
+test('rejects refreshed fees above reviewed caps before requesting the action signature', async () => {
+  const fixture = approvalActionFixture();
+  const realNow = Date.now;
+  let now = 1_800_000_000_000;
+  Date.now = () => now;
+  const signatureKinds: Array<PlannedTransaction['kind'] | undefined> = [];
+  let refreshes = 0;
+  const rpcClient = feeTestClient({
+    transactions: fixture.planned.transactions,
+    hashes: fixture.hashes,
+    onReceipt: (hash) => { if (hash === HASH_1) now = 1_800_000_030_001; },
+    estimateGas: async () => 100_000n,
+  });
+  try {
+    const result = await runTransactionRoute({
+      route: fixture.planned,
+      policy: fixture.policy,
+      publicClient: rpcClient,
+      feeSelection: fixture.feeSelection(now),
+      refreshFeeQuotes: async () => {
+        refreshes += 1;
+        return fixture.fresh(now, { tier: 'standard', gasPriceWei: 110n, maxFeePerGas: 230n, maxPriorityFeePerGas: 21n, source: 'rpc' });
+      },
+      callbacks: { requestSignature: async (_request, transaction) => {
+        signatureKinds.push(transaction?.kind);
+        return fixture.hashes[signatureKinds.length - 1]!;
+      } },
+      options: { simulate: false, pollMs: 0, receiptTimeoutMs: 100 },
+    });
+
+    assert.equal(result.status, 'partial');
+    assert.equal(refreshes, 1);
+    assert.deepEqual(signatureKinds, ['approval']);
+    assert.deepEqual(readPendingHashJournal().map((record) => [record.stepKind, record.status]), [['approval', 'confirmed']]);
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+test('an action signature rejection after approval preserves a confirmed approval and submits no action hash', async () => {
+  const fixture = approvalActionFixture();
+  const signatureKinds: PlannedTransaction['kind'][] = [];
+  const rpcClient = feeTestClient({
+    transactions: fixture.planned.transactions,
+    hashes: fixture.hashes,
+    estimateGas: async () => 100_000n,
+  });
+  const result = await runTransactionRoute({
+    route: fixture.planned,
+    policy: fixture.policy,
+    publicClient: rpcClient,
+    callbacks: { requestSignature: async (_request, transaction) => {
+      signatureKinds.push(transaction!.kind);
+      if (transaction!.kind === 'action') throw new Error('user rejected action');
+      return HASH_1;
+    } },
+    options: { simulate: false, pollMs: 0, receiptTimeoutMs: 100 },
+  });
+
+  assert.equal(result.status, 'partial');
+  assert.deepEqual(signatureKinds, ['approval', 'action']);
+  assert.equal(result.steps[0]?.status, 'confirmed');
+  assert.equal(result.steps[1]?.hash, undefined);
+  assert.deepEqual(readPendingHashJournal().map((record) => [record.stepKind, record.status]), [['approval', 'confirmed']]);
+});
+
+test('gas estimation failure stops before the wallet signature request', async () => {
+  const planned = route(1);
+  let signatures = 0;
+  const rpcClient = feeTestClient({
+    transactions: planned.transactions,
+    hashes: [HASH_1],
+    estimateGas: async () => { throw new Error('estimateGas unavailable'); },
+  });
+  const result = await runTransactionRoute({
+    route: planned,
+    policy: TEST_POLICY,
+    publicClient: rpcClient,
+    callbacks: { requestSignature: async () => { signatures += 1; return HASH_1; } },
+    options: { simulate: false, pollMs: 0, receiptTimeoutMs: 100 },
+  });
+
+  assert.equal(result.status, 'failed');
+  assert.equal(signatures, 0);
+  assert.deepEqual(readPendingHashJournal(), []);
 });
 
 test("runner performs the default post-confirm read at the receipt block", async () => {

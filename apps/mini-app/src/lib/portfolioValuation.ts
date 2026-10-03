@@ -2,11 +2,30 @@ import { formatUnits } from 'viem';
 import type { WalletBalancesResult } from './fx/balances';
 import type { UsdPriceSnapshot } from './prices';
 import { usdValueForUnits } from './prices';
-import { ASSET_BALANCE_MAX_AGE_MS, ASSET_PRICE_MAX_AGE_MS, emptyWalletSnapshot, summarizeWalletAssets, type WalletAssetSnapshot } from './walletAssets';
+import { ASSET_BALANCE_MAX_AGE_MS, ASSET_PRICE_MAX_AGE_MS, emptyWalletSnapshot, filterSupportedWalletAssets, summarizeWalletAssets, type WalletAssetSnapshot } from './walletAssets';
 
 const freshTimestamp = (timestamp: number | null | undefined, now: number, maxAge: number) =>
   typeof timestamp === 'number' && Number.isFinite(timestamp) && timestamp > 0
     && now - timestamp <= maxAge && timestamp <= now + 30_000;
+
+export type VerifiedPortfolioTotal = { walletAddress: string; totalUsd: number; verifiedAt: number };
+
+/** Retain a recent, complete total for this wallet while a refresh is in flight. */
+export function portfolioHeadlineTotal(
+  currentTotalUsd: number | null,
+  previous: VerifiedPortfolioTotal | null,
+  walletAddress: string,
+  refreshing: boolean,
+  now = Date.now(),
+): { displayTotalUsd: number | null; verified: VerifiedPortfolioTotal | null } {
+  if (typeof currentTotalUsd === 'number' && Number.isFinite(currentTotalUsd) && currentTotalUsd >= 0) {
+    const verified = { walletAddress: walletAddress.toLowerCase(), totalUsd: currentTotalUsd, verifiedAt: now };
+    return { displayTotalUsd: currentTotalUsd, verified };
+  }
+  const keepPrevious = refreshing && previous?.walletAddress === walletAddress.toLowerCase()
+    && freshTimestamp(previous.verifiedAt, now, ASSET_BALANCE_MAX_AGE_MS);
+  return { displayTotalUsd: keepPrevious ? previous.totalUsd : null, verified: keepPrevious ? previous : null };
+}
 
 /**
  * Returns the subtotal of independently fresh, priced rows available from
@@ -102,8 +121,9 @@ export function mergeFreshCanonicalWalletBalances(
   prices: UsdPriceSnapshot,
   now = Date.now(),
 ): WalletAssetSnapshot {
-  if (!balances || balanceUpdatedAt === null || !freshTimestamp(balanceUpdatedAt, now, ASSET_BALANCE_MAX_AGE_MS)) return snapshot;
-  const assets = new Map(snapshot.assets.map((asset) => [asset.id, asset]));
+  const supportedSnapshot = filterSupportedWalletAssets(snapshot);
+  if (!balances || balanceUpdatedAt === null || !freshTimestamp(balanceUpdatedAt, now, ASSET_BALANCE_MAX_AGE_MS)) return supportedSnapshot;
+  const assets = new Map(supportedSnapshot.assets.map((asset) => [asset.id, asset]));
   let addedCanonicalRow = false;
   for (const balance of balances.balances) {
     addedCanonicalRow = true;
@@ -135,9 +155,9 @@ export function mergeFreshCanonicalWalletBalances(
     });
     addedCanonicalRow = true;
   }
-  const source = addedCanonicalRow && snapshot.source === 'alchemy' ? 'mixed' : snapshot.source;
-  return summarizeWalletAssets({ ...snapshot, assets: [...assets.values()], source,
-    updatedAt: Math.max(snapshot.updatedAt, balanceUpdatedAt) }, now);
+  const source = addedCanonicalRow && supportedSnapshot.source === 'alchemy' ? 'mixed' : supportedSnapshot.source;
+  return summarizeWalletAssets({ ...supportedSnapshot, assets: [...assets.values()], source,
+    updatedAt: Math.max(supportedSnapshot.updatedAt, balanceUpdatedAt) }, now);
 }
 
 /** Builds a partial display snapshot when the expanded asset source has not

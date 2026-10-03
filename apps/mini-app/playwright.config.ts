@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { configuredBrowserChannel } from '../../scripts/e2e_browser_channel.cjs';
 
 /** Browser contract for the client-first web and Telegram app.
  *
@@ -12,6 +13,7 @@ const BASE_URL = `http://localhost:${PORT}`;
 // rebuild by default so a changed source tree cannot silently exercise stale
 // dist/ assets; callers can override this explicitly when reusing a build.
 const E2E_BUILD = process.env.E2E_BUILD ?? (process.env.CI ? '0' : '1');
+const browserChannel = configuredBrowserChannel();
 
 export default defineConfig({
   testDir: './e2e/specs',
@@ -38,7 +40,7 @@ export default defineConfig({
     video: 'retain-on-failure',
     // Container-safe Chromium launch (CI runners / sandboxes without a usable
     // kernel sandbox or with small /dev/shm).
-    launchOptions: { args: ['--no-sandbox', '--disable-dev-shm-usage'] },
+    launchOptions: { args: ['--no-sandbox', '--disable-dev-shm-usage'], ...(browserChannel ? { channel: browserChannel } : {}) },
   },
 
   projects: [

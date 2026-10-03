@@ -2,6 +2,8 @@ export type NativeMaxEstimate = {
   status: 'current' | 'partial' | 'unavailable';
   nativeValueWei: bigint;
   totalNativeCostWei?: bigint;
+  /** Costed against the same 120%-buffered limits and fee cap the wallet preflights. */
+  requiredNativeCostWei?: bigint;
   totalNativeCostScope?: string;
   validUntil: number;
   fee?: { stale?: boolean };
@@ -11,10 +13,12 @@ export type NativeMaxCalculationOptions<Route> = {
   balanceWei: bigint;
   /** A valid entered amount gives RPC estimation a fundable starting point. */
   initialCandidateWei?: bigint;
-  buildRoutes: (amountWei: bigint) => Promise<readonly Route[]>;
-  estimateRoutes: (routes: readonly Route[]) => Promise<readonly NativeMaxEstimate[]>;
+  buildRoutes: (amountWei: bigint, signal?: AbortSignal) => Promise<readonly Route[]>;
+  estimateRoutes: (routes: readonly Route[], signal?: AbortSignal) => Promise<readonly NativeMaxEstimate[]>;
   now?: () => number;
   maxIterations?: number;
+  /** Total wall-clock budget across route builds and estimates. */
+  timeoutMs?: number;
   isCurrent?: () => boolean;
 };
 
@@ -25,12 +29,61 @@ class NativeMaxUnavailableError extends Error {
   }
 }
 
+class NativeMaxTimeoutError extends Error {
+  constructor() {
+    super('native max estimate timed out');
+    this.name = 'NativeMaxTimeoutError';
+  }
+}
+
+function isUnderfundedCandidateError(error: unknown): boolean {
+  const text = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  return /insufficient funds|insufficient balance|not enough funds|balance is too low|funds for gas \* price \+ value/i.test(text);
+}
+
+/** Convert internal estimator failures into concise, user-safe copy. */
+export function nativeMaxErrorMessage(error: unknown): string {
+  const text = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  if (/timed out/i.test(text)) return 'Gas estimate timed out. Try again.';
+  if (/native max request is stale/i.test(text)) return 'Wallet balance changed. Refresh the amount and try again.';
+  if (/current gas estimate is unavailable|fee estimate|stale/i.test(text)) return 'Current gas fees are unavailable. Try again shortly.';
+  if (/wallet balance does not cover|reserve consumes|insufficient funds|insufficient balance|not enough funds|balance is too low/i.test(text)) {
+    return 'Not enough ETH for network fees.';
+  }
+  if (/did not converge/i.test(text)) return 'Gas estimate changed while calculating Max. Try again.';
+  if (/leverage.*(?:higher|maximum|allowed)/i.test(text)) return 'Reduce the target leverage, then try Max again.';
+  return 'Could not calculate Max. Try again.';
+}
+
+async function withinDeadline<T>(
+  operation: (signal: AbortSignal) => Promise<T>,
+  deadline: number,
+): Promise<T> {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) throw new NativeMaxTimeoutError();
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new NativeMaxTimeoutError());
+    }, remaining);
+  });
+  try {
+    return await Promise.race([operation(controller.signal), timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 function usableEstimate(estimate: NativeMaxEstimate, now: () => number): boolean {
   return estimate.status === 'current'
     && !estimate.fee?.stale
     && estimate.totalNativeCostScope === 'execution-plus-value'
     && estimate.totalNativeCostWei !== undefined
     && estimate.totalNativeCostWei >= estimate.nativeValueWei
+    && estimate.requiredNativeCostWei !== undefined
+    && estimate.requiredNativeCostWei >= estimate.nativeValueWei
     && estimate.validUntil > now();
 }
 
@@ -38,27 +91,34 @@ async function reserveFor<Route>(
   amountWei: bigint,
   options: NativeMaxCalculationOptions<Route>,
   now: () => number,
-): Promise<bigint> {
-  const routes = await options.buildRoutes(amountWei);
+  deadline: number,
+): Promise<{ reserveWei: bigint; validUntil: number }> {
+  const routes = await withinDeadline((signal) => options.buildRoutes(amountWei, signal), deadline);
   if (routes.length === 0) throw new Error('native max route is empty');
-  const estimates = await options.estimateRoutes(routes);
+  const estimates = await withinDeadline((signal) => options.estimateRoutes(routes, signal), deadline);
   if (estimates.length !== routes.length || estimates.some((estimate) => !usableEstimate(estimate, now))) {
     throw new NativeMaxUnavailableError();
   }
-  return estimates.reduce((max, estimate) => {
-    const reserve = estimate.totalNativeCostWei! - estimate.nativeValueWei;
+  const reserveWei = estimates.reduce((max, estimate) => {
+    const reserve = estimate.requiredNativeCostWei! - estimate.nativeValueWei;
     return reserve > max ? reserve : max;
   }, 0n);
+  const validUntil = Math.min(...estimates.map((estimate) => estimate.validUntil));
+  if (validUntil <= now()) throw new NativeMaxUnavailableError();
+  return { reserveWei, validUntil };
 }
 
 /**
  * Find a fundable native amount using only complete, fresh route estimates.
  * The returned value is verified against a final route build at that exact
- * amount; a merely close iteration is never presented as a 100% maximum.
+ * amount; an estimate for a nearby candidate is never presented as a maximum.
  */
 export async function calculateNativeMax<Route>(options: NativeMaxCalculationOptions<Route>): Promise<bigint> {
-  if (!Number.isSafeInteger(options.maxIterations ?? 8) || (options.maxIterations ?? 8) < 2 || (options.maxIterations ?? 8) > 16) {
+  if (!Number.isSafeInteger(options.maxIterations ?? 6) || (options.maxIterations ?? 6) < 2 || (options.maxIterations ?? 6) > 16) {
     throw new RangeError('native max iterations must be an integer between 2 and 16');
+  }
+  if (options.timeoutMs !== undefined && (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 100 || options.timeoutMs > 60_000)) {
+    throw new RangeError('native max timeout must be an integer between 100 and 60000 milliseconds');
   }
   if (options.balanceWei < 0n) throw new RangeError('native max balance must be non-negative');
   if (options.balanceWei <= 0n) throw new Error('wallet balance does not cover the verified gas reserve');
@@ -66,43 +126,53 @@ export async function calculateNativeMax<Route>(options: NativeMaxCalculationOpt
   const assertCurrent = () => {
     if (options.isCurrent && !options.isCurrent()) throw new Error('native max request is stale');
   };
-  const maxIterations = options.maxIterations ?? 8;
+  const maxIterations = options.maxIterations ?? 6;
+  const deadline = Date.now() + (options.timeoutMs ?? 15_000);
   const entered = options.initialCandidateWei !== undefined
     && options.initialCandidateWei > 0n
     && options.initialCandidateWei < options.balanceWei
     ? options.initialCandidateWei
     : options.balanceWei / 2n;
   let candidate = entered > 0n ? entered : 1n;
+  let reserveConsumesBalanceRetries = 0;
 
   for (let iteration = 0; iteration < maxIterations; iteration += 1) {
     assertCurrent();
-    let reserve: bigint;
+    let verified: { reserveWei: bigint; validUntil: number };
     try {
-      reserve = await reserveFor(candidate, options, now);
+      verified = await reserveFor(candidate, options, now, deadline);
       assertCurrent();
     } catch (error) {
-      if (error instanceof NativeMaxUnavailableError) throw error;
-      // An underfunded estimate is expected for an overly optimistic amount;
-      // back off until the candidate is fundable. Other failures still fail
-      // closed after the bounded attempts.
+      if (error instanceof NativeMaxUnavailableError || error instanceof NativeMaxTimeoutError) throw error;
+      // Only explicit insufficient-funds errors justify trying a smaller
+      // candidate. SDK leverage, route, contract and transport failures are
+      // deterministic/ambiguous and must not trigger repeated builds.
+      if (!isUnderfundedCandidateError(error)) throw error;
       if (candidate <= 1n) throw error;
       candidate = candidate / 2n;
       continue;
     }
+    const reserve = verified.reserveWei;
     if (reserve >= options.balanceWei) {
-      if (candidate <= 1n) throw new Error('wallet balance does not cover the verified gas reserve');
+      // A single smaller amount checks whether amount-dependent route work
+      // changes the reserve. Repeatedly halving an amount cannot make a
+      // wallet with this reserve fundable and only repeats remote reads.
+      if (candidate <= 1n || reserveConsumesBalanceRetries >= 1) {
+        throw new Error('wallet balance does not cover the verified gas reserve');
+      }
+      reserveConsumesBalanceRetries += 1;
       candidate = candidate / 2n;
       continue;
     }
     const next = options.balanceWei - reserve;
     if (next === candidate) {
-      // Re-read at the exact candidate and require the same result while the
-      // estimates are still fresh. This catches changing gas and expiry.
-      const finalReserve = await reserveFor(candidate, options, now);
+      // This loop iteration just built and estimated this exact candidate.
+      // Reuse that proof and check its freshness/context immediately before
+      // returning instead of repeating the same remote route work.
       assertCurrent();
-      if (finalReserve >= options.balanceWei || options.balanceWei - finalReserve !== candidate) {
-        throw new Error('native max gas reserve did not converge');
-      }
+      if (Date.now() >= deadline) throw new NativeMaxTimeoutError();
+      if (verified.validUntil <= now()) throw new NativeMaxUnavailableError();
+      assertCurrent();
       return candidate;
     }
     candidate = next;

@@ -251,10 +251,10 @@ test.describe("connected browser wallet flows", () => {
     await expect(page.getByRole("listbox", { name: "Input asset options" }).getByRole("option", { name: /^stETH/i })).toBeVisible();
     await page.getByRole("listbox", { name: "Input asset options" }).getByRole("option", { name: /^ETH\b.*\bselected$/i }).click();
     for (const flow of [
-      { market: "ETH", side: "Long", label: "Target leverage", min: "1.1", max: "6.8" },
-      { market: "ETH", side: "Short", label: "Target leverage", min: "0.1", max: "6.9" },
-      { market: "BTC", side: "Long", label: "Target leverage", min: "1.1", max: "6.8" },
-      { market: "BTC", side: "Short", label: "Target leverage", min: "0.1", max: "6.9" },
+      { market: "ETH", side: "Long", label: "Target leverage", min: "1.1", max: "6.1" },
+      { market: "ETH", side: "Short", label: "Target leverage", min: "0.1", max: "6" },
+      { market: "BTC", side: "Long", label: "Target leverage", min: "1.1", max: "6.1" },
+      { market: "BTC", side: "Short", label: "Target leverage", min: "0.1", max: "6" },
     ] as const) {
       await page.getByRole("radio", { name: flow.market, exact: true }).click();
       await page.getByRole("radio", { name: flow.side, exact: true }).click();
