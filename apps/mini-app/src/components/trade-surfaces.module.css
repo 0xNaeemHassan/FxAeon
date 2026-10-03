@@ -104,8 +104,10 @@
   border-radius: var(--radius-md);
   background: var(--bg-raised);
   box-shadow: var(--elevation-2);
-  animation: tokenPickerSheetEnter 160ms ease-out both;
+  animation: tokenPickerSheetEnter var(--motion-enter) var(--motion-ease) both;
 }
+.tokenPickerBackdrop[data-state='closed'] { pointer-events: none; animation: tokenPickerExit var(--motion-exit) var(--motion-ease) both; }
+@keyframes tokenPickerExit { to { opacity: 0; } }
 
 .tokenPickerHeader {
   display: flex;
@@ -207,6 +209,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .tokenPickerDialog { animation: none; }
+  .tokenPickerBackdrop[data-state='closed'] { animation: none; }
   .tokenPickerRow { transition: none; }
 }
 

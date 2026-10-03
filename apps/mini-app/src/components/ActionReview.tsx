@@ -223,7 +223,7 @@ export function ActionReview(props: ActionReviewProps) {
       })];
     });
     return (
-      <ReviewSurface surface={surface} className={`${styles.reviewCard} ${styles.reviewInlineCard} anim-scale-in p-4 sm:p-5`}>
+      <ReviewSurface surface={surface} className={`${styles.reviewCard} ${styles.reviewInlineCard} p-4 sm:p-5`}>
         <TransactionResultView
           result={result}
           presentation={presentation}
@@ -296,7 +296,7 @@ export function ActionReview(props: ActionReviewProps) {
   const wrongNetwork = wallet.chainId !== undefined && wallet.chainId !== route.chainId;
   const unsupportedNetwork = wallet.chainId === undefined;
   return (
-    <ReviewSurface surface={surface} className={`${styles.reviewCard} ${styles.reviewInlineCard} anim-scale-in p-4 sm:p-5`}>
+    <ReviewSurface surface={surface} className={`${styles.reviewCard} ${styles.reviewInlineCard} p-4 sm:p-5`}>
       <header className={presentationStyles.reviewHeader}>
         <div>
           <h3 ref={headingRef} data-review-focus tabIndex={-1} className="text-display outline-none">
@@ -429,8 +429,8 @@ export function ActionReview(props: ActionReviewProps) {
 }
 
 function ReviewSurface({ surface, className, children }: { surface: 'card' | 'content'; className: string; children: ReactNode }) {
-  if (surface === 'content') return <div className={`${styles.reviewInlineContent} reviewInlineContent anim-scale-in`}>{children}</div>;
-  return <Card className={className}>{children}</Card>;
+  if (surface === 'content') return <div className={`${styles.reviewInlineContent} reviewInlineContent ${presentationStyles.surfaceEnter}`}>{children}</div>;
+  return <Card className={`${className} ${presentationStyles.surfaceEnter}`}>{children}</Card>;
 }
 
 function ReviewRow({ label, value, title, className }: { label: string; value: ReactNode; title?: string; className?: string }) {

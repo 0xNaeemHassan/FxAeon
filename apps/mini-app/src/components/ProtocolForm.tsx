@@ -2,6 +2,7 @@
 
 import { createPortal } from 'react-dom';
 import { useOverlayDialog } from '@/lib/useOverlayDialog';
+import { useExitPresence } from '@/lib/useExitPresence';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, Info, Search } from 'lucide-react';
 import TokenIcon from '@/components/TokenIcon';
@@ -268,6 +269,7 @@ export function TokenSelect<T extends string>({
   const labelId = `${selectId}-label`;
   const dialogTitleId = `${selectId}-dialog-title`;
   const [open, setOpen] = useState(false);
+  const present = useExitPresence(open, selectId);
   const [query, setQuery] = useState('');
   const { prices, status: priceStatus, refresh: refreshPrices } = useUsdPrices();
   const pickerBalances = balances;
@@ -348,9 +350,12 @@ export function TokenSelect<T extends string>({
         </span>
         <ChevronDown aria-hidden="true" className={`h-4 w-4 shrink-0 text-mut transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
-      {open && typeof document !== 'undefined' && createPortal(
+      {present && typeof document !== 'undefined' && createPortal(
         <div
           className={styles.tokenPickerBackdrop}
+          data-state={open ? 'open' : 'closed'}
+          inert={!open}
+          aria-hidden={!open || undefined}
           role="presentation"
           onMouseDown={(event) => { if (event.target === event.currentTarget) closePicker(); }}
         >

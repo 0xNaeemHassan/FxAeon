@@ -90,6 +90,10 @@
   --astryx-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --astryx-duration-fast: 120ms;
   --astryx-duration-normal: 180ms;
+  --motion-ease: cubic-bezier(.17, .67, .45, 1);
+  --motion-enter: 100ms;
+  --motion-panel-enter: 120ms;
+  --motion-exit: 80ms;
 
   /* Bottom-nav geometry: panel + safe area + one 8px spacing unit. Keep the
      reserve in one token so route-level action rails and scroll padding clear

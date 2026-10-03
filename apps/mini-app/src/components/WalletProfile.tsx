@@ -31,6 +31,7 @@ import { activeWalletAddress } from '@/lib/wallet/activeWalletAddress';
 import { canonicalWalletBalancesSnapshot, knownFreshPortfolioSubtotal, mergeFreshCanonicalWalletBalances } from '@/lib/portfolioValuation';
 import { walletAssetValuation } from '@/lib/walletAssets';
 import { useOverlayDialog } from '@/lib/useOverlayDialog';
+import { useExitPresence } from '@/lib/useExitPresence';
 import styles from '@/app/AccountWorkspace.module.css';
 import ConnectWalletButton from '@/components/ConnectWalletButton';
 import { ValueOrSkeleton } from '@/components/MissingValue';
@@ -63,6 +64,7 @@ export default function WalletProfile() {
   // Hide immediately on account loss/change, then discard the old open state
   // so reconnecting that account cannot silently reopen a prior drawer.
   const open = Boolean(walletIdentity && openWallet === walletIdentity);
+  const present = useExitPresence(open, `${walletIdentity}:${pathname}`);
   useEffect(() => {
     if (open && openedAtPathRef.current !== pathname) setOpenWallet(null);
   }, [open, pathname, setOpenWallet]);
@@ -157,8 +159,8 @@ export default function WalletProfile() {
       className={`${styles.walletTrigger} ${headerWalletControl.trigger} ${headerWalletControl.identityTrigger} glass-press`}>
       <span className={headerWalletControl.identityName}>{verifiedEnsName ?? compactAddress(activeAddress)}</span>
     </button>
-    {open && typeof document !== 'undefined' && createPortal(
-      <div className={`${styles.walletBackdrop} ${presentation.backdrop} wallet-profile-backdrop`} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpenWallet(null); }}>
+    {present && typeof document !== 'undefined' && createPortal(
+      <div className={`${styles.walletBackdrop} ${presentation.backdrop} wallet-profile-backdrop`} data-state={open ? 'open' : 'closed'} inert={!open} aria-hidden={!open || undefined} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpenWallet(null); }}>
         <aside ref={dialogRef} role="dialog" aria-modal="true" aria-label={profileDialogName} className={presentation.sheet} onMouseDown={(event) => event.stopPropagation()}>
           <header className={presentation.header}>
             <span className={presentation.handle} aria-hidden="true" />
@@ -183,8 +185,9 @@ export default function WalletProfile() {
                 status={walletValueLoading ? 'loading' : 'unavailable'} label={walletValueLoading ? 'Loading wallet value' : 'Wallet value unavailable'} /></strong>
               <div className={presentation.actions}>
                 <Link href="/qr" className={presentation.primaryAction}><ArrowDownToLine size={18} aria-hidden="true" />Receive</Link>
-                <Link href="/portfolio">View portfolio<ArrowUpRight size={18} aria-hidden="true" /></Link>
+                <Link href="/trade" className={presentation.primaryAction}><ArrowUpRight size={18} aria-hidden="true" />Trade</Link>
               </div>
+              <Link href="/portfolio" className={presentation.portfolioLink}>View portfolio<ArrowUpRight size={16} aria-hidden="true" /></Link>
             </section>
             <section className={presentation.assets} aria-labelledby="wallet-profile-balances-title">
               <div className={presentation.sectionHeading}><h3 id="wallet-profile-balances-title">Assets</h3><span>All networks</span></div>

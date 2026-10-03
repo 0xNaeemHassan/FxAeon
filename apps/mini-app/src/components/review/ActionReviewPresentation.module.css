@@ -8,6 +8,10 @@
   background: transparent;
 }
 
+.surfaceEnter { animation: review-enter var(--motion-enter) var(--motion-ease) both; }
+@keyframes review-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .surfaceEnter { animation: none; } }
+
 .quoteMetric {
   min-width: 0;
   padding: 7px 8px;
