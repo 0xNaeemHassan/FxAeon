@@ -16,18 +16,21 @@ test.describe("protocol form help and picker keyboard behavior", () => {
     await page.setViewportSize({ width: 320, height: 844 });
     await page.goto("/trade", { waitUntil: "domcontentloaded" });
 
-    // Trade keeps slippage collapsed under the compact Settings disclosure.
-    // The aria-hidden arrow is part of summary textContent, so match its label.
-    const settings = page.locator(".trade-ticket summary").filter({ hasText: /^Settings/ }).first();
+    const settings = page.getByRole("button", { name: /^Transaction settings,/ });
     await expect(settings).toBeVisible();
     await settings.click();
-    const settingsPanel = settings.locator("xpath=..");
+    const settingsPanel = page.getByRole("dialog", { name: "Transaction settings" });
+    await expect(settingsPanel).toBeVisible();
+    const ticketWidth = await page.locator(".trade-ticket").evaluate((element) => element.getBoundingClientRect().width);
     const disclosureGeometry = await settingsPanel.evaluate((element) => ({
       width: element.getBoundingClientRect().width,
-      ticketWidth: element.closest(".trade-ticket")?.getBoundingClientRect().width ?? 0,
+      left: element.getBoundingClientRect().left,
+      right: element.getBoundingClientRect().right,
     }));
     expect(disclosureGeometry.width, "expanded Trade settings must use the ticket width on mobile")
-      .toBeGreaterThan(disclosureGeometry.ticketWidth - 32);
+      .toBeGreaterThan(ticketWidth - 32);
+    expect(disclosureGeometry.left).toBeGreaterThanOrEqual(0);
+    expect(disclosureGeometry.right).toBeLessThanOrEqual(320);
     await expect(page.getByRole("button", { name: "About slippage tolerance", exact: true })).toBeVisible();
 
     const helpButton = page.getByRole("button", { name: "About slippage tolerance", exact: true });
@@ -43,6 +46,13 @@ test.describe("protocol form help and picker keyboard behavior", () => {
     await expect(tooltip).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(tooltip).toBeHidden();
+    await expect(settingsPanel).toBeHidden();
+    await expect(settings).toBeFocused();
+
+    // Reopen the modal to verify hover, keyboard focus, and touch behavior
+    // inside the live settings surface.
+    await settings.click();
+    await expect(settingsPanel).toBeVisible();
 
     await page.mouse.move(2, 2);
     await helpButton.hover();
@@ -50,35 +60,40 @@ test.describe("protocol form help and picker keyboard behavior", () => {
     await page.mouse.move(2, 2);
     await expect(tooltip).toBeHidden();
 
-    // Keyboard focus opens the same disclosure and Escape closes it without
-    // moving focus away from the compact help control.
+    // Keyboard focus opens the contextual explanation. Escape closes the
+    // settings dialog and returns focus to its trigger.
     await helpButton.focus();
     await expect(tooltip).toBeVisible();
     await expect(helpButton).toHaveAttribute("aria-describedby", /-help$/);
     await page.keyboard.press("Escape");
     await expect(tooltip).toBeHidden();
-    await expect(helpButton).toBeFocused();
-    await expect(helpButton).toHaveAttribute("aria-expanded", "false");
+    await expect(settingsPanel).toBeHidden();
+    await expect(settings).toBeFocused();
 
-    const buttonBox = await helpButton.boundingBox();
+    await settings.click();
+    await expect(settingsPanel).toBeVisible();
+    const reopenedHelpButton = page.getByRole("button", { name: "About slippage tolerance", exact: true });
+    const reopenedTooltip = page.getByRole("tooltip");
+
+    const buttonBox = await reopenedHelpButton.boundingBox();
     expect(buttonBox).not.toBeNull();
     expect(buttonBox!.width).toBeGreaterThanOrEqual(44);
     expect(buttonBox!.height).toBeGreaterThanOrEqual(44);
 
     // Exercise a real touch pointerdown/click sequence. A second tap must
     // toggle the disclosure closed rather than being swallowed by focus-open.
-    await helpButton.tap();
-    await expect(tooltip).toBeVisible();
-    await helpButton.tap();
-    await expect(tooltip).toBeHidden();
+    await reopenedHelpButton.tap();
+    await expect(reopenedTooltip).toBeVisible();
+    await reopenedHelpButton.tap();
+    await expect(reopenedTooltip).toBeHidden();
 
     // At the narrowest supported viewport the popup must not obscure either
     // the field label or the value input it explains.
     await page.mouse.move(2, 2);
-    await page.mouse.click(2, 2);
-    await helpButton.focus();
-    await expect(tooltip).toBeVisible();
-    const tooltipBox = await tooltip.boundingBox();
+    await slippageInput.focus();
+    await reopenedHelpButton.focus();
+    await expect(reopenedTooltip).toBeVisible();
+    const tooltipBox = await reopenedTooltip.boundingBox();
     const labelBox = await slippageLabel.boundingBox();
     const inputBox = await slippageInput.boundingBox();
     expect(tooltipBox).not.toBeNull();

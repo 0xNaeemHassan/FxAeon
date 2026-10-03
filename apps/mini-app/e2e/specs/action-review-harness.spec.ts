@@ -180,7 +180,7 @@ test.describe('ActionReview isolated orchestration', () => {
     expect(box!.x + box!.width).toBeLessThanOrEqual(393);
     expect(box!.y).toBeGreaterThan(headerBox!.y + headerBox!.height);
     expect(box!.y + box!.height).toBeLessThanOrEqual(navBox!.y);
-    const review = page.locator('details[aria-label="Review details"]').locator('..');
+    const review = page.locator('[data-review-viewport]');
     const reviewBox = await review.boundingBox();
     expect(reviewBox!.height, 'collapsed review should occupy at most half the mobile viewport').toBeLessThanOrEqual(426);
     await expect(review.locator('summary').filter({ hasText: /^Steps ·/ })).toBeHidden();
@@ -190,6 +190,28 @@ test.describe('ActionReview isolated orchestration', () => {
     await expect(details).toHaveJSProperty('open', true);
     await page.keyboard.press('Enter');
     await expect(details).toHaveJSProperty('open', false);
+    // Even the worst-case expanded metadata must not displace confirmation.
+    await review.locator('details').evaluateAll((nodes) => nodes.forEach((node) => { (node as HTMLDetailsElement).open = true; }));
+    const scrollBody = page.getByRole('region', { name: 'Review information', exact: true });
+    await expect.poll(() => scrollBody.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
+    const expandedConfirm = await confirm.boundingBox();
+    expect(expandedConfirm!.y + expandedConfirm!.height).toBeLessThanOrEqual(navBox!.y);
+    await scrollBody.evaluate((node) => { node.scrollTop = node.scrollHeight; });
+    await expect(confirm).toBeInViewport();
+    await page.screenshot({ path: testInfo.outputPath('action-review-expanded-bounded.png') });
+    for (const size of [{ width: 320, height: 568 }, { width: 844, height: 390 }]) {
+      await page.setViewportSize(size);
+      await expect.poll(async () => {
+        const action = await confirm.boundingBox();
+        const bottom = await page.locator('[data-fixed-navigation="true"]').evaluate((node) => {
+          const box = node.getBoundingClientRect();
+          return box.height > 0 ? box.top : window.innerHeight;
+        });
+        return Boolean(action && action.y >= 0 && action.y + action.height <= bottom);
+      }, { message: `expanded review confirmation fits ${size.width}×${size.height}` }).toBe(true);
+    }
+    await page.setViewportSize({ width: 393, height: 852 });
+    await review.locator('details').evaluateAll((nodes) => nodes.forEach((node) => { (node as HTMLDetailsElement).open = false; }));
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const duration = await details.locator(':scope > summary svg').evaluate((node) => getComputedStyle(node).transitionDuration);
     // The global reduced-motion reset uses 0.01ms to preserve end events.

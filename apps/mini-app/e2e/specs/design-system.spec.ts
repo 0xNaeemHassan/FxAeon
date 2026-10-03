@@ -34,17 +34,21 @@ test.describe('cohesive responsive design', () => {
     await page.goto('/trade', { waitUntil: 'domcontentloaded' });
     const chart = page.locator('.market-chart-panel');
     const ticket = page.locator('.trade-ticket');
+    const positionSide = page.getByRole('radiogroup', { name: 'Position side' });
     await expect(chart).toBeVisible();
     await expect(ticket).toBeVisible();
+    await expect(positionSide).toBeVisible();
     await expect(chart.getByText('f(x) market · Ethereum', { exact: true })).toHaveCount(0);
     await expect(chart.getByText('CoinGecko history · display only', { exact: true })).toHaveCount(0);
     await expect(chart.getByRole('link', { name: 'CoinGecko', exact: true })).toHaveCount(0);
     const chartBox = await chart.boundingBox();
     const ticketBox = await ticket.boundingBox();
+    const positionSideBox = await positionSide.boundingBox();
     expect(chartBox).not.toBeNull();
     expect(ticketBox).not.toBeNull();
+    expect(positionSideBox).not.toBeNull();
     expect(chartBox!.x + chartBox!.width).toBeLessThan(ticketBox!.x);
-    expect(Math.abs(chartBox!.y - ticketBox!.y)).toBeLessThan(5);
+    expect(Math.abs(chartBox!.y - positionSideBox!.y)).toBeLessThan(5);
     await expect(page.getByRole('navigation', { name: 'Primary navigation' }).filter({ visible: true })).toHaveCount(1);
 
     await page.setViewportSize({ width: 390, height: 844 });
