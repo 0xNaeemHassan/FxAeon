@@ -26,12 +26,15 @@ function mockClient(options: {
   rate?: bigint;
   quote?: bigint;
   balances?: readonly bigint[];
-}): DirectPositionDiscoveryParams['client'] & { calls: string[] } {
+  malformedBatchAt?: number;
+}): DirectPositionDiscoveryParams['client'] & { calls: string[]; requestedIds: number[][] } {
   const owned = new Set(options.ownedIds ?? []);
   let balanceRead = 0;
   const calls: string[] = [];
+  const requestedIds: number[][] = [];
   return {
     calls,
+    requestedIds,
     readContract: async (args: { functionName: string }) => {
       calls.push(args.functionName);
       if (args.functionName === 'balanceOf') {
@@ -55,14 +58,17 @@ function mockClient(options: {
     },
     multicall: async ({ contracts }: { contracts: readonly { args: readonly [bigint] }[] }) => {
       calls.push('ownerOfBatch');
-      return contracts.map(({ args }) => {
-        const id = Number(args[0]);
+      const ids = contracts.map(({ args }) => Number(args[0]));
+      requestedIds.push(ids);
+      const results = ids.map((id) => {
         return owned.has(id)
           ? { status: 'success', result: wallet }
           : { status: 'failure', error: new Error('burned or foreign') };
       });
+      if (options.malformedBatchAt === requestedIds.length - 1) results.pop();
+      return results;
     },
-  } as DirectPositionDiscoveryParams['client'] & { calls: string[] };
+  } as DirectPositionDiscoveryParams['client'] & { calls: string[]; requestedIds: number[][] };
 }
 
 function mockStorage(initial?: string): PositionCandidateStorage & { value: string | null } {
@@ -100,14 +106,41 @@ test('indexer deficit falls back to ownerOf batches and tolerates burned IDs', a
   assert.equal(client.calls.filter((call) => call === 'getNextPositionId').length, 1);
 });
 
-test('historical scans search newest IDs first without claiming partial coverage', async () => {
+test('the newest-ID probe checks only 16 IDs and accepts a complete holding immediately', async () => {
   const newestId = 1999;
   const client = mockClient({ balance: 1n, nextId: BigInt(newestId + 1), ownedIds: [newestId] });
   const result = await discoverDirectWalletPositionIds({
     client, group, walletAddress: wallet, verifiedIndexerIds: [], memoryCandidates: new Map(),
   });
   assert.deepEqual(result.ids, [newestId]);
-  assert.equal(client.calls.filter((call) => call === 'ownerOfBatch').length, 2, 'latest ID is checked in the first pair of bounded batches');
+  assert.equal(client.requestedIds.length, 1);
+  assert.deepEqual(client.requestedIds[0], Array.from({ length: 16 }, (_, index) => newestId - 15 + index));
+});
+
+test('recent holdings remain discoverable when the pool has minted more than 4096 IDs', async () => {
+  const newestId = 6001;
+  const client = mockClient({ balance: 1n, nextId: BigInt(newestId + 1), ownedIds: [newestId] });
+  const result = await discoverDirectWalletPositionIds({
+    client, group, walletAddress: wallet, verifiedIndexerIds: [], memoryCandidates: new Map(),
+  });
+  assert.deepEqual(result.ids, [newestId]);
+  assert.ok(client.requestedIds.flat().every((id) => id > 4096));
+  assert.equal(client.requestedIds.flat().length, 16);
+});
+
+test('historical mixed holdings scan without gaps or duplicate IDs up to the 4096-ID boundary', async () => {
+  const nextId = 5001;
+  const firstId = nextId - DIRECT_POSITION_SCAN_MAX_IDS;
+  const ownedIds = [firstId, 3000, nextId - 1];
+  const client = mockClient({ balance: BigInt(ownedIds.length), nextId: BigInt(nextId), ownedIds });
+  const result = await discoverDirectWalletPositionIds({
+    client, group, walletAddress: wallet, verifiedIndexerIds: [], memoryCandidates: new Map(),
+  });
+  assert.deepEqual(result.ids, ownedIds);
+  const requested = client.requestedIds.flat();
+  assert.equal(requested.length, DIRECT_POSITION_SCAN_MAX_IDS);
+  assert.equal(new Set(requested).size, requested.length, 'each candidate ID is checked once');
+  assert.deepEqual([...requested].sort((a, b) => a - b), Array.from({ length: DIRECT_POSITION_SCAN_MAX_IDS }, (_, index) => firstId + index));
 });
 
 test('a wallet-scoped candidate cache rechecks ownership and recovers a transferred NFT', async () => {
@@ -137,15 +170,19 @@ test('zero NFT ownership is an honest empty result and skips scanning', async ()
   assert.equal(client.calls.includes('getNextPositionId'), false);
 });
 
-test('a capped or incomplete scan rejects instead of reporting an empty wallet', async () => {
-  const capped = mockClient({ balance: 1n, nextId: BigInt(DIRECT_POSITION_SCAN_MAX_IDS + 2) });
+test('an out-of-window holding rejects instead of returning a partial wallet', async () => {
+  const oldId = 1;
+  const nextId = 6000;
+  const outOfWindow = mockClient({ balance: 2n, nextId: BigInt(nextId), ownedIds: [oldId, nextId - 1] });
   await assert.rejects(() => discoverDirectWalletPositionIds({
-    client: capped,
+    client: outOfWindow,
     group,
     walletAddress: wallet,
     verifiedIndexerIds: [],
     memoryCandidates: new Map(),
-  }), /exceeds/);
+  }), /incomplete/);
+  assert.ok(outOfWindow.requestedIds.flat().every((id) => id >= nextId - DIRECT_POSITION_SCAN_MAX_IDS));
+  assert.ok(!outOfWindow.requestedIds.flat().includes(oldId));
 
   const incomplete = mockClient({ balance: 1n, nextId: 4n, ownedIds: [] });
   await assert.rejects(() => discoverDirectWalletPositionIds({
@@ -155,6 +192,20 @@ test('a capped or incomplete scan rejects instead of reporting an empty wallet',
     verifiedIndexerIds: [],
     memoryCandidates: new Map(),
   }), /incomplete/);
+});
+
+test('direct discovery rejects if the wallet balance changes during the scan', async () => {
+  const client = mockClient({ balances: [1n, 2n], nextId: 20n, ownedIds: [19] });
+  await assert.rejects(() => discoverDirectWalletPositionIds({
+    client, group, walletAddress: wallet, verifiedIndexerIds: [], memoryCandidates: new Map(),
+  }), /incomplete/);
+});
+
+test('direct discovery rejects malformed multicall batch lengths', async () => {
+  const client = mockClient({ balance: 1n, nextId: 20n, ownedIds: [19], malformedBatchAt: 0 });
+  await assert.rejects(() => discoverDirectWalletPositionIds({
+    client, group, walletAddress: wallet, verifiedIndexerIds: [], memoryCandidates: new Map(),
+  }), /incomplete batch/);
 });
 
 test('canonical reader preserves SDK long leverage and token metadata', async () => {

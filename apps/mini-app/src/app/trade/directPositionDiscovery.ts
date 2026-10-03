@@ -34,6 +34,7 @@ export const POSITION_NFT_ABI = [
 
 /** A scan is deliberately small enough to be safe on a public RPC endpoint. */
 export const DIRECT_POSITION_SCAN_MAX_IDS = 4_096;
+export const DIRECT_POSITION_SCAN_INITIAL_IDS = 16;
 export const DIRECT_POSITION_SCAN_BATCH_SIZE = 128;
 export const DIRECT_POSITION_SCAN_CONCURRENCY = 2;
 export const DIRECT_POSITION_SCAN_DEADLINE_MS = 12_000;
@@ -248,22 +249,24 @@ async function scanOwners(params: {
   deadline: number;
 }): Promise<number[]> {
   if (!params.client.multicall) throw new Error('direct position scan requires multicall support');
-  if (params.nextId - 1 > DIRECT_POSITION_SCAN_MAX_IDS) {
-    throw new Error(`direct position scan exceeds ${DIRECT_POSITION_SCAN_MAX_IDS} token IDs`);
-  }
-
   const found = new Set<number>();
   const lastId = params.nextId - 1;
-  // Newly minted NFTs are normally near the end of the ID range. Search
-  // newest IDs first to find common recent positions quickly, while still
-  // covering the complete historical range before accepting completeness.
-  for (let windowEnd = lastId; windowEnd >= 1; windowEnd -= DIRECT_POSITION_SCAN_BATCH_SIZE * DIRECT_POSITION_SCAN_CONCURRENCY) {
+  const firstId = Math.max(1, lastId - DIRECT_POSITION_SCAN_MAX_IDS + 1);
+  // Probe a small recent tail before paying for two full batches. The cap is
+  // a per-refresh work budget, not a limit on how many NFTs a pool may mint.
+  // An older holding outside this window leaves discovery incomplete; only
+  // the canonical wallet count can establish completeness.
+  let windowEnd = lastId;
+  let windowSize = DIRECT_POSITION_SCAN_INITIAL_IDS;
+  while (windowEnd >= firstId) {
+    if (Date.now() >= params.deadline) throw new Error('direct position scan deadline exceeded');
+    const windowStart = Math.max(firstId, windowEnd - windowSize + 1);
     const jobs: Promise<readonly MulticallResult[]>[] = [];
     const batchStarts: number[] = [];
     for (let offset = 0; offset < DIRECT_POSITION_SCAN_CONCURRENCY; offset += 1) {
       const batchEnd = windowEnd - offset * DIRECT_POSITION_SCAN_BATCH_SIZE;
-      if (batchEnd < 1) break;
-      const batchStart = Math.max(1, batchEnd - DIRECT_POSITION_SCAN_BATCH_SIZE + 1);
+      if (batchEnd < windowStart) break;
+      const batchStart = Math.max(windowStart, batchEnd - DIRECT_POSITION_SCAN_BATCH_SIZE + 1);
       batchStarts.push(batchStart);
       const contracts = Array.from({ length: batchEnd - batchStart + 1 }, (_, index) => ({
         address: params.pool,
@@ -276,6 +279,8 @@ async function scanOwners(params: {
     const results = await Promise.all(jobs);
     results.forEach((batch, batchIndex) => {
       const batchStart = batchStarts[batchIndex]!;
+      const batchEnd = windowEnd - batchIndex * DIRECT_POSITION_SCAN_BATCH_SIZE;
+      if (batch.length !== batchEnd - batchStart + 1) throw new Error('direct position scan returned an incomplete batch');
       batch.forEach((result, index) => {
         if (ownerMatches(result, params.walletAddress)) found.add(batchStart + index);
       });
@@ -288,6 +293,8 @@ async function scanOwners(params: {
       if (finalCount === params.expectedCount) return [...found].sort((a, b) => a - b);
       throw new Error('direct position scan was incomplete');
     }
+    windowEnd = windowStart - 1;
+    windowSize = DIRECT_POSITION_SCAN_BATCH_SIZE * DIRECT_POSITION_SCAN_CONCURRENCY;
   }
 
   if (BigInt(found.size) !== params.expectedCount) {
