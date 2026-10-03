@@ -291,8 +291,9 @@ function formatGasUnits(value: bigint): string {
 function formatNativeCost(value: bigint): { amount: string; unit: 'ETH' | 'Gwei' } {
   // Tiny estimates are common on test or low-fee networks. Showing eighteen
   // decimal places in ETH obscures the useful number, so retain precision in
-  // Gwei below one Gwei and use trimmed ETH above it.
-  if (value < 1_000_000_000n) {
+  // Gwei below 0.000001 ETH so the compact six-decimal ETH display does not
+  // collapse distinct low-cost transactions into the same less-than label.
+  if (value < 1_000_000_000_000n) {
     return { amount: formatUnits(value, 9).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1'), unit: 'Gwei' };
   }
   return { amount: formatEther(value).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1'), unit: 'ETH' };
@@ -543,6 +544,14 @@ export async function estimatePlannedRouteCost(
   };
 }
 
+/** Network fees exclude native value sent, including bridge protocol fees. */
+export function networkFeeWei(estimate: RouteGasCostEstimate): bigint | undefined {
+  if (estimate.executionGasFeeWei === undefined) return undefined;
+  if (estimate.chainId !== 8453) return estimate.executionGasFeeWei;
+  if (estimate.l1DataFeeWei === undefined || estimate.operatorFeeWei === undefined) return undefined;
+  return estimate.executionGasFeeWei + estimate.l1DataFeeWei + estimate.operatorFeeWei;
+}
+
 /** UI-facing strings are produced only for values proven by the snapshot. */
 export function formatRouteGasCost(estimate: RouteGasCostEstimate): {
   estimatedGas?: string;
@@ -551,7 +560,8 @@ export function formatRouteGasCost(estimate: RouteGasCostEstimate): {
   totalCost?: string;
 } {
   if (estimate.status === 'unavailable') return {};
-  const gasAmount = estimate.executionGasFeeWei === undefined ? undefined : formatNativeCost(estimate.executionGasFeeWei);
+  const networkFee = networkFeeWei(estimate);
+  const gasAmount = networkFee === undefined ? undefined : formatNativeCost(networkFee);
   const totalAmount = estimate.totalNativeCostWei === undefined ? undefined : formatNativeCost(estimate.totalNativeCostWei);
   const isMaxFee = estimate.fee?.mode !== 'legacy';
   const displayRate = estimate.fee?.displayFeePerGasWei;

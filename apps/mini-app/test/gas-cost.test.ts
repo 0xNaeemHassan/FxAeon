@@ -205,6 +205,7 @@ test('Base includes OP Stack fee components and counts the bridge native fee onc
   assert.equal(estimate.operatorFeeWei, 5n);
   assert.equal(estimate.totalNativeCostWei, 46n);
   assert.equal(estimate.totalNativeCostScope, 'execution-plus-l1-plus-operator-plus-value');
+  assert.equal(formatRouteGasCost(estimate).gasFee, '0.000000039 Gwei (max)', 'all network components, excluding the bridge native value');
 });
 
 test('Base stays partial when L1/operator fee accounting is unavailable', async () => {
@@ -219,6 +220,7 @@ test('Base stays partial when L1/operator fee accounting is unavailable', async 
   assert.equal(estimate.status, 'partial');
   assert.equal(estimate.executionGasFeeWei, 30n);
   assert.equal(estimate.totalNativeCostWei, undefined);
+  assert.equal(formatRouteGasCost(estimate).gasFee, undefined, 'execution alone must not appear as the complete Base network fee');
 });
 
 test('cache follows the current browser clock after initialization', async (t) => {

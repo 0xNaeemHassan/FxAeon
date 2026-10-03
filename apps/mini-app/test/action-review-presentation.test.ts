@@ -67,3 +67,21 @@ test('total cost is omitted only when zero native value makes it numerically equ
   const nonzeroNativeFacts = routeFacts(route(1n), { estimate: nonzeroNativeRoute, estimateIsCurrent: true });
   assert.deepEqual(nonzeroNativeFacts.map(({ label }) => label), ['Gas fee', 'Total cost']);
 });
+
+test('Base gas combines network components without duplicating a fee-only total', () => {
+  const baseEstimate = {
+    ...estimate({ executionGasFeeWei: 1_000_000_000n, totalNativeCostWei: 1_300_000_000n }),
+    chainId: 8453 as const,
+    l1DataFeeWei: 200_000_000n,
+    operatorFeeWei: 100_000_000n,
+  };
+  const baseRoute = { ...route(), chainId: 8453 as const };
+  const facts = routeFacts(baseRoute, { estimate: baseEstimate, estimateIsCurrent: true });
+  assert.deepEqual(facts.map(({ label, value }) => ({ label, value })), [{ label: 'Gas fee', value: '1.3 Gwei max' }]);
+  const withValue = { ...baseEstimate, nativeValueWei: 500_000_000n, totalNativeCostWei: 1_800_000_000n };
+  const valueFacts = routeFacts({ ...baseRoute, transactions: route(500_000_000n).transactions }, { estimate: withValue, estimateIsCurrent: true });
+  assert.deepEqual(valueFacts.map(({ label, value }) => ({ label, value })), [
+    { label: 'Gas fee', value: '1.3 Gwei max' },
+    { label: 'Total cost', value: '1.8 Gwei max' },
+  ]);
+});

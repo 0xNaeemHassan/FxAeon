@@ -111,6 +111,15 @@ The 22 focused prefetch, leverage, and fee-presentation cases, the mobile fee
 loading/failure browser case, and typecheck passed locally. Failed estimates
 say Unavailable without promising that a wallet can show a final charge.
 
+The Base Gas fee row now includes execution, L1 data, and operator fees; its
+amount stays unavailable if either Base component is missing. Native value
+and bridge protocol value remain separate from network gas. A fee-only total
+is omitted when it would repeat the same aggregate. Fees below 0.000001 ETH
+use Gwei so distinct small estimates remain distinguishable in compact rows.
+All 24 focused fee, presentation, and review-summary cases passed after this
+change. Privy's own Base fee row still lacks the additional fee components;
+the complete estimate is available in the FxAeon review.
+
 Standard, Fast, and Rapid fee controls and reviewed fee caps apply to the Privy send path. There, the wallet request uses the RPC gas estimate with 20% headroom, bounded against an invalid or excessive estimate. If an approval outlives its quote, the runner refreshes the selected tier but refuses to exceed the reviewed fee ceiling. The trade Max calculation reserves the estimated gas cost at the selected maximum fee, uses a bounded iteration count and deadline, and returns concise failure messages instead of treating arbitrary route failures as underfunded estimates. With an external wallet, that wallet owns fee selection and pricing; FxAeon does not impose the Privy fee caps on external sends.
 
 Leverage bounds now reserve margin for the SDK's debt-ratio guard and selected slippage. The displayed maximum is an input guard, not a guarantee that every route at that value will plan; the SDK and current pool state still determine route validity.
