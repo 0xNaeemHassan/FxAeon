@@ -147,3 +147,29 @@ The following focused checks were reported as passing during development:
 The latest consolidated `pnpm verify` run reported 543 passed and 4 skipped unit cases, then passed the production build, bundle and built-secret checks. All 193 main browser cases, 56 isolated browser cases, and 14 landing theme/viewport states passed. That command exited nonzero because its concurrent typecheck caught an optional environment-variable narrowing error in temporary fork-replay setup. The temporary setup was removed, and the full `pnpm typecheck` then passed. The unchanged browser stages were not rerun. Local execution used Node 24 and installed Chrome; repository CI uses the required Node 22 and pinned Playwright browser and remains a separate release gate.
 
 The Anvil all-suite run passed four cases, with protocol and fxSAVE manifests verified. An earlier cold-fork SDK multicall exceeded the hosted 5-second deadline; a 60-second deadline now applies only to loopback endpoints in explicit local-fork mode. Hosted endpoints retain the 5-second limit. The final browser manifest records four successful opens and full closes, canonical zero accounting after closure, positive USDC close proceeds, approval/action binding, account/ownership isolation, and successful existing-position borrowing and fxSAVE deposit. Withdrawal coverage verifies reviews and calldata; cross-chain execution was not tested. Historical close and bridge replay did not establish the cause of the reported live failures, so those symptoms are not claimed as conclusively resolved.
+
+## Review priority and visual hierarchy follow-up
+
+A live external-wallet review observation captured 143 eth_call requests over
+about 50 seconds, including background reads after the review became ready.
+Repeated position-group reads followed Ethereum blocks. This is evidence of
+competing work, not a measurement that all 143 calls belong to the planner.
+
+ActionReview now holds a reference-counted pause while planning, reviewing,
+refreshing, or executing. Only automatic block-triggered full-position reads
+pause; initial wallet reads, manual refresh, bounded failure recovery, and
+receipt-bound reconciliation retain their existing behavior. The provider and
+its verified snapshot remain mounted. Releasing the last review catches up to
+the latest block once. Already in-flight RPCs are not cancelled by this change.
+
+Review facts use one label/value column at every viewport width. The primary
+input amount has stronger emphasis, and standalone review cards are limited
+to 480px. No transaction fact or signing guard is removed.
+
+Validation: seven position-provider browser cases passed, with the new
+concurrent-pause case rerun after tightening same-render pause acquisition.
+The actual ActionReview source harness passes mobile CTA visibility, half-screen
+collapsed height, keyboard disclosure, reduced motion, and wide-viewport row
+alignment. Typecheck, focused ESLint, and diff checks pass locally. These checks
+use Node 24 and installed Chrome; CI remains the release gate. Live timing after
+deployment and broader action-specific review redesign remain unverified.

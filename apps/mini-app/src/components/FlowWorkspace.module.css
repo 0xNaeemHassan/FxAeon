@@ -69,7 +69,7 @@
  * portal-backed modal. */
 .reviewInlineCard {
   width: 100%;
-  max-width: 920px;
+  max-width: 480px;
   margin-inline: auto;
   border: 1px solid color-mix(in srgb, var(--line-strong) 42%, var(--line));
   box-shadow: none;
@@ -190,7 +190,7 @@
 
 .reviewFacts {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   padding: 4px 0 8px;
 }
