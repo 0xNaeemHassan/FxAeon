@@ -152,6 +152,7 @@ test('four-position Close review hides siblings, keeps its action above navigati
   });
   // Expand the disclosure panels to exercise the actual scroll path, rather
   // than relying on this short fixture to overflow by default.
+  await page.getByLabel('Review details', { exact: true }).locator(':scope > summary').click();
   for (const label of ['Quote details', 'Advanced details', 'Steps · 2']) {
     await page.getByText(label, { exact: true }).click();
   }

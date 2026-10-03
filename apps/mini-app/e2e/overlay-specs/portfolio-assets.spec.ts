@@ -3,6 +3,15 @@ import { existsSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
+test('legacy all-token snapshots only display supported holdings plus FXN', async ({ page }) => {
+  await mount(page);
+  await page.getByRole('button', { name: 'Legacy all-token snapshot', exact: true }).click();
+  await page.getByRole('button', { name: 'All', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'View ETH on Ethereum', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'View FXN on Ethereum', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /View Unrelated/ })).toHaveCount(0);
+});
+
 const appRoot = resolve(__dirname, '../..');
 const repoRoot = resolve(appRoot, '../..');
 const tsxPackage = createRequire(resolve(repoRoot, 'package.json')).resolve('tsx/package.json');

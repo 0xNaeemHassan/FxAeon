@@ -2,6 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { userSafeError } from '../src/lib/errors';
 
+test('network aborts give an actionable message instead of a browser diagnostic', () => {
+  for (const cause of [new DOMException('signal is aborted without reason', 'AbortError'), new DOMException('The operation timed out.', 'TimeoutError'), new Error('signal is aborted without reason')]) {
+    assert.equal(userSafeError(cause, 'Failed'), 'The request timed out or was interrupted. Try again.');
+  }
+});
+
 test('leverage errors explain the required edit without exposing SDK product names', () => {
   for (const product of ['xPOSITION', 'sPOSITION']) {
     assert.equal(userSafeError(new Error(`Your ${product} leverage is higher than the maximum leverage allowed, please lower your leverage level.`), 'Failed'), 'Lower the target leverage for this amount.');

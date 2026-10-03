@@ -79,7 +79,26 @@
 .editButton { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 5px; min-height: 44px; min-width: 56px; padding: 0 8px; border-radius: 12px; color: var(--mut); font-size: 12px; font-weight: 600; }
 .editButton:hover { background: var(--mint-dim); color: var(--mint); }
 .editButton:disabled { opacity: .5; }
-.disclosures { margin-top: 6px; border: 1px solid var(--line); border-radius: 14px; overflow: clip; }
+.reviewDetails { margin-top: 8px; border-block: 1px solid var(--line); }
+.reviewDetails > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; cursor: pointer; color: var(--mut); font-size: 12px; list-style: none; }
+.reviewDetails > summary::-webkit-details-marker { display: none; }
+.reviewDetails > summary > span:last-child { display: inline-flex; align-items: center; gap: 8px; }
+.reviewDetails > summary > span > svg { transition: transform 160ms ease; }
+.reviewDetails[open] > summary > span > svg { transform: rotate(180deg); }
+.reviewDetails > summary:focus-visible { outline: 2px solid var(--mint); outline-offset: -2px; border-radius: 4px; }
+.disclosures { border-top: 1px solid var(--line); }
+.transactionStep { min-width: 0; padding: 8px 0; }
+.transactionStep + .transactionStep { border-top: 1px solid var(--line); }
+/* Progressive enhancement: native keyboard/AT disclosure behavior remains
+   intact in older Telegram webviews that do not interpolate auto sizes. */
+@supports (interpolate-size: allow-keywords) {
+  .reviewDetails { interpolate-size: allow-keywords; }
+  .reviewDetails::details-content { height: 0; overflow: clip; opacity: 0; transition: height 180ms ease-out, opacity 140ms ease-out, content-visibility 180ms allow-discrete; }
+  .reviewDetails[open]::details-content { height: auto; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reviewDetails > summary > span > svg, .reviewDetails::details-content { transition: none; }
+}
 .disclosures > details { margin: 0; border: 0; border-radius: 0; background: transparent; }
 .disclosures > details + details { border-top: 1px solid var(--line); }
 .disclosures > details > summary { min-height: 44px; font-size: 12px; }

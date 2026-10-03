@@ -15,6 +15,10 @@ export async function readReviewedTransactions(
   options: { collapseAfterRead?: boolean } = {},
 ): Promise<ReviewedTransaction[]> {
   await expect(actionDetails).toBeVisible({ timeout: 180_000 });
+  const reviewDetails = actionDetails.locator('details[aria-label="Review details"]');
+  if (await reviewDetails.count() && !await reviewDetails.evaluate((element) => (element as HTMLDetailsElement).open)) {
+    await reviewDetails.locator(':scope > summary').click();
+  }
   const stepsSummary = actionDetails.locator('summary').filter({ hasText: /^Steps · \d+$/ });
   const stepsDisclosure = stepsSummary.locator('..');
   await expect(stepsDisclosure).toHaveCount(1);
@@ -73,6 +77,9 @@ export async function readReviewedTransactions(
   });
   await expect(steps.locator('pre[aria-label="Transaction calldata"]')).toHaveCount(reviewed.length);
 
-  if (options.collapseAfterRead !== false) await stepsSummary.click();
+  if (options.collapseAfterRead !== false) {
+    await stepsSummary.click();
+    if (await reviewDetails.count()) await reviewDetails.locator(':scope > summary').click();
+  }
   return reviewed;
 }

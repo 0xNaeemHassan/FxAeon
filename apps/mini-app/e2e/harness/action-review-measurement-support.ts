@@ -191,7 +191,7 @@ export const useInvalidateWalletData = () => async () => {
   '@/lib/fx/tokens': `export const FX_TOKENS = { fxUSD: { key: 'fxUSD', address: '0x00000000000000000000000000000000000000c1', decimals: 18 }, fxSAVE: { key: 'fxSAVE', address: '0x00000000000000000000000000000000000000c2', decimals: 18 } };`,
   'lucide-react': `
     import React from 'react';
-    const Icon = (props) => <span {...props} />;
+    const Icon = ({ size = 24, ...props }) => <svg width={size} height={size} {...props} />;
     export const AlertTriangle = Icon; export const ArrowLeft = Icon; export const CheckCircle2 = Icon; export const CircleAlert = Icon;
     export const Clock3 = Icon; export const LoaderCircle = Icon; export const ShieldCheck = Icon; export const ExternalLink = Icon;
     export const Circle = Icon; export const XCircle = Icon; export const ChevronDown = Icon; export const Check = Icon; export const Copy = Icon;
