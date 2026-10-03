@@ -88,6 +88,20 @@ the collapsed review fits within half the screen and keeps Confirm above
 navigation. Abort errors receive readable copy; the reported long planning
 delay still needs request-level reproduction and is not claimed resolved.
 
+Follow-up: rejected background route warm-ups now fall back to the normal fresh
+planner. A warm route that expired or was invalidated while planning skips its
+extra block read. Exact wallet/form/block and expiry checks still gate reuse;
+an unavailable current snapshot cannot be used. Nine prefetch tests cover this
+recovery and stale-session boundaries. This fixes a demonstrated failure path,
+not a guarantee of fast upstream RPC responses.
+
+Surface, disclosure, and transaction-stage motion now share the 180ms ease-out
+tokens; control feedback uses 120ms. The wallet profile's actual sheet and
+backdrop animate together. Transaction status entrance follows label/state
+changes, without replaying on same-stage polling; balance values stay still.
+Reduced motion disables those effects. All 30 ActionReview browser cases and
+typecheck passed locally after these changes.
+
 Standard, Fast, and Rapid fee controls and reviewed fee caps apply to the Privy send path. There, the wallet request uses the RPC gas estimate with 20% headroom, bounded against an invalid or excessive estimate. If an approval outlives its quote, the runner refreshes the selected tier but refuses to exceed the reviewed fee ceiling. The trade Max calculation reserves the estimated gas cost at the selected maximum fee, uses a bounded iteration count and deadline, and returns concise failure messages instead of treating arbitrary route failures as underfunded estimates. With an external wallet, that wallet owns fee selection and pricing; FxAeon does not impose the Privy fee caps on external sends.
 
 Leverage bounds now reserve margin for the SDK's debt-ratio guard and selected slippage. The displayed maximum is an input guard, not a guarantee that every route at that value will plan; the SDK and current pool state still determine route validity.

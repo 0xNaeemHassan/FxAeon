@@ -83,7 +83,7 @@
 .reviewDetails > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; cursor: pointer; color: var(--mut); font-size: 12px; list-style: none; }
 .reviewDetails > summary::-webkit-details-marker { display: none; }
 .reviewDetails > summary > span:last-child { display: inline-flex; align-items: center; gap: 8px; }
-.reviewDetails > summary > span > svg { transition: transform 160ms ease; }
+.reviewDetails > summary > span > svg { transition: transform var(--astryx-duration-normal) var(--astryx-ease-out); }
 .reviewDetails[open] > summary > span > svg { transform: rotate(180deg); }
 .reviewDetails > summary:focus-visible { outline: 2px solid var(--mint); outline-offset: -2px; border-radius: 4px; }
 .disclosures { border-top: 1px solid var(--line); }
@@ -93,9 +93,12 @@
    intact in older Telegram webviews that do not interpolate auto sizes. */
 @supports (interpolate-size: allow-keywords) {
   .reviewDetails { interpolate-size: allow-keywords; }
-  .reviewDetails::details-content { height: 0; overflow: clip; opacity: 0; transition: height 180ms ease-out, opacity 140ms ease-out, content-visibility 180ms allow-discrete; }
+  .reviewDetails::details-content { height: 0; overflow: clip; opacity: 0; transition: height var(--astryx-duration-normal) var(--astryx-ease-out), opacity var(--astryx-duration-normal) var(--astryx-ease-out), content-visibility var(--astryx-duration-normal) allow-discrete; }
   .reviewDetails[open]::details-content { height: auto; opacity: 1; }
 }
+.statusContent { display: flex; align-items: flex-start; gap: 8px; animation: status-enter var(--astryx-duration-normal) var(--astryx-ease-out) both; }
+@keyframes status-enter { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .statusContent { animation: none; } }
 @media (prefers-reduced-motion: reduce) {
   .reviewDetails > summary > span > svg, .reviewDetails::details-content { transition: none; }
 }
@@ -103,6 +106,6 @@
 .disclosures > details + details { border-top: 1px solid var(--line); }
 .disclosures > details > summary { min-height: 44px; font-size: 12px; }
 .disclosures > details > summary:focus-visible { outline-offset: -3px; }
-.disclosures > details > summary > svg { flex: 0 0 16px; transition: transform 150ms ease; }
+.disclosures > details > summary > svg { flex: 0 0 16px; transition: transform var(--astryx-duration-normal) var(--astryx-ease-out); }
 .disclosures > details[open] > summary > svg { transform: rotate(180deg); }
 @media (prefers-reduced-motion: reduce) { .disclosures > details > summary > svg { transition: none; } }

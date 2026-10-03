@@ -6,6 +6,7 @@ import { useState } from 'react';
 import type { TransactionStepResult } from '@/lib/fx';
 import { openExternalLink } from '@/lib/telegram';
 import { transactionExplorerUrl, transactionStepKind, transactionStepProgress } from '@/lib/transactionProgress';
+import presentation from './ActionReviewPresentation.module.css';
 
 export function chainName(chainId: number): string {
   return chainId === 8453 ? 'Base' : chainId === 1 ? 'Ethereum' : `Chain ${chainId}`;
@@ -56,9 +57,13 @@ export function TransactionHashLink({ step, chainId }: { step: TransactionStepRe
 
 export function StatusNotice({ label, body, className, icon }: { label: string; body: string; className: string; icon: ReactNode }) {
   return (
-    <div role="status" aria-live="polite" aria-atomic="true" className="flex items-start gap-2 rounded-xl bg-[rgba(255,255,255,.035)] px-2.5 py-2 text-[11px] leading-snug">
+    <div role="status" aria-live="polite" aria-atomic="true" className="rounded-xl bg-[rgba(255,255,255,.035)] px-2.5 py-2 text-[11px] leading-snug">
+      {/* Animate an actual stage change once; polling/body updates keep the
+          same node, live region, and focus rather than replaying the effect. */}
+      <div key={label} className={presentation.statusContent}>
       <span className={`mt-0.5 shrink-0 ${className}`}>{icon}</span>
       <span className="min-w-0"><span className={`font-semibold ${className}`}>{label}</span><span className="mt-0.5 block text-mut">{body}</span></span>
+      </div>
     </div>
   );
 }

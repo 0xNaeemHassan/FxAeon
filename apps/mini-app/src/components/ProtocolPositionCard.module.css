@@ -10,8 +10,8 @@
   font: inherit;
   text-align: left;
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 4%, transparent);
-  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease, background-color 180ms ease;
-  animation: position-card-enter 260ms cubic-bezier(.2, .75, .25, 1) both;
+  transition: border-color var(--astryx-duration-normal) var(--astryx-ease-out), box-shadow var(--astryx-duration-normal) var(--astryx-ease-out), transform var(--astryx-duration-normal) var(--astryx-ease-out), background-color var(--astryx-duration-normal) var(--astryx-ease-out);
+  animation: position-card-enter var(--astryx-duration-normal) var(--astryx-ease-out) both;
 }
 
 @keyframes position-card-enter {
@@ -101,7 +101,7 @@
   border: 1px solid var(--line);
   border-radius: 10px;
   color: var(--mut-2);
-  transition: border-color 180ms ease, color 180ms ease, transform 180ms ease;
+  transition: border-color var(--astryx-duration-fast) var(--astryx-ease-out), color var(--astryx-duration-fast) var(--astryx-ease-out), transform var(--astryx-duration-fast) var(--astryx-ease-out);
 }
 .navigateIcon svg { width: 15px; height: 15px; }
 .interactive:hover .navigateIcon { border-color: var(--line-strong); color: var(--mint); transform: translateX(1px); }

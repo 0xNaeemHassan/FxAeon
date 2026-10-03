@@ -158,7 +158,7 @@ export default function WalletProfile() {
       <span className={headerWalletControl.identityName}>{verifiedEnsName ?? compactAddress(activeAddress)}</span>
     </button>
     {open && typeof document !== 'undefined' && createPortal(
-      <div className={`${styles.walletBackdrop} wallet-profile-backdrop`} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpenWallet(null); }}>
+      <div className={`${styles.walletBackdrop} ${presentation.backdrop} wallet-profile-backdrop`} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpenWallet(null); }}>
         <aside ref={dialogRef} role="dialog" aria-modal="true" aria-label={profileDialogName} className={presentation.sheet} onMouseDown={(event) => event.stopPropagation()}>
           <header className={presentation.header}>
             <span className={presentation.handle} aria-hidden="true" />
