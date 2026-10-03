@@ -28,6 +28,39 @@ function descriptor(overrides: Partial<RoutePrefetchDescriptor> = {}): RoutePref
 
 const ROUTE = {} as PlannedRoute;
 
+test("failed warm-up falls back to fresh planning without reading a stale chain snapshot", async () => {
+  const store = new RoutePrefetchStore();
+  let reject!: (error: Error) => void;
+  let snapshotReads = 0;
+  let freshPlans = 0;
+  void store.prime(descriptor(), () => new Promise<PlannedRoute>((_, fail) => { reject = fail; })).catch(() => undefined);
+  const pending = store.readValidated(descriptor(), async () => { snapshotReads++; return descriptor(); });
+  reject(new DOMException('signal is aborted without reason', 'AbortError'));
+  const planned = await pending ?? await (async () => { freshPlans++; return ROUTE; })();
+  assert.equal(planned, ROUTE);
+  assert.equal(freshPlans, 1);
+  assert.equal(snapshotReads, 0);
+});
+
+test("an expired in-flight warm-up skips the extra block read", async () => {
+  const store = new RoutePrefetchStore();
+  let now = 1_000;
+  let resolve!: (route: PlannedRoute) => void;
+  let snapshotReads = 0;
+  void store.prime(descriptor(), () => new Promise<PlannedRoute>((done) => { resolve = done; }), now);
+  const pending = store.readValidated(descriptor(), async () => { snapshotReads++; return descriptor(); }, () => now);
+  now += ROUTE_PREFETCH_TTL_MS;
+  resolve(ROUTE);
+  assert.equal(await pending, null);
+  assert.equal(snapshotReads, 0);
+});
+
+test("an unavailable current snapshot cannot make a warm quote usable", async () => {
+  const store = new RoutePrefetchStore();
+  await store.prime(descriptor(), async () => ROUTE);
+  assert.equal(await store.readValidated(descriptor(), async () => { throw new Error('RPC unavailable'); }), null);
+});
+
 test("awaited prefetch rejects expiry, changed block, and session invalidation", async () => {
   for (const change of ['expiry', 'block', 'session'] as const) {
     const store = new RoutePrefetchStore();

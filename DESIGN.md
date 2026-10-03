@@ -17,6 +17,13 @@ Use the existing 4px spacing rhythm and radius tokens (`--radius-sm`, `--radius-
 | Type | Inter; tabular figures for balances and amounts; existing shared heading and amount styles |
 | Motion | 120–180ms for feedback; respect `prefers-reduced-motion` |
 
+Use `--astryx-duration-fast` for control feedback and `--astryx-duration-normal`
+with `--astryx-ease-out` for surfaces, disclosures, and transaction stage changes.
+Related sheet/backdrop and disclosure/chevron effects start together. Financial
+values update directly; background refreshes must not replay entrance effects.
+Transaction motion follows actual state changes, never a timer pretending that a
+transaction progressed. Reduced motion removes travel and stage-entry effects.
+
 At 393 × 852, healthy default forms and collapsed reviews must show their complete primary action above bottom navigation. Expanded details, errors, enlarged text, and shorter viewports may scroll naturally. Never hide facts, shrink tap targets, or clip content to satisfy this baseline. Amount fields keep the label and shortcuts above the amount and token; the available balance sits beneath the token.
 
 ## Interaction and content

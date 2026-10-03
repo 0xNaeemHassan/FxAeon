@@ -138,8 +138,14 @@ export class RoutePrefetchStore {
     const pending = this.read(descriptor, clock());
     const entry = this.entry;
     if (!pending || !entry) return null;
-    const routes = await pending;
-    const current = await currentDescriptor();
+    // Warm-up is advisory. A rejected SDK/RPC request must leave the normal
+    // fresh planner available rather than fail an explicit Review click.
+    let routes: PrefetchedRoutes;
+    try { routes = await pending; } catch { return null; }
+    // Do not spend another RPC on a route already invalidated while planning.
+    if (this.entry !== entry || entry.expiresAt <= clock()) return null;
+    let current: RoutePrefetchDescriptor | null;
+    try { current = await currentDescriptor(); } catch { return null; }
     if (this.entry !== entry || entry.expiresAt <= clock()
       || !current || entry.key !== routePrefetchKey(current)) return null;
     return routes;
