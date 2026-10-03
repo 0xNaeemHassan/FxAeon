@@ -2,7 +2,7 @@
 
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Settings2, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useOverlayDialog } from '@/lib/useOverlayDialog';
 import { useExitPresence } from '@/lib/useExitPresence';
 import styles from './SettingsPopover.module.css';
@@ -54,7 +54,10 @@ export function SettingsPopover({ summary, children }: { summary: string; childr
 
   return <>
     <button ref={triggerRef} type="button" aria-label={`Transaction settings, ${summary}`} aria-haspopup="dialog" aria-expanded={open} className={styles.trigger} onClick={() => setOpen(true)}>
-      <span>{summary}</span><Settings2 size={18} aria-hidden="true" />
+      <span>{summary}</span>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
+        <path fillRule="evenodd" d="M9.5 2h5l.6 2.8 1.5.9 2.7-.9 2.5 4.4-2.1 1.9v1.8l2.1 1.9-2.5 4.4-2.7-.9-1.5.9-.6 2.8h-5l-.6-2.8-1.5-.9-2.7.9-2.5-4.4 2.1-1.9v-1.8L2.2 9.2l2.5-4.4 2.7.9 1.5-.9L9.5 2Zm6 10a3.5 3.5 0 1 0-7 0 3.5 3.5 0 0 0 7 0Z" clipRule="evenodd" />
+      </svg>
     </button>
     {present && typeof document !== 'undefined' && createPortal(<div className={styles.backdrop} data-state={open ? 'open' : 'closed'} inert={!open} aria-hidden={!open || undefined} onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Transaction settings" className={styles.panel} style={position}>

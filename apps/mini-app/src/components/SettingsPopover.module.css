@@ -1,6 +1,8 @@
 .trigger { display: inline-flex; min-height: 44px; align-items: center; gap: 8px; padding: 0 8px; border-radius: 12px; color: var(--mut); font-size: 12px; }
 .trigger:hover { background: var(--surface-2); color: var(--text); }
 .trigger:focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
+.trigger > svg { flex-shrink: 0; transition: transform var(--motion-enter) var(--motion-ease); }
+.trigger:hover > svg, .trigger[aria-expanded='true'] > svg { transform: rotate(30deg); }
 .backdrop { position: fixed; inset: 0; z-index: 70; }
 .panel { position: fixed; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); box-shadow: 0 12px 36px #0003; animation: settings-enter var(--motion-enter) var(--motion-ease) both; }
 .panel header { display: flex; align-items: center; justify-content: space-between; padding: 4px 10px 0 18px; flex-shrink: 0; }
@@ -13,4 +15,4 @@
 .backdrop[data-state='closed'] .panel { animation: settings-exit var(--motion-exit) var(--motion-ease) both; }
 @keyframes settings-enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes settings-exit { to { opacity: 0; transform: translateY(4px); } }
-@media (prefers-reduced-motion: reduce) { .panel, .backdrop[data-state='closed'] .panel { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .panel, .backdrop[data-state='closed'] .panel { animation: none; } .trigger > svg { transition: none; transform: none; } }
