@@ -1,6 +1,6 @@
 # Runtime hardening changes — 3 October 2026
 
-This note describes the current working-tree changes and their validation status. It is not a release sign-off. Source checks, production build, all 193 main browser cases, 56 isolated browser cases, and 14 landing states passed. Full typechecking passed after removing temporary fork-replay setup. The Anvil protocol and fxSAVE all-suite run passed; the fork browser replay and remote release checks remain outstanding.
+This note describes the current changes and their validation status. It is not a release sign-off. Source checks, production build, all 193 main browser cases, 56 isolated browser cases, and 14 landing states passed. Full typechecking passed after removing temporary fork-replay setup. The Anvil protocol and fxSAVE all-suite run passed. All five remote CI workflows passed on commit `687a2da`; the final gas-loading correction and fork browser replay remain under verification.
 
 ## Wallet review and transaction history
 
@@ -9,6 +9,19 @@ The review flow labels approvals separately from protocol actions. Approval rows
 Receipt summaries now distinguish token-approval fees from action fees, report native transaction value separately from gas, and label bridge fees explicitly. On Base, the UI adds execution, L1 data, and operator-fee components when all are present; if receipt data is incomplete, it states that the fee total is partial.
 
 A separate approval-history classification issue has a local fix. The previously reported close-route simulation fault has not yet been reproduced; it remains under investigation and is not claimed as resolved here.
+
+The fork browser replay exposed a review timing defect: an initial gas request
+could display “Unavailable” while still in flight. The hook now starts the
+shared request before reading its cache state, so the existing loading view
+is used. Fork assertions wait for a numeric gas estimate before signing and
+retain the unavailable-estimate failure; they also use the current numbered
+Confirm/Approve labels in expanded transaction details.
+
+Three focused real-hook browser cases pass: initial loading, StrictMode request
+deduplication with a resolved numeric fee, and an actual failed estimate. A
+negative-control run with the old hook ordering failed the initial-loading
+case as expected; the fixed source was restored and all three passed. Full
+typechecking also passed after this correction.
 
 ## Portfolio and protocol reads
 

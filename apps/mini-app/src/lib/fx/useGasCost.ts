@@ -85,9 +85,12 @@ export function useRouteGasCost(
     const refreshRoute = async (): Promise<void> => {
       if (controller.signal.aborted) return;
       if (!isOnline() || !isVisible()) return;
-      setState({ key: routeKey, view: routeGasCostCache.view(activeRoute, options.feeTierQuote) });
       try {
-        await routeGasCostCache.refresh(activeRoute, { client: options.client, signal: controller.signal, feeTierQuote: options.feeTierQuote });
+        const request = routeGasCostCache.refresh(activeRoute, { client: options.client, signal: controller.signal, feeTierQuote: options.feeTierQuote });
+        // refresh registers the shared in-flight request synchronously. Read
+        // its view afterwards so an initial estimate is loading, not failed.
+        setState({ key: routeKey, view: routeGasCostCache.view(activeRoute, options.feeTierQuote) });
+        await request;
         if (controller.signal.aborted) return;
         const next = routeGasCostCache.view(activeRoute, options.feeTierQuote);
         setState({ key: routeKey, view: next });

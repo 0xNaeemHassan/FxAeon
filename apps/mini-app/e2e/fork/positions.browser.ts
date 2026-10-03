@@ -514,7 +514,7 @@ async function runProof(captureStage: string) {
       if (!isOpen) await advanced.locator('summary').click();
       const reviewed = await advanced.evaluate((root) => {
         const cards = Array.from(root.querySelectorAll('p'))
-          .filter((heading) => /^(?:Action|Approve\b)/.test(heading.textContent?.trim() ?? ''))
+          .filter((heading) => /^(?:Confirm|Approve\b)/.test(heading.textContent?.trim() ?? ''))
           .map((heading) => heading.parentElement)
           .filter((card): card is HTMLElement => Boolean(card));
         return cards.map((card) => {
@@ -534,9 +534,9 @@ async function runProof(captureStage: string) {
         });
       });
       assert.ok(reviewed.length > 0 && reviewed.length <= 10, 'action details must list one to ten transactions');
-      assert.ok(reviewed.some((transaction) => transaction.heading.startsWith('Action ')), 'action details must include the protocol action');
+      assert.ok(reviewed.some((transaction) => /^Confirm\s+\d+$/.test(transaction.heading)), 'action details must include the protocol action');
       reviewed.forEach((transaction, index) => {
-        const headingNumber = transaction.heading.match(/^(?:Action|Approve\b).*\s(\d+)$/)?.[1];
+        const headingNumber = transaction.heading.match(/^(?:Confirm|Approve\b).*\s(\d+)$/)?.[1];
         assert.equal(headingNumber, String(index + 1), `transaction ${index + 1} must have an ordered heading`);
         assert.match(transaction.contract, /^0x[0-9a-fA-F]{40}$/, `transaction ${index + 1} must show its contract`);
         assert.match(transaction.calldata, /^0x[0-9a-fA-F]*$/, `transaction ${index + 1} must show its calldata`);
@@ -658,7 +658,10 @@ async function runProof(captureStage: string) {
       await expect(activePage.locator('input[name="review-gas-tier"]'), 'external EIP-1193 wallets must not see app-selected fee tiers').toHaveCount(0);
       const reviewedGasFee = reviewedFactRow('Gas fee');
       await expect(reviewedGasFee, 'external wallet review must retain the gas estimate').toBeVisible();
-      assert.match(await reviewedGasFee.innerText(), /[\d,]+(?:\.\d+)?\s*ETH/i, 'the external wallet review must show the estimated native gas cost');
+      await expect.poll(() => reviewedGasFee.innerText(), {
+        timeout: 30_000,
+        message: 'the external wallet review must resolve an estimated native gas cost',
+      }).toMatch(/[\d,]+(?:\.\d+)?\s*(?:ETH|Gwei)/i);
       await options.beforeSigning?.(initialReviewedTransactions);
       await capturePreconfirmReview(screenshotPrefix, actionButton);
       await activePage.screenshot({ path: resolve(artifactRoot, `${screenshotPrefix}-review.png`), fullPage: true });
@@ -747,10 +750,14 @@ async function runProof(captureStage: string) {
       await expect(actionButton, `${screenshotPrefix} must wait for the real route quote`).toBeVisible({ timeout: 180_000 });
       await expect(actionButton, `${screenshotPrefix} review must be enabled only after planning succeeds`).toBeEnabled();
       const reviewedTransactions = await readReviewedTransactions();
-      assert.ok(reviewedTransactions.some((transaction) => transaction.heading.startsWith('Action ')), `${screenshotPrefix} must show a real protocol action`);
+      assert.ok(reviewedTransactions.some((transaction) => /^Confirm\s+\d+$/.test(transaction.heading)), `${screenshotPrefix} must show a real protocol action`);
       await expect(activePage.locator('input[name="review-gas-tier"]')).toHaveCount(0);
-      await expect(reviewedFactRow('Gas fee')).toBeVisible();
-      assert.match(await reviewedFactRow('Gas fee').innerText(), /[\d,]+(?:\.\d+)?\s*ETH/i);
+      const reviewedGasFee = reviewedFactRow('Gas fee');
+      await expect(reviewedGasFee).toBeVisible();
+      await expect.poll(() => reviewedGasFee.innerText(), {
+        timeout: 30_000,
+        message: `${screenshotPrefix} review must resolve an estimated native gas cost`,
+      }).toMatch(/[\d,]+(?:\.\d+)?\s*(?:ETH|Gwei)/i);
       await verifyReview?.(reviewedTransactions);
       assert.equal(submitted.length, signedBefore, `${screenshotPrefix} preconfirm review must not request a signature`);
       await capturePreconfirmReview(screenshotPrefix, actionButton);
@@ -1320,7 +1327,7 @@ async function runProof(captureStage: string) {
       'earn-usdc-deposit',
       {
         beforeSigning: async (reviewed) => {
-          const action = reviewed.find((transaction) => transaction.heading.startsWith('Action '));
+          const action = reviewed.find((transaction) => /^Confirm\s+\d+$/.test(transaction.heading));
           assert.ok(action, 'Earn deposit review must expose its action transaction');
           assert.equal(action.contract.toLowerCase(), router.toLowerCase(), 'Earn deposit review action must target the fx router');
           const decoded = decodeFunctionData({ abi: depositToFxSaveAbi, data: action.calldata as Hex });
