@@ -36,7 +36,6 @@ test.describe("protocol form help and picker keyboard behavior", () => {
     const helpButton = page.getByRole("button", { name: "About slippage tolerance", exact: true });
     const tooltip = page.getByRole("tooltip");
     const slippageInput = page.getByRole("textbox", { name: "Slippage tolerance percentage", exact: true });
-    const slippageLabel = page.locator(`label[for="${await slippageInput.getAttribute("id")}"]`);
 
     await expect(helpButton).toHaveAttribute("aria-expanded", "false");
     await expect(tooltip).toHaveCount(0);
@@ -84,6 +83,8 @@ test.describe("protocol form help and picker keyboard behavior", () => {
     // toggle the disclosure closed rather than being swallowed by focus-open.
     await reopenedHelpButton.tap();
     await expect(reopenedTooltip).toBeVisible();
+    // The dialog remounts after its exit animation, generating a new input ID.
+    const slippageLabel = page.locator(`label[for="${await slippageInput.getAttribute("id")}"]`);
     await reopenedHelpButton.tap();
     await expect(reopenedTooltip).toBeHidden();
 

@@ -57,8 +57,17 @@
   max-width: 174px;
 }
 
+.identityAvatar {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+}
+
 .identityName {
   display: block;
+  min-width: 0;
+  flex: 1 1 auto;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;

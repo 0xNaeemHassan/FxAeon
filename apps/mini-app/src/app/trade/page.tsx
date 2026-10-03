@@ -571,7 +571,7 @@ export default function TradePage() {
                       <h2 className="text-[18px] font-semibold">Open position</h2>
                     </div>
                     <SettingsPopover summary={`${slippage}% slippage`}>
-                      <SlippageField value={slippage} onChange={changeSlippage} max={MAX_FX_SLIPPAGE_PERCENT} />
+                      <SlippageField value={slippage} onChange={changeSlippage} max={MAX_FX_SLIPPAGE_PERCENT} inlineHelp />
                     </SettingsPopover>
                   </div>
 

@@ -35,8 +35,6 @@ import presentation from '@/components/SavingsWorkspace.module.css';
 import { ActionWorkspace } from '@/components/ProductLayout';
 import { MissingValue, ValueOrSkeleton } from '@/components/MissingValue';
 import { useFxSaveClaimable } from '@/components/WalletDataProvider';
-import RecentActivityPreview from '@/components/RecentActivityPreview';
-import type { Address } from 'viem';
 import { useRefreshAction } from '@/lib/useRefreshAction';
 
 type EarnMode = 'deposit' | 'withdraw' | 'claim';
@@ -490,7 +488,6 @@ export default function EarnPage() {
             </>}
           />
         </ProductSurface>
-        {wallet.address && <RecentActivityPreview walletAddress={wallet.address as Address} attentionOnly />}
         {reviewStage === 'input' && <VaultDetails config={config} />}
       </ActionWorkspace>
     </AppShell>

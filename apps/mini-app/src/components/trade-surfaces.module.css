@@ -49,6 +49,7 @@
 .slippageHelpButton:hover,
 .slippageHelpButton:focus-visible { color: var(--mint); background: var(--mint-dim); }
 .slippageHelpPopup { position: absolute; right: -4px; bottom: calc(100% + 8px); z-index: 20; width: max-content; max-width: min(280px, calc(100vw - 32px)); padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface-2); color: var(--text); font-size: 12px; font-weight: 500; line-height: 1.4; box-shadow: var(--elevation-2); }
+.slippageHelpInline { margin: 12px 0; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); color: var(--mut); font-size: 12px; line-height: 1.4; }
 
 /* Trade's compact leverage layout puts the numeric value beside its caption
  * and reserves the full row below for the range control. Position management

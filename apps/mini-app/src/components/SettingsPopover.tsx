@@ -1,6 +1,6 @@
 'use client';
 
-import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { useOverlayDialog } from '@/lib/useOverlayDialog';
@@ -9,6 +9,8 @@ import styles from './SettingsPopover.module.css';
 
 export function SettingsPopover({ summary, children }: { summary: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
   const [position, setPosition] = useState<CSSProperties>({ visibility: 'hidden' });
   const triggerRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -53,7 +55,7 @@ export function SettingsPopover({ summary, children }: { summary: string; childr
   }, [open]);
 
   return <>
-    <button ref={triggerRef} type="button" aria-label={`Transaction settings, ${summary}`} aria-haspopup="dialog" aria-expanded={open} className={styles.trigger} onClick={() => setOpen(true)}>
+    <button ref={triggerRef} type="button" disabled={!hydrated} aria-label={`Transaction settings, ${summary}`} aria-haspopup="dialog" aria-expanded={open} className={styles.trigger} onClick={() => setOpen(true)}>
       <span>{summary}</span>
       <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
         <path fillRule="evenodd" d="M9.5 2h5l.6 2.8 1.5.9 2.7-.9 2.5 4.4-2.1 1.9v1.8l2.1 1.9-2.5 4.4-2.7-.9-1.5.9-.6 2.8h-5l-.6-2.8-1.5-.9-2.7.9-2.5-4.4 2.1-1.9v-1.8L2.2 9.2l2.5-4.4 2.7.9 1.5-.9L9.5 2Zm6 10a3.5 3.5 0 1 0-7 0 3.5 3.5 0 0 0 7 0Z" clipRule="evenodd" />

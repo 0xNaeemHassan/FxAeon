@@ -10,7 +10,6 @@
 .panel header button { display: grid; place-items: center; min-width: 44px; min-height: 44px; color: var(--mut); border-radius: 50%; }
 .panel header button:hover { background: var(--surface-2); }
 .body { overflow: auto; overscroll-behavior: contain; padding: 4px 18px 18px; min-height: 0; }
-.body :global([role='tooltip']) { top: calc(100% + 8px); bottom: auto; max-width: min(260px, calc(100vw - 100px)); white-space: normal; }
 .backdrop[data-state='closed'] { pointer-events: none; }
 .backdrop[data-state='closed'] .panel { animation: settings-exit var(--motion-exit) var(--motion-ease) both; }
 @keyframes settings-enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }

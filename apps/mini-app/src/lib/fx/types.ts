@@ -405,7 +405,7 @@ export interface TransactionRunnerOptions {
 
 export interface PendingHashRecord {
   id: string;
-  operation: OfficialFxMethod;
+  operation: OfficialFxMethod | 'sendAsset';
   /** Exact route step type, so an approval receipt cannot represent the user action. */
   stepKind?: PlannedTransaction["kind"];
   /** Human action captured from the reviewed route; never controls execution. */
@@ -431,7 +431,7 @@ export interface PendingHashRecord {
 export type PendingActionIntent =
   | 'Open position' | 'Increase position' | 'Reduce position' | 'Close position'
   | 'Adjust leverage' | 'Borrow' | 'Add collateral' | 'Repay' | 'Withdraw collateral'
-  | 'Repay and withdraw' | 'Deposit' | 'Withdraw' | 'Queue withdrawal' | 'Claim' | 'Bridge';
+  | 'Repay and withdraw' | 'Deposit' | 'Withdraw' | 'Queue withdrawal' | 'Claim' | 'Bridge' | 'Send';
 
 export interface PendingBridgeContext {
   destinationChainId: FxChainId;
