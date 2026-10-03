@@ -1,5 +1,5 @@
 import { isAddress, keccak256, type Address, type Hex } from "viem";
-import { OFFICIAL_FX_METHODS, type FxChainId, type OfficialFxMethod, type PendingActionIntent, type PendingBridgeContext, type PendingHashRecord } from "./types";
+import { OFFICIAL_FX_METHODS, type FxChainId, type PendingActionIntent, type PendingBridgeContext, type PendingHashRecord } from "./types";
 
 const LEGACY_STORAGE_KEYS = [
   "fxaeon:pending-hashes:v1",
@@ -84,7 +84,7 @@ function validRecord(value: unknown): value is PendingHashRecord {
   return typeof record.id === "string"
     && record.id === expectedId
     && typeof record.operation === "string"
-    && (OFFICIAL_FX_METHODS as readonly string[]).includes(record.operation)
+    && (record.operation === 'sendAsset' || (OFFICIAL_FX_METHODS as readonly string[]).includes(record.operation))
     && (record.stepKind === undefined || record.stepKind === "approval" || record.stepKind === "action" || record.stepKind === "unknown")
     && typeof record.walletAddress === "string"
     && isAddress(record.walletAddress)
@@ -105,7 +105,7 @@ function validRecord(value: unknown): value is PendingHashRecord {
       && validBridgeContext(record.bridge, record.chainId)
       && record.bridge.sourceOftAddress.toLowerCase() === record.to?.toLowerCase()
     ))
-    && (record.intent === undefined || (typeof record.intent === "string" && ["Open position", "Increase position", "Reduce position", "Close position", "Adjust leverage", "Borrow", "Add collateral", "Repay", "Withdraw collateral", "Repay and withdraw", "Deposit", "Withdraw", "Queue withdrawal", "Claim", "Bridge"].includes(record.intent)));
+    && (record.intent === undefined || (typeof record.intent === "string" && ["Open position", "Increase position", "Reduce position", "Close position", "Adjust leverage", "Borrow", "Add collateral", "Repay", "Withdraw collateral", "Repay and withdraw", "Deposit", "Withdraw", "Queue withdrawal", "Claim", "Bridge", "Send"].includes(record.intent)));
 }
 
 function recordStorageKey(record: PendingHashRecord): string {
@@ -218,7 +218,7 @@ export function readPendingHashes(): PendingHashRecord[] {
 }
 
 export function recordPendingHash(params: {
-  operation: OfficialFxMethod;
+  operation: PendingHashRecord['operation'];
   stepKind?: PendingHashRecord["stepKind"];
   intent?: PendingActionIntent;
   walletAddress: Address;

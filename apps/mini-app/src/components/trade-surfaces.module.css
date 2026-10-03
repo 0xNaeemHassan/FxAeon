@@ -49,6 +49,7 @@
 .slippageHelpButton:hover,
 .slippageHelpButton:focus-visible { color: var(--mint); background: var(--mint-dim); }
 .slippageHelpPopup { position: absolute; right: -4px; bottom: calc(100% + 8px); z-index: 20; width: max-content; max-width: min(280px, calc(100vw - 32px)); padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface-2); color: var(--text); font-size: 12px; font-weight: 500; line-height: 1.4; box-shadow: var(--elevation-2); }
+.slippageHelpInline { margin: 12px 0; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); color: var(--mut); font-size: 12px; line-height: 1.4; }
 
 /* Trade's compact leverage layout puts the numeric value beside its caption
  * and reserves the full row below for the range control. Position management
@@ -104,8 +105,10 @@
   border-radius: var(--radius-md);
   background: var(--bg-raised);
   box-shadow: var(--elevation-2);
-  animation: tokenPickerSheetEnter 160ms ease-out both;
+  animation: tokenPickerSheetEnter var(--motion-enter) var(--motion-ease) both;
 }
+.tokenPickerBackdrop[data-state='closed'] { pointer-events: none; animation: tokenPickerExit var(--motion-exit) var(--motion-ease) both; }
+@keyframes tokenPickerExit { to { opacity: 0; } }
 
 .tokenPickerHeader {
   display: flex;
@@ -207,6 +210,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .tokenPickerDialog { animation: none; }
+  .tokenPickerBackdrop[data-state='closed'] { animation: none; }
   .tokenPickerRow { transition: none; }
 }
 
@@ -246,8 +250,8 @@
 }
 
 .tradePageHeading h1 {
-  font-size: clamp(28px, 4vw, 40px);
-  letter-spacing: -0.055em;
+  font-size: 24px;
+  letter-spacing: -0.035em;
 }
 
 .positionsShortcut { flex: 0 0 auto; white-space: nowrap; }
@@ -338,7 +342,7 @@
 .tradeTicketReview :global(.reviewTrigger) { margin-inline: 0; }
 
 .ticketHeader { margin-bottom: 16px; }
-.ticketHeader h2 { font-size: 24px; letter-spacing: -0.035em; }
+.ticketHeader h2 { font-size: 20px; letter-spacing: -0.025em; }
 .ticketKicker { color: var(--mut); font-size: 13px; }
 .ticketHeader :global(details) { min-width: 0; border-top: 0; }
 .ticketHeader :global(details > summary) { min-height: 44px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; padding-inline: 10px; color: var(--mut); font-size: 12px; transition: background-color 150ms ease, color 150ms ease; }
@@ -374,18 +378,20 @@
   box-shadow: none;
 }
 .marketColumn :global(.market-chart-panel)::before { display: none; }
-.marketColumn :global(.market-chart-header) { padding: 22px; border-bottom-color: var(--line); }
-.marketColumn :global(.market-chart-token) { border-radius: var(--radius-md); background: var(--mint-dim); border-color: var(--line-strong); }
+.marketColumn :global(.market-chart-header) { padding: 18px 20px 8px; border-bottom: 0; }
+.marketColumn :global(.market-chart-token) { width: 32px; height: 32px; background: transparent; border: 0; }
 .marketColumn :global(.market-chart-header h2) { font-size: 20px; letter-spacing: -0.035em; }
-.marketColumn :global(.market-chart-header .micro-label) { font-size: 11px; letter-spacing: 0.04em; }
+.marketColumn :global(.market-chart-header .micro-label) { display: none; }
 .marketColumn :global(.market-chart-header .text-display) { font-size: 28px; }
-.marketColumn :global(.market-chart-market-switch) { border-bottom: 1px solid var(--line); padding: 14px 20px 16px; }
-.marketColumn :global(.market-chart-market-switch .segmented-option) { min-height: 48px; border-radius: var(--radius-sm); }
+.marketColumn :global(.market-chart-market-switch) { border-bottom: 0; padding: 4px 14px 10px; }
+.marketColumn :global(.market-chart-market-switch .segmented) { width: fit-content; border: 0; background: transparent; padding: 0; }
+.marketColumn :global(.market-chart-market-switch .segmented-option) { min-height: 44px; min-width: 84px; padding: 6px 12px; border-radius: 999px; }
+.marketColumn :global(.market-chart-market-switch .segmented-option > span:last-child) { display: none; }
 .marketColumn :global(.market-chart-market-switch .market-option-icon) { display: inline-flex; }
-.marketColumn :global(.market-chart-instrument-meta) { padding-inline: 20px; }
-.marketColumn :global(.market-chart-frame) { background-color: var(--bg-raised); }
-.marketColumn :global(.market-chart-footer) { padding: 14px 20px; border-top-color: var(--line); }
-.marketColumn :global(.chart-range-tabs) { border-radius: var(--radius-sm); background: var(--input); }
+.marketColumn :global(.market-chart-instrument-meta) { display: none; }
+.marketColumn :global(.market-chart-frame) { background: transparent; }
+.marketColumn :global(.market-chart-footer) { padding: 8px 14px; border-top: 0; }
+.marketColumn :global(.chart-range-tabs) { border: 0; border-radius: 999px; background: transparent; }
 .marketColumn :global(.chart-range-tabs button) { border-radius: var(--radius-sm); }
 .marketColumn :global(.chart-range-tabs .chart-range-active) { background: var(--surface-3); box-shadow: none; color: var(--text); }
 
@@ -482,8 +488,14 @@
 .positionsRoot :global(.button-ghost) { background: var(--surface-2); }
 
 @media (min-width: 840px) {
-  .tradeLayout { grid-template-columns: minmax(0, 1fr) minmax(360px, 420px); align-items: start; gap: 24px; }
-  .ticketColumn { max-width: 420px; }
+  .tradeWorkspace { max-width: 1040px; margin-inline: auto; }
+  .tradeLayout { grid-template-columns: minmax(0, 1fr) minmax(380px, 1.04fr); align-items: start; gap: 28px; }
+  .ticketColumn { max-width: none; }
+  .tradeTicket:not(.tradeTicketReview) { border-color: transparent; background: transparent; padding: 0; }
+  .tradeTicket:not(.tradeTicketReview) .ticketHeader { margin-bottom: 10px; align-items: center; }
+  .tradeTicket:not(.tradeTicketReview) :global(.amount-control) { margin-top: 8px; padding: 16px 18px; border-color: transparent; background: var(--surface-2); }
+  .tradeTicket :global([data-amount-field] input:not([data-long-amount='true'])) { font-size: 42px; font-weight: 500; }
+  .marketColumn :global(.market-chart-panel) { margin-top: 54px; }
   .marketColumn :global(.market-chart-panel) { position: sticky; top: 24px; }
   .positionManagerGrid { grid-template-columns: minmax(0, 1fr) minmax(380px, 420px); align-items: start; gap: 24px; }
   .positionManageColumn { max-width: 420px; }

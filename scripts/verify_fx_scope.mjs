@@ -42,6 +42,8 @@ const allowedRoutes = new Set([
   'portfolio',
   'positions',
   'qr',
+  // User-requested native/ERC-20 wallet transfers do not add an SDK method.
+  'send',
   'settings',
   'trade',
 ]);

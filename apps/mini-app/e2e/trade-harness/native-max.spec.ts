@@ -12,6 +12,7 @@ const entry = resolve(root, 'apps/mini-app/e2e/harness/trade-native-max-entry.ts
 
 const mocks: Record<string, string> = {
   'next/link': `import React from 'react'; export default ({children,...props}) => <a {...props}>{children}</a>;`,
+  'next/navigation': `export const useRouter = () => ({ push: () => {} });`,
   '@/components/ui': `import React from 'react'; export const AppShell = ({children}) => <main>{children}</main>; export const Card = ({children,...props}) => <section {...props}>{children}</section>;`,
   '@/components/ProductUI': `import React from 'react'; export const Disclosure = ({children}) => <>{children}</>;`,
   '@/components/ProductLayout': `import React from 'react'; export const ActionWorkspace = ({children,...props}) => <section {...props}>{children}</section>;`,
@@ -55,6 +56,7 @@ async function buildHarness(): Promise<string> {
         return { path: candidate };
       });
       build.onResolve({ filter: /^next\/link$/ }, () => ({ path: 'next/link', namespace: 'mock' }));
+      build.onResolve({ filter: /^next\/navigation$/ }, () => ({ path: 'next/navigation', namespace: 'mock' }));
       build.onLoad({ filter: /.*/, namespace: 'mock' }, (args) => ({ contents: mocks[args.path], loader: 'tsx', resolveDir: resolve(root, 'apps/mini-app') }));
       build.onResolve({ filter: /\.module\.css$/ }, (args) => ({ path: resolve(args.resolveDir ?? root, args.path), namespace: 'empty-css' }));
       build.onLoad({ filter: /.*/, namespace: 'empty-css' }, () => ({ contents: 'export default {};', loader: 'js' }));

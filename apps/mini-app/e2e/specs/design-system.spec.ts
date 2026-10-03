@@ -34,25 +34,29 @@ test.describe('cohesive responsive design', () => {
     await page.goto('/trade', { waitUntil: 'domcontentloaded' });
     const chart = page.locator('.market-chart-panel');
     const ticket = page.locator('.trade-ticket');
+    const positionSide = page.getByRole('radiogroup', { name: 'Position side' });
     await expect(chart).toBeVisible();
     await expect(ticket).toBeVisible();
+    await expect(positionSide).toBeVisible();
     await expect(chart.getByText('f(x) market · Ethereum', { exact: true })).toHaveCount(0);
     await expect(chart.getByText('CoinGecko history · display only', { exact: true })).toHaveCount(0);
     await expect(chart.getByRole('link', { name: 'CoinGecko', exact: true })).toHaveCount(0);
     const chartBox = await chart.boundingBox();
     const ticketBox = await ticket.boundingBox();
+    const positionSideBox = await positionSide.boundingBox();
     expect(chartBox).not.toBeNull();
     expect(ticketBox).not.toBeNull();
+    expect(positionSideBox).not.toBeNull();
     expect(chartBox!.x + chartBox!.width).toBeLessThan(ticketBox!.x);
-    expect(Math.abs(chartBox!.y - ticketBox!.y)).toBeLessThan(5);
+    expect(Math.abs(chartBox!.y - positionSideBox!.y)).toBeLessThan(5);
     await expect(page.getByRole('navigation', { name: 'Primary navigation' }).filter({ visible: true })).toHaveCount(1);
 
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page.getByRole('button', { name: 'Show chart' })).toBeVisible();
     await expect(page.locator('.market-chart-content')).toBeHidden();
-    await expect(page.getByLabel('Input asset')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Input asset', exact: true })).toBeVisible();
     await expect(page.getByLabel('Amount in ETH', { exact: true })).toBeVisible();
-    const combined = await page.getByLabel('Input asset').evaluate((element) => Boolean(element.closest('.amount-control')));
+    const combined = await page.getByRole('button', { name: 'Input asset', exact: true }).evaluate((element) => Boolean(element.closest('.amount-control')));
     expect(combined, 'asset selection belongs to the amount control rather than a duplicate field').toBe(true);
     assertNoBackendRequests(requests);
   });
@@ -61,12 +65,12 @@ test.describe('cohesive responsive design', () => {
     for (const width of [320, 359, 390, 430, 768, 1180, 1280]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto('/trade', { waitUntil: 'domcontentloaded' });
-      const shell = page.locator('.app-shell-tabs');
+      const shell = page.locator('[data-shell-tabs=true]');
       const content = page.locator('.app-content-tabs');
       await expect(shell).toBeVisible();
       await expect(content).toBeVisible();
       await expect(page.locator('.market-strip')).toHaveCount(0);
-      await expect.poll(() => page.evaluate(() => Boolean(document.querySelector('.app-shell-tabs') && document.querySelector('.app-content-tabs'))), {
+      await expect.poll(() => page.evaluate(() => Boolean(document.querySelector('[data-shell-tabs=true]') && document.querySelector('.app-content-tabs'))), {
         timeout: 5_000,
         message: 'working route shell/content must remain mounted after hydration',
       }).toBe(true);
@@ -80,7 +84,7 @@ test.describe('cohesive responsive design', () => {
           geometry = await page.evaluate(() => {
             const root = document.documentElement;
             const body = document.body;
-            const shell = document.querySelector<HTMLElement>('.app-shell-tabs');
+            const shell = document.querySelector<HTMLElement>('[data-shell-tabs=true]');
             const main = document.querySelector<HTMLElement>('.app-content-tabs');
             if (!main || !shell) throw new Error('working route content is missing');
             const style = getComputedStyle(main);
@@ -246,7 +250,7 @@ test.describe('light theme overlays', () => {
     await page.keyboard.press('Escape');
     await expect(wallet).toBeHidden();
     await expect(page.getByRole('button', { name: 'Open wallet profile' })).toBeFocused();
-    await page.getByLabel('Input asset').click();
+    await page.getByRole('button', { name: 'Input asset', exact: true }).click();
     const picker = page.getByRole('dialog', { name: 'Input asset' });
     await expect(picker).toBeVisible();
     // A browser extension, assistive technology, or application code can move
@@ -261,7 +265,7 @@ test.describe('light theme overlays', () => {
     expect(palette.accent).toBe(palette.expected);
     await page.keyboard.press('Escape');
     await expect(picker).toBeHidden();
-    await expect(page.getByLabel('Input asset')).toBeFocused();
+    await expect(page.getByRole('button', { name: 'Input asset', exact: true })).toBeFocused();
     assertNoBackendRequests(requests);
   });
 });

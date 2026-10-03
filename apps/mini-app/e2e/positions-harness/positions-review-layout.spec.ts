@@ -157,8 +157,12 @@ test('four-position Close review hides siblings, keeps its action above navigati
     await page.getByText(label, { exact: true }).click();
   }
   await embeddedConfirm.scrollIntoViewIfNeeded();
+  // The review owns an internal scroll area so its confirmation footer stays
+  // visible even when the expanded details exceed the available viewport.
+  const reviewInformation = page.getByRole('region', { name: 'Review information', exact: true });
+  await reviewInformation.evaluate((node) => { node.scrollTop = node.scrollHeight; });
   await expect.poll(async () => {
-    const contentScrollTop = await page.locator('[data-shell-content]').evaluate((node) => (node as HTMLElement).scrollTop);
+    const contentScrollTop = await reviewInformation.evaluate((node) => node.scrollTop);
     const action = await embeddedConfirm.boundingBox();
     const nav = await page.locator('[data-app-navigation]').boundingBox();
     return contentScrollTop > 0 && Boolean(action && nav && action.y >= 0 && action.y + action.height <= nav.y);
