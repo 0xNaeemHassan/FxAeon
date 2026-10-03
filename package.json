@@ -43,7 +43,8 @@
     "docs:screenshots": "node scripts/capture_docs_screenshots.mjs",
     "docs:screenshots:positions": "node scripts/capture_position_screenshots.mjs",
     "verify": "node scripts/verify.mjs",
-    "audit": "pnpm audit --prod --audit-level=high"
+    "audit": "pnpm audit --prod --audit-level=high",
+    "audit:all": "node scripts/audit_dependencies.mjs"
   },
   "engines": {
     "node": "22.x",

@@ -78,7 +78,7 @@ const quickChecks = await runGroup([
   { args: ['exec', 'node', '--test', 'scripts/verify_frontend_secrets.test.mjs', 'scripts/launch_readiness.test.mjs'], label: 'Launch readiness contracts' },
   { args: ['exec', 'node', 'scripts/verify_frontend_secrets.mjs'], label: 'Frontend secret scan' },
   {
-    args: ['audit', '--prod', '--audit-level=high'],
+    args: ['run', 'audit:all'],
     label: 'dependency audit',
   },
 ], 'parallel lightweight checks');
