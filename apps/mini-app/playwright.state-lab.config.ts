@@ -1,4 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
+import { configuredBrowserChannel } from '../../scripts/e2e_browser_channel.cjs';
+
+const browserChannel = configuredBrowserChannel();
 
 const port = Number(process.env.UI_STATE_LAB_PORT ?? 4322);
 const baseURL = `http://127.0.0.1:${port}`;
@@ -24,7 +27,7 @@ export default defineConfig({
       colorScheme: 'dark',
       locale: 'en-US',
       timezoneId: 'UTC',
-      launchOptions: { args: ['--no-sandbox', '--disable-dev-shm-usage'] },
+      launchOptions: { args: ['--no-sandbox', '--disable-dev-shm-usage'], ...(browserChannel ? { channel: browserChannel } : {}) },
     },
   }],
   webServer: {

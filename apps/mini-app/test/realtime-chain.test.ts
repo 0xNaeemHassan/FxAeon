@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createAlchemyChainPulse, deriveAlchemyWebSocketUrl, realtimeReconnectDelay, TRANSFER_TOPIC, type RealtimeChainEvent, type RealtimeChainState } from '../src/lib/realtimeChain';
+import { createAlchemyChainPulse, deriveAlchemyWebSocketUrl, deriveAlchemyWebSocketUrls, realtimeReconnectDelay, TRANSFER_TOPIC, type RealtimeChainEvent, type RealtimeChainState } from '../src/lib/realtimeChain';
 
 test('derives reviewed Alchemy websocket URLs and rejects wrong chains or hosts', () => {
   assert.equal(deriveAlchemyWebSocketUrl(1, 'https://eth-mainnet.g.alchemy.com/v2/browser_key'), 'wss://eth-mainnet.g.alchemy.com/v2/browser_key');
@@ -14,6 +14,60 @@ test('uses the canonical ERC-20 Transfer topic and bounded reconnect backoff', (
   assert.equal(TRANSFER_TOPIC, '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef');
   assert.ok(realtimeReconnectDelay(0, () => 0) < realtimeReconnectDelay(8, () => 1));
   assert.ok(realtimeReconnectDelay(100, () => 1) <= 30_000 * 1.2);
+});
+
+test('derives a primary and Alchemy2 websocket failover list while excluding Infura', () => {
+  const names = ['NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL', 'NEXT_PUBLIC_ALCHEMY2_ETHEREUM_RPC_URL', 'NEXT_PUBLIC_INFURA_ETHEREUM_RPC_URL'] as const;
+  const previous = names.map((name) => process.env[name]);
+  process.env.NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL = 'https://eth-mainnet.g.alchemy.com/v2/primary_key';
+  process.env.NEXT_PUBLIC_ALCHEMY2_ETHEREUM_RPC_URL = 'https://eth-mainnet.g.alchemy.com/v2/secondary_key';
+  process.env.NEXT_PUBLIC_INFURA_ETHEREUM_RPC_URL = 'https://mainnet.infura.io/v3/infura_key';
+  try {
+    assert.deepEqual(deriveAlchemyWebSocketUrls(1), [
+      'wss://eth-mainnet.g.alchemy.com/v2/primary_key',
+      'wss://eth-mainnet.g.alchemy.com/v2/secondary_key',
+    ]);
+  } finally {
+    names.forEach((name, index) => { if (previous[index] === undefined) delete process.env[name]; else process.env[name] = previous[index]; });
+  }
+});
+
+test('rotates a failed realtime feed to Alchemy2 instead of retrying the primary indefinitely', () => {
+  const names = ['NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL', 'NEXT_PUBLIC_ALCHEMY2_ETHEREUM_RPC_URL'] as const;
+  const previous = names.map((name) => process.env[name]);
+  process.env.NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL = 'https://eth-mainnet.g.alchemy.com/v2/primary_key';
+  process.env.NEXT_PUBLIC_ALCHEMY2_ETHEREUM_RPC_URL = 'https://eth-mainnet.g.alchemy.com/v2/secondary_key';
+  const scheduled = new Map<ReturnType<typeof setTimeout>, { callback: () => void; delay: number }>();
+  const sockets: { url: string; onopen: (() => void) | null; onmessage: ((event: { data?: unknown }) => void) | null; onerror: (() => void) | null; onclose: (() => void) | null; send: () => void; close: () => void }[] = [];
+  let timerId = 0;
+  const pulse = createAlchemyChainPulse({ chainId: 1, walletAddress: '0x0000000000000000000000000000000000001234', onEvent() {}, onState() {},
+    createSocket: (url) => { const socket = { url, onopen: null, onmessage: null, onerror: null, onclose: null, send() {}, close() {} }; sockets.push(socket); return socket; },
+    schedule: (callback, delay) => { const id = ++timerId as unknown as ReturnType<typeof setTimeout>; scheduled.set(id, { callback, delay }); return id; },
+    cancelSchedule: (id) => { scheduled.delete(id); }, random: () => 0,
+  });
+  const fireRetry = () => {
+    const entry = [...scheduled.entries()].find(([, timer]) => timer.delay < 45_000);
+    assert.ok(entry, 'retry timer should be scheduled');
+    scheduled.delete(entry[0]);
+    entry[1].callback();
+  };
+  try {
+    pulse.setActive(true);
+    assert.equal(sockets[0].url, 'wss://eth-mainnet.g.alchemy.com/v2/primary_key');
+    sockets[0].onerror?.();
+    fireRetry();
+    assert.equal(sockets[1].url, 'wss://eth-mainnet.g.alchemy.com/v2/secondary_key');
+    sockets[1].onopen?.();
+    for (const id of [1, 2, 3]) sockets[1].onmessage?.({ data: JSON.stringify({ id, result: `secondary-${id}` }) });
+    sockets[1].onerror?.();
+    fireRetry();
+    assert.equal(sockets[2].url, 'wss://eth-mainnet.g.alchemy.com/v2/primary_key');
+    pulse.stop();
+    assert.equal(scheduled.size, 0);
+  } finally {
+    pulse.stop();
+    names.forEach((name, index) => { if (previous[index] === undefined) delete process.env[name]; else process.env[name] = previous[index]; });
+  }
 });
 
 test('requires subscription acknowledgements, validates wallet logs, and cancels every timer on pause', () => {

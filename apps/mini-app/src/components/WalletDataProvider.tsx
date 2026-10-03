@@ -6,14 +6,14 @@ import { WagmiProvider, useConfig, useWatchBlockNumber } from 'wagmi';
 import { usePrivyWallet } from '@/lib/wallet';
 import { createWalletDataConfig, type WalletDataConfig } from '@/lib/web3/config';
 import {
-  canonicalWalletAssetQueryOptions, createWalletQueryClient, fxSaveClaimableQueryOptions, FX_SAVE_CLAIMABLE_REFETCH_MS, FX_SAVE_CLAIMABLE_STALE_MS, invalidateWalletQueries, moveBalanceQueryOptions, walletBalanceQueryOptions, walletQueryResultFresh, WALLET_QUERY_ROOT,
+  canonicalAssetReadFromWalletBalances, canonicalWalletAssetQueryOptions, createWalletQueryClient, fxSaveClaimableQueryOptions, FX_SAVE_CLAIMABLE_REFETCH_MS, FX_SAVE_CLAIMABLE_STALE_MS, invalidateWalletQueries, moveBalanceQueryOptions, refreshStaleWalletQueries, walletBalanceQueryOptions, walletQueryResultFresh, WALLET_QUERY_ROOT,
 } from '@/lib/web3/walletQueries';
 import type { WalletBalancesResult } from '@/lib/fx/balances';
 import type { FxSaveClaimable } from '@/lib/fx';
 import type { CanonicalMoveBalanceMap } from '@/lib/moveBalances';
 import {
   alchemyDataApiKey, fetchAlchemyWalletAssets, mergeCanonicalWalletAssets, walletAssetSourcesFailed,
-  type CanonicalAssetRead, type WalletAssetSnapshot,
+  filterSupportedWalletAssets, type CanonicalAssetRead, type WalletAssetSnapshot,
 } from '@/lib/walletAssets';
 import { useUsdPrices } from '@/components/PriceProvider';
 import { createAlchemyChainPulse, initialRealtimeChainState, type RealtimeChainEvent, type RealtimeChainState } from '@/lib/realtimeChain';
@@ -202,7 +202,7 @@ function WalletAssetLayer({ address, enabled, expandedAssets, chainPulse, childr
   const mergedRef = useRef<WalletAssetSnapshot | null>(null);
   const requestRef = useRef(new Map<string, { controller: AbortController; promise: Promise<WalletAssetSnapshot | undefined>; session: string; address: string }>());
   const [blockRefreshGate] = useState(() => createWalletBlockRefreshGate(
-    (walletAddress, chainId) => invalidateWalletQueries(client, walletAddress, chainId),
+    (walletAddress, chainId) => refreshStaleWalletQueries(client, walletAddress, chainId),
   ));
   const latestSession = useRef(session);
   latestSession.current = session;
@@ -256,8 +256,11 @@ function WalletAssetLayer({ address, enabled, expandedAssets, chainPulse, childr
     if (mergedRef.current?.walletAddress !== address.toLowerCase()) mergedRef.current = null;
     // Keep the asset surface in its loading state until the first indexed or
     // canonical response arrives. A pending read is not a failed balance.
-    if (!indexed.data && canonicalReads.length === 0) return mergedRef.current;
-    const previous = mergedRef.current;
+    if (!indexed.data && canonicalReads.length === 0) {
+      if (mergedRef.current) mergedRef.current = filterSupportedWalletAssets(mergedRef.current);
+      return mergedRef.current;
+    }
+    const previous = mergedRef.current ? filterSupportedWalletAssets(mergedRef.current) : null;
     const source = indexed.data ?? previous;
     const next = mergeCanonicalWalletAssets(source, address, canonicalReads, { prices, status: priceStatus, updatedAt: priceUpdatedAt, updatedAts: priceUpdatedAts });
     // Indexed discovery does not necessarily include every canonical protocol
@@ -303,8 +306,16 @@ function WalletAssetLayer({ address, enabled, expandedAssets, chainPulse, childr
       if (controller.signal.aborted || latestSession.current !== session) return undefined;
       const nextIndexed = client.getQueryData<WalletAssetSnapshot>(walletAssetsQueryKey(address)) ?? null;
       const cachedCanonical = (chainId: FxChainId): CanonicalAssetRead | null => {
-        const key = canonicalWalletAssetQueryOptions(config, session, address, chainId).queryKey;
-        const data = client.getQueryData<CanonicalAssetRead>(key);
+        const options = chainId === 1
+          ? canonicalWalletAssetQueryOptions(config, session, address, 1)
+          : canonicalWalletAssetQueryOptions(config, session, address, 8453);
+        const key = options.queryKey;
+        const data = chainId === 1
+          ? (() => {
+            const exact = client.getQueryData<WalletBalancesResult>(key);
+            return exact ? canonicalAssetReadFromWalletBalances(exact) : undefined;
+          })()
+          : client.getQueryData<CanonicalAssetRead>(key);
         const state = client.getQueryState(key);
         if (data) return {
           ...data,
@@ -434,9 +445,7 @@ function BalanceBlockWatcher({ chainId }: { chainId: 1 | 8453 }) {
     config, chainId, enabled: watching, poll: true, pollingInterval: 12_000, emitOnBegin: false,
     onBlockNumber: (_block, previous) => {
       if (previous === undefined) return;
-      void client.invalidateQueries({ predicate: ({ queryKey }) => queryKey[0] === WALLET_QUERY_ROOT
-        && queryKey[1] === session && queryKey[2] === chainId, refetchType: 'active',
-      }, { cancelRefetch: false });
+      void refreshStaleWalletQueries(client, session.split(':')[0], chainId);
     },
     onError: () => { /* Queries retain their own error/retry/fallback refresh state. */ },
   });

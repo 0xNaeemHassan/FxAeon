@@ -31,6 +31,8 @@
     "test:e2e:borrow-harness": "pnpm --dir apps/mini-app test:e2e:borrow-harness",
     "test:e2e:move-harness": "pnpm --dir apps/mini-app test:e2e:move-harness",
     "test:e2e:positions-harness": "pnpm --dir apps/mini-app test:e2e:positions-harness",
+    "test:e2e:privy-send-harness": "pnpm --dir apps/mini-app test:e2e:privy-send-harness",
+    "test:e2e:trade-harness": "pnpm --dir apps/mini-app test:e2e:trade-harness",
     "test:e2e:overlay": "pnpm --dir apps/mini-app test:e2e:overlay",
     "test:e2e:state-lab": "pnpm --dir apps/mini-app test:e2e:state-lab",
     "typecheck": "pnpm --dir apps/mini-app typecheck && tsc -p apps/mini-app/e2e/fork/tsconfig.json",
@@ -41,7 +43,8 @@
     "docs:screenshots": "node scripts/capture_docs_screenshots.mjs",
     "docs:screenshots:positions": "node scripts/capture_position_screenshots.mjs",
     "verify": "node scripts/verify.mjs",
-    "audit": "pnpm audit --prod --audit-level=high"
+    "audit": "pnpm audit --prod --audit-level=high",
+    "audit:all": "node scripts/audit_dependencies.mjs"
   },
   "engines": {
     "node": "22.x",

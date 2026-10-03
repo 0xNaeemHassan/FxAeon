@@ -129,7 +129,7 @@ if (JSON.stringify(methods) !== JSON.stringify(expectedMethods)) {
   fail(`SDK method surface changed. Expected ${expectedMethods.join(', ')}; received ${methods.join(', ')}`);
 }
 
-const patch = await readFile(join(root, 'patches', '@aladdindao__fx-sdk.patch'), 'utf8');
+const patch = await readFile(join(root, 'patches', '@aladdindao__fx-sdk@1.0.5.patch'), 'utf8');
 for (const required of shortPoolFix) {
   if (!patch.includes(required)) fail('the audited upstream short-pool fix is missing');
 }

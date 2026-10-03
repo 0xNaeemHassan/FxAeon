@@ -43,7 +43,7 @@ import {
 import { positionTokenDecimals, type UiPosition } from '@/app/trade/fxUi';
 import { formatUsd, priceKeyForSymbol, usdValueForUnits, type UsdPriceMap } from '@/lib/prices';
 import { walletAssetValuation } from '@/lib/walletAssets';
-import { canonicalWalletBalancesSnapshot, knownFreshPortfolioSubtotal, mergeFreshCanonicalWalletBalances } from '@/lib/portfolioValuation';
+import { canonicalWalletBalancesSnapshot, knownFreshPortfolioSubtotal, mergeFreshCanonicalWalletBalances, portfolioHeadlineTotal, type VerifiedPortfolioTotal } from '@/lib/portfolioValuation';
 import { calculatePositionUsdValuation } from '@/lib/positionValuation';
 import { fxSaveUsdValue, normalizedFxSaveAssetsWei } from '@/lib/fxSaveUnits';
 import { haptic } from '@/lib/telegram';
@@ -104,6 +104,7 @@ function PortfolioWallet() {
   const realtime = useRealtimeChainState(1) as import('@/lib/realtimeChain').RealtimeChainState;
   const protocolBlockRef = useRef('');
   const protocolRequest = useRef<{ identity: string; promise: Promise<void> } | null>(null);
+  const verifiedPortfolioTotalRef = useRef<VerifiedPortfolioTotal | null>(null);
 
   const loadProtocol = useCallback(() => {
     if (!walletAddress) return Promise.resolve();
@@ -227,6 +228,9 @@ function PortfolioWallet() {
       ? valuation.totalUsd + protocolEquityUsd : null,
     reason: '',
   };
+  const headline = portfolioHeadlineTotal(portfolioValuation.totalUsd, verifiedPortfolioTotalRef.current,
+    wallet.address, refreshing, valuationNow);
+  verifiedPortfolioTotalRef.current = headline.verified;
   const walletTasks = selectWalletTasks({ walletAddress: wallet.address, transactions: [], claimable: protocol.claimable,
     valuation: (!valuation.complete || !allWalletRowsPriced) && Boolean(displayAssets?.assets.some((asset) => asset.balanceWei > 0n))
       ? knownWalletSubtotal.hasKnownValue ? 'partial' : 'unavailable' : 'complete' });
@@ -237,7 +241,7 @@ function PortfolioWallet() {
   };
   return <div id="overview" className={presentation.dashboard}>
     <div className={presentation.primary}>
-      <SupportedValueCard displayTotalUsd={portfolioValuation.totalUsd}
+      <SupportedValueCard displayTotalUsd={headline.displayTotalUsd}
         loading={loading || liveLoading || priceSnapshot.refreshing || positionState.refreshing} refreshing={manualRefresh.refreshing} onRefresh={refreshAll}
         walletValue={knownWalletSubtotal.totalUsd} positionEquity={positionsComplete || knownPositionCount > 0 ? protocolEquityUsd : null}
         walletComplete={valuation.complete && allWalletRowsPriced} positionsComplete={positionsComplete} />

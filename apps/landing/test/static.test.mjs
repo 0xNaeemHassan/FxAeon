@@ -133,9 +133,10 @@ test('checked-in icons match the app’s pinned Lucide renderer and license', as
     const rendered = renderToStaticMarkup(react.createElement(Icon, { size: 24, color: '#c6a7ff', strokeWidth: 2 }));
     assert.equal(await readFile(resolve(root, 'assets/icons', `${name}.svg`), 'utf8'), rendered, `${name}.svg should match the pinned app icon`);
   }
+  const normalizeLicenseLineEndings = (value) => value.replace(/\r\n?/g, '\n');
   assert.deepEqual(
-    await readFile(resolve(root, 'assets/icons/LICENSE.txt')),
-    await readFile(resolve(lucidePackagePath, '../LICENSE')),
+    normalizeLicenseLineEndings(await readFile(resolve(root, 'assets/icons/LICENSE.txt'), 'utf8')),
+    normalizeLicenseLineEndings(await readFile(resolve(lucidePackagePath, '../LICENSE'), 'utf8')),
     'Include the same Lucide license as the app dependency',
   );
 });

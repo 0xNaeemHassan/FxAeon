@@ -25,6 +25,24 @@ function assertAlchemyRpc(name, expectedHost) {
   }
 }
 
+function assertOptionalAlchemyRpc(name, expectedHost) {
+  const value = process.env[name]?.trim();
+  if (value) assertAlchemyRpc(name, expectedHost);
+}
+
+function assertOptionalInfuraRpc(name, expectedHost) {
+  const value = process.env[name]?.trim();
+  if (!value) return;
+  let url;
+  try { url = new URL(value); } catch { throw new Error(`${name} must be an absolute HTTPS URL`); }
+  if (url.protocol !== 'https:') throw new Error(`${name} must use HTTPS`);
+  if (url.hostname !== expectedHost) throw new Error(`${name} must use ${expectedHost}`);
+  if (url.port || url.username || url.password || url.search || url.hash) {
+    throw new Error(`${name} cannot include credentials, a custom port, query, or fragment`);
+  }
+  if (!/^\/v3\/[^/]+\/?$/.test(url.pathname)) throw new Error(`${name} must use an Infura /v3 project endpoint`);
+}
+
 function assertTelegramMiniAppUrl() {
   const value = requireValue('NEXT_PUBLIC_TELEGRAM_APP_URL');
   let url;
@@ -70,11 +88,15 @@ try {
 
   assertAlchemyRpc('NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL', 'eth-mainnet.g.alchemy.com');
   assertAlchemyRpc('NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL', 'base-mainnet.g.alchemy.com');
+  assertOptionalAlchemyRpc('NEXT_PUBLIC_ALCHEMY2_ETHEREUM_RPC_URL', 'eth-mainnet.g.alchemy.com');
+  assertOptionalAlchemyRpc('NEXT_PUBLIC_ALCHEMY2_BASE_RPC_URL', 'base-mainnet.g.alchemy.com');
+  assertOptionalInfuraRpc('NEXT_PUBLIC_INFURA_ETHEREUM_RPC_URL', 'mainnet.infura.io');
+  assertOptionalInfuraRpc('NEXT_PUBLIC_INFURA_BASE_RPC_URL', 'base-mainnet.infura.io');
   assertAlchemyDataKey();
   assertTelegramMiniAppUrl();
   assertTelegramBotToken();
 
-  console.log('FxAeon production environment verified: Privy, Alchemy, and Telegram configuration are structurally valid.');
+  console.log('FxAeon production environment verified: Privy, RPC, and Telegram configuration are structurally valid.');
 } catch (error) {
   console.error(`FxAeon production environment invalid: ${error instanceof Error ? error.message : String(error)}`);
   process.exitCode = 1;

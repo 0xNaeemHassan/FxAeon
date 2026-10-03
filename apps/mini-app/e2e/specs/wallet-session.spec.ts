@@ -109,12 +109,12 @@ test.describe('wallet session isolation', () => {
       ]));
     }, { accountA: ACCOUNT_A, accountB: ACCOUNT_B });
     await page.goto('/history', { waitUntil: 'domcontentloaded' });
-    await expect(page.getByText('Opened or increased position', { exact: true })).toBeVisible();
-    await expect(page.getByText('Deposit Fx Save', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('0xaaaaaa…aaaaaa', { exact: true })).toBeVisible();
+    await expect(page.getByText('0xbbbbbb…bbbbbb', { exact: true })).toHaveCount(0);
 
     await setAccounts(page, [ACCOUNT_B]);
-    await expect(page.getByText('Deposit Fx Save', { exact: true })).toBeVisible();
-    await expect(page.getByText('Opened or increased position', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('0xbbbbbb…bbbbbb', { exact: true })).toBeVisible();
+    await expect(page.getByText('0xaaaaaa…aaaaaa', { exact: true })).toHaveCount(0);
     assertNoBackendRequests(requests);
   });
 
@@ -153,19 +153,19 @@ test.describe('wallet session isolation', () => {
     await expect(page.getByRole('link', { name: 'Continue', exact: true })).toBeHidden();
     await expect(page.getByText('Borrow fxUSD', { exact: true })).toBeHidden();
     await expect(page.getByText('Submitted transactions', { exact: true })).toBeVisible();
-    await expect(page.getByText('Opened or increased position', { exact: true })).toBeVisible();
+    await expect(page.getByText('0xcccccc…cccccc', { exact: true })).toBeVisible();
     await expect(page.getByText('Minted fxUSD', { exact: true })).toHaveCount(0);
 
     await draftSummary.click();
     await expect(page.getByRole('link', { name: 'Continue', exact: true })).toBeVisible();
     await expect(page.getByText('Borrow fxUSD', { exact: true })).toBeVisible();
     await expect(page.getByText('Unsubmitted', { exact: true })).toBeVisible();
-    await expect(page.getByText('Opened or increased position', { exact: true })).toBeVisible();
+    await expect(page.getByText('0xcccccc…cccccc', { exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
     await expect(page.getByText('Drafts (1)', { exact: true })).toHaveCount(0);
     await expect(page.getByRole('link', { name: 'Continue', exact: true })).toHaveCount(0);
-    await expect(page.getByText('Opened or increased position', { exact: true })).toBeVisible();
+    await expect(page.getByText('0xcccccc…cccccc', { exact: true })).toBeVisible();
     assertNoBackendRequests(requests);
   });
 });

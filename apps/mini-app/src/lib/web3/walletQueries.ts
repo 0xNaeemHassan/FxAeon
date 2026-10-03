@@ -138,17 +138,7 @@ export async function readCanonicalWalletAssets(
 
   if (chainId === 1) {
     const result = await readWagmiWalletBalancesOnVerifiedChain(config, address, chainId, signal);
-    return {
-      chainId,
-      balances: result.balances.map((balance) => ({
-        key: balance.key,
-        address: balance.key === 'ETH' ? null : balance.address,
-        decimals: balance.decimals,
-        amountWei: balance.amountWei,
-      })),
-      failedTokens: result.failedTokens,
-      updatedAt: Date.now(),
-    };
+    return canonicalAssetReadFromWalletBalances(result);
   }
 
   const settled = await Promise.allSettled([
@@ -181,11 +171,44 @@ export async function readCanonicalWalletAssets(
   return { chainId, balances, failedTokens, updatedAt: Date.now() };
 }
 
-export function canonicalWalletAssetQueryOptions(config: WalletDataConfig, session: string, address: string, chainId: 1 | 8453) {
+export function canonicalAssetReadFromWalletBalances(result: WalletBalancesResult): CanonicalAssetRead {
+  return {
+    chainId: 1,
+    balances: result.balances.map((balance) => ({
+      key: balance.key,
+      address: balance.key === 'ETH' ? null : balance.address,
+      decimals: balance.decimals,
+      amountWei: balance.amountWei,
+    })),
+    failedTokens: result.failedTokens,
+    updatedAt: Date.now(),
+  };
+}
+
+function ethereumCanonicalWalletAssetQueryOptions(config: WalletDataConfig, session: string, address: string) {
   return queryOptions({
-    queryKey: [WALLET_QUERY_ROOT, session, chainId, address.toLowerCase(), 'canonical-assets'] as const,
-    queryFn: ({ signal }) => readCanonicalWalletAssets(config, address, chainId, signal),
+    queryKey: walletBalanceQueryKey(session, address, 1),
+    queryFn: ({ signal }) => readWagmiWalletBalances(config, address, 1, signal),
+    select: canonicalAssetReadFromWalletBalances,
   });
+}
+
+function baseCanonicalWalletAssetQueryOptions(config: WalletDataConfig, session: string, address: string) {
+  return queryOptions({
+    queryKey: [WALLET_QUERY_ROOT, session, 8453, address.toLowerCase(), 'canonical-assets'] as const,
+    queryFn: ({ signal }) => readCanonicalWalletAssets(config, address, 8453, signal),
+  });
+}
+
+export function canonicalWalletAssetQueryOptions(config: WalletDataConfig, session: string, address: string, chainId: 1): ReturnType<typeof ethereumCanonicalWalletAssetQueryOptions>;
+export function canonicalWalletAssetQueryOptions(config: WalletDataConfig, session: string, address: string, chainId: 8453): ReturnType<typeof baseCanonicalWalletAssetQueryOptions>;
+export function canonicalWalletAssetQueryOptions(config: WalletDataConfig, session: string, address: string, chainId: 1 | 8453) {
+  // Ethereum's canonical asset rows are a presentation of the exact balance
+  // result. Share the legacy key/queryFn so portfolio/profile observers join
+  // the same in-flight read instead of issuing a second identical snapshot.
+  return chainId === 1
+    ? ethereumCanonicalWalletAssetQueryOptions(config, session, address)
+    : baseCanonicalWalletAssetQueryOptions(config, session, address);
 }
 
 export function walletQueryScope(address: string, chainId: number) {
@@ -199,6 +222,19 @@ type RefreshWork = { generation: number; promise: Promise<void> };
 const refreshes = new WeakMap<QueryClient, Map<string, RefreshWork>>();
 
 export type WalletQueryRefreshOptions = { afterReceipt?: boolean };
+
+/** Refresh only active wallet reads whose configured freshness has elapsed.
+ * Block notifications are hints for ordinary polling; explicit/manual and
+ * receipt refreshes continue through invalidateWalletQueries below so they
+ * can force a trailing read and win races with pre-receipt work.
+ */
+export function refreshStaleWalletQueries(client: QueryClient, address: string, chainId: number): Promise<void> {
+  const scope = walletQueryScope(address, chainId);
+  return client.refetchQueries({
+    predicate: (query) => scope.predicate(query) && query.isStale(),
+    type: 'active',
+  }, { cancelRefetch: false });
+}
 
 /**
  * A pre-receipt RPC response must not win a post-receipt refresh. Cancel it,

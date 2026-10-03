@@ -353,6 +353,8 @@ export interface WalletTransactionRequest {
   data: Hex;
   value: bigint;
   nonce: number;
+  /** Buffered estimate for this exact step after prerequisite approvals. */
+  gasLimit?: bigint;
   /** Frozen EIP-1559 fee selection applied equally to approvals and actions. */
   maxFeePerGas?: bigint;
   maxPriorityFeePerGas?: bigint;
@@ -365,7 +367,9 @@ export interface TransactionRunnerCallbacks {
    * enabled. It is intentionally named requestSignature to make the approval
    * boundary explicit in callers.
    */
-  requestSignature: (request: WalletTransactionRequest) => Promise<Hex>;
+  requestSignature: (request: WalletTransactionRequest, transaction: PlannedTransaction) => Promise<Hex>;
+  /** Wait for a previous wallet confirmation UI to close before refreshing and reviewing the next step. */
+  beforeTransaction?: (index: number, transaction: PlannedTransaction) => Promise<void>;
   ensureChain?: (chainId: FxChainId) => Promise<void>;
   /** Optional custom simulation; return false or throw to fail closed. */
   simulate?: (
@@ -395,6 +399,8 @@ export interface TransactionRunnerOptions {
 export interface PendingHashRecord {
   id: string;
   operation: OfficialFxMethod;
+  /** Exact route step type, so an approval receipt cannot represent the user action. */
+  stepKind?: PlannedTransaction["kind"];
   /** Human action captured from the reviewed route; never controls execution. */
   intent?: PendingActionIntent;
   walletAddress: Address;

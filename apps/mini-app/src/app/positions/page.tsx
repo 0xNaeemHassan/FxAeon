@@ -231,16 +231,18 @@ export default function PositionsPage() {
   useEffect(() => {
     let active = true;
     if (!selected) return () => { active = false; };
-    const fallback = leverageBoundsFor(selected.market, selected.side);
+    const chosenSlippage = Number(slippage);
+    if (!Number.isFinite(chosenSlippage) || chosenSlippage <= 0 || chosenSlippage > MAX_FX_SLIPPAGE_PERCENT) return;
+    const fallback = leverageBoundsFor(selected.market, selected.side, chosenSlippage);
     setLeverageBounds(fallback);
-    void readLeverageBounds(selected.market, selected.side).then((next) => {
+    void readLeverageBounds(selected.market, selected.side, undefined, chosenSlippage).then((next) => {
       if (active) setLeverageBounds(next);
     }).catch(() => {
       // Keep the conservative fallback; the SDK remains the final planner
       // authority when the user asks to review a transaction.
     });
     return () => { active = false; };
-  }, [selected]);
+  }, [selected, slippage]);
 
   // History resumes carry only safe form primitives. Verify the current
   // wallet, network, operation, stable position/action key, and same-origin
@@ -345,7 +347,7 @@ export default function PositionsPage() {
         const prepared = await prepareLeverageReview({
           leverage,
           currentBounds: leverageBounds,
-          readBounds: () => readLeverageBounds(selected.market, selected.side),
+          readBounds: () => readLeverageBounds(selected.market, selected.side, undefined, slippageValue),
           buildPlan: () => planIncreasePosition({ ...common, leverage, inputTokenAddress: tokenAddress(token), amount: amountWei }),
         });
         setLeverageBounds((current) => current.min === prepared.bounds.min
@@ -378,7 +380,7 @@ export default function PositionsPage() {
       const prepared = await prepareLeverageReview({
         leverage,
         currentBounds: leverageBounds,
-        readBounds: () => readLeverageBounds(selected.market, selected.side),
+        readBounds: () => readLeverageBounds(selected.market, selected.side, undefined, slippageValue),
         buildPlan: () => planAdjustPositionLeverage({ ...common, leverage }),
       });
       setLeverageBounds((current) => current.min === prepared.bounds.min

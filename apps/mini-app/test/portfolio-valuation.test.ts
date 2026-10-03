@@ -2,16 +2,16 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { FX_TOKENS } from '../src/lib/fx/tokens';
 import { USD_PRICE_MAX_AGE_MS } from '../src/lib/prices';
-import { canonicalWalletBalancesSnapshot, knownFreshPortfolioSubtotal, mergeFreshCanonicalWalletBalances } from '../src/lib/portfolioValuation';
+import { canonicalWalletBalancesSnapshot, knownFreshPortfolioSubtotal, mergeFreshCanonicalWalletBalances, portfolioHeadlineTotal } from '../src/lib/portfolioValuation';
 import { parseAlchemyWalletAssets, walletAssetValuation } from '../src/lib/walletAssets';
 
 const wallet = '0x930feae1b277ff60b836d2ce27f162555ab598b9';
 const now = Date.now();
 
-test('uses a fresh canonical ETH balance when expanded asset rows are present but unpriced', () => {
+test('ignores unsupported indexed tokens when valuing fresh canonical ETH', () => {
   const expanded = parseAlchemyWalletAssets({ data: { tokens: [
     { address: wallet, network: 'eth-mainnet', tokenAddress: null, tokenBalance: '0x1', tokenMetadata: { symbol: 'ETH', decimals: 18 }, tokenPrices: [] },
-    { address: wallet, network: 'base-mainnet', tokenAddress: '0x2222222222222222222222222222222222222222', tokenBalance: '0x2', tokenMetadata: { symbol: 'Other', decimals: 18 }, tokenPrices: [] },
+    { address: wallet, network: 'base-mainnet', tokenAddress: '0x2222222222222222222222222222222222222222', tokenBalance: '0x2', tokenMetadata: { symbol: 'Other', decimals: 18 }, error: 'Unknown token metadata is unavailable.', tokenPrices: [] },
   ] } }, wallet, now);
   const balances = {
     balances: [{ key: 'ETH' as const, address: FX_TOKENS.ETH.address, decimals: 18, amountWei: 600_000_000_000_000n }],
@@ -23,13 +23,12 @@ test('uses a fresh canonical ETH balance when expanded asset rows are present bu
   const displaySnapshot = mergeFreshCanonicalWalletBalances(expanded, balances, now, prices, now);
   const result = knownFreshPortfolioSubtotal(displaySnapshot, balances, now, prices, now);
 
-  // Mirrors the screenshot: the wallet query and ETH quote are ready, while
-  // the expanded asset snapshot contains rows but cannot produce a complete
-  // portfolio valuation yet.
-  assert.equal(walletAssetValuation(displaySnapshot).totalUsd, null);
-  assert.equal(walletAssetValuation(displaySnapshot).complete, false);
+  // Unknown indexed tokens do not count as FxAeon holdings or block the total.
+  assert.equal(walletAssetValuation(displaySnapshot).totalUsd, 1.2);
+  assert.equal(walletAssetValuation(displaySnapshot).complete, true);
   assert.equal(displaySnapshot.assets.find((asset) => asset.canonicalKey === 'ETH')?.balance, '0.0006');
-  assert.deepEqual(result, { totalUsd: 1.2, assetCount: 2, hasKnownValue: true });
+  assert.equal(displaySnapshot.assets.some((asset) => asset.symbol === 'Other'), false);
+  assert.deepEqual(result, { totalUsd: 1.2, assetCount: 1, hasKnownValue: true });
 });
 
 test('does not double count an expanded canonical row or use stale fallback data', () => {
@@ -124,5 +123,21 @@ test('keeps the subtotal unavailable when no verified fresh quote or balance exi
     balances: [{ key: 'ETH', address: FX_TOKENS.ETH.address, decimals: 18, amountWei: 1n }], failedTokens: [],
   }, now, { prices: { ETH: 0 }, status: 'ready', updatedAt: now, updatedAts: { ETH: now } }, now), {
     totalUsd: null, assetCount: 1, hasKnownValue: false,
+  });
+});
+
+test('keeps a recent verified portfolio headline visible during same-wallet refreshes only', () => {
+  const verified = { walletAddress: wallet, totalUsd: 26.29, verifiedAt: now };
+  assert.deepEqual(portfolioHeadlineTotal(null, verified, wallet, true, now + 1_000), {
+    displayTotalUsd: 26.29, verified,
+  });
+  assert.deepEqual(portfolioHeadlineTotal(null, verified, '0x0000000000000000000000000000000000000001', true, now + 1_000), {
+    displayTotalUsd: null, verified: null,
+  });
+  assert.deepEqual(portfolioHeadlineTotal(null, verified, wallet, false, now + 1_000), {
+    displayTotalUsd: null, verified: null,
+  });
+  assert.deepEqual(portfolioHeadlineTotal(null, verified, wallet, true, now + 3 * 60_000), {
+    displayTotalUsd: null, verified: null,
   });
 });

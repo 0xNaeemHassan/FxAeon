@@ -63,6 +63,7 @@ test('estimates every route step and separates gas from native transaction value
   assert.equal(estimate.executionGasFeeWei, 63_000n);
   assert.equal(estimate.nativeValueWei, 12n);
   assert.equal(estimate.totalNativeCostWei, 63_012n);
+  assert.equal(estimate.requiredNativeCostWei, 75_612n, 'wallet funding check uses buffered limit at the max fee cap');
   assert.equal(estimate.steps[0].gasFeeWei, 63_000n);
 });
 
@@ -89,6 +90,7 @@ test('route estimate uses the reviewed tier cap and does not re-read an RPC fee'
   assert.equal(estimate.fee?.feePerGasWei, 40n);
   assert.equal(estimate.fee?.displayFeePerGasWei, 20n);
   assert.equal(estimate.executionGasFeeWei, 840_000n);
+  assert.equal(estimate.requiredNativeCostWei, 1_008_012n, 'fundability uses maxFeePerGas, not the expected display rate');
   assert.match(formatRouteGasCost(estimate).gasFee ?? '', /max/);
   assert.match(formatRouteGasCost(estimate).gasTier ?? '', /^Fast · /);
 });

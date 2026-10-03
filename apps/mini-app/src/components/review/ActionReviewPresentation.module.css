@@ -36,8 +36,8 @@
 .previewFacts {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 6px;
-  padding-block: 2px;
+  gap: 4px;
+  padding-block: 1px;
 }
 
 .previewFactRow {
@@ -60,9 +60,9 @@
   gap: 8px;
 }
 
-.positionOutcome { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 11px; line-height: 1.4; }
-.positionOutcome > p { margin: 0 0 4px; color: var(--mut); font-weight: 600; }
-.positionOutcome dl { display: grid; gap: 4px; margin: 0; }
+.positionOutcome { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); font-size: 11px; line-height: 1.35; }
+.positionOutcome > p { margin: 0 0 3px; color: var(--mut); font-weight: 600; }
+.positionOutcome dl { display: grid; gap: 3px; margin: 0; }
 .positionOutcome dl > div { display: grid; grid-template-columns: minmax(52px, .45fr) minmax(0, 1.55fr); gap: 8px; }
 .positionOutcome dt { color: var(--mut); }
 .positionOutcome dd { margin: 0; min-width: 0; overflow-wrap: anywhere; text-align: right; font-variant-numeric: tabular-nums; }
@@ -72,14 +72,14 @@
   .quoteMetric { padding-inline: 4px; }
 }
 
-.reviewHeader { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.reviewHeader { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
 .reviewHeader > div { min-width: 0; }
 .reviewHeader h3 { margin: 0; font-size: 21px; font-weight: 650; line-height: 1.2; letter-spacing: -.025em; }
 .reviewHeader p { margin: 4px 0 0; color: var(--mut); font-size: 12px; }
 .editButton { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 5px; min-height: 44px; min-width: 56px; padding: 0 8px; border-radius: 12px; color: var(--mut); font-size: 12px; font-weight: 600; }
 .editButton:hover { background: var(--mint-dim); color: var(--mint); }
 .editButton:disabled { opacity: .5; }
-.disclosures { margin-top: 8px; border: 1px solid var(--line); border-radius: 14px; overflow: clip; }
+.disclosures { margin-top: 6px; border: 1px solid var(--line); border-radius: 14px; overflow: clip; }
 .disclosures > details { margin: 0; border: 0; border-radius: 0; background: transparent; }
 .disclosures > details + details { border-top: 1px solid var(--line); }
 .disclosures > details > summary { min-height: 44px; font-size: 12px; }

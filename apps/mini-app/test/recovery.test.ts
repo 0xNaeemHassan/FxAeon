@@ -26,9 +26,13 @@ function addRecord(params: {
   walletAddress?: Address;
   chainId?: 1 | 8453;
   hash?: Hex;
+  stepKind?: PendingHashRecord["stepKind"];
+  intent?: PendingHashRecord["intent"];
 } = {}): PendingHashRecord {
   return recordPendingHash({
     operation: "buildBridgeTx",
+    stepKind: params.stepKind,
+    intent: params.intent,
     walletAddress: params.walletAddress ?? WALLET,
     chainId: params.chainId ?? 1,
     hash: params.hash ?? HASH,
@@ -122,6 +126,19 @@ test("reconciles a receipt at its mined block while retaining final receipt and 
   assert.equal(view?.verification, "receipt");
   assert.equal(receiptReads, 2, "recovery must recheck the receipt before persisting completion");
   assert.equal(readPendingHashJournal().find((item) => item.id === record.id)?.status, "confirmed");
+});
+
+test("an interrupted approval keeps its step identity and route intent when its receipt is recovered", async () => {
+  const approval = addRecord({ stepKind: "approval", intent: "Open position", hash: OTHER_HASH });
+  const [view] = await reconcileWalletJournal({
+    walletAddress: WALLET,
+    getClient: () => client(async () => receipt(approval), 1),
+  });
+
+  assert.equal(view?.status, "confirmed");
+  assert.equal(view?.record.stepKind, "approval");
+  assert.equal(view?.record.intent, "Open position");
+  assert.equal(readPendingHashJournal()[0]?.stepKind, "approval");
 });
 
 test("exposes network cost only when it can be derived from receipt and mined transaction", async () => {

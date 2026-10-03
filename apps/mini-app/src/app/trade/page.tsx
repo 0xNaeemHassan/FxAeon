@@ -18,7 +18,9 @@ import { deriveConfirmedPositionHint } from '@/lib/confirmedPositions';
 import { confirmedPositionHintKey } from '@/lib/confirmedPositionStorage';
 import { AmountField, LeverageField, Segmented, SlippageField, TokenSelect, tokenBalanceFor, useWalletTokenBalances, type TokenBalanceView } from '@/components/ProtocolForm';
 import { MAX_FX_SLIPPAGE_PERCENT, clampLeverage, estimatePlannedRouteCost, getEthereumClient, leverageBoundsFor, planIncreasePosition, prepareLeverageReview, readLeverageBounds, readSignatureRequiredDraft, restoreSignatureRequiredDraft, signatureDraftIdFromSearch, type LeverageBounds, type PlannedRoute, type TransactionExecutionResult } from '@/lib/fx';
-import { calculateNativeMax } from '@/lib/fx/nativeMax';
+import { calculateNativeMax, nativeMaxErrorMessage } from '@/lib/fx/nativeMax';
+import { fetchGasTierQuotes, selectedGasTierQuote } from '@/lib/fx/gasFeePolicy';
+import { readGasTier } from '@/lib/settings';
 import { RoutePrefetchStore, type RoutePrefetchDescriptor } from '@/lib/fx/routePrefetch';
 import { usePrivyWallet } from '@/lib/wallet';
 import styles from '@/components/trade-surfaces.module.css';
@@ -90,9 +92,12 @@ export default function TradePage() {
   const nativeMaxRequestRef = useRef(0);
   const nativeMaxMountedRef = useRef(true);
 
-  useEffect(() => () => {
-    nativeMaxMountedRef.current = false;
-    nativeMaxRequestRef.current += 1;
+  useEffect(() => {
+    nativeMaxMountedRef.current = true;
+    return () => {
+      nativeMaxMountedRef.current = false;
+      nativeMaxRequestRef.current += 1;
+    };
   }, []);
 
   // Keep the unsigned snapshot primitive-only so History can restore the
@@ -136,7 +141,7 @@ export default function TradePage() {
   const changeToken = useCallback((nextToken: UiToken) => {
     resetTradeContext(market, side, nextToken);
   }, [market, resetTradeContext, side]);
-  currentTicketRef.current = JSON.stringify([wallet.address, wallet.chainId, walletBalances.balances.ETH?.amount ?? '', market, side, token, amount, leverage, slippage, leverageBounds.min, leverageBounds.max]);
+  currentTicketRef.current = JSON.stringify([wallet.address, wallet.chainId, wallet.isEmbedded, walletBalances.balances.ETH?.amount ?? '', market, side, token, amount, leverage, slippage, leverageBounds.min, leverageBounds.max]);
 
   useEffect(() => {
     const context = `${wallet.address?.toLowerCase() ?? ''}:${wallet.chainId ?? ''}`;
@@ -277,16 +282,18 @@ export default function TradePage() {
 
   useEffect(() => {
     let active = true;
-    const fallback = leverageBoundsFor(market, side);
+    const chosenSlippage = Number(slippage);
+    if (!Number.isFinite(chosenSlippage) || chosenSlippage <= 0 || chosenSlippage > MAX_FX_SLIPPAGE_PERCENT) return;
+    const fallback = leverageBoundsFor(market, side, chosenSlippage);
     setLeverageBounds(fallback);
-    void readLeverageBounds(market, side).then((next) => {
+    void readLeverageBounds(market, side, undefined, chosenSlippage).then((next) => {
       if (active) setLeverageBounds(next);
     }).catch(() => {
       // The input remains guarded by the conservative fallback while a public
       // RPC is unavailable; the SDK is still the final route authority.
     });
     return () => { active = false; };
-  }, [market, side]);
+  }, [market, side, slippage]);
 
   useEffect(() => {
     setLeverage((current) => clampLeverage(current, leverageBounds));
@@ -309,7 +316,7 @@ export default function TradePage() {
   const slippageValue = Number(slippage);
 
   const resolveNativeMax = useCallback(async () => {
-    if (token !== 'ETH' || !wallet.address || wallet.chainId !== 1 || nativeMaxPending) return;
+    if (token !== 'ETH' || !wallet.address || nativeMaxPending) return;
     const balance = tokenBalanceFor(walletBalances.balances, 'ETH');
     if (!balance || balance.status !== 'ready' || !balance.amount) return;
     const balanceWei = parseAmount(balance.amount, 'ETH');
@@ -342,21 +349,27 @@ export default function TradePage() {
           amount: candidate,
           slippage: slippageValue,
         }),
-        estimateRoutes: (routes) => Promise.all(routes.map((route) => estimatePlannedRouteCost(route))),
+        estimateRoutes: async (routes, signal) => {
+          const feeTierQuote = wallet.isEmbedded
+            ? selectedGasTierQuote(await fetchGasTierQuotes(1), readGasTier())
+            : undefined;
+          return Promise.all(routes.map((route) => estimatePlannedRouteCost(route, { feeTierQuote, signal })));
+        },
         isCurrent,
       });
       if (!isCurrent()) return;
       const formatted = formatUnits(spendable, 18);
+      setNativeMaxPending(false);
       setNativeMaxAmount(formatted);
       setAmount(formatted);
-    } catch {
+    } catch (error) {
       if (!isCurrent()) return;
       setNativeMaxAmount(null);
-      setNativeMaxError('100% is unavailable until current gas is verified. Enter an amount manually or retry.');
+      setNativeMaxError(nativeMaxErrorMessage(error));
     } finally {
-      if (isCurrent()) setNativeMaxPending(false);
+      if (nativeMaxMountedRef.current && nativeMaxRequestRef.current === request) setNativeMaxPending(false);
     }
-  }, [amount, leverage, market, nativeMaxPending, side, slippageValue, token, wallet.address, wallet.chainId, walletBalances.balances]);
+  }, [amount, leverage, market, nativeMaxPending, side, slippageValue, token, wallet.address, wallet.isEmbedded, walletBalances.balances]);
 
   useEffect(() => {
     setNativeMaxAmount(null);
@@ -370,7 +383,7 @@ export default function TradePage() {
     nativeMaxRequestRef.current += 1;
     setNativeMaxPending(false);
     setNativeMaxError(null);
-  }, [amount, leverage, market, side, slippage, token, wallet.address, wallet.chainId]);
+  }, [amount, leverage, market, side, slippage, token, wallet.address, wallet.chainId, wallet.isEmbedded, walletBalances.balances.ETH?.amount, leverageBounds.min, leverageBounds.max]);
 
   const changeLeverage = useCallback((value: number) => {
     setLeverage(value);
@@ -476,7 +489,7 @@ export default function TradePage() {
       const prepared = await prepareLeverageReview({
         leverage,
         currentBounds: leverageBounds,
-        readBounds: () => readLeverageBounds(market, side),
+        readBounds: () => readLeverageBounds(market, side, undefined, slippageValue),
         buildPlan: () => planIncreasePosition({
         market,
         type: side,

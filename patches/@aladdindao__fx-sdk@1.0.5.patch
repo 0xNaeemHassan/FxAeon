@@ -1,0 +1,386 @@
+diff --git a/dist/index.js b/dist/index.js
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -8,6 +8,12 @@
+ // src/configs/index.ts
+ var RPC_URL = "https://ethereum-rpc.publicnode.com";
+ var CHAIN_ID = 1;
++var RPC_TIMEOUT_MS = 5e3;
++function rpcTransport(urls, injectedTransport) {
++  if (injectedTransport) return injectedTransport;
++  if (urls.length !== 1) throw new Error("multiple RPC endpoints require a chain-verified transport");
++  return http(urls[0], { timeout: RPC_TIMEOUT_MS, retryCount: 0 });
++}
+ var PRECISION = 1e18;
+ var DEBT_RATIO_SLIPPAGE = 1 * 100;
+ var INT_MIN = "57896044618658097711785492504343953926634992332820282019728792003956564819968";
+@@ -29,7 +35,7 @@
+    * @param rpcUrl - RPC URL (defaults to configured value)
+    * @returns viem PublicClient instance
+    */
+-  getClient(chainId, rpcUrl) {
++  getClient(chainId, rpcUrl, rpcUrls, transport) {
+     if (this.client) {
+       return this.client;
+     }
+@@ -46,7 +52,7 @@
+           decimals: 18
+         },
+         rpcUrls: {
+-          default: { http: [rpcUrl ?? RPC_URL] }
++          default: { http: rpcUrls?.length ? rpcUrls : [rpcUrl ?? RPC_URL] }
+         },
+         contracts: {
+           multicall3: {
+@@ -55,7 +61,7 @@
+           }
+         }
+       },
+-      transport: http()
++      transport: rpcTransport(rpcUrls?.length ? rpcUrls : [rpcUrl ?? RPC_URL], transport)
+     });
+     return this.client;
+   }
+@@ -65,12 +71,12 @@
+    * @param rpcUrl - RPC URL (defaults to configured value)
+    * @returns viem PublicClient instance
+    */
+-  static getClient(chainId, rpcUrl) {
+-    return _RpcClient.getInstance().getClient(chainId, rpcUrl);
++  static getClient(chainId, rpcUrl, rpcUrls, transport) {
++    return _RpcClient.getInstance().getClient(chainId, rpcUrl, rpcUrls, transport);
+   }
+ };
+-function getClient(chainId, rpcUrl) {
+-  return RpcClient.getClient(chainId, rpcUrl);
++function getClient(chainId, rpcUrl, rpcUrls, transport) {
++  return RpcClient.getClient(chainId, rpcUrl, rpcUrls, transport);
+ }
+ 
+ // src/abis/AFPool.json
+@@ -2865,7 +2871,13 @@
+   return [minTarget, maxTarget];
+ };
+ var getEncodeMiscData = (minDebtRatio, maxDebtRatio) => {
+-  return cBN(maxDebtRatio).times(cBN(2).pow(60)).plus(minDebtRatio).toFixed(0);
++  if (typeof minDebtRatio !== "string" || typeof maxDebtRatio !== "string" || !minDebtRatio || !maxDebtRatio || /\D/.test(minDebtRatio) || /\D/.test(maxDebtRatio)) throw new TypeError("Debt ratio bounds must be unsigned integer strings");
++  const min = BigInt(minDebtRatio);
++  const max = BigInt(maxDebtRatio);
++  const limit = 1n << 60n;
++  if (min >= limit || max >= limit) throw new RangeError("Debt ratio bounds must fit uint60");
++  if (min > max) throw new RangeError("Minimum debt ratio cannot exceed maximum debt ratio");
++  return ((max << 60n) | min).toString();
+ };
+ var getEncodeMiscDataWithSlippage = (targetDebtRatio, slippage) => {
+   const [minDebtRatio, maxDebtRatio] = getDebtRatioRange(
+@@ -4957,7 +4969,6 @@
+         ]
+       });
+     } catch (err) {
+-      console.log("err------", name, err);
+       if (name === "FxRoute" /* FX_ROUTE */) {
+         mainError = err;
+       }
+@@ -11887,9 +11898,9 @@
+       return {
+         collateralCapacity: poolInfoRes[0],
+         collateralBalance: poolInfoRes[1],
+-        rawCollateral: poolInfoRes[2],
+-        debtCapacity: poolInfoRes[3],
+-        debtBalance: poolInfoRes[4] || 0n,
++        rawCollateral: this.config.isShort ? 0n : poolInfoRes[2],
++        debtCapacity: this.config.isShort ? poolInfoRes[2] : poolInfoRes[3],
++        debtBalance: this.config.isShort ? poolInfoRes[3] : poolInfoRes[4],
+         isPaused: pausedRes,
+         poolMinDebtRatio: debtRatioRangeRes[0],
+         poolMaxDebtRatio: debtRatioRangeRes[1],
+@@ -11913,7 +11924,6 @@
+     const buyPrice = cBN(await this.price.getBuyPrice()).times(1e18).div(rateRes).toString();
+     const sellPrice = cBN(await this.price.getSellPrice()).times(1e18).div(rateRes).toString();
+     const averagePrice = cBN(buyPrice).add(cBN(sellPrice)).div(2).toString();
+-    console.log("poolData-->", poolData);
+     const poolInfo = {
+       ...this.config,
+       ...poolData,
+@@ -11928,7 +11938,6 @@
+       closeFeeRatio: cBN(poolData.withdrawFeeRatio ?? 0).div(1e9).toNumber(),
+       repayFeeRatio: cBN(poolData.repayFeeRatio ?? 0).div(1e9).toNumber()
+     };
+-    console.log("poolInfo-->", poolInfo);
+     return poolInfo;
+   }
+ };
+@@ -12103,7 +12112,8 @@
+     token,
+     amount,
+     recipient,
+-    sourceRpcUrl
++    sourceRpcUrl,
++    sourceRpcUrls
+   } = request;
+   assertSupportedChains(sourceChainId, destChainId);
+   if (amount <= 0n) {
+@@ -12114,7 +12124,8 @@
+   }
+   const { address: oftAddress, tokenKey } = resolveOftAddress(sourceChainId, token);
+   const dstEid = getEidByChainId(destChainId);
+-  const rpcUrl = sourceRpcUrl ?? DEFAULT_RPC_BY_CHAIN[sourceChainId];
++  const rpcUrls = sourceRpcUrls?.length ? sourceRpcUrls : [sourceRpcUrl ?? DEFAULT_RPC_BY_CHAIN[sourceChainId]];
++  const rpcUrl = rpcUrls[0];
+   if (!rpcUrl) {
+     throw new Error("Source RPC URL is required.");
+   }
+@@ -12123,9 +12134,9 @@
+       id: sourceChainId,
+       name: sourceChainId === 8453 ? "Base" : "Ethereum",
+       nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+-      rpcUrls: { default: { http: [rpcUrl] } }
++      rpcUrls: { default: { http: rpcUrls } }
+     },
+-    transport: http(rpcUrl)
++    transport: rpcTransport(rpcUrls, request.sourceRpcTransport)
+   });
+   const sendParam = {
+     dstEid,
+@@ -12154,7 +12165,8 @@
+     amount,
+     recipient,
+     refundAddress,
+-    sourceRpcUrl
++    sourceRpcUrl,
++    sourceRpcUrls
+   } = request;
+   assertSupportedChains(sourceChainId, destChainId);
+   if (amount <= 0n) {
+@@ -16559,7 +16571,7 @@
+ // src/core/index.ts
+ var FxSdk = class {
+   constructor(config) {
+-    getClient(config?.chainId, config?.rpcUrl);
++    getClient(config?.chainId, config?.rpcUrl, config?.rpcUrls, config?.rpcTransport);
+   }
+   /**
+    * Gets all positions for a user in a given market and position type.
+diff --git a/dist/index.cjs b/dist/index.cjs
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -15,6 +15,12 @@
+ // src/configs/index.ts
+ var RPC_URL = "https://ethereum-rpc.publicnode.com";
+ var CHAIN_ID = 1;
++var RPC_TIMEOUT_MS = 5e3;
++function rpcTransport(urls, injectedTransport) {
++  if (injectedTransport) return injectedTransport;
++  if (urls.length !== 1) throw new Error("multiple RPC endpoints require a chain-verified transport");
++  return viem.http(urls[0], { timeout: RPC_TIMEOUT_MS, retryCount: 0 });
++}
+ var PRECISION = 1e18;
+ var DEBT_RATIO_SLIPPAGE = 1 * 100;
+ var INT_MIN = "57896044618658097711785492504343953926634992332820282019728792003956564819968";
+@@ -36,7 +42,7 @@
+    * @param rpcUrl - RPC URL (defaults to configured value)
+    * @returns viem PublicClient instance
+    */
+-  getClient(chainId, rpcUrl) {
++  getClient(chainId, rpcUrl, rpcUrls, transport) {
+     if (this.client) {
+       return this.client;
+     }
+@@ -53,7 +59,7 @@
+           decimals: 18
+         },
+         rpcUrls: {
+-          default: { http: [rpcUrl ?? RPC_URL] }
++          default: { http: rpcUrls?.length ? rpcUrls : [rpcUrl ?? RPC_URL] }
+         },
+         contracts: {
+           multicall3: {
+@@ -62,7 +68,7 @@
+           }
+         }
+       },
+-      transport: viem.http()
++      transport: rpcTransport(rpcUrls?.length ? rpcUrls : [rpcUrl ?? RPC_URL], transport)
+     });
+     return this.client;
+   }
+@@ -72,12 +78,12 @@
+    * @param rpcUrl - RPC URL (defaults to configured value)
+    * @returns viem PublicClient instance
+    */
+-  static getClient(chainId, rpcUrl) {
+-    return _RpcClient.getInstance().getClient(chainId, rpcUrl);
++  static getClient(chainId, rpcUrl, rpcUrls, transport) {
++    return _RpcClient.getInstance().getClient(chainId, rpcUrl, rpcUrls, transport);
+   }
+ };
+-function getClient(chainId, rpcUrl) {
+-  return RpcClient.getClient(chainId, rpcUrl);
++function getClient(chainId, rpcUrl, rpcUrls, transport) {
++  return RpcClient.getClient(chainId, rpcUrl, rpcUrls, transport);
+ }
+ 
+ // src/abis/AFPool.json
+@@ -2872,7 +2878,13 @@
+   return [minTarget, maxTarget];
+ };
+ var getEncodeMiscData = (minDebtRatio, maxDebtRatio) => {
+-  return cBN(maxDebtRatio).times(cBN(2).pow(60)).plus(minDebtRatio).toFixed(0);
++  if (typeof minDebtRatio !== "string" || typeof maxDebtRatio !== "string" || !minDebtRatio || !maxDebtRatio || /\D/.test(minDebtRatio) || /\D/.test(maxDebtRatio)) throw new TypeError("Debt ratio bounds must be unsigned integer strings");
++  const min = BigInt(minDebtRatio);
++  const max = BigInt(maxDebtRatio);
++  const limit = 1n << 60n;
++  if (min >= limit || max >= limit) throw new RangeError("Debt ratio bounds must fit uint60");
++  if (min > max) throw new RangeError("Minimum debt ratio cannot exceed maximum debt ratio");
++  return ((max << 60n) | min).toString();
+ };
+ var getEncodeMiscDataWithSlippage = (targetDebtRatio, slippage) => {
+   const [minDebtRatio, maxDebtRatio] = getDebtRatioRange(
+@@ -4964,7 +4976,6 @@
+         ]
+       });
+     } catch (err) {
+-      console.log("err------", name, err);
+       if (name === "FxRoute" /* FX_ROUTE */) {
+         mainError = err;
+       }
+@@ -11894,9 +11905,9 @@
+       return {
+         collateralCapacity: poolInfoRes[0],
+         collateralBalance: poolInfoRes[1],
+-        rawCollateral: poolInfoRes[2],
+-        debtCapacity: poolInfoRes[3],
+-        debtBalance: poolInfoRes[4] || 0n,
++        rawCollateral: this.config.isShort ? 0n : poolInfoRes[2],
++        debtCapacity: this.config.isShort ? poolInfoRes[2] : poolInfoRes[3],
++        debtBalance: this.config.isShort ? poolInfoRes[3] : poolInfoRes[4],
+         isPaused: pausedRes,
+         poolMinDebtRatio: debtRatioRangeRes[0],
+         poolMaxDebtRatio: debtRatioRangeRes[1],
+@@ -11920,7 +11931,6 @@
+     const buyPrice = cBN(await this.price.getBuyPrice()).times(1e18).div(rateRes).toString();
+     const sellPrice = cBN(await this.price.getSellPrice()).times(1e18).div(rateRes).toString();
+     const averagePrice = cBN(buyPrice).add(cBN(sellPrice)).div(2).toString();
+-    console.log("poolData-->", poolData);
+     const poolInfo = {
+       ...this.config,
+       ...poolData,
+@@ -11935,7 +11945,6 @@
+       closeFeeRatio: cBN(poolData.withdrawFeeRatio ?? 0).div(1e9).toNumber(),
+       repayFeeRatio: cBN(poolData.repayFeeRatio ?? 0).div(1e9).toNumber()
+     };
+-    console.log("poolInfo-->", poolInfo);
+     return poolInfo;
+   }
+ };
+@@ -12110,7 +12119,8 @@
+     token,
+     amount,
+     recipient,
+-    sourceRpcUrl
++    sourceRpcUrl,
++    sourceRpcUrls
+   } = request;
+   assertSupportedChains(sourceChainId, destChainId);
+   if (amount <= 0n) {
+@@ -12121,7 +12131,8 @@
+   }
+   const { address: oftAddress, tokenKey } = resolveOftAddress(sourceChainId, token);
+   const dstEid = getEidByChainId(destChainId);
+-  const rpcUrl = sourceRpcUrl ?? DEFAULT_RPC_BY_CHAIN[sourceChainId];
++  const rpcUrls = sourceRpcUrls?.length ? sourceRpcUrls : [sourceRpcUrl ?? DEFAULT_RPC_BY_CHAIN[sourceChainId]];
++  const rpcUrl = rpcUrls[0];
+   if (!rpcUrl) {
+     throw new Error("Source RPC URL is required.");
+   }
+@@ -12130,9 +12141,9 @@
+       id: sourceChainId,
+       name: sourceChainId === 8453 ? "Base" : "Ethereum",
+       nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+-      rpcUrls: { default: { http: [rpcUrl] } }
++      rpcUrls: { default: { http: rpcUrls } }
+     },
+-    transport: viem.http(rpcUrl)
++    transport: rpcTransport(rpcUrls, request.sourceRpcTransport)
+   });
+   const sendParam = {
+     dstEid,
+@@ -12161,7 +12172,8 @@
+     amount,
+     recipient,
+     refundAddress,
+-    sourceRpcUrl
++    sourceRpcUrl,
++    sourceRpcUrls
+   } = request;
+   assertSupportedChains(sourceChainId, destChainId);
+   if (amount <= 0n) {
+@@ -16566,7 +16578,7 @@
+ // src/core/index.ts
+ var FxSdk = class {
+   constructor(config) {
+-    getClient(config?.chainId, config?.rpcUrl);
++    getClient(config?.chainId, config?.rpcUrl, config?.rpcUrls, config?.rpcTransport);
+   }
+   /**
+    * Gets all positions for a user in a given market and position type.
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -62,6 +62,10 @@
+     recipient: string;
+     /** Optional: RPC URL for source chain (for quote read call). */
+     sourceRpcUrl?: string;
++    /** Optional ordered RPC endpoints for source-chain failover. */
++    sourceRpcUrls?: string[];
++    /** Chain-verified source transport supplied by the integrating app. */
++    sourceRpcTransport?: Transport;
+ }
+ /** Result of getBridgeQuote. */
+ interface BridgeQuoteResult {
+@@ -334,6 +338,10 @@
+ interface FxSdkConfig {
+     /** RPC URL. Defaults to the configured value if omitted. */
+     rpcUrl?: string;
++    /** Ordered same-chain RPC endpoints used for bounded read failover. */
++    rpcUrls?: string[];
++    /** Chain-verified shared transport supplied by the integrating app. */
++    rpcTransport?: Transport;
+     /** Chain ID. Defaults to 1 (Ethereum mainnet) if omitted. */
+     chainId?: number;
+ }
+@@ -634,3 +642,4 @@
+ }>;
+ 
+ export { type AdjustPositionLeverageRequest, BRIDGE_OFT_BY_TOKEN, type BridgeQuoteRequest, type BridgeQuoteResult, type BridgeTokenId, type BridgeTxPayload, type BuildBridgeTxRequest, type BuildBridgeTxResult, CHAIN_ID_BASE, CHAIN_ID_ETHEREUM, type ConvertData, DEFAULT_RPC_BY_CHAIN, type DepositAndMintRequest, EID_BASE, EID_ETHEREUM, type FxSaveClaimPreviewReceive, type FxSaveDepositRequest, type FxSaveDepositResult, type FxSaveTokenIn, type FxSaveTx, type FxSaveWithdrawRequest, type FxSaveWithdrawResult, FxSdk, type FxSdkConfig, type GetFxSaveBalanceRequest, type GetFxSaveBalanceResult, type GetFxSaveClaimableRequest, type GetFxSaveClaimableResult, type GetFxSaveRedeemStatusRequest, type GetFxSaveRedeemStatusResult, type GetRedeemTxRequest, type GetRedeemTxResult, type IncreasePositionRequest, LZ_ENDPOINT_ADDRESS, type Market, type PoolConfig, type PoolInfo, PoolName, type PositionInfo, type PositionRequest, type PositionType, type PriceOracle, type ReducePositionRequest, type RepayAndWithdrawRequest, SUPPORTED_BRIDGE_CHAIN_IDS, type SupportedBridgeChainId, type TokenSymbol, getEidByChainId, tokens };
++import type { Transport } from 'viem';
+diff --git a/dist/index.d.cts b/dist/index.d.cts
+--- a/dist/index.d.cts
++++ b/dist/index.d.cts
+@@ -62,6 +62,10 @@
+     recipient: string;
+     /** Optional: RPC URL for source chain (for quote read call). */
+     sourceRpcUrl?: string;
++    /** Ordered RPC endpoints for source-chain failover. */
++    sourceRpcUrls?: string[];
++    /** Chain-verified source transport supplied by the integrating app. */
++    sourceRpcTransport?: Transport;
+ }
+ /** Result of getBridgeQuote. */
+ interface BridgeQuoteResult {
+@@ -334,6 +338,10 @@
+ interface FxSdkConfig {
+     /** RPC URL. Defaults to the configured value if omitted. */
+     rpcUrl?: string;
++    /** Ordered same-chain RPC endpoints used for bounded read failover. */
++    rpcUrls?: string[];
++    /** Chain-verified shared transport supplied by the integrating app. */
++    rpcTransport?: Transport;
+     /** Chain ID. Defaults to 1 (Ethereum mainnet) if omitted. */
+     chainId?: number;
+ }
+@@ -634,3 +642,4 @@
+ }>;
+ 
+ export { type AdjustPositionLeverageRequest, BRIDGE_OFT_BY_TOKEN, type BridgeQuoteRequest, type BridgeQuoteResult, type BridgeTokenId, type BridgeTxPayload, type BuildBridgeTxRequest, type BuildBridgeTxResult, CHAIN_ID_BASE, CHAIN_ID_ETHEREUM, type ConvertData, DEFAULT_RPC_BY_CHAIN, type DepositAndMintRequest, EID_BASE, EID_ETHEREUM, type FxSaveClaimPreviewReceive, type FxSaveDepositRequest, type FxSaveDepositResult, type FxSaveTokenIn, type FxSaveTx, type FxSaveWithdrawRequest, type FxSaveWithdrawResult, FxSdk, type FxSdkConfig, type GetFxSaveBalanceRequest, type GetFxSaveBalanceResult, type GetFxSaveClaimableRequest, type GetFxSaveClaimableResult, type GetFxSaveRedeemStatusRequest, type GetFxSaveRedeemStatusResult, type GetRedeemTxRequest, type GetRedeemTxResult, type IncreasePositionRequest, LZ_ENDPOINT_ADDRESS, type Market, type PoolConfig, type PoolInfo, PoolName, type PositionInfo, type PositionRequest, type PositionType, type PriceOracle, type ReducePositionRequest, type RepayAndWithdrawRequest, SUPPORTED_BRIDGE_CHAIN_IDS, type SupportedBridgeChainId, type TokenSymbol, getEidByChainId, tokens };
++import type { Transport } from 'viem';

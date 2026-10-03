@@ -1,6 +1,7 @@
 import { formatUnits } from 'viem';
 import { fetchEthereumGasFallback } from './etherscanGas';
 import { getPublicClient } from './clients';
+import { assertSupportedChainId } from './config';
 import type { FxChainId, FxPublicClient } from './types';
 import type { GasTier } from '@/lib/settings';
 
@@ -8,7 +9,7 @@ export interface GasTierQuote {
   tier: GasTier;
   /** Estimated current total price, used for the visible tier/rate. */
   gasPriceWei: bigint;
-  /** EIP-1559 cap and tip placed on every wallet transaction. */
+  /** EIP-1559 cap and tip for embedded-wallet transactions; external wallets choose their own. */
   maxFeePerGas: bigint;
   maxPriorityFeePerGas: bigint;
   source?: 'rpc' | 'etherscan';
@@ -34,6 +35,15 @@ export const GAS_TIER_QUOTE_TTL_MS = 30_000;
 const GAS_RPC_TIMEOUT_MS = 8_000;
 const MAX_FEE_PER_GAS_WEI = 1_000_000_000_000_000_000n;
 const GAS_TIERS: readonly GasTier[] = ['standard', 'fast', 'rapid'];
+const gasQuoteCache = new Map<FxChainId, GasTierQuotes>();
+const gasQuoteRequests = new Map<FxChainId, Promise<GasTierQuotes>>();
+let gasQuoteCacheGeneration = 0;
+
+export function resetGasTierQuoteCacheForTests(): void {
+  gasQuoteCacheGeneration += 1;
+  gasQuoteCache.clear();
+  gasQuoteRequests.clear();
+}
 
 function validFee(value: bigint): boolean {
   return value > 0n && value <= MAX_FEE_PER_GAS_WEI;
@@ -146,11 +156,29 @@ async function fetchRpcTierQuotes(chainId: FxChainId, now: number): Promise<GasT
  * reviewed Etherscan oracle; Base always prices itself through its own RPC. */
 export async function fetchGasTierQuotes(
   chainId: FxChainId,
-  options: { now?: () => number } = {},
+  options: { now?: () => number; forceRefresh?: boolean; fetchSnapshot?: () => Promise<GasTierQuotes> } = {},
 ): Promise<GasTierQuotes> {
+  assertSupportedChainId(chainId);
   const now = options.now ?? Date.now;
   const requestedAt = now();
   if (!Number.isSafeInteger(requestedAt) || requestedAt < 0) throw new Error('network fee quote clock is invalid');
+  const cached = gasQuoteCache.get(chainId);
+  if (!options.forceRefresh && cached && cached.validUntil > requestedAt) return cached;
+  const pending = gasQuoteRequests.get(chainId);
+  if (pending) return pending;
+  const generation = gasQuoteCacheGeneration;
+  const request = options.fetchSnapshot ? options.fetchSnapshot() : fetchFreshGasTierQuotes(chainId, now);
+  gasQuoteRequests.set(chainId, request);
+  try {
+    const snapshot = await request;
+    if (generation === gasQuoteCacheGeneration) gasQuoteCache.set(chainId, snapshot);
+    return snapshot;
+  } finally {
+    if (gasQuoteRequests.get(chainId) === request) gasQuoteRequests.delete(chainId);
+  }
+}
+
+async function fetchFreshGasTierQuotes(chainId: FxChainId, now: () => number): Promise<GasTierQuotes> {
   if (chainId === 1 && !isLocalForkMode()) {
     try {
       const snapshot = await fetchEthereumGasFallback({ now });

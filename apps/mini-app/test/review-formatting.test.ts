@@ -5,8 +5,8 @@ import { rawQuoteReviewFacts, routeFinancialReviewFacts, tokenAmountReviewFact }
 import { FX_TOKENS } from '../src/lib/fx/tokens';
 import { factsOutsideConsequenceSummary, primaryReviewFacts, routeFacts } from '../src/components/review/actionReviewPresentation';
 import { consequenceSummary } from '../src/components/review/actionReviewModel';
-import { resultBodyDuringRefresh } from '../src/components/review/executionResult';
-import type { OfficialFxMethod, PlannedRoute, ReviewedActionIntent, RouteDetails } from '../src/lib/fx/types';
+import { resultBodyDuringRefresh, resultPresentation } from '../src/components/review/executionResult';
+import type { OfficialFxMethod, PlannedRoute, PlannedTransaction, ReviewedActionIntent, RouteDetails, TransactionExecutionResult } from '../src/lib/fx/types';
 
 const WALLET = '0x1111111111111111111111111111111111111111';
 const UNKNOWN = '0x2222222222222222222222222222222222222222';
@@ -88,6 +88,31 @@ test('refresh copy never describes partial or failed position actions as confirm
     assert.equal(resultBodyDuringRefresh({ status, refreshing: true, positionAction: true, body: 'Partially completed.' }), 'Partially completed.');
   }
   assert.equal(resultBodyDuringRefresh({ status: 'confirmed', refreshing: true, positionAction: true, body: 'Confirmed.' }), 'Transaction confirmed. Position details are refreshing.');
+});
+
+test('an approval-only partial result does not claim the reviewed action completed', () => {
+  const approvalOnly: TransactionExecutionResult = {
+    status: 'partial', operation: 'increasePosition', chainId: 1, walletAddress: WALLET as `0x${string}`,
+    steps: [
+      { index: 0, transaction: { kind: 'approval' } as PlannedTransaction, hash: `0x${'1'.repeat(64)}` as `0x${string}`, status: 'confirmed', receipt: { status: 'success' } as never },
+      { index: 1, transaction: { kind: 'action' } as PlannedTransaction, status: 'failed' },
+    ],
+  };
+  const presentation = resultPresentation(approvalOnly, false);
+  assert.equal(presentation.title, 'Approval confirmed');
+  assert.match(presentation.body, /Action not submitted/);
+
+  const actionConfirmed: TransactionExecutionResult = { ...approvalOnly, steps: [
+    ...approvalOnly.steps,
+    { index: 2, transaction: { kind: 'action' } as PlannedTransaction, status: 'confirmed', receipt: { status: 'success' } as never },
+  ] };
+  assert.equal(resultPresentation(actionConfirmed, false).title, 'Partially completed');
+
+  const actionSubmitted: TransactionExecutionResult = { ...approvalOnly, steps: [
+    approvalOnly.steps[0]!,
+    { index: 1, transaction: { kind: 'action' } as PlannedTransaction, hash: `0x${'2'.repeat(64)}` as `0x${string}`, status: 'submitted' as const },
+  ] };
+  assert.equal(resultPresentation(actionSubmitted, false).title, 'Confirmation unknown');
 });
 
 test('pure ActionReview presentation builder keeps verified action facts and authoritative costs together', () => {

@@ -1,4 +1,4 @@
-import { assertAlchemyRpcUrl, assertLocalForkRpcUrl, assertSupportedChainId } from '../fx/config';
+import { assertAlchemyRpcUrl, assertInfuraRpcUrl, assertLocalForkRpcUrl, assertSupportedChainId } from '../fx/config';
 import type { FxChainId } from '../fx/types';
 
 type ChainRequestProvider = {
@@ -7,6 +7,7 @@ type ChainRequestProvider = {
 
 export type BrowserChainRpcConfig = {
   configuredRpcUrl?: string;
+  configuredRpcUrls?: readonly string[];
   localForkRpcUrl?: string;
 };
 
@@ -44,19 +45,25 @@ export async function switchBrowserChain(
     if (typeof cause !== 'object' || cause === null || !('code' in cause) || cause.code !== 4902) throw cause;
   }
 
-  let rpcUrl: string;
+  let rpcUrls: string[];
   try {
-    const { configuredRpcUrl, localForkRpcUrl } = resolveRpcConfig();
-    rpcUrl = localForkRpcUrl
-      ? assertLocalForkRpcUrl(localForkRpcUrl, 'Screenshot fork RPC URL')
-      : assertAlchemyRpcUrl(configuredRpcUrl || '', chainId, 'Browser chain RPC URL');
+    const { configuredRpcUrl, configuredRpcUrls, localForkRpcUrl } = resolveRpcConfig();
+    rpcUrls = localForkRpcUrl
+      ? [assertLocalForkRpcUrl(localForkRpcUrl, 'Screenshot fork RPC URL')]
+      : [...new Set((configuredRpcUrls ?? [configuredRpcUrl || '']).map((url) => {
+        const hostname = new URL(url).hostname;
+        return hostname.endsWith('.infura.io')
+          ? assertInfuraRpcUrl(url, chainId, 'Browser chain RPC URL')
+          : assertAlchemyRpcUrl(url, chainId, 'Browser chain RPC URL');
+      }))];
+    if (!rpcUrls.length) throw new Error('No network RPC configured');
   } catch {
     // A configuration value can contain a provider credential; never reflect
     // the rejected URL in wallet UI or error messages.
     throw new Error('This wallet does not have the requested network yet. Add Ethereum or Base in the wallet, then try again.');
   }
 
-  const metadata = { ...CHAIN_METADATA[chainId], rpcUrls: [rpcUrl] };
+  const metadata = { ...CHAIN_METADATA[chainId], rpcUrls };
   await provider.request({ method: 'wallet_addEthereumChain', params: [metadata] });
   await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: targetChainId }] });
 }

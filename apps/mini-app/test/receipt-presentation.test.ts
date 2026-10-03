@@ -1,19 +1,23 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { FX_TOKENS } from '../src/lib/fx/tokens';
-import { buildReceiptPresentation, receiptTransfersFromLogs, verifiedReceiptPositionIdentity } from '../src/lib/receiptPresentation';
+import { buildReceiptPresentation, receiptTransfersFromLogs, shouldShowReceiptMovementFallback, verifiedReceiptPositionIdentity } from '../src/lib/receiptPresentation';
 
 const WALLET = '0x1111111111111111111111111111111111111111';
 const OTHER = '0x2222222222222222222222222222222222222222';
 
 test('formats only registry-known Ethereum receipt transfers as token amounts', () => {
-  const result = buildReceiptPresentation({ chainId: 1, walletAddress: WALLET, status: 'success',
+  const result = buildReceiptPresentation({ chainId: 1, walletAddress: WALLET, status: 'success', transactionKind: 'action',
     transfers: [{ token: FX_TOKENS.USDC.address, from: OTHER, to: WALLET, amountRaw: 1_234_500n }],
     executionCostWei: 2_100_000_000_000_000n, nativeValueWei: 1_000_000_000_000_000_000n,
   });
   assert.deepEqual(result.movements, ['received 1.2345 USDC']);
   assert.equal(result.executionFee, '0.0021 ETH');
+  assert.equal(result.feeLabel, 'Action network fee');
+  assert.equal(result.totalExecutionFee, null, 'Ethereum total duplicates its single network fee component');
+  assert.equal(result.totalFeeLabel, null);
   assert.equal(result.nativeValue, '1 ETH');
+  assert.equal(result.nativeValueLabel, 'Native value sent');
   assert.equal(result.feeCaveat, null);
 });
 
@@ -25,7 +29,48 @@ test('keeps unknown chain tokens technical and labels Base execution fee exclusi
   assert.deepEqual(result.movements, ['Token movement available in technical details']);
   assert.match(result.technicalMovements[0] ?? '', /9 base units/);
   assert.equal(result.feeLabel, 'Execution fee');
-  assert.match(result.feeCaveat ?? '', /L1 and operator fees/);
+  assert.match(result.feeCaveat ?? '', /L1 data, and operator fee component/);
+});
+
+test('adds Base L1 data and operator fees to a total only when every component is present', () => {
+  const complete = buildReceiptPresentation({ chainId: 8453, status: 'success', transactionKind: 'approval',
+    executionCostWei: 1_000_000_000_000_000n, l1DataFeeWei: 2_000_000_000_000_000n, operatorFeeWei: 3_000_000_000_000_000n,
+  });
+  assert.equal(complete.feeLabel, 'Token approval execution fee');
+  assert.equal(complete.executionFee, '0.001 ETH');
+  assert.equal(complete.l1DataFee, '0.002 ETH');
+  assert.equal(complete.operatorFee, '0.003 ETH');
+  assert.equal(complete.totalExecutionFee, '0.006 ETH');
+  assert.equal(complete.totalFeeLabel, 'Token approval total execution fee');
+  assert.equal(complete.feeCaveat, null);
+
+  const partial = buildReceiptPresentation({ chainId: 8453, status: 'success', transactionKind: 'action',
+    executionCostWei: 1_000_000_000_000_000n, l1DataFeeWei: 2_000_000_000_000_000n,
+  });
+  assert.equal(partial.feeLabel, 'Action execution fee');
+  assert.equal(partial.totalExecutionFee, null);
+  assert.match(partial.feeCaveat ?? '', /does not include every gas, L1 data, and operator fee component/);
+});
+
+test('omits missing movement copy for approval-only receipts but keeps it for actions and unknown kinds', () => {
+  const approval = buildReceiptPresentation({ chainId: 1, status: 'success', transactionKind: 'approval' });
+  const action = buildReceiptPresentation({ chainId: 1, status: 'success', transactionKind: 'action' });
+  const unknown = buildReceiptPresentation({ chainId: 1, status: 'success' });
+  assert.equal(shouldShowReceiptMovementFallback([approval]), false);
+  assert.equal(shouldShowReceiptMovementFallback([approval, approval]), false);
+  assert.equal(shouldShowReceiptMovementFallback([approval, action]), true);
+  assert.equal(shouldShowReceiptMovementFallback([unknown]), true);
+});
+
+test('labels successful bridge native value as a bridge fee and hides reverted native value', () => {
+  const success = buildReceiptPresentation({ chainId: 1, status: 'success', bridgeFee: true, nativeValueWei: 5_000_000_000_000_000n });
+  assert.equal(success.nativeValue, '0.005 ETH');
+  assert.equal(success.nativeValueLabel, 'Bridge fee');
+  const reverted = buildReceiptPresentation({ chainId: 1, status: 'reverted', bridgeFee: true,
+    nativeValueWei: 5_000_000_000_000_000n, executionCostWei: 1_000_000_000_000_000n,
+  });
+  assert.equal(reverted.nativeValue, null);
+  assert.equal(reverted.executionFee, '0.001 ETH', 'reverted transactions still show gas actually charged');
 });
 
 test('reverted receipts show no token movement or native value', () => {

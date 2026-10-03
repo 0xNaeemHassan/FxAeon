@@ -8,12 +8,21 @@ export type ReceiptPresentation = {
   movements: string[];
   technicalMovements: string[];
   executionFee: string | null;
-  feeLabel: 'Network fee' | 'Execution fee';
+  feeLabel: string;
+  totalFeeLabel: string | null;
+  transactionKind: 'approval' | 'action' | 'unknown';
+  l1DataFee: string | null;
+  operatorFee: string | null;
+  totalExecutionFee: string | null;
   feeCaveat: string | null;
   nativeValue: string | null;
+  nativeValueLabel: 'Bridge fee' | 'Native value sent';
 };
 
 export type ReceiptPositionIdentity = Pick<ConfirmedPositionHint, 'market' | 'side' | 'positionId' | 'transactionHash'>;
+export function shouldShowReceiptMovementFallback(receipts: readonly ReceiptPresentation[]): boolean {
+  return receipts.length > 0 && receipts.some((receipt) => receipt.transactionKind !== 'approval');
+}
 /** Hints are supplied by ProtocolPositionProvider only after receipt and current-owner verification. */
 export function verifiedReceiptPositionIdentity(input: {
   status: 'pending' | 'confirmed' | 'failed';
@@ -66,7 +75,11 @@ export function buildReceiptPresentation(input: {
   status: 'success' | 'reverted';
   transfers?: readonly ReceiptTransferFact[];
   executionCostWei?: bigint;
+  l1DataFeeWei?: bigint | null;
+  operatorFeeWei?: bigint | null;
   nativeValueWei?: bigint;
+  transactionKind?: 'approval' | 'action' | 'unknown';
+  bridgeFee?: boolean;
 }): ReceiptPresentation {
   const walletTokens = Object.values(FX_TOKENS).filter((token) => !token.native);
   const movements: string[] = [];
@@ -83,13 +96,34 @@ export function buildReceiptPresentation(input: {
       technicalMovements.push(`${transfer.from} → ${transfer.to}: token ${transfer.token}, ${transfer.amountRaw.toString()} base units`);
     }
   }
+  const base = input.chainId === 8453;
+  const executionFee = input.executionCostWei;
+  const l1DataFee = typeof input.l1DataFeeWei === 'bigint' && input.l1DataFeeWei >= 0n ? input.l1DataFeeWei : undefined;
+  const operatorFee = typeof input.operatorFeeWei === 'bigint' && input.operatorFeeWei >= 0n ? input.operatorFeeWei : undefined;
+  const totalExecutionFee = base && executionFee !== undefined && l1DataFee !== undefined && operatorFee !== undefined
+    ? executionFee + l1DataFee + operatorFee
+    : undefined;
+  const feeSubject = input.transactionKind === 'approval' ? 'Token approval'
+    : input.transactionKind === 'action' ? 'Action' : undefined;
+  const feeLabel = feeSubject
+    ? `${feeSubject} ${base ? 'execution' : 'network'} fee`
+    : base ? 'Execution fee' : 'Network fee';
+  const feeCaveat = base && totalExecutionFee === undefined
+    ? 'Partial fee data: this receipt does not include every gas, L1 data, and operator fee component.'
+    : null;
   return {
     movements,
     technicalMovements,
-    executionFee: input.executionCostWei === undefined ? null : `${compactAmount(input.executionCostWei, 18)} ETH`,
-    feeLabel: input.chainId === 8453 ? 'Execution fee' : 'Network fee',
-    feeCaveat: input.chainId === 8453 && input.executionCostWei !== undefined ? 'Base L1 and operator fees are not included.' : null,
+    executionFee: executionFee === undefined ? null : `${compactAmount(executionFee, 18)} ETH`,
+    feeLabel,
+    totalFeeLabel: totalExecutionFee === undefined ? null : `${feeSubject ? `${feeSubject} ` : ''}total execution fee`,
+    transactionKind: input.transactionKind ?? 'unknown',
+    l1DataFee: l1DataFee === undefined ? null : `${compactAmount(l1DataFee, 18)} ETH`,
+    operatorFee: operatorFee === undefined ? null : `${compactAmount(operatorFee, 18)} ETH`,
+    totalExecutionFee: totalExecutionFee === undefined ? null : `${compactAmount(totalExecutionFee, 18)} ETH`,
+    feeCaveat,
     nativeValue: input.status === 'success' && input.nativeValueWei && input.nativeValueWei > 0n
       ? `${compactAmount(input.nativeValueWei, 18)} ETH` : null,
+    nativeValueLabel: input.bridgeFee ? 'Bridge fee' : 'Native value sent',
   };
 }

@@ -1,8 +1,12 @@
 import playwright from '../apps/mini-app/node_modules/@playwright/test/index.js';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+const require = createRequire(import.meta.url);
+const { configuredBrowserChannel } = require('./e2e_browser_channel.cjs');
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const output = path.resolve(process.env.FX_SCREENSHOT_OUTPUT_DIR || path.join(root, 'docs', 'assets'));
@@ -96,7 +100,11 @@ function loadPositionManifest(configuredPath) {
 }
 
 mkdirSync(output, { recursive: true });
-const browser = await playwright.chromium.launch({ args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+const browserChannel = configuredBrowserChannel();
+const browser = await playwright.chromium.launch({
+  args: ['--no-sandbox', '--disable-dev-shm-usage'],
+  ...(browserChannel ? { channel: browserChannel } : {}),
+});
 
 async function createCaptureContext({ viewport, theme }) {
   const colorScheme = theme === 'light' ? 'light' : 'dark';

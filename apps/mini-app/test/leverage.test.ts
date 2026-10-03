@@ -5,21 +5,34 @@ import { positionPoolAddress } from "../src/lib/fx/policy";
 import type { FxPublicClient } from "../src/lib/fx/types";
 
 const POSITION_FLOWS = [
-  { market: "ETH", side: "long", expected: { min: 1.1, max: 6.8 } },
-  { market: "ETH", side: "short", expected: { min: 0.1, max: 6.9 } },
-  { market: "BTC", side: "long", expected: { min: 1.1, max: 6.8 } },
-  { market: "BTC", side: "short", expected: { min: 0.1, max: 6.9 } },
+  { market: "ETH", side: "long", expected: { min: 1.1, max: 6.1 } },
+  { market: "ETH", side: "short", expected: { min: 0.1, max: 6.0 } },
+  { market: "BTC", side: "long", expected: { min: 1.1, max: 6.1 } },
+  { market: "BTC", side: "short", expected: { min: 0.1, max: 6.0 } },
 ] as const;
+const WAD = 10n ** 18n;
 
 test("derives a conservative editable bound from live debt-ratio limits", () => {
   const long = leverageBoundsFromRatios(25_600_000_000_000_000n, 855_000_000_000_000_000n, "long");
   assert.equal(long.source, "live");
   assert.equal(long.min, 1.1);
-  assert.equal(long.max, 6.8);
+  assert.equal(long.max, 6.1);
 
   const short = leverageBoundsFromRatios(90_909_090_909_090_909n, 875_000_000_000_000_000n, "short");
   assert.equal(short.min, 0.1);
-  assert.equal(short.max, 6.9);
+  assert.equal(short.max, 6.0);
+  // The displayed tenth stays below the guarded hard pool ratio after the
+  // default 0.5% route slippage; the next tenth would cross the estimate.
+  const guardNumerator = 9_900n * 9_950n;
+  const guardDenominator = 10_000n * 10_050n;
+  const guardedLongMax = 855_000_000_000_000_000n * guardNumerator / guardDenominator;
+  assert.ok(51n * WAD <= guardedLongMax * 61n);
+  assert.ok(52n * WAD > guardedLongMax * 62n);
+  const guardedShortMax = 875_000_000_000_000_000n * guardNumerator / guardDenominator;
+  assert.ok(60n * WAD <= guardedShortMax * 70n);
+  assert.ok(61n * WAD > guardedShortMax * 71n);
+  assert.equal(leverageBoundsFromRatios(25_600_000_000_000_000n, 855_000_000_000_000_000n, "long", 2).max, 5.3);
+  assert.equal(leverageBoundsFromRatios(90_909_090_909_090_909n, 875_000_000_000_000_000n, "short", 2).max, 4.9);
 });
 
 test("clamps pasted leverage values to the current pool guard", () => {
@@ -27,6 +40,12 @@ test("clamps pasted leverage values to the current pool guard", () => {
   assert.equal(clampLeverage(20, bounds), bounds.max);
   assert.equal(clampLeverage(0.01, bounds), bounds.min);
   assert.equal(clampLeverage(Number.NaN, bounds), bounds.min);
+  // A previously selected legacy ceiling is clamped immediately when the
+  // conservative live/fallback ceiling arrives after a market/side change.
+  assert.equal(clampLeverage(6.8, { min: 1.1, max: 6.1 }), 6.1);
+  assert.equal(clampLeverage(6.9, { min: 0.1, max: 6.0 }), 6.0);
+  assert.equal(clampLeverage(6.1, leverageBoundsFor("ETH", "long", 2)), 5.3);
+  assert.equal(clampLeverage(6, leverageBoundsFor("ETH", "short", 2)), 4.9);
 });
 
 test("defines a safe fallback range for all four position flows", () => {

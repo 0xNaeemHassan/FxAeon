@@ -25,6 +25,7 @@ const mocks: Record<string, string> = {
       h.adapterRerender = () => redraw((version) => version + 1);
       return { ready: h.ready, wallets: h.wallets };
     }
+    export function useModalStatus() { return { isOpen: false }; }
     export function useSendTransaction() { return { sendTransaction: async () => ({ hash: '0x' + '1'.repeat(64) }) }; }
     export function useLogout() { const h = globalThis.__privyHarness; return { logout: async () => {
       h.logoutCalls += 1;
@@ -61,7 +62,7 @@ const mocks: Record<string, string> = {
       };
     }
   `,
-  '@/lib/fx/config': `export const assertLocalForkRpcUrl = (url) => url;`,
+  '@/lib/fx/config': `export const assertLocalForkRpcUrl = (url) => url; export const configuredRpcUrls = () => ['https://eth-mainnet.g.alchemy.com/v2/harness'];`,
   './switchBrowserChain': `export const switchBrowserChain = async () => {};`,
   './eip6963': `
     export const eip6963FocusTrapDestination = () => null;

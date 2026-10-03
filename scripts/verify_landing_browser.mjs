@@ -3,10 +3,12 @@ import { spawn } from 'node:child_process';
 import { mkdir } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
+import { configuredBrowserChannel } from './e2e_browser_channel.cjs';
 
 const root = resolve(import.meta.dirname, '..');
 const require = createRequire(resolve(root, 'apps/mini-app/package.json'));
 const { chromium } = require('@playwright/test');
+const browserChannel = configuredBrowserChannel();
 const port = process.env.LANDING_TEST_PORT || '4319';
 const origin = `http://127.0.0.1:${port}`;
 const output = resolve(root, 'artifacts/landing');
@@ -41,7 +43,7 @@ try {
     server.stderr.on('data', (chunk) => process.stderr.write(chunk));
   });
 
-  browser = await chromium.launch();
+  browser = await chromium.launch(browserChannel ? { channel: browserChannel } : {});
   const context = await browser.newContext({ reducedMotion: 'reduce' });
   const page = await context.newPage();
   const errors = [];

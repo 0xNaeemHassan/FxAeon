@@ -21,6 +21,13 @@ export function deriveAlchemyWebSocketUrl(chainId: WalletAssetChain, input?: str
   } catch { return null; }
 }
 
+export function deriveAlchemyWebSocketUrls(chainId: WalletAssetChain): string[] {
+  const inputs = chainId === 1
+    ? [process.env.NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL, process.env.NEXT_PUBLIC_ALCHEMY2_ETHEREUM_RPC_URL]
+    : [process.env.NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL, process.env.NEXT_PUBLIC_ALCHEMY2_BASE_RPC_URL];
+  return [...new Set(inputs.map((input) => deriveAlchemyWebSocketUrl(chainId, input)).filter((url): url is string => url !== null))];
+}
+
 type WebSocketLike = { onopen: (() => void) | null; onmessage: ((event: { data?: unknown }) => void) | null; onerror: (() => void) | null; onclose: (() => void) | null; send(data: string): void; close(code?: number, reason?: string): void };
 type Timer = ReturnType<typeof setTimeout>;
 const WALLET_ADDRESS = /^0x[0-9a-f]{40}$/i;
@@ -41,11 +48,12 @@ export function createAlchemyChainPulse(options: {
   const cancelSchedule = options.cancelSchedule ?? ((timer) => clearTimeout(timer));
   const now = options.now ?? Date.now;
   const random = options.random ?? Math.random;
-  const websocketUrl = deriveAlchemyWebSocketUrl(options.chainId);
+  const websocketUrls = deriveAlchemyWebSocketUrls(options.chainId);
   let socket: WebSocketLike | null = null;
   let retry: Timer | null = null;
   let watchdog: Timer | null = null;
   let retryAttempt = 0;
+  let websocketIndex = 0;
   let active = false;
   let disposed = false;
   let state = stateFor(options.chainId);
@@ -53,14 +61,21 @@ export function createAlchemyChainPulse(options: {
   const update = (patch: Partial<RealtimeChainState>) => { state = { ...state, ...patch, revision: state.revision + 1 }; options.onState(state); };
   const close = () => { if (watchdog !== null) { cancelSchedule(watchdog); watchdog = null; } const current = socket; socket = null; if (!current) return; current.onopen = null; current.onmessage = null; current.onerror = null; current.onclose = null; try { current.close(1000, 'FxAeon realtime feed paused'); } catch { /* already closed */ } };
   const clearRetry = () => { if (retry !== null) { cancelSchedule(retry); retry = null; } };
-  const reconnect = () => { if (!active || disposed || retry !== null) return; const delay = realtimeReconnectDelay(retryAttempt, random); retryAttempt += 1; update({ status: 'polling', transport: 'polling', reconnectAttempt: retryAttempt }); retry = schedule(() => { retry = null; connect(); }, delay); };
+  const reconnect = () => {
+    if (!active || disposed || retry !== null) return;
+    if (websocketUrls.length > 1) websocketIndex = (websocketIndex + 1) % websocketUrls.length;
+    const delay = realtimeReconnectDelay(retryAttempt, random);
+    retryAttempt += 1;
+    update({ status: 'polling', transport: 'polling', reconnectAttempt: retryAttempt });
+    retry = schedule(() => { retry = null; connect(); }, delay);
+  };
   const emit = (kind: 'block' | 'transfer', blockNumber: bigint | null, removed = false) => { const at = now(); update({ latestBlockNumber: blockNumber ?? state.latestBlockNumber, lastEventAt: at, lastTransferAt: kind === 'transfer' ? at : state.lastTransferAt }); options.onEvent({ chainId: options.chainId, kind, blockNumber, removed, at }); };
   const connect = () => {
     if (!active || disposed || socket) return;
-    if (!websocketUrl) { update({ status: 'unavailable', transport: null }); return; }
+    if (!websocketUrls.length) { update({ status: 'unavailable', transport: null }); return; }
     update({ status: retryAttempt ? 'polling' : 'connecting', transport: retryAttempt ? 'polling' : 'websocket', reconnectAttempt: retryAttempt });
     let current: WebSocketLike;
-    try { current = createSocket(websocketUrl); } catch { reconnect(); return; }
+    try { current = createSocket(websocketUrls[websocketIndex]); } catch { reconnect(); return; }
     socket = current;
     const subscriptions = new Map<string, number>();
     const armWatchdog = () => {

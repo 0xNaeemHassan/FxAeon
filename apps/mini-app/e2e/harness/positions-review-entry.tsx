@@ -18,7 +18,7 @@ const fixturePositions = [
 
 declare global {
   var __positionsReviewHarness: {
-    wallet: { ready: boolean; authenticated: boolean; address: string; chainId: number; connectionVersion: number };
+    wallet: { ready: boolean; authenticated: boolean; address: string; chainId: number; connectionVersion: number; isEmbedded: boolean };
     shared: Record<string, unknown>;
     walletRequests: number;
     rerender?: () => void;
@@ -26,7 +26,7 @@ declare global {
 }
 
 globalThis.__positionsReviewHarness = {
-  wallet: { ready: true, authenticated: true, address: account, chainId: 1, connectionVersion: 1 },
+  wallet: { ready: true, authenticated: true, address: account, chainId: 1, connectionVersion: 1, isEmbedded: false },
   shared: {
     walletAddress: account, positions: fixturePositions, pendingPositions: [], status: 'ready', failedGroups: [],
     lastVerifiedAt: Date.now(), refreshing: false, refresh: async () => ({ positions: fixturePositions }),

@@ -7,7 +7,9 @@ import TokenIcon from '@/components/TokenIcon';
 import ConnectWalletButton from '@/components/ConnectWalletButton';
 import { MetricRows, PageHeading, ProductNav, ProductSurface, StatusNotice } from '@/components/ProductUI';
 import { freshDisplayPrices } from '@/lib/displayPrices';
-import { calculateNativeMax } from '@/lib/fx/nativeMax';
+import { calculateNativeMax, nativeMaxErrorMessage } from '@/lib/fx/nativeMax';
+import { fetchGasTierQuotes, selectedGasTierQuote } from '@/lib/fx/gasFeePolicy';
+import { readGasTier } from '@/lib/settings';
 import { estimatePlannedRouteCost } from '@/lib/fx';
 import { ActionReview, type ActionReviewStage } from '@/components/ActionReview';
 import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
@@ -383,7 +385,7 @@ export default function BorrowPage() {
   const maxRequest = useRef(0);
   const maxMounted = useRef(true);
   const maxContext = useRef('');
-  const maxContextKey = JSON.stringify([wallet.address, wallet.chainId, market, selectedKey, token, deposit, mint, balanceSnapshot.balances.ETH?.amount]);
+  const maxContextKey = JSON.stringify([wallet.address, wallet.chainId, wallet.isEmbedded, market, selectedKey, token, deposit, mint, balanceSnapshot.balances.ETH?.amount]);
   maxContext.current = maxContextKey;
   useEffect(() => { maxMounted.current = true; return () => { maxMounted.current = false; maxRequest.current += 1; }; }, []);
   useEffect(() => { maxRequest.current += 1; setNativeMaxPending(false); setNativeMaxError(null); }, [maxContextKey]);
@@ -405,15 +407,20 @@ export default function BorrowPage() {
             userAddress: wallet.address!, depositTokenAddress: tokenAddress('ETH'), depositAmount: amountWei, mintAmount: debtWei });
           return Array.isArray(route) ? route : [route];
         },
-        estimateRoutes: (routes) => Promise.all(routes.map((route) => estimatePlannedRouteCost(route))), isCurrent: current,
+        estimateRoutes: async (routes, signal) => {
+          const feeTierQuote = wallet.isEmbedded
+            ? selectedGasTierQuote(await fetchGasTierQuotes(1), readGasTier())
+            : undefined;
+          return Promise.all(routes.map((route) => estimatePlannedRouteCost(route, { feeTierQuote, signal })));
+        }, isCurrent: current,
       });
       if (!current()) return;
       setNativeMaxPending(false);
       setDeposit(formatUnits(maximum, 18));
-    } catch {
-      if (current()) setNativeMaxError('Max is unavailable until current network fees are verified. Retry or enter an amount.');
+    } catch (error) {
+      if (current()) setNativeMaxError(nativeMaxErrorMessage(error));
     } finally { if (current()) setNativeMaxPending(false); }
-  }, [balanceSnapshot.balances.ETH, deposit, market, mint, nativeMaxPending, selected, selectedKey, selectedStale, token, wallet.address]);
+  }, [balanceSnapshot.balances.ETH, deposit, market, mint, nativeMaxPending, selected, selectedKey, selectedStale, token, wallet.address, wallet.isEmbedded]);
 
   const planBuilder = useMemo(() => {
     if (!wallet.address) return null;

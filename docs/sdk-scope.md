@@ -4,7 +4,7 @@ FxAeon exposes a deliberately narrow, reviewable surface from the official f(x) 
 
 - `AladdinDAO/fx-sdk-skill` — commit `e2c4a6085950a40f238bda1c9159305f6c8acf1f`
 - `AladdinDAO/fx-sdk` — commit `53c0b9805a169e75ad375c92c241e1292b66405f`
-- Installed package `@aladdindao/fx-sdk@1.0.5`, plus the reviewed short-pool correction, diagnostic-log removal, and exact debt-ratio packing fix in `patches/@aladdindao__fx-sdk.patch`
+- Installed package `@aladdindao/fx-sdk@1.0.5`, plus the reviewed short-pool correction, diagnostic-log removal, exact debt-ratio packing fix, and chain-bound shared RPC transport support in `patches/@aladdindao__fx-sdk@1.0.5.patch`
 
 The debt-ratio packing fix is a local correction, not a claim that the pinned
 upstream commit contains it. The SDK combines two 60-bit integer limits into

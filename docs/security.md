@@ -35,8 +35,8 @@ signing. Position value is not P&L, ROI, health, or liquidation value.
 
 ## Browser and release controls
 
-- Public RPC endpoints are restricted to the reviewed HTTPS Alchemy host for
-  the selected chain; the client checks the reported chain ID at financial
+- Public RPC endpoints are restricted to reviewed HTTPS Alchemy and Infura
+  hosts for the selected chain; the client checks the reported chain ID at financial
   boundaries. Browser-visible API keys must be origin-restricted and quota
   limited.
 - `NEXT_PUBLIC_*` settings are public build inputs. Privy secrets,
@@ -55,3 +55,24 @@ Do not log Telegram launch data, authentication tokens, private material,
 unredacted wallet history, or unnecessary transaction details. Report
 vulnerabilities privately using the process in the repository's
 [`SECURITY.md`](../SECURITY.md).
+
+## Temporary dependency backport (3 October 2026)
+
+`braces@3.0.3` is used by Tailwind, Chokidar, and Next's ESLint tooling.
+[GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)
+describes stack exhaustion from deeply nested input. There is no published
+3.0.4 in npm at this review date, even though npm's audit response names that
+version. We backport only the five `lib/` changes from
+[upstream PR 72, commit d0d575e](https://github.com/micromatch/braces/commit/d0d575e55e74a4e0218e5248fafb79efc3e54ebb)
+to the exact installed version via `patches/braces@3.0.3.patch`. This is an
+unreleased upstream contribution, not an official patched release.
+
+`pnpm run audit:all` checks all four affected dependency paths, installed
+source hashes, string/AST attack inputs, the allowed boundary, and ordinary
+glob expansion before ignoring **only that advisory** in the registry audit.
+The raw `pnpm audit` command still reports it because the package version
+remains 3.0.3. Every other high/critical finding and registry failure blocks
+CI. Version changes, missing/tampered patches, or a failing regression also
+block the gate. The mitigation expires on 3 November 2026; replace it with
+the official release and remove the patch, exception, and gate helper when
+one becomes available. Hono is pinned to 4.13.7 for GHSA-hxh3-vqpv-xpqv.

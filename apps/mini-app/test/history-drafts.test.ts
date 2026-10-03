@@ -9,6 +9,7 @@ import {
   restoreSignatureRequiredDraftFromSearch,
   removeSignatureRequiredDraft,
   saveSignatureRequiredDraft,
+  shouldRemoveSignatureDraft,
   signatureDraftIdFromSearch,
   signatureDraftResumePath,
 } from "../src/lib/fx/drafts";
@@ -54,6 +55,12 @@ test("signature-required history drafts are scoped and contain no executable req
     operation: "increasePosition",
     actionKey: "increasePosition:1:1000:2x",
   })?.draft.id, draft.id);
+});
+
+test("an approval-only partial route keeps its editable resume draft until action submission or completion", () => {
+  assert.equal(shouldRemoveSignatureDraft({ actionSubmitted: false, routeCompleted: false }), false);
+  assert.equal(shouldRemoveSignatureDraft({ actionSubmitted: true, routeCompleted: false }), true);
+  assert.equal(shouldRemoveSignatureDraft({ actionSubmitted: false, routeCompleted: true }), true);
 });
 
 test("numeric UI draft values preserve bounded decimal controls", () => {

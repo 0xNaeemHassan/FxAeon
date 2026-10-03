@@ -78,7 +78,7 @@ const quickChecks = await runGroup([
   { args: ['exec', 'node', '--test', 'scripts/verify_frontend_secrets.test.mjs', 'scripts/launch_readiness.test.mjs'], label: 'Launch readiness contracts' },
   { args: ['exec', 'node', 'scripts/verify_frontend_secrets.mjs'], label: 'Frontend secret scan' },
   {
-    args: ['audit', '--prod', '--audit-level=high'],
+    args: ['run', 'audit:all'],
     label: 'dependency audit',
   },
 ], 'parallel lightweight checks');
@@ -111,6 +111,8 @@ const isolatedBrowserChecks = [
   { args: ['test:e2e:borrow-harness'], label: 'Borrow selection browser harness' },
   { args: ['test:e2e:move-harness'], label: 'Move review layout browser harness' },
   { args: ['test:e2e:positions-harness'], label: 'Positions review layout browser harness' },
+  { args: ['test:e2e:privy-send-harness'], label: 'Privy embedded send adapter browser harness' },
+  { args: ['test:e2e:trade-harness'], label: 'Trade native Max lifecycle browser harness' },
   { args: ['test:e2e:overlay'], label: 'Overlay lifecycle browser harness' },
   { args: ['test:e2e:state-lab'], label: 'UI state lab browser suite' },
 ];

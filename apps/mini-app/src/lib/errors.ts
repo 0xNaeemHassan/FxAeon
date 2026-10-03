@@ -14,5 +14,11 @@ export function userSafeError(cause: unknown, fallback: string): string {
   ) {
     return fallback;
   }
+  if (/^Your [xs]POSITION leverage is higher than the maximum leverage allowed, please lower your leverage level\.$/.test(message)) {
+    return 'Lower the target leverage for this amount.';
+  }
+  if (/^Your [xs]POSITION leverage is lower than the minimum leverage required, please increase your leverage level\.$/.test(message)) {
+    return 'Increase the target leverage for this amount.';
+  }
   return message;
 }

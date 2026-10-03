@@ -9,6 +9,7 @@ import { AccountSummary, SessionControl } from '@/components/AccountControls';
 import AppearancePreference from '@/components/AppearancePreference';
 import { Disclosure, PageHeading, ProductSurface } from '@/components/ProductUI';
 import { MissingValue } from '@/components/MissingValue';
+import { usePrivyWallet } from '@/lib/wallet';
 import { useLocale } from '@/lib/i18n';
 import { haptic } from '@/lib/telegram';
 import { announceSettingsUpdated, GAS_TIERS, readGasTier, readSlippagePercent, SETTINGS_KEY, type GasTier } from '@/lib/settings';
@@ -29,6 +30,8 @@ function formatGwei(value: bigint): string {
 
 export default function SettingsPage() {
   const { t } = useLocale();
+  const wallet = usePrivyWallet();
+  const showGasSettings = !wallet.address || wallet.isEmbedded;
   const [ready, setReady] = useState(false);
   const [slippageBps, setSlippageBps] = useState(50);
   const [savedBps, setSavedBps] = useState(50);
@@ -41,7 +44,7 @@ export default function SettingsPage() {
   const [gasError, setGasError] = useState(false);
   const gasRefreshRef = useRef<ReturnType<typeof createCoalescedRefresh<GasTierQuotes>> | null>(null);
   const id = useId();
-  const dirty = slippageBps !== savedBps || gasTier !== savedGasTier;
+  const dirty = slippageBps !== savedBps || (showGasSettings && gasTier !== savedGasTier);
   useEffect(() => {
     const value = Math.round(readSlippagePercent() * 100);
     const tier = readGasTier();
@@ -52,6 +55,7 @@ export default function SettingsPage() {
     void gasRefreshRef.current?.refresh();
   }, []);
   useEffect(() => {
+    if (!showGasSettings) return;
     const refresh = createCoalescedRefresh<GasTierQuotes>({
       fetch: () => fetchGasTierQuotes(1),
       onStart: () => { setGasLoading(true); setGasError(false); },
@@ -70,7 +74,7 @@ export default function SettingsPage() {
       refresh.dispose();
       if (gasRefreshRef.current === refresh) gasRefreshRef.current = null;
     };
-  }, [refreshGas]);
+  }, [refreshGas, showGasSettings]);
   const select = (value: number) => { setSlippageBps(value); setSaved(false); setError(''); haptic('selection'); };
   const selectGas = (value: GasTier) => { setGasTier(value); setSaved(false); setError(''); haptic('selection'); };
   const save = () => {
@@ -83,9 +87,9 @@ export default function SettingsPage() {
         const parsed: unknown = JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || '{}');
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) previous = parsed as Record<string, unknown>;
       } catch { /* A corrupt old value can be replaced by the selected preference. */ }
-      window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...previous, slippageBps, gasTier }));
-      announceSettingsUpdated(slippageBps, gasTier);
-      setSavedBps(slippageBps); setSavedGasTier(gasTier); setSaved(true); haptic('success');
+      window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...previous, slippageBps, ...(showGasSettings ? { gasTier } : {}) }));
+      announceSettingsUpdated(slippageBps, showGasSettings ? gasTier : undefined);
+      setSavedBps(slippageBps); if (showGasSettings) setSavedGasTier(gasTier); setSaved(true); haptic('success');
     } catch {
       setSaved(false);
       setError('This browser blocked local preference storage. Your changes have not been saved. Your wallet and onchain state were not affected.');
@@ -117,7 +121,7 @@ export default function SettingsPage() {
               }}>{bps / 100}%</button>)}
           </div>
           <p className={styles.scope}>Trade, Positions, and eligible fxSAVE; saved on this device.</p>
-          <div className={styles.gasPreference}>
+          {showGasSettings && <div className={styles.gasPreference}>
             <div className={styles.preferenceHeading}>
               <h3 id={`${id}-gas`}>Gas speed</h3>
               <button type="button" className={styles.refresh} onClick={refreshGas} disabled={gasLoading} aria-label={gasError ? 'Retry gas fees' : 'Refresh gas fees'}>{gasError ? 'Retry' : 'Refresh'}</button>
@@ -135,7 +139,7 @@ export default function SettingsPage() {
                 <span className={styles.gasRate}>{gas ? formatGwei(gas.tiers[tier].gasPriceWei) : <MissingValue width="xs" status={gasLoading ? 'loading' : 'unavailable'} label={`${tier} gas fee ${gasLoading ? 'loading' : 'unavailable'}`} />}</span>
               </button>)}
             </div>
-          </div>
+          </div>}
           <Button onClick={save} disabled={!ready || !dirty} className={styles.save}>Save preferences</Button>
           {error && <p role="alert" className={styles.error}>{error}</p>}
         </ProductSurface>

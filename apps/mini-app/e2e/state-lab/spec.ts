@@ -49,7 +49,7 @@ test('catalogs deterministic data states through the real provider-independent a
   const receipt = page.getByRole('region', { name: 'Receipt detail fixtures' });
   await expect(receipt).toContainText('sent 1.2345 USDC');
   await expect(receipt).toContainText('Execution fee: 0.000021 ETH');
-  await expect(receipt).toContainText('Base L1 and operator fees are not included.');
+  await expect(receipt).toContainText('Partial fee data: this receipt does not include every gas, L1 data, and operator fee component.');
   await expect(receipt).toContainText('Token movement available in technical details');
   await receipt.getByText('Technical movement details', { exact: true }).click();
   await expect(receipt).toContainText('0x3333333333333333333333333333333333333333');
@@ -67,7 +67,10 @@ test('exposes transaction stage fixtures, themes, long values, and keyboard focu
   for (const stage of ['Editing', 'Preparing', 'Review', 'Wallet request', 'Submitted', 'Partial completion', 'Confirmed', 'Uncertain']) {
     await stages.selectOption({ label: stage });
     await expect(page.getByText(`Selected fixture: ${stage}.`)).toBeVisible();
-    if (stage === 'Partial completion') await expect(page.getByRole('status').getByText('Partially completed', { exact: true })).toBeVisible();
+    if (stage === 'Partial completion') {
+      await expect(page.getByRole('status').getByText('Approval confirmed', { exact: true })).toBeVisible();
+      await expect(page.getByRole('status')).toContainText('Action not submitted. The approval is on-chain; review each step before continuing.');
+    }
     if (stage === 'Confirmed') await expect(page.getByRole('status').getByText('Confirmed', { exact: true })).toBeVisible();
     if (stage === 'Submitted') await expect(page.getByRole('status').getByText('Submitted', { exact: true })).toBeVisible();
     if (stage === 'Uncertain') await expect(page.getByRole('status').getByText('Confirmation unknown', { exact: true })).toBeVisible();

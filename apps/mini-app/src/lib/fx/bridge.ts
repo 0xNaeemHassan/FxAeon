@@ -12,9 +12,9 @@ import {
   type Hex,
   type PublicClient,
 } from "viem";
-import { getFxSdk } from "./sdk";
-import { assertPublicClientChain, assertRpcUrlChain } from "./clients";
-import { assertAlchemyRpcUrl } from "./config";
+import { asFxSdkRpcTransport, getFxSdk } from "./sdk";
+import { assertPublicClientChain, getRpcTransport } from "./clients";
+import { configuredRpcUrls } from "./config";
 import { assertAddress, assertDifferentChains, assertPositiveAmount, validateExactApproval } from "./validation";
 import { normalizeSdkTransaction } from "./normalize";
 import type {
@@ -210,12 +210,16 @@ export async function validateAdvancedBridgeContracts(params: {
   if (params.destinationClient.chain?.id !== undefined && params.destinationClient.chain.id !== params.destinationChainId) {
     throw new Error("advanced bridge destination RPC client chain does not match the selected destination chain");
   }
-  const sourceMetadata = await readOftMetadata({ client: params.sourceClient, address: sourceOftAddress, label: "source OFT" });
-  const destinationMetadata = await readOftMetadata({ client: params.destinationClient, address: destinationOftAddress, label: "destination OFT" });
+  const [sourceMetadata, destinationMetadata] = await Promise.all([
+    readOftMetadata({ client: params.sourceClient, address: sourceOftAddress, label: "source OFT" }),
+    readOftMetadata({ client: params.destinationClient, address: destinationOftAddress, label: "destination OFT" }),
+  ]);
   assertNonZeroAddress(sourceMetadata.localTokenAddress, "source OFT local token");
   assertNonZeroAddress(destinationMetadata.localTokenAddress, "destination OFT local token");
-  await assertDeployed18DecimalToken({ client: params.sourceClient, address: sourceMetadata.localTokenAddress, label: "source local token" });
-  await assertDeployed18DecimalToken({ client: params.destinationClient, address: destinationMetadata.localTokenAddress, label: "destination local token" });
+  await Promise.all([
+    assertDeployed18DecimalToken({ client: params.sourceClient, address: sourceMetadata.localTokenAddress, label: "source local token" }),
+    assertDeployed18DecimalToken({ client: params.destinationClient, address: destinationMetadata.localTokenAddress, label: "destination local token" }),
+  ]);
   if (params.sourceChainId === 1) {
     if (sourceMetadata.approvalRequired) {
       if (!ethereumApprovalTokenAddress) throw new Error("Ethereum OFTAdapter requires an explicit underlying approval token");
@@ -399,9 +403,10 @@ export async function planBridge(params: BridgePlanParams): Promise<BridgePlan> 
     : bridgeTokenKey(params.token)
       ? resolveBridgeApprovalTokenAddress(params.token, params.sourceChainId)
       : undefined;
-  if (!params.sourceRpcUrl) throw new Error("bridge source RPC URL is required");
-  const sourceRpcUrl = assertAlchemyRpcUrl(params.sourceRpcUrl, params.sourceChainId, "bridge source RPC URL");
-  await assertRpcUrlChain(sourceRpcUrl, params.sourceChainId);
+  const configuredSourceRpcUrls = configuredRpcUrls(params.sourceChainId);
+  if (params.sourceRpcUrl && !configuredSourceRpcUrls.includes(params.sourceRpcUrl)) {
+    throw new Error("bridge source RPC URL must match a configured provider for the selected chain");
+  }
   const expectedSendBytes = expectedBridgeSendBytes(params.token);
   const result = await getFxSdk().buildBridgeTx({
     sourceChainId: params.sourceChainId,
@@ -410,7 +415,8 @@ export async function planBridge(params: BridgePlanParams): Promise<BridgePlan> 
     amount: params.amount,
     recipient,
     refundAddress,
-    sourceRpcUrl,
+    sourceRpcUrl: configuredSourceRpcUrls[0],
+    sourceRpcTransport: asFxSdkRpcTransport(getRpcTransport(configuredSourceRpcUrls, params.sourceChainId)),
   });
   if (!result?.tx || typeof result.tx !== "object") {
     throw new Error("SDK returned a malformed bridge transaction");

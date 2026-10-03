@@ -26,7 +26,15 @@ export function resultPresentation(result: TransactionExecutionResult, bridge: b
   if (confirmationUnknown) return { title: 'Confirmation unknown', body: 'A transaction was submitted, but its receipt could not be verified. Check History from the wallet profile. Do not submit this action again.', tone: 'warning', icon: Clock3 };
   if (verificationIncomplete) return { title: 'Verification incomplete', body: 'A receipt exists, but the submitted transaction could not be fully verified. Check History. Do not submit this action again.', tone: 'warning', icon: AlertTriangle };
   if (finalityPending) return { title: 'Confirmation pending', body: 'A transaction was included, but finality could not be verified yet. Check History or the explorer and do not submit this action again.', tone: 'warning', icon: Clock3 };
-  if (result.status === 'partial') return { title: 'Partially completed', body: 'At least one earlier transaction confirmed before the route stopped. Do not repeat the full action; review each step below.', tone: 'warning', icon: AlertTriangle };
+  if (result.status === 'partial') {
+    const confirmedApproval = result.steps.some((step) => step.transaction.kind === 'approval' && step.status === 'confirmed');
+    const confirmedAction = result.steps.some((step) => step.transaction.kind === 'action' && step.status === 'confirmed');
+    const submittedAction = result.steps.some((step) => step.transaction.kind === 'action' && hasTransactionHash(step));
+    if (confirmedApproval && !confirmedAction && !submittedAction) {
+      return { title: 'Approval confirmed', body: 'Action not submitted. The approval is on-chain; review each step before continuing.', tone: 'warning', icon: AlertTriangle };
+    }
+    return { title: 'Partially completed', body: 'At least one earlier transaction confirmed before the route stopped. Do not repeat the full action; review each step below.', tone: 'warning', icon: AlertTriangle };
+  }
   if (reverted) return { title: 'Reverted', body: 'The submitted transaction reverted on-chain. No later step was submitted.', tone: 'danger', icon: XCircle };
   if (looksLikeWalletRejection(result.error)) return { title: 'Wallet request declined', body: 'This transaction was not submitted. No later step was opened.', tone: 'danger', icon: XCircle };
   return { title: 'Not submitted', body: userSafeError(result.error, 'The route stopped before a transaction could be confirmed.'), tone: 'danger', icon: CircleAlert };
