@@ -48,7 +48,8 @@ test.describe('ActionReview isolated orchestration', () => {
 
     const review = page.locator('.reviewInlineContent');
     const stepsSummary = review.getByText('Steps · 3', { exact: true });
-    await expect(stepsSummary).toBeVisible();
+    await expect(stepsSummary).toBeHidden();
+    await expect(review.locator('details[aria-label="Review details"]')).toHaveJSProperty('open', false);
     const advanced = review.locator('details').filter({ has: review.getByText('Advanced details', { exact: true }) });
     await expect(advanced).toHaveCount(0);
     await expect(review.getByText('Prepared transactions', { exact: true })).toHaveCount(0);
@@ -81,7 +82,7 @@ test.describe('ActionReview isolated orchestration', () => {
       harness.rerender?.();
     });
     await page.getByRole('button', { name: 'Review position', exact: true }).click();
-    await expect(review.getByText('Steps · 2', { exact: true })).toBeVisible();
+    await expect(review.getByText('Steps · 2', { exact: true })).toBeHidden();
     const representative = await readReviewedTransactions(review, { collapseAfterRead: false });
     expect(representative.map((transaction) => transaction.heading)).toEqual(['Approve fxUSD 1', 'Confirm 2']);
     expect(representative.map((transaction) => transaction.status)).toEqual(['Ready', 'Ready']);
@@ -179,6 +180,20 @@ test.describe('ActionReview isolated orchestration', () => {
     expect(box!.x + box!.width).toBeLessThanOrEqual(393);
     expect(box!.y).toBeGreaterThan(headerBox!.y + headerBox!.height);
     expect(box!.y + box!.height).toBeLessThanOrEqual(navBox!.y);
+    const review = page.locator('details[aria-label="Review details"]').locator('..');
+    const reviewBox = await review.boundingBox();
+    expect(reviewBox!.height, 'collapsed review should occupy at most half the mobile viewport').toBeLessThanOrEqual(426);
+    await expect(review.locator('summary').filter({ hasText: /^Steps ·/ })).toBeHidden();
+    const details = review.locator('details[aria-label="Review details"]');
+    await details.locator(':scope > summary').focus();
+    await page.keyboard.press('Enter');
+    await expect(details).toHaveJSProperty('open', true);
+    await page.keyboard.press('Enter');
+    await expect(details).toHaveJSProperty('open', false);
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const duration = await details.locator(':scope > summary svg').evaluate((node) => getComputedStyle(node).transitionDuration);
+    // The global reduced-motion reset uses 0.01ms to preserve end events.
+    expect(Number.parseFloat(duration)).toBeLessThanOrEqual(0.00001);
     expect(navBox!.y + navBox!.height).toBeLessThanOrEqual(852);
     await page.screenshot({ path: testInfo.outputPath('action-review-393x852.png') });
   });

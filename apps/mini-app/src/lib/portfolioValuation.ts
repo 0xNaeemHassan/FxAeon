@@ -10,19 +10,19 @@ const freshTimestamp = (timestamp: number | null | undefined, now: number, maxAg
 
 export type VerifiedPortfolioTotal = { walletAddress: string; totalUsd: number; verifiedAt: number };
 
-/** Retain a recent, complete total for this wallet while a refresh is in flight. */
+/** Retain a recent complete total through transient read failures as well as
+ * in-flight refreshes, without extending the original freshness window. */
 export function portfolioHeadlineTotal(
   currentTotalUsd: number | null,
   previous: VerifiedPortfolioTotal | null,
   walletAddress: string,
-  refreshing: boolean,
   now = Date.now(),
 ): { displayTotalUsd: number | null; verified: VerifiedPortfolioTotal | null } {
   if (typeof currentTotalUsd === 'number' && Number.isFinite(currentTotalUsd) && currentTotalUsd >= 0) {
     const verified = { walletAddress: walletAddress.toLowerCase(), totalUsd: currentTotalUsd, verifiedAt: now };
     return { displayTotalUsd: currentTotalUsd, verified };
   }
-  const keepPrevious = refreshing && previous?.walletAddress === walletAddress.toLowerCase()
+  const keepPrevious = previous?.walletAddress === walletAddress.toLowerCase()
     && freshTimestamp(previous.verifiedAt, now, ASSET_BALANCE_MAX_AGE_MS);
   return { displayTotalUsd: keepPrevious ? previous.totalUsd : null, verified: keepPrevious ? previous : null };
 }

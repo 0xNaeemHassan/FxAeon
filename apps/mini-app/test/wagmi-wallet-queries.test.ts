@@ -224,6 +224,8 @@ test("shares one Ethereum read between exact and canonical portfolio consumers",
   assert.equal(state.calls.filter((method) => method === "eth_chainId").length, 1);
   assert.equal(state.calls.filter((method) => method === "eth_getBalance").length, 1);
   assert.equal(state.calls.filter((method) => method === "eth_call").length, 1);
+  assert.deepEqual([...state.multicallTargets].sort(), Object.values(FX_TOKENS).filter((token) => !token.native).map((token) => token.address.toLowerCase()).sort());
+  assert.ok(state.multicallTargets.includes(FX_TOKENS.FXN.address.toLowerCase()));
   assert.equal(canonical.getCurrentResult().data?.chainId, 1);
   unsubscribeExact();
   unsubscribeCanonical();

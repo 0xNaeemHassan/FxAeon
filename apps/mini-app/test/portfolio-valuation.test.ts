@@ -126,18 +126,18 @@ test('keeps the subtotal unavailable when no verified fresh quote or balance exi
   });
 });
 
-test('keeps a recent verified portfolio headline visible during same-wallet refreshes only', () => {
+test('keeps a recent verified portfolio headline visible through same-wallet transient failures without renewing its timestamp', () => {
   const verified = { walletAddress: wallet, totalUsd: 26.29, verifiedAt: now };
-  assert.deepEqual(portfolioHeadlineTotal(null, verified, wallet, true, now + 1_000), {
+  assert.deepEqual(portfolioHeadlineTotal(null, verified, wallet, now + 1_000), {
     displayTotalUsd: 26.29, verified,
   });
-  assert.deepEqual(portfolioHeadlineTotal(null, verified, '0x0000000000000000000000000000000000000001', true, now + 1_000), {
+  assert.deepEqual(portfolioHeadlineTotal(null, verified, '0x0000000000000000000000000000000000000001', now + 1_000), {
     displayTotalUsd: null, verified: null,
   });
-  assert.deepEqual(portfolioHeadlineTotal(null, verified, wallet, false, now + 1_000), {
-    displayTotalUsd: null, verified: null,
+  assert.deepEqual(portfolioHeadlineTotal(null, verified, wallet, now + 1_000), {
+    displayTotalUsd: 26.29, verified,
   });
-  assert.deepEqual(portfolioHeadlineTotal(null, verified, wallet, true, now + 3 * 60_000), {
+  assert.deepEqual(portfolioHeadlineTotal(null, verified, wallet, now + 3 * 60_000), {
     displayTotalUsd: null, verified: null,
   });
 });

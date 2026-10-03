@@ -6,6 +6,10 @@
 export function userSafeError(cause: unknown, fallback: string): string {
   const raw = cause instanceof Error ? cause.message : typeof cause === 'string' ? cause : '';
   const message = raw.replace(/\s+/g, ' ').trim();
+  if ((cause instanceof Error && /^(AbortError|TimeoutError)$/.test(cause.name))
+    || /^(?:signal is aborted without reason|the operation was aborted\.?|the user aborted a request\.?)$/i.test(message)) {
+    return 'The request timed out or was interrupted. Try again.';
+  }
   if (
     !message
     || message.length > 280

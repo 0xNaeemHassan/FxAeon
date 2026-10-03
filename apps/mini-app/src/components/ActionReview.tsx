@@ -263,7 +263,6 @@ export function ActionReview(props: ActionReviewProps) {
 
   if (!route) return null;
   const stepCount = route.transactions.length;
-  const approvalCount = route.transactions.filter((transaction) => transaction.kind === 'approval').length;
   const feeTierQuote = wallet.isEmbedded && feeSelection?.snapshot.chainId === route.chainId
     ? feeSelection.snapshot.tiers[feeSelection.tier]
     : undefined;
@@ -299,9 +298,7 @@ export function ActionReview(props: ActionReviewProps) {
           <h3 ref={headingRef} data-review-focus tabIndex={-1} className="text-display outline-none">
             {reviewTitle ?? route.operation}
           </h3>
-          <p>{chainName(route.chainId)} · {stepCount} {stepCount === 1 ? 'transaction' : 'transactions'}
-            {approvalCount > 0 ? ` · ${approvalCount} approval${approvalCount === 1 ? '' : 's'}` : ''}
-          </p>
+          <p>{chainName(route.chainId)}</p>
         </div>
         <button type="button" disabled={loading} onClick={reset} className={presentationStyles.editButton}>
           <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Edit
@@ -368,9 +365,10 @@ export function ActionReview(props: ActionReviewProps) {
       {unsupportedNetwork && <p role="status" className="mt-2 rounded-xl border border-[rgba(255,194,102,.24)] bg-[var(--warn-dim)] px-3 py-2 text-[11.5px] leading-relaxed text-warn">Wallet network is unavailable or unsupported. Confirmation will request {chainName(route.chainId)} before signing.</p>}
 
       <PositionOutcomeSummary facts={positionChanges.paired} />
-      <DecisionContext beforeFacts={positionChanges.remainingBefore.length ? positionChanges.remainingBefore : undefined} />
-
+      <details className={presentationStyles.reviewDetails} aria-label="Review details">
+        <summary><span>Details</span><span>{stepCount} {stepCount === 1 ? 'transaction' : 'transactions'}<ChevronDown size={16} aria-hidden="true" /></span></summary>
       <div className={presentationStyles.disclosures}>
+      <DecisionContext beforeFacts={positionChanges.remainingBefore.length ? positionChanges.remainingBefore : undefined} />
       {/* Summary facts are already visible above. Keep Quote details for the
        * remaining exact route metadata so a fact has one deliberate home. */}
       <QuoteFactDetails facts={reviewFacts.details} />
@@ -386,14 +384,13 @@ export function ActionReview(props: ActionReviewProps) {
           const approval = approvalFacts(transaction);
           const progress = stepProgress(stepResults[index]);
           return (
-          <div key={`${transaction.to}-${index}`} role="group" aria-label={`Transaction ${index + 1}`} className={`${styles.reviewStep} border border-[var(--line)] p-3`}>
+          <div key={`${transaction.to}-${index}`} role="group" aria-label={`Transaction ${index + 1}`} className={presentationStyles.transactionStep}>
             <div className="flex items-center justify-between gap-3">
               <span className="text-[12px] font-semibold">{index + 1}. {stepTitle(transaction)}</span>
               <span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${progress.className}`}>{progress.icon}{progress.label}</span>
             </div>
             {approval && <p className="mt-1 text-[11px] text-mut">{approvalSummary(transaction, approval)} to <span className="font-mono">{compactAddress(approval.spender)}</span></p>}
             {transaction.value > 0n && <p className="mt-1 text-[11px] text-mut">Value sent: {trimDecimal(formatEther(transaction.value))} ETH <span className="text-[var(--mut-2)]">(native transaction value; gas is separate)</span></p>}
-            {transaction.kind !== 'approval' && <p className="mt-1 text-[11px] text-mut">Contract <span className="font-mono">{compactAddress(transaction.to)}</span></p>}
             <details className="mt-2 border-t border-[var(--line)] pt-2">
               <summary className="min-h-11 cursor-pointer text-[12px] text-mut">Transaction details</summary>
               <ReviewRow label="Contract" value={transaction.to} />
@@ -411,6 +408,7 @@ export function ActionReview(props: ActionReviewProps) {
       </details>
 
       </div>
+      </details>
 
       {!showExecutionProgress && !(stage === 'review' && status === 'reviewing') && <div className="mt-4"><StatusNotice {...progress} /></div>}
       {error && <div className="mt-3"><InlineError message={error} /></div>}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { Address } from 'viem';
@@ -40,6 +40,8 @@ import { useVerifiedWalletName } from '@/components/AccountControls';
 import headerWalletControl from '@/components/HeaderWalletControl.module.css';
 import { WalletAssetModal } from '@/components/WalletAssetDetails';
 import { useRefreshAction } from '@/lib/useRefreshAction';
+import { WalletExportAction } from '@/components/WalletExportAction';
+import { privyConfigured } from '@/lib/privyConfig';
 
 const WALLET_PROFILE_DEMAND = { expandedAssets: true, chainPulse: true, positions: true } as const;
 export default function WalletProfile() {
@@ -53,6 +55,9 @@ export default function WalletProfile() {
   const { walletProfileAddress: openWallet, setWalletProfileAddress: setOpenWallet } = useWalletProfileSession();
   const [disconnecting, setDisconnecting] = useState(false);
   const [disconnectError, setDisconnectError] = useState('');
+  const [exporting, setExporting] = useState(false);
+  const currentIdentity = useRef(walletIdentity);
+  currentIdentity.current = walletIdentity;
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const openedAtPathRef = useRef(pathname);
   // Hide immediately on account loss/change, then discard the old open state
@@ -221,6 +226,15 @@ export default function WalletProfile() {
             <nav className={presentation.links} aria-label="Wallet profile actions">
               <ActionRow icon={History} title="History" href="/history" />
               <ActionRow icon={Settings} title="Settings" href="/settings" />
+              {privyConfigured() && wallet.isEmbedded && <WalletExportAction address={activeAddress}
+                disabled={exporting || disconnecting}
+                onStart={() => flushSync(() => { setExporting(true); setDisconnectError(''); setOpenWallet(null); })}
+                onComplete={() => setExporting(false)}
+                onError={(message) => {
+                  if (currentIdentity.current !== walletIdentity) return;
+                  setDisconnectError(message);
+                  setOpenWallet(walletIdentity);
+                }} />}
             </nav>
             <a className={presentation.explorer} href={`${walletExplorer}/address/${wallet.address}`} target="_blank" rel="noopener noreferrer"
               onClick={(event) => { if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && openExternalLink(`${walletExplorer}/address/${wallet.address}`)) event.preventDefault(); }}>

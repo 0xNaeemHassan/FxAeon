@@ -12,7 +12,7 @@ import type { WalletBalancesResult } from '@/lib/fx/balances';
 import type { FxSaveClaimable } from '@/lib/fx';
 import type { CanonicalMoveBalanceMap } from '@/lib/moveBalances';
 import {
-  alchemyDataApiKey, fetchAlchemyWalletAssets, mergeCanonicalWalletAssets, walletAssetSourcesFailed,
+  mergeCanonicalWalletAssets,
   filterSupportedWalletAssets, type CanonicalAssetRead, type WalletAssetSnapshot,
 } from '@/lib/walletAssets';
 import { useUsdPrices } from '@/components/PriceProvider';
@@ -166,12 +166,7 @@ export function useInvalidateWalletData() {
   const client = useQueryClient();
   return useCallback(async (address: string, chainId: number) => {
     await invalidateWalletQueries(client, address, chainId, { afterReceipt: true });
-    await client.invalidateQueries({ queryKey: walletAssetsQueryKey(address), refetchType: 'active' });
   }, [client]);
-}
-
-export function walletAssetsQueryKey(address: string) {
-  return [WALLET_QUERY_ROOT, 'assets', address.toLowerCase()] as const;
 }
 
 export function useWalletAssets({ address, enabled = true }: { address?: string; enabled?: boolean } = {}): WalletAssetsHookResult {
@@ -196,7 +191,6 @@ function WalletAssetLayer({ address, enabled, expandedAssets, chainPulse, childr
   const priceRef = useRef({ prices, status: priceStatus, updatedAt: priceUpdatedAt, updatedAts: priceUpdatedAts });
   priceRef.current = { prices, status: priceStatus, updatedAt: priceUpdatedAt, updatedAts: priceUpdatedAts };
   const active = enabled && expandedAssets && Boolean(address) && session !== 'disconnected' && session.split(':')[0] === address?.toLowerCase();
-  const indexedEnabled = active && Boolean(alchemyDataApiKey());
   const pulseActive = enabled && chainPulse && Boolean(address) && session !== 'disconnected' && session.split(':')[0] === address?.toLowerCase();
   const [chainStates, setChainStates] = useState<Record<FxChainId, RealtimeChainState>>(EMPTY_CHAIN_STATE);
   const mergedRef = useRef<WalletAssetSnapshot | null>(null);
@@ -214,13 +208,6 @@ function WalletAssetLayer({ address, enabled, expandedAssets, chainPulse, childr
   // chain, and the interval remains a safety net if block polling fails.
   const ethereumFallbackInterval = chainStates[1].status === 'live' ? false : 30_000;
   const baseFallbackInterval = chainStates[8453].status === 'live' ? false : 30_000;
-  const indexed = useQuery({
-    queryKey: address ? [WALLET_QUERY_ROOT, 'assets', address.toLowerCase()] as const : [WALLET_QUERY_ROOT, 'assets', 'disconnected'] as const,
-    queryFn: ({ signal }) => fetchAlchemyWalletAssets(address ?? '', signal),
-    enabled: indexedEnabled,
-    // Discovery is event-driven; bounded polling is reserved for exact reads.
-    refetchInterval: false,
-  });
   const ethereum = useQuery({ ...canonicalWalletAssetQueryOptions(config, session, address ?? '', 1), enabled: active, refetchInterval: ethereumFallbackInterval });
   const base = useQuery({ ...canonicalWalletAssetQueryOptions(config, session, address ?? '', 8453), enabled: active, refetchInterval: baseFallbackInterval });
 
@@ -254,39 +241,14 @@ function WalletAssetLayer({ address, enabled, expandedAssets, chainPulse, childr
   const merged = useMemo(() => {
     if (!active || !address) return null;
     if (mergedRef.current?.walletAddress !== address.toLowerCase()) mergedRef.current = null;
-    // Keep the asset surface in its loading state until the first indexed or
-    // canonical response arrives. A pending read is not a failed balance.
-    if (!indexed.data && canonicalReads.length === 0) {
-      if (mergedRef.current) mergedRef.current = filterSupportedWalletAssets(mergedRef.current);
-      return mergedRef.current;
-    }
+    // Portfolio shares the targeted balance queries used by the forms.
+    // No all-token discovery, metadata pagination, or duplicate balance read.
     const previous = mergedRef.current ? filterSupportedWalletAssets(mergedRef.current) : null;
-    const source = indexed.data ?? previous;
-    const next = mergeCanonicalWalletAssets(source, address, canonicalReads, { prices, status: priceStatus, updatedAt: priceUpdatedAt, updatedAts: priceUpdatedAts });
-    // Indexed discovery does not necessarily include every canonical protocol
-    // asset. Carry those prior canonical rows through an index refresh/pending
-    // canonical read until an exact zero or replacement read removes them.
-    if (indexed.data && previous && previous.walletAddress === address.toLowerCase()) {
-      const indexedIds = new Set(indexed.data.assets.map((asset) => asset.id));
-      const canonicalOnly = previous.assets.filter((asset) => asset.source === 'canonical' && !indexedIds.has(asset.id));
-      if (canonicalOnly.length) {
-        // If an indexed refresh arrives before an exact reader has published
-        // its cached result, retain the row but mark that network pending. It
-        // must not make a stale discovery snapshot look fully verified.
-        const carriedReads = [...canonicalReads];
-        for (const chainId of [1, 8453] as const) {
-          if (canonicalOnly.some((asset) => asset.chainId === chainId) && !carriedReads.some((read) => read.chainId === chainId)) {
-            carriedReads.push({ chainId, balances: [], failedTokens: [], updatedAt: Date.now(), status: 'pending' });
-          }
-        }
-        const carried = mergeCanonicalWalletAssets({ ...indexed.data, assets: [...indexed.data.assets, ...canonicalOnly], source: 'mixed' }, address, carriedReads, { prices, status: priceStatus, updatedAt: priceUpdatedAt, updatedAts: priceUpdatedAts });
-        mergedRef.current = carried;
-        return carried;
-      }
-    }
+    if (canonicalReads.length === 0) return previous;
+    const next = mergeCanonicalWalletAssets(previous, address, canonicalReads, { prices, status: priceStatus, updatedAt: priceUpdatedAt, updatedAts: priceUpdatedAts });
     mergedRef.current = next;
     return next;
-  }, [active, address, canonicalReads, indexed.data, priceStatus, priceUpdatedAt, priceUpdatedAts, prices]);
+  }, [active, address, canonicalReads, priceStatus, priceUpdatedAt, priceUpdatedAts, prices]);
 
   const refresh = useCallback((chainId?: FxChainId): Promise<WalletAssetSnapshot | undefined> => {
     if (!active || !address || latestSession.current !== session) return Promise.resolve(undefined);
@@ -299,12 +261,10 @@ function WalletAssetLayer({ address, enabled, expandedAssets, chainPulse, childr
     const promise = (async () => {
       const chains = walletAssetRefreshChains(chainId);
       const tasks: Promise<unknown>[] = [
-        client.invalidateQueries({ queryKey: walletAssetsQueryKey(address), refetchType: 'active' }, { cancelRefetch: false }),
         ...chains.map((targetChainId) => invalidateWalletQueries(client, address, targetChainId)),
       ];
       await Promise.all(tasks);
       if (controller.signal.aborted || latestSession.current !== session) return undefined;
-      const nextIndexed = client.getQueryData<WalletAssetSnapshot>(walletAssetsQueryKey(address)) ?? null;
       const cachedCanonical = (chainId: FxChainId): CanonicalAssetRead | null => {
         const options = chainId === 1
           ? canonicalWalletAssetQueryOptions(config, session, address, 1)
@@ -329,7 +289,7 @@ function WalletAssetLayer({ address, enabled, expandedAssets, chainPulse, childr
       };
       const nextCanonical = [cachedCanonical(1), cachedCanonical(8453)]
         .filter((read): read is CanonicalAssetRead => Boolean(read));
-      return mergeCanonicalWalletAssets(nextIndexed, address, nextCanonical, priceRef.current);
+      return mergeCanonicalWalletAssets(mergedRef.current, address, nextCanonical, priceRef.current);
     })().finally(() => {
       if (requestRef.current.get(requestKey)?.controller === controller) requestRef.current.delete(requestKey);
     });
@@ -396,9 +356,9 @@ function WalletAssetLayer({ address, enabled, expandedAssets, chainPulse, childr
     : merged ? Object.values(merged.networks).some((network) => network.status === 'pending') ? 'loading'
       : Object.values(merged.networks).some((network) => network.status === 'unavailable') ? 'unavailable'
         : Object.values(merged.networks).some((network) => network.status === 'partial') ? 'partial' : 'ready'
-      : walletAssetSourcesFailed(indexedEnabled, indexed.isError, ethereum.isError, base.isError) ? 'unavailable' : 'loading';
+      : ethereum.isError && base.isError ? 'unavailable' : 'loading';
   const error = '';
-  const value = useMemo<WalletAssetsHookResult>(() => ({ data: merged, status, isFetching: indexed.isFetching || ethereum.isFetching || base.isFetching, error, refresh }), [base.isFetching, error, ethereum.isFetching, indexed.isFetching, merged, refresh, status]);
+  const value = useMemo<WalletAssetsHookResult>(() => ({ data: merged, status, isFetching: ethereum.isFetching || base.isFetching, error, refresh }), [base.isFetching, error, ethereum.isFetching, merged, refresh, status]);
   return <WalletAssetsContext.Provider value={value}><RealtimeChainContext.Provider value={chainStates}><BalanceBlockWatcher chainId={1} /><BalanceBlockWatcher chainId={8453} />{children}</RealtimeChainContext.Provider></WalletAssetsContext.Provider>;
 }
 

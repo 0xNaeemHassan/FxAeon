@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { FX_TOKENS } from '../src/lib/fx/tokens';
 import {
-  fetchAlchemyWalletAssets,
   filterSupportedWalletAssets,
   mergeCanonicalWalletAssets,
   parseAlchemyWalletAssets,
@@ -215,30 +214,6 @@ test('treats top-level and per-token Alchemy errors as incomplete while retainin
   assert.equal(tokenPartial.assets[0].priceUsd, 2000);
 });
 
-test('freshly retries only networks reported in Alchemy partialErrors and keeps later pages', async () => {
-  const calls: Array<{ networks: string[]; pageKey?: string }> = [];
-  const timestamp = new Date().toISOString();
-  const response = (payload: unknown) => new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } });
-  const request: typeof fetch = async (_url, init) => {
-    const body = JSON.parse(String(init?.body)) as { addresses: [{ networks: string[] }]; pageKey?: string };
-    calls.push({ networks: body.addresses[0].networks, pageKey: body.pageKey });
-    if (!body.pageKey && body.addresses[0].networks.length === 2) return response({ data: { pageKey: 'base-page', tokens: [{ address: wallet, network: 'base-mainnet', tokenAddress: null, tokenBalance: '0x1', tokenMetadata: { symbol: 'ETH', decimals: 18 }, tokenPrices: [] }] }, error: { partialErrors: [{ network: 'eth-mainnet', message: 'Internal server error' }] } });
-    if (body.pageKey === 'base-page') return response({ data: { tokens: [{ address: wallet, network: 'base-mainnet', tokenAddress: '0x1111111111111111111111111111111111111111', tokenBalance: '0x2', tokenMetadata: { symbol: 'TEST', decimals: 18 }, tokenPrices: [] }] } });
-    if (!body.pageKey && body.addresses[0].networks.length === 1 && body.addresses[0].networks[0] === 'eth-mainnet') return response({ data: { tokens: [{ address: wallet, network: 'eth-mainnet', tokenAddress: null, tokenBalance: '0x3', tokenMetadata: { symbol: 'ETH', decimals: 18 }, tokenPrices: [{ currency: 'usd', value: '2000', lastUpdatedAt: timestamp }] }] } });
-    throw new Error('unexpected Alchemy request');
-  };
-  const snapshot = await fetchAlchemyWalletAssets(wallet, undefined, request, 'test-api-key');
-  assert.deepEqual(calls.map(({ networks, pageKey }) => [networks, pageKey]), [
-    [['eth-mainnet', 'base-mainnet'], undefined],
-    [['eth-mainnet', 'base-mainnet'], 'base-page'],
-    [['eth-mainnet'], undefined],
-  ]);
-  assert.equal(snapshot.networks[1].status, 'ready');
-  assert.equal(snapshot.networks[8453].status, 'ready');
-  assert.equal(snapshot.assets.find((asset) => asset.chainId === 1)?.balanceWei, 3n);
-  assert.equal(snapshot.assets.find((asset) => asset.chainId === 8453 && asset.tokenAddress === null)?.balanceWei, 1n);
-  assert.equal(snapshot.assets.some((asset) => asset.symbol === 'TEST'), false);
-});
 
 test('pending refresh preserves canonical rows without restamping cached values', () => {
   const indexed = parseAlchemyWalletAssets({ data: { tokens: [

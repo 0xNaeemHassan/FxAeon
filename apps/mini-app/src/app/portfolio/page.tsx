@@ -229,7 +229,7 @@ function PortfolioWallet() {
     reason: '',
   };
   const headline = portfolioHeadlineTotal(portfolioValuation.totalUsd, verifiedPortfolioTotalRef.current,
-    wallet.address, refreshing, valuationNow);
+    wallet.address, valuationNow);
   verifiedPortfolioTotalRef.current = headline.verified;
   const walletTasks = selectWalletTasks({ walletAddress: wallet.address, transactions: [], claimable: protocol.claimable,
     valuation: (!valuation.complete || !allWalletRowsPriced) && Boolean(displayAssets?.assets.some((asset) => asset.balanceWei > 0n))

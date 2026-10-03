@@ -60,6 +60,34 @@ These `NEXT_PUBLIC_*` values are embedded in the static browser application at b
 
 ## Gas limits, Max, and leverage
 
+The pinned Privy React SDK 3.45.0 has a confirmation-screen unit error:
+`totalGasEstimate` is assigned viem's `gas` count and then formatted as wei.
+The version-scoped pnpm patch multiplies the prepared gas count by its
+`maxFeePerGas` (or legacy `gasPrice`) before formatting. Missing estimates
+remain unavailable. This changes the displayed execution-fee cap and funding
+shortfall calculation, not the prepared transaction or signing fields. It
+does not add Base L1 data/operator fees to Privy's own modal; FxAeon's route
+review accounts for those separately. Tests execute the installed ESM and
+CommonJS helpers against varying gas demand/prices, missing values, and a
+historical receipt. No historical fee is used as a production default.
+
+Wallet profile now provides direct export for the selected embedded wallet.
+It closes the profile before opening Privy's secure export UI, releases the
+profile focus trap, and does not reconnect or switch accounts. External
+wallets do not receive an embedded-wallet export action.
+
+Portfolio token discovery no longer calls Alchemy's all-token endpoint.
+The portfolio and forms share canonical balance queries, including FXN;
+legacy snapshots are filtered by chain and contract address. A recent complete
+portfolio total survives transient read failures for at most two minutes,
+without extending its original timestamp or carrying it across wallets.
+
+Review internals are under one animated Details disclosure. Reduced-motion
+preferences suppress the animation, and the 393×852 viewport check verifies
+the collapsed review fits within half the screen and keeps Confirm above
+navigation. Abort errors receive readable copy; the reported long planning
+delay still needs request-level reproduction and is not claimed resolved.
+
 Standard, Fast, and Rapid fee controls and reviewed fee caps apply to the Privy send path. There, the wallet request uses the RPC gas estimate with 20% headroom, bounded against an invalid or excessive estimate. If an approval outlives its quote, the runner refreshes the selected tier but refuses to exceed the reviewed fee ceiling. The trade Max calculation reserves the estimated gas cost at the selected maximum fee, uses a bounded iteration count and deadline, and returns concise failure messages instead of treating arbitrary route failures as underfunded estimates. With an external wallet, that wallet owns fee selection and pricing; FxAeon does not impose the Privy fee caps on external sends.
 
 Leverage bounds now reserve margin for the SDK's debt-ratio guard and selected slippage. The displayed maximum is an input guard, not a guarantee that every route at that value will plan; the SDK and current pool state still determine route validity.

@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PortfolioAssets, type PortfolioNetwork } from '../../src/components/PortfolioAssets';
 import type { WalletAsset, WalletAssetSnapshot } from '../../src/lib/walletAssets';
+import { FX_TOKENS } from '../../src/lib/fx/tokens';
+import { canonicalMoveSourceTokenAddress } from '../../src/lib/moveBalances';
 
-type FixtureState = 'base-pending' | 'base-zero' | 'base-unavailable' | 'base-refreshing';
+type FixtureState = 'base-pending' | 'base-zero' | 'base-unavailable' | 'base-refreshing' | 'legacy-tokens';
 const walletA = '0x930f0000000000000000000000000000000098b9';
 
 function asset(chainId: 1 | 8453, symbol: string): WalletAsset {
@@ -13,8 +15,8 @@ function asset(chainId: 1 | 8453, symbol: string): WalletAsset {
     id: `${chainId}:${symbol}`,
     chainId,
     network: chainId === 1 ? 'ethereum' : 'base',
-    tokenAddress: null,
-    canonicalKey: null,
+    tokenAddress: symbol === 'fxUSD' ? canonicalMoveSourceTokenAddress('fxUSD', chainId) : symbol === 'FXN' ? FX_TOKENS.FXN.address : null,
+    canonicalKey: symbol === 'fxUSD' ? 'fxUSD' : symbol === 'FXN' ? 'FXN' : 'ETH',
     symbol,
     name: symbol,
     decimals: 18,
@@ -37,7 +39,7 @@ function snapshot(state: FixtureState): WalletAssetSnapshot {
     : state === 'base-unavailable' ? 'unavailable' as const : 'ready' as const;
   return {
     walletAddress: walletA,
-    assets: [asset(1, 'ETH'), ...(state === 'base-refreshing' ? [asset(8453, 'fxUSD')] : [])],
+    assets: [asset(1, 'ETH'), ...(state === 'base-refreshing' ? [asset(8453, 'fxUSD')] : []), ...(state === 'legacy-tokens' ? [asset(1, 'FXN'), { ...asset(1, 'Unrelated'), id: 'unknown', tokenAddress: '0x1111111111111111111111111111111111111111' as const }] : [])],
     networks: {
       1: { chainId: 1, status: 'ready', error: '' },
       8453: { chainId: 8453, status: baseStatus, error: baseStatus === 'unavailable' ? 'Base read failed.' : '' },
@@ -62,6 +64,7 @@ function Harness() {
       <button type="button" onClick={() => setFixture('base-zero')}>Base zero</button>
       <button type="button" onClick={() => setFixture('base-unavailable')}>Base unavailable</button>
       <button type="button" onClick={() => setFixture('base-refreshing')}>Base refreshing with holding</button>
+      <button type="button" onClick={() => setFixture('legacy-tokens')}>Legacy all-token snapshot</button>
       <button type="button" onClick={() => setRefreshing(false)}>Resolve asset refresh</button>
       <output data-testid="retry-count">{retryCount}</output>
     </div>
