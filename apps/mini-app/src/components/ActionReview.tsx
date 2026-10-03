@@ -381,12 +381,12 @@ export function ActionReview(props: ActionReviewProps) {
           <span>{stage === 'executing' ? 'Transaction progress' : `Steps · ${stepCount}`}</span>
           <ChevronDown size={16} aria-hidden="true" />
         </summary>
-        <section className="flex flex-col gap-2 border-t border-[var(--line)] py-3" aria-labelledby="transaction-steps-heading">
+        <section className="flex flex-col gap-2 border-t border-[var(--line)] py-3" aria-label="Prepared transactions">
         {route.transactions.map((transaction, index) => {
           const approval = approvalFacts(transaction);
           const progress = stepProgress(stepResults[index]);
           return (
-          <div key={`${transaction.to}-${index}`} className={`${styles.reviewStep} border border-[var(--line)] p-3`}>
+          <div key={`${transaction.to}-${index}`} role="group" aria-label={`Transaction ${index + 1}`} className={`${styles.reviewStep} border border-[var(--line)] p-3`}>
             <div className="flex items-center justify-between gap-3">
               <span className="text-[12px] font-semibold">{index + 1}. {stepTitle(transaction)}</span>
               <span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${progress.className}`}>{progress.icon}{progress.label}</span>
@@ -397,6 +397,7 @@ export function ActionReview(props: ActionReviewProps) {
             <details className="mt-2 border-t border-[var(--line)] pt-2">
               <summary className="min-h-11 cursor-pointer text-[12px] text-mut">Transaction details</summary>
               <ReviewRow label="Contract" value={transaction.to} />
+              <ReviewRow label="Transaction value (wei)" value={transaction.value.toString()} />
               <ReviewRow label="Nonce" value={transaction.nonce === undefined ? 'Checked before signing' : String(transaction.nonce)} />
               {approval && <ReviewRow label="Approval spender" value={approval.spender} />}
               {approval && <ReviewRow label={approval.valueLabel} value={approval.value.toString()} />}
@@ -440,7 +441,6 @@ function AdvancedReviewDetails({ route }: { route: PlannedRoute }) {
   const rawQuoteFacts = rawQuoteReviewFacts(route);
   const hasDetails = Boolean(
     route.details?.requestedAmount
-      || route.transactions.length
       || rawQuoteFacts.length
       || route.details?.sdkSlippagePercent !== undefined
       || route.details?.economicLimits?.length
@@ -463,24 +463,6 @@ function AdvancedReviewDetails({ route }: { route: PlannedRoute }) {
         {route.details?.economicLimits?.map((limit, index) => <ReviewRow key={`limit-${index}`} label={limit.label} value={`${limit.value} raw units`} />)}
         {route.details?.conversionPaths?.map((path, index) => <ReviewRow key={`path-${index}`} label={`${path.label} fingerprint`} value={path.fingerprint} />)}
         {route.policy?.reviewedAction?.expectedActionDataFingerprint && <ReviewRow label="Action fingerprint" value={route.policy.reviewedAction.expectedActionDataFingerprint} />}
-        {route.transactions.length > 0 && (
-          <div className="flex flex-col gap-2 border-t border-[var(--line)] pt-3" aria-label="Prepared transactions">
-            <p className="text-[11px] font-semibold text-mut">Prepared transactions</p>
-            {route.transactions.map((transaction, index) => {
-              const approval = approvalFacts(transaction);
-              return (
-                <div key={`${transaction.to}-${index}`} className="flex flex-col gap-1.5 rounded-lg border border-[var(--line)] bg-[rgba(255,255,255,.02)] p-2.5">
-                  <p className="text-[11px] font-semibold">{stepTitle(transaction)} {index + 1}</p>
-                  <ReviewRow label="Contract" value={transaction.to} />
-                  <ReviewRow label="Transaction value (wei)" value={transaction.value.toString()} />
-                  {approval && <ReviewRow label="Approval spender" value={approval.spender} />}
-                  {approval && <ReviewRow label={approval.valueLabel} value={approval.value.toString()} />}
-                  <CalldataDisclosure data={transaction.data} />
-                </div>
-              );
-            })}
-          </div>
-        )}
         {bridgeQuote && (
           <>
             {bridgeQuote.sourceOftAddress && <ReviewRow label="Source OFT" value={bridgeQuote.sourceOftAddress} />}

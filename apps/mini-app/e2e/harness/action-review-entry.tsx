@@ -19,7 +19,7 @@ type PreviewRequest = {
 type HarnessState = {
   wallet: WalletState; version: number; mode: 'auto' | 'deferred'; failNextPrepare: boolean; executeVersion?: number; partialResult: boolean;
   deferRunner: boolean; failRunner: boolean; executionResolvers: Array<() => void>; deferWalletResponse: boolean; walletResolvers: Array<(reject?: boolean) => void>; lastExecutedRouteVersion?: number;
-  multiStepExecution: boolean; gasCost: { status: 'refreshing' | 'unavailable' | 'current'; estimate?: { status: 'current' | 'partial'; nativeValueWei: bigint; executionGasFeeWei?: bigint; totalNativeCostWei?: bigint }; estimateIsCurrent: boolean; error?: string };
+  multiStepExecution: boolean; nonzeroTransactionValues: boolean; gasCost: { status: 'refreshing' | 'unavailable' | 'current'; estimate?: { status: 'current' | 'partial'; nativeValueWei: bigint; executionGasFeeWei?: bigint; totalNativeCostWei?: bigint }; estimateIsCurrent: boolean; error?: string };
   rejectActionSignature: boolean;
   prepareCount: number; planCount: number; runnerCount: number; sendCount: number; draftSaveCount: number; draftCancelCount: number; draftRemoveCount: number;
   feeQuoteCount: number; lastFeeSelection?: unknown;
@@ -33,7 +33,7 @@ const initialOptions = (globalThis as typeof globalThis & { __actionReviewHarnes
 const H = (globalThis as typeof globalThis & { __actionReviewHarness?: HarnessState }).__actionReviewHarness ??= {
   wallet: { ready: true, authenticated: true, isEmbedded: false, connectionVersion: 1, address: '0x00000000000000000000000000000000000000aa', chainId: 1 },
   version: 1, mode: initialOptions?.mode ?? 'auto', failNextPrepare: false, executeVersion: undefined, partialResult: false, deferRunner: false, failRunner: false, executionResolvers: [], deferWalletResponse: false, walletResolvers: [],
-  multiStepExecution: false, approvalRequired: false, sentTransactions: [], gasCost: initialOptions?.presentationMode
+  multiStepExecution: false, nonzeroTransactionValues: false, approvalRequired: false, sentTransactions: [], gasCost: initialOptions?.presentationMode
     ? { status: 'current', estimate: { status: 'current', nativeValueWei: 0n, executionGasFeeWei: 840000000000000n, totalNativeCostWei: 840000000000000n }, estimateIsCurrent: true }
     : { status: 'refreshing', estimateIsCurrent: false },
   prepareCount: 0, planCount: 0, runnerCount: 0, sendCount: 0, draftSaveCount: 0, draftCancelCount: 0, draftRemoveCount: 0, feeQuoteCount: 0,
@@ -50,8 +50,8 @@ const routeFor = (version: number): HarnessRoute => ({
   harnessRouteVersion: version, harnessConnectionVersion: H.wallet.connectionVersion,
   transactions: [
     ...(H.approvalRequired ? [{ chainId: 1, from: H.wallet.address! as Address, to: '0x00000000000000000000000000000000000000c1' as Address, data: ('0x095ea7b3' + '0'.repeat(24) + '0'.repeat(40) + '0'.repeat(63) + '1') as Hex, value: 0n, kind: 'approval', type: 'approveToken', operation: 'increasePosition' }] : []),
-    { chainId: 1, from: H.wallet.address! as Address, to: '0x00000000000000000000000000000000000000bb' as Address, data: '0x12345678' as Hex, value: 0n, kind: 'action', type: 'increasePosition', operation: 'increasePosition' },
-    ...(H.multiStepExecution ? [{ chainId: 1, from: H.wallet.address! as Address, to: '0x00000000000000000000000000000000000000cc' as Address, data: '0x87654321' as Hex, value: 0n, kind: 'action', type: 'increasePosition', operation: 'increasePosition' }] : []),
+    { chainId: 1, from: H.wallet.address! as Address, to: '0x00000000000000000000000000000000000000bb' as Address, data: '0x12345678' as Hex, value: H.nonzeroTransactionValues ? 123n : 0n, kind: 'action', type: 'increasePosition', operation: 'increasePosition' },
+    ...(H.multiStepExecution ? [{ chainId: 1, from: H.wallet.address! as Address, to: '0x00000000000000000000000000000000000000cc' as Address, data: '0x87654321' as Hex, value: H.nonzeroTransactionValues ? 456n : 0n, kind: 'action', type: 'increasePosition', operation: 'increasePosition' }] : []),
   ],
   details: { routeType: `Terms ${version}` },
   ...(initialOptions?.presentationMode ? { policy: { reviewedAction: {
@@ -121,6 +121,7 @@ function Harness() {
       <button type="button" onClick={() => { H.partialResult = true; }}>Return partial result</button>
       <button type="button" onClick={() => { H.refreshResolvers.shift()?.(); }}>Resolve wallet refresh</button>
       <button type="button" onClick={() => { H.multiStepExecution = true; H.rerender?.(); }}>Use multi-step route</button>
+      <button type="button" onClick={() => { H.nonzeroTransactionValues = true; H.rerender?.(); }}>Use nonzero transaction values</button>
       <button type="button" onClick={() => { H.approvalRequired = true; H.rerender?.(); }}>Use approval route</button>
       <button type="button" onClick={() => { H.rejectActionSignature = true; }}>Reject action signature</button>
       <button type="button" onClick={() => { H.gasCost = { status: 'unavailable', estimateIsCurrent: false, error: 'RPC unavailable' }; H.rerender?.(); }}>Gas estimate unavailable</button>

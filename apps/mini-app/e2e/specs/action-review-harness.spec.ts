@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { openHarness, metric } from '../harness/action-review-measurement-support';
+import { readReviewedTransactions } from '../fork/reviewedTransactions';
 async function harnessMetrics(page: import('@playwright/test').Page): Promise<Record<string, unknown>> {
   return page.locator('[data-metrics]').evaluate((node) => JSON.parse(node.textContent || '{}') as Record<string, unknown>);
 }
@@ -36,6 +37,67 @@ async function resolvePreviewRequest(page: import('@playwright/test').Page, requ
 }
 
 test.describe('ActionReview isolated orchestration', () => {
+  test('renders each reviewed transaction once in Steps with exact wei and calldata', async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 393, height: 852 });
+    await page.setContent('<meta name="viewport" content="width=device-width, initial-scale=1"><div id="root"></div>');
+    await openHarness(page);
+    await page.getByRole('button', { name: 'Use approval route', exact: true }).click();
+    await page.getByRole('button', { name: 'Use multi-step route', exact: true }).click();
+    await page.getByRole('button', { name: 'Use nonzero transaction values', exact: true }).click();
+    await page.getByRole('button', { name: 'Review position', exact: true }).click();
+
+    const review = page.locator('.reviewInlineContent');
+    const stepsSummary = review.getByText('Steps · 3', { exact: true });
+    await expect(stepsSummary).toBeVisible();
+    const advanced = review.locator('details').filter({ has: review.getByText('Advanced details', { exact: true }) });
+    await expect(advanced).toHaveCount(0);
+    await expect(review.getByText('Prepared transactions', { exact: true })).toHaveCount(0);
+    const reviewed = await readReviewedTransactions(review, { collapseAfterRead: false });
+    expect(reviewed.map((transaction) => transaction.heading)).toEqual(['Approve fxUSD 1', 'Confirm 2', 'Confirm 3']);
+    expect(reviewed.map((transaction) => transaction.status)).toEqual(['Ready', 'Ready', 'Ready']);
+    expect(reviewed.some((transaction) => transaction.status === 'Confirmed')).toBe(false);
+    expect(reviewed.map((transaction) => transaction.valueWei)).toEqual(['0', '123', '456']);
+    expect(reviewed.map((transaction) => transaction.calldata)).toEqual([
+      `0x095ea7b3${'0'.repeat(24)}${'0'.repeat(40)}${'0'.repeat(63)}1`,
+      '0x12345678',
+      '0x87654321',
+    ]);
+    const steps = review.getByRole('region', { name: 'Prepared transactions', exact: true });
+    const cards = steps.getByRole('group', { name: /^Transaction \d+$/ });
+    for (let index = 0; index < await cards.count(); index += 1) {
+      const dimensions = await cards.nth(index).evaluate((node) => ({ clientWidth: node.clientWidth, scrollWidth: node.scrollWidth }));
+      expect(dimensions.scrollWidth, `transaction ${index + 1} must fit without horizontal overflow`).toBeLessThanOrEqual(dimensions.clientWidth);
+    }
+    expect(await metric(page, 'send')).toBe(0);
+
+    // Keep the stress route assertions above, but capture a representative
+    // approval-plus-action review instead of presenting the synthetic third
+    // step as a normal product state.
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.evaluate(() => {
+      const harness = (window as typeof window & { __actionReviewHarness?: { multiStepExecution: boolean; rerender?: () => void } }).__actionReviewHarness;
+      if (!harness) throw new Error('ActionReview fixture state is missing');
+      harness.multiStepExecution = false;
+      harness.rerender?.();
+    });
+    await page.getByRole('button', { name: 'Review position', exact: true }).click();
+    await expect(review.getByText('Steps · 2', { exact: true })).toBeVisible();
+    const representative = await readReviewedTransactions(review, { collapseAfterRead: false });
+    expect(representative.map((transaction) => transaction.heading)).toEqual(['Approve fxUSD 1', 'Confirm 2']);
+    expect(representative.map((transaction) => transaction.status)).toEqual(['Ready', 'Ready']);
+    await expect(steps).toHaveCount(1);
+    await steps.evaluate((node) => {
+      const label = document.createElement('p');
+      label.textContent = 'Synthetic test fixture · no wallet signature requested';
+      label.style.cssText = 'font-size:10px;color:var(--mut);padding:0 0 8px';
+      node.prepend(label);
+    });
+    await page.locator('[role="toolbar"]').evaluate((node) => { (node as HTMLElement).style.display = 'none'; });
+    await steps.scrollIntoViewIfNeeded();
+    await steps.screenshot({ path: testInfo.outputPath('action-review-steps-expanded.png') });
+    expect(await metric(page, 'send')).toBe(0);
+  });
+
   test('primary action names the required token approval and fee tier reaches wallet request fields', async ({ page }) => {
     await page.goto('/token-icons/eth.png', { waitUntil: 'load' });
     await openHarness(page);

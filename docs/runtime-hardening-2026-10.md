@@ -1,6 +1,6 @@
 # Runtime hardening changes — 3 October 2026
 
-This note describes the current changes and their validation status. It is not a release sign-off. Source checks, production build, all 193 main browser cases, 56 isolated browser cases, and 14 landing states passed. Full typechecking passed after removing temporary fork-replay setup. The Anvil protocol and fxSAVE all-suite run passed. All five remote CI workflows passed on commit `687a2da`; the final gas-loading correction and fork browser replay remain under verification.
+This note describes the runtime changes and their validation limits. PR #221 shipped at `7eef5f8dc4770ecfbc6cdc03183af404cb6b8c99`; all seven main-branch workflows, including deployment and live revision/configuration checks, passed. The final Ethereum fork browser replay at block 26,109,104 opened and fully closed ETH/BTC long and short positions. This is not proof of native Telegram/Privy behavior or cross-chain bridge execution. Later refinements require their own PR and deployment checks.
 
 ## Wallet review and transaction history
 
@@ -8,7 +8,17 @@ The review flow labels approvals separately from protocol actions. Approval rows
 
 Receipt summaries now distinguish token-approval fees from action fees, report native transaction value separately from gas, and label bridge fees explicitly. On Base, the UI adds execution, L1 data, and operator-fee components when all are present; if receipt data is incomplete, it states that the fee total is partial.
 
-A separate approval-history classification issue has a local fix. The previously reported close-route simulation fault has not yet been reproduced; it remains under investigation and is not claimed as resolved here.
+The approval-history classification fix is included in PR #221. The reported historical close-route simulation fault has not been reproduced. Current fork close flows passed, but this does not establish the cause of that historical failure.
+
+Prepared transaction details now have one home in the Steps disclosure. Exact contract, native value in wei, approval spender/amount, nonce, and calldata remain inspectable there. Advanced details contains quote and protocol metadata rather than a second copy of every transaction. The Anvil review extractor and browser regression share the same DOM reader, so moving a disclosure cannot silently remove transaction-binding evidence from the proof.
+
+### Remaining action-specific review gaps
+
+Source inspection on 3 October confirms that rebalance/liquidation prices are not yet displayed. `routeFacts` accepts an optional `executionCost.protocolFee`, but no action page supplies that prop, so this is not an implemented protocol-fee disclosure. These remain open product requirements, not verified features.
+
+The pinned SDK exposes `openFeeRatio`, `closeFeeRatio`, and `repayFeeRatio` in pool information. Its bundled pool ABI contains `getRebalanceRatios` and `getLiquidateRatios`, but the supported position request types expose no user rebalancing enable/disable option. The [official mechanism](https://fxprotocol.gitbook.io/fx-docs/f-x-protocol-mechanisms/rebalancing-the-position-liquidation-brake) is automatic; [liquidation](https://fxprotocol.gitbook.io/fx-docs/f-x-protocol-mechanisms/rebalancing-the-position-liquidation-brake/liquidation-process) can follow failed rebalancing. Do not introduce a cosmetic opt-out or imply liquidation occurs only when rebalancing is disabled.
+
+The next implementation must bind action-specific review facts to the accepted quote: post-action thresholds and leverage for open/add/reduce/adjust/borrow changes; received assets and fees for full closes; shares, minimum output, withdrawal method and redemption fee for fxSAVE; and delivery amount, destination, gas and bridge fees for Move. A full close has no post-action position threshold. Protocol fees must use the matching action's current pool parameters and correct amount basis; [documented fee percentages](https://fxprotocol.gitbook.io/fx-docs/f-x-protocol-mechanisms/fees) are governance-adjustable, so hardcoded percentages or reuse of a single opening fee across actions are insufficient. Unknown financial facts must remain unavailable, not become zero or fabricated precision.
 
 The fork browser replay exposed a review timing defect: an initial gas request
 could display “Unavailable” while still in flight. The hook now starts the
@@ -76,4 +86,4 @@ The following focused checks were reported as passing during development:
 
 The latest consolidated `pnpm verify` run reported 543 passed and 4 skipped unit cases, then passed the production build, bundle and built-secret checks. All 193 main browser cases, 56 isolated browser cases, and 14 landing theme/viewport states passed. That command exited nonzero because its concurrent typecheck caught an optional environment-variable narrowing error in temporary fork-replay setup. The temporary setup was removed, and the full `pnpm typecheck` then passed. The unchanged browser stages were not rerun. Local execution used Node 24 and installed Chrome; repository CI uses the required Node 22 and pinned Playwright browser and remains a separate release gate.
 
-The Anvil all-suite run passed four cases, with protocol and fxSAVE manifests verified. An earlier cold-fork SDK multicall exceeded the hosted 5-second deadline; a 60-second deadline now applies only to loopback endpoints in explicit local-fork mode. Hosted endpoints retain the 5-second limit. Historical close and bridge replay did not establish the cause of the reported live failures, so those symptoms are not claimed as conclusively resolved. Production deployment verification remains outstanding.
+The Anvil all-suite run passed four cases, with protocol and fxSAVE manifests verified. An earlier cold-fork SDK multicall exceeded the hosted 5-second deadline; a 60-second deadline now applies only to loopback endpoints in explicit local-fork mode. Hosted endpoints retain the 5-second limit. The final browser manifest records four successful opens and full closes, canonical zero accounting after closure, positive USDC close proceeds, approval/action binding, account/ownership isolation, and successful existing-position borrowing and fxSAVE deposit. Withdrawal coverage verifies reviews and calldata; cross-chain execution was not tested. Historical close and bridge replay did not establish the cause of the reported live failures, so those symptoms are not claimed as conclusively resolved.
