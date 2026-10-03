@@ -371,7 +371,7 @@ test.describe('ActionReview isolated orchestration', () => {
     await expect(page.getByRole('heading', { name: 'Confirmed', exact: true })).toHaveCount(0);
   });
 
-  test('keeps a fee placeholder while gas is loading and shows the wallet fallback when estimation fails', async ({ page }) => {
+  test('keeps a fee placeholder while gas is loading and shows unavailable when estimation fails', async ({ page }) => {
     await openHarness(page);
     await page.getByRole('button', { name: 'Review position', exact: true }).click();
     const review = page.locator('.reviewInlineContent');
@@ -381,7 +381,7 @@ test.describe('ActionReview isolated orchestration', () => {
     await expect(confirm).toBeEnabled();
 
     await page.getByRole('button', { name: 'Gas estimate unavailable', exact: true }).click();
-    await expect(review).toContainText('Unavailable; wallet will show final gas');
+    await expect(review).toContainText('Unavailable');
     await expect(confirm).toBeEnabled();
     expect(await metric(page, 'send')).toBe(0);
   });

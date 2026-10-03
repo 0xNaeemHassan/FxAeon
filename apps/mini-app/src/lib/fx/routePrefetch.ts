@@ -138,16 +138,30 @@ export class RoutePrefetchStore {
     const pending = this.read(descriptor, clock());
     const entry = this.entry;
     if (!pending || !entry) return null;
-    // Warm-up is advisory. A rejected SDK/RPC request must leave the normal
-    // fresh planner available rather than fail an explicit Review click.
-    let routes: PrefetchedRoutes;
-    try { routes = await pending; } catch { return null; }
-    // Do not spend another RPC on a route already invalidated while planning.
-    if (this.entry !== entry || entry.expiresAt <= clock()) return null;
-    let current: RoutePrefetchDescriptor | null;
-    try { current = await currentDescriptor(); } catch { return null; }
-    if (this.entry !== entry || entry.expiresAt <= clock()
-      || !current || entry.key !== routePrefetchKey(current)) return null;
-    return routes;
+    // Bound the entire advisory lookup, including its final block read. A
+    // stalled warm-up must not hold an explicit Review beyond the quote TTL.
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const expired = new Promise<null>((resolve) => {
+      timeout = setTimeout(() => {
+        if (this.entry === entry) this.invalidate();
+        resolve(null);
+      }, Math.max(0, entry.expiresAt - clock()));
+    });
+    const validated = async (): Promise<PrefetchedRoutes | null> => {
+      try {
+        const routes = await pending;
+        // Do not spend another RPC on an already invalidated route.
+        if (this.entry !== entry || entry.expiresAt <= clock()) return null;
+        const current = await currentDescriptor();
+        if (this.entry !== entry || entry.expiresAt <= clock()
+          || !current || entry.key !== routePrefetchKey(current)) return null;
+        return routes;
+      } catch {
+        // Warm-up failures leave the normal fresh planner available.
+        return null;
+      }
+    };
+    try { return await Promise.race([validated(), expired]); }
+    finally { clearTimeout(timeout); }
   }
 }

@@ -3,6 +3,7 @@ import { FX_TOKENS, formatRouteGasCost, type PlannedRoute } from '@/lib/fx';
 import { compactAddress } from '@/lib/addressPresentation';
 import { routeFinancialReviewFacts, type ReviewFact } from '@/lib/fx/reviewFormatting';
 import type { UseGasCostResult } from '@/lib/fx/useGasCost';
+import { networkFeeWei } from '@/lib/fx/gasCost';
 import { formatGasTierQuote, type GasTierQuote } from '@/lib/fx/gasFeePolicy';
 
 export interface ExecutionCost { estimatedGas?: string; gasFee?: string; protocolFee?: string; totalCost?: string }
@@ -163,8 +164,7 @@ export function routeFacts(route: PlannedRoute, gasCost: Pick<UseGasCostResult, 
   if (currentGasCost?.gasFee) addNativeCostFact(facts, 'Gas fee', currentGasCost.gasFee);
   const totalIsOnlyTheGasFee = currentEstimate?.nativeValueWei === 0n
     && currentEstimate.totalNativeCostWei !== undefined
-    && currentEstimate.executionGasFeeWei !== undefined
-    && currentEstimate.totalNativeCostWei === currentEstimate.executionGasFeeWei;
+    && currentEstimate.totalNativeCostWei === networkFeeWei(currentEstimate);
   if (currentGasCost?.totalCost && !totalIsOnlyTheGasFee) addNativeCostFact(facts, 'Total cost', currentGasCost.totalCost);
   if (executionCost?.gasFee) addNativeCostFact(facts, 'Gas fee', executionCost.gasFee);
   if (executionCost?.protocolFee) addFact(facts, 'Protocol fee', executionCost.protocolFee);
@@ -181,8 +181,8 @@ export function missingGasFeeFact(gasCost: Pick<UseGasCostResult, 'estimate' | '
   return {
     label: 'Gas fee',
     value: gasCost.estimate?.status === 'partial'
-      ? 'Partial estimate; wallet will show final gas'
-      : 'Unavailable; wallet will show final gas',
+      ? 'Partial estimate'
+      : 'Unavailable',
   };
 }
 
@@ -195,5 +195,5 @@ export function missingTotalCostFact(
   if (gasCost.status === 'refreshing' && !gasCost.estimateIsCurrent) {
     return { label: 'Total cost', value: '—' };
   }
-  return { label: 'Total cost', value: 'Unavailable; wallet will show final total' };
+  return { label: 'Total cost', value: 'Unavailable' };
 }
