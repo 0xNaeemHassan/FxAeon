@@ -550,7 +550,7 @@ export default function MovePage() {
             >
               <summary className={`${moveStyles.expertSummary} group flex cursor-pointer list-none items-center justify-between gap-3 px-3 text-[12px] font-semibold text-mut [&::-webkit-details-marker]:hidden`}>
                 <span className="flex min-w-0 items-center gap-2"><Code2 aria-hidden="true" className="h-4 w-4 shrink-0 text-[var(--mut-2)]" />Custom contracts</span>
-                <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 text-[var(--mut-2)] transition-transform group-open:rotate-180" />
+                <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 text-[var(--mut-2)] disclosure-chevron" />
               </summary>
               <div className="border-t border-[var(--line)] p-3">
                 <AdvancedAddressFields
@@ -638,7 +638,7 @@ function AdvancedRiskSummary() {
         <p>Custom contracts are checked live before signing. Both networks must have deployed 18-decimal metadata, matching cross-chain peers, quote support, and the exact send target.</p>
       </div>
       <details className="mt-2 border-t border-[rgba(255,194,102,.18)] pt-1">
-        <summary className="flex min-h-11 cursor-pointer items-center text-[11px] font-semibold">What gets checked</summary>
+        <summary className="flex min-h-11 cursor-pointer items-center gap-1.5 text-[11px] font-semibold">What gets checked<ChevronDown aria-hidden="true" className="ml-auto h-3.5 w-3.5 shrink-0 disclosure-chevron" /></summary>
         <ul className="space-y-1 pb-1 pl-4 text-mut">
           <li>Checksummed, deployed contracts with 18-decimal token metadata</li>
           <li>Matching, non-zero cross-chain peers in both directions</li>

@@ -1,3 +1,4 @@
+import { ChevronDown } from 'lucide-react';
 import type { ChangedReviewFact } from './actionReviewModel';
 import type { ReviewFact } from '@/lib/fx/reviewFormatting';
 import { shouldShowReceiptMovementFallback, type ReceiptPresentation } from '@/lib/receiptPresentation';
@@ -92,7 +93,7 @@ export function ReceiptSummary({ receipts }: { receipts: readonly ReceiptPresent
       <p className="text-[13px] font-semibold">Verified receipt</p>
       {movements.map((movement, index) => <p key={`movement-${index}`} className="mt-1.5 text-[13px] first-letter:uppercase">{movement}</p>)}
       {movements.length === 0 && showMovementFallback && <p className="mt-1.5 text-[12px] text-mut">Token movements could not be established from the verified receipt logs.</p>}
-      {technicalMovements.length > 0 && <details className="mt-2 text-[12px]"><summary className="flex min-h-11 cursor-pointer items-center text-mut">Technical movement details</summary>{technicalMovements.map((movement, index) => <p key={`technical-${index}`} className="mt-1 break-all font-mono text-[11px] text-mut">{movement}</p>)}</details>}
+      {technicalMovements.length > 0 && <details className="mt-2 text-[12px]"><summary className="flex min-h-11 cursor-pointer items-center gap-1.5 text-mut">Technical movement details<ChevronDown aria-hidden="true" className="h-3.5 w-3.5 shrink-0 disclosure-chevron" /></summary>{technicalMovements.map((movement, index) => <p key={`technical-${index}`} className="mt-1 break-all font-mono text-[11px] text-mut">{movement}</p>)}</details>}
       {receipts.map((receipt, index) => <div key={`fees-${index}`} className="mt-1.5 text-[12px] text-mut">
         {receipt.executionFee && <p>{receipt.feeLabel}: {receipt.executionFee}</p>}
         {receipt.l1DataFee && <p>Base L1 data fee: {receipt.l1DataFee}</p>}
