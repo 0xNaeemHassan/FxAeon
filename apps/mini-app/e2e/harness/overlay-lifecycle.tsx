@@ -2,11 +2,14 @@
 
 import { useRef, useState } from 'react';
 import { useOverlayDialog } from '../../src/lib/useOverlayDialog';
+import { useExitPresence } from '../../src/lib/useExitPresence';
 import NetworkSelector from '../../src/components/NetworkSelector';
 
 export default function OverlayLifecycleHarness() {
   const [parentOpen, setParentOpen] = useState(() => Boolean((window as Window & { __overlayInitiallyOpen?: boolean }).__overlayInitiallyOpen));
   const [childOpen, setChildOpen] = useState(false);
+  const parentPresent = useExitPresence(parentOpen, 'wallet');
+  const childPresent = useExitPresence(childOpen, 'picker');
   const parentTrigger = useRef<HTMLButtonElement>(null);
   const childTrigger = useRef<HTMLButtonElement>(null);
   const parentCloseRef = useRef<HTMLButtonElement>(null);
@@ -21,7 +24,7 @@ export default function OverlayLifecycleHarness() {
       if ((window as Window & { __overlayRouteFocusRace?: boolean }).__overlayRouteFocusRace) document.querySelector<HTMLElement>('main')?.focus();
     }}>Open wallet profile</button>
     <button type="button" onClick={() => setParentOpen(true)}>View connected account</button>
-    {parentOpen && <div style={{ position: 'fixed', inset: 0, zIndex: 10, display: 'grid', placeItems: 'center', background: '#0009' }}>
+    {parentPresent && <div inert={!parentOpen} aria-hidden={!parentOpen || undefined} style={{ pointerEvents: parentOpen ? undefined : 'none', position: 'fixed', inset: 0, zIndex: 10, display: 'grid', placeItems: 'center', background: '#0009' }}>
       <aside ref={parentRef} role="dialog" aria-modal="true" aria-labelledby="parent-title" tabIndex={-1} data-testid="parent-dialog" style={{ padding: 24, background: 'white', color: 'black' }}>
         <h2 id="parent-title">Wallet profile</h2>
         <button ref={childTrigger} type="button" onClick={() => setChildOpen(true)}>Open asset picker</button>
@@ -29,7 +32,7 @@ export default function OverlayLifecycleHarness() {
         <button ref={parentCloseRef} type="button" onClick={() => setParentOpen(false)}>Close wallet profile</button>
       </aside>
     </div>}
-    {childOpen && <div style={{ position: 'fixed', inset: 0, zIndex: 20, display: 'grid', placeItems: 'center', background: '#0009' }}>
+    {childPresent && <div inert={!childOpen} aria-hidden={!childOpen || undefined} style={{ pointerEvents: childOpen ? undefined : 'none', position: 'fixed', inset: 0, zIndex: 20, display: 'grid', placeItems: 'center', background: '#0009' }}>
       <div ref={childRef} role="dialog" aria-modal="true" aria-labelledby="child-title" tabIndex={-1} data-testid="child-dialog" style={{ padding: 24, background: 'white', color: 'black' }}>
         <h2 id="child-title">Asset picker</h2>
         <button type="button" onClick={() => setChildOpen(false)}>Close asset picker</button>

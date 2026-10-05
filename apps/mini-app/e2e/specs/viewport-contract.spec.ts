@@ -296,7 +296,7 @@ test.describe("single-viewport route contract", () => {
       page.getByLabel("Amount in ETH"),
       page.getByRole("button", { name: /Input asset/ }),
       page.getByLabel("Target leverage", { exact: true }),
-      page.locator(".trade-ticket summary").filter({ hasText: /^Settings/ }),
+      page.getByRole("button", { name: /^Transaction settings,/ }),
       page.getByRole("button", { name: "Connect wallet", exact: true }).last(),
     ];
 

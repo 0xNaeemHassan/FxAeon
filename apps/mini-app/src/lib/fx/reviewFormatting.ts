@@ -2,6 +2,7 @@ import { formatUnits } from 'viem';
 import { positionCollateralTokenAddress, positionDebtTokenAddress, positionPoolAddress } from './policy';
 import { FX_TOKENS, type FxTokenDefinition } from './tokens';
 import type { OfficialFxMethod, PlannedRoute, ReviewedActionIntent } from './types';
+import { calculateProtocolFee } from './protocolFee';
 
 export type ReviewFact = { label: string; value: string; title?: string };
 type Unit = { symbol: string; decimals: number };
@@ -138,6 +139,7 @@ export function routeFinancialReviewFacts(route: PlannedRoute): ReviewFact[] {
   const add = (fact: ReviewFact | undefined) => { if (fact) facts.push(fact); };
 
   if (pool) {
+    add(protocolFeeReviewFact(route, intent));
     const price = details?.executionPrice;
     if ('positionType' in intent && price && /^\d+(?:\.\d+)?$/.test(price) && /[1-9]/.test(price)) {
       // curPrice is already a decimal fxUSD/underlying ratio, not wei and
@@ -177,6 +179,52 @@ export function routeFinancialReviewFacts(route: PlannedRoute): ReviewFact[] {
   }
   if (unsupportedLimits) add({ label: 'Additional limits', value: 'See advanced details' });
   return facts;
+}
+
+/** Fee rates come from the same SDK pool read as the quote, never a static fee table. */
+function protocolFeeReviewFact(route: PlannedRoute, intent: ReviewedActionIntent): ReviewFact | undefined {
+  const quote = route.details?.protocolFeeQuote;
+  if (!quote || !('poolAddress' in intent) || !sameAddress(quote.poolAddress, intent.poolAddress)) return undefined;
+  const actions = route.transactions.filter((transaction) => transaction.kind !== 'approval');
+  if (actions.length !== 1 || !sameAddress(actions[0].to, quote.routerAddress)) return undefined;
+  if (quote.ratios.length !== 4 || quote.ratios.some((ratio) => !/^\d{1,10}$/.test(ratio) || BigInt(ratio) > 1_000_000_000n)) return undefined;
+  const selector = actions[0].data.slice(0, 10).toLowerCase();
+  let legs: { index: number; basis: string }[];
+  if ((intent.kind === 'position-increase' || intent.kind === 'position-adjust')
+    && ['0xef9e1aa7', '0x99414c10'].includes(selector)) {
+    legs = [{ index: 0, basis: 'supplied collateral' }, { index: 2, basis: 'borrowed debt' }];
+  } else if ((intent.kind === 'position-reduce' || intent.kind === 'position-adjust')
+    && ['0xe8e9fc2a', '0xad0acfdc'].includes(selector)) {
+    legs = [{ index: 1, basis: 'withdrawn collateral' }, { index: 3, basis: 'repaid debt' }];
+  } else if (intent.kind === 'deposit-and-mint' && selector === '0x216d5108') {
+    legs = [
+      ...(intent.depositAmount > 0n ? [{ index: 0, basis: 'supplied collateral' }] : []),
+      ...(intent.mintAmount > 0n ? [{ index: 2, basis: 'borrowed debt' }] : []),
+    ];
+  } else if (intent.kind === 'repay-and-withdraw' && ['0x0d8aea82', '0xbf4e5936'].includes(selector)) {
+    legs = [
+      ...(intent.withdrawAmount > 0n ? [{ index: 1, basis: 'withdrawn collateral' }] : []),
+      ...(intent.minimumRepayAmount > 0n ? [{ index: 3, basis: 'repaid debt' }] : []),
+    ];
+  } else return undefined;
+  if (legs.length === 0) return undefined;
+  const charged = legs.filter((leg) => BigInt(quote.ratios[leg.index]) > 0n);
+  const describe = (leg: { index: number; basis: string }) => `${formatUnits(BigInt(quote.ratios[leg.index]), 7)}% of ${leg.basis}`;
+  // borrowFromLong forwards this exact fxUSD debt amount to PoolManager.
+  // Only show an amount when it covers every charged leg. Converted collateral
+  // and flash-loan routes cannot safely use the user's input as the fee base.
+  if (intent.kind === 'deposit-and-mint' && charged.length === 1 && charged[0].index === 2) {
+    const feeAmount = calculateProtocolFee(intent.mintAmount, BigInt(quote.ratios[2]));
+    const fact = amountFact('Protocol fee', feeAmount.toString(), tokenUnit(FX_TOKENS.fxUSD))!;
+    return { ...fact, value: `${fact.value} (${formatUnits(BigInt(quote.ratios[2]), 7)}%)`, title: `${fact.title}; ${describe(charged[0])}. Deducted from the borrowed amount. Excludes network gas and conversion costs.` };
+  }
+  return {
+    label: 'Protocol fee rate',
+    value: charged.length === 0 ? '0%' : charged.length === 1
+      ? `${formatUnits(BigInt(quote.ratios[charged[0].index]), 7)}%`
+      : charged.map(describe).join(' + '),
+    title: `${(charged.length ? charged : legs).map(describe).join(' + ')} when that leg has a nonzero amount. Quoted f(x) rates; excludes network gas, conversion costs and retained slippage.`,
+  };
 }
 
 /** Exact source values remain inspectable even when units are unsupported. */

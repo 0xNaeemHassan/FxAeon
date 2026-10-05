@@ -8,6 +8,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { chromium } from '@playwright/test';
+import { configuredBrowserChannel } from '../../../scripts/e2e_browser_channel.cjs';
 
 const baseUrl = process.env.FXAEON_HYDRATION_BASE_URL ?? 'http://localhost:4321';
 const targetTheme = process.env.FXAEON_HYDRATION_THEME ?? 'light';
@@ -29,7 +30,8 @@ if (!process.env.NEXT_PUBLIC_PRIVY_APP_ID && !fileAppId) {
 }
 
 const routes = ['/', '/trade', '/positions'];
-const browser = await chromium.launch({ headless: true });
+const channel = configuredBrowserChannel();
+const browser = await chromium.launch({ headless: true, ...(channel ? { channel } : {}) });
 let failures = 0;
 
 try {

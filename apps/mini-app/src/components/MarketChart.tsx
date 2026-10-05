@@ -184,9 +184,9 @@ function LazyCandlestickChart({ snapshot }: { snapshot: MarketCandleSnapshot }) 
       const chart = createChart(hostRef.current, {
         autoSize: true,
         layout: { background: { color: 'transparent' }, textColor: css('--mut', '#87909d') },
-        grid: { vertLines: { color: css('--line', 'rgba(255,255,255,.08)') }, horzLines: { color: css('--line', 'rgba(255,255,255,.08)') } },
-        rightPriceScale: { borderColor: css('--line', 'rgba(255,255,255,.1)') },
-        timeScale: { borderColor: css('--line', 'rgba(255,255,255,.1)'), timeVisible: true, secondsVisible: false, rightOffset: 2 },
+        grid: { vertLines: { visible: false }, horzLines: { visible: false } },
+        rightPriceScale: { borderVisible: false },
+        timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false, rightOffset: 2 },
         crosshair: { vertLine: { color: css('--mint', '#24d399'), width: 1 }, horzLine: { color: css('--mint', '#24d399'), width: 1 } },
       });
       const series = chart.addSeries(CandlestickSeries, { upColor: css('--success', '#24d399'), downColor: css('--danger', '#ff5c73'), borderVisible: false, wickUpColor: css('--success', '#24d399'), wickDownColor: css('--danger', '#ff5c73') });

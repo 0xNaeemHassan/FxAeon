@@ -337,12 +337,14 @@ export function EmptyState({
   );
 }
 
-export function SectionTitle({ children, right }: { children: ReactNode; right?: ReactNode }) {
+export function SectionTitle({ children, right, level = 2 }: { children: ReactNode; right?: ReactNode; level?: 2 | 3 }) {
+  // Nested surfaces (for example the wallet dialog) keep a single level-2 heading.
+  const Heading = level === 3 ? 'h3' : 'h2';
   return (
     <div className="section-heading mb-2 flex items-center justify-between">
-      <h2 className="text-[16px] font-semibold tracking-tight text-[var(--text)]">
+      <Heading className="text-[16px] font-semibold tracking-tight text-[var(--text)]">
         {children}
-      </h2>
+      </Heading>
       {right}
     </div>
   );

@@ -50,6 +50,13 @@ export interface PlannedTransaction {
 }
 
 export interface RouteDetails {
+  /** Live fee tuple already read by the pinned SDK for this route's pool/router.
+   * Display only; ratios use 1e9 precision and are not gas or swap fees. */
+  protocolFeeQuote?: {
+    poolAddress: Address;
+    routerAddress: Address;
+    ratios: readonly [string, string, string, string];
+  };
   routeType?: string;
   positionId?: number;
   leverage?: number;
@@ -398,7 +405,7 @@ export interface TransactionRunnerOptions {
 
 export interface PendingHashRecord {
   id: string;
-  operation: OfficialFxMethod;
+  operation: OfficialFxMethod | 'sendAsset';
   /** Exact route step type, so an approval receipt cannot represent the user action. */
   stepKind?: PlannedTransaction["kind"];
   /** Human action captured from the reviewed route; never controls execution. */
@@ -424,7 +431,7 @@ export interface PendingHashRecord {
 export type PendingActionIntent =
   | 'Open position' | 'Increase position' | 'Reduce position' | 'Close position'
   | 'Adjust leverage' | 'Borrow' | 'Add collateral' | 'Repay' | 'Withdraw collateral'
-  | 'Repay and withdraw' | 'Deposit' | 'Withdraw' | 'Queue withdrawal' | 'Claim' | 'Bridge';
+  | 'Repay and withdraw' | 'Deposit' | 'Withdraw' | 'Queue withdrawal' | 'Claim' | 'Bridge' | 'Send';
 
 export interface PendingBridgeContext {
   destinationChainId: FxChainId;

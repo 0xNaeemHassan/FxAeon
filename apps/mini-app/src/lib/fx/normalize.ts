@@ -4,7 +4,7 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import type { FxChainId, OfficialFxMethod, PlannedRoute, PlannedTransaction } from "./types";
+import type { FxChainId, OfficialFxMethod, PlannedRoute, PlannedTransaction, RouteDetails } from "./types";
 
 export interface RawSdkTransaction {
   from?: string;
@@ -130,6 +130,20 @@ function stringField(value: unknown, label: string): string | undefined {
   return value;
 }
 
+function protocolFeeQuote(value: unknown): RouteDetails['protocolFeeQuote'] {
+  if (!value || typeof value !== 'object') return undefined;
+  const quote = value as Record<string, unknown>;
+  if (typeof quote.poolAddress !== 'string' || !isAddress(quote.poolAddress)
+    || typeof quote.routerAddress !== 'string' || !isAddress(quote.routerAddress)
+    || !Array.isArray(quote.ratios) || quote.ratios.length !== 4
+    || quote.ratios.some((ratio) => typeof ratio !== 'string' || !/^\d{1,10}$/.test(ratio) || BigInt(ratio) > 1_000_000_000n)) return undefined;
+  return {
+    poolAddress: getAddress(quote.poolAddress),
+    routerAddress: getAddress(quote.routerAddress),
+    ratios: [...quote.ratios] as [string, string, string, string],
+  };
+}
+
 /** Normalize increase/reduce/adjust route results without reimplementing SDK logic. */
 export function normalizeRouteResult(
   operation: "increasePosition" | "reducePosition" | "adjustPositionLeverage",
@@ -149,6 +163,7 @@ export function normalizeRouteResult(
       walletAddress,
     });
     const details = {
+      protocolFeeQuote: protocolFeeQuote(root.protocolFeeQuote),
       routeType: stringField(route.routeType, "route type"),
       positionId: numberField(root.positionId, "position ID"),
       leverage: numberField(route.leverage, "leverage"),
@@ -191,6 +206,7 @@ export function normalizeTxResult(
       walletAddress,
     }),
     details: {
+      protocolFeeQuote: protocolFeeQuote(root.protocolFeeQuote),
       positionId: numberField(root.positionId, "position ID"),
       leverage: numberField(root.leverage, "leverage"),
       executionPrice: stringField(root.executionPrice, "execution price"),

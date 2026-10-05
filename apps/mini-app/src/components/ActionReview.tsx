@@ -38,6 +38,7 @@ import { rawQuoteReviewFacts, tokenAmountReviewFact, type ReviewFact } from '@/l
 import { buildStatusPresentation } from '@/components/review/actionReviewStatusModel';
 import { PositionOutcomeSummary, TransactionProgressPresentation, UpdatedQuoteSummary } from '@/components/review/ActionReviewSummary';
 import { TransactionResultView } from '@/components/review/TransactionResultView';
+import { ReviewViewport } from '@/components/review/ReviewViewport';
 import { positionPoolAddress } from '@/lib/fx/policy';
 import { GAS_TIERS } from '@/lib/settings';
 import { formatGasPriceGwei } from '@/lib/fx/gasFeePolicy';
@@ -223,7 +224,7 @@ export function ActionReview(props: ActionReviewProps) {
       })];
     });
     return (
-      <ReviewSurface surface={surface} className={`${styles.reviewCard} ${styles.reviewInlineCard} anim-scale-in p-4 sm:p-5`}>
+      <ReviewSurface surface={surface} className={`${styles.reviewCard} ${styles.reviewInlineCard} p-4 sm:p-5`}>
         <TransactionResultView
           result={result}
           presentation={presentation}
@@ -296,7 +297,8 @@ export function ActionReview(props: ActionReviewProps) {
   const wrongNetwork = wallet.chainId !== undefined && wallet.chainId !== route.chainId;
   const unsupportedNetwork = wallet.chainId === undefined;
   return (
-    <ReviewSurface surface={surface} className={`${styles.reviewCard} ${styles.reviewInlineCard} anim-scale-in p-4 sm:p-5`}>
+    <ReviewSurface surface={surface} className={`${styles.reviewCard} ${styles.reviewInlineCard} p-4 sm:p-5`}>
+      <ReviewViewport>
       <header className={presentationStyles.reviewHeader}>
         <div>
           <h3 ref={headingRef} data-review-focus tabIndex={-1} className="text-display outline-none">
@@ -308,6 +310,7 @@ export function ActionReview(props: ActionReviewProps) {
           <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Edit
         </button>
       </header>
+      <div className={presentationStyles.reviewScrollBody} role="region" aria-label="Review information" tabIndex={0}>
 
       {showExecutionProgress && (
         <div className={presentationStyles.actualProgress}>
@@ -416,6 +419,7 @@ export function ActionReview(props: ActionReviewProps) {
 
       {!showExecutionProgress && !(stage === 'review' && status === 'reviewing') && <div className="mt-4"><StatusNotice {...progress} /></div>}
       {error && <div className="mt-3"><InlineError message={error} /></div>}
+      </div>
       {stage === 'review' && (
         <div className={styles.reviewInlineActions}>
           <Button variant={destructive ? 'danger' : 'primary'} disabled={disabled || !planBuilder || loading || (!quoteExpired && status === 'failed')} loading={loading} className={styles.primaryAction} onClick={() => quoteExpired ? void refreshReviewedQuote() : void execute()}>
@@ -423,14 +427,15 @@ export function ActionReview(props: ActionReviewProps) {
           </Button>
         </div>
       )}
+      </ReviewViewport>
     </ReviewSurface>
   );
 
 }
 
 function ReviewSurface({ surface, className, children }: { surface: 'card' | 'content'; className: string; children: ReactNode }) {
-  if (surface === 'content') return <div className={`${styles.reviewInlineContent} reviewInlineContent anim-scale-in`}>{children}</div>;
-  return <Card className={className}>{children}</Card>;
+  if (surface === 'content') return <div className={`${styles.reviewInlineContent} reviewInlineContent ${presentationStyles.surfaceEnter}`}>{children}</div>;
+  return <Card className={`${className} ${presentationStyles.surfaceEnter}`}>{children}</Card>;
 }
 
 function ReviewRow({ label, value, title, className }: { label: string; value: ReactNode; title?: string; className?: string }) {
