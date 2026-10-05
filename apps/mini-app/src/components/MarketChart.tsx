@@ -200,7 +200,7 @@ export function MarketMiniCard({ market }: { market: MarketSymbol }) {
   const price = live.isFresh ? live.quote?.price : prices[market === 'ETH' ? 'ETH' : 'WBTC'] ?? history.snapshot?.currentPrice;
   const change = live.isFresh ? live.quote?.percentChange24h : history.snapshot?.percentChange;
   const positive = change !== undefined && change >= 0;
-  return <div className={`${styles.marketMiniCard} portfolio-market-card`} aria-label={`${market} market overview`}><div className="flex items-center justify-between gap-2"><span className="flex items-center gap-2"><TokenIcon symbol={market === 'BTC' ? 'WBTC' : 'ETH'} size={28} /><strong className="text-[13px]">{market}</strong></span><span className={`text-[10.5px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}><ValueOrSkeleton value={change === undefined ? '—' : `${positive ? '+' : ''}${change.toFixed(2)}%`} width="md" label="24 hour change loading" /></span></div><p className="mt-3 text-display text-[20px] font-semibold tabular-nums"><ValueOrSkeleton value={formatUsdPrice(price)} width="lg" label="Market price loading" /></p><div className="market-chart-compact mt-2 h-[54px]">{history.status === 'ready' && history.snapshot ? <Sparkline snapshot={history.snapshot} /> : history.status === 'loading' ? <div role="status" aria-label="Loading market history" className="market-chart-skeleton h-full rounded-md" /> : <div role="status" aria-label="Market history unavailable" className="flex h-full items-center justify-center"><MissingValue width="xl" status="unavailable" label="Market history unavailable" /></div>}</div></div>;
+  return <div className={`${styles.marketMiniCard} portfolio-market-card`} aria-label={`${market} market overview`}><div className="flex items-center justify-between gap-2"><span className="flex items-center gap-2"><TokenIcon symbol={market === 'BTC' ? 'WBTC' : 'ETH'} size={28} /><strong className="text-[13px]">{market}</strong></span><span className={`text-[10.5px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}><ValueOrSkeleton value={change === undefined ? '—' : `${positive ? '+' : ''}${change.toFixed(2)}%`} width="md" label="24 hour change loading" /></span></div><p className="mt-3 text-display text-[20px] font-semibold tabular-nums"><ValueOrSkeleton value={formatUsdPrice(price)} width="lg" label="Market price loading" /></p><div className="market-chart-compact mt-2 h-[54px]">{history.status === 'ready' && history.snapshot ? <Sparkline snapshot={history.snapshot} rising={change === undefined ? undefined : positive} /> : history.status === 'loading' ? <div role="status" aria-label="Loading market history" className="market-chart-skeleton h-full rounded-md" /> : <div role="status" aria-label="Market history unavailable" className="flex h-full items-center justify-center"><MissingValue width="xl" status="unavailable" label="Market history unavailable" /></div>}</div></div>;
 }
 
 type Candles = MarketCandleSnapshot['candles'];
@@ -356,12 +356,13 @@ function LazyPriceChart({ snapshot, chartStyle }: { snapshot: MarketCandleSnapsh
   return <div ref={hostRef} className="market-chart-graphic" data-chart-style={chartStyle} role="img" aria-label={`${snapshot.market} ${snapshot.range} USD price chart, current price ${formatUsdPrice(snapshot.currentPrice)}`}><span className="sr-only">High {formatUsdPrice(snapshot.high)}. Low {formatUsdPrice(snapshot.low)}.</span></div>;
 }
 
-function Sparkline({ snapshot }: { snapshot: MarketHistorySnapshot }) {
+/** `rising` is the change printed beside the line, so color and label never disagree. */
+function Sparkline({ snapshot, rising }: { snapshot: MarketHistorySnapshot; rising?: boolean }) {
   const fillId = useId();
   const values = snapshot.points.map((point) => point.price);
   const min = Math.min(...values); const max = Math.max(...values); const span = Math.max(max - min, max * 0.002, 1e-8);
   const coordinates = values.map((value, index) => `${((index / Math.max(1, values.length - 1)) * 100).toFixed(2)},${(8 + ((max - value) / span) * 84).toFixed(2)}`).join(' ');
-  const color = snapshot.percentChange >= 0 ? 'var(--success)' : 'var(--danger)';
+  const color = (rising ?? snapshot.percentChange >= 0) ? 'var(--success)' : 'var(--danger)';
   return <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full" role="img" aria-label={`${snapshot.market} 24 hour trend`}><defs><linearGradient id={fillId} x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor={color} stopOpacity="0.2" /><stop offset="1" stopColor={color} stopOpacity="0" /></linearGradient></defs><polygon points={`0,100 ${coordinates} 100,100`} fill={`url(#${fillId})`} /><polyline points={coordinates} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" /><title>{snapshot.market} trend</title></svg>;
 }
 

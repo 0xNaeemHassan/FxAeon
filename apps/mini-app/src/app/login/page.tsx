@@ -4,10 +4,12 @@
 import { Suspense, useEffect, useState, type MouseEvent } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { ArrowRight } from 'lucide-react';
+import { ArrowLeft, ArrowRight } from 'lucide-react';
 import FxLogo from '@/components/FxLogo';
 import { privyConfigured } from '@/lib/privyConfig';
-import { Button, Card, FullScreenSpinner } from '@/components/ui';
+import { Button, FullScreenSpinner } from '@/components/ui';
+import { GroupedAddress } from '@/components/GroupedAddress';
+import { WalletAvatar } from '@/components/WalletAvatar';
 import { usePrivyWallet } from '@/lib/wallet';
 import { userSafeError } from '@/lib/errors';
 import { haptic, isTelegramLaunchContext, openExternalLink } from '@/lib/telegram';
@@ -47,17 +49,18 @@ function TelegramUnavailableFlow() {
     }
   };
   return (
-    <main className={`${styles.loginPanel} auth-panel mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col justify-center px-6`}>
-      <Card className={`${styles.loginCard} w-full p-6`}>
-        <h1 className="text-display text-[28px] font-semibold">Connect in your browser</h1>
-        <p className="mt-2 text-[14px] leading-relaxed text-mut">
-          Wallet sign-in isn’t available here. Open FxAeon in your browser to connect a wallet.
-        </p>
-        <a href={browserUrl} target="_blank" rel="noopener noreferrer" onClick={openBrowser} className="button button-primary glass-press mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-full px-4 py-3 text-[14px] font-semibold">
+    <main className={`${styles.loginPanel} ${styles.authStage} mx-auto w-full`}>
+      <span className={styles.authHalo} aria-hidden="true"><FxLogo size={44} /></span>
+      <h1 className={styles.authTitle}>Connect in your browser</h1>
+      <p className={styles.authLead}>
+        Wallet sign-in isn’t available here. Open FxAeon in your browser to connect a wallet.
+      </p>
+      <div className={styles.authActions}>
+        <a href={browserUrl} target="_blank" rel="noopener noreferrer" onClick={openBrowser} className="button button-primary glass-press flex min-h-12 w-full items-center justify-center gap-2 px-4 py-3 text-[15px] font-semibold">
           Continue in browser <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </a>
-      </Card>
-      <Link href="/" className="mt-4 inline-flex min-h-11 items-center text-[12px] font-semibold text-mint">← Back to home</Link>
+      </div>
+      <Link href="/" className={styles.authBack}><ArrowLeft aria-hidden="true" />Back to home</Link>
     </main>
   );
 }
@@ -81,26 +84,34 @@ function BrowserWalletFlow() {
     }
   };
 
+  const connected = Boolean(wallet.authenticated && wallet.address);
   return (
-    <main className={`${styles.loginPanel} auth-panel mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col justify-center px-6`}>
-        <Card className={`${styles.loginCard} w-full p-6`}>
-          <span className="auth-brand-mark" aria-hidden="true"><FxLogo size={40} /></span>
-          <h1 className="text-display mt-5 text-[28px] font-semibold">Connect your wallet</h1>
-          <p className="mt-2 text-[14px] leading-relaxed text-mut">Connect MetaMask, Coinbase Wallet, or another EVM wallet. Review and approve each transaction in your wallet.</p>
+    <main className={`${styles.loginPanel} ${styles.authStage} mx-auto w-full`}>
+      <span className={styles.authHalo} aria-hidden="true"><FxLogo size={44} /></span>
+      <h1 className={styles.authTitle}>{connected ? 'Wallet connected' : 'Connect your wallet'}</h1>
+      <p className={styles.authLead}>{connected
+        ? 'Every transaction still needs your approval in this wallet.'
+        : 'Connect MetaMask, Coinbase Wallet, or another EVM wallet. Review and approve each transaction in your wallet.'}</p>
 
-          {wallet.authenticated && wallet.address ? (
-            <div className="mt-5">
-              <div className="auth-address">{wallet.address}</div>
-              <Link href="/" onClick={() => haptic('medium')} className="button button-primary glass-press mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-full px-4 py-3 text-[14px] font-semibold">Continue to FxAeon <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
-            </div>
-          ) : (
-            <>
-              <Button onClick={connect} loading={connecting} className="mt-5 w-full">Connect browser wallet</Button>
-              {error && <p role="alert" className="mt-3 rounded-lg border border-[var(--danger-dim)] bg-[var(--danger-dim)] px-3 py-2.5 text-[12px] leading-relaxed text-danger">{error}</p>}
-            </>
-          )}
-        </Card>
-        <Link href="/" className="mt-4 inline-flex min-h-11 items-center text-[12px] font-semibold text-mint">← Back to home</Link>
+      {connected && wallet.address ? (
+        <>
+          <div className={styles.authAddress}>
+            <WalletAvatar address={wallet.address} size={32} />
+            <GroupedAddress address={wallet.address} />
+          </div>
+          <div className={styles.authActions}>
+            <Link href="/" onClick={() => haptic('medium')} className="button button-primary glass-press flex min-h-12 w-full items-center justify-center gap-2 px-4 py-3 text-[15px] font-semibold">Continue to FxAeon <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className={styles.authActions}>
+            <Button onClick={connect} loading={connecting}>Connect browser wallet</Button>
+          </div>
+          {error && <p role="alert" className={styles.authNotice} data-tone="danger">{error}</p>}
+        </>
+      )}
+      <Link href="/" className={styles.authBack}><ArrowLeft aria-hidden="true" />Back to home</Link>
     </main>
   );
 }

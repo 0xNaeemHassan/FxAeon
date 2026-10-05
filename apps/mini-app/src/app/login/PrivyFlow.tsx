@@ -9,7 +9,7 @@
  * There is no raw private-key field and no delegated/session signer step.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Lock, Mail, Plus, Wallet } from 'lucide-react';
+import { ChevronRight, Lock, Mail, Plus, Wallet } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import {
   useConnectWallet,
@@ -19,8 +19,9 @@ import {
   useWallets,
 } from '@privy-io/react-auth';
 import { haptic } from '@/lib/telegram';
-import { AddressChip, Button, Card, FullScreenSpinner } from '@/components/ui';
+import { AddressChip, Button, FullScreenSpinner } from '@/components/ui';
 import FxLogo from '@/components/FxLogo';
+import { WalletAvatar } from '@/components/WalletAvatar';
 import { usePrivyWallet } from '@/lib/wallet';
 import { useT } from '@/lib/i18n';
 import { userSafeError } from '@/lib/errors';
@@ -120,21 +121,22 @@ function PrivyLoginFlow() {
 
   if (phase === 'done') {
     return (
-        <main className={`${styles.loginPanel} mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col justify-center gap-5 px-6`}>
-        <div className="flex flex-col items-center gap-4 text-center">
-          <span className="flex h-16 w-16 items-center justify-center rounded-lg bg-[var(--success-dim)]">
-            <Check className="h-8 w-8 text-success" strokeWidth={1.8} />
-          </span>
-          <h1 ref={phaseHeadingRef} tabIndex={-1} className="text-display text-2xl font-semibold outline-none">
-            Wallet ready
-          </h1>
-          {walletAddress && <AddressChip address={walletAddress} />}
-          <Card className={`${styles.loginCard} w-full text-left`}>
-            <p className="text-[14px] leading-relaxed text-mut">
-              <span className="font-medium text-[var(--text)]">You stay in control.</span>{' '}
-              Every transaction still requires your wallet approval. FxAeon never receives your private key.
-            </p>
-          </Card>
+      <main className={`${styles.loginPanel} ${styles.authStage} mx-auto w-full`}>
+        <AuthCheck />
+        <h1 ref={phaseHeadingRef} tabIndex={-1} className={styles.authTitle}>
+          Wallet ready
+        </h1>
+        {walletAddress && (
+          <div className={styles.authIdentity}>
+            <WalletAvatar address={walletAddress} size={28} />
+            <AddressChip address={walletAddress} />
+          </div>
+        )}
+        <p className={styles.authNote}>
+          <strong>You stay in control.</strong>{' '}
+          Every transaction still requires your wallet approval. FxAeon never receives your private key.
+        </p>
+        <div className={styles.authActions}>
           <Button onClick={() => router.push('/')}>
             Continue
           </Button>
@@ -144,101 +146,85 @@ function PrivyLoginFlow() {
   }
 
   if (phase === 'choose' || phase === 'creating') {
+    const creating = phase === 'creating';
     return (
-      <main className={`${styles.loginPanel} mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col justify-center gap-4 px-6`}>
-        <div className="flex flex-col gap-4">
-          <h1 ref={phaseHeadingRef} tabIndex={-1} className="text-display text-[26px] font-semibold leading-tight outline-none">
-            Choose your wallet
-          </h1>
-          <p className="text-[14px] leading-relaxed text-mut">
-            Create a wallet for this account or connect one you already use. Nothing is created or connected automatically.
-          </p>
-          <Card className={`${styles.loginCard} flex items-start gap-3`}>
-            <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)]">
-              <Plus className="h-[18px] w-[18px] text-mint" strokeWidth={2} />
+      <main className={`${styles.loginPanel} ${styles.authStage} mx-auto w-full`}>
+        <h1 ref={phaseHeadingRef} tabIndex={-1} className={styles.authTitle}>
+          Choose your wallet
+        </h1>
+        <p className={styles.authLead}>
+          Create a wallet for this account or connect one you already use. Nothing is created or connected automatically.
+        </p>
+        <div className={styles.authOptions}>
+          <button type="button" className={styles.authOption} onClick={handleCreate} disabled={creating} aria-busy={creating || undefined}>
+            <span className={styles.authOptionIcon} aria-hidden="true"><Plus /></span>
+            <span className={styles.authOptionText}>
+              <strong>{creating ? 'Creating wallet…' : 'Create a new wallet'}</strong>
+              <small>Create a wallet secured by Privy for this account.</small>
             </span>
-            <span className="flex-1">
-              <p className="text-[14px] font-medium">Create a new wallet</p>
-              <p className="mt-1 text-[13px] leading-relaxed text-mut">
-                Create a wallet secured by Privy for this account.
-              </p>
-              <Button onClick={handleCreate} loading={phase === 'creating'} className="mt-3">
-                {phase === 'creating' ? 'Creating…' : 'Create wallet'}
-              </Button>
+            {creating ? <span className={styles.authSpinner} aria-hidden="true" /> : <ChevronRight aria-hidden="true" />}
+          </button>
+          <button type="button" className={styles.authOption} onClick={startExternalWallet} disabled={creating}>
+            <span className={styles.authOptionIcon} aria-hidden="true"><Wallet /></span>
+            <span className={styles.authOptionText}>
+              <strong>Connect an existing wallet</strong>
+              <small>Connect MetaMask, Coinbase Wallet, WalletConnect, or another supported EVM wallet.</small>
             </span>
-          </Card>
-          <Card className={`${styles.loginCard} flex items-start gap-3`}>
-            <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--mint-dim)]">
-              <Wallet className="h-[18px] w-[18px] text-mint" strokeWidth={2} />
-            </span>
-            <span className="flex-1">
-              <p className="text-[14px] font-medium">Connect an existing wallet</p>
-              <p className="mt-1 text-[13px] leading-relaxed text-mut">
-                Connect MetaMask, Coinbase Wallet, WalletConnect, or another supported EVM wallet.
-              </p>
-              <Button variant="ghost" onClick={startExternalWallet} className="mt-3">
-                Connect wallet
-              </Button>
-            </span>
-          </Card>
-          {error && (
-            <Card className={`${styles.loginCard} border-[rgba(255,194,75,0.35)]`}>
-              <p role="alert" className="text-[13px] leading-relaxed text-warn">{error}</p>
-            </Card>
-          )}
-          <Button variant="ghost" onClick={() => setPhase('intro')}>Back</Button>
+            <ChevronRight aria-hidden="true" />
+          </button>
         </div>
+        {error && <p role="alert" className={styles.authNotice}>{error}</p>}
+        <button type="button" className={styles.authBack} onClick={() => setPhase('intro')} disabled={creating}>Back</button>
       </main>
     );
   }
 
   const busy = phase === 'authenticating';
   return (
-    <main className={`${styles.loginPanel} mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col justify-center px-6 py-10`}>
-      <div className="flex flex-col">
-        <div className={`${styles.loginCard} glass mx-auto w-full p-6`}>
-          <div className="flex flex-col items-center text-center">
-            <span className="flex h-16 w-16 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface-2)]">
-              <FxLogo size={48} />
-            </span>
-            <p className="text-display mt-2.5 text-[20px] font-semibold tracking-tight">Fx<span className="text-gradient">Aeon</span></p>
-          </div>
-          <h1 ref={phaseHeadingRef} tabIndex={-1} className="text-display mt-5 text-center text-[23px] font-semibold leading-tight outline-none">
-            {t('loginCard.signIn')}
-          </h1>
-          <p className="mt-2 text-center text-[14px] leading-relaxed text-mut">
-            Continue with a wallet or email.
-          </p>
-          <div className={`${styles.loginActions} mt-6`}>
-            <Button variant="primary" onClick={startExternalWallet} disabled={busy}>
-              <Wallet className="h-[18px] w-[18px]" strokeWidth={2} />
-              {t('loginCard.wallet')}
-            </Button>
-            <Button variant="ghost" onClick={startEmailLogin} disabled={busy}>
-              <Mail className="h-[18px] w-[18px]" strokeWidth={2} />
-              {t('loginCard.email')}
-            </Button>
-          </div>
-          {phase === 'error' && (
-            <Card className={`${styles.loginCard} mt-4 border-[rgba(255,194,75,0.35)]`}>
-              <p role="alert" className="text-[13px] leading-relaxed text-warn">{error}</p>
-              <Button variant="ghost" className="mt-2" onClick={() => { setError(''); setPhase('intro'); }}>
-                Try again
-              </Button>
-            </Card>
-          )}
-          <p className="mt-5 text-center text-[13px] leading-relaxed text-mut">
-            {t('loginCard.terms')}
-          </p>
-        </div>
-        <div className="mt-5 flex justify-center">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-[13px] text-mut">
-            <Lock className="h-3 w-3 text-mint" strokeWidth={2.2} />
-            {t('loginCard.poweredBy')} <span className="font-semibold text-[var(--text)]">privy</span>
-          </span>
-        </div>
+    <main className={`${styles.loginPanel} ${styles.authStage} mx-auto w-full`}>
+      <span className={styles.authHalo} aria-hidden="true"><FxLogo size={44} /></span>
+      <h1 ref={phaseHeadingRef} tabIndex={-1} className={styles.authTitle}>
+        {t('loginCard.signIn')}
+      </h1>
+      <p className={styles.authLead}>
+        Continue with a wallet or email.
+      </p>
+      <div className={styles.authActions}>
+        <Button variant="primary" onClick={startExternalWallet} disabled={busy}>
+          <Wallet aria-hidden="true" />
+          {t('loginCard.wallet')}
+        </Button>
+        <Button variant="ghost" onClick={startEmailLogin} disabled={busy}>
+          <Mail aria-hidden="true" />
+          {t('loginCard.email')}
+        </Button>
       </div>
+      {phase === 'error' && (
+        <div className={styles.authNotice}>
+          <p role="alert">{error}</p>
+          <button type="button" className={styles.authRetry} onClick={() => { setError(''); setPhase('intro'); }}>
+            Try again
+          </button>
+        </div>
+      )}
+      <p className={styles.authFinePrint}>
+        {t('loginCard.terms')}
+      </p>
+      <span className={styles.authBadge}>
+        <Lock aria-hidden="true" />
+        {t('loginCard.poweredBy')} <strong>privy</strong>
+      </span>
     </main>
+  );
+}
+
+/** A check drawn once when the wallet is ready; reduced motion shows it whole. */
+function AuthCheck() {
+  return (
+    <svg className={styles.authCheck} viewBox="0 0 72 72" aria-hidden="true">
+      <circle cx="36" cy="36" r="34" />
+      <path d="M23 37.5 32 46.5 50 27.5" />
+    </svg>
   );
 }
 
