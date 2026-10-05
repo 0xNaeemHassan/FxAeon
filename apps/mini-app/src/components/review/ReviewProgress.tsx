@@ -58,14 +58,14 @@ export function TransactionHashLink({ step, chainId }: { step: TransactionStepRe
 export function StatusNotice({ label, body, className, icon }: { label: string; body: string; className: string; icon: ReactNode }) {
   // Tone follows the semantic text color; only states that wait on the
   // person (wallet prompts, network switches) carry the attention ring.
-  const tone = className.match(/text-(warn|success|danger|mint|mut)/)?.[1] ?? 'mut';
+  const tone = (className ?? '').match(/text-(warn|success|danger|mint|mut)/)?.[1] ?? 'mut';
   return (
     <div role="status" aria-live="polite" aria-atomic="true" className={presentation.statusNotice} data-tone={tone}>
       {/* Animate an actual stage change once; polling/body updates keep the
           same node, live region, and focus rather than replaying the effect. */}
       <div key={label} className={presentation.statusContent}>
-      <span className={`${presentation.statusIcon} ${className}`}>{icon}</span>
-      <span className={presentation.statusText}><span className={className}>{label}</span><span>{body}</span></span>
+      <span className={`${presentation.statusIcon} ${className ?? ''}`}>{icon}</span>
+      <span className={presentation.statusText}><span className={className ?? undefined}>{label}</span><span>{body}</span></span>
       </div>
     </div>
   );

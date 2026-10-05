@@ -1326,27 +1326,13 @@ select.field-control option {
   background: color-mix(in srgb, var(--surface) 94%, var(--mint) 6%);
 }
 
-.segmented-sides {
-  margin-bottom: 16px;
-  border-color: var(--line-strong);
-  background: var(--bg-raised);
-}
-
-.segmented-sides .segmented-option-active {
-  box-shadow: none;
-}
-
-.segmented-sides .segmented-option-active[data-value='long'] {
-  background: var(--success-dim);
-  box-shadow: inset 0 -2px 0 var(--success);
-  color: var(--success);
-}
-
-.segmented-sides .segmented-option-active[data-value='short'] {
-  background: var(--danger-dim);
-  box-shadow: inset 0 -2px 0 var(--danger);
-  color: var(--danger);
-}
+/* Long/short: the sliding thumb takes the side's tint; the active label its color. */
+.segmented-sides[data-thumb][data-active='long']::before { background: color-mix(in srgb, var(--long) 15%, var(--surface-2)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--long) 32%, transparent); }
+.segmented-sides[data-thumb][data-active='short']::before { background: color-mix(in srgb, var(--short) 15%, var(--surface-2)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--short) 32%, transparent); }
+:root[data-theme='light'] .segmented-sides[data-thumb][data-active='long']::before { background: color-mix(in srgb, var(--long) 12%, var(--surface)); }
+:root[data-theme='light'] .segmented-sides[data-thumb][data-active='short']::before { background: color-mix(in srgb, var(--short) 10%, var(--surface)); }
+.segmented-sides .segmented-option-active[data-value='long'] { color: var(--long); }
+.segmented-sides .segmented-option-active[data-value='short'] { color: var(--short); }
 
 .trade-positions-link {
   display: flex;
@@ -1409,6 +1395,20 @@ select.field-control option {
   background: var(--bg-raised);
   padding: clamp(24px, 5vw, 56px);
 }
+
+/* Brand mark on the sign-in surface: the logo resting in a soft halo. */
+.auth-brand-mark {
+  position: relative;
+  display: grid;
+  width: 64px;
+  height: 64px;
+  place-items: center;
+  border-radius: 20px;
+  background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--mint) 22%, var(--surface-2)), var(--surface-2) 70%);
+  box-shadow: inset 0 0 0 1px var(--hairline), 0 12px 32px color-mix(in srgb, var(--mint) 18%, transparent);
+  animation: scale-in var(--dur-slow) var(--ease-out) both;
+}
+.auth-brand-mark :where(svg) { filter: drop-shadow(0 4px 12px color-mix(in srgb, var(--mint) 35%, transparent)); }
 
 .auth-wallet-icon {
   display: grid;

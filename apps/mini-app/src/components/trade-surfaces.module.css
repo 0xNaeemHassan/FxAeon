@@ -392,10 +392,6 @@
 .sideControl :global(.segmented) { padding: 4px; }
 .sideControl :global(.segmented-option) { min-height: 56px; padding-block: 6px; }
 .sideControl :global(.segmented-option > span:first-child) { font-size: var(--fs-body); }
-.sideControl :global(.segmented-sides[data-active='long']::before) { background: color-mix(in srgb, var(--long) 14%, var(--surface-2)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--long) 30%, transparent); }
-.sideControl :global(.segmented-sides[data-active='short']::before) { background: color-mix(in srgb, var(--short) 14%, var(--surface-2)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--short) 30%, transparent); }
-.sideControl :global(.segmented-sides .segmented-option-active[data-value='long']) { color: var(--long); }
-.sideControl :global(.segmented-sides .segmented-option-active[data-value='short']) { color: var(--short); }
 
 .fieldStack { display: flex; flex-direction: column; gap: 10px; }
 .positionList { display: grid; gap: 10px; }

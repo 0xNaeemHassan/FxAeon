@@ -4,7 +4,8 @@
 import { Suspense, useEffect, useState, type MouseEvent } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { ArrowRight, Wallet } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
+import FxLogo from '@/components/FxLogo';
 import { privyConfigured } from '@/lib/privyConfig';
 import { Button, Card, FullScreenSpinner } from '@/components/ui';
 import { usePrivyWallet } from '@/lib/wallet';
@@ -83,7 +84,7 @@ function BrowserWalletFlow() {
   return (
     <main className={`${styles.loginPanel} auth-panel mx-auto flex min-h-[var(--tg-viewport-stable-height)] w-full max-w-md flex-col justify-center px-6`}>
         <Card className={`${styles.loginCard} w-full p-6`}>
-          <span className="auth-wallet-icon"><Wallet className="h-6 w-6 text-mint" strokeWidth={1.8} aria-hidden="true" /></span>
+          <span className="auth-brand-mark" aria-hidden="true"><FxLogo size={40} /></span>
           <h1 className="text-display mt-5 text-[28px] font-semibold">Connect your wallet</h1>
           <p className="mt-2 text-[14px] leading-relaxed text-mut">Connect MetaMask, Coinbase Wallet, or another EVM wallet. Review and approve each transaction in your wallet.</p>
 

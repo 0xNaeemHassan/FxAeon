@@ -489,6 +489,7 @@ export default function MovePage() {
               type="button"
               aria-label={`Reverse route to ${sourceName}`}
               onClick={changeDirection}
+              data-direction={sourceChainId === 1 ? 'forward' : 'reverse'}
               className={`glass-press ${styles.networkArrow} ${moveStyles.routeSwap}`}
             >
               <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
@@ -496,7 +497,7 @@ export default function MovePage() {
             <NetworkField label="To" name={destinationName} chainId={destinationChainId} />
           </div>
 
-          <div className="my-4 hairline" />
+          <div className="h-3" aria-hidden="true" />
           <div className={`${styles.moveFormFields} ${moveStyles.moveFormFields}`}>
             <div className={`${styles.amountHero} ${styles.moveAmountHero} ${moveStyles.moveAmountHero}`}>
               <AmountField
@@ -513,11 +514,11 @@ export default function MovePage() {
 
             <div className={styles.recipientSection}>
               <div className="mb-2 flex items-center justify-between gap-3">
-                <span className="text-[12px] font-medium text-mut">Recipient on {destinationName}</span>
+                <span className="text-[13px] font-medium text-mut">Recipient on {destinationName}</span>
                 <button
                   type="button"
                   onClick={changeRecipientMode}
-                  className="min-h-11 rounded-lg px-2 text-[11px] font-semibold text-mint"
+                  className="min-h-11 rounded-full px-3 text-[12px] font-semibold text-mint transition-colors hover:bg-[var(--mint-dim)]"
                 >
                   {customRecipient ? 'Use connected wallet' : 'Use another wallet'}
                 </button>
@@ -530,9 +531,9 @@ export default function MovePage() {
                   placeholder="0x… destination wallet"
                 />
               ) : (
-                <div className="flex min-h-[56px] items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--input)] px-3">
+                <div className="flex min-h-[56px] items-center justify-between gap-3 rounded-2xl bg-[var(--surface-2)] px-3">
                   <span className={moveStyles.recipientMark}><UserRound className="h-4 w-4" aria-hidden="true" /></span>
-                  <span className={`${moveStyles.recipientLabel} mr-auto text-[12px] text-mut`}>{wallet.address ? 'Your wallet' : 'Connect wallet'}</span>
+                  <span className={`${moveStyles.recipientLabel} mr-auto text-[13px] font-medium text-[var(--text)]`}>{wallet.address ? 'Your wallet' : 'Connect wallet'}</span>
                   {wallet.address ? (
                     <span className={`${moveStyles.recipientAddress} font-mono text-[12px] font-semibold`}>
                       {`${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)}`}
@@ -664,8 +665,8 @@ function AddressField({ label, hint, value, onChange, placeholder }: { label: st
 function NetworkField({ label, name, chainId }: { label: 'From' | 'To'; name: string; chainId: FxChainId }) {
   return (
     <div className={`${styles.networkNode} ${moveStyles.routeNode}`}>
-      <span className="block text-[11px] text-mut">{label}</span>
-      <span className={`${moveStyles.routeIdentity} mt-1 flex items-center text-[14px] font-semibold`}><ChainIcon chainId={chainId} size={22} className={moveStyles.chainLogo} /><span className={moveStyles.routeName}>{name}</span></span>
+      <span className="block text-[12px] font-medium text-mut">{label}</span>
+      <span className={`${moveStyles.routeIdentity} mt-1.5 flex items-center text-[15px] font-semibold`}><ChainIcon chainId={chainId} size={26} className={moveStyles.chainLogo} /><span className={moveStyles.routeName}>{name}</span></span>
     </div>
   );
 }

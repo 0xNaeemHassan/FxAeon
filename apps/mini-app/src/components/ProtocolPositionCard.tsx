@@ -19,6 +19,14 @@ import { freshDisplayPrices } from '@/lib/displayPrices';
 import { calculatePositionUsdValuation, debtCollateralRatioPercent, formatUsdCents } from '@/lib/positionValuation';
 import styles from './ProtocolPositionCard.module.css';
 
+/** Thousands separators for display only; the fraction is left untouched. */
+function groupDigits(value: string): string {
+  const [integer, fraction] = value.split('.');
+  if (!/^\d+$/.test(integer ?? '')) return value;
+  const grouped = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return fraction === undefined ? grouped : `${grouped}.${fraction}`;
+}
+
 function Skeleton({ className = '' }: { className?: string }) {
   return <div aria-hidden="true" className={`skeleton ${className}`} />;
 }
@@ -48,8 +56,8 @@ function PositionBody({
   const priceSnapshot = useUsdPrices();
   const prices = freshDisplayPrices(priceSnapshot);
   const { quote: liveQuote, isFresh: hasFreshLiveQuote } = useLiveMarketQuote(position.market);
-  const collateral = formatAmount(position.info.rawColls, positionTokenDecimals(position, 'collateral'));
-  const debt = formatAmount(position.info.rawDebts, positionTokenDecimals(position, 'debt'));
+  const collateral = groupDigits(formatAmount(position.info.rawColls, positionTokenDecimals(position, 'collateral')));
+  const debt = groupDigits(formatAmount(position.info.rawDebts, positionTokenDecimals(position, 'debt')));
   const collateralKey = priceKeyForSymbol(position.info.rawCollsToken);
   const debtKey = priceKeyForSymbol(position.info.rawDebtsToken);
   // Validate each display quote independently, including retained quotes.
@@ -197,12 +205,13 @@ export function ProtocolPositionNotice({
       : 'Positions are temporarily unavailable';
 
   return (
-    <div role="status" aria-label={label} className={`flex items-center gap-2.5 rounded-xl border border-[rgba(255,194,102,.2)] bg-[rgba(255,194,102,.08)] text-warn ${compact ? 'p-2.5' : 'p-3'}`}>
-      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-      <span className="flex-1 text-[11px] leading-relaxed">{refreshing ? 'Refreshing positions' : 'Refresh positions'}</span>
+    <div role="status" aria-label={label} className={styles.notice} data-compact={compact || undefined}>
+      <AlertTriangle aria-hidden="true" />
+      {/* Sighted users see the same state the label announces. */}
+      <span>{refreshing ? 'Refreshing positions…' : label}</span>
       {onRefresh && (
-        <button type="button" onClick={onRefresh} disabled={refreshing} aria-label="Retry position verification" className="glass-press flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg disabled:opacity-50">
-          <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
+        <button type="button" onClick={onRefresh} disabled={refreshing} aria-label="Retry position verification">
+          <RefreshCw className={refreshing ? 'animate-spin' : ''} aria-hidden="true" />
         </button>
       )}
     </div>
@@ -211,9 +220,10 @@ export function ProtocolPositionNotice({
 
 export function ProtocolPositionSkeleton({ compact = false }: { compact?: boolean }) {
   return (
-    <div role="status" aria-label="Loading positions" className="astryx-card rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-3.5 shadow-[var(--elevation-1)]">
-      <div className="flex items-center gap-3"><Skeleton className="h-9 w-9 rounded-full" /><div className="flex-1"><Skeleton className="h-4 w-32" /><Skeleton className="mt-2 h-3 w-24" /></div></div>
-      {!compact && <div className="mt-3 grid grid-cols-2 gap-2"><Skeleton className="h-16 rounded-lg" /><Skeleton className="h-16 rounded-lg" /></div>}
+    <div role="status" aria-label="Loading positions" className={`${styles.card} ${compact ? styles.compact : ''}`}>
+      <div className="flex items-center gap-3"><Skeleton className="h-10 w-10 rounded-full" /><div className="flex-1"><Skeleton className="h-4 w-32 rounded-md" /><Skeleton className="mt-2 h-3 w-24 rounded-md" /></div></div>
+      <Skeleton className="mt-4 h-7 w-40 rounded-lg" />
+      {!compact && <div className="mt-3 grid grid-cols-2 gap-2"><Skeleton className="h-16 rounded-xl" /><Skeleton className="h-16 rounded-xl" /></div>}
     </div>
   );
 }

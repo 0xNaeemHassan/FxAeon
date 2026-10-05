@@ -1,39 +1,41 @@
+/* Position card: identity and side first, the position's value as the hero,
+ * then four calm facts. Long and short are the only colors in the card. */
 .card {
   display: block;
   width: 100%;
   min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: 19px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
   padding: 16px;
-  background: linear-gradient(145deg, color-mix(in srgb, var(--surface-2) 58%, var(--surface)), var(--surface) 72%);
+  background: var(--surface);
   color: var(--text);
   font: inherit;
   text-align: left;
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 4%, transparent);
-  transition: border-color var(--astryx-duration-normal) var(--astryx-ease-out), box-shadow var(--astryx-duration-normal) var(--astryx-ease-out), transform var(--astryx-duration-normal) var(--astryx-ease-out), background-color var(--astryx-duration-normal) var(--astryx-ease-out);
-  animation: position-card-enter var(--astryx-duration-normal) var(--astryx-ease-out) both;
+  box-shadow: var(--ring-inset);
+  transition: border-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out), transform var(--dur-slow) var(--ease-spring), background-color var(--dur-base) var(--ease-out);
+  animation: position-card-enter var(--dur-slow) var(--ease-out) both;
 }
 
 @keyframes position-card-enter {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
-.compact { padding: 11px 12px; border-radius: 16px; }
+.compact { padding: 14px; border-radius: var(--radius-lg); }
 
 .interactive { cursor: pointer; }
 .interactive:hover {
-  border-color: color-mix(in srgb, var(--mint) 52%, var(--line));
-  box-shadow: 0 8px 22px color-mix(in srgb, var(--bg) 35%, transparent), inset 0 1px 0 color-mix(in srgb, var(--text) 5%, transparent);
-  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--mint) 34%, var(--line));
+  box-shadow: var(--ring-inset), var(--elevation-1);
 }
+.interactive:active { transform: scale(0.99); transition-duration: var(--dur-press); }
 .interactive:focus-visible {
   outline: 2px solid var(--mint-bright);
   outline-offset: 3px;
 }
 .selected {
-  border-color: color-mix(in srgb, var(--mint) 72%, var(--line));
-  box-shadow: inset 3px 0 0 var(--mint), 0 0 0 1px color-mix(in srgb, var(--mint) 12%, transparent);
+  border-color: color-mix(in srgb, var(--mint) 64%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mint) 12%, transparent);
 }
 .highlighted {
   outline: 2px solid color-mix(in srgb, var(--success) 68%, transparent);
@@ -42,11 +44,11 @@
 
 .content { min-width: 0; }
 .compactContent .identity { gap: 10px; }
-.compactContent .positionValue { margin-top: 9px; padding: 8px 10px; border-radius: 12px; }
-.compactContent .metrics { gap: 6px; margin-top: 6px; }
-.compactContent .metric { padding: 7px 8px; border-radius: 10px; }
-.compactContent .metricValue { margin-top: 3px; font-size: 13px; }
-.compactContent .metricDetail { font-size: 11px; }
+.compactContent .positionValue { margin-top: 12px; }
+.compactContent .metrics { gap: 6px; margin-top: 10px; }
+.compactContent .metric { padding: 9px 10px; }
+.compactContent .metricValue { font-size: var(--fs-small); }
+.compactContent .metricDetail { font-size: var(--fs-micro); }
 .identity {
   display: flex;
   min-width: 0;
@@ -59,25 +61,25 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--surface-3) 72%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--line-strong) 50%, transparent);
+  box-shadow: 0 0 0 3px var(--surface-2);
 }
 .identityText { min-width: 0; flex: 1; }
 .marketLine { display: flex; min-width: 0; align-items: center; gap: 8px; }
-.market { color: var(--text); font-size: 17px; font-weight: 750; letter-spacing: -.035em; line-height: 1.1; }
+.market { color: var(--text); font-size: var(--fs-title); font-weight: 650; letter-spacing: -.02em; line-height: 1.15; }
 .side {
   display: inline-flex;
   min-height: 22px;
   align-items: center;
-  border: 1px solid transparent;
+  border: 0;
   border-radius: 999px;
-  padding: 2px 8px;
-  font-size: 10px;
-  font-weight: 750;
+  padding: 3px 9px;
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.02em;
   line-height: 1;
 }
-.long { border-color: color-mix(in srgb, var(--success) 23%, transparent); background: var(--success-dim); color: var(--success); }
-.short { border-color: color-mix(in srgb, var(--danger) 23%, transparent); background: var(--danger-dim); color: var(--danger); }
+.long { background: var(--long-dim); color: var(--long); }
+.short { background: var(--short-dim); color: var(--short); }
 .positionMeta {
   display: flex;
   min-width: 0;
@@ -85,56 +87,55 @@
   align-items: center;
   gap: 6px;
   margin: 4px 0 0;
-  color: var(--mut-2);
-  font-size: 11px;
+  color: var(--mut);
+  font-size: var(--fs-caption);
   line-height: 1.3;
   font-variant-numeric: tabular-nums;
 }
 .positionMeta strong { color: var(--text); font-weight: 650; }
 .navigateIcon {
   display: flex;
-  flex: 0 0 30px;
-  width: 30px;
-  height: 30px;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  color: var(--mut-2);
-  transition: border-color var(--astryx-duration-fast) var(--astryx-ease-out), color var(--astryx-duration-fast) var(--astryx-ease-out), transform var(--astryx-duration-fast) var(--astryx-ease-out);
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--mut);
+  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), transform var(--dur-slow) var(--ease-spring);
 }
-.navigateIcon svg { width: 15px; height: 15px; }
-.interactive:hover .navigateIcon { border-color: var(--line-strong); color: var(--mint); transform: translateX(1px); }
+.navigateIcon svg { width: 16px; height: 16px; }
+.interactive:hover .navigateIcon { background: var(--mint-dim); color: var(--mint); transform: translateX(2px); }
 
 .positionValue {
   display: flex;
   min-width: 0;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 14px;
-  border: 1px solid color-mix(in srgb, var(--line) 88%, transparent);
-  border-radius: 14px;
-  padding: 11px 13px;
-  background: color-mix(in srgb, var(--surface-3) 52%, var(--surface));
+  margin-top: 16px;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
 }
-.positionValueLabel { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.positionValueLabel { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
 .positionValueLabel > span:first-child {
   color: var(--mut);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .025em;
-  line-height: 1.25;
-  text-transform: uppercase;
+  font-size: var(--fs-small);
+  font-weight: 500;
+  line-height: 1.3;
 }
-.valueBasis { color: var(--mut-2); font-size: 10px; line-height: 1.25; }
+.valueBasis { color: var(--mut-2); font-size: var(--fs-micro); line-height: 1.25; }
 .positionValueNumber {
   min-width: 0;
   color: var(--text);
-  font-size: clamp(20px, 5vw, 25px);
-  font-weight: 750;
-  letter-spacing: -.045em;
-  line-height: 1.15;
+  font-size: clamp(22px, 6vw, 28px);
+  font-weight: 600;
+  letter-spacing: var(--tracking-figure);
+  line-height: 1.1;
   text-align: right;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
@@ -145,22 +146,21 @@
   min-width: 0;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  margin-top: 9px;
+  margin-top: 14px;
 }
 .metric {
   min-width: 0;
-  border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
-  border-radius: 12px;
-  padding: 9px 10px;
-  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  background: var(--surface-2);
 }
 .metricLabel {
   display: block;
   overflow: hidden;
-  color: var(--mut-2);
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: .015em;
+  color: var(--mut);
+  font-size: var(--fs-micro);
+  font-weight: 500;
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -169,8 +169,8 @@
   min-width: 0;
   margin: 4px 0 0;
   color: var(--text);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 600;
   line-height: 1.3;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
@@ -179,23 +179,52 @@
   min-width: 0;
   margin: 2px 0 0;
   color: var(--mut);
-  font-size: 10px;
+  font-size: var(--fs-caption);
   line-height: 1.3;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
 
+/* Discovery notices say what happened and offer the retry beside it. */
+.notice {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  border-radius: var(--radius-md);
+  padding: 8px 6px 8px 14px;
+  background: var(--warn-dim);
+  color: var(--warn);
+  font-size: var(--fs-small);
+  line-height: 1.45;
+}
+.notice > svg { flex: 0 0 16px; width: 16px; height: 16px; }
+.notice > span { min-width: 0; flex: 1; }
+.notice > button {
+  display: inline-flex;
+  min-width: 44px;
+  min-height: 44px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background-color var(--dur-fast) ease;
+}
+.notice > button:hover:not(:disabled) { background: color-mix(in srgb, var(--warn) 14%, transparent); }
+.notice > button:disabled { opacity: .5; }
+.notice > button svg { width: 15px; height: 15px; }
+
 @media (max-width: 359px) {
-  .card { padding: 11px; }
-  .compact { padding: 10px; }
+  .card { padding: 12px; }
+  .compact { padding: 12px; }
   .identity { gap: 9px; }
-  .positionValue { gap: 8px; margin-top: 9px; padding: 8px 9px; }
+  .positionValue { gap: 8px; margin-top: 12px; }
   .metrics { gap: 6px; }
   .metric { padding: 8px; }
-  .metricValue { font-size: 11px; }
+  .metricValue { font-size: var(--fs-caption); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .card, .navigateIcon { transition: none; animation: none; }
-  .interactive:hover, .interactive:hover .navigateIcon { transform: none; }
+  .interactive:hover, .interactive:hover .navigateIcon, .interactive:active { transform: none; }
 }
