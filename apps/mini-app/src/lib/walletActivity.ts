@@ -17,17 +17,24 @@ export type WalletActivity = {
   transfers: WalletTransfer[];
 };
 
+const OPERATION_TITLES: Record<string, string> = {
+  increasePosition: 'Open position', reducePosition: 'Reduce position', adjustPositionLeverage: 'Adjust leverage',
+  depositAndMint: 'Borrow fxUSD', repayAndWithdraw: 'Repay', depositFxSave: 'Deposit fxSAVE',
+  withdrawFxSave: 'Withdraw fxSAVE', getRedeemTx: 'Claim fxSAVE', buildBridgeTx: 'Bridge',
+};
+
+/** User-facing title for an SDK operation; unknown operations never leak method names. */
+export function operationTitle(operation: string): string {
+  return OPERATION_TITLES[operation] ?? 'Transaction';
+}
+
 export function activityOperation(view: RecoveryViewModel): string {
   if (view.record.stepKind === 'approval') {
     const token = Object.values(FX_TOKENS).find((item) => item.address.toLowerCase() === view.record.to.toLowerCase());
     return `Approve ${token?.key ?? 'token'}`;
   }
   if (view.record.stepKind !== 'action') return 'Transaction';
-  return view.record.intent ?? ({
-    increasePosition: 'Open position', reducePosition: 'Reduce position', adjustPositionLeverage: 'Adjust leverage',
-    depositAndMint: 'Borrow fxUSD', repayAndWithdraw: 'Repay', depositFxSave: 'Deposit fxSAVE',
-    withdrawFxSave: 'Withdraw fxSAVE', getRedeemTx: 'Claim fxSAVE', buildBridgeTx: 'Bridge',
-  } as Record<string, string>)[view.record.operation] ?? 'Transaction';
+  return view.record.intent ?? operationTitle(view.record.operation);
 }
 
 /** One row per chain/hash. An approval never inherits its route's action label. */

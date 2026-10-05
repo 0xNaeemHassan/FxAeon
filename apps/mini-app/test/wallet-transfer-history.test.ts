@@ -134,7 +134,7 @@ test('falls back only between configured Alchemy endpoints and excludes Infura',
 
   assert.equal(result.partial, false);
   assert.ok(attempts.some((url) => url.endsWith('/secondary')));
-  assert.ok(attempts.every((url) => url.includes('.alchemy.com/')));
+  assert.ok(attempts.every((url) => new URL(url).hostname.endsWith('.g.alchemy.com')));
 });
 
 test('missing Alchemy configuration returns a partial empty result without throwing', async () => {

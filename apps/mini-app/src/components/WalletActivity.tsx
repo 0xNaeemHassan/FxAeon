@@ -10,7 +10,7 @@ import TokenIcon, { ChainIcon } from './TokenIcon';
 import { SectionTitle } from './ui';
 import { BridgeTracker } from './BridgeTracker';
 import { useWalletActivity } from '@/lib/useWalletActivity';
-import { mergeWalletActivity, type WalletActivity as Activity } from '@/lib/walletActivity';
+import { mergeWalletActivity, operationTitle, type WalletActivity as Activity } from '@/lib/walletActivity';
 import { cancelSignatureRequiredDraft, signatureDraftResumePath } from '@/lib/fx/drafts';
 import { buildReceiptPresentation } from '@/lib/receiptPresentation';
 import { useOverlayDialog } from '@/lib/useOverlayDialog';
@@ -41,7 +41,9 @@ function ActivityFeed({ walletAddress, compact }: { walletAddress: Address; comp
     && `${item.title} ${item.hash} ${item.symbol}`.toLowerCase().includes(search.toLowerCase()));
   const visible = compact ? filtered.slice(0, 3) : filtered;
   const drafts = activity.data?.drafts ?? [];
-  if (compact && !activity.isPending && rows.length === 0) return null;
+  const unavailable = !activity.isPending && rows.length === 0 && activity.data.partial;
+  // A verified-empty preview stays hidden; an unreadable one says so instead of looking empty.
+  if (compact && !activity.isPending && rows.length === 0 && !unavailable) return null;
   return <section className={styles.section} aria-label={compact ? 'Recent history' : 'Transaction history'}>
     <SectionTitle right={<div className={styles.toolbar}>
       {compact && <Link href="/history" aria-label="View all history">View all<ChevronRight size={14} aria-hidden="true" /></Link>}
@@ -54,11 +56,13 @@ function ActivityFeed({ walletAddress, compact }: { walletAddress: Address; comp
       <select aria-label="Activity network" value={chain} onChange={(event) => setChain(event.target.value)}><option value="all">All networks</option><option value="1">Ethereum</option><option value="8453">Base</option></select>
       <label className={styles.search}><Search size={16} aria-hidden="true" /><input aria-label="Search activity" placeholder="Search activity" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
     </div>}
-    {!compact && drafts.length > 0 && <details className={styles.drafts}><summary>Not signed <span>{drafts.length}</span></summary>
-      {drafts.map((draft) => <div key={draft.id}><span>{draft.operation.replace(/([a-z])([A-Z])/g, '$1 $2')}</span>
-        <Link href={signatureDraftResumePath(draft)}>Continue</Link><button type="button" aria-label="Dismiss unsigned action" onClick={() => { cancelSignatureRequiredDraft(draft.id); void activity.refetch(); }}><X size={16} /></button></div>)}
+    {!compact && drafts.length > 0 && <details className={styles.drafts}><summary>Drafts <span>({drafts.length})</span></summary>
+      {drafts.map((draft) => <div key={draft.id}><span>{operationTitle(draft.operation)}</span><small>Unsubmitted</small>
+        <Link href={signatureDraftResumePath(draft)}>Continue</Link><button type="button" aria-label="Dismiss" title="Dismiss draft" onClick={() => { cancelSignatureRequiredDraft(draft.id); void activity.refetch(); }}><X size={16} aria-hidden="true" /></button></div>)}
     </details>}
     {activity.isPending ? <div role="status" aria-label="Loading history" className={styles.loading}><div className="skeleton" /><div className="skeleton" /></div>
+      : unavailable ? <div role="status" className={styles.unavailable}><span>History couldn’t load. Nothing was marked complete or failed.</span>
+        <button type="button" disabled={activity.isFetching} onClick={() => void activity.refetch()}>Retry</button></div>
       : <ul className={styles.list}>{visible.map((item) => <li key={item.id}>
         <button type="button" className={styles.row} onClick={(event) => { triggerRef.current = event.currentTarget; setSelected(item); setDetailOpen(true); }}>
           <span className={styles.token}><TokenIcon symbol={item.symbol} size={38} /><span><ChainIcon chainId={item.chainId} size={15} /></span></span>

@@ -109,12 +109,14 @@ test.describe('wallet session isolation', () => {
       ]));
     }, { accountA: ACCOUNT_A, accountB: ACCOUNT_B });
     await page.goto('/history', { waitUntil: 'domcontentloaded' });
-    await expect(page.getByText('0xaaaaaa…aaaaaa', { exact: true })).toBeVisible();
-    await expect(page.getByText('0xbbbbbb…bbbbbb', { exact: true })).toHaveCount(0);
+    // Account A submitted a position action; account B submitted an fxSAVE deposit.
+    const history = page.locator('section[aria-label="Transaction history"]');
+    await expect(history.getByText('Open position', { exact: true })).toBeVisible();
+    await expect(history.getByText('Deposit fxSAVE', { exact: true })).toHaveCount(0);
 
     await setAccounts(page, [ACCOUNT_B]);
-    await expect(page.getByText('0xbbbbbb…bbbbbb', { exact: true })).toBeVisible();
-    await expect(page.getByText('0xaaaaaa…aaaaaa', { exact: true })).toHaveCount(0);
+    await expect(history.getByText('Deposit fxSAVE', { exact: true })).toBeVisible();
+    await expect(history.getByText('Open position', { exact: true })).toHaveCount(0);
     assertNoBackendRequests(requests);
   });
 
@@ -152,20 +154,22 @@ test.describe('wallet session isolation', () => {
     await expect(draftSummary).toBeVisible();
     await expect(page.getByRole('link', { name: 'Continue', exact: true })).toBeHidden();
     await expect(page.getByText('Borrow fxUSD', { exact: true })).toBeHidden();
-    await expect(page.getByText('Submitted transactions', { exact: true })).toBeVisible();
-    await expect(page.getByText('0xcccccc…cccccc', { exact: true })).toBeVisible();
+    // The submitted position action stays in the feed, separate from the collapsed draft.
+    const submitted = page.locator('section[aria-label="Transaction history"] ul').getByRole('button', { name: /Open position/ });
+    await expect(submitted).toBeVisible();
+    await expect(submitted).toContainText('Submitted');
     await expect(page.getByText('Minted fxUSD', { exact: true })).toHaveCount(0);
 
     await draftSummary.click();
     await expect(page.getByRole('link', { name: 'Continue', exact: true })).toBeVisible();
     await expect(page.getByText('Borrow fxUSD', { exact: true })).toBeVisible();
     await expect(page.getByText('Unsubmitted', { exact: true })).toBeVisible();
-    await expect(page.getByText('0xcccccc…cccccc', { exact: true })).toBeVisible();
+    await expect(submitted).toBeVisible();
 
     await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
     await expect(page.getByText('Drafts (1)', { exact: true })).toHaveCount(0);
     await expect(page.getByRole('link', { name: 'Continue', exact: true })).toHaveCount(0);
-    await expect(page.getByText('0xcccccc…cccccc', { exact: true })).toBeVisible();
+    await expect(submitted).toBeVisible();
     assertNoBackendRequests(requests);
   });
 });

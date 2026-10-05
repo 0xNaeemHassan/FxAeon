@@ -60,7 +60,7 @@ test.describe('shared shell spacing', () => {
       // proving its connected address, use an ENS-length label to stress the
       // same constrained identity control that displays a verified name.
       const ensSizedLabel = 'dextrader-2024.eth';
-      await profileButton.locator('span').evaluate((element, label) => { element.textContent = label; }, ensSizedLabel);
+      await profileButton.locator('[data-wallet-identity-name]').evaluate((element, label) => { element.textContent = label; }, ensSizedLabel);
       await expect(profileButton).toContainText(ensSizedLabel);
 
       const geometry = await page.locator('.app-topbar').evaluate((element) => ({

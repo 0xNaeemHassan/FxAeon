@@ -145,7 +145,7 @@ export default function WalletProfile() {
     <button ref={openerRef} type="button" aria-label="Open wallet profile" onClick={() => { openedAtPathRef.current = pathname; setOpenWallet(walletIdentity); haptic('light'); }}
       className={`${styles.walletTrigger} ${headerWalletControl.trigger} ${headerWalletControl.identityTrigger} glass-press`}>
       <span className={headerWalletControl.identityAvatar}><WalletAvatar address={activeAddress} size={22} /></span>
-      <span className={headerWalletControl.identityName}>{verifiedEnsName ?? compactAddress(activeAddress)}</span>
+      <span className={headerWalletControl.identityName} data-wallet-identity-name>{verifiedEnsName ?? compactAddress(activeAddress)}</span>
     </button>
     {present && typeof document !== 'undefined' && createPortal(
       <div className={`${styles.walletBackdrop} ${presentation.backdrop} wallet-profile-backdrop`} data-state={open ? 'open' : 'closed'} inert={!open} aria-hidden={!open || undefined} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpenWallet(null); }}>
