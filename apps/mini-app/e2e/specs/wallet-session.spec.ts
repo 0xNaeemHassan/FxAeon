@@ -104,8 +104,8 @@ test.describe('wallet session isolation', () => {
       const hashA = `0x${'a'.repeat(64)}`;
       const hashB = `0x${'b'.repeat(64)}`;
       localStorage.setItem('fxaeon:pending-hashes:v4', JSON.stringify([
-        { id: `1:${accountA.toLowerCase()}:${hashA}`, operation: 'increasePosition', walletAddress: accountA, chainId: 1, hash: hashA, to: '0x2222222222222222222222222222222222222222', nonce: 1, dataHash: hashA, valueWei: '0', submittedAt: 1, status: 'pending' },
-        { id: `1:${accountB.toLowerCase()}:${hashB}`, operation: 'depositFxSave', walletAddress: accountB, chainId: 1, hash: hashB, to: '0x3333333333333333333333333333333333333333', nonce: 2, dataHash: hashB, valueWei: '0', submittedAt: 2, status: 'pending' },
+        { id: `1:${accountA.toLowerCase()}:${hashA}`, operation: 'increasePosition', stepKind: 'action', walletAddress: accountA, chainId: 1, hash: hashA, to: '0x2222222222222222222222222222222222222222', nonce: 1, dataHash: hashA, valueWei: '0', submittedAt: 1, status: 'pending' },
+        { id: `1:${accountB.toLowerCase()}:${hashB}`, operation: 'depositFxSave', stepKind: 'action', walletAddress: accountB, chainId: 1, hash: hashB, to: '0x3333333333333333333333333333333333333333', nonce: 2, dataHash: hashB, valueWei: '0', submittedAt: 2, status: 'pending' },
       ]));
     }, { accountA: ACCOUNT_A, accountB: ACCOUNT_B });
     await page.goto('/history', { waitUntil: 'domcontentloaded' });
@@ -145,7 +145,7 @@ test.describe('wallet session isolation', () => {
 
       const hash = `0x${'c'.repeat(64)}`;
       localStorage.setItem('fxaeon:pending-hashes:v4', JSON.stringify([
-        { id: `1:${wallet}:${hash}`, operation: 'increasePosition', walletAddress: account, chainId: 1, hash, to: '0x2222222222222222222222222222222222222222', nonce: 1, dataHash: hash, valueWei: '0', submittedAt: 1, status: 'pending' },
+        { id: `1:${wallet}:${hash}`, operation: 'increasePosition', stepKind: 'action', walletAddress: account, chainId: 1, hash, to: '0x2222222222222222222222222222222222222222', nonce: 1, dataHash: hash, valueWei: '0', submittedAt: 1, status: 'pending' },
       ]));
     }, ACCOUNT_A);
 

@@ -21,12 +21,12 @@ import { WalletAvatar } from './WalletAvatar';
 import { loadActivityReceipt } from '@/lib/activityReceipt';
 import styles from './WalletActivity.module.css';
 
-export default function WalletActivity({ walletAddress, compact = false }: { walletAddress: Address; compact?: boolean }) {
+export default function WalletActivity({ walletAddress, compact = false, inDialog = false }: { walletAddress: Address; compact?: boolean; inDialog?: boolean }) {
   // A new account owns a new selection/filter state as well as a separate query cache.
-  return <ActivityFeed key={walletAddress.toLowerCase()} walletAddress={walletAddress} compact={compact} />;
+  return <ActivityFeed key={walletAddress.toLowerCase()} walletAddress={walletAddress} compact={compact || inDialog} inDialog={inDialog} />;
 }
 
-function ActivityFeed({ walletAddress, compact }: { walletAddress: Address; compact: boolean }) {
+function ActivityFeed({ walletAddress, compact, inDialog }: { walletAddress: Address; compact: boolean; inDialog: boolean }) {
   const activity = useWalletActivity(walletAddress);
   const [search, setSearch] = useState('');
   const [chain, setChain] = useState('all');
@@ -43,10 +43,11 @@ function ActivityFeed({ walletAddress, compact }: { walletAddress: Address; comp
   const drafts = activity.data?.drafts ?? [];
   const unavailable = !activity.isPending && rows.length === 0 && activity.data.partial;
   // A verified-empty preview stays hidden; an unreadable one says so instead of looking empty.
-  if (compact && !activity.isPending && rows.length === 0 && !unavailable) return null;
+  // The wallet dialog keeps its own History row, so it only previews rows that exist.
+  if (compact && !activity.isPending && rows.length === 0 && (!unavailable || inDialog)) return null;
   return <section className={styles.section} aria-label={compact ? 'Recent history' : 'Transaction history'}>
-    <SectionTitle right={<div className={styles.toolbar}>
-      {compact && <Link href="/history" aria-label="View all history">View all<ChevronRight size={14} aria-hidden="true" /></Link>}
+    <SectionTitle level={inDialog ? 3 : 2} right={<div className={styles.toolbar}>
+      {compact && !inDialog && <Link href="/history" aria-label="View all history">View all<ChevronRight size={14} aria-hidden="true" /></Link>}
       <button type="button" aria-label="Refresh history" title="Refresh history" disabled={activity.isFetching} onClick={() => void activity.refetch()}>
         <RefreshCw size={16} className={activity.isFetching ? 'animate-spin' : ''} aria-hidden="true" />
       </button>

@@ -198,7 +198,7 @@ export default function WalletProfile() {
               <h3 id="wallet-profile-positions-title" className="sr-only">Open positions</h3>
               {claimTask && <ActionRow icon={ArrowDownToLine} title="Claim fxSAVE withdrawal" href={claimTask.href} />}
             </section>
-            <RecentActivityPreview walletAddress={wallet.address as Address} />
+            <RecentActivityPreview walletAddress={wallet.address as Address} inDialog />
             <nav className={presentation.links} aria-label="Wallet profile actions">
               <ActionRow icon={History} title="History" href="/history" />
               <ActionRow icon={Settings} title="Settings" href="/settings" />
