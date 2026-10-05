@@ -1,0 +1,13 @@
+/* Five groups per line: the width admits "0x" plus five fours and no more. */
+.address {
+  display: inline-block;
+  max-width: 25.5ch;
+  color: var(--mut);
+  line-height: 1.6;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.address[data-align='center'] { text-align: center; }
+.address > span { margin-inline-end: .5ch; }
+.address > span:last-child { margin-inline-end: 0; }
+.address > span[data-edge] { color: var(--text); font-weight: 600; }
