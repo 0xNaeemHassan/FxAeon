@@ -55,6 +55,7 @@ import ConnectWalletButton from '@/components/ConnectWalletButton';
 import { ValueOrSkeleton } from '@/components/MissingValue';
 import { PortfolioAssets, type PortfolioNetwork } from '@/components/PortfolioAssets';
 import { PortfolioWorkspace } from '@/components/ProductLayout';
+import { SplitFigure } from '@/components/SplitFigure';
 import { useRefreshAction } from '@/lib/useRefreshAction';
 
 const EMPTY_FX_SAVE: FxSaveSnapshot = {
@@ -326,12 +327,13 @@ function SupportedValueCard({ displayTotalUsd, loading, refreshing, onRefresh,
 }) {
   return <section aria-label="Portfolio balance" className={`${presentation.valueCard} ${balancePresentation.hero}`}>
     <div className={presentation.valueTop}>
-      <p className={`${presentation.valueNumber} ${balancePresentation.value}`} data-portfolio-value><ValueOrSkeleton value={displayTotalUsd === null ? '—' : formatUsd(displayTotalUsd)} width="xl"
-        status={loading ? 'loading' : 'unavailable'} label={loading ? 'Loading portfolio value' : 'Portfolio value unavailable'} /></p>
+      <span className={presentation.valueLabel}>Total value</span>
       <button type="button" aria-label="Refresh portfolio balances and positions" aria-busy={refreshing} title="Refresh balances and positions" disabled={refreshing} onClick={onRefresh}>
         <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} aria-hidden="true" />
       </button>
     </div>
+    <p className={`${presentation.valueNumber} ${balancePresentation.value}`} data-portfolio-value><ValueOrSkeleton value={displayTotalUsd === null ? '—' : <SplitFigure value={formatUsd(displayTotalUsd)} />} width="xl"
+      status={loading ? 'loading' : 'unavailable'} label={loading ? 'Loading portfolio value' : 'Portfolio value unavailable'} /></p>
     <QuickActions />
     <Disclosure title="Value breakdown">
       <MetricRows rows={[

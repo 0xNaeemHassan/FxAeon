@@ -489,6 +489,7 @@ export default function MovePage() {
               type="button"
               aria-label={`Reverse route to ${sourceName}`}
               onClick={changeDirection}
+              data-direction={sourceChainId === 1 ? 'forward' : 'reverse'}
               className={`glass-press ${styles.networkArrow} ${moveStyles.routeSwap}`}
             >
               <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
@@ -496,7 +497,7 @@ export default function MovePage() {
             <NetworkField label="To" name={destinationName} chainId={destinationChainId} />
           </div>
 
-          <div className="my-4 hairline" />
+          <div className="h-3" aria-hidden="true" />
           <div className={`${styles.moveFormFields} ${moveStyles.moveFormFields}`}>
             <div className={`${styles.amountHero} ${styles.moveAmountHero} ${moveStyles.moveAmountHero}`}>
               <AmountField
@@ -513,11 +514,11 @@ export default function MovePage() {
 
             <div className={styles.recipientSection}>
               <div className="mb-2 flex items-center justify-between gap-3">
-                <span className="text-[12px] font-medium text-mut">Recipient on {destinationName}</span>
+                <span className="text-[13px] font-medium text-mut">Recipient on {destinationName}</span>
                 <button
                   type="button"
                   onClick={changeRecipientMode}
-                  className="min-h-11 rounded-lg px-2 text-[11px] font-semibold text-mint"
+                  className="min-h-11 rounded-full px-3 text-[12px] font-semibold text-mint transition-colors hover:bg-[var(--mint-dim)]"
                 >
                   {customRecipient ? 'Use connected wallet' : 'Use another wallet'}
                 </button>
@@ -530,9 +531,9 @@ export default function MovePage() {
                   placeholder="0x… destination wallet"
                 />
               ) : (
-                <div className="flex min-h-[56px] items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--input)] px-3">
+                <div className="flex min-h-[56px] items-center justify-between gap-3 rounded-2xl bg-[var(--surface-2)] px-3">
                   <span className={moveStyles.recipientMark}><UserRound className="h-4 w-4" aria-hidden="true" /></span>
-                  <span className={`${moveStyles.recipientLabel} mr-auto text-[12px] text-mut`}>{wallet.address ? 'Your wallet' : 'Connect wallet'}</span>
+                  <span className={`${moveStyles.recipientLabel} mr-auto text-[13px] font-medium text-[var(--text)]`}>{wallet.address ? 'Your wallet' : 'Connect wallet'}</span>
                   {wallet.address ? (
                     <span className={`${moveStyles.recipientAddress} font-mono text-[12px] font-semibold`}>
                       {`${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)}`}
@@ -549,7 +550,7 @@ export default function MovePage() {
             >
               <summary className={`${moveStyles.expertSummary} group flex cursor-pointer list-none items-center justify-between gap-3 px-3 text-[12px] font-semibold text-mut [&::-webkit-details-marker]:hidden`}>
                 <span className="flex min-w-0 items-center gap-2"><Code2 aria-hidden="true" className="h-4 w-4 shrink-0 text-[var(--mut-2)]" />Custom contracts</span>
-                <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 text-[var(--mut-2)] transition-transform group-open:rotate-180" />
+                <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 text-[var(--mut-2)] disclosure-chevron" />
               </summary>
               <div className="border-t border-[var(--line)] p-3">
                 <AdvancedAddressFields
@@ -637,7 +638,7 @@ function AdvancedRiskSummary() {
         <p>Custom contracts are checked live before signing. Both networks must have deployed 18-decimal metadata, matching cross-chain peers, quote support, and the exact send target.</p>
       </div>
       <details className="mt-2 border-t border-[rgba(255,194,102,.18)] pt-1">
-        <summary className="flex min-h-11 cursor-pointer items-center text-[11px] font-semibold">What gets checked</summary>
+        <summary className="flex min-h-11 cursor-pointer items-center gap-1.5 text-[11px] font-semibold">What gets checked<ChevronDown aria-hidden="true" className="ml-auto h-3.5 w-3.5 shrink-0 disclosure-chevron" /></summary>
         <ul className="space-y-1 pb-1 pl-4 text-mut">
           <li>Checksummed, deployed contracts with 18-decimal token metadata</li>
           <li>Matching, non-zero cross-chain peers in both directions</li>
@@ -664,8 +665,8 @@ function AddressField({ label, hint, value, onChange, placeholder }: { label: st
 function NetworkField({ label, name, chainId }: { label: 'From' | 'To'; name: string; chainId: FxChainId }) {
   return (
     <div className={`${styles.networkNode} ${moveStyles.routeNode}`}>
-      <span className="block text-[11px] text-mut">{label}</span>
-      <span className={`${moveStyles.routeIdentity} mt-1 flex items-center text-[14px] font-semibold`}><ChainIcon chainId={chainId} size={22} className={moveStyles.chainLogo} /><span className={moveStyles.routeName}>{name}</span></span>
+      <span className="block text-[12px] font-medium text-mut">{label}</span>
+      <span className={`${moveStyles.routeIdentity} mt-1.5 flex items-center text-[15px] font-semibold`}><ChainIcon chainId={chainId} size={26} className={moveStyles.chainLogo} /><span className={moveStyles.routeName}>{name}</span></span>
     </div>
   );
 }

@@ -3,7 +3,7 @@
 import { createPortal } from 'react-dom';
 import { useOverlayDialog } from '@/lib/useOverlayDialog';
 import { useExitPresence } from '@/lib/useExitPresence';
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { ChevronDown, Info, Search } from 'lucide-react';
 import TokenIcon from '@/components/TokenIcon';
 import { useUsdPrices } from '@/components/PriceProvider';
@@ -82,9 +82,18 @@ export function Segmented<T extends string>({
   useEffect(() => {
     setHydrated(true);
   }, []);
+  const activeIndex = options.findIndex((option) => option.value === value);
 
   return (
-    <div className={`${styles.formSegmented} segmented ${tone === 'sides' ? 'segmented-sides' : ''} grid grid-flow-col auto-cols-fr p-1`} role="radiogroup" aria-label={ariaLabel}>
+    <div
+      className={`${styles.formSegmented} segmented ${tone === 'sides' ? 'segmented-sides' : ''} grid grid-flow-col auto-cols-fr p-1`}
+      role="radiogroup"
+      aria-label={ariaLabel}
+      data-thumb=""
+      data-index={activeIndex}
+      data-active={value}
+      style={{ '--seg-count': options.length, '--seg-index': Math.max(activeIndex, 0) } as CSSProperties}
+    >
       {options.map((option) => {
         const active = option.value === value;
         return (
@@ -126,10 +135,10 @@ export function Segmented<T extends string>({
             {option.icon ? (
               <span className="flex items-center justify-center gap-2">
                 <span className="market-option-icon" aria-hidden="true">{option.icon}</span>
-                <span className="text-[13px] font-semibold">{option.label}</span>
+                <span className="text-[14px] font-semibold">{option.label}</span>
               </span>
-            ) : <span className="block text-[13px] font-semibold">{option.label}</span>}
-            {option.sub && <span className="mt-0.5 block text-[11px] opacity-70">{option.sub}</span>}
+            ) : <span className="block text-[14px] font-semibold">{option.label}</span>}
+            {option.sub && <span className="mt-0.5 block text-[12px] font-medium opacity-75">{option.sub}</span>}
           </button>
         );
       })}

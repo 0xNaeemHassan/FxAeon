@@ -56,6 +56,7 @@ const mocks: Record<string, string> = {
         const transaction = route.transactions[index];
         callbacks.onStatus?.('submitted', 'mock submitted');
         try {
+          await callbacks.beforeTransaction?.(index, transaction);
           await callbacks.ensureChain?.(route.chainId);
           const tier = feeSelection?.snapshot?.tiers?.[feeSelection.tier];
           const request = {
@@ -64,7 +65,7 @@ const mocks: Record<string, string> = {
             nonce: transaction.nonce,
             ...(tier ? { maxFeePerGas: tier.maxFeePerGas, maxPriorityFeePerGas: tier.maxPriorityFeePerGas } : {}),
           };
-          const hash = await callbacks.requestSignature(request, transaction);
+          const hash = await callbacks.requestSignature(request, { ...transaction });
           const step = { index, transaction, status: 'confirmed', hash };
           steps.push(step);
           callbacks.onStep?.(step);

@@ -93,6 +93,16 @@ export function formatExactDecimal(value: string, maxFractionDigits = 4): string
   return `${sign && !isZero ? '-' : ''}${grouped}${roundedFraction ? `.${roundedFraction}` : ''}`;
 }
 
+/**
+ * Thousands separators for an exact unsigned decimal string, for display only.
+ * The fraction is left untouched, and anything else is returned as is.
+ */
+export function groupDigits(value: string): string {
+  const match = /^(\d+)(\.\d+)?$/.exec(value);
+  if (!match) return value;
+  return `${match[1].replace(/\B(?=(\d{3})+(?!\d))/g, ',')}${match[2] ?? ''}`;
+}
+
 /** Compare two unsigned decimal strings at a fixed on-chain precision. */
 export function compareExactDecimals(
   left: string,

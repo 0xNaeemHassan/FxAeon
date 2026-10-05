@@ -541,7 +541,7 @@ export default function TradePage() {
       <ActionWorkspace className={`${styles.tradeWorkspace} trade-workspace`}>
         <header className={`${styles.tradePageHeading} trade-page-heading`}>
           <div><h1 className="text-display text-[30px] font-semibold leading-tight">Trade</h1></div>
-          <Link href="/positions" className={`${styles.positionsShortcut} glass-press inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 text-[12px] font-semibold text-mut hover:text-mint`}><Layers2 className="h-4 w-4" aria-hidden="true" />Positions</Link>
+          <Link href="/positions" className={`${styles.positionsShortcut} glass-press inline-flex min-h-11 items-center gap-2 border text-[13px] font-semibold`}><Layers2 className="h-4 w-4" aria-hidden="true" />Positions</Link>
         </header>
 
         <div className={styles.tradeLayout} data-trade-layout data-review={reviewStage !== 'input' || undefined}>

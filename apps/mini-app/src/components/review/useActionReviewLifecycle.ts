@@ -557,6 +557,9 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
     const refreshWallet = createRouteWalletRefresh(invalidateWalletData);
     const currentRoute = startingRoute;
     let postConfirmReadStarted = false;
+    // The runner signs copies of the planned transactions, so the step being
+    // signed is the index it announces before each one, not an identity lookup.
+    let signingStepIndex = -1;
     try {
       setExecutionRoute(currentRoute);
       const execution = await runTransactionRoute({
@@ -564,6 +567,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
         feeSelection: executionIsEmbedded ? feeSelection ?? undefined : undefined,
         callbacks: {
           beforeTransaction: async (index) => {
+            signingStepIndex = index;
             if (index === 0) return;
             const liveWallet = liveWalletRef.current;
             if (!isCurrentExecution()
@@ -596,7 +600,16 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
               throw new Error('The selected wallet changed before signing.');
             }
             setStatus('awaiting-user');
-            setStatusDetail('Review this transaction in your wallet.');
+            const approvalToken = Object.values(FX_TOKENS).find((token) => token.address.toLowerCase() === transaction.to.toLowerCase());
+            const signingLabel = transaction.kind === 'approval'
+              ? transaction.type === 'approvePosition' ? 'Approve position' : `Approve ${approvalToken?.key ?? 'token'}`
+              : 'Confirm';
+            // Name the exact request the wallet is showing; the status model
+            // appends the instruction to review it there.
+            const stepIndex = signingStepIndex;
+            const stepCount = currentRoute.transactions.length;
+            const requestLabel = transaction.kind === 'approval' ? signingLabel : `Confirm ${reviewTitle ?? 'the action'}`;
+            setStatusDetail(stepCount > 1 && stepIndex >= 0 ? `${requestLabel} (step ${stepIndex + 1} of ${stepCount})` : requestLabel);
             // Persist the unsigned resume hint only after the runner's final
             // validation/simulation has reached the wallet request boundary.
             if (!signatureDraftIdRef.current) {
@@ -614,10 +627,6 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
                 signatureDraftIdRef.current = null;
               }
             }
-            const approvalToken = Object.values(FX_TOKENS).find((token) => token.address.toLowerCase() === transaction.to.toLowerCase());
-            const signingLabel = transaction.kind === 'approval'
-              ? transaction.type === 'approvePosition' ? 'Approve position' : `Approve ${approvalToken?.key ?? 'token'}`
-              : 'Confirm';
             const signed = await wallet.sendTransaction({
               chainId: request.chainId,
               from: request.from,

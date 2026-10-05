@@ -2,8 +2,11 @@
 
 import { useEffect, useState } from 'react';
 
+/** The longest overlay exit: phone sheets slide down over --dur-base. */
+const OVERLAY_EXIT_MS = 220;
+
 /** Keep closing chrome for its brief exit; never retain a previous account's UI. */
-export function useExitPresence(open: boolean, identity: string, durationMs = 80) {
+export function useExitPresence(open: boolean, identity: string, durationMs = OVERLAY_EXIT_MS) {
   const [retainedIdentity, setRetainedIdentity] = useState<string | null>(open ? identity : null);
   useEffect(() => {
     if (open) {

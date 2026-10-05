@@ -15,6 +15,8 @@ export function userSafeError(cause: unknown, fallback: string): string {
     || message.length > 280
     || /(?:https?|wss?):\/\//i.test(message)
     || /(?:request body|authorization|api[-_ ]?key|stack trace)/i.test(message)
+    // Bare codes such as "network_error" or "ACTION_REJECTED" are diagnostics, not sentences.
+    || /^(?:[a-z][a-z0-9]*(?:_[a-z0-9]+)+|[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)$/.test(message)
   ) {
     return fallback;
   }

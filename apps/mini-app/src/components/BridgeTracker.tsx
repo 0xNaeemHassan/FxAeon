@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { getEidByChainId } from '@aladdindao/fx-sdk';
 import { type Address, type Hex } from 'viem';
-import { CheckCircle2, Clock3, ExternalLink, LoaderCircle, Network, RefreshCw, XCircle } from 'lucide-react';
+import { CheckCircle2, ChevronDown, Clock3, ExternalLink, LoaderCircle, Network, RefreshCw, XCircle } from 'lucide-react';
 import { assertPublicClientChain, getPublicClient } from '@/lib/fx';
 import { userSafeError } from '@/lib/errors';
 import {
@@ -328,7 +328,7 @@ export function BridgeTracker({
       </div>
       {(verificationError || hasVerificationContext) && (
         <details className="mt-3 border-t border-[var(--line)] pt-1">
-          <summary className="flex min-h-11 cursor-pointer items-center text-[11px] font-semibold text-mut">Verification details</summary>
+          <summary className="flex min-h-11 cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-mut">Verification details<ChevronDown aria-hidden="true" className="ml-auto h-3.5 w-3.5 shrink-0 disclosure-chevron" /></summary>
           <div className="pb-2 text-[10.5px] leading-relaxed text-mut">
             <p>Delivery requires the matching bridge message, recipient, amount, and {DESTINATION_CONFIRMATIONS.toString()} destination confirmations.</p>
             {verificationError && !delivered && <p className="mt-2 break-words text-[var(--mut-2)]">Last check: {verificationError}</p>}

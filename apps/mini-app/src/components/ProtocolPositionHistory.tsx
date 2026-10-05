@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ExternalLink, RefreshCw } from 'lucide-react';
+import { ChevronDown, ExternalLink, RefreshCw } from 'lucide-react';
 import type { Address } from 'viem';
 import { Card, SectionTitle } from '@/components/ui';
 import TokenIcon from '@/components/TokenIcon';
@@ -192,7 +192,7 @@ export default function ProtocolPositionHistory({ walletAddress, compact = false
               <p className="px-1 py-2 text-[11.5px] leading-relaxed text-mut">No position activity yet.</p>
             )}
             {!compact && <details className="mt-2 border-t border-[var(--line)] px-1 pt-1">
-              <summary className="flex min-h-11 cursor-pointer items-center text-[10.5px] font-semibold text-mut">History details</summary>
+              <summary className="flex min-h-11 cursor-pointer items-center gap-1.5 text-[10.5px] font-semibold text-mut">History details<ChevronDown aria-hidden="true" className="ml-auto h-3.5 w-3.5 shrink-0 disclosure-chevron" /></summary>
               <p className="pb-2 text-[10px] leading-relaxed text-mut">Indexed position events are matched to successful Ethereum router receipts. Transfers out may not retain prior-wallet attribution in every market index. Other transaction types appear when saved in this browser.</p>
             </details>}
             {hasMore && !compact && (

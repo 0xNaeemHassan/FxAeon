@@ -274,6 +274,8 @@ test.describe('ActionReview isolated orchestration', () => {
     await page.getByRole('button', { name: 'Review position', exact: true }).click();
     await page.getByRole('button', { name: 'Confirm', exact: true }).click();
     await expect(page.getByText('Wallet approval', { exact: true })).toBeVisible();
+    // The wallet prompt names the exact request, including its place in the route.
+    await expect(page.getByText('Confirm Open position v1 (step 1 of 2). Review it in your wallet.', { exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: 'Switch account', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Open position v1', exact: true })).toBeVisible();

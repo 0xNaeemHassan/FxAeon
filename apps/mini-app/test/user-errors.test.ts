@@ -20,3 +20,12 @@ test('provider diagnostics remain hidden even when they contain a leverage error
   assert.equal(userSafeError(new Error('Request body: api_key=private'), 'Retry'), 'Retry');
   assert.equal(userSafeError(new Error('Quote expired. Review again.'), 'Retry'), 'Quote expired. Review again.');
 });
+
+test('bare provider codes fall back to a sentence instead of reaching the screen', () => {
+  for (const code of ['network_error', 'exited_auth_flow', 'ACTION_REJECTED', 'CALL_EXCEPTION']) {
+    assert.equal(userSafeError(code, 'Sign-in was not completed.'), 'Sign-in was not completed.');
+    assert.equal(userSafeError(new Error(code), 'Retry'), 'Retry');
+  }
+  assert.equal(userSafeError('Wallet locked', 'Retry'), 'Wallet locked');
+  assert.equal(userSafeError(new Error('Insufficient balance'), 'Retry'), 'Insufficient balance');
+});

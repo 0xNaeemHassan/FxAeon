@@ -60,8 +60,8 @@
 }
 
 .reviewCard {
-  border-radius: var(--radius-md);
-  background: var(--surface-2);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
 }
 
 /* Transaction review is part of the product card. It replaces the editor in
@@ -105,9 +105,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 8px;
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
+  margin-top: 4px;
 }
 
 .eyebrow {
@@ -167,32 +165,23 @@
   background: transparent;
 }
 
+/* The one primary decision per surface: tall, calm, unmistakable. */
 .primaryAction {
-  min-height: 48px;
-  border-radius: var(--radius-sm);
-  font-weight: 750;
+  min-height: 52px;
+  border-radius: var(--radius-md);
+  font-size: var(--fs-body);
+  font-weight: 650;
+  letter-spacing: -0.01em;
 }
 
-.reviewTrigger .primaryAction:global(.button-primary),
-.reviewInlineActions .primaryAction:global(.button-primary) {
-  border: 1px solid var(--mint);
-  background: var(--mint);
-  box-shadow: none;
-  transition: filter 150ms ease, transform 150ms ease;
-}
-
-.reviewTrigger .primaryAction:global(.button-primary):hover:not(:disabled),
-.reviewInlineActions .primaryAction:global(.button-primary):hover:not(:disabled) { filter: brightness(1.045); }
-.reviewTrigger .primaryAction:global(.button-primary):active:not(:disabled),
-.reviewInlineActions .primaryAction:global(.button-primary):active:not(:disabled) { transform: translateY(1px) scale(.995); }
 .reviewTrigger .primaryAction:global(.button-primary):focus-visible,
 .reviewInlineActions .primaryAction:global(.button-primary):focus-visible { outline: 2px solid var(--mint-bright); outline-offset: 3px; }
 
 .reviewFacts {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 6px;
-  padding: 4px 0 8px;
+  gap: 10px;
+  padding: 2px 0 10px;
 }
 
 .reviewStep {
