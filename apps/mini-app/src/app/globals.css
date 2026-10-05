@@ -363,9 +363,9 @@ summary:focus-visible {
   outline-offset: 3px;
 }
 
-/* Disclosure state lives in plain CSS. This Tailwind build emits no group-*
-   or peer-* variants (they are dropped while finalizing :merge selectors), so
-   group-open utilities would silently never apply. */
+/* Disclosure state lives in plain CSS so it never depends on Tailwind group-*
+   variants: postcss-selector-parser 6.1.3 once made them compile to nothing
+   without a build error. */
 summary:has(.disclosure-chevron) { list-style: none; }
 summary:has(.disclosure-chevron)::-webkit-details-marker { display: none; }
 .disclosure-chevron { flex: 0 0 auto; transition: transform var(--dur-base) var(--ease-out); }
