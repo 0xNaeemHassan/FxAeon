@@ -164,7 +164,7 @@ function PrivyLoginFlow() {
             </span>
             {creating ? <span className={styles.authSpinner} aria-hidden="true" /> : <ChevronRight aria-hidden="true" />}
           </button>
-          <button type="button" className={styles.authOption} onClick={startExternalWallet} disabled={creating}>
+          <button type="button" className={styles.authOption} onClick={startExternalWallet}>
             <span className={styles.authOptionIcon} aria-hidden="true"><Wallet /></span>
             <span className={styles.authOptionText}>
               <strong>Connect an existing wallet</strong>
@@ -174,7 +174,8 @@ function PrivyLoginFlow() {
           </button>
         </div>
         {error && <p role="alert" className={styles.authNotice}>{error}</p>}
-        <button type="button" className={styles.authBack} onClick={() => setPhase('intro')} disabled={creating}>Back</button>
+        {/* Wallet creation has no timeout, so the ways out stay available while it runs. */}
+        <button type="button" className={styles.authBack} onClick={() => setPhase('intro')}>Back</button>
       </main>
     );
   }

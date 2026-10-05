@@ -17,15 +17,8 @@ import TokenIcon from '@/components/TokenIcon';
 import { formatUsdPrice, priceKeyForSymbol } from '@/lib/prices';
 import { freshDisplayPrices } from '@/lib/displayPrices';
 import { calculatePositionUsdValuation, debtCollateralRatioPercent, formatUsdCents } from '@/lib/positionValuation';
+import { groupDigits } from '@/lib/amount';
 import styles from './ProtocolPositionCard.module.css';
-
-/** Thousands separators for display only; the fraction is left untouched. */
-function groupDigits(value: string): string {
-  const [integer, fraction] = value.split('.');
-  if (!/^\d+$/.test(integer ?? '')) return value;
-  const grouped = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return fraction === undefined ? grouped : `${grouped}.${fraction}`;
-}
 
 function Skeleton({ className = '' }: { className?: string }) {
   return <div aria-hidden="true" className={`skeleton ${className}`} />;

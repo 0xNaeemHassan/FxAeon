@@ -233,15 +233,17 @@ function withAlpha(color: string, alpha: number): string {
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
 
-const axisCents = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const axisWhole = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
-/** Grouped axis prices; five-figure prices drop cents that only add noise at axis scale. */
-function formatAxisPrice(price: number) { return Math.abs(price) >= 10_000 ? axisWhole.format(price) : axisCents.format(price); }
+const priceCents = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const priceWhole = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
+/** Exact readings (crosshair and last price) always keep cents, grouped. */
+function formatPrice(price: number) { return priceCents.format(price); }
+/** Axis ticks drop cents once prices reach five figures, where they only add noise. */
+function formatTickmarks(prices: number[]) { return prices.map((price) => (Math.abs(price) >= 10_000 ? priceWhole : priceCents).format(price)); }
 
 function chartOptions(theme: ChartTheme, module: ChartModule): DeepPartial<TimeChartOptions> {
   return {
     layout: { background: { color: 'transparent' }, textColor: theme.axis, fontFamily: theme.font, fontSize: 11 },
-    localization: { priceFormatter: formatAxisPrice },
+    localization: { priceFormatter: formatPrice, tickmarksPriceFormatter: formatTickmarks },
     grid: { vertLines: { visible: false }, horzLines: { visible: false } },
     // The bottom margin keeps the line clear of the attribution mark; the fill fades beneath it.
     rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.14, bottom: 0.24 } },

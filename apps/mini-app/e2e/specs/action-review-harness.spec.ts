@@ -274,6 +274,7 @@ test.describe('ActionReview isolated orchestration', () => {
     await page.getByRole('button', { name: 'Review position', exact: true }).click();
     await page.getByRole('button', { name: 'Confirm', exact: true }).click();
     await expect(page.getByText('Wallet approval', { exact: true })).toBeVisible();
+    await expect(page.getByText(/Approve fxUSD \(step 1 of \d+\)/)).toBeVisible();
 
     await page.getByRole('button', { name: 'Switch account', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Open position v1', exact: true })).toBeVisible();

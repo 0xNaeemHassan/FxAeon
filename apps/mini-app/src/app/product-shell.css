@@ -33,8 +33,6 @@
   [data-product-ui='v2'] .app-topbar > a { gap: 7px; }
   [data-product-ui='v2'] .app-topbar > a > svg { width: 28px; height: 28px; }
   [data-product-ui='v2'] .app-topbar-actions > button { padding-inline: 8px; border-radius: 999px; }
-  [data-product-ui='v2'] .app-topbar-actions > button[aria-label='Connect wallet'] { padding-inline: 14px; }
-  [data-product-ui='v2'] .app-topbar-actions > button[aria-label='Open wallet profile'] > svg { display: none; }
 }
 @media (max-width: 350px) {
   [data-product-ui='v2'] .brand-wordmark { font-size: 18px; }

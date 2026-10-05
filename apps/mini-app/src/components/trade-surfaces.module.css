@@ -158,7 +158,7 @@
   padding: 0 14px;
   transition: border-color var(--dur-fast) ease, box-shadow var(--dur-fast) ease;
 }
-.tokenPickerSearch:focus-within { border-color: color-mix(in srgb, var(--mint) 55%, var(--line)); box-shadow: 0 0 0 3px var(--mint-dim); }
+.tokenPickerSearch:focus-within { border-color: var(--mint); box-shadow: 0 0 0 1px var(--mint), 0 0 0 4px var(--mint-dim); }
 .tokenPickerSearchInput {
   min-height: 48px;
   min-width: 0;

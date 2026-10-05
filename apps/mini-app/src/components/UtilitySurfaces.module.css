@@ -221,7 +221,6 @@
 
 .loginPanel { width: 100%; max-width: 460px; height: 100dvh; min-height: 0 !important; overflow-y: auto; overscroll-behavior: contain; }
 .loginCard { border-radius: 24px; background: color-mix(in srgb, var(--surface) 94%, var(--surface-2)); }
-.loginActions { display: flex; flex-direction: column; gap: 8px; }
 
 /* Sign-in and wallet setup: one centered column on the canvas. The brand mark
  * rests in a soft halo, then a title, one line of context, and the actions. */

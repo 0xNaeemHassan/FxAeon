@@ -501,8 +501,7 @@ details[open] > summary .disclosure-closed-only { display: none; }
   gap: 8px;
 }
 
-.app-topbar-actions > button,
-.app-topbar-actions > .network-selector-wrap > button {
+.app-topbar-actions > button {
   border: 1px solid var(--hairline);
   background: var(--glass-strong);
   box-shadow: var(--ring-inset);
@@ -510,28 +509,12 @@ details[open] > summary .disclosure-closed-only { display: none; }
   transition: border-color var(--dur-fast) ease, background-color var(--dur-fast) ease, color var(--dur-fast) ease, transform var(--dur-press) var(--ease-out);
 }
 
-.app-topbar-actions > button:hover:not(:disabled),
-.app-topbar-actions > .network-selector-wrap > button:hover:not(:disabled) {
+.app-topbar-actions > button:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--mint) 34%, var(--line));
   color: var(--text);
 }
 
 .app-topbar-actions > button:active:not(:disabled) { transform: scale(0.96); }
-
-.app-topbar-actions > button[aria-label='Connect wallet'] {
-  border-color: transparent;
-  border-radius: var(--radius-full);
-  background: var(--mint);
-  box-shadow: 0 6px 18px color-mix(in srgb, var(--mint) 22%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.24);
-  color: var(--on-accent);
-  padding-inline: 16px;
-  font-weight: 650;
-}
-.app-topbar-actions > button[aria-label='Connect wallet']:hover:not(:disabled) {
-  border-color: transparent;
-  color: var(--on-accent);
-  filter: brightness(1.06);
-}
 
 .wallet-profile-backdrop {
   position: fixed;
@@ -1417,51 +1400,6 @@ select.field-control option {
   border-radius: 11px;
 }
 
-/* Direct-login fallback. Normal wallet entry opens over the active route. */
-.auth-panel {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  justify-content: center;
-  background: var(--bg-raised);
-  padding: clamp(24px, 5vw, 56px);
-}
-
-/* Brand mark on the sign-in surface: the logo resting in a soft halo. */
-.auth-brand-mark {
-  position: relative;
-  display: grid;
-  width: 64px;
-  height: 64px;
-  place-items: center;
-  border-radius: 20px;
-  background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--mint) 22%, var(--surface-2)), var(--surface-2) 70%);
-  box-shadow: inset 0 0 0 1px var(--hairline), 0 12px 32px color-mix(in srgb, var(--mint) 18%, transparent);
-  animation: scale-in var(--dur-slow) var(--ease-out) both;
-}
-.auth-brand-mark :where(svg) { filter: drop-shadow(0 4px 12px color-mix(in srgb, var(--mint) 35%, transparent)); }
-
-.auth-wallet-icon {
-  display: grid;
-  width: 48px;
-  height: 48px;
-  place-items: center;
-  border: 1px solid color-mix(in srgb, var(--mint) 30%, var(--line));
-  border-radius: var(--radius-md);
-  background: var(--mint-dim);
-}
-
-.auth-address {
-  overflow-wrap: anywhere;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--input);
-  padding: 12px;
-  color: var(--mut);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 11px;
-}
-
 /* Loading / brand */
 .brand-orbit {
   position: relative;
@@ -1565,7 +1503,6 @@ select.field-control option {
   to { left: 104%; }
 }
 
-@keyframes spin-soft { to { transform: rotate(360deg); } }
 
 .anim-scale-in { animation: scale-in var(--dur-slow) var(--ease-out) both; }
 /* Balance updates stay still; motion belongs to newly opened surfaces. */
@@ -1668,7 +1605,7 @@ input[type='range'].lever::-webkit-slider-thumb {
   border: 0;
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 1px 2px rgba(10, 6, 24, 0.3), 0 4px 12px rgba(10, 6, 24, 0.28), 0 0 0 4px color-mix(in srgb, var(--lever-fill) 22%, transparent);
+  box-shadow: 0 0 0 2px var(--lever-fill), 0 1px 2px rgba(10, 6, 24, 0.3), 0 4px 12px rgba(10, 6, 24, 0.24), 0 0 0 6px color-mix(in srgb, var(--lever-fill) 18%, transparent);
   cursor: grab;
   transition: box-shadow var(--dur-base) var(--ease-out);
 }
@@ -1680,18 +1617,18 @@ input[type='range'].lever::-moz-range-thumb {
   border: 0;
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 1px 2px rgba(10, 6, 24, 0.3), 0 4px 12px rgba(10, 6, 24, 0.28), 0 0 0 4px color-mix(in srgb, var(--lever-fill) 22%, transparent);
+  box-shadow: 0 0 0 2px var(--lever-fill), 0 1px 2px rgba(10, 6, 24, 0.3), 0 4px 12px rgba(10, 6, 24, 0.24), 0 0 0 6px color-mix(in srgb, var(--lever-fill) 18%, transparent);
   cursor: grab;
   transition: box-shadow var(--dur-base) var(--ease-out);
 }
 
 input[type='range'].lever:active::-webkit-slider-thumb {
   cursor: grabbing;
-  box-shadow: 0 1px 2px rgba(10, 6, 24, 0.3), 0 6px 16px rgba(10, 6, 24, 0.32), 0 0 0 8px color-mix(in srgb, var(--lever-fill) 20%, transparent);
+  box-shadow: 0 0 0 2px var(--lever-fill), 0 1px 2px rgba(10, 6, 24, 0.3), 0 6px 16px rgba(10, 6, 24, 0.3), 0 0 0 9px color-mix(in srgb, var(--lever-fill) 18%, transparent);
 }
 input[type='range'].lever:active::-moz-range-thumb {
   cursor: grabbing;
-  box-shadow: 0 1px 2px rgba(10, 6, 24, 0.3), 0 6px 16px rgba(10, 6, 24, 0.32), 0 0 0 8px color-mix(in srgb, var(--lever-fill) 20%, transparent);
+  box-shadow: 0 0 0 2px var(--lever-fill), 0 1px 2px rgba(10, 6, 24, 0.3), 0 6px 16px rgba(10, 6, 24, 0.3), 0 0 0 9px color-mix(in srgb, var(--lever-fill) 18%, transparent);
 }
 input[type='range'].lever:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--mint-bright); }
 input[type='range'].lever:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--mint-bright); }
@@ -1702,7 +1639,6 @@ input[type='range'].lever:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3p
 }
 
 @media (max-width: 760px) {
-  .auth-panel { min-height: 52dvh; padding: 30px 20px; }
 }
 
 @media (min-width: 840px) {
@@ -1729,8 +1665,8 @@ input[type='range'].lever:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3p
   .app-content { max-width: 1120px; }
   .app-content.utility-content { max-width: 560px; }
   .app-topbar { max-width: 1120px; margin: 0 auto var(--header-gap); }
-  .desktop-navigation { display: flex; align-items: center; gap: 2px; margin-right: auto; margin-left: 28px; padding: 4px; border: 1px solid var(--hairline); border-radius: 999px; background: var(--glass-strong); box-shadow: var(--ring-inset); }
-  .desktop-navigation a { position: relative; display: grid; min-height: 40px; place-items: center; padding: 0 16px; border-radius: 999px; font-size: var(--fs-small); font-weight: 600; color: var(--mut); white-space: nowrap; transition: background-color var(--dur-base) ease, color var(--dur-base) ease, transform var(--dur-slow) var(--ease-spring); }
+  .desktop-navigation { display: flex; align-items: center; gap: 2px; margin-right: auto; margin-left: 28px; padding: 2px; border: 1px solid var(--hairline); border-radius: 999px; background: var(--glass-strong); box-shadow: var(--ring-inset); }
+  .desktop-navigation a { position: relative; display: grid; min-height: 44px; place-items: center; padding: 0 16px; border-radius: 999px; font-size: var(--fs-small); font-weight: 600; color: var(--mut); white-space: nowrap; transition: background-color var(--dur-base) ease, color var(--dur-base) ease, transform var(--dur-slow) var(--ease-spring); }
   .desktop-navigation a:hover { color: var(--text); }
   .desktop-navigation a:active { transform: scale(0.96); transition-duration: var(--dur-press); }
   .desktop-navigation a[aria-current='page'] { color: var(--text); background: var(--surface-3); box-shadow: var(--ring-inset); }
@@ -1939,18 +1875,14 @@ input[type='range'].lever:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3p
   .button:active,
   .nav-item:active,
   .desktop-navigation a:active {
-    transform: none;
+    /* Press rules use :active:not(:disabled), which would outrank a plain reset. */
+    transform: none !important;
   }
   .missing-value-bar,
   .skeleton {
     animation: none;
     background-position: 50% 0;
   }
-}
-
-@keyframes shell-enter {
-  from { opacity: 0; }
-  to { opacity: 1; }
 }
 
 @media (forced-colors: active) {

@@ -170,7 +170,7 @@
   background: color-mix(in srgb, currentColor 14%, transparent);
 }
 .statusIcon svg { width: 18px; height: 18px; }
-.statusNotice[data-tone='warn'] .statusIcon::after {
+.statusNotice[data-waiting] .statusIcon::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -183,7 +183,7 @@
 .statusText { min-width: 0; }
 .statusText > span:first-child { display: block; font-size: var(--fs-body); font-weight: 650; line-height: 1.3; }
 .statusText > span:last-child { display: block; margin-top: 2px; color: var(--mut); }
-@media (prefers-reduced-motion: reduce) { .statusNotice[data-tone='warn'] .statusIcon::after { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .statusNotice[data-waiting] .statusIcon::after { animation: none; } }
 
 /* Submitted transactions read as receipts with an explorer affordance. */
 .hashLink {

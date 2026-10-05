@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium, expect as playwrightExpect, type Locator, type Page, type Route } from '@playwright/test';
 import { configuredBrowserChannel } from '../../../../scripts/e2e_browser_channel.cjs';
 import { createPublicClient, decodeFunctionData, decodeFunctionResult, encodeFunctionData, formatUnits, http, multicall3Abi, parseAbi, parseUnits, type Address, type Hex } from 'viem';
-import { formatExactDecimal } from '../../src/lib/amount';
+import { formatExactDecimal, groupDigits } from '../../src/lib/amount';
 import { formatAmount, readPositionGroupWithDirectFallback, tokenAddress } from '../../src/app/trade/fxUi';
 import { readCanonicalPositionInfo } from '../../src/app/trade/canonicalPositionReader';
 import { DIRECT_POSITION_SCAN_MAX_IDS, DIRECT_POSITION_SCAN_BATCH_SIZE } from '../../src/app/trade/directPositionDiscovery';
@@ -740,8 +740,8 @@ async function runProof(captureStage: string) {
         group,
         positionId,
       });
-      await expect(card).toContainText(`${formatAmount(info.rawColls, info.rawCollsDecimals)} ${info.rawCollsToken}`);
-      await expect(card).toContainText(`${formatAmount(info.rawDebts, info.rawDebtsDecimals)} ${info.rawDebtsToken}`);
+      await expect(card).toContainText(`${groupDigits(formatAmount(info.rawColls, info.rawCollsDecimals))} ${info.rawCollsToken}`);
+      await expect(card).toContainText(`${groupDigits(formatAmount(info.rawDebts, info.rawDebtsDecimals))} ${info.rawDebtsToken}`);
       const leverage = (group.side === 'short' ? info.lsdLeverage : info.currentLeverage).toFixed(2).replace(/\.00$/, '');
       await expect(card).toContainText(`${leverage}× leverage`);
     };
