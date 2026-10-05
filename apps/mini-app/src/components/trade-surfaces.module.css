@@ -423,10 +423,7 @@
 .marketColumn :global(.market-chart-market-switch .market-option-icon) { display: inline-flex; }
 .marketColumn :global(.market-chart-instrument-meta) { display: none; }
 .marketColumn :global(.market-chart-frame) { background: transparent; }
-.marketColumn :global(.market-chart-footer) { padding: 8px 14px 12px; border-top: 0; }
-.marketColumn :global(.chart-range-tabs) { border: 0; border-radius: 999px; background: var(--surface-2); }
-.marketColumn :global(.chart-range-tabs button) { border-radius: 999px; }
-.marketColumn :global(.chart-range-tabs .chart-range-active) { background: var(--surface-3); box-shadow: var(--ring-inset); color: var(--text); }
+.marketColumn :global(.market-chart-footer) { padding: 8px 16px 16px; }
 
 .positionManagerGrid {
   display: grid;
@@ -557,6 +554,7 @@
   .marketColumn :global(.market-chart-market-switch .segmented-option > span:first-child) { gap: 6px; white-space: nowrap; }
   .marketColumn :global(.market-chart-market-switch .segmented-option .market-option-icon svg) { width: 18px; height: 18px; }
   .marketColumn :global(.market-chart-toggle) {
+    width: auto;
     min-height: 44px;
     align-self: center;
     margin: 0 10px 4px 0;
