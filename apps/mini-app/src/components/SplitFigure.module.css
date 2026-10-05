@@ -1,0 +1,1 @@
+.fraction { color: color-mix(in srgb, var(--text) 42%, transparent); }

@@ -30,7 +30,6 @@
 .valueLabel { color: var(--mut); font-size: var(--fs-small); font-weight: 500; }
 .partial { color: var(--warn); border-radius: 7px; padding: 4px 7px; background: var(--warn-dim); font-size: var(--fs-micro); }
 .valueNumber { min-width: 0; margin: 2px 0 4px; color: var(--text); }
-.decimals { color: color-mix(in srgb, var(--text) 42%, transparent); }
 .helper { color: var(--mut); font-size: var(--fs-caption); line-height: 1.6; margin: 12px 0 0; }
 .sectionTitle { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
 .sectionTitle h2 { font-size: var(--fs-title); font-weight: 650; letter-spacing: -.02em; margin: 0; }

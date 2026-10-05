@@ -55,6 +55,7 @@ import ConnectWalletButton from '@/components/ConnectWalletButton';
 import { ValueOrSkeleton } from '@/components/MissingValue';
 import { PortfolioAssets, type PortfolioNetwork } from '@/components/PortfolioAssets';
 import { PortfolioWorkspace } from '@/components/ProductLayout';
+import { SplitFigure } from '@/components/SplitFigure';
 import { useRefreshAction } from '@/lib/useRefreshAction';
 
 const EMPTY_FX_SAVE: FxSaveSnapshot = {
@@ -342,12 +343,6 @@ function SupportedValueCard({ displayTotalUsd, loading, refreshing, onRefresh,
       <p className={presentation.helper}>Position value is collateral minus debt. Pending transfers and withdrawal claims are excluded.</p>
     </Disclosure>
   </section>;
-}
-
-/** Whole units lead; cents stay legible but recede. Text content is unchanged. */
-function SplitFigure({ value }: { value: string }) {
-  const match = /^(.*?)(\.\d+)?$/.exec(value);
-  return <>{match?.[1] ?? value}{match?.[2] && <span className={presentation.decimals}>{match[2]}</span>}</>;
 }
 
 function QuickActions() {

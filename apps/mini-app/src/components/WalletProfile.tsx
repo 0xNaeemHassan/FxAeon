@@ -17,6 +17,7 @@ import { useUsdPrices } from '@/components/PriceProvider';
 import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
 import { useWalletDemand, useWalletProfileSession } from '@/components/WalletDemandProvider';
 import { formatUsd } from '@/lib/prices';
+import { SplitFigure } from '@/components/SplitFigure';
 import { compactAddress } from '@/lib/addressPresentation';
 import { userSafeError } from '@/lib/errors';
 import { tokenSymbol } from '@/lib/fx/tokenPresentation';
@@ -169,7 +170,7 @@ export default function WalletProfile() {
                   <RefreshCw size={18} className={manualRefresh.refreshing ? 'animate-spin' : ''} aria-hidden="true" />
                 </button>
               </div></div>
-              <strong className={`${presentation.total} ${balancePresentation.value}`}><ValueOrSkeleton value={walletSnapshotValuation.totalUsd === null ? '—' : formatUsd(walletSnapshotValuation.totalUsd)} width="xl"
+              <strong className={`${presentation.total} ${balancePresentation.value}`}><ValueOrSkeleton value={walletSnapshotValuation.totalUsd === null ? '—' : <SplitFigure value={formatUsd(walletSnapshotValuation.totalUsd)} />} width="xl"
                 status={walletValueLoading ? 'loading' : 'unavailable'} label={walletValueLoading ? 'Loading wallet value' : 'Wallet value unavailable'} /></strong>
               <div className={presentation.actions}>
                 <Link href="/qr" className={presentation.primaryAction}><ArrowDownToLine size={18} aria-hidden="true" />Receive</Link>

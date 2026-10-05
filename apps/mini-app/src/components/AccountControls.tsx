@@ -5,6 +5,7 @@ import { useEnsAddress, useEnsName } from 'wagmi';
 import type { Address } from 'viem';
 import { ChevronRight, LogOut, RefreshCw, Wallet } from 'lucide-react';
 import ConnectWalletButton from '@/components/ConnectWalletButton';
+import { WalletAvatar } from '@/components/WalletAvatar';
 import { useWalletProfileSession } from '@/components/WalletDemandProvider';
 import { usePrivyWallet, useWalletReadyTimeout } from '@/lib/wallet';
 import { compactAddress } from '@/lib/addressPresentation';
@@ -36,7 +37,8 @@ export function AccountSummary() {
     <ConnectWalletButton className={styles.connect}>{wallet.authenticated ? 'Choose' : 'Connect'}</ConnectWalletButton>
   </div>;
   return <button type="button" className={styles.account} aria-label="View connected account" onClick={() => { haptic('light'); setWalletProfileAddress(activeAddress.toLowerCase()); }}>
-    <span className={styles.accountIcon}><Wallet size={22} aria-hidden="true" /></span>
+    {/* The same avatar as the header, so the account reads as one identity. */}
+    <span className={`${styles.accountIcon} ${styles.accountAvatar}`}><WalletAvatar address={activeAddress} size={40} /></span>
     <span className={styles.copy}><strong>{name ?? 'Connected wallet'}</strong><small title={activeAddress}>{compactAddress(activeAddress)}</small></span>
     <ChevronRight size={18} aria-hidden="true" />
   </button>;

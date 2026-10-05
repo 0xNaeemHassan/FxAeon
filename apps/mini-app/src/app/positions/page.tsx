@@ -425,9 +425,9 @@ export default function PositionsPage() {
       <div className={`${styles.positionsRoot} ${styles.positionsCompactRoot} ${!wallet.address ? styles.positionsDisconnectedRoot : ''}`} data-position-stage={reviewStage}>
       <div className={styles.positionsWorkspace}>
         <h1 className={styles.positionsHeading}>Positions</h1>
-        {reviewStage === 'input' && <nav className="grid grid-cols-2 rounded-xl border border-[var(--line)] bg-[var(--input)] p-1" aria-label="Trade views">
-          <Link href="/trade" className="glass-press flex min-h-11 items-center justify-center rounded-lg px-3 text-[13px] font-semibold text-mut">New position</Link>
-          <span aria-current="page" className="flex min-h-11 items-center justify-center rounded-lg bg-[var(--mint-dim)] px-3 text-[13px] font-semibold text-[var(--text)]">Positions</span>
+        {reviewStage === 'input' && <nav className={styles.positionsViews} aria-label="Trade views">
+          <Link href="/trade" className="glass-press">New position</Link>
+          <span aria-current="page">Positions</span>
         </nav>}
         {!wallet.address && !preserveActionReview ? (
           <WalletConnectCTA compact ready={wallet.ready} authenticated={wallet.authenticated} body="Choose or connect a wallet to see and manage your open positions." />
@@ -444,9 +444,9 @@ export default function PositionsPage() {
         {wallet.address && positionState.status === 'loading' && !positions.length && !positionState.pendingPositions.length && reviewStage === 'input' ? (
           <div className="flex flex-col gap-3"><ProtocolPositionSkeleton /><ProtocolPositionSkeleton /></div>
         ) : wallet.address && positionState.status === 'unavailable' && !positions.length && !positionState.pendingPositions.length && reviewStage === 'input' ? (
-          <div role="status" aria-live="polite" className="flex items-center gap-3 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-4"><span className="text-[12px] text-warn">Position data is unavailable.</span><button type="button" aria-label="Retry positions" onClick={() => void positionState.refresh()} className="glass-press ml-auto flex min-h-11 min-w-11 items-center justify-center rounded-xl text-mut"><RefreshCw className="h-4 w-4" aria-hidden="true" /></button></div>
+          <div role="status" aria-live="polite" className="flex items-center gap-3 rounded-2xl bg-[var(--warn-dim)] py-2 pl-4 pr-2"><span className="text-[13px] text-warn">Position data is unavailable.</span><button type="button" aria-label="Retry positions" onClick={() => void positionState.refresh()} className="glass-press ml-auto flex min-h-11 min-w-11 items-center justify-center rounded-xl text-mut"><RefreshCw className="h-4 w-4" aria-hidden="true" /></button></div>
         ) : wallet.address && positionState.status === 'partial' && !positions.length && !positionState.pendingPositions.length && reviewStage === 'input' ? (
-          <div role="status" aria-live="polite" className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-4 text-[12px] text-warn">Some position data couldn’t load, so results may be incomplete.<button type="button" onClick={() => void positionState.refresh()} className="mt-2 min-h-11 rounded-lg px-2 font-semibold text-mint">Retry positions</button></div>
+          <div role="status" aria-live="polite" className="rounded-2xl bg-[var(--warn-dim)] px-4 py-3 text-[13px] text-warn">Some position data couldn’t load, so results may be incomplete.<button type="button" onClick={() => void positionState.refresh()} className="mt-2 min-h-11 rounded-lg px-2 font-semibold text-mint">Retry positions</button></div>
         ) : wallet.address && positionState.status === 'ready' && !positions.length && !positionState.pendingPositions.length && reviewStage === 'input' ? (
           <EmptyState icon={Layers2} title="No open positions" body="Open an ETH or BTC position to get started." action={<Link href="/trade" className="button button-primary flex min-h-12 items-center justify-center rounded-xl px-4 font-semibold">Open a position</Link>} />
         ) : wallet.address && positions.length > 0 || preserveActionReview ? (

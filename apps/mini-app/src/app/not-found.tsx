@@ -1,20 +1,19 @@
 import Link from 'next/link';
-import { ArrowLeft, Compass } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { FxLogo } from '@/components/FxLogo';
+import styles from '@/components/UtilitySurfaces.module.css';
 
 export default function NotFound() {
   return (
-    <main className="app-shell mx-auto flex min-h-[var(--tg-viewport-height,var(--tg-viewport-stable-height,100dvh))] w-full max-w-[430px] flex-col items-center justify-center px-6 py-10 pb-[calc(env(safe-area-inset-bottom,0px)+2.5rem)] text-center">
-      <div className="brand-orbit"><FxLogo size={52} /></div>
-      <span className="mt-7 flex h-11 w-11 items-center justify-center rounded-lg bg-[var(--mint-dim)] text-mint">
-        <Compass className="h-5 w-5" aria-hidden="true" />
-      </span>
-      <p className="mt-5 text-[10px] font-semibold uppercase tracking-[0.18em] text-mint">404 · route not found</p>
-      <h1 className="text-display mt-2 text-[28px] font-semibold tracking-[-0.04em]">This screen is outside FxAeon</h1>
-      <p className="mt-2 max-w-[310px] text-[12.5px] leading-relaxed text-mut">That page is not available here. Return to your portfolio to continue.</p>
-      <Link href="/" className="button button-primary glass-press mt-6 flex min-h-12 w-full max-w-[280px] items-center justify-center gap-2 rounded-lg px-4 py-3 text-[14px] font-semibold">
-        <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back to portfolio
-      </Link>
+    <main className={`app-shell ${styles.authStage} mx-auto w-full max-w-[430px]`}>
+      <span className={styles.authHalo} aria-hidden="true"><FxLogo size={44} /></span>
+      <h1 className={styles.authTitle}>This screen is outside FxAeon</h1>
+      <p className={styles.authLead}>That page is not available here. Return to your portfolio to continue.</p>
+      <div className={styles.authActions}>
+        <Link href="/" className="button button-primary glass-press flex min-h-12 w-full items-center justify-center gap-2 px-4 py-3 text-[15px] font-semibold">
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back to portfolio
+        </Link>
+      </div>
     </main>
   );
 }
