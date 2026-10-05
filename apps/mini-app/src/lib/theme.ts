@@ -10,7 +10,8 @@ export interface ThemeConfig {
   id: ThemeId;
   name: string;
   accent: string;
-  colors: Record<string, string>;
+  /** Preview and host-chrome colors only. globals.css owns every live token. */
+  colors: Record<'--bg' | '--surface' | '--surface-2', string>;
 }
 
 export const THEMES: Record<ThemeId, ThemeConfig> = {
@@ -18,48 +19,26 @@ export const THEMES: Record<ThemeId, ThemeConfig> = {
     id: 'official',
     name: 'Official',
     accent: '#b9a0ff',
-    colors: {
-      '--bg': '#101018', '--bg-raised': '#14131d', '--surface': '#181721',
-      '--surface-2': '#211f2c', '--surface-3': '#2b2739', '--card': '#181721',
-      '--input': '#1d1b28', '--line': '#302c3f', '--line-strong': '#504760',
-      '--text': '#f7f5fc', '--mut': '#b1a9bf', '--mut-2': '#93889f',
-      '--mint': '#b9a0ff', '--mint-bright': '#d1bfff', '--on-accent': '#211737',
-      '--mint-dim': 'rgba(185, 160, 255, 0.12)', '--mint-glow': 'rgba(185, 160, 255, 0.20)',
-      '--cyan': '#d6c7ff', '--brand-coral': '#c495ff',
-      '--success': '#53d5a0', '--danger': '#ff5368', '--warn': '#f2b84b',
-    },
+    colors: { '--bg': '#0d0c13', '--surface': '#16151e', '--surface-2': '#1e1c28' },
   },
   dark: {
     id: 'dark',
     name: 'Dark',
     accent: '#b9a0ff',
-    colors: {
-      '--bg': '#090a0c', '--bg-raised': '#0e1013', '--surface': '#13161a',
-      '--surface-2': '#1a1e24', '--surface-3': '#232830', '--card': '#13161a',
-      '--input': '#171b20', '--line': '#282e36', '--line-strong': '#46505c',
-      '--text': '#f5f7fa', '--mut': '#a7b0bb', '--mut-2': '#89939f',
-      '--mint': '#b9a0ff', '--mint-bright': '#d1bfff', '--on-accent': '#211737',
-      '--mint-dim': 'rgba(185, 160, 255, 0.12)', '--mint-glow': 'rgba(185, 160, 255, 0.20)',
-      '--cyan': '#d6c7ff', '--brand-coral': '#c495ff',
-      '--success': '#53d5a0', '--danger': '#ff5368', '--warn': '#f2b84b',
-    },
+    colors: { '--bg': '#08090b', '--surface': '#121418', '--surface-2': '#191c21' },
   },
   light: {
     id: 'light',
     name: 'Light',
     accent: '#7341c8',
-    colors: {
-      '--bg': '#faf8f4', '--bg-raised': '#fffdfa', '--surface': '#fffdfa',
-      '--surface-2': '#eee7f7', '--surface-3': '#e7def2', '--card': '#fffdfa',
-      '--input': '#f4f0f8', '--line': '#ded5e7', '--line-strong': '#ad9cc3',
-      '--text': '#302340', '--mut': '#6c617b', '--mut-2': '#786987',
-      '--mint': '#7341c8', '--mint-bright': '#5f2cb4', '--on-accent': '#ffffff',
-      '--mint-dim': 'rgba(115, 65, 200, 0.09)', '--mint-glow': 'rgba(115, 65, 200, 0.16)',
-      '--cyan': '#8655c7', '--brand-coral': '#a362c4',
-      '--success': '#128354', '--danger': '#c92b49', '--warn': '#90630c',
-    },
+    colors: { '--bg': '#f7f5f1', '--surface': '#ffffff', '--surface-2': '#f4f0f8' },
   },
 };
+
+/** Tokens earlier releases wrote inline; clearing them lets the stylesheet win. */
+const LEGACY_INLINE_TOKENS = ['--bg', '--bg-raised', '--surface', '--surface-2', '--surface-3', '--card', '--input', '--line',
+  '--line-strong', '--text', '--mut', '--mut-2', '--mint', '--mint-bright', '--on-accent', '--mint-dim', '--mint-glow', '--cyan',
+  '--brand-coral', '--success', '--danger', '--warn'] as const;
 
 export function getSavedTheme(): ThemeId {
   if (typeof window === 'undefined') return 'official';
@@ -78,7 +57,7 @@ export function applyTheme(themeId: ThemeId) {
   if (typeof window === 'undefined') return;
   const theme = THEMES[themeId] || THEMES.official;
   const root = document.documentElement;
-  Object.entries(theme.colors).forEach(([key, value]) => root.style.setProperty(key, value));
+  LEGACY_INLINE_TOKENS.forEach((token) => root.style.removeProperty(token));
   root.style.colorScheme = themeId === 'light' ? 'light' : 'dark';
   root.setAttribute('data-theme', themeId);
   document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute('content', theme.colors['--bg']);

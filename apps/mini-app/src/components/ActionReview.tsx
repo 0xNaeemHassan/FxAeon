@@ -440,7 +440,7 @@ function ReviewSurface({ surface, className, children }: { surface: 'card' | 'co
 
 function ReviewRow({ label, value, title, className }: { label: string; value: ReactNode; title?: string; className?: string }) {
   const valueTitle = title ?? (typeof value === 'string' ? value : undefined);
-  return <div className={`flex items-start justify-between gap-4 text-[12px] ${className ?? ''}`}><span className="text-mut">{label}</span><span title={valueTitle} className="max-w-[62%] break-words text-right font-semibold tabular-nums"><ValueOrSkeleton value={value} width="md" label={`Loading ${label.toLowerCase()}`} /></span></div>;
+  return <div className={`flex items-start justify-between gap-4 text-[13px] ${className ?? ''}`}><span className="text-mut">{label}</span><span title={valueTitle} className="max-w-[62%] break-words text-right font-semibold tabular-nums"><ValueOrSkeleton value={value} width="md" label={`Loading ${label.toLowerCase()}`} /></span></div>;
 }
 
 function AdvancedReviewDetails({ route }: { route: PlannedRoute }) {

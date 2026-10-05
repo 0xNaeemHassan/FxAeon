@@ -48,7 +48,7 @@ export function buildStatusPresentation(params: {
     }
     return {
       label: 'Wallet approval',
-      body: params.detail ? `${params.detail.replace(/^transaction/i, 'Transaction')}. Review it in your wallet.` : 'Review the transaction in your wallet, then approve it.',
+      body: params.detail ? `${params.detail.replace(/^transaction/i, 'Transaction').replace(/[.\s]+$/, '')}. Review it in your wallet.` : 'Review the transaction in your wallet, then approve it.',
       className: 'text-warn',
       icon: 'clock',
     };

@@ -326,12 +326,13 @@ function SupportedValueCard({ displayTotalUsd, loading, refreshing, onRefresh,
 }) {
   return <section aria-label="Portfolio balance" className={`${presentation.valueCard} ${balancePresentation.hero}`}>
     <div className={presentation.valueTop}>
-      <p className={`${presentation.valueNumber} ${balancePresentation.value}`} data-portfolio-value><ValueOrSkeleton value={displayTotalUsd === null ? '—' : formatUsd(displayTotalUsd)} width="xl"
-        status={loading ? 'loading' : 'unavailable'} label={loading ? 'Loading portfolio value' : 'Portfolio value unavailable'} /></p>
+      <span className={presentation.valueLabel}>Total value</span>
       <button type="button" aria-label="Refresh portfolio balances and positions" aria-busy={refreshing} title="Refresh balances and positions" disabled={refreshing} onClick={onRefresh}>
         <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} aria-hidden="true" />
       </button>
     </div>
+    <p className={`${presentation.valueNumber} ${balancePresentation.value}`} data-portfolio-value><ValueOrSkeleton value={displayTotalUsd === null ? '—' : <SplitFigure value={formatUsd(displayTotalUsd)} />} width="xl"
+      status={loading ? 'loading' : 'unavailable'} label={loading ? 'Loading portfolio value' : 'Portfolio value unavailable'} /></p>
     <QuickActions />
     <Disclosure title="Value breakdown">
       <MetricRows rows={[
@@ -341,6 +342,12 @@ function SupportedValueCard({ displayTotalUsd, loading, refreshing, onRefresh,
       <p className={presentation.helper}>Position value is collateral minus debt. Pending transfers and withdrawal claims are excluded.</p>
     </Disclosure>
   </section>;
+}
+
+/** Whole units lead; cents stay legible but recede. Text content is unchanged. */
+function SplitFigure({ value }: { value: string }) {
+  const match = /^(.*?)(\.\d+)?$/.exec(value);
+  return <>{match?.[1] ?? value}{match?.[2] && <span className={presentation.decimals}>{match[2]}</span>}</>;
 }
 
 function QuickActions() {
