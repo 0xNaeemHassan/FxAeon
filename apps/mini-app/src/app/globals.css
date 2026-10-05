@@ -358,6 +358,11 @@ a:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--mint-bright);
+  outline-offset: 3px;
+}
+
 /* Disclosure state lives in plain CSS. This Tailwind build emits no group-*
    or peer-* variants (they are dropped while finalizing :merge selectors), so
    group-open utilities would silently never apply. */
@@ -367,11 +372,6 @@ summary:has(.disclosure-chevron)::-webkit-details-marker { display: none; }
 details[open] > summary .disclosure-chevron { transform: rotate(180deg); }
 details[open] > summary .disclosure-closed-only { display: none; }
 @media (prefers-reduced-motion: reduce) { .disclosure-chevron { transition: none; } }
-
-summary:focus-visible {
-  outline: 2px solid var(--mint-bright);
-  outline-offset: 3px;
-}
 
 ::selection {
   background: var(--mint-glow);
