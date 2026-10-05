@@ -188,7 +188,7 @@ test.describe("single-viewport route contract", () => {
         await page.goto(route, { waitUntil: "domcontentloaded" });
         await expect(page.locator("main:visible"), `${route} main at ${viewport.width}px`).toBeVisible();
 
-        const topbar = page.locator(".app-topbar");
+        const topbar = page.locator("header.app-topbar");
         if (CTA_ROUTES.has(route) && await topbar.count()) {
           await expect(topbar.getByRole("button", { name: "Connect wallet", exact: true }), `${route} disconnected wallet must finish hydration before CTA geometry`).toBeVisible({ timeout: 15_000 });
         }
@@ -330,7 +330,7 @@ test.describe("single-viewport route contract", () => {
     await page.goto("/trade", { waitUntil: "domcontentloaded" });
     await expect(page.locator("main:visible")).toBeVisible();
 
-    const topbar = page.locator(".app-topbar");
+    const topbar = page.locator("header.app-topbar");
     await expect(topbar).toBeVisible();
     await expect(topbar.getByRole("button", { name: "Connect wallet", exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(topbar).toHaveCSS("display", "flex");

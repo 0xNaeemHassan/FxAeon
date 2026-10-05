@@ -129,7 +129,12 @@ test.describe('cohesive responsive design', () => {
   test('desktop top bar stays within the viewport at the compact desktop breakpoint', async ({ page, requests }) => {
     await page.setViewportSize({ width: 1180, height: 900 });
     await page.goto('/trade', { waitUntil: 'domcontentloaded' });
-    const bounds = await page.locator('.app-topbar').evaluate((element) => {
+    // Only the live <header> top bar: ProviderLoadingState's div.app-topbar
+    // fallback can share the DOM with it until React reveals the shell, and
+    // the hidden live bar would measure as an empty rect before that.
+    const topbar = page.locator('header.app-topbar');
+    await expect(topbar).toBeVisible();
+    const bounds = await topbar.evaluate((element) => {
       const rect = element.getBoundingClientRect();
       return { left: rect.left, right: rect.right, viewport: window.innerWidth };
     });

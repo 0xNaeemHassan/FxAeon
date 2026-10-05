@@ -16,7 +16,7 @@ function selector(page: Page) {
 }
 
 async function expectHeaderToFit(page: Page, width: number): Promise<void> {
-  const header = page.locator('.app-topbar');
+  const header = page.locator('header.app-topbar');
   await expect(header).toBeVisible();
   expect(await header.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   const box = await header.boundingBox();
