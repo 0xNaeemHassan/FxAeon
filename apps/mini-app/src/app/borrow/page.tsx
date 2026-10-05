@@ -13,6 +13,7 @@ import { readGasTier } from '@/lib/settings';
 import { estimatePlannedRouteCost } from '@/lib/fx';
 import { ActionReview, type ActionReviewStage } from '@/components/ActionReview';
 import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
+import { ProtocolPositionNotice } from '@/components/ProtocolPositionCard';
 import { ConfirmedPositionCards } from '@/components/ConfirmedPositionCards';
 import { AmountField, Segmented, TokenSelect, useWalletTokenBalances } from '@/components/ProtocolForm';
 import { useUsdPrices } from '@/components/PriceProvider';
@@ -527,6 +528,12 @@ export default function BorrowPage() {
           { value: 'new', label: 'New position' }, { value: 'positions', label: 'Your positions' },
         ]} />
       </div>}
+      {view === 'positions' && wallet.address && initialRead && <StatusNotice>Reading your collateral positions…</StatusNotice>}
+      {view === 'positions' && wallet.address && !initialRead && positionReadUnavailable && <ProtocolPositionNotice status="unavailable"
+        failedGroups={sharedPositions.failedGroups} hasPositions={false} refreshing={sharedPositions.refreshing}
+        onRefresh={() => void refreshPositions()} compact />}
+      {view === 'positions' && wallet.address && !initialRead && !positionReadUnavailable && <ProtocolPositionNotice status={sharedPositions.status}
+        failedGroups={sharedPositions.failedGroups} hasPositions={positions.length > 0} refreshing={sharedPositions.refreshing} onRefresh={() => void refreshPositions()} compact />}
       {view === 'positions' && reviewStage === 'input' && <>
         {!wallet.address ? <div className={presentation.empty}><p className={presentation.helper}>Connect the wallet that holds your collateral position.</p><ConnectWalletButton className="button button-primary mt-2 w-full">Connect wallet</ConnectWalletButton></div>
           : !initialRead && !positionReadUnavailable && positions.length === 0 ? <div className={presentation.empty}>
