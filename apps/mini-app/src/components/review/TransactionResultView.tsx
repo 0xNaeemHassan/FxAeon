@@ -8,6 +8,7 @@ import { hasTransactionHash } from '@/lib/transactionProgress';
 import { Button } from '@/components/ui';
 import { ReceiptSummary } from '@/components/review/ActionReviewSummary';
 import { chainName, TransactionHashLink } from '@/components/review/ReviewProgress';
+import styles from './ActionReviewPresentation.module.css';
 import { resultBodyDuringRefresh, type resultPresentation } from '@/components/review/executionResult';
 
 type ResultPresentation = ReturnType<typeof resultPresentation>;
@@ -38,34 +39,32 @@ export function TransactionResultView({
   headingRef?: Ref<HTMLHeadingElement>;
 }) {
   const ResultIcon = presentation.icon;
-  const tone = presentation.tone === 'success'
-    ? 'bg-[var(--success-dim)] text-success'
-    : presentation.tone === 'warning'
-      ? 'bg-[var(--warn-dim)] text-warn'
-      : 'bg-[var(--danger-dim)] text-danger';
   return (
-    <div className="flex flex-col items-center text-center">
-      <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${tone}`}>
-        <ResultIcon className="h-5 w-5" aria-hidden="true" />
+    <div className={styles.result}>
+      <span className={styles.resultMark} data-tone={presentation.tone} aria-hidden="true">
+        {presentation.tone === 'success'
+          // A confirmed receipt draws its check once; nothing else celebrates.
+          ? <svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" /><path d="M15.5 27.2 22.6 34.3 37 19.6" /></svg>
+          : <ResultIcon className="h-7 w-7" />}
       </span>
-      <h3 ref={headingRef} data-review-focus tabIndex={-1} className="text-display mt-2.5 text-[19px] font-semibold outline-none">{presentation.title}</h3>
-      <p className="mt-1 text-[13px] leading-snug text-mut">
+      <h3 ref={headingRef} data-review-focus tabIndex={-1} className="text-display mt-4 text-[22px] font-semibold outline-none">{presentation.title}</h3>
+      <p className="mt-1.5 max-w-[34ch] text-[14px] leading-snug text-mut">
         {resultBodyDuringRefresh({ status: result.status, refreshing, positionAction, body: presentation.body })}
       </p>
-      <p className="mt-1.5 text-[12px] text-mut" title={result.walletAddress}>
+      <p className={styles.resultMeta} title={result.walletAddress}>
         {chainName(result.chainId)} · Wallet {compactAddress(result.walletAddress)}
       </p>
       {result.steps.some(hasTransactionHash) && (
-        <div className="mt-3 flex w-full flex-col gap-1.5 text-left">
+        <div className="mt-4 flex w-full flex-col gap-2 text-left">
           {result.steps.map((step: TransactionStepResult) => hasTransactionHash(step)
             ? <TransactionHashLink key={`${step.index}-${step.hash}`} step={step} chainId={result.chainId} />
             : null)}
         </div>
       )}
       <ReceiptSummary receipts={receipts} />
-      {positionLabel && <p className="mt-2 text-[11px] text-mut">Position: {positionLabel}</p>}
+      {positionLabel && <p className={styles.resultMeta}>Position: {positionLabel}</p>}
       {bridgeTracker}
-      <Button variant="ghost" aria-label={nextAriaLabel} className="mt-3" onClick={onNext}>{nextLabel}</Button>
+      <Button variant={presentation.tone === 'danger' ? 'ghost' : 'primary'} aria-label={nextAriaLabel} className="mt-5" onClick={onNext}>{nextLabel}</Button>
     </div>
   );
 }

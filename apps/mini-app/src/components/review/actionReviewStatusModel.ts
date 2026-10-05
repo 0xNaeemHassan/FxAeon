@@ -13,7 +13,7 @@ export function buildStatusPresentation(params: {
   operation?: PlannedRoute['operation'];
   refreshing?: boolean;
   networkSwitching?: boolean;
-}): { label: string; body: string; className: string; icon: 'clock' | 'loading' | 'success' | 'warning' | 'error' } {
+}): { label: string; body: string; className: string; icon: 'clock' | 'loading' | 'success' | 'warning' | 'error'; waiting?: boolean } {
   const confirmed = params.stepResults.filter((step) => transactionStepProgress(step).state === 'confirmed').length;
   const uncertain = params.stepResults.find((step) => ['unknown', 'unverified'].includes(transactionStepProgress(step).state));
   if (uncertain) {
@@ -44,13 +44,15 @@ export function buildStatusPresentation(params: {
         body: 'Your wallet is switching to the transaction network. Signing opens after the switch is verified.',
         className: 'text-warn',
         icon: 'loading',
+        waiting: true,
       };
     }
     return {
       label: 'Wallet approval',
-      body: params.detail ? `${params.detail.replace(/^transaction/i, 'Transaction')}. Review it in your wallet.` : 'Review the transaction in your wallet, then approve it.',
+      body: params.detail ? `${params.detail.replace(/^transaction/i, 'Transaction').replace(/[.\s]+$/, '')}. Review it in your wallet.` : 'Review the transaction in your wallet, then approve it.',
       className: 'text-warn',
       icon: 'clock',
+      waiting: true,
     };
   }
   if (params.status === 'submitted') {

@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { formatEther, formatUnits, isAddress, type Address } from 'viem';
-import { ArrowLeft, ArrowUpRight, Clock3, ChevronRight } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, ChevronDown, ChevronRight, Clock3, Wallet } from 'lucide-react';
 import { AppShell } from '@/components/ui';
 import TokenIcon, { ChainIcon } from '@/components/TokenIcon';
+import { GroupedAddress } from '@/components/GroupedAddress';
 import { WalletAvatar } from '@/components/WalletAvatar';
 import WalletConnectCTA from '@/components/WalletConnectCTA';
 import { useWalletAssets } from '@/components/WalletDataProvider';
@@ -19,6 +20,9 @@ import { userSafeError } from '@/lib/errors';
 import { canonicalAsset } from '@/lib/walletAssets';
 import styles from './send.module.css';
 const SEND_DEMAND = { expandedAssets: true, chainPulse: true, positions: false } as const;
+
+const networkName = (chainId: number) => (chainId === 1 ? 'Ethereum' : 'Base');
+const shortAddress = (address: string) => `${address.slice(0, 6)}…${address.slice(-4)}`;
 
 export default function SendPage() {
   const wallet = usePrivyWallet();
@@ -41,6 +45,8 @@ function SendForm() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [hash, setHash] = useState<string | null>(null);
+  const speedLabelId = useId();
+  const recipientHintId = useId();
   const mounted = useRef(true);
   const identity = `${wallet.address?.toLowerCase()}:${wallet.connectionVersion}`;
   const currentIdentity = useRef(identity);
@@ -48,6 +54,8 @@ function SendForm() {
   const lock = useRef(false);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const current = () => mounted.current && currentIdentity.current === identity;
+  const trimmedRecipient = recipient.trim();
+  const recipientValid = isAddress(trimmedRecipient);
   const input = (value = amount): SendInput => {
     if (!asset || !wallet.address || !isAddress(recipient.trim())) throw new Error('Enter a valid recipient address.');
     return { walletAddress: wallet.address as Address, recipient: recipient.trim() as Address, chainId: asset.chainId, tokenAddress: asset.tokenAddress,
@@ -93,30 +101,71 @@ function SendForm() {
     if (current()) { setHash(result.hash); void assets.refresh(); }
     } });
   });
-  if (hash && quote) return <section className={styles.card}>
-    <Clock3 size={32} className={styles.sentIcon} /><h2>Submitted</h2><p className={styles.subtitle}>{quote.input.amount} {quote.symbol}</p>
-    <a className={styles.secondary} href={`https://${quote.input.chainId === 1 ? 'etherscan.io' : 'basescan.org'}/tx/${hash}`} target="_blank" rel="noopener noreferrer">View transaction<ArrowUpRight size={18} /></a>
-    <Link className={styles.primary} href="/history">View history</Link>
+  if (hash && quote) return <section className={`${styles.card} ${styles.done}`} aria-label="Send submitted">
+    <span className={styles.doneMark} aria-hidden="true"><Clock3 /></span>
+    <h2>Submitted</h2>
+    <p className={styles.doneAmount}><strong>{quote.input.amount} {quote.symbol}</strong> to {shortAddress(quote.input.recipient)}</p>
+    <p className={styles.doneNote}>Not confirmed by the network yet. History shows its status.</p>
+    <Link className={`button button-primary ${styles.action}`} href="/history">View history</Link>
+    <a className={`button button-ghost ${styles.action}`} href={`https://${quote.input.chainId === 1 ? 'etherscan.io' : 'basescan.org'}/tx/${hash}`} target="_blank" rel="noopener noreferrer">View transaction<ArrowUpRight aria-hidden="true" /></a>
   </section>;
   return <section className={styles.card} aria-label={quote ? 'Review send' : 'Send crypto'}>
-    <header>{quote ? <button type="button" aria-label="Edit transfer" disabled={busy} onClick={() => { setQuote(null); setError(''); }}><ArrowLeft size={20} /></button> : <ArrowUpRight size={24} />}<h2>{quote ? 'Review send' : 'Send crypto'}</h2></header>
     {quote ? <>
-      <div className={styles.reviewAmount}><TokenIcon symbol={quote.symbol} size={48} /><strong>{quote.input.amount} {quote.symbol}</strong></div>
-      <div className={styles.recipient}><WalletAvatar address={quote.input.recipient} /><span><small>To</small><strong>{quote.input.recipient}</strong></span></div>
-      <dl className={styles.facts}><div><dt>Network</dt><dd><ChainIcon chainId={quote.input.chainId} size={18} />{quote.input.chainId === 1 ? 'Ethereum' : 'Base'}</dd></div><div><dt>Network cost</dt><dd>≈ {formatEther(quote.estimatedFee)} ETH</dd></div></dl>
+      <header className={styles.reviewHeader}>
+        <button type="button" className={styles.back} aria-label="Edit transfer" disabled={busy} onClick={() => { setQuote(null); setError(''); }}><ArrowLeft aria-hidden="true" /></button>
+        <h2>Review send</h2>
+      </header>
+      <div className={styles.reviewHero}>
+        <TokenIcon symbol={quote.symbol} size={48} />
+        <p className={styles.reviewAmount}>{quote.input.amount} <span>{quote.symbol}</span></p>
+      </div>
+      <div className={styles.recipientReview}>
+        <span className={styles.fieldLabel}>To</span>
+        <div className={styles.recipientIdentity}>
+          <WalletAvatar address={quote.input.recipient} size={32} />
+          <GroupedAddress address={quote.input.recipient} />
+        </div>
+      </div>
+      <dl className={styles.facts}>
+        <div><dt>Network</dt><dd><ChainIcon chainId={quote.input.chainId} size={18} />{networkName(quote.input.chainId)}</dd></div>
+        <div><dt>Network cost</dt><dd>≈ {formatEther(quote.estimatedFee)} ETH</dd></div>
+      </dl>
     </> : <>
-      <div className={styles.amountBox}>
-        <label htmlFor="send-amount">Amount</label><input id="send-amount" inputMode="decimal" autoComplete="off" placeholder="0" value={amount} disabled={busy} onChange={(event) => { setAmount(event.target.value); setError(''); }} />
-        <div className={styles.tokenRow}>{asset && <TokenIcon symbol={asset.symbol} size={28} />}<select aria-label="Asset to send" disabled={busy || !tokens.length} value={asset?.id ?? ''} onChange={(event) => { setAssetId(event.target.value); setAmount(''); setError(''); }}>
-          {!tokens.length && <option value="">{assets.status === 'loading' || assets.status === 'idle' ? 'Loading assets' : 'No available assets'}</option>}
-          {tokens.map((token) => <option key={token.id} value={token.id}>{token.symbol} · {token.chainId === 1 ? 'Ethereum' : 'Base'}</option>)}
-        </select><button type="button" disabled={busy || !asset || !asset.tokenAddress && !isAddress(recipient.trim())} onClick={maximum}>Max</button></div>
+      <div className={styles.amountPanel}>
+        <div className={styles.panelHead}>
+          <label htmlFor="send-amount">Amount</label>
+          <button type="button" className={styles.max} disabled={busy || !asset || !asset.tokenAddress && !recipientValid} onClick={maximum}><span>Max</span></button>
+        </div>
+        <div className={styles.amountRow}>
+          <input id="send-amount" className={styles.amountInput} inputMode="decimal" autoComplete="off" placeholder="0" value={amount} disabled={busy} onChange={(event) => { setAmount(event.target.value); setError(''); }} />
+          <span className={styles.assetPicker}>
+            {asset && <TokenIcon symbol={asset.symbol} size={24} />}
+            <select aria-label="Asset to send" disabled={busy || !tokens.length} value={asset?.id ?? ''} onChange={(event) => { setAssetId(event.target.value); setAmount(''); setError(''); }}>
+              {!tokens.length && <option value="">{assets.status === 'loading' || assets.status === 'idle' ? 'Loading assets' : 'No available assets'}</option>}
+              {tokens.map((token) => <option key={token.id} value={token.id}>{token.symbol} · {networkName(token.chainId)}</option>)}
+            </select>
+            <ChevronDown aria-hidden="true" />
+          </span>
+        </div>
         {asset && <p className={styles.balance}>Balance: {asset.balance} {asset.symbol}</p>}
       </div>
-      <label className={styles.to}>To<input aria-label="Recipient address" placeholder="Wallet address" autoComplete="off" spellCheck={false} value={recipient} disabled={busy} onChange={(event) => { setRecipient(event.target.value); setError(''); }} /></label>
-      {wallet.isEmbedded && <div className={styles.tiers} role="group" aria-label="Network speed">{GAS_TIERS.map((option) => <button key={option} type="button" aria-pressed={tier === option} disabled={busy} onClick={() => setTier(option)}>{option}</button>)}</div>}
+      <div className={styles.recipientPanel}>
+        <label htmlFor="send-recipient" className={styles.fieldLabel}>To</label>
+        <div className={styles.recipientRow}>
+          {recipientValid ? <WalletAvatar address={trimmedRecipient} size={28} /> : <span className={styles.recipientEmpty} aria-hidden="true"><Wallet /></span>}
+          {/* Two lines show the whole address while it is entered; Enter never adds a line break. */}
+          <textarea id="send-recipient" rows={2} aria-label="Recipient address" aria-invalid={trimmedRecipient !== '' && !recipientValid} aria-describedby={trimmedRecipient && !recipientValid ? recipientHintId : undefined} placeholder="0x… wallet address" autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={recipient} disabled={busy} onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); }} onChange={(event) => { setRecipient(event.target.value); setError(''); }} />
+        </div>
+        {trimmedRecipient && !recipientValid && <p id={recipientHintId} className={styles.hint}>Enter a complete 0x wallet address.</p>}
+      </div>
+      {wallet.isEmbedded && <div className={styles.speed}>
+        <span id={speedLabelId} className={styles.fieldLabel}>Network speed</span>
+        <div className={styles.tiers} role="group" aria-labelledby={speedLabelId} style={{ '--seg-index': GAS_TIERS.indexOf(tier), '--seg-count': GAS_TIERS.length } as CSSProperties}>
+          {GAS_TIERS.map((option) => <button key={option} type="button" aria-pressed={tier === option} disabled={busy} onClick={() => setTier(option)}>{option}</button>)}
+        </div>
+      </div>}
     </>}
     {error && <p role="alert" className={styles.error}>{error}</p>}
-    <button type="button" className={styles.primary} disabled={busy || !quote && (!asset || !amount || !isAddress(recipient.trim()))} onClick={quote ? confirm : review}>{busy ? quote ? 'Confirm in wallet' : 'Preparing' : quote ? 'Confirm' : <>Review<ChevronRight size={18} /></>}</button>
+    <button type="button" className={`button button-primary ${styles.action}`} aria-busy={busy || undefined} disabled={busy || !quote && (!asset || !amount || !recipientValid)} onClick={quote ? confirm : review}>{busy ? quote ? 'Confirm in wallet' : 'Preparing' : quote ? 'Confirm' : <>Review<ChevronRight aria-hidden="true" /></>}</button>
   </section>;
 }

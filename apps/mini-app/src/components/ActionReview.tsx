@@ -381,7 +381,7 @@ export function ActionReview(props: ActionReviewProps) {
       <QuoteFactDetails facts={reviewFacts.details} />
       <AdvancedReviewDetails route={route} />
 
-      <details className="group mt-3 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.02)] px-3">
+      <details className="mt-3 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.02)] px-3">
         <summary id="transaction-steps-heading" className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-[12px] font-semibold text-mut">
           <span>{stage === 'executing' ? 'Transaction progress' : `Steps · ${stepCount}`}</span>
           <ChevronDown size={16} aria-hidden="true" />
@@ -440,7 +440,7 @@ function ReviewSurface({ surface, className, children }: { surface: 'card' | 'co
 
 function ReviewRow({ label, value, title, className }: { label: string; value: ReactNode; title?: string; className?: string }) {
   const valueTitle = title ?? (typeof value === 'string' ? value : undefined);
-  return <div className={`flex items-start justify-between gap-4 text-[12px] ${className ?? ''}`}><span className="text-mut">{label}</span><span title={valueTitle} className="max-w-[62%] break-words text-right font-semibold tabular-nums"><ValueOrSkeleton value={value} width="md" label={`Loading ${label.toLowerCase()}`} /></span></div>;
+  return <div className={`flex items-start justify-between gap-4 text-[13px] ${className ?? ''}`}><span className="text-mut">{label}</span><span title={valueTitle} className="max-w-[62%] break-words text-right font-semibold tabular-nums"><ValueOrSkeleton value={value} width="md" label={`Loading ${label.toLowerCase()}`} /></span></div>;
 }
 
 function AdvancedReviewDetails({ route }: { route: PlannedRoute }) {
@@ -458,10 +458,10 @@ function AdvancedReviewDetails({ route }: { route: PlannedRoute }) {
   if (!hasDetails) return null;
 
   return (
-    <details className="group mt-4 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.02)] px-3">
+    <details className="mt-4 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.02)] px-3">
       <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-[12px] font-semibold text-mut">
         <span>Advanced details</span>
-        <ChevronDown size={16} aria-hidden="true" />
+        <ChevronDown size={16} aria-hidden="true" className="shrink-0 disclosure-chevron" />
       </summary>
       <div className="flex flex-col gap-2.5 border-t border-[var(--line)] py-3">
         {route.details?.requestedAmount && <ReviewRow label="Requested amount (raw units)" value={route.details.requestedAmount} />}
@@ -525,9 +525,9 @@ function isBridgeQuote(value: unknown): value is BridgeReviewQuote {
 }
 function QuoteFactDetails({ facts }: { facts: ReviewFact[] }) {
   if (!facts.length) return null;
-  return <details className="group mt-2 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.02)] px-3">
+  return <details className="mt-2 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.02)] px-3">
     <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-[11px] font-semibold text-mut">
-      <span>Quote details</span><ChevronDown size={16} aria-hidden="true" />
+      <span>Quote details</span><ChevronDown size={16} aria-hidden="true" className="shrink-0 disclosure-chevron" />
     </summary>
     <div className="flex flex-col gap-1 border-t border-[var(--line)] py-2">
       {facts.map((fact) => <ReviewRow key={`${fact.label}-${fact.value}`} label={fact.label} value={fact.title ?? fact.value} title={fact.title ?? fact.value} />)}
@@ -538,7 +538,7 @@ function QuoteFactDetails({ facts }: { facts: ReviewFact[] }) {
 function DecisionContext({ beforeFacts }: { beforeFacts?: ReviewFact[] }) {
   if (!beforeFacts?.length) return null;
   return <details aria-label="Current position" className="group mt-2 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-3">
-    <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-[11px] font-semibold text-mut"><span>Current position</span><span className="text-[10px] font-normal text-[var(--mut-2)] group-open:hidden">Verified values</span></summary>
+    <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-[11px] font-semibold text-mut"><span>Current position</span><span className="text-[10px] font-normal text-[var(--mut-2)] disclosure-closed-only">Verified values</span></summary>
     <div className="grid gap-1 border-t border-[var(--line)] py-2">{beforeFacts.map((fact) => <ReviewRow key={`before-${fact.label}`} label={fact.label} value={fact.value} title={fact.title} />)}</div>
   </details>;
 }

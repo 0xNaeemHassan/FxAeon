@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   CheckCircle2,
+  ChevronDown,
   CircleAlert,
   Clock3,
   ExternalLink,
@@ -225,7 +226,7 @@ function RecoveryItem({ view, trackBridge, autoTrackBridge, task, positionHint, 
             </a>
           </div>
           <details className="mt-1 border-t border-[var(--line)] pt-1">
-            <summary className="flex min-h-11 cursor-pointer items-center text-[11px] font-semibold text-mut">Details</summary>
+            <summary className="flex min-h-11 cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-mut">Details<ChevronDown aria-hidden="true" className="ml-auto h-3.5 w-3.5 shrink-0 disclosure-chevron" /></summary>
             <div className="pb-2 text-[10.5px] leading-relaxed text-mut">
               <p>{view.message}</p>
               {view.receiptBlockNumber !== undefined && <p className="mt-1">Block {view.receiptBlockNumber.toString()}</p>}
@@ -377,9 +378,10 @@ export default function PendingTransactionRecovery({ walletAddress, embedded = f
           <div className="flex flex-col gap-4" aria-live="polite">
             {drafts.length > 0 && (
               <details className="rounded-xl border border-[var(--line)] px-3">
-                <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-2 text-[11px] font-semibold text-mut">
+                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 text-[11px] font-semibold text-mut">
                   <span>Drafts ({drafts.length})</span>
-                  <span className="text-[10px] font-medium text-[var(--mut-2)]">Not submitted</span>
+                  <span className="ml-auto text-[10px] font-medium text-[var(--mut-2)]">Not submitted</span>
+                  <ChevronDown aria-hidden="true" className="h-3.5 w-3.5 shrink-0 disclosure-chevron" />
                 </summary>
                 <p className="pb-2 text-[10.5px] leading-relaxed text-mut">Continue rebuilds the action from current details before asking for a signature.</p>
                 <ul className="flex flex-col gap-2.5 pb-3">

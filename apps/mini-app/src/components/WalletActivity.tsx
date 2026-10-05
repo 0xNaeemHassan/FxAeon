@@ -19,6 +19,7 @@ import { compactAddress } from '@/lib/addressPresentation';
 import { openExternalLink } from '@/lib/telegram';
 import { WalletAvatar } from './WalletAvatar';
 import { loadActivityReceipt } from '@/lib/activityReceipt';
+import { formatExactDecimal } from '@/lib/amount';
 import styles from './WalletActivity.module.css';
 
 export default function WalletActivity({ walletAddress, compact = false, inDialog = false }: { walletAddress: Address; compact?: boolean; inDialog?: boolean }) {
@@ -45,16 +46,18 @@ function ActivityFeed({ walletAddress, compact, inDialog }: { walletAddress: Add
   // A verified-empty preview stays hidden; an unreadable one says so instead of looking empty.
   // The wallet dialog keeps its own History row, so it only previews rows that exist.
   if (compact && !activity.isPending && rows.length === 0 && (!unavailable || inDialog)) return null;
+  const refresh = <button type="button" className={styles.refresh} aria-label="Refresh history" title="Refresh history" disabled={activity.isFetching} onClick={() => void activity.refetch()}>
+    <RefreshCw size={16} className={activity.isFetching ? 'animate-spin' : ''} aria-hidden="true" />
+  </button>;
   return <section className={styles.section} aria-label={compact ? 'Recent history' : 'Transaction history'}>
-    <SectionTitle level={inDialog ? 3 : 2} right={<div className={styles.toolbar}>
-      {compact && !inDialog && <Link href="/history" aria-label="View all history">View all<ChevronRight size={14} aria-hidden="true" /></Link>}
-      <button type="button" aria-label="Refresh history" title="Refresh history" disabled={activity.isFetching} onClick={() => void activity.refetch()}>
-        <RefreshCw size={16} className={activity.isFetching ? 'animate-spin' : ''} aria-hidden="true" />
-      </button>
-    </div>}>{compact ? 'History' : <span className="sr-only">History</span>}</SectionTitle>
+    {compact ? <SectionTitle level={inDialog ? 3 : 2} right={<div className={styles.toolbar}>
+      {!inDialog && <Link href="/history" aria-label="View all history">View all<ChevronRight size={14} aria-hidden="true" /></Link>}
+      {refresh}
+    </div>}>History</SectionTitle> : <h2 className="sr-only">History</h2>}
     {!compact && <div className={styles.filters}>
       <select aria-label="Activity status" value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">All activity</option><option value="confirmed">Confirmed</option><option value="pending">Pending</option><option value="failed">Failed</option></select>
       <select aria-label="Activity network" value={chain} onChange={(event) => setChain(event.target.value)}><option value="all">All networks</option><option value="1">Ethereum</option><option value="8453">Base</option></select>
+      {refresh}
       <label className={styles.search}><Search size={16} aria-hidden="true" /><input aria-label="Search activity" placeholder="Search activity" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
     </div>}
     {!compact && drafts.length > 0 && <details className={styles.drafts}><summary>Drafts <span>({drafts.length})</span></summary>
@@ -67,8 +70,11 @@ function ActivityFeed({ walletAddress, compact, inDialog }: { walletAddress: Add
       : <ul className={styles.list}>{visible.map((item) => <li key={item.id}>
         <button type="button" className={styles.row} onClick={(event) => { triggerRef.current = event.currentTarget; setSelected(item); setDetailOpen(true); }}>
           <span className={styles.token}><TokenIcon symbol={item.symbol} size={38} /><span><ChainIcon chainId={item.chainId} size={15} /></span></span>
-          <span className={styles.label}><strong>{item.title}</strong><span>{item.transfers.length === 1 ? `${formatUnits(item.transfers[0].amountRaw, item.transfers[0].decimals)} ${item.transfers[0].symbol} · ` : ''}{item.chainId === 1 ? 'Ethereum' : 'Base'} · {new Date(item.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span></span>
-          {item.statusLabel && <span className={styles.status} data-status={item.status}>{item.status === 'confirmed' ? <Check size={14} /> : item.status === 'failed' ? <X size={14} /> : <Clock3 size={14} />}<span>{item.statusLabel}</span></span>}
+          <span className={styles.label}><strong>{item.title}</strong><span>{item.chainId === 1 ? 'Ethereum' : 'Base'} · {activityDay(item.timestamp)}</span></span>
+          <span className={styles.outcome}>
+            {item.transfers.length === 1 && <TransferAmount transfer={item.transfers[0]} walletAddress={walletAddress} />}
+            {item.statusLabel && <span className={styles.status} data-status={item.status}>{item.status === 'confirmed' ? <Check size={13} aria-hidden="true" /> : item.status === 'failed' ? <X size={13} aria-hidden="true" /> : <Clock3 size={13} aria-hidden="true" />}<span>{item.statusLabel}</span></span>}
+          </span>
           <ChevronRight size={15} className={styles.chevron} aria-hidden="true" />
         </button>
       </li>)}</ul>}
@@ -78,6 +84,28 @@ function ActivityFeed({ walletAddress, compact, inDialog }: { walletAddress: Add
     }}>{loadingMore ? <RefreshCw size={16} className="animate-spin" aria-label="Loading" /> : 'Load more'}</button>}
     {selected && <ActivityDetail key={selected.id} item={rows.find((item) => item.id === selected.id) ?? selected} open={detailOpen} onClose={() => setDetailOpen(false)} triggerRef={triggerRef} walletAddress={walletAddress} />}
   </section>;
+}
+
+/** Signed movement for a single indexed transfer; the detail sheet keeps the exact amount. */
+function TransferAmount({ transfer, walletAddress }: { transfer: Activity['transfers'][number]; walletAddress: Address }) {
+  const sent = transfer.from.toLowerCase() === walletAddress.toLowerCase();
+  const rounded = formatExactDecimal(formatUnits(transfer.amountRaw, transfer.decimals), 6);
+  // Rounding must never turn a real movement into zero; dust reads as a bound.
+  const amount = rounded === '0' && transfer.amountRaw !== 0n ? '<0.000001' : rounded;
+  return <strong className={styles.amount} data-direction={sent ? 'out' : 'in'}>
+    {sent ? '−' : '+'}{amount} {transfer.symbol}
+  </strong>;
+}
+
+/** Recent rows read by day: Today, Yesterday, then the calendar date. */
+function activityDay(timestamp: number): string {
+  const day = new Date(timestamp);
+  const today = new Date();
+  const startOf = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+  const difference = Math.round((startOf(today) - startOf(day)) / 86_400_000);
+  if (difference === 0) return `Today, ${day.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+  if (difference === 1) return 'Yesterday';
+  return day.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(day.getFullYear() !== today.getFullYear() ? { year: 'numeric' } : {}) });
 }
 
 function ActivityDetail({ item, open, onClose, triggerRef, walletAddress }: { item: Activity; open: boolean; onClose: () => void; triggerRef: React.RefObject<HTMLButtonElement | null>; walletAddress: Address }) {

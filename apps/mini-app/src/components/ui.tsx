@@ -4,7 +4,7 @@
  * FxAeon shared UI kit — every screen composes these so the app feels like
  * one product instead of disconnected pages.
  */
-import { forwardRef, ReactNode, useEffect, useRef, useState, type ButtonHTMLAttributes, type HTMLAttributes, type MouseEventHandler } from 'react';
+import { forwardRef, ReactNode, useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type HTMLAttributes, type MouseEventHandler } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -59,6 +59,7 @@ export function AppShell({
   const pathname = usePathname();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const contentRef = useRef<HTMLElement>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
   // Keep browser/tab titles correct for routes that own their heading inside
   // the workspace (Portfolio and Trade). The visual shell heading remains
   // opt-in via `title`, so action pages do not get a second large title.
@@ -73,8 +74,30 @@ export function AppShell({
     if (documentTitle) document.title = `${documentTitle} · FxAeon`;
   }, [documentTitle]);
 
+  // The top bar earns a hairline only once content scrolls beneath it.
+  useEffect(() => {
+    const content = contentRef.current;
+    const shell = shellRef.current;
+    if (!content || !shell) return;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      shell.dataset.scrolled = content.scrollTop > 4 ? 'true' : 'false';
+    };
+    const onScroll = () => {
+      if (!frame) frame = window.requestAnimationFrame(update);
+    };
+    update();
+    content.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      content.removeEventListener('scroll', onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
   return (
     <div
+      ref={shellRef}
       data-product-ui="v2"
       data-shell-tabs={tabs ? 'true' : 'false'}
       className={`app-shell mx-auto w-full ${tabs ? 'app-shell-tabs' : 'app-shell-no-tabs pb-[calc(env(safe-area-inset-bottom,0px)+1rem)]'}`}
@@ -132,9 +155,26 @@ function isTabActive(pathname: string | null, href: string, also?: string[]) {
   return pathname === href || Boolean(also?.some((prefix) => pathname?.startsWith(prefix)));
 }
 
+/* Routes remount the shell, so the dock remembers where its highlight was and
+   travels from there instead of reappearing in place. */
+let lastActiveTabIndex: number | null = null;
+
 export function TabBar() {
   const pathname = usePathname();
   const t = useT();
+  const barRef = useRef<HTMLDivElement>(null);
+  const activeIndex = TABS.findIndex(({ href, also }) => isTabActive(pathname, href, also));
+
+  useLayoutEffect(() => {
+    const bar = barRef.current;
+    const from = lastActiveTabIndex;
+    lastActiveTabIndex = activeIndex;
+    if (!bar || from === null || from < 0 || activeIndex < 0 || from === activeIndex) return;
+    bar.style.setProperty('--tab-index', String(from));
+    // Commit the starting position before travelling to the current tab.
+    void window.getComputedStyle(bar, '::before').transform;
+    bar.style.setProperty('--tab-index', String(activeIndex));
+  }, [activeIndex]);
   const links = TABS.map(({ href, labelKey, icon: Icon, also }) => {
     const active = isTabActive(pathname, href, also);
     return (
@@ -148,7 +188,7 @@ export function TabBar() {
         }`}
       >
         <span className="nav-icon">
-          <Icon aria-hidden="true" className="h-[18px] w-[18px]" strokeWidth={active ? 2.25 : 1.8} />
+          <Icon aria-hidden="true" className="h-5 w-5" strokeWidth={active ? 2.2 : 1.8} />
         </span>
         <span>{t(labelKey)}</span>
       </Link>
@@ -159,7 +199,12 @@ export function TabBar() {
     <>
       <nav data-fixed-navigation="true" className="mobile-tabbar pointer-events-none fixed inset-x-0 bottom-0 z-40" aria-label="Primary navigation">
         <div className="tabbar-safe mx-auto w-full max-w-[520px]">
-          <div className="tabbar pointer-events-auto">{links}</div>
+          <div
+            ref={barRef}
+            className="tabbar pointer-events-auto"
+            data-active-tab={activeIndex < 0 ? 'none' : String(activeIndex)}
+            style={{ '--tab-index': Math.max(activeIndex, 0), '--tab-count': TABS.length } as CSSProperties}
+          >{links}</div>
         </div>
       </nav>
     </>

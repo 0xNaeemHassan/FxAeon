@@ -1,62 +1,106 @@
+/* Portfolio: one hero for total value and the four most common moves, then
+ * calm sections that read top to bottom. */
 .workspace { width: min(100%, 1120px); margin-inline: auto; }
-.dashboard { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; }
-.primary, .secondary { display: flex; min-width: 0; flex-direction: column; gap: 20px; }
-.valueCard { padding: 4px 0 0; }
-.valueTop { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 12px; color: var(--mut); font-size: 13px; }
+.dashboard { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+.primary, .secondary { display: flex; min-width: 0; flex-direction: column; gap: 18px; }
+
+.valueCard {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-xl);
+  padding: 18px 20px 6px;
+  background:
+    radial-gradient(90% 120% at 100% -10%, color-mix(in srgb, var(--mint) 22%, transparent), transparent 58%),
+    radial-gradient(70% 90% at -10% 120%, color-mix(in srgb, var(--brand-coral) 10%, transparent), transparent 60%),
+    var(--surface);
+  box-shadow: var(--ring-inset), var(--elevation-1);
+}
+:root[data-theme='light'] .valueCard {
+  background:
+    radial-gradient(90% 120% at 100% -10%, color-mix(in srgb, var(--mint) 14%, transparent), transparent 58%),
+    radial-gradient(70% 90% at -10% 120%, color-mix(in srgb, var(--brand-coral) 7%, transparent), transparent 60%),
+    var(--surface);
+}
+.valueTop { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 12px; color: var(--mut); font-size: var(--fs-small); }
 .valueTop > div { display: flex; align-items: center; gap: 8px; }
-.valueTop button { display: inline-grid; min-width: 44px; min-height: 44px; place-items: center; border-radius: 50%; color: var(--mut); margin-right: -8px; }
-.valueTop button:hover { background: var(--mint-dim); color: var(--mint); }
-.partial { color: var(--warn); border-radius: 7px; padding: 4px 7px; background: var(--warn-dim); font-size: 11px; }
-.valueNumber { min-width: 0; margin: 5px 0; color: var(--text); }
-.helper { color: var(--mut); font-size: 12px; line-height: 1.65; margin: 12px 0 0; }
+.valueTop button { display: inline-grid; min-width: 44px; min-height: 44px; place-items: center; border-radius: 50%; color: var(--mut); margin: -8px -10px -8px 0; transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease, transform var(--dur-slow) var(--ease-spring); }
+.valueTop button:hover:not(:disabled) { background: var(--mint-dim); color: var(--mint-bright); }
+.valueTop button:active:not(:disabled) { transform: rotate(-30deg) scale(0.94); transition-duration: var(--dur-press); }
+.valueLabel { color: var(--mut); font-size: var(--fs-small); font-weight: 500; }
+.partial { color: var(--warn); border-radius: 7px; padding: 4px 7px; background: var(--warn-dim); font-size: var(--fs-micro); }
+.valueNumber { min-width: 0; margin: 2px 0 4px; color: var(--text); }
+.helper { color: var(--mut); font-size: var(--fs-caption); line-height: 1.6; margin: 12px 0 0; }
 .sectionTitle { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
-.sectionTitle h2 { font-size: 17px; font-weight: 620; letter-spacing: -.02em; margin: 0; }
-.sectionTitle a { display: flex; min-height: 44px; align-items: center; gap: 3px; font-size: 12px; color: var(--mint); }
-.positionList { display: flex; flex-direction: column; gap: 14px; }
-.emptyState { display: flex; align-items: center; gap: 10px; margin: 0; padding: 4px 0; color: var(--mut); font-size: 13px; }
+.sectionTitle h2 { font-size: var(--fs-title); font-weight: 650; letter-spacing: -.02em; margin: 0; }
+.sectionTitle a { display: flex; min-height: 44px; align-items: center; gap: 3px; font-size: var(--fs-small); color: var(--mint); }
+.positionList { display: flex; flex-direction: column; gap: 12px; }
+.emptyState { display: flex; align-items: center; gap: 12px; margin: 0; padding: 6px 0 2px; color: var(--mut); font-size: var(--fs-small); }
 .emptyState p { margin: 0; flex: 1; }
-.emptyIcon { display: grid; flex: 0 0 auto; place-items: center; width: 40px; height: 40px; border: 1px solid color-mix(in srgb, var(--mint) 20%, var(--line)); border-radius: 50%; background: transparent; color: var(--mint); }
-.emptyState a { display: inline-flex; flex: 0 0 auto; min-height: 44px; align-items: center; gap: 2px; color: var(--mint); font-weight: 600; }
+.emptyIcon { display: grid; flex: 0 0 auto; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 50%; background: var(--mint-dim); color: var(--mint); }
+.emptyState a { display: inline-flex; flex: 0 0 auto; min-height: 44px; align-items: center; gap: 2px; padding: 0 14px; border-radius: 999px; background: var(--surface-2); color: var(--text); font-weight: 600; transition: background-color var(--dur-fast) ease; }
+.emptyState a:hover { background: var(--surface-3); }
 .emptyEarn p a { color: var(--mint); font-weight: 600; }
-.emptyEarn > p { display: flex; align-items: center; gap: 12px; margin: 0; padding: 0; color: var(--mut); font-size: 13px; }
+.emptyEarn > p { display: flex; align-items: center; gap: 12px; margin: 0; padding: 0; color: var(--mut); font-size: var(--fs-small); }
 .emptyEarn > p strong { flex: 1; color: var(--text); font-weight: 550; }
-.emptyEarn p a { display: inline-flex; min-height: 44px; align-items: center; padding: 0 12px; border: 1px solid color-mix(in srgb, var(--mint) 26%, var(--line)); border-radius: 12px; }
+.emptyEarn p a { display: inline-flex; min-height: 44px; align-items: center; padding: 0 14px; border: 0; border-radius: 999px; background: var(--mint-dim); }
 .positionItem { min-width: 0; }
 .positionActions { display: flex; gap: 6px; padding: 8px 0 0; }
-.positionActions a { display: grid; flex: 1; place-items: center; min-height: 44px; border: 1px solid var(--line); border-radius: 10px; font-size: 12px; color: var(--mut); }
-.positionActions a:hover { color: var(--mint); border-color: color-mix(in srgb, var(--mint) 45%, var(--line)); }
+.positionActions a { display: grid; flex: 1; place-items: center; min-height: 44px; border: 0; border-radius: var(--radius-sm); background: var(--surface-2); font-size: var(--fs-small); font-weight: 600; color: var(--text); transition: background-color var(--dur-fast) ease, transform var(--dur-slow) var(--ease-spring); }
+.positionActions a:hover { background: var(--surface-3); }
+.positionActions a:active { transform: scale(0.97); transition-duration: var(--dur-press); }
+.positionActions a:last-child { color: var(--danger); }
 .disclosureActions { display: flex; justify-content: flex-end; min-height: 0; }
-.disclosureActions a { display: inline-flex; min-height: 44px; align-items: center; gap: 3px; color: var(--mint); font-size: 12px; font-weight: 600; }
-.earnCard { padding: 16px; }
+.disclosureActions a { display: inline-flex; min-height: 44px; align-items: center; gap: 3px; color: var(--mint); font-size: var(--fs-small); font-weight: 600; }
+.earnCard { padding: 4px 0 4px; }
 .earnTop { display: flex; min-width: 0; align-items: center; gap: 12px; }
 .earnTop > div { min-width: 0; flex: 1; }
-.earnTop h3 { font-size: 15px; font-weight: 600; margin: 0; }
-.earnTop p { color: var(--mut); font-size: 12px; margin: 4px 0 0; overflow-wrap: anywhere; }
-.earnTop > strong { font-size: 20px; font-weight: 600; }
-.earnActions { display: flex; gap: 8px; margin: 16px 0; }
-.earnActions a { display: inline-flex; flex: 1; min-width: 0; min-height: 44px; align-items: center; justify-content: center; text-align: center; padding: 8px; border: 1px solid color-mix(in srgb, var(--mint) 23%, var(--line)); border-radius: 12px; font-size: 12px; color: var(--text); }
-.earnActions a:first-child { color: var(--mint); background: color-mix(in srgb, var(--mint) 7%, transparent); }
-.quickActions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 8px 0 10px; }
-.quickAction { display: flex; min-width: 0; min-height: 80px; flex-direction: column; align-items: center; justify-content: center; gap: 7px; border-radius: 14px; padding: 4px 2px; color: var(--mut); font-size: 12px; transition: color 160ms ease, background-color 160ms ease; }
-.quickAction > span { display: grid; flex: 0 0 auto; width: 48px; height: 48px; place-items: center; border: 1px solid color-mix(in srgb, var(--mint) 30%, var(--line)); border-radius: 50%; background: color-mix(in srgb, var(--surface-2) 62%, transparent); color: var(--mint); transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease; }
-.quickAction > strong { font-weight: 550; }
-.quickAction:hover, .quickAction:focus-visible { color: var(--text); background: color-mix(in srgb, var(--mint) 5%, transparent); }
-.quickAction:hover > span { transform: translateY(-1px); border-color: color-mix(in srgb, var(--mint) 58%, var(--line)); background: var(--mint-dim); }
+.earnTop h3 { font-size: var(--fs-body); font-weight: 600; margin: 0; }
+.earnTop p { color: var(--mut); font-size: var(--fs-caption); margin: 3px 0 0; overflow-wrap: anywhere; }
+.earnTop > strong { font-size: 20px; font-weight: 600; letter-spacing: var(--tracking-figure); }
+.earnActions { display: flex; gap: 8px; margin: 14px 0 6px; }
+.earnActions a { display: inline-flex; flex: 1; min-width: 0; min-height: 44px; align-items: center; justify-content: center; text-align: center; padding: 8px; border: 0; border-radius: var(--radius-sm); background: var(--surface-2); font-size: var(--fs-small); font-weight: 600; color: var(--text); transition: background-color var(--dur-fast) ease, transform var(--dur-slow) var(--ease-spring); }
+.earnActions a:hover { background: var(--surface-3); }
+.earnActions a:active { transform: scale(0.97); transition-duration: var(--dur-press); }
+.earnActions a:first-child { color: var(--on-accent); background: var(--mint); }
+.earnActions a:first-child:hover { filter: brightness(1.06); }
+
+/* Quick actions: four round, tactile shortcuts inside the value card. */
+.quickActions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 14px 0 10px; }
+.quickAction { display: flex; min-width: 0; min-height: 80px; flex-direction: column; align-items: center; justify-content: center; gap: 8px; border-radius: var(--radius-md); padding: 4px 2px; color: var(--text); font-size: var(--fs-caption); transition: color var(--dur-fast) ease; }
+.quickAction > span { display: grid; flex: 0 0 auto; width: 52px; height: 52px; place-items: center; border: 1px solid color-mix(in srgb, var(--mint) 22%, var(--hairline)); border-radius: 50%; background: color-mix(in srgb, var(--mint) 12%, var(--surface-2)); color: var(--mint-bright); box-shadow: var(--ring-inset); transition: background-color var(--dur-fast) ease, border-color var(--dur-fast) ease, transform var(--dur-slow) var(--ease-spring); }
+:root[data-theme='light'] .quickAction > span { color: var(--mint); background: var(--mint-dim); }
+.quickAction > strong { font-weight: 600; }
+.quickAction:hover > span { transform: translateY(-2px); border-color: color-mix(in srgb, var(--mint) 45%, var(--line)); background: color-mix(in srgb, var(--mint) 20%, var(--surface-2)); }
+.quickAction:active > span { transform: scale(0.92); transition-duration: var(--dur-press); }
 .quickAction:focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
-.positionsSection, .emptyEarn { border-block: 1px solid var(--line); padding: 4px 0; background: transparent; }
-.positionsSection :global(details > summary), .earnSection :global(details > summary) { color: var(--text); font-size: 14px; font-weight: 600; }
+
+/* Positions and fxSAVE summaries sit in quiet cards with their disclosure. */
+.positionsSection, .earnSection, .emptyEarn {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--ring-inset);
+  padding: 2px 16px;
+}
+.positionsSection :global(details), .earnSection :global(details) { border-top: 0; }
+.positionsSection :global(details > summary), .earnSection :global(details > summary) { min-height: 56px; color: var(--text); font-size: var(--fs-body); font-weight: 600; }
+.positionsSection :global(details > summary > span:nth-child(2)), .earnSection :global(details > summary > span:nth-child(2)) { color: var(--mut); font-weight: 500; }
 @media (min-width: 1000px) {
   .dashboard { grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); gap: 28px; align-items: start; }
-  .primary, .secondary { gap: 22px; }
+  .primary, .secondary { gap: 20px; }
   .secondary { padding-top: 2px; }
+  .valueCard { padding: 24px 24px 8px; }
 }
 @media (max-width: 380px) {
-  .dashboard, .primary, .secondary { gap: 16px; }
+  .dashboard, .primary, .secondary { gap: 14px; }
   .quickActions { gap: 2px; }
-  .quickAction { min-height: 76px; font-size: 11px; }
-  .quickAction > span { width: 44px; height: 44px; }
-  .emptyState { gap: 8px; font-size: 12px; }
+  .quickAction { min-height: 76px; font-size: var(--fs-micro); }
+  .quickAction > span { width: 46px; height: 46px; }
+  .emptyState { gap: 8px; font-size: var(--fs-caption); }
+  .valueCard { padding-inline: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .quickAction, .quickAction > span { transition: none; }
+  .quickAction, .quickAction > span, .valueTop button, .positionActions a, .earnActions a { transition: none; }
+  .quickAction:hover > span, .quickAction:active > span, .valueTop button:active:not(:disabled) { transform: none; }
 }

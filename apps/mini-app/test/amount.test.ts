@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { calculateFractionDecimal, decimalInputError, decimalToUnits, formatExactDecimal, normalizeAmountInput } from '../src/lib/amount';
+import { calculateFractionDecimal, decimalInputError, decimalToUnits, formatExactDecimal, groupDigits, normalizeAmountInput } from '../src/lib/amount';
 
 test('percentage sizing calculates exact token units without floating point drift', () => {
   const balance = '9007199254740993.123456789012345678';
@@ -24,4 +24,13 @@ test('amount input normalization follows an explicit separator policy', () => {
   assert.equal(normalizeAmountInput('1,25', 'comma-decimal'), '1.25');
   assert.equal(normalizeAmountInput('1,000', 'comma-decimal'), null);
   assert.equal(normalizeAmountInput('1.000,25', 'comma-decimal'), null);
+});
+
+test('digit grouping adds separators to the whole part only and never alters the value', () => {
+  assert.equal(groupDigits('1234567.000001'), '1,234,567.000001');
+  assert.equal(groupDigits('999.5'), '999.5');
+  assert.equal(groupDigits('1000'), '1,000');
+  assert.equal(groupDigits('0.000001'), '0.000001');
+  for (const untouched of ['-1500', '1,500', '1e21', '', '12.']) assert.equal(groupDigits(untouched), untouched);
+  assert.equal(groupDigits('9007199254740993.123456789012345678').replace(/,/g, ''), '9007199254740993.123456789012345678');
 });

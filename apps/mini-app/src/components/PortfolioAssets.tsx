@@ -3,7 +3,7 @@
 // Static export: small allowlisted token logos use native lazy loading and a
 // local fallback, without an image-optimization server.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { Coins, Search } from 'lucide-react';
 import { AssetListSkeleton, AssetRowContent, displayAssetSymbol, networkLabel } from '@/components/AssetPresentation';
@@ -15,8 +15,9 @@ import styles from './PortfolioAssets.module.css';
 export type PortfolioNetwork = 'all' | 1 | 8453;
 
 export function PortfolioNetworkTabs({ value, onChange }: { value: PortfolioNetwork; onChange: (value: PortfolioNetwork) => void }) {
-  return <div className={styles.networkTabs} role="group" aria-label="Portfolio network">
-    {(['all', 1, 8453] as const).map((network) => <button key={network} type="button" aria-pressed={value === network} onClick={() => onChange(network)}>{network === 'all' ? 'All' : networkLabel(network)}</button>)}
+  const options = ['all', 1, 8453] as const;
+  return <div className={styles.networkTabs} role="group" aria-label="Portfolio network" style={{ '--seg-index': Math.max(0, options.indexOf(value)), '--seg-count': options.length } as CSSProperties}>
+    {options.map((network) => <button key={network} type="button" aria-pressed={value === network} onClick={() => onChange(network)}>{network === 'all' ? 'All' : networkLabel(network)}</button>)}
   </div>;
 }
 
