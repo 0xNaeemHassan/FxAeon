@@ -1,12 +1,16 @@
 import { expect, test, assertNoBackendRequests } from '../fixtures/test';
 
+// Locate the live top bar as `header.app-topbar`. On routes where React
+// streams the wallet boundary out of line, the exported HTML also contains
+// that boundary's loading fallback (ProviderLoadingState) with its own
+// div.app-topbar until React reveals the shell, so `.app-topbar` can match twice.
 test.describe('shared shell spacing', () => {
   test.use({ telegram: false });
 
   test('keeps the mobile product top bar compact without shrinking its controls', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/portfolio', { waitUntil: 'domcontentloaded' });
-    const topbar = page.locator('.app-topbar');
+    const topbar = page.locator('header.app-topbar');
     await expect(topbar).toBeVisible();
 
     const geometry = await topbar.evaluate((element) => {
@@ -63,7 +67,7 @@ test.describe('shared shell spacing', () => {
       await profileButton.locator('[data-wallet-identity-name]').evaluate((element, label) => { element.textContent = label; }, ensSizedLabel);
       await expect(profileButton).toContainText(ensSizedLabel);
 
-      const geometry = await page.locator('.app-topbar').evaluate((element) => ({
+      const geometry = await page.locator('header.app-topbar').evaluate((element) => ({
         height: element.getBoundingClientRect().height,
         controls: Array.from(element.querySelectorAll<HTMLElement>('.app-topbar-actions button'))
           .map((control) => {
@@ -101,7 +105,7 @@ test.describe('shared shell spacing', () => {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       for (const route of routes) {
         await page.goto(route, { waitUntil: 'domcontentloaded' });
-        const topbar = page.locator('.app-topbar');
+        const topbar = page.locator('header.app-topbar');
         const header = page.locator('.page-header:visible, .trade-page-heading:visible, .portfolio-page-heading:visible').first();
         await expect(topbar).toBeVisible();
         if (await header.count() === 0) continue;
@@ -111,13 +115,13 @@ test.describe('shared shell spacing', () => {
         for (let attempt = 0; !geometry && attempt < 25; attempt += 1) {
           try {
             const currentHeader = page.locator('.page-header:visible, .trade-page-heading:visible, .portfolio-page-heading:visible').first();
-            await expect(page.locator('.app-topbar')).toBeVisible();
+            await expect(page.locator('header.app-topbar')).toBeVisible();
             if (await currentHeader.count() === 0) {
               await page.waitForTimeout(100);
               continue;
             }
             geometry = await currentHeader.evaluate((element) => {
-              const topbar = document.querySelector<HTMLElement>('.app-topbar');
+              const topbar = document.querySelector<HTMLElement>('header.app-topbar');
               if (!topbar) throw new Error('top bar is missing');
               const topbarRect = topbar.getBoundingClientRect();
               const headerRect = element.getBoundingClientRect();

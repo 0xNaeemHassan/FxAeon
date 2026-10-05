@@ -289,7 +289,7 @@ test.describe("connected browser wallet flows", () => {
     // scroll. The connected fixture may render supporting content below the
     // ticket, so wait for that actual scroll boundary rather than assuming
     // either an immediate layout or a zero scroll range.
-    const topbar = page.locator(".app-topbar");
+    const topbar = page.locator("header.app-topbar");
     const topbarTopBefore = await topbar.evaluate((element) => element.getBoundingClientRect().top);
     await expect.poll(() => main.evaluate((element) => element.scrollHeight - element.clientHeight), { timeout: 15_000 })
       .toBeGreaterThan(0);
