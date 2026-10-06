@@ -361,4 +361,12 @@ export function positionDebtTokenAddress(market: "ETH" | "BTC", type: "long" | "
 export const FX_ROUTER_ADDRESS: Address = ROUTER;
 export const FX_MINT_ROUTER_ADDRESS: Address = FX_MINT_ROUTER;
 
+/**
+ * Where an SDK operation sends its action steps, for History labels only; any
+ * other step it signs is an approval. Null for operations outside the manifest.
+ */
+export function operationActionDestinations(operation: string): readonly Address[] | null {
+  return Object.hasOwn(ACTION_MANIFESTS, operation) ? ACTION_MANIFESTS[operation as OfficialFxMethod].destinations : null;
+}
+
 export { OFT_SEND, APPROVE };

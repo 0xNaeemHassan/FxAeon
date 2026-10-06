@@ -87,6 +87,13 @@
   padding-bottom: 4px;
 }
 
+.fundsNote {
+  margin: 0 0 10px;
+  color: var(--warn);
+  font-size: var(--fs-small);
+  line-height: 1.45;
+}
+
 .feeSelector { display: flex; gap: 8px; margin: 8px 0; border: 0; padding: 0; }
 .feeSelector label { flex: 1; min-width: 0; position: relative; cursor: pointer; }
 .feeSelector input { position: absolute; opacity: 0; width: 1px; height: 1px; }

@@ -544,7 +544,11 @@ export default function TradePage() {
       <ActionWorkspace className={`${styles.tradeWorkspace} trade-workspace`}>
         <header className={`${styles.tradePageHeading} trade-page-heading`}>
           <div><h1 className="text-display text-[30px] font-semibold leading-tight">Trade</h1></div>
-          <Link href="/positions" className={`${styles.positionsShortcut} glass-press inline-flex min-h-11 items-center gap-2 border text-[13px] font-semibold`}><Layers2 className="h-4 w-4" aria-hidden="true" />Positions</Link>
+          <div className={`${styles.tradePageActions} trade-page-actions`}>
+            <Link href="/positions" className={`${styles.positionsShortcut} glass-press inline-flex min-h-11 items-center gap-2 border text-[13px] font-semibold`}><Layers2 className="h-4 w-4" aria-hidden="true" />Positions</Link>
+            {/* The ticket's settings live with the route's other controls, so the form starts at its first decision. */}
+            {reviewStage === 'input' && <TransactionSettings slippage />}
+          </div>
         </header>
 
         <div className={styles.tradeLayout} data-trade-layout data-review={reviewStage !== 'input' || undefined}>
@@ -570,13 +574,7 @@ export default function TradePage() {
               resumeReview={resumeReview}
               editor={
                 <>
-                  <div className={`${styles.ticketHeader} flex items-start justify-between gap-3`}>
-                    <div>
-                      <h2 className="text-[18px] font-semibold">Open position</h2>
-                    </div>
-                    <TransactionSettings slippage />
-                  </div>
-
+                  <h2 className="sr-only">Open position</h2>
                   <div className={styles.sideControl}><Segmented tone="sides" value={side} onChange={changeSide} ariaLabel="Position side" options={[{ value: 'long', label: 'Long', sub: 'Price rises' }, { value: 'short', label: 'Short', sub: 'Price falls' }]} /></div>
 
                   <div className={styles.fieldStack}>

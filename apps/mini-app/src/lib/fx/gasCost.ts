@@ -70,6 +70,14 @@ export interface RouteGasCostEstimate {
   requiredNativeCostWei?: bigint;
   /** Why a total is absent or what its component scope covers. */
   totalNativeCostScope?: 'execution-plus-value' | 'execution-plus-l1-plus-operator-plus-value';
+  /** The wallet's native balance, when it could be read alongside the estimate. */
+  nativeBalanceWei?: bigint;
+  /**
+   * True when the wallet cannot pay for the route: its balance is below the
+   * required native cost, or, while some steps lack estimates, below the value
+   * plus the 21,000-gas floor every transaction costs. Signing would only fail.
+   */
+  insufficientNativeBalance?: boolean;
   error?: string;
 }
 
@@ -95,6 +103,9 @@ const MAX_ROUTE_STEPS = 32;
 export const MAX_FEE_PER_GAS_WEI = 1_000_000_000_000_000_000n;
 export const MAX_GAS_UNITS_PER_STEP = 1_000_000_000n;
 const MAX_COMPONENT_FEE_WEI = MAX_FEE_PER_GAS_WEI * MAX_GAS_UNITS_PER_STEP;
+/** Every transaction costs at least this much gas. */
+const MIN_TRANSACTION_GAS = 21_000n;
+export const INSUFFICIENT_NATIVE_ERROR = 'Not enough ETH for network fees';
 
 type GasClient = FxPublicClient & {
   estimateGas?: NonNullable<FxPublicClient['estimateGas']>;
@@ -373,6 +384,13 @@ export async function estimatePlannedRouteCost(
     return unavailableEstimate(route, routeKey, fetchedAt, validUntil, nativeValueWei, 'chain unavailable');
   }
 
+  // The wallet's balance decides whether the route can be paid for at all. A
+  // failed read leaves that unknown rather than blocking the review.
+  const balancePromise: Promise<bigint | undefined> = typeof client.getBalance === 'function'
+    ? boundedCall(client.getBalance({ address: route.walletAddress }), timeoutMs, options.signal)
+      .then((balance) => (typeof balance === 'bigint' && balance >= 0n ? balance : undefined))
+      .catch(() => undefined)
+    : Promise.resolve(undefined);
   // Always settle this parallel request before the step loop completes. If a
   // fee request aborts while eth_estimateGas is still running, leaving a
   // rejected promise pending would surface as an unhandled rejection.
@@ -511,6 +529,19 @@ export async function estimatePlannedRouteCost(
   const error = 'feeError' in feeResult
     ? safeGasCostError(feeResult.feeError)
     : componentError || (fee?.stale ? 'gas oracle data is stale' : undefined) || steps.find((step) => step.error)?.error;
+  const requiredNativeCostWei = allCosts && usableFee
+    ? nativeValueWei
+      + steps.reduce((sum, step) => sum + gasLimitMaxFeeCost(step.gas!, usableFee.feePerGasWei), 0n)
+      + (l1DataFeeWei ?? 0n)
+      + (operatorFeeWei ?? 0n)
+    : undefined;
+  const nativeBalanceWei = await balancePromise;
+  const minimumNativeCostWei = usableFee
+    ? nativeValueWei + BigInt(route.transactions.length) * MIN_TRANSACTION_GAS * usableFee.feePerGasWei
+    : undefined;
+  const fundsFloor = requiredNativeCostWei ?? minimumNativeCostWei;
+  const insufficientNativeBalance = steps.some((step) => step.error === INSUFFICIENT_NATIVE_ERROR)
+    || (nativeBalanceWei !== undefined && fundsFloor !== undefined && nativeBalanceWei < fundsFloor);
   return {
     routeKey,
     walletAddress: route.walletAddress,
@@ -531,15 +562,12 @@ export async function estimatePlannedRouteCost(
     totalNativeCostWei: allCosts && executionGasFeeWei !== undefined
       ? nativeValueWei + executionGasFeeWei + (l1DataFeeWei ?? 0n) + (operatorFeeWei ?? 0n)
       : undefined,
-    requiredNativeCostWei: allCosts && usableFee
-      ? nativeValueWei
-        + steps.reduce((sum, step) => sum + gasLimitMaxFeeCost(step.gas!, usableFee.feePerGasWei), 0n)
-        + (l1DataFeeWei ?? 0n)
-        + (operatorFeeWei ?? 0n)
-      : undefined,
+    requiredNativeCostWei,
     totalNativeCostScope: route.chainId === 8453
       ? (allCosts ? 'execution-plus-l1-plus-operator-plus-value' : undefined)
       : (executionGasFeeWei === undefined ? undefined : 'execution-plus-value'),
+    nativeBalanceWei,
+    insufficientNativeBalance,
     error,
   };
 }
@@ -697,6 +725,7 @@ export const routeGasCostCache = new RouteGasCostCache();
 /** Never leak a private key or RPC credential through an error string. */
 export function safeGasCostError(error: unknown): string {
   const value = errorText(error);
+  if (/insufficient funds|exceeds the balance|exceeds transaction sender account balance/i.test(value)) return INSUFFICIENT_NATIVE_ERROR;
   if (/abort|cancel/i.test(value)) return 'Gas estimate cancelled';
   if (/timed out|timeout/i.test(value)) return 'Gas estimate timed out';
   if (/Base L1 data fee unavailable/i.test(value)) return 'Base L1 data fee unavailable';
