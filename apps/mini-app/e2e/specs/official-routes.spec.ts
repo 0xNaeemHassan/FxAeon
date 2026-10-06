@@ -430,6 +430,24 @@ test.describe("market price context", () => {
     assertNoBackendRequests(requests);
   });
 
+  test("scrubbing the chart reads the hovered bar in the header, then returns to the live price", async ({ page, requests }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/trade", { waitUntil: "domcontentloaded" });
+    const panel = page.locator(".market-chart-panel");
+    const chart = page.getByRole("img", { name: /^ETH 1D USD price chart/ });
+    await expect(chart).toBeVisible({ timeout: 15_000 });
+    const box = (await chart.boundingBox())!;
+    await page.mouse.move(box.x + box.width * 0.35, box.y + box.height * 0.5);
+    await expect(panel).toHaveAttribute("data-scrubbing", "true");
+    await expect(panel.locator("[data-scrub-price]")).toHaveText(/^\$[\d,]+\.\d{2}$/);
+    await expect(panel.locator("[data-scrub-time] time")).toHaveAttribute("datetime", /^\d{4}-\d{2}-\d{2}T/);
+    // Leaving the chart restores the live quote and its 24h change.
+    await page.mouse.move(box.x + box.width / 2, Math.max(0, box.y - 160));
+    await expect(panel).not.toHaveAttribute("data-scrubbing", "true");
+    await expect(panel.locator(".market-chart-header")).toContainText(/% 24h/);
+    assertNoBackendRequests(requests);
+  });
+
   test("keeps the top bar free of a duplicate market-price strip across every asset workspace", async ({ page, requests }) => {
     for (const route of ["/portfolio", "/positions", "/borrow", "/earn", "/move", "/more", "/settings", "/history", "/qr"]) {
       await page.goto(route, { waitUntil: "domcontentloaded" });

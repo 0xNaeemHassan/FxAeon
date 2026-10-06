@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { localTimeShiftSeconds } from '../src/lib/chartTime';
+import { formatScrubTime, localTimeShiftSeconds, scrubChangePercent } from '../src/lib/chartTime';
 
 const MIDNIGHT_UTC = Date.UTC(2026, 9, 5) / 1_000;
 
@@ -28,4 +28,19 @@ test('one offset from the newest bar keeps a series ordered across a daylight-sa
   assert.ok(beforeFallBack + shift < afterFallBack + shift);
   // Per-bar offsets would have produced the same local time twice.
   assert.equal(beforeFallBack - 240 * 60, afterFallBack - 300 * 60);
+});
+
+test('a scrubbed price reads as a change from the range start', () => {
+  assert.equal(scrubChangePercent(2_000, 2_100), 5);
+  assert.equal(scrubChangePercent(2_000, 1_900), -5);
+  assert.equal(scrubChangePercent(undefined, 2_100), null);
+  assert.equal(scrubChangePercent(0, 2_100), null);
+  assert.equal(scrubChangePercent(2_000, Number.NaN), null);
+});
+
+test('scrub times read in the viewer zone: a time within the hour, a date beyond it', () => {
+  const at = Date.UTC(2026, 9, 6, 14, 35) / 1_000;
+  assert.equal(formatScrubTime(at, '1H', 'en-GB', 'UTC'), '14:35');
+  assert.equal(formatScrubTime(at, '1D', 'en-GB', 'UTC'), '6 Oct, 14:35');
+  assert.equal(formatScrubTime(at, '30D', 'en-GB', 'Asia/Kolkata'), '6 Oct, 20:05');
 });
