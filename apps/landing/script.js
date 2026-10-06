@@ -174,7 +174,10 @@
     const revealGroups = [
       [".section-head", false],
       [".chapter", false],
-      [".mechanic", true],
+      [".scene", false],
+      [".duo-item", true],
+      [".sdk-copy", false],
+      [".sdk-group", true],
       [".trust-copy", false],
       [".review-card", false],
       [".chat", false],
@@ -209,7 +212,7 @@
 
     // Headlines are read into light: each word brightens as its line scrolls up
     // to where it is read. Words become spans; the heading's text is unchanged.
-    const headlines = still() ? [] : [...document.querySelectorAll(".section-head h2, .trust-copy h2")].map((heading) => {
+    const headlines = still() ? [] : [...document.querySelectorAll(".section-head h2, .trust-copy h2, .scene-title")].map((heading) => {
       const words = [];
       for (const node of [...heading.childNodes]) {
         if (node.nodeType !== Node.TEXT_NODE) continue;
@@ -298,16 +301,145 @@
       if (!pointerFrame) pointerFrame = requestAnimationFrame(applyPointer);
     }, { passive: true });
 
-    // Protocol cards light up under the pointer.
-    document.querySelectorAll(".mechanic").forEach((card) => {
-      card.addEventListener("pointermove", (event) => {
-        const box = card.getBoundingClientRect();
-        card.style.setProperty("--mx", `${Math.round(event.clientX - box.left)}px`);
-        card.style.setProperty("--my", `${Math.round(event.clientY - box.top)}px`);
-      });
+    // The split: 1 ETH opened at 3× with ETH at $3,000 holds 3 ETH against
+    // 6,000 fxUSD. Moving the price moves only the share above the fxUSD.
+    const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+    const SPLIT = { eth: 3, debt: 6000, price: 3000, ceiling: 3 * 3000 * 1.2 };
+    const splitInput = document.getElementById("split-price");
+    const vessel = document.querySelector(".vessel");
+    const splitOut = (name) => document.querySelector(`[data-split="${name}"]`);
+    const renderSplit = () => {
+      if (!splitInput) return;
+      const move = Number(splitInput.value) / 100;
+      const price = SPLIT.price * (1 + move);
+      const collateral = SPLIT.eth * price;
+      const share = collateral - SPLIT.debt;
+      const change = share / (SPLIT.eth * SPLIT.price - SPLIT.debt) - 1;
+      const sign = change > 0.0005 ? "+" : change < -0.0005 ? "−" : "±";
+      const changeText = `${sign}${Math.abs(change * 100).toFixed(1)}%`;
+      const leverage = collateral / share;
+      splitOut("share").textContent = usd.format(share);
+      splitOut("change").textContent = changeText;
+      splitOut("change").dataset.tone = change > 0.0005 ? "up" : change < -0.0005 ? "down" : "";
+      splitOut("collateral").textContent = usd.format(collateral);
+      splitOut("price").textContent = `3 ETH at ${usd.format(price)}`;
+      splitOut("leverage").textContent = `${leverage.toFixed(1)}×`;
+      vessel?.style.setProperty("--share", (share / SPLIT.ceiling).toFixed(4));
+      vessel?.style.setProperty("--stable", (SPLIT.debt / SPLIT.ceiling).toFixed(4));
+      const movePercent = Math.round(move * 100);
+      splitInput.setAttribute("aria-valuetext", `ETH ${movePercent > 0 ? "up" : movePercent < 0 ? "down" : "unchanged"}${movePercent ? ` ${Math.abs(movePercent)}%` : ""}, at ${usd.format(price)}. Your share ${usd.format(share)}, ${changeText.replace("−", "minus ").replace("+", "plus ").replace("±", "")}. fxUSD stays 6,000.`);
+    };
+    splitInput?.addEventListener("input", renderSplit);
+    renderSplit();
+
+    // The brake: distances from the f(x) Protocol docs' table of price falls
+    // that reach the rebalance (88% LTV) and liquidation (95% LTV) lines.
+    const BRAKE = { 2: [43.18, 47.37], 3: [24.24, 29.82], 4: [14.77, 21.05], 5: [9.09, 15.79], 6: [5.3, 12.28], 7: [2.6, 9.77] };
+    const brake = document.querySelector(".brake-art");
+    const brakeOptions = brake?.querySelector(".brake-options");
+    const ruler = brake?.querySelector(".ruler");
+    const showBrake = (leverage) => {
+      const row = BRAKE[leverage];
+      if (!brake || !row) return;
+      brake.querySelectorAll(".brake-options button").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.leverage === String(leverage))));
+      brakeOptions?.style.setProperty("--i", String(Number(leverage) - 2));
+      ruler?.style.setProperty("--rb", String(row[0]));
+      ruler?.style.setProperty("--lq", String(row[1]));
+      brake.querySelector('[data-brake="opened"]').textContent = `, opened at ${leverage}×`;
+      brake.querySelector('[data-brake="rebalance"]').textContent = row[0].toFixed(2);
+      brake.querySelector('[data-brake="liquidation"]').textContent = row[1].toFixed(2);
+    };
+    brake?.querySelectorAll(".brake-options button").forEach((button) => {
+      button.addEventListener("click", () => showBrake(button.dataset.leverage));
     });
 
+    // The peg: once its line has drawn, a bead traces the swing back to a
+    // dollar, only while motion is welcome and the chart is on screen.
+    const pegChart = document.querySelector(".peg-chart");
+    const pegMotion = pegChart?.querySelector("animateMotion");
+    let pegOnScreen = false;
+    const syncPeg = () => {
+      if (!pegChart || !pegMotion || typeof pegMotion.beginElement !== "function") return;
+      const run = pegOnScreen && !still() && !document.hidden;
+      if (run && !pegChart.hasAttribute("data-moving")) {
+        pegChart.toggleAttribute("data-moving", true);
+        pegChart.unpauseAnimations?.();
+        pegMotion.beginElement();
+      } else if (run) {
+        pegChart.unpauseAnimations?.();
+      } else if (!run && pegChart.hasAttribute("data-moving")) {
+        pegChart.pauseAnimations?.();
+        if (still()) {
+          pegMotion.endElement();
+          pegChart.removeAttribute("data-moving");
+        }
+      }
+    };
+    if (pegChart && "IntersectionObserver" in window) {
+      new IntersectionObserver((entries) => {
+        pegOnScreen = entries.some((entry) => entry.isIntersecting);
+        // Let the line draw first; the bead follows it.
+        window.setTimeout(syncPeg, pegChart.hasAttribute("data-moving") ? 0 : 1800);
+      }, { threshold: 0.35 }).observe(pegChart);
+      document.addEventListener("visibilitychange", syncPeg);
+    }
+
+    // What runs when you tap: each FxAeon screen and the SDK methods it uses
+    // (docs/sdk-scope.md). Write methods prepare transactions; the others read state.
+    const SCREENS = {
+      portfolio: { label: "Portfolio", methods: ["getPositions", "getFxSaveBalance", "getFxSaveClaimable"] },
+      trade: { label: "Trade", methods: ["increasePosition", "getPositions"] },
+      positions: { label: "Positions", methods: ["increasePosition", "reducePosition", "adjustPositionLeverage", "getPositions"] },
+      borrow: { label: "Borrow", methods: ["depositAndMint", "repayAndWithdraw", "getPositions"] },
+      earn: { label: "Earn", methods: ["depositFxSave", "withdrawFxSave", "getRedeemTx", "getFxSaveConfig", "getFxSaveBalance", "getFxSaveRedeemStatus", "getFxSaveClaimable"] },
+      move: { label: "Move", methods: ["buildBridgeTx", "getBridgeQuote"] },
+    };
+    const board = document.querySelector(".sdk-board");
+    const sdkStatus = document.querySelector("[data-sdk-status]");
+    const methodRows = [...(board?.querySelectorAll("li[data-method]") ?? [])];
+    // "a", "a and b", "a, b and c" as text and <code> nodes.
+    const appendNames = (parent, names) => names.forEach((name, index) => {
+      if (index > 0) parent.append(index === names.length - 1 ? " and " : ", ");
+      const element = document.createElement("code");
+      element.textContent = name;
+      parent.append(element);
+    });
+    const showSdkScreen = (key) => {
+      const screen = SCREENS[key];
+      if (!board || !screen) return;
+      board.dataset.screen = key;
+      document.querySelectorAll(".sdk-picker button").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.screen === key)));
+      methodRows.forEach((row) => {
+        const on = screen.methods.includes(row.dataset.method);
+        if (on && row.hasAttribute("data-on")) {
+          // Restart the sweep so a repeated choice still answers.
+          row.removeAttribute("data-on");
+          void row.offsetWidth;
+        }
+        row.toggleAttribute("data-on", on);
+      });
+      if (!sdkStatus) return;
+      const writes = screen.methods.filter((name) => board.querySelector(`li[data-method="${name}"]`)?.hasAttribute("data-write"));
+      const reads = screen.methods.filter((name) => !writes.includes(name));
+      sdkStatus.replaceChildren(`${screen.label} uses ${screen.methods.length} of 15 methods: `);
+      if (writes.length) {
+        appendNames(sdkStatus, writes);
+        sdkStatus.append(writes.length === 1 ? " prepares its transactions" : " prepare its transactions");
+      }
+      if (writes.length && reads.length) sdkStatus.append("; ");
+      if (reads.length) {
+        appendNames(sdkStatus, reads);
+        sdkStatus.append(reads.length === 1 ? " reads the state it shows" : " read the state it shows");
+      }
+      sdkStatus.append(".");
+    };
+    document.querySelectorAll(".sdk-picker button").forEach((button) => {
+      button.addEventListener("click", () => showSdkScreen(button.dataset.screen));
+    });
+    if (board) showSdkScreen(board.dataset.screen || "trade");
+
     reduce.addEventListener?.("change", () => {
+      syncPeg();
       if (!reduce.matches) return;
       resetPointer();
       showAll();

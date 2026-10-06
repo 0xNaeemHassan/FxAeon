@@ -20,19 +20,27 @@ const WIDTHS = [320, 360, 393, 430, 768, 1024, 1440];
 const TEXT_SELECTORS = [
   '.site-header .brand span', '.site-header nav a', '.hero h1', '.hero .lede',
   '.hero .web-link', '.proof li', '.section-head h2', '.trust-copy h2', '.chapter h3', '.chapter p',
-  '.chapter .text-link', '.mechanic h3', '.mechanic p', '.mechanic .text-link', '.trust-points li', '.steps h3',
+  '.chapter .text-link', '.scene-title', '.scene-copy > p', '.scene-copy .text-link', '.split-readout dt',
+  '.split-readout b', '.split-readout small', '.split-control label', '.range-scale', '.brake-picker-label',
+  '.brake-options button', '.brake-figures dt', '.brake-figures dd', '.ruler-mark span', '.ruler-scale',
+  '.ruler-caption', '.scene-note', '.defenses h4', '.defenses p', '.duo-item h3', '.duo-item p',
+  '.duo-item .text-link', '.sdk-lede', '.sdk-picker button', '.sdk-status', '.sdk-group h3', '.sdk-group li',
+  '.sdk-key', '.trust-points li', '.steps h3',
   '.steps p', '.faq summary', '.finale h2', '.finale p', 'footer .brand span', '.footer-links a', '.copyright',
 ].join(', ');
 
 const TARGET_SELECTORS = [
   '.site-header .brand', '.site-header nav a', '.theme-toggle', '.site-header .pill', '.menu', '.hero .actions a',
-  '.text-link', '.faq summary', '.finale .actions a', 'footer .brand', '.footer-links a',
+  '.text-link', '#split-price', '.brake-options button', '.sdk-picker button', '.faq summary', '.finale .actions a',
+  'footer .brand', '.footer-links a',
 ].join(', ');
 
 const IN_BOUNDS_SELECTORS = [
   '.site-header', '.hero-copy', '.hero h1', '.hero .lede', '.hero .actions', '.hero-stage', '.proof li',
-  '.section-head', '.chapter', '.chapter-phone .phone', '.mechanic', '.trust-copy', '.review-card', '.chat',
-  '.steps li', '.faq-list', '.finale h2', '.finale .actions', 'footer',
+  '.section-head', '.chapter', '.chapter-phone .phone', '.scene', '.scene-copy', '.scene-art', '.vessel',
+  '.split-readout', '.split-control', '.brake-options', '.brake-figures', '.ruler', '.ruler-mark span',
+  '.peg-chart', '.defenses li', '.flow', '.duo-item', '.sdk-copy', '.sdk-picker', '.sdk-group li',
+  '.trust-copy', '.review-card', '.chat', '.steps li', '.faq-list', '.finale h2', '.finale .actions', 'footer',
 ].join(', ');
 
 await mkdir(output, { recursive: true });
@@ -289,7 +297,9 @@ try {
       // Contrast over the real backdrop, section by section, at two sizes.
       if (width === 393 || width === 1440) {
         const failures = [];
-        const stops = ['.hero', '.proof', '#moves', '.chapter[data-chapter="earn"]', '#protocol', '.mechanics', '.trust', '#telegram', '#faq', '.finale', 'footer'];
+        const stops = ['.hero', '.proof', '#moves', '.chapter[data-chapter="earn"]', '#protocol', '.scene-split', '.split-control',
+          '.scene-brake', '.ruler', '.scene-peg', '.defenses', '.scene-pool', '.duo', '#sdk', '.sdk-group:nth-child(3)', '.sdk-key',
+          '.trust', '#telegram', '#faq', '.finale', 'footer'];
         for (const selector of stops) {
           await page.locator(selector).first().scrollIntoViewIfNeeded();
           await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
@@ -348,15 +358,59 @@ try {
 
   // Headlines light word by word as they are read, without changing their text.
   const headline = motionPage.locator('#protocol-title');
-  assert.equal(await headline.evaluate((element) => element.textContent), 'Mechanics that work for you, stated plainly.');
+  assert.equal(await headline.evaluate((element) => element.textContent), 'How f(x) Protocol works.');
   await headline.evaluate((element) => element.scrollIntoView({ block: 'end' }));
   await motionPage.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
   const unlit = await headline.evaluate((element) => element.querySelectorAll('.w:not([data-lit])').length);
   assert.ok(unlit > 0, 'A headline entering at the bottom of the screen should still be dim');
   await headline.evaluate((element) => element.scrollIntoView({ block: 'center' }));
   await motionPage.waitForFunction(() => document.querySelectorAll('#protocol-title .w:not([data-lit])').length === 0);
-  assert.equal(await headline.evaluate((element) => element.textContent), 'Mechanics that work for you, stated plainly.');
+  assert.equal(await headline.evaluate((element) => element.textContent), 'How f(x) Protocol works.');
+
+  // The split: the keyboard moves the price; fxUSD holds while the share takes the move.
+  const split = motionPage.locator('#split-price');
+  await split.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+  await split.focus();
+  for (let step = 0; step < 10; step += 1) await motionPage.keyboard.press('ArrowLeft');
+  assert.deepEqual(await motionPage.evaluate(() => ({
+    share: document.querySelector('[data-split="share"]').textContent,
+    change: document.querySelector('[data-split="change"]').textContent,
+    collateral: document.querySelector('[data-split="collateral"]').textContent,
+    leverage: document.querySelector('[data-split="leverage"]').textContent,
+    text: document.querySelector('#split-price').getAttribute('aria-valuetext'),
+  })), {
+    share: '$2,100', change: '−30.0%', collateral: '$8,100', leverage: '3.9×',
+    text: 'ETH down 10%, at $2,700. Your share $2,100, minus 30.0%. fxUSD stays 6,000.',
+  }, 'A 10% fall moves a 3× share by 30%');
+
+  // The brake: each leverage shows the docs' distances to the two lines.
+  await motionPage.locator('.brake-options button[data-leverage="5"]').click();
+  assert.deepEqual(await motionPage.evaluate(() => ({
+    rebalance: document.querySelector('[data-brake="rebalance"]').textContent,
+    liquidation: document.querySelector('[data-brake="liquidation"]').textContent,
+    pressed: [...document.querySelectorAll('.brake-options button[aria-pressed="true"]')].map((button) => button.textContent),
+  })), { rebalance: '9.09', liquidation: '15.79', pressed: ['5×'] });
+
+  // What runs when you tap: Move lights exactly its two bridge methods.
+  await motionPage.locator('.sdk-picker button[data-screen="move"]').click();
+  assert.deepEqual(await motionPage.evaluate(() => [...document.querySelectorAll('.sdk-board li[data-on]')].map((row) => row.dataset.method)),
+    ['getBridgeQuote', 'buildBridgeTx']);
+  assert.match(await motionPage.locator('[data-sdk-status]').textContent(), /^Move uses 2 of 15 methods: buildBridgeTx prepares its transactions; getBridgeQuote reads the state it shows\.$/);
+
+  // The peg bead runs only while its chart is on screen and motion is welcome.
+  await motionPage.locator('.peg-chart').evaluate((element) => element.scrollIntoView({ block: 'center' }));
+  await motionPage.waitForFunction(() => document.querySelector('.peg-chart')?.hasAttribute('data-moving'), null, { timeout: 6_000 });
   await motionContext.close();
+
+  // Without script the page is complete: no inert controls, every SDK method readable.
+  const staticContext = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 390, height: 844 } });
+  const staticPage = await staticContext.newPage();
+  watch(staticPage);
+  await staticPage.goto(origin, { waitUntil: 'load' });
+  assert.deepEqual(await staticPage.evaluate(() => ['.split-control', '.brake-picker', '.sdk-picker', '.sdk-status']
+    .map((selector) => getComputedStyle(document.querySelector(selector)).display)), ['none', 'none', 'none', 'none']);
+  assert.equal(await staticPage.locator('.sdk-group li').count(), 15);
+  await staticContext.close();
 
   for (const theme of ['dark', 'light']) {
     for (const width of [393, 1440]) {

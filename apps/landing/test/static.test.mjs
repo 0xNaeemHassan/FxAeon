@@ -92,8 +92,69 @@ test('protocol and safety copy keeps its caveats', () => {
   assert.match(html, /Protocol fees and liquidation risk still apply/);
   assert.match(html, /Liquidation remains possible/);
   assert.match(html, /APY is variable/);
+  assert.match(html, /it is not an algorithmic stablecoin/);
+  assert.match(html, /Governance can change these lines/);
   assert.match(html, /FxAeon has no account server, delegated signer, background executor, or private-key field\. Your wallet approves each transaction\./);
   assert.match(html, /https:\/\/fxprotocol\.gitbook\.io\/fx-docs/);
+});
+
+test('the f(x) Protocol story explains the split, the brake, the peg, and the pool', () => {
+  const story = elementSource(html, /<section class="protocol" id="protocol"/, 'section');
+  assert.match(story, /<h2 id="protocol-title">How f\(x\) Protocol works\.<\/h2>/);
+  for (const id of ['split', 'brake', 'peg', 'pool']) assert.match(story, new RegExp(`<article class="scene scene-${id}" aria-labelledby="${id}-title">`));
+  // The split's premise is arithmetic the readouts start from: 3 ETH at $3,000 against 6,000 fxUSD.
+  assert.match(story, /Say you open 1 ETH at 3× with ETH at \$3,000\. Fees aside, the position holds 3 ETH: 6,000 fxUSD is minted against it, and the other \$3,000 is your share\./);
+  assert.match(story, /data-split="share">\$3,000</);
+  assert.match(story, /data-split="collateral">\$9,000</);
+  assert.match(story, /data-split="leverage">3\.0×</);
+  assert.match(script, /const SPLIT = \{ eth: 3, debt: 6000, price: 3000,/);
+  // The range stays above the 3× rebalance line (a 24.24% fall), where the sketch would stop being true.
+  assert.match(story, /<input id="split-price" type="range" min="-20" max="20" step="1" value="0"/);
+  // Brake figures are the f(x) Protocol docs' published table (rebalance at 88% LTV, liquidation at 95%).
+  const docsTable = { 2: [43.18, 47.37], 3: [24.24, 29.82], 4: [14.77, 21.05], 5: [9.09, 15.79], 6: [5.3, 12.28], 7: [2.6, 9.77] };
+  const brakeSource = script.match(/const BRAKE = (\{[^;]+\});/)?.[1];
+  assert.ok(brakeSource, 'The brake table is declared in script.js');
+  assert.deepEqual(JSON.parse(brakeSource.replace(/(\d):/g, '"$1":')), docsTable, 'The brake table must match the docs exactly');
+  for (const [leverage, [rebalance, liquidation]] of Object.entries(docsTable)) {
+    const lineLtv = (fall) => (1 - 1 / Number(leverage)) / (1 - fall / 100);
+    assert.ok(Math.abs(lineLtv(rebalance) - 0.88) < 0.0002, `${leverage}× rebalance distance matches the 88% line`);
+    assert.ok(Math.abs(lineLtv(liquidation) - 0.95) < 0.0002, `${leverage}× liquidation distance matches the 95% line`);
+  }
+  assert.match(story, /data-brake="rebalance">24\.24</);
+  assert.match(story, /data-brake="liquidation">29\.82</);
+  assert.match(story, /aria-pressed="true">3×<\/button>/);
+});
+
+test('the SDK board lists exactly the locked f(x) Protocol SDK surface', async () => {
+  const scope = await readFile(resolve(root, '../../docs/sdk-scope.md'), 'utf8');
+  const locked = scope.match(/## Locked public surface[\s\S]*?```text\r?\n([\s\S]*?)```/)?.[1].trim().split(/\s+/);
+  assert.equal(locked?.length, 15, 'docs/sdk-scope.md should lock fifteen methods');
+  const board = elementSource(html, /<div class="sdk-board"/, 'div');
+  const listed = [...board.matchAll(/<li data-method="([A-Za-z]+)"/g)].map((match) => match[1]);
+  assert.deepEqual([...listed].sort(), [...locked].sort(), 'Every locked method appears once and nothing else does');
+  assert.match(html, /FxAeon is built on fifteen methods of the official f\(x\) Protocol SDK/);
+  // Each screen lights only locked methods, and every write method is marked as one.
+  const screens = script.match(/const SCREENS = \{([\s\S]*?)\n    \};/)?.[1];
+  assert.ok(screens, 'SCREENS mapping is present');
+  const mapped = [...screens.matchAll(/methods: \[([^\]]*)\]/g)].flatMap((match) => [...match[1].matchAll(/"([A-Za-z]+)"/g)].map((name) => name[1]));
+  assert.equal(new Set(mapped).size, 15, 'Together the screens use all fifteen methods');
+  for (const name of mapped) assert.ok(locked.includes(name), `${name} is a locked SDK method`);
+  const writes = ['increasePosition', 'reducePosition', 'adjustPositionLeverage', 'depositAndMint', 'repayAndWithdraw', 'buildBridgeTx', 'getRedeemTx', 'depositFxSave', 'withdrawFxSave'];
+  for (const name of locked) {
+    const tag = board.match(new RegExp(`<li data-method="${name}"[^>]*>`))?.[0] ?? '';
+    assert.equal(/data-write/.test(tag), writes.includes(name), `${name} write marking`);
+  }
+});
+
+test('instruments are real controls only when script can drive them', () => {
+  for (const control of ['.split-control', '.brake-picker', '.sdk-picker', '.sdk-status']) {
+    assert.ok(css.includes(control), `${control} is styled`);
+  }
+  assert.match(css, /:root:not\(\[data-js\]\) :is\(\.split-control, \.brake-picker, \.sdk-picker, \.sdk-status\) \{ display: none; \}/);
+  assert.match(css, /:root:not\(\[data-js\]\) \.sdk-group li \{ color: var\(--text\); \}/);
+  // The peg bead is SMIL, started by script only while motion is welcome.
+  assert.match(html, /<animateMotion [^>]*begin="indefinite"/);
+  assert.match(script, /const run = pegOnScreen && !still\(\) && !document\.hidden;/);
 });
 
 test('markup and scripts fit the strict content security policy', () => {
