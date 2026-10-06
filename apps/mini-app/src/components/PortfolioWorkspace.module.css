@@ -1,0 +1,144 @@
+/* Portfolio: one hero for total value and the four most common moves, then
+ * calm sections that read top to bottom. */
+.workspace { width: min(100%, 1120px); margin-inline: auto; }
+.dashboard { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+.primary, .secondary { display: flex; min-width: 0; flex-direction: column; gap: 18px; }
+
+/* The total is the page's headline, not a box: the figure stands on the canvas
+ * with a slow light behind it, and its actions and breakdown follow directly. */
+.valueCard {
+  position: relative;
+  isolation: isolate;
+  padding: 2px 0 0;
+}
+.valueCard::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: -46px;
+  left: -14%;
+  width: min(560px, 96%);
+  height: 230px;
+  background:
+    radial-gradient(closest-side at 38% 50%, color-mix(in srgb, var(--mint) 16%, transparent), transparent),
+    radial-gradient(closest-side at 72% 56%, color-mix(in srgb, var(--brand-coral) 10%, transparent), transparent);
+  pointer-events: none;
+  animation: hero-light 11s var(--ease-in-out) infinite alternate;
+}
+:root[data-theme='light'] .valueCard::before { background: radial-gradient(closest-side, color-mix(in srgb, var(--mint) 11%, transparent), transparent); }
+@keyframes hero-light {
+  from { transform: translate3d(0, 0, 0) scale(1); opacity: 0.75; }
+  to { transform: translate3d(8%, 10px, 0) scale(1.12); opacity: 1; }
+}
+.valueTop { display: flex; min-width: 0; align-items: center; justify-content: flex-start; gap: 12px; color: var(--mut); font-size: var(--fs-small); }
+.valueTop > div { display: flex; align-items: center; gap: 8px; }
+.valueTop button { display: inline-grid; min-width: 44px; min-height: 44px; place-items: center; border-radius: 50%; color: var(--mut); margin: -8px -10px -8px -6px; transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease, transform var(--dur-slow) var(--ease-spring); }
+.valueTop button:hover:not(:disabled) { background: var(--mint-dim); color: var(--mint-bright); }
+.valueTop button:active:not(:disabled) { transform: rotate(-30deg) scale(0.94); transition-duration: var(--dur-press); }
+.valueLabel { color: var(--mut); font-size: var(--fs-small); font-weight: 500; }
+.partial { color: var(--warn); border-radius: 7px; padding: 4px 7px; background: var(--warn-dim); font-size: var(--fs-micro); }
+.valueNumber { min-width: 0; margin: 0 0 6px; color: var(--text); }
+.helper { color: var(--mut); font-size: var(--fs-caption); line-height: 1.6; margin: 12px 0 0; }
+.sectionTitle { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+.sectionTitle h2 { font-size: var(--fs-title); font-weight: 650; letter-spacing: -.02em; margin: 0; }
+.sectionTitle a { display: flex; min-height: 44px; align-items: center; gap: 3px; font-size: var(--fs-small); color: var(--mint); }
+.positionList { display: flex; flex-direction: column; gap: 12px; }
+.emptyState { display: flex; align-items: center; gap: 12px; margin: 0; padding: 6px 0 2px; color: var(--mut); font-size: var(--fs-small); }
+.emptyState p { margin: 0; flex: 1; }
+.emptyIcon { display: grid; flex: 0 0 auto; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 50%; background: var(--mint-dim); color: var(--mint); }
+.emptyState a { display: inline-flex; flex: 0 0 auto; min-height: 44px; align-items: center; gap: 2px; padding: 0 14px; border-radius: 999px; background: var(--surface-2); color: var(--text); font-weight: 600; transition: background-color var(--dur-fast) ease; }
+.emptyState a:hover { background: var(--surface-3); }
+.emptyEarn p a { color: var(--mint); font-weight: 600; }
+.emptyEarn > p { display: flex; align-items: center; gap: 12px; margin: 0; padding: 0; color: var(--mut); font-size: var(--fs-small); }
+.emptyEarn > p strong { flex: 1; color: var(--text); font-weight: 550; }
+.emptyEarn p a { display: inline-flex; min-height: 44px; align-items: center; padding: 0 14px; border: 0; border-radius: 999px; background: var(--mint-dim); }
+.positionItem { min-width: 0; }
+.positionActions { display: flex; gap: 6px; padding: 8px 0 0; }
+.positionActions a { display: grid; flex: 1; place-items: center; min-height: 44px; border: 0; border-radius: var(--radius-sm); background: var(--surface-2); font-size: var(--fs-small); font-weight: 600; color: var(--text); transition: background-color var(--dur-fast) ease, transform var(--dur-slow) var(--ease-spring); }
+.positionActions a:hover { background: var(--surface-3); }
+.positionActions a:active { transform: scale(0.97); transition-duration: var(--dur-press); }
+.positionActions a:last-child { color: var(--danger); }
+.disclosureActions { display: flex; justify-content: flex-end; min-height: 0; }
+.disclosureActions a { display: inline-flex; min-height: 44px; align-items: center; gap: 3px; color: var(--mint); font-size: var(--fs-small); font-weight: 600; }
+.earnCard { padding: 4px 0 4px; }
+.earnTop { display: flex; min-width: 0; align-items: center; gap: 12px; }
+.earnTop > div { min-width: 0; flex: 1; }
+.earnTop h3 { font-size: var(--fs-body); font-weight: 600; margin: 0; }
+.earnTop p { color: var(--mut); font-size: var(--fs-caption); margin: 3px 0 0; overflow-wrap: anywhere; }
+.earnTop > strong { font-size: 20px; font-weight: 600; letter-spacing: var(--tracking-figure); }
+.earnActions { display: flex; gap: 8px; margin: 14px 0 6px; }
+.earnActions a { display: inline-flex; flex: 1; min-width: 0; min-height: 44px; align-items: center; justify-content: center; text-align: center; padding: 8px; border: 0; border-radius: var(--radius-sm); background: var(--surface-2); font-size: var(--fs-small); font-weight: 600; color: var(--text); transition: background-color var(--dur-fast) ease, transform var(--dur-slow) var(--ease-spring); }
+.earnActions a:hover { background: var(--surface-3); }
+.earnActions a:active { transform: scale(0.97); transition-duration: var(--dur-press); }
+.earnActions a:first-child { color: var(--on-accent); background: var(--mint); }
+.earnActions a:first-child:hover { filter: brightness(1.06); }
+
+/* Signed out: the landing's headline, its token marks in a loose row above
+   it, the f(x) split drifting behind it, then the connect action. */
+.welcome { position: relative; isolation: isolate; display: grid; justify-items: center; gap: 16px; padding: clamp(6px, 3.4vh, 34px) 0 14px; text-align: center; }
+.welcomeHorizon {
+  position: absolute;
+  z-index: -1;
+  inset: auto 0 0;
+  height: 64%;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent);
+}
+.welcomeMarks { display: flex; }
+.welcomeMarks > * { margin-left: -9px; border-radius: 50%; box-shadow: 0 0 0 3px var(--bg), 0 10px 24px -10px var(--mint-glow); }
+.welcomeMarks > :first-child { margin-left: 0; }
+.welcomeTitle { max-width: 14ch; color: var(--text); font-size: clamp(34px, 10.2vw, 54px); font-weight: 680; letter-spacing: -0.055em; line-height: 1.02; text-wrap: balance; }
+.welcomeTitle span { display: block; padding-bottom: 0.06em; background: linear-gradient(100deg, var(--mint-bright), var(--mint) 42%, var(--brand-coral) 84%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+@media (forced-colors: active) { .welcomeTitle span { background: none; color: CanvasText; } }
+@media (prefers-reduced-motion: no-preference) {
+  .welcomeMarks > * { animation: welcome-float 6.5s var(--ease-in-out) infinite alternate; }
+  .welcomeMarks > :nth-child(2) { animation-delay: -1.3s; }
+  .welcomeMarks > :nth-child(3) { animation-delay: -2.6s; }
+  .welcomeMarks > :nth-child(4) { animation-delay: -3.9s; }
+  .welcomeMarks > :nth-child(5) { animation-delay: -5.2s; }
+}
+@keyframes welcome-float { from { transform: translate3d(0, -3px, 0); } to { transform: translate3d(0, 4px, 0); } }
+
+/* Quick actions: four round, tactile shortcuts inside the value card. */
+.quickActions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 14px 0 10px; }
+.quickAction { display: flex; min-width: 0; min-height: 80px; flex-direction: column; align-items: center; justify-content: center; gap: 8px; border-radius: var(--radius-md); padding: 4px 2px; color: var(--text); font-size: var(--fs-caption); transition: color var(--dur-fast) ease; }
+.quickAction > span { display: grid; flex: 0 0 auto; width: 52px; height: 52px; place-items: center; border: 1px solid color-mix(in srgb, var(--mint) 22%, var(--hairline)); border-radius: 50%; background: color-mix(in srgb, var(--mint) 12%, var(--surface-2)); color: var(--mint-bright); box-shadow: var(--ring-inset); transition: background-color var(--dur-fast) ease, border-color var(--dur-fast) ease, transform var(--dur-slow) var(--ease-spring); }
+:root[data-theme='light'] .quickAction > span { color: var(--mint); background: var(--mint-dim); }
+.quickAction > strong { font-weight: 600; }
+.quickAction:hover > span { transform: translateY(-2px); border-color: color-mix(in srgb, var(--mint) 45%, var(--line)); background: color-mix(in srgb, var(--mint) 20%, var(--surface-2)); }
+.quickAction:active > span { transform: scale(0.92); transition-duration: var(--dur-press); }
+.quickAction:focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
+
+/* Positions and fxSAVE summaries sit in quiet cards with their disclosure. */
+.positionsSection, .earnSection, .emptyEarn {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--ring-inset);
+  padding: 2px 16px;
+}
+.positionsSection :global(details), .earnSection :global(details) { border-top: 0; }
+.positionsSection :global(details > summary), .earnSection :global(details > summary) { min-height: 56px; color: var(--text); font-size: var(--fs-body); font-weight: 600; }
+.positionsSection :global(details > summary > span:nth-child(2)), .earnSection :global(details > summary > span:nth-child(2)) { color: var(--mut); font-weight: 500; }
+@media (min-width: 1000px) {
+  .dashboard { grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); gap: 28px; align-items: start; }
+  .primary, .secondary { gap: 20px; }
+  .secondary { padding-top: 2px; }
+}
+/* Beyond phone width the shortcuts keep a phone's rhythm under the figure
+ * instead of spreading across the column. */
+@media (min-width: 601px) {
+  .valueCard .quickActions { grid-template-columns: repeat(4, minmax(0, 92px)); justify-content: start; gap: 6px; }
+}
+@media (max-width: 380px) {
+  .dashboard, .primary, .secondary { gap: 14px; }
+  .quickActions { gap: 2px; }
+  .quickAction { min-height: 76px; font-size: var(--fs-micro); }
+  .quickAction > span { width: 46px; height: 46px; }
+  .emptyState { gap: 8px; font-size: var(--fs-caption); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .valueCard::before { animation: none; }
+  .quickAction, .quickAction > span, .valueTop button, .positionActions a, .earnActions a { transition: none; }
+  .quickAction:hover > span, .quickAction:active > span, .valueTop button:active:not(:disabled) { transform: none; }
+}

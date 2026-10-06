@@ -1,0 +1,242 @@
+/* Position card: identity and side first, the position's value as the hero,
+ * then four calm facts. Long and short are the only colors in the card. */
+.card {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  box-shadow: var(--ring-inset);
+  transition: border-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out), transform var(--dur-slow) var(--ease-spring), background-color var(--dur-base) var(--ease-out);
+  animation: position-card-enter var(--dur-slow) var(--ease-out) both;
+}
+
+@keyframes position-card-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.compact { padding: 14px; border-radius: var(--radius-lg); }
+
+.interactive { cursor: pointer; }
+.interactive:hover {
+  border-color: color-mix(in srgb, var(--mint) 34%, var(--line));
+  box-shadow: var(--ring-inset), var(--elevation-1);
+}
+.interactive:active { transform: scale(0.99); transition-duration: var(--dur-press); }
+.interactive:focus-visible {
+  outline: 2px solid var(--mint-bright);
+  outline-offset: 3px;
+}
+.selected {
+  border-color: color-mix(in srgb, var(--mint) 64%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mint) 12%, transparent);
+}
+.highlighted {
+  outline: 2px solid color-mix(in srgb, var(--success) 68%, transparent);
+  outline-offset: 3px;
+}
+
+.content { min-width: 0; }
+.compactContent .identity { gap: 10px; }
+.compactContent .positionValue { margin-top: 12px; }
+.compactContent .metrics { gap: 6px; margin-top: 10px; }
+.compactContent .metric { padding: 9px 10px; }
+.compactContent .metricValue { font-size: var(--fs-small); }
+.compactContent .metricDetail { font-size: var(--fs-micro); }
+.identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+.tokenIcon {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px var(--surface-2);
+}
+.identityText { min-width: 0; flex: 1; }
+.marketLine { display: flex; min-width: 0; align-items: center; gap: 8px; }
+.market { color: var(--text); font-size: var(--fs-title); font-weight: 650; letter-spacing: -.02em; line-height: 1.15; }
+.side {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  border: 0;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+.long { background: var(--long-dim); color: var(--long); }
+.short { background: var(--short-dim); color: var(--short); }
+.positionMeta {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0;
+  color: var(--mut);
+  font-size: var(--fs-caption);
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+.positionMeta strong { color: var(--text); font-weight: 650; }
+.navigateIcon {
+  display: flex;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--mut);
+  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), transform var(--dur-slow) var(--ease-spring);
+}
+.navigateIcon svg { width: 16px; height: 16px; }
+.interactive:hover .navigateIcon { background: var(--mint-dim); color: var(--mint); transform: translateX(2px); }
+
+.positionValue {
+  display: flex;
+  min-width: 0;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+}
+.positionValueLabel { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.positionValueLabel > span:first-child {
+  color: var(--mut);
+  font-size: var(--fs-small);
+  font-weight: 500;
+  line-height: 1.3;
+}
+.valueBasis { color: var(--mut-2); font-size: var(--fs-micro); line-height: 1.25; }
+.positionValueNumber {
+  min-width: 0;
+  color: var(--text);
+  font-size: clamp(22px, 6vw, 28px);
+  font-weight: 600;
+  letter-spacing: var(--tracking-figure);
+  line-height: 1.1;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* The f(x) split of this position: debt (quiet) then the holder's share (the
+   accent), in proportion to collateral value. Draws in once on mount. */
+.split { display: flex; height: 6px; margin-top: 12px; overflow: hidden; border-radius: 999px; background: var(--surface-2); }
+.splitDebt, .splitShare { display: block; height: 100%; transform-origin: left center; }
+.splitDebt { flex: 0 0 calc(var(--debt-share) * 100%); background: color-mix(in srgb, var(--text) 24%, transparent); }
+.splitShare { flex: 1 1 auto; background: linear-gradient(90deg, var(--mint), var(--brand-coral)); }
+@media (prefers-reduced-motion: no-preference) {
+  .splitDebt, .splitShare { animation: position-split-in 900ms var(--ease-out) both; }
+  .splitShare { animation-delay: 240ms; }
+}
+@keyframes position-split-in { from { transform: scaleX(0); } }
+
+.metrics {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+.metric {
+  min-width: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  background: var(--surface-2);
+}
+.metricLabel {
+  display: block;
+  overflow: hidden;
+  color: var(--mut);
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.metricValue {
+  min-width: 0;
+  margin: 4px 0 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.metricDetail {
+  min-width: 0;
+  margin: 2px 0 0;
+  color: var(--mut);
+  font-size: var(--fs-caption);
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* Discovery notices say what happened and offer the retry beside it. */
+.notice {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  border-radius: var(--radius-md);
+  padding: 8px 6px 8px 14px;
+  background: var(--warn-dim);
+  color: var(--warn);
+  font-size: var(--fs-small);
+  line-height: 1.45;
+}
+.notice > svg { flex: 0 0 16px; width: 16px; height: 16px; }
+.notice > span { min-width: 0; flex: 1; }
+.notice > button {
+  display: inline-flex;
+  min-width: 44px;
+  min-height: 44px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background-color var(--dur-fast) ease;
+}
+.notice > button:hover:not(:disabled) { background: color-mix(in srgb, var(--warn) 14%, transparent); }
+.notice > button:disabled { opacity: .5; }
+.notice > button svg { width: 15px; height: 15px; }
+
+@media (max-width: 359px) {
+  .card { padding: 12px; }
+  .compact { padding: 12px; }
+  .identity { gap: 9px; }
+  .positionValue { gap: 8px; margin-top: 12px; }
+  .metrics { gap: 6px; }
+  .metric { padding: 8px; }
+  .metricValue { font-size: var(--fs-caption); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card, .navigateIcon { transition: none; animation: none; }
+  .interactive:hover, .interactive:hover .navigateIcon, .interactive:active { transform: none; }
+}

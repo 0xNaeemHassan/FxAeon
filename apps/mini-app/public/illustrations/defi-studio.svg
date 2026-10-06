@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="520" viewBox="0 0 880 520" fill="none">
+  <title>FxAeon illustrated workspace</title>
+  <desc>Four connected workstations for markets, saving, borrowing and transfers, drawn in lavender, mint and peach.</desc>
+  <defs>
+    <pattern id="dots" width="18" height="18" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1" fill="#675080" opacity=".14"/></pattern>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="12" stdDeviation="1" flood-color="#544069" flood-opacity=".12"/></filter>
+  </defs>
+  <ellipse cx="440" cy="440" rx="324" ry="36" fill="#cabbe7" opacity=".22"/>
+  <path d="M142 277 439 103 744 277 443 452Z" fill="#f4eefb" stroke="#8f78ad" stroke-width="2"/>
+  <path d="M142 277v15l301 176 301-176v-15L443 452Z" fill="#d7c8ee" stroke="#8f78ad" stroke-width="2" stroke-linejoin="round"/>
+  <path d="m183 278 256-151 260 151-256 151Z" fill="url(#dots)"/>
+  <g stroke="#8b77a7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="m320 243 120-70 120 70-120 70Z" stroke-width="18"/>
+    <path d="m320 243 120-70 120 70-120 70Z" stroke="#e7ddf6" stroke-width="12"/>
+    <path d="m320 243 120-70 120 70-120 70Z" stroke="#ac98c7" stroke-width="1.5" stroke-dasharray="4 9"/>
+  </g>
+  <!-- Market workstation -->
+  <g filter="url(#shadow)" stroke="#6e5888" stroke-width="2" stroke-linejoin="round">
+    <path d="m173 266 123-71 96 56-123 72Z" fill="#c6b2e8"/>
+    <path d="m173 266 96 57v30l-96-57Z" fill="#b69bdc"/>
+    <path d="m269 323 123-72v30l-123 72Z" fill="#dfd1f2"/>
+    <path d="m218 239 87-51v-91l-87 51Z" fill="#fdf9ff"/>
+    <path d="m218 148-8-5 87-50 8 4m-95 46v91l8 5" fill="#bda2e3"/>
+    <path d="m240 149 0 46m17-63v34m18-48v48m17-60v29" stroke="#9073b8" stroke-width="2"/>
+    <path d="m240 164 0 17m17-35v9m18-25v22m17-39v10" stroke="#91c9ae" stroke-width="9"/>
+    <path d="m247 222 15-9v24l-15 9Z" fill="#c6b2e8"/>
+    <path d="m233 253 33-19 27 16-33 19Z" fill="#e8dcf7"/>
+    <path d="m303 265 36-21 19 11-36 21Z" fill="#f9dac2"/>
+    <path d="m310 264 25-15m-17 19 25-15" stroke-width="1"/>
+  </g>
+  <!-- Savings vault -->
+  <g filter="url(#shadow)" stroke="#5c786e" stroke-width="2" stroke-linejoin="round">
+    <path d="m353 130 86-50 86 50-86 50Z" fill="#d4ecda"/>
+    <path d="m353 130 86 50v95l-86-50Z" fill="#a6d9ba"/>
+    <path d="m439 180 86-50v95l-86 50Z" fill="#88bba2"/>
+    <path d="m371 157 51 30v59l-51-30Z" fill="#e4f3e7"/>
+    <ellipse cx="397" cy="201" rx="15" ry="22" transform="rotate(-27 397 201)" fill="#c2b0e3" stroke="#75628d"/>
+    <path d="m397 187v28m-10-20 20 12" stroke="#75628d"/>
+    <path d="m369 137 64 37m16 25 58-34" opacity=".5"/>
+    <path d="m411 122 27-16 28 16-28 16Z" fill="#f9dfa5" stroke="#9c8561"/>
+    <path d="m411 122v9l27 16 28-16v-9l-28 16Z" fill="#e8c686" stroke="#9c8561"/>
+  </g>
+  <!-- Borrow receipt -->
+  <g filter="url(#shadow)" stroke="#907061" stroke-width="2" stroke-linejoin="round">
+    <path d="m501 262 105-61 99 58-105 61Z" fill="#f9d1b4"/>
+    <path d="m501 262 99 58v29l-99-58Z" fill="#e6b495"/>
+    <path d="m600 320 105-61v29l-105 61Z" fill="#ffe3ca"/>
+    <path d="m562 243 65-38V103l-65 38Z" fill="#fff6e9"/>
+    <path d="m562 141 13-15 13 0 13-15 13 0 13-8" fill="#fff6e9"/>
+    <path d="m577 154 35-20m-35 37 28-16m-28 33 35-20m-35 36 22-12" stroke="#b2a1c5" stroke-width="4" stroke-linecap="round"/>
+    <ellipse cx="634" cy="270" rx="28" ry="15" fill="#e9c981"/>
+    <path d="M606 261v9c0 8 13 15 28 15s28-7 28-15v-9" fill="#e9c981"/>
+    <ellipse cx="634" cy="261" rx="28" ry="15" fill="#fff0bc"/>
+    <path d="m625 260 9-5 9 5-9 5Z" fill="#e3c281" stroke-width="1"/>
+  </g>
+  <!-- Transfer portal -->
+  <g filter="url(#shadow)" stroke="#77668f" stroke-width="2" stroke-linejoin="round">
+    <path d="m333 368 106-61 111 64-107 62Z" fill="#c8d5ef"/>
+    <path d="m333 368 110 65v22l-110-65Z" fill="#a7b9dc"/>
+    <path d="m443 433 107-62v22l-107 62Z" fill="#dbe4f5"/>
+    <path d="M395 356v-69c0-40 71-81 71-41v69l-16 9v-63c0-17-39 5-39 23v63Z" fill="#c3abe8"/>
+    <path d="m395 356-10-6v-69c0-40 71-81 71-41l10 6" fill="#e2d4f5"/>
+    <path d="m420 357 53-30m-15-1 15 1-3 14" stroke="#7b62a0" stroke-width="3" stroke-linecap="round"/>
+    <path d="m472 360-48 28m14 2-14-2 2-13" stroke="#7b62a0" stroke-width="3" stroke-linecap="round"/>
+  </g>
+  <g stroke="#a48cbf" stroke-width="2" stroke-linecap="round"><path d="M145 161v16m-8-8h16M734 186v12m-6-6h12M580 85v16m-8-8h16"/><circle cx="161" cy="341" r="4"/><circle cx="695" cy="361" r="4"/></g>
+</svg>

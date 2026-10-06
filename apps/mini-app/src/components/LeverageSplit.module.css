@@ -1,0 +1,20 @@
+/* Leverage as a split of collateral: the borrowed part (calm) beside the trader's
+   share (the accent), one borderless row per leverage. */
+.rows { display: grid; gap: 14px; margin: 2px 0 4px; padding: 0; list-style: none; }
+.row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px 14px; }
+.leverage { color: var(--text); font-size: var(--fs-small); font-weight: 650; font-variant-numeric: tabular-nums; }
+.figures { justify-self: end; color: var(--mut); font-size: var(--fs-caption); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.figures b { color: var(--text); font-weight: 650; }
+.bar { position: relative; display: flex; grid-column: 1 / -1; height: 12px; overflow: hidden; border-radius: 999px; background: var(--surface-2); }
+.borrowed, .share { display: block; height: 100%; transform-origin: left center; }
+.borrowed { flex: 0 0 calc(var(--borrowed) * 100%); background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--text) 30%, transparent) 0 2px, color-mix(in srgb, var(--text) 16%, transparent) 2px 6px); }
+.share { flex: 1 1 auto; background: linear-gradient(90deg, var(--mint), var(--brand-coral)); }
+@media (prefers-reduced-motion: no-preference) {
+  .rows:not([data-shown]) .borrowed, .rows:not([data-shown]) .share { transform: scaleX(0); }
+  .rows[data-shown] .borrowed { transform: none; transition: transform 900ms var(--ease-out); }
+  .rows[data-shown] .share { transform: none; transition: transform 700ms var(--ease-out) 520ms; }
+  .rows[data-shown] .row:nth-child(2) .borrowed { transition-delay: 120ms; }
+  .rows[data-shown] .row:nth-child(2) .share { transition-delay: 640ms; }
+  .rows[data-shown] .row:nth-child(3) .borrowed { transition-delay: 240ms; }
+  .rows[data-shown] .row:nth-child(3) .share { transition-delay: 760ms; }
+}

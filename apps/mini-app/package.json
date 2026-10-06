@@ -1,0 +1,50 @@
+{
+  "name": "@fxaeon/mini-app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build && node ../../scripts/generate_csp_headers.mjs",
+    "start": "node e2e/serve.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test --test-concurrency=1 \"test/**/*.test.ts\"",
+    "test:chaos": "tsx --test \"test/chaos.test.ts\"",
+    "test:anvil": "tsx --test --test-concurrency=1 \"test/anvil.integration.test.ts\" \"test/earn.anvil.test.ts\"",
+    "test:e2e": "playwright test",
+    "test:e2e:borrow-harness": "playwright test --config e2e/borrow-harness.config.ts",
+    "test:e2e:move-harness": "playwright test --config e2e/move-harness.config.ts",
+    "test:e2e:positions-harness": "playwright test --config e2e/positions-harness.config.ts",
+    "test:e2e:privy-send-harness": "playwright test --config e2e/privy-send-harness.config.ts",
+    "test:e2e:trade-harness": "playwright test --config e2e/trade-harness.config.ts",
+    "test:e2e:overlay": "playwright test --config playwright.overlay.config.ts",
+    "test:e2e:state-lab": "playwright test --config playwright.state-lab.config.ts",
+    "dev:state-lab": "node e2e/ui-state-lab-server.mjs",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:update": "playwright test --update-snapshots",
+    "test:e2e:report": "playwright show-report"
+  },
+  "dependencies": {
+    "@aladdindao/fx-sdk": "1.0.5",
+    "@privy-io/react-auth": "3.45.0",
+    "@tanstack/react-query": "5.102.8",
+    "lightweight-charts": "5.2.1",
+    "lucide-react": "0.554.0",
+    "next": "15.5.24",
+    "qrcode.react": "4.2.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "viem": "2.56.9",
+    "wagmi": "3.7.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "20.19.42",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "autoprefixer": "10.5.4",
+    "postcss": "8.5.28",
+    "tailwindcss": "3.4.17",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3"
+  }
+}

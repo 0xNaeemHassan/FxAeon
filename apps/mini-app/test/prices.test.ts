@@ -1,0 +1,272 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { FX_TOKENS, type FxTokenKey } from "../src/lib/fx/tokens";
+import { freshDisplayPrices } from "../src/lib/displayPrices";
+import {
+  formatUsd,
+  coinGeckoTokenPriceEndpoint,
+  createUsdPriceFetcher,
+  parseCoinGeckoTokenPriceResponse,
+  parseUsdPriceCache,
+  parseUsdPriceResponse,
+  priceKeyForSymbol,
+  usdValueForDecimal,
+  usdValueForUnits,
+  USD_PRICE_MAX_AGE_MS,
+} from "../src/lib/prices";
+
+const keys = Object.keys(FX_TOKENS) as FxTokenKey[];
+const isCoinGeckoTokenPriceRequest = (value: string): boolean => {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:'
+      && url.hostname === 'api.coingecko.com'
+      && url.pathname === '/api/v3/simple/token_price/ethereum';
+  } catch {
+    return false;
+  }
+};
+
+function validPayload(now: number) {
+  const coins: Record<string, { price: number; timestamp: number; confidence: number }> = {};
+  for (const key of keys) {
+    const token = key === "ETH" ? FX_TOKENS.WETH : FX_TOKENS[key];
+    const id = `ethereum:${token.address.toLowerCase()}`;
+    const price = key === "WBTC" ? 104_000 : key === "ETH" || key === "WETH" ? 2_400 : 1;
+    coins[id] = { price, timestamp: now - 12, confidence: 0.99 };
+  }
+  return { coins };
+}
+
+test("accepts recent, confident prices and maps ETH to WETH", () => {
+  const now = 2_000_000_000;
+  const snapshot = parseUsdPriceResponse(validPayload(now), now);
+  assert.equal(snapshot.prices.ETH, 2_400);
+  assert.equal(snapshot.prices.WETH, 2_400);
+  assert.equal(snapshot.prices.WBTC, 104_000);
+  assert.equal(snapshot.prices.fxUSD, 1);
+  assert.equal(snapshot.prices.FXN, 1);
+  assert.equal(snapshot.updatedAt, (now - 12) * 1_000);
+  assert.equal(snapshot.updatedAts.ETH, (now - 12) * 1_000);
+});
+
+test("preserves each quote timestamp when another token is older", () => {
+  const now = 2_000_000_000;
+  const payload = validPayload(now);
+  payload.coins[`ethereum:${FX_TOKENS.WETH.address.toLowerCase()}`].timestamp = now - 10;
+  payload.coins[`ethereum:${FX_TOKENS.FXN.address.toLowerCase()}`].timestamp = now - 120;
+  const snapshot = parseUsdPriceResponse(payload, now);
+  assert.equal(snapshot.updatedAt, (now - 120) * 1_000);
+  assert.equal(snapshot.updatedAts.ETH, (now - 10) * 1_000);
+  assert.equal(snapshot.updatedAts.FXN, (now - 120) * 1_000);
+});
+
+test('accepts provider quotes inside one hour and isolates an older token', () => {
+  const now = 2_000_000_000;
+  const payload = validPayload(now);
+  payload.coins[`ethereum:${FX_TOKENS.FXN.address.toLowerCase()}`].timestamp = now - (USD_PRICE_MAX_AGE_MS / 1_000 + 1);
+  const snapshot = parseUsdPriceResponse(payload, now);
+  assert.equal(snapshot.prices.ETH, 2_400);
+  assert.equal(snapshot.updatedAts.ETH, (now - 12) * 1_000);
+  assert.equal(snapshot.prices.FXN, undefined, 'a quote older than the provider freshness window is excluded independently');
+  const sevenMinutesOld = validPayload(now);
+  for (const coin of Object.values(sevenMinutesOld.coins)) coin.timestamp = now - 7 * 60;
+  assert.equal(parseUsdPriceResponse(sevenMinutesOld, now).prices.ETH, 2_400);
+});
+
+test('display surfaces retain seven-minute quotes and filter each token at one hour', () => {
+  const now = 2_000_000_000_000;
+  const sevenMinutesAgo = now - 7 * 60_000;
+  assert.deepEqual(freshDisplayPrices({
+    prices: { ETH: 2_400, FXN: 1 }, status: 'stale', updatedAt: sevenMinutesAgo,
+    updatedAts: { ETH: sevenMinutesAgo, FXN: now - USD_PRICE_MAX_AGE_MS - 1 },
+  }, now), { ETH: 2_400 });
+});
+
+test('accepts the exact one-hour display boundary and rejects one millisecond older', () => {
+  const now = 2_000_000_000_000;
+  const boundary = now - USD_PRICE_MAX_AGE_MS;
+  const snapshot = { prices: { ETH: 2_400 }, status: 'stale' as const, updatedAt: boundary, updatedAts: { ETH: boundary } };
+  assert.deepEqual(freshDisplayPrices(snapshot, now), { ETH: 2_400 });
+  assert.deepEqual(freshDisplayPrices({ ...snapshot, updatedAts: { ETH: boundary - 1 } }, now), {});
+  const providerNow = Math.floor(now / 1_000);
+  const providerPayload = validPayload(providerNow);
+  providerPayload.coins[`ethereum:${FX_TOKENS.FXN.address.toLowerCase()}`].timestamp = providerNow - USD_PRICE_MAX_AGE_MS / 1_000;
+  assert.equal(parseUsdPriceResponse(providerPayload, providerNow).prices.FXN, 1);
+  providerPayload.coins[`ethereum:${FX_TOKENS.FXN.address.toLowerCase()}`].timestamp -= 1;
+  assert.equal(parseUsdPriceResponse(providerPayload, providerNow).prices.FXN, undefined);
+});
+
+test("rejects stale and low-confidence prices without discarding independently valid tokens", () => {
+  const now = 2_000_000_000;
+  const stale = validPayload(now);
+  for (const coin of Object.values(stale.coins)) coin.timestamp = now - (USD_PRICE_MAX_AGE_MS / 1_000 + 1);
+  assert.throws(() => parseUsdPriceResponse(stale, now), /no validated prices/);
+
+  const lowConfidence = validPayload(now);
+  for (const coin of Object.values(lowConfidence.coins)) coin.confidence = 0.49;
+  assert.throws(() => parseUsdPriceResponse(lowConfidence, now), /no validated prices/);
+
+  const incomplete = validPayload(now);
+  delete incomplete.coins[`ethereum:${FX_TOKENS.WBTC.address.toLowerCase()}`];
+  incomplete.coins[`ethereum:${FX_TOKENS.fxUSD.address.toLowerCase()}`].timestamp = now - (USD_PRICE_MAX_AGE_MS / 1_000 + 1);
+  const partial = parseUsdPriceResponse(incomplete, now);
+  assert.equal(partial.prices.ETH, 2_400);
+  assert.equal(partial.prices.WBTC, undefined);
+  assert.equal(partial.prices.fxUSD, undefined);
+});
+
+test("calculates display-only USD values without changing token units", () => {
+  assert.equal(priceKeyForSymbol("BTC"), "WBTC");
+  assert.equal(priceKeyForSymbol("fxSP"), "fxUSDBasePool");
+  assert.equal(priceKeyForSymbol("$FXN"), "FXN");
+  assert.equal(usdValueForDecimal("2.5", 2_400), 6_000);
+  assert.equal(usdValueForUnits(2_500_000n, 6, 1), 2.5);
+  assert.equal(usdValueForDecimal("all", 1), null);
+  assert.equal(formatUsd(6_000), "$6,000.00");
+  assert.equal(formatUsd(0.001), "<$0.01");
+});
+
+test("restores validated USD snapshots through the quote freshness window", () => {
+  const now = 2_000_000_000_000;
+  const prices = parseUsdPriceResponse(validPayload(Math.floor(now / 1_000)), Math.floor(now / 1_000)).prices;
+  assert.deepEqual(parseUsdPriceCache({ prices, updatedAt: now - 12_000 }, now), {
+    prices,
+    updatedAt: now - 12_000,
+  });
+  assert.deepEqual(parseUsdPriceCache({ prices, updatedAt: now - 7 * 60_000 }, now), {
+    prices,
+    updatedAt: now - 7 * 60_000,
+  });
+  assert.equal(parseUsdPriceCache({ prices, updatedAt: now - USD_PRICE_MAX_AGE_MS - 1 }, now), null);
+  const perToken = parseUsdPriceCache({ prices, updatedAt: now - 7 * 60_000,
+    updatedAts: { ETH: now - 7 * 60_000, FXN: now - USD_PRICE_MAX_AGE_MS - 1 } }, now);
+  assert.equal(perToken?.prices.ETH, prices.ETH);
+  assert.equal(perToken?.prices.FXN, undefined);
+  assert.equal(parseUsdPriceCache({ prices: { ...prices, fxUSD: 0 }, updatedAt: now - 12_000 }, now)?.prices.fxUSD, undefined);
+  assert.equal(parseUsdPriceCache({ prices: { fxUSD: 0 }, updatedAt: now - 12_000 }, now), null);
+});
+
+test("CoinGecko fallback validates the exact contract, numeric price, and timestamp", () => {
+  const now = 2_000_000_000;
+  const address = FX_TOKENS.fxUSD.address.toLowerCase();
+  assert.deepEqual(parseCoinGeckoTokenPriceResponse({ [address]: { usd: 0.997, last_updated_at: now - 20 } }, 'fxUSD', now), { price: 0.997, timestamp: now - 20 });
+  for (const entry of [
+    { usd: 1, last_updated_at: now - (USD_PRICE_MAX_AGE_MS / 1_000 + 1) },
+    { usd: 1, last_updated_at: now + 121 },
+    { usd: 1 }, { usd: 0, last_updated_at: now },
+    { usd: Infinity, last_updated_at: now }, { usd: '1', last_updated_at: now },
+  ]) assert.equal(parseCoinGeckoTokenPriceResponse({ [address]: entry }, 'fxUSD', now), null);
+  assert.equal(parseCoinGeckoTokenPriceResponse({ unrelated: { usd: 1, last_updated_at: now } }, 'fxUSD', now), null);
+  assert.equal(new URL(coinGeckoTokenPriceEndpoint('fxUSD')).searchParams.get('contract_addresses'), address);
+  assert.equal(new URL(coinGeckoTokenPriceEndpoint('ETH')).searchParams.get('contract_addresses'), FX_TOKENS.WETH.address.toLowerCase());
+});
+
+test("a delayed protocol price uses a fresh CoinGecko quote without replacing fresh primary tokens", async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const payload = validPayload(now);
+  const address = FX_TOKENS.fxUSD.address.toLowerCase();
+  payload.coins[`ethereum:${address}`].timestamp = now - (USD_PRICE_MAX_AGE_MS / 1_000 + 1);
+  const calls: string[] = [];
+  const request = (async (input) => {
+    const url = String(input); calls.push(url);
+    return Response.json(url.includes('coins.llama.fi') ? payload : { [address]: { usd: 0.998, last_updated_at: now - 3 } });
+  }) as typeof fetch;
+  const fetchPrices = createUsdPriceFetcher();
+  const first = await fetchPrices(request);
+  assert.equal(first.prices.fxUSD, 0.998);
+  assert.equal(first.prices.ETH, 2_400);
+  assert.equal(first.updatedAt, (now - 12) * 1000, 'freshness uses the oldest included price');
+  const second = await fetchPrices(request);
+  assert.equal(second.prices.fxUSD, 0.998);
+  assert.equal(calls.filter(isCoinGeckoTokenPriceRequest).length, 1, 'fallback cached for one minute');
+});
+
+test("publishes validated primary prices before a slow optional fallback completes", async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const payload = validPayload(now);
+  const address = FX_TOKENS.fxUSD.address.toLowerCase();
+  delete payload.coins[`ethereum:${address}`];
+  let releaseFallback: (() => void) | undefined;
+  const fallback = new Promise<void>((resolve) => { releaseFallback = resolve; });
+  const request = (async input => {
+    const url = String(input);
+    if (url.includes('coins.llama.fi')) return Response.json(payload);
+    await fallback;
+    return Response.json({ [address]: { usd: 0.998, last_updated_at: now - 3 } });
+  }) as typeof fetch;
+  const updates: Array<{ prices: Record<string, number>; updatedAt: number | null }> = [];
+  const resultPromise = createUsdPriceFetcher()(request, undefined, (snapshot) => {
+    updates.push({ prices: { ...snapshot.prices }, updatedAt: snapshot.updatedAt });
+  });
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  assert.equal(updates.length, 1);
+  assert.equal(updates[0].prices.ETH, 2_400);
+  assert.equal(updates[0].prices.fxUSD, undefined);
+  releaseFallback?.();
+  const result = await resultPromise;
+  assert.equal(result.prices.fxUSD, 0.998);
+  assert.equal(result.updatedAts.fxUSD, (now - 3) * 1000);
+});
+
+test("unavailable fallback prices stay absent instead of assuming the stablecoin peg", async () => {
+  const payload = validPayload(Math.floor(Date.now() / 1000));
+  delete payload.coins[`ethereum:${FX_TOKENS.fxUSD.address.toLowerCase()}`];
+  const request = (async input => String(input).includes('coins.llama.fi') ? Response.json(payload) : Response.json({})) as typeof fetch;
+  const result = await createUsdPriceFetcher()(request);
+  assert.equal(result.prices.ETH, 2_400);
+  assert.equal(result.prices.fxUSD, undefined);
+});
+
+test("fallback traffic is bounded and respects rate-limit backoff", async () => {
+  let fallbackRequests = 0;
+  const request = (async input => {
+    if (String(input).includes('coins.llama.fi')) return Response.json({}, { status: 503 });
+    fallbackRequests += 1;
+    return Response.json({}, { status: 429, headers: { 'retry-after': '300' } });
+  }) as typeof fetch;
+  const fetchPrices = createUsdPriceFetcher();
+  await assert.rejects(fetchPrices(request), /no validated prices/);
+  await assert.rejects(fetchPrices(request), /no validated prices/);
+  assert.equal(fallbackRequests, 1);
+
+  let boundedRequests = 0;
+  const failing = (async input => {
+    if (isCoinGeckoTokenPriceRequest(String(input))) boundedRequests += 1;
+    return Response.json({}, { status: 503 });
+  }) as typeof fetch;
+  await assert.rejects(createUsdPriceFetcher()(failing), /no validated prices/);
+  assert.equal(boundedRequests, 1, 'a provider failure stops further fallback requests');
+});
+
+test('keyless fallback requests one contract at a time, deduplicates aliases, and publishes recovered quotes', async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const addresses: string[] = [];
+  const updates: Array<Record<string, number>> = [];
+  const request = (async input => {
+    const url = new URL(String(input));
+    if (url.hostname === 'coins.llama.fi') return Response.json({}, { status: 503 });
+    const address = url.searchParams.get('contract_addresses')!;
+    assert.equal(address.split(',').length, 1, 'the unauthenticated API rejects multi-address requests');
+    addresses.push(address);
+    return Response.json({ [address]: { usd: 2.5, last_updated_at: now } });
+  }) as typeof fetch;
+  const fetchPrices = createUsdPriceFetcher();
+  const first = await fetchPrices(request, undefined, snapshot => updates.push({ ...snapshot.prices }));
+  assert.equal(first.prices.ETH, 2.5);
+  assert.equal(first.prices.WETH, 2.5);
+  assert.equal(first.prices.fxUSD, 2.5);
+  assert.equal(addresses.length, new Set(Object.values(FX_TOKENS).map(token => token.address.toLowerCase()).filter(address => address !== FX_TOKENS.ETH.address.toLowerCase())).size);
+  assert.equal(new Set(addresses).size, addresses.length, 'shared token identities consume one request');
+  assert.equal(updates[0].fxUSD, 2.5, 'the first recovered quote is available before the remaining requests');
+  await fetchPrices(request);
+  assert.equal(new Set(addresses).size, addresses.length, 'fresh fallback values are cached');
+});
+
+test("aborting a price refresh does not request fallback data", async () => {
+  const controller = new AbortController();
+  let calls = 0;
+  const request = (async () => { calls += 1; controller.abort(); throw new Error('aborted'); }) as typeof fetch;
+  await assert.rejects(createUsdPriceFetcher()(request, controller.signal), { name: 'AbortError' });
+  assert.equal(calls, 1);
+});

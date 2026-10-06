@@ -1,0 +1,655 @@
+.utilityWorkspace {
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* More is a directory, not a feed: keep every destination in the first
+   viewport by grouping its short action rows into a compact grid. */
+.moreWorkspace { gap: 12px; }
+
+/* Persistent form actions stay available when the settings content pane is
+   scrolled, while the document itself remains a fixed app viewport. */
+.utilityAction {
+  position: sticky;
+  z-index: 1;
+  bottom: 0;
+  margin-inline: -4px;
+  padding: 8px 4px max(8px, env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(to top, var(--bg) 72%, transparent);
+}
+
+.utilityAction > button { width: 100%; }
+
+/* Utility routes stay focused on phones while using the available desktop
+   canvas instead of leaving a narrow column stranded in the middle. */
+@media (min-width: 1100px) {
+  .utilityWorkspace { max-width: 920px; }
+}
+
+.utilityCard {
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--surface) 94%, var(--surface-2));
+}
+
+.utilitySection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.moreWorkspace .utilitySection { gap: 4px; }
+
+.utilitySection :global(.section-heading) { margin-top: 0; }
+
+.sectionLabel {
+  padding-inline: 4px;
+  color: var(--mut);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.moreWorkspace .sectionLabel { color: var(--mut-2); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+
+.walletSummaryCard {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--mint) 24%, var(--line));
+  background:
+    radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--mint) 14%, transparent), transparent 44%),
+    color-mix(in srgb, var(--surface) 94%, var(--mint) 6%);
+}
+
+.walletIcon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--mint) 24%, var(--line));
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--mint-dim) 82%, var(--surface));
+}
+
+.moreIconWell {
+  display: grid;
+  width: 31px;
+  height: 31px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--mint) 18%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--mint-dim) 75%, var(--surface));
+  transition: transform 160ms ease, background-color 160ms ease;
+}
+
+.moreRow:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--mint);
+  outline-offset: -3px;
+}
+
+.moreRow:hover .moreIconWell {
+  transform: translateY(-1px);
+  background: var(--mint-dim);
+}
+
+.preferenceChoice {
+  min-width: 44px;
+  min-height: 44px;
+  margin-top: 8px;
+  padding: 10px 8px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--mut);
+  font-size: 13px;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.preferenceChoice[aria-checked='true'] {
+  border-color: var(--mint);
+  background: var(--mint-dim);
+  color: var(--mint);
+  font-weight: 700;
+}
+
+.preferenceChoice:hover { border-color: var(--line-strong); }
+.preferenceChoice:focus-visible,
+.themeChoice:focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
+
+.rowGroup {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+}
+
+.actionGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.actionGrid > :nth-child(even) { border-left: 1px solid var(--line); }
+.actionGrid > :nth-child(n + 3) { border-top: 1px solid var(--line); }
+
+.moreRow {
+  min-width: 0;
+  min-height: 48px;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.moreRow:hover { color: var(--text); background: color-mix(in srgb, var(--surface-2) 78%, var(--mint) 22%); }
+
+/* More is a directory with two short link groups and a theme picker. Keep
+   every 44px interaction in the compact shell on short phones. */
+@media (max-width: 640px) {
+  .moreWorkspace { gap: 6px; }
+  .moreWorkspace .utilityCard { border-radius: 16px; }
+  .moreWorkspace .moreRow { min-height: 44px; padding-block: 6px; }
+  .moreWorkspace .themeChoice { min-height: 64px; }
+}
+
+@media (max-width: 359px) and (max-height: 700px) {
+  /* 320×568 leaves only a small content band above the fixed tab bar. The
+     route names, wallet action, and all three theme choices remain present;
+     secondary explanatory copy yields the space, never the controls. */
+  .moreWorkspace { gap: 4px; }
+  .moreWorkspace .utilityCard { padding: 8px !important; }
+  .moreWorkspace .utilityCard > div > p + p { display: none; }
+  .moreWorkspace .utilitySection { gap: 2px; }
+  .moreWorkspace .sectionLabel { line-height: 1.1; }
+  .moreWorkspace .themePanel { padding: 8px; }
+  .moreWorkspace .themePanel > :first-child > div > p { display: none; }
+  .moreWorkspace .themeChoices { margin-top: 6px; }
+  .moreWorkspace .themeChoice { min-height: 56px; padding: 4px; }
+  .moreWorkspace .themeChoice :global(.mt-2) { margin-top: 2px; }
+  .moreWorkspace .themeChoice :global(.mt-0\.5) { display: none; }
+}
+
+.themePanel {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--surface) 92%, var(--mint) 8%);
+}
+
+.moreWorkspace .themePanel { padding: 10px; border-radius: 16px; }
+.moreWorkspace .themePanel :global(h2) { font-size: 13px; }
+.moreWorkspace .themePanel :global(p) { font-size: 11px; line-height: 1.25; }
+.moreWorkspace .themePanel > :first-child { align-items: center; }
+.moreWorkspace .themePanel > :first-child > div > p,
+.moreWorkspace .themePanel > :first-child > span { display: none; }
+
+.themeChoices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.moreWorkspace .themeChoices { gap: 5px; margin-top: 8px; }
+
+.themeChoice {
+  min-height: 104px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  color: var(--text);
+  background: var(--surface-2);
+  text-align: left;
+  transition: border-color 140ms ease, transform 140ms ease;
+}
+
+.moreWorkspace .themeChoice { min-height: 70px; padding: 6px; border-radius: 12px; }
+.moreWorkspace .themeChoice :global(.mt-2) { margin-top: 4px; }
+.moreWorkspace .themeChoice :global(.mt-0\.5) { margin-top: 2px; }
+.moreWorkspace .themeChoice :global(.text-\[13px\]) { font-size: 11px; }
+.moreWorkspace .themeChoice :global(.text-\[11px\]) { display: none; }
+
+.themeChoice:hover { border-color: var(--line-strong); }
+.themeChoice:active { transform: scale(.985); }
+
+.themeChoiceActive {
+  border-color: var(--mint);
+  box-shadow: 0 0 0 3px var(--mint-dim);
+}
+
+.loginPanel { width: 100%; max-width: 460px; height: 100dvh; min-height: 0 !important; overflow-y: auto; overscroll-behavior: contain; }
+.loginCard { border-radius: 24px; background: color-mix(in srgb, var(--surface) 94%, var(--surface-2)); }
+
+/* Sign-in and wallet setup: one centered column on the canvas. The brand mark
+ * rests in a soft halo, then a title, one line of context, and the actions. */
+.authStage {
+  display: flex;
+  min-height: var(--tg-viewport-stable-height, 100dvh);
+  flex-direction: column;
+  justify-content: center;
+  padding: 40px 24px calc(32px + env(safe-area-inset-bottom, 0px));
+  text-align: center;
+}
+.authHalo {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  width: 72px;
+  height: 72px;
+  place-items: center;
+  align-self: center;
+  margin-bottom: 24px;
+  border-radius: 22px;
+  background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--mint) 24%, var(--surface-2)), var(--surface-2) 72%);
+  box-shadow: inset 0 0 0 1px var(--hairline), 0 18px 48px color-mix(in srgb, var(--mint) 20%, transparent);
+  animation: auth-rise var(--dur-slow) var(--ease-out) both;
+}
+.authHalo::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: -56px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--mint) 14%, transparent), transparent);
+  pointer-events: none;
+}
+.authHalo :where(svg) { filter: drop-shadow(0 4px 12px color-mix(in srgb, var(--mint) 35%, transparent)); }
+.authTitle {
+  color: var(--text);
+  font-size: var(--fs-display);
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  line-height: 1.12;
+  outline: none;
+}
+.authLead {
+  max-width: 34ch;
+  margin: 10px auto 0;
+  color: var(--mut);
+  font-size: var(--fs-body);
+  line-height: 1.5;
+}
+.authActions { display: flex; flex-direction: column; gap: 10px; margin-top: 28px; }
+.authActions svg { width: 18px; height: 18px; }
+.authFinePrint {
+  max-width: 36ch;
+  margin: 20px auto 0;
+  color: var(--mut-2);
+  font-size: var(--fs-caption);
+  line-height: 1.5;
+}
+.authBadge {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  gap: 6px;
+  margin-top: 16px;
+  border-radius: 999px;
+  padding: 7px 12px;
+  background: var(--surface-2);
+  color: var(--mut);
+  font-size: var(--fs-caption);
+}
+.authBadge svg { width: 12px; height: 12px; color: var(--mint); }
+.authBadge strong { color: var(--text); font-weight: 600; }
+.authNotice {
+  margin-top: 14px;
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  background: var(--warn-dim);
+  color: var(--warn);
+  font-size: var(--fs-small);
+  line-height: 1.45;
+  text-align: left;
+}
+.authNotice[data-tone='danger'] { background: var(--danger-dim); color: var(--danger); }
+.authRetry {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  margin: 2px 0 -10px;
+  color: var(--text);
+  font-weight: 600;
+}
+.authBack {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  align-self: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 0 10px;
+  color: var(--mut);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  transition: color var(--dur-fast) ease;
+}
+.authBack:hover:not(:disabled) { color: var(--text); }
+.authBack svg { width: 16px; height: 16px; }
+
+/* Choosing a wallet: two full-width options, each one tap target. */
+.authOptions { display: grid; gap: 10px; margin-top: 26px; text-align: left; }
+.authOption {
+  display: flex;
+  width: 100%;
+  min-height: 76px;
+  align-items: center;
+  gap: 14px;
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  background: var(--surface);
+  box-shadow: var(--ring-inset);
+  color: var(--text);
+  text-align: left;
+  transition: background-color var(--dur-fast) ease, transform var(--dur-slow) var(--ease-spring);
+}
+.authOption:hover:not(:disabled) { background: var(--surface-2); }
+.authOption:active:not(:disabled) { transform: scale(0.985); transition-duration: var(--dur-press); }
+.authOption:disabled { cursor: default; }
+.authOption:disabled:not([aria-busy='true']) { opacity: .55; }
+.authOption:focus-visible { outline: 2px solid var(--mint-bright); outline-offset: 3px; }
+.authOptionIcon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--mint-dim);
+  color: var(--mint);
+}
+.authOptionIcon svg { width: 20px; height: 20px; }
+.authOptionText { min-width: 0; flex: 1; }
+.authOptionText strong { display: block; font-size: var(--fs-body); font-weight: 600; line-height: 1.3; }
+.authOptionText small { display: block; margin-top: 3px; color: var(--mut); font-size: var(--fs-small); line-height: 1.4; }
+.authOption > svg:last-child { width: 18px; height: 18px; flex: 0 0 auto; color: var(--mut-2); }
+.authSpinner {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  border: 2px solid var(--mint);
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: auth-spin .8s linear infinite;
+}
+
+/* Wallet ready and connected states: the identity, then the reminder. */
+.authCheck { width: 72px; height: 72px; align-self: center; margin-bottom: 22px; overflow: visible; }
+.authCheck circle { fill: var(--success-dim); stroke: color-mix(in srgb, var(--success) 40%, transparent); stroke-width: 1.5; }
+.authCheck path {
+  fill: none;
+  stroke: var(--success);
+  stroke-dasharray: 40;
+  stroke-dashoffset: 40;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3.5;
+  animation: auth-draw .5s var(--ease-out) .15s forwards;
+}
+.authIdentity {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  gap: 8px;
+  margin-top: 16px;
+  border-radius: 999px;
+  padding: 4px 4px 4px 8px;
+  background: var(--surface-2);
+}
+.authIdentity > svg { flex: 0 0 auto; }
+.authAddress {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  margin-top: 22px;
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  background: var(--surface-2);
+  font-size: var(--fs-small);
+  text-align: left;
+}
+.authAddress > svg { flex: 0 0 auto; }
+.authNote {
+  margin-top: 20px;
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  background: var(--surface);
+  box-shadow: var(--ring-inset);
+  color: var(--mut);
+  font-size: var(--fs-small);
+  line-height: 1.5;
+  text-align: left;
+}
+.authNote strong { color: var(--text); font-weight: 600; }
+
+@keyframes auth-rise {
+  from { opacity: 0; transform: translateY(6px) scale(.96); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes auth-draw { to { stroke-dashoffset: 0; } }
+@keyframes auth-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .authHalo, .authSpinner { animation: none; }
+  .authCheck path { animation: none; stroke-dashoffset: 0; }
+}
+
+@media (max-width: 760px) {
+  .loginPanel { max-width: 560px; margin-inline: auto; }
+}
+
+@media (min-width: 520px) {
+  .actionGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .actionGrid > :nth-child(even) { border-left: 0; }
+  .actionGrid > :nth-child(3n + 2),
+  .actionGrid > :nth-child(3n + 3) { border-left: 1px solid var(--line); }
+  .actionGrid > :nth-child(3) { border-top: 0; }
+  .actionGrid > :nth-child(n + 4) { border-top: 1px solid var(--line); }
+  .moreWorkspace .resourceSection .actionGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .moreWorkspace .resourceSection .actionGrid > :nth-child(odd) { border-left: 0; }
+  .moreWorkspace .resourceSection .actionGrid > :nth-child(even) { border-left: 1px solid var(--line); }
+  .moreWorkspace .resourceSection .actionGrid > :nth-child(3) { border-top: 1px solid var(--line); }
+}
+
+/* Settings and Receive are utility surfaces, so keep their complete action
+   set in the shell viewport without changing the shared top bar or nav. */
+.settingsWorkspace { min-width: 0; gap: 10px; }
+
+.settingsWorkspace .utilitySection { gap: 6px; }
+.settingsWorkspace :global(.ui-card) { border-radius: 18px; }
+.settingsWorkspace .utilityCard { padding: 12px !important; border-radius: 18px; }
+.slippagePanel {
+  border: 1px solid color-mix(in srgb, var(--mint) 20%, var(--line));
+  background:
+    radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--mint) 12%, transparent), transparent 42%),
+    color-mix(in srgb, var(--surface) 95%, var(--mint) 5%);
+}
+.slippagePanel > p:first-child { max-width: 58ch; }
+.settingsScopeNote {
+  margin-top: 7px;
+  color: var(--mut-2);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.settingsWorkspace .slippagePanel > .settingsScopeNote { display: block; }
+.settingsWorkspace .utilityAction { margin-top: 0 !important; padding-top: 4px; }
+.settingsWorkspace .preferenceChoice { margin-top: 6px; }
+.settingsLogout { min-width: 0; }
+
+/* Receive: who is receiving, a scannable code on white, the address grouped
+ * for checking against the sender's screen, and one copy action. */
+.qrWorkspace {
+  min-width: 0;
+  width: 100%;
+  max-width: 440px;
+  margin-inline: auto;
+  gap: 12px;
+}
+.receiveCard {
+  display: flex !important;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 18px;
+  padding: 18px !important;
+  border-radius: var(--radius-lg) !important;
+}
+.receiveIdentity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+.receiveIdentity > svg { flex: 0 0 auto; }
+.receiveTitle { color: var(--text); font-size: var(--fs-body); font-weight: 600; line-height: 1.25; }
+.receiveNetworks { margin-top: 2px; color: var(--mut); font-size: var(--fs-small); line-height: 1.3; }
+.networkStack { display: flex; flex: 0 0 auto; margin-left: auto; }
+.networkStack img { width: 24px; height: 24px; border-radius: 50%; box-shadow: 0 0 0 2px var(--surface); }
+.networkStack img + img { margin-left: -7px; }
+.qrTile {
+  display: flex;
+  align-self: center;
+  padding: 14px;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+}
+:root[data-theme='light'] .qrTile { box-shadow: 0 0 0 1px var(--line), 0 10px 28px rgba(54, 34, 79, 0.08); }
+.qrTile > svg { display: block; width: min(208px, 56vw); height: auto; }
+.addressValue {
+  font-size: 15px;
+  text-align: center;
+  user-select: all;
+  -webkit-user-select: all;
+}
+.copyDock { display: flex; flex-direction: column; }
+.copyAction svg { width: 18px; height: 18px; }
+.copyAction[data-copied] svg { animation: copy-confirm var(--dur-slow) var(--ease-spring) both; }
+@keyframes copy-confirm {
+  from { opacity: 0; transform: scale(.6); }
+  to { opacity: 1; transform: none; }
+}
+.copyStatus { margin-top: -8px; color: var(--danger); font-size: var(--fs-caption); line-height: 1.4; text-align: center; }
+.receiveNotice {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 10px;
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  background: var(--warn-dim);
+  color: var(--mut);
+  font-size: var(--fs-small);
+  line-height: 1.45;
+}
+.receiveNotice > svg { flex: 0 0 16px; width: 16px; height: 16px; margin-top: 2px; color: var(--warn); }
+.receiveNotice strong { color: var(--warn); font-weight: 600; }
+
+@media (min-width: 840px) {
+  /* Keep the session action available on desktop as well as in the wallet
+     profile. The settings route is a direct destination users can bookmark. */
+  .settingsLogout { display: flex; }
+}
+
+@media (max-width: 640px) {
+  .receiveCard { gap: 16px; padding: 16px !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .moreIconWell,
+  .moreRow,
+  .preferenceChoice,
+  .themeChoice { transition: none; }
+}
+
+@media (min-width: 360px) and (max-width: 600px) {
+  /* Match the compact utility rhythm used by the shortest Telegram shell.
+     These routes are controls first, so explanatory copy yields space while
+     every wallet, preference, theme, and save action stays present. */
+  .settingsWorkspace { gap: 4px; }
+  .settingsWorkspace .utilitySection:first-child > :global(section) > :global(.section-heading) { display: none; }
+  .settingsWorkspace .utilitySection:first-child :global(.ui-card) {
+    gap: 6px !important;
+    padding: 8px !important;
+  }
+  .settingsWorkspace .utilitySection:first-child :global(.ui-card) > p { display: none; }
+   .settingsWorkspace .utilitySection:first-child :global(.ui-card) > button { min-height: 44px; }
+  .settingsWorkspace .utilityCard { padding: 9px !important; }
+  .settingsWorkspace .utilityCard > p { display: none; }
+   .settingsWorkspace .preferenceChoice { min-height: 44px; margin-top: 4px; padding: 6px; }
+  .settingsWorkspace .themePanel { padding: 8px; border-radius: 16px; }
+  .settingsWorkspace .themePanel > :first-child > div > p { display: none; }
+  .settingsWorkspace .themeChoices { gap: 4px; margin-top: 6px; }
+  .settingsWorkspace .themeChoice { min-height: 50px; padding: 4px; border-radius: 10px; }
+  .settingsWorkspace .themeChoice :global(.mt-2) { margin-top: 2px; }
+  .settingsWorkspace .themeChoice :global(.mt-0\.5) { display: none; }
+}
+
+@media (max-width: 359px) and (max-height: 700px) {
+  .settingsWorkspace { gap: 4px; }
+  .qrWorkspace { gap: 8px; }
+  /* Settings is a control surface, not a reading page. On the shortest
+     phones keep the wallet action, slippage choices, theme choices, and save
+     action in one calm viewport; supporting copy can yield the space. */
+  .settingsWorkspace .utilitySection:first-child .utilityCard,
+  .settingsWorkspace .utilitySection:first-child :global(.ui-card) {
+    gap: 6px !important;
+    padding: 8px !important;
+  }
+  .settingsWorkspace .utilitySection:first-child .utilityCard > p,
+  .settingsWorkspace .utilitySection:first-child :global(.ui-card) > p { display: none; }
+   .settingsWorkspace .utilitySection:first-child :global(.ui-card) > button { min-height: 44px; }
+  .settingsWorkspace .utilityCard { padding: 9px !important; }
+  .settingsWorkspace .utilityCard > p { display: none; }
+   .settingsWorkspace .preferenceChoice { min-height: 44px; margin-top: 4px; padding: 6px; }
+  .settingsWorkspace .themePanel { padding: 8px; border-radius: 16px; }
+  .settingsWorkspace .themePanel > :first-child > div > p { display: none; }
+  .settingsWorkspace .themeChoices { gap: 4px; margin-top: 6px; }
+  .settingsWorkspace .themeChoice { min-height: 50px; padding: 4px; border-radius: 10px; }
+  .settingsWorkspace .themeChoice :global(.mt-2) { margin-top: 2px; }
+  .settingsWorkspace .themeChoice :global(.mt-0\.5) { display: none; }
+  .settingsWorkspace :global(.ui-card) { padding: 10px !important; }
+
+  .receiveCard { gap: 12px; padding: 12px !important; }
+  .qrTile { padding: 10px; border-radius: 18px; }
+  .qrTile > svg { width: min(176px, 54vw); }
+  .addressValue { font-size: 13px; }
+  .receiveNotice { padding: 10px 12px; font-size: var(--fs-caption); }
+}
+
+/* Utility surfaces share a narrow shell, but their labels and wallet values
+   are user data. Keep each row shrinkable and let long content wrap inside
+   the card instead of creating horizontal page overflow. */
+.utilityWorkspace,
+.utilityWorkspace > *,
+.utilitySection,
+.utilitySection > *,
+.utilityCard,
+.rowGroup,
+.themePanel,
+.themeChoice,
+.loginPanel { min-width: 0; }
+
+.utilityAction > button { min-height: 44px; }
+.moreRow { min-width: 0; overflow: hidden; }
+.moreRow > span { min-width: 0; overflow-wrap: anywhere; }
+.actionGrid > * { min-width: 0; }
+.preferenceChoice,
+.themeChoice { overflow-wrap: anywhere; }
+
+.settingsWorkspace .utilityCard,
+.settingsWorkspace :global(.ui-card),
+.qrWorkspace :global(.ui-card) { min-width: 0; }
+.settingsWorkspace .utilityAction { padding-bottom: max(8px, env(safe-area-inset-bottom, 0px)); }
+
+@media (max-width: 640px) {
+  .utilityWorkspace { gap: 12px; }
+  .moreWorkspace { gap: 6px; }
+  .moreWorkspace .rowGroup { border-radius: 16px; }
+  .moreWorkspace .moreRow { min-height: 44px; }
+  .settingsWorkspace,
+  .qrWorkspace { gap: 8px; }
+  .settingsWorkspace .utilitySection { gap: 5px; }
+}

@@ -1,0 +1,42 @@
+name: Official f(x) scope monitor
+
+on:
+  schedule:
+    - cron: '0 0 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+      - name: Compare pinned upstream commits
+        id: upstream
+        shell: bash
+        run: |
+          PINNED_SDK=$(node -p "require('./fx-scope.lock.json').sdkCommit")
+          PINNED_SKILL=$(node -p "require('./fx-scope.lock.json').skillCommit")
+          LATEST_SDK=$(git ls-remote https://github.com/AladdinDAO/fx-sdk.git refs/heads/main | cut -f1)
+          LATEST_SKILL=$(git ls-remote https://github.com/AladdinDAO/fx-sdk-skill.git refs/heads/main | cut -f1)
+          test -n "$LATEST_SDK" && test -n "$LATEST_SKILL"
+          echo "sdk_changed=$([ "$PINNED_SDK" = "$LATEST_SDK" ] && echo false || echo true)" >> "$GITHUB_OUTPUT"
+          echo "skill_changed=$([ "$PINNED_SKILL" = "$LATEST_SKILL" ] && echo false || echo true)" >> "$GITHUB_OUTPUT"
+          echo "latest_sdk=$LATEST_SDK" >> "$GITHUB_OUTPUT"
+          echo "latest_skill=$LATEST_SKILL" >> "$GITHUB_OUTPUT"
+      - name: Open review issue
+        if: steps.upstream.outputs.sdk_changed == 'true' || steps.upstream.outputs.skill_changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SDK_SHA: ${{ steps.upstream.outputs.latest_sdk }}
+          SKILL_SHA: ${{ steps.upstream.outputs.latest_skill }}
+        run: |
+          TITLE='Review upstream f(x) SDK scope change'
+          gh issue list --state open --search "$TITLE in:title" --json number --jq 'length' | grep -q '^0$' || exit 0
+          gh issue create --title "$TITLE" --body "Upstream changed. SDK main: \`$SDK_SHA\`. Skill main: \`$SKILL_SHA\`. Re-audit all 15 methods, transaction shapes, destinations, selectors, browser bundling, and the local short-pool patch before updating fx-scope.lock.json."

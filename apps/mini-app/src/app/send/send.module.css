@@ -1,0 +1,191 @@
+/* Send is one card that becomes its own review: the amount first, the
+ * recipient second, and a review that shows the whole recipient address in
+ * reading groups before anything is signed. */
+.card {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 12px;
+  margin: 4px auto 0;
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--ring-inset);
+}
+.card h2 { color: var(--text); font-size: var(--fs-heading); font-weight: 650; letter-spacing: -0.02em; line-height: 1.15; }
+/* Text fields show focus through their panel ring; controls keep an outline. */
+.card :where(button, a):focus-visible { outline: 2px solid var(--mint-bright); outline-offset: 3px; }
+.card :where(input, textarea):focus-visible { outline: none; }
+.cardHead { display: flex; min-height: 44px; align-items: center; justify-content: space-between; gap: 12px; margin: -8px -6px -4px 2px; }
+.cardHead h2 { color: var(--mut); font-size: var(--fs-small); font-weight: 600; letter-spacing: 0; line-height: 1.3; }
+.fieldLabel,
+.panelHead label { color: var(--mut); font-size: var(--fs-small); font-weight: 500; line-height: 1.4; }
+
+/* Amount: the same panel language as Trade, Earn, and Move. */
+.amountPanel,
+.recipientPanel {
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  transition: box-shadow var(--dur-fast) ease;
+}
+.amountPanel { padding: 12px 16px 14px; }
+.amountPanel:focus-within,
+.recipientPanel:focus-within { box-shadow: inset 0 0 0 2px var(--mint); }
+.panelHead { display: flex; min-height: 30px; align-items: center; justify-content: space-between; gap: 12px; }
+.max {
+  display: flex;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  margin: -8px -10px -8px 0;
+  color: var(--mut);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  transition: color var(--dur-fast) ease, transform var(--dur-slow) var(--ease-spring);
+}
+.max > span { padding: 5px 10px; border-radius: 999px; background: var(--surface-3); transition: background-color var(--dur-fast) ease; }
+.max:hover:not(:disabled) { color: var(--mint-bright); }
+.max:hover:not(:disabled) > span { background: var(--mint-dim); }
+.max:active:not(:disabled) { transform: scale(0.94); transition-duration: var(--dur-press); }
+.max:disabled { cursor: not-allowed; color: var(--mut-2); }
+/* The amount keeps a readable width; on the narrowest phones the asset pill
+ * wraps below it. The figure sizes to its own width, like every amount field. */
+.amountRow { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 6px; }
+.amountFit { display: flex; min-width: 0; flex: 1 1 7rem; container-type: inline-size; }
+.amountInput {
+  width: 100%;
+  min-width: 0;
+  min-height: 52px;
+  background: transparent;
+  color: var(--text);
+  font-size: clamp(14px, calc(100cqi / (var(--amount-length, 1) * 0.62 + 0.4)), var(--fs-amount));
+  transition: font-size var(--dur-base) var(--ease-out);
+  font-weight: 500;
+  letter-spacing: var(--tracking-figure);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+.amountInput::placeholder { color: var(--mut-2); }
+.balance { display: flex; flex-wrap: wrap; gap: 0 8px; margin-top: 6px; color: var(--mut); font-size: var(--fs-small); line-height: 1.45; font-variant-numeric: tabular-nums; }
+.balance > span:first-of-type { color: var(--text); font-weight: 500; }
+.balanceUsd { margin-left: auto; }
+
+/* Recipient: an avatar appears once the address is complete. */
+.recipientPanel { padding: 12px 16px 10px; }
+.recipientRow { display: flex; min-width: 0; align-items: flex-start; gap: 10px; margin-top: 6px; }
+.recipientRow > svg { flex: 0 0 auto; margin-top: 8px; }
+.recipientEmpty {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  margin-top: 8px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  color: var(--mut);
+}
+.recipientEmpty svg { width: 14px; height: 14px; }
+/* A fixed width keeps the field from widening the card; only its height
+ * follows the content. */
+.recipientRow textarea {
+  width: 0;
+  min-width: 0;
+  min-height: 44px;
+  flex: 1 1 auto;
+  padding: 11px 0;
+  resize: none;
+  overflow: hidden;
+  background: transparent;
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  word-break: break-all;
+  field-sizing: content;
+  outline: none;
+}
+.recipientRow textarea::placeholder { color: var(--mut-2); font-family: var(--font-sans, inherit); }
+.hint { margin-top: 2px; color: var(--warn); font-size: var(--fs-caption); line-height: 1.4; }
+
+.error { margin: 2px 4px 0; color: var(--danger); font-size: var(--fs-small); line-height: 1.5; }
+.action {
+  display: flex;
+  width: 100%;
+  min-height: 52px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-weight: 600;
+}
+.action svg { width: 18px; height: 18px; }
+
+/* Review: the amount leads, then the full recipient, then the costs. */
+.reviewHeader { display: flex; min-width: 0; align-items: center; gap: 6px; margin: -4px 0 0 -8px; }
+.back {
+  display: grid;
+  min-width: 44px;
+  min-height: 44px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--text);
+  transition: background-color var(--dur-fast) ease;
+}
+.back:hover:not(:disabled) { background: var(--surface-2); }
+.back svg { width: 20px; height: 20px; }
+.reviewHero { display: flex; min-width: 0; align-items: center; gap: 14px; padding: 6px 2px 4px; }
+.reviewAmount {
+  min-width: 0;
+  color: var(--text);
+  font-size: var(--fs-display);
+  font-weight: 600;
+  letter-spacing: var(--tracking-figure);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.reviewAmount span { color: var(--mut); font-weight: 500; }
+.recipientReview { border-radius: var(--radius-md); padding: 12px 14px; background: var(--surface-2); }
+.recipientIdentity { display: flex; min-width: 0; align-items: center; gap: 12px; margin-top: 6px; }
+.recipientIdentity > svg { flex: 0 0 auto; }
+.recipientIdentity > span { font-size: var(--fs-small); }
+.facts { display: grid; gap: 10px; padding: 4px 4px 0; font-size: var(--fs-small); }
+.facts > div { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 14px; }
+.facts dt { flex-shrink: 0; color: var(--mut); }
+.facts dd { display: flex; min-width: 0; align-items: center; gap: 6px; color: var(--text); font-weight: 500; text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+/* Submitted: honest about being unconfirmed, with History one tap away. */
+.done { align-items: center; padding: 28px 20px 20px; text-align: center; }
+.doneMark {
+  display: grid;
+  width: 64px;
+  height: 64px;
+  place-items: center;
+  margin-bottom: 4px;
+  border-radius: 50%;
+  background: var(--mint-dim);
+  color: var(--mint);
+  animation: done-enter var(--dur-slow) var(--ease-spring) both;
+}
+.doneMark svg { width: 28px; height: 28px; }
+@keyframes done-enter {
+  from { opacity: 0; transform: scale(.7); }
+  to { opacity: 1; transform: none; }
+}
+.doneAmount { color: var(--mut); font-size: var(--fs-body); line-height: 1.45; }
+.doneAmount strong { color: var(--text); font-weight: 600; }
+.doneNote { margin-bottom: 8px; color: var(--mut-2); font-size: var(--fs-small); line-height: 1.45; }
+.done .action { margin-top: 0; }
+
+@media (max-width: 600px) {
+  .card { margin-top: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .doneMark { animation: none; }
+  .amountInput { transition: none; }
+}

@@ -1,0 +1,22 @@
+{
+  "sdkPackage": "@aladdindao/fx-sdk@1.0.5",
+  "sdkCommit": "53c0b9805a169e75ad375c92c241e1292b66405f",
+  "skillCommit": "e2c4a6085950a40f238bda1c9159305f6c8acf1f",
+  "methods": [
+    "getPositions",
+    "increasePosition",
+    "reducePosition",
+    "adjustPositionLeverage",
+    "depositAndMint",
+    "repayAndWithdraw",
+    "getBridgeQuote",
+    "buildBridgeTx",
+    "getFxSaveBalance",
+    "getFxSaveConfig",
+    "getFxSaveRedeemStatus",
+    "getFxSaveClaimable",
+    "getRedeemTx",
+    "depositFxSave",
+    "withdrawFxSave"
+  ]
+}

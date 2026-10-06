@@ -1,0 +1,2 @@
+# Confirmed false positive in the FX save APY client.
+5085d8fb773736e5141fe8d3e269e2496239b4f1:apps/mini-app/src/lib/fxSaveApy.ts:generic-api-key:11
