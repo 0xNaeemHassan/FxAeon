@@ -2,7 +2,6 @@
 
 import { ArrowLeftRight, BadgeCheck, CircleDollarSign, Clock3, Coins, Gauge, Layers2, PiggyBank, Route, ShieldAlert, Signature, TrendingUp, Wallet } from 'lucide-react';
 import { useLiveMarketQuote } from '@/components/PriceProvider';
-import { useMarketHistory } from '@/components/MarketChart';
 import { ValueOrSkeleton } from '@/components/MissingValue';
 import { formatUsdPrice } from '@/lib/prices';
 import type { MarketSymbol } from '@/lib/marketData';
@@ -25,14 +24,13 @@ export function TradeSections({ market, side, leverage, openPositions, connected
   connected: boolean;
 }) {
   const live = useLiveMarketQuote(market);
-  const history = useMarketHistory(market, '1D');
-  // The live ticker carries the 24h range; otherwise derive it from the day's history points.
-  const points = history.snapshot?.points.map((point) => point.price) ?? [];
-  const low = live.isFresh ? live.quote?.low24h : points.length ? Math.min(...points) : undefined;
-  const high = live.isFresh ? live.quote?.high24h : points.length ? Math.max(...points) : undefined;
-  const rangeStatus = history.status === 'loading' && !live.isFresh ? 'loading' : 'unavailable';
+  // The live ticker carries the 24h range. Chart history stays cold until the
+  // chart itself is opened, so a stale ticker shows the range as unavailable.
+  const low = live.isFresh ? live.quote?.low24h : undefined;
+  const high = live.isFresh ? live.quote?.high24h : undefined;
+  const rangeStatus = live.status === 'connecting' || live.status === 'reconnecting' ? 'loading' : 'unavailable';
   return <PageSections label={`${market} market details`}>
-    <Section id="trade-market" eyebrow={`${market} / USD`} title="Market at a glance" action={{ label: 'Positions', href: '/positions' }}>
+    <Section id="trade-market" eyebrow={`${market} market`} title="At a glance" action={{ label: 'Manage positions', href: '/positions' }}>
       <StatGrid stats={[
         { label: '24h low', value: <ValueOrSkeleton value={formatUsdPrice(low)} width="lg" status={rangeStatus} label="24 hour low" />, hint: 'Display price' },
         { label: '24h high', value: <ValueOrSkeleton value={formatUsdPrice(high)} width="lg" status={rangeStatus} label="24 hour high" />, hint: 'Display price' },
@@ -64,7 +62,7 @@ export function EarnSections({ apy, cooldown, instantFee }: { apy: string | null
   return <PageSections label="fxSAVE details">
     <Section id="earn-glance" eyebrow="fxSAVE" title="The vault at a glance">
       <StatGrid stats={[
-        { label: 'Variable APY', value: apy ?? '—', hint: 'Official f(x) feed, display only' },
+        { label: 'APY', value: apy ?? '—', hint: 'Variable · official f(x) feed' },
         { label: 'Withdrawal cooldown', value: cooldown ?? '—', hint: 'For queued withdrawals' },
         { label: 'Instant withdrawal fee', value: instantFee ?? '—', hint: 'Skip the cooldown' },
         { label: 'Deposit with', value: 'fxUSD · USDC', hint: 'Ethereum' },
@@ -90,7 +88,7 @@ export function EarnSections({ apy, cooldown, instantFee }: { apy: string | null
 /** Below the Borrow form: the pool's terms, how borrowing works, and common questions. */
 export function BorrowSections({ ltvLimit }: { ltvLimit: string }) {
   return <PageSections label="Borrowing details">
-    <Section id="borrow-glance" eyebrow="Borrow fxUSD" title="Terms at a glance" action={{ label: 'Borrowing details', href: FX_BORROWING_DOCS, external: true }}>
+    <Section id="borrow-glance" eyebrow="fxUSD loans" title="Terms at a glance" action={{ label: 'Borrowing details', href: FX_BORROWING_DOCS, external: true }}>
       <StatGrid stats={[
         { label: 'Loan-to-value limit', value: ltvLimit, hint: 'Live from the pool' },
         { label: 'Annual interest', value: '0%', hint: 'In normal conditions; protocol fees apply' },
@@ -101,7 +99,7 @@ export function BorrowSections({ ltvLimit }: { ltvLimit: string }) {
     <Section id="borrow-how" eyebrow="How it works" title="Borrowing in three steps">
       <Steps steps={[
         { icon: Wallet, title: 'Deposit collateral', body: 'ETH, stETH, wstETH, or WBTC opens a collateral position on Ethereum.' },
-        { icon: CircleDollarSign, title: 'Borrow fxUSD', body: 'Borrow up to the pool’s limit for your collateral. The form shows the exact ceiling as you type.' },
+        { icon: CircleDollarSign, title: 'Borrow up to the limit', body: 'The form shows how much fxUSD your collateral can support as you type, and names anything missing before review.' },
         { icon: BadgeCheck, title: 'Repay to withdraw', body: 'Repay fxUSD at any time and withdraw collateral within the position’s limits.' },
       ]} />
       {rebalancingNote}
@@ -138,7 +136,7 @@ export function MoveSections() {
       <Questions items={[
         { question: 'How long does a move take?', answer: 'It depends on both networks and LayerZero. History tracks the source confirmation and the delivery separately.' },
         { question: 'Can I send to another wallet?', answer: 'Yes. Choose Use another wallet and enter the recipient’s address on the destination network.' },
-        { question: 'What are custom contracts?', answer: 'An expert mode for other LayerZero tokens. Check every address and network before you approve.' },
+        { question: 'When would I use expert mode?', answer: 'Expert mode exposes token and deployment fields for other LayerZero routes. Check every address and network before you approve.' },
       ]} />
     </Section>
   </PageSections>;

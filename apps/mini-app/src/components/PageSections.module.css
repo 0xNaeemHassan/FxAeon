@@ -11,11 +11,13 @@
 .reveal[data-shown] { opacity: 1; transform: none; }
 
 .section { display: grid; gap: 18px; }
-.sectionHead { display: flex; min-width: 0; align-items: flex-end; justify-content: space-between; gap: 16px; }
+/* The action wraps under the title when text is large, never past the edge. */
+.sectionHead { display: flex; min-width: 0; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 4px 16px; }
+.sectionHead > div { min-width: 0; }
 .eyebrow { margin-bottom: 6px; color: var(--mint-bright); font-size: var(--fs-micro); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
 :root[data-theme='light'] .eyebrow { color: var(--mint); }
 .sectionHead h2 { color: var(--text); font-size: clamp(22px, 4.6vw, 28px); font-weight: 650; letter-spacing: -0.03em; line-height: 1.12; }
-.sectionAction { display: inline-flex; min-height: 44px; flex: 0 0 auto; align-items: center; gap: 4px; padding-inline: 6px; border-radius: 999px; color: var(--mint); font-size: var(--fs-small); font-weight: 600; transition: background-color var(--dur-fast) ease; }
+.sectionAction { display: inline-flex; min-height: 44px; min-width: 0; max-width: 100%; flex: 0 1 auto; align-items: center; gap: 4px; padding-inline: 6px; border-radius: 999px; color: var(--mint); font-size: var(--fs-small); font-weight: 600; transition: background-color var(--dur-fast) ease; }
 .sectionAction:hover { background: var(--mint-dim); }
 .sectionAction svg { width: 16px; height: 16px; transition: transform var(--dur-base) var(--ease-out); }
 .sectionAction:hover svg { transform: translateX(2px); }

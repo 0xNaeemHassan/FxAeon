@@ -406,12 +406,15 @@ summary:focus-visible {
     bottom: 8px;
     z-index: 6;
   }
+  /* The fade reaches past the action as a soft shadow rather than a wider box:
+     shadows are ink, so they never widen the scroll area. */
   .sticky-action::before {
     content: '';
     position: absolute;
     z-index: -1;
-    inset: -28px calc(-1 * var(--shell-inline-padding)) calc(-8px - var(--content-bottom-clearance));
-    background: linear-gradient(to top, var(--bg) 0, var(--bg) calc(100% - 40px), color-mix(in srgb, var(--bg) 0%, transparent));
+    inset: -14px 0 calc(-8px - var(--content-bottom-clearance));
+    background: var(--bg);
+    box-shadow: 0 -10px 24px 18px var(--bg);
     opacity: 0;
     pointer-events: none;
     transition: opacity var(--dur-base) var(--ease-out);
