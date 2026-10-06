@@ -19,7 +19,6 @@
 <a href="docs/README.md">Docs</a>
 
 <br>
-<br>
 
 <a href="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/ci.yml"><img alt="Client CI" src="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/ci.yml/badge.svg"></a>
 <a href="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/e2e-mini-app.yml"><img alt="End-to-end tests" src="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/e2e-mini-app.yml/badge.svg"></a>
@@ -29,14 +28,7 @@
 
 <br>
 
-FxAeon is a self-custodial Telegram Mini App and web app for [f(x) Protocol](https://fxprotocol.gitbook.io/fx-docs). It is built on the official [f(x) Protocol SDK](https://github.com/aladdindao/fx-sdk). You can:
-
-- trade ETH and BTC with leverage;
-- earn with fxSAVE;
-- borrow fxUSD against your collateral;
-- move funds between Ethereum and Base.
-
-Every step is simulated and explained before your wallet opens.
+FxAeon is a self-custodial Telegram Mini App and web app for [f(x) Protocol](https://fxprotocol.gitbook.io/fx-docs), built on the official [f(x) Protocol SDK](https://github.com/aladdindao/fx-sdk). Every step is simulated and explained before your wallet opens.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/screens-dark.webp">
