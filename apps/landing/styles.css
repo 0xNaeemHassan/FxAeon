@@ -702,6 +702,7 @@ main > section { width: var(--page); margin-inline: auto; }
 .diagram .muted-text { fill: var(--mut-2); }
 .diagram .danger-text { fill: var(--danger); }
 .diagram .center { text-anchor: middle; }
+.diagram .end { text-anchor: end; }
 .diagram .chain-dot { fill: var(--surface-raised); stroke: var(--line-strong); stroke-width: 1.5; }
 .traveller-orbit { transform-box: view-box; transform-origin: 160px 139.3px; }
 .traveller { fill: var(--accent); }
