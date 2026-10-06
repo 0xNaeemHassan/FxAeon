@@ -23,7 +23,11 @@ export function StickyAction({ children, className = '' }: { children: ReactNode
       const covered = panel && getComputedStyle(panel).display !== 'none' ? Math.max(0, window.innerHeight - panel.getBoundingClientRect().top) : 0;
       observer = new IntersectionObserver(([entry]) => {
         // Riding: the natural place is below the visible area, not scrolled past above it.
-        setRiding(!entry.isIntersecting && entry.boundingClientRect.top > 0);
+        // The header clips the scroll area's top, so an action that has scrolled up
+        // under it is still on the page's upper side: compare with the visible middle.
+        const bounds = entry.rootBounds;
+        const middle = bounds ? (bounds.top + bounds.bottom) / 2 : (window.innerHeight - covered) / 2;
+        setRiding(!entry.isIntersecting && entry.boundingClientRect.top > middle);
       }, { rootMargin: `0px 0px -${Math.round(covered)}px 0px` });
       observer.observe(sentinel);
     };
