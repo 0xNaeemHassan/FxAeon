@@ -82,6 +82,11 @@
 .field[data-compact] .labelRow { margin-bottom: 0; }
 .field[data-compact] .usd { gap: 4px; min-height: 18px; margin-top: 2px; font-size: var(--fs-caption); }
 @media (max-width: 360px) { .surface:global(.amount-control) { padding-inline: 12px; } .entryRow { gap: 6px; } .labelRow { gap: 8px; } }
+/* The compact Trade ticket shares the first phone screen with its action. */
+@media (max-width: 640px) {
+  .field[data-compact] .labelRow { min-height: 28px; }
+  .field[data-compact] .entryRow, .field[data-compact] .entryFit > input { min-height: 48px; }
+}
 
 .balance { margin-left: auto; text-align: right; color: var(--mut); font-size: inherit; line-height: 1.5; }
 .balance strong { color: var(--text); font-weight: 600; }

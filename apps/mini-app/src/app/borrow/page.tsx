@@ -54,7 +54,7 @@ import { resetTransactionAmounts } from '@/lib/transactionState';
 import { ValueOrSkeleton } from '@/components/MissingValue';
 import { TransactionSettings } from '@/components/TransactionSettings';
 import { BorrowSections } from '@/components/ProductSections';
-import { borrowCapacity, BORROW_LIMIT_GUARD_BPS, loanToValueBps, withdrawableCollateralUsdCents } from '@/lib/fx/borrowLimits';
+import { borrowCapacity, BORROW_LIMIT_GUARD_BPS, collateralUsdWad, loanToValueBps, tokenAmountForUsdWad, withdrawableCollateralUsd } from '@/lib/fx/borrowLimits';
 import { formatSignificantDecimal } from '@/lib/amount';
 import { amountBlocker } from '@/lib/formBlockers';
 import { tokenSymbol } from '@/lib/fx/tokenPresentation';
@@ -204,11 +204,12 @@ export default function BorrowPage() {
     return () => { active = false; };
   }, [limitMarket]);
   const limitPrices = freshDisplayPrices(useUsdPrices());
-  const valueCents = (raw: bigint, decimals: number, symbol: string): bigint | null => {
+  const limitPrice = (symbol: string): number | undefined => {
     const key = priceKeyForSymbol(symbol);
-    return calculatePositionUsdValuation({ collateralRaw: raw, collateralDecimals: decimals, collateralPrice: key ? limitPrices[key] : undefined,
-      debtRaw: 0n, debtDecimals: 18, debtPrice: 1 }).collateralUsdCents;
+    return key ? limitPrices[key] : undefined;
   };
+  // Exact 18-decimal USD, so collateral worth a fraction of a cent still has a limit.
+  const valueUsd = (raw: bigint, decimals: number, symbol: string): bigint | null => collateralUsdWad(raw, decimals, limitPrice(symbol));
   const collateralTokens = selectedKey === 'new' ? COLLATERAL_TOKENS : collateralTokensForMarket(market);
   const withdrawalTokens = collateralTokensForMarket(selected?.market ?? market);
   const activeTokenOptions = mode === 'manage' ? withdrawalTokens : collateralTokens;
@@ -518,15 +519,16 @@ export default function BorrowPage() {
   const showMint = newPosition || mode === 'mint' && (managementAction === 'borrow' || managementAction === 'combined');
   const showRepay = mode === 'manage' && (managementAction === 'repay' || managementAction === 'combined');
   const showWithdraw = mode === 'manage' && (managementAction === 'withdraw' || managementAction === 'combined');
-  const existingCollateralCents = selected ? valueCents(selected.info.rawColls, positionCollateralDecimals(selected), selected.info.rawCollsToken) : 0n;
+  const existingCollateralUsd = selected ? valueUsd(selected.info.rawColls, positionCollateralDecimals(selected), selected.info.rawCollsToken) : 0n;
   const existingDebt = selected?.info.rawDebts ?? 0n;
   const depositWei = parseZeroAmount(deposit, token);
   const mintWei = parseZeroAmount(mint, 'fxUSD');
-  const depositCents = depositWei === null ? null : valueCents(depositWei, tokenDecimals(token), token);
-  const collateralAfterCents = mode === 'mint' && existingCollateralCents !== null && depositCents !== null ? existingCollateralCents + depositCents : null;
-  const capacity = collateralAfterCents !== null && collateralAfterCents > 0n ? borrowCapacity({ collateralUsdCents: collateralAfterCents, existingDebt, range: debtRange }) : null;
+  const depositUsd = depositWei === null ? null : valueUsd(depositWei, tokenDecimals(token), token);
+  const collateralAfterUsd = mode === 'mint' && existingCollateralUsd !== null && depositUsd !== null ? existingCollateralUsd + depositUsd : null;
+  const capacity = collateralAfterUsd !== null && collateralAfterUsd > 0n ? borrowCapacity({ collateralUsd: collateralAfterUsd, existingDebt, range: debtRange }) : null;
+  const collateralEntered = Boolean(depositWei && depositWei > 0n) || Boolean(selected && selected.info.rawColls > 0n);
   const limitBps = debtRange.max * (10_000n - BORROW_LIMIT_GUARD_BPS) / 10n ** 18n;
-  const ltvBps = capacity && collateralAfterCents !== null ? loanToValueBps(existingDebt + (mintWei ?? 0n), collateralAfterCents) : null;
+  const ltvBps = capacity && collateralAfterUsd !== null ? loanToValueBps(existingDebt + (mintWei ?? 0n), collateralAfterUsd) : null;
   const fxUsdLimit = (value: bigint) => formatSignificantDecimal(formatUnits(value, 18), 4);
   const symbol = tokenSymbol(token);
   const mintBlocker = (): string | null => {
@@ -558,14 +560,12 @@ export default function BorrowPage() {
       const repayIssue = amountBlocker(repay, 18, 'fxUSD', balanceStateFor('fxUSD'));
       if (repayIssue?.startsWith('Insufficient')) return repayIssue;
     }
-    if (withdrawWei && existingCollateralCents !== null) {
-      const withdrawableCents = withdrawableCollateralUsdCents(existingCollateralCents, selected.info.rawDebts - (repayWei ?? 0n), debtRange);
-      const withdrawCents = valueCents(withdrawWei, tokenDecimals(token), token);
-      const priceKey = priceKeyForSymbol(token);
-      const price = priceKey ? limitPrices[priceKey] : undefined;
-      if (withdrawCents !== null && withdrawCents > withdrawableCents) {
-        if (withdrawableCents === 0n || !price) return 'Repay debt to withdraw';
-        const withdrawableWei = withdrawableCents * 10n ** BigInt(tokenDecimals(token)) / BigInt(Math.round(price * 100));
+    if (withdrawWei && existingCollateralUsd !== null) {
+      const withdrawableUsd = withdrawableCollateralUsd(existingCollateralUsd, selected.info.rawDebts - (repayWei ?? 0n), debtRange);
+      const withdrawUsd = valueUsd(withdrawWei, tokenDecimals(token), token);
+      if (withdrawUsd !== null && withdrawUsd > withdrawableUsd) {
+        const withdrawableWei = tokenAmountForUsdWad(withdrawableUsd, tokenDecimals(token), limitPrice(token));
+        if (withdrawableUsd === 0n || withdrawableWei === null || withdrawableWei === 0n) return 'Repay debt to withdraw';
         return `Withdraw at most ${formatSignificantDecimal(formatUnits(withdrawableWei, tokenDecimals(token)), 4)} ${symbol}`;
       }
     }
@@ -579,7 +579,9 @@ export default function BorrowPage() {
     {showMint && <AmountField label={newPosition ? 'fxUSD to borrow' : 'Additional fxUSD to borrow'} symbol="fxUSD" value={mint}
       onChange={setMint} allowZero maxDecimals={18} showPercentages={false} showMax={Boolean(capacity && capacity.maxAdditional > 0n)}
       maxAmount={capacity && capacity.maxAdditional > 0n ? formatUnits(capacity.maxAdditional, 18) : null}
-      hint={capacity ? (capacity.maxAdditional > 0n ? `Up to ${fxUsdLimit(capacity.maxAdditional)} fxUSD with this collateral` : 'This collateral cannot borrow more') : newPosition ? 'Enter collateral to see how much you can borrow' : undefined} />}
+      hint={capacity ? (capacity.maxAdditional > 0n ? `Up to ${fxUsdLimit(capacity.maxAdditional)} fxUSD with this collateral` : 'This collateral cannot borrow more')
+        : collateralEntered ? 'Your limit appears when current prices are available'
+        : newPosition ? 'Enter collateral to see how much you can borrow' : undefined} />}
     {showDeposit && <AmountField label={newPosition ? 'Starting collateral' : 'Collateral to add'} symbol={token} value={deposit}
       onChange={(value) => { setNativeMaxError(null); setDeposit(value); }} allowZero maxDecimals={tokenDecimals(token)}
       balanceState={balanceStateFor(token)} tokenSelector={picker}

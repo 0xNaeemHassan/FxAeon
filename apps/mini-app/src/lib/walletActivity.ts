@@ -63,7 +63,14 @@ type Group = {
 
 const activityId = (chainId: number, hash: string) => `${chainId}:${hash.toLowerCase()}`;
 
-/** Transactions that need calldata to be explained: every row without a journal record. */
+/**
+ * Journal entries from before step kinds were recorded cannot tell an approval
+ * from its action; once mined, their calldata can.
+ */
+const needsLegacyCall = (view: RecoveryViewModel) => (view.record.stepKind === undefined || view.record.stepKind === 'unknown')
+  && !view.transactionInput && view.status !== 'pending';
+
+/** Transactions that need calldata to be explained: rows without a journal record, and legacy journal steps. */
 export function activityCallRequests(
   views: readonly RecoveryViewModel[],
   positions: readonly ProtocolPositionActivity[],
@@ -71,6 +78,9 @@ export function activityCallRequests(
 ): { chainId: 1 | 8453; hash: string }[] {
   const journal = new Set(views.map((view) => activityId(view.record.chainId, view.record.hash)));
   const requests = new Map<string, { chainId: 1 | 8453; hash: string }>();
+  for (const view of views) {
+    if (needsLegacyCall(view)) requests.set(activityId(view.record.chainId, view.record.hash), { chainId: view.record.chainId, hash: view.record.hash.toLowerCase() });
+  }
   for (const item of [...positions, ...transfers]) {
     const id = activityId(item.chainId, item.hash);
     if (!journal.has(id) && !requests.has(id)) requests.set(id, { chainId: item.chainId, hash: item.hash.toLowerCase() });
@@ -139,6 +149,9 @@ function toActivity(group: Group, walletAddress: string, calls: WalletActivityEv
   const view = group.view;
   const record = view?.record;
   const indexedCall = !view ? calls?.[group.id] ?? undefined : undefined;
+  // A legacy step's mined calldata only names it; the journal keeps its status.
+  const legacyCall = view && needsLegacyCall(view) ? calls?.[group.id] : undefined;
+  const legacyInput = legacyCall && legacyCall.to?.toLowerCase() === record?.to.toLowerCase() ? legacyCall.input : undefined;
   const classification = classifyActivity({
     chainId: group.chainId,
     hash: group.hash,
@@ -146,7 +159,7 @@ function toActivity(group: Group, walletAddress: string, calls: WalletActivityEv
     wallet: walletAddress as Address,
     status,
     call: record
-      ? { from: record.walletAddress, to: record.to, input: view?.transactionInput ?? null, value: record.valueWei && /^[0-9]+$/.test(record.valueWei) ? BigInt(record.valueWei) : null }
+      ? { from: record.walletAddress, to: record.to, input: view?.transactionInput ?? legacyInput ?? null, value: record.valueWei && /^[0-9]+$/.test(record.valueWei) ? BigInt(record.valueWei) : null }
       : indexedCall ? { from: indexedCall.from, to: indexedCall.to, input: indexedCall.input, value: indexedCall.value } : undefined,
     journal: record ? {
       intent: record.intent,
@@ -183,8 +196,9 @@ function toActivity(group: Group, walletAddress: string, calls: WalletActivityEv
 
 /**
  * One explained row per chain/hash. The journal's receipt status is never
- * overridden by an index, an approval never inherits its route's action, and
- * position NFT movements only add evidence to rows that already exist.
+ * overridden by an index, and position NFT movements only add evidence to rows
+ * that already exist. An approval is a step of the action after it, never an
+ * action of its own, so History leaves it out unless it failed.
  */
 export function mergeWalletActivity(
   views: readonly RecoveryViewModel[],
@@ -232,5 +246,6 @@ export function mergeWalletActivity(
   }
   return [...groups.values()]
     .map((group) => toActivity(group, walletAddress, evidence.calls))
+    .filter((activity) => activity.classification.kind !== 'approve')
     .sort((a, b) => b.timestamp - a.timestamp || a.id.localeCompare(b.id));
 }

@@ -1049,3 +1049,50 @@ test("an explicitly requested post-confirm block wait can skip a read when unava
   assert.equal(result.status, "confirmed");
   assert.equal(postReads, 0);
 });
+
+test('a wallet that cannot fund the step fails before any wallet prompt opens', async () => {
+  // An embedded wallet sends an unfundable request into a funding screen that
+  // never settles, so the runner checks value + gas limit × max fee first.
+  const fixture = approvalActionFixture();
+  let prompts = 0;
+  let balanceTag: string | undefined;
+  const rpcClient = {
+    ...feeTestClient({ transactions: fixture.planned.transactions, hashes: fixture.hashes, estimateGas: async () => 100_000n }),
+    // 100,000 gas × 1.2 headroom × 220 wei max fee needs 26,400,000 wei.
+    getBalance: async ({ blockTag }: { blockTag?: string }) => { balanceTag = blockTag; return 26_399_999n; },
+  } as unknown as FxPublicClient;
+  const result = await runTransactionRoute({
+    route: fixture.planned,
+    policy: fixture.policy,
+    publicClient: rpcClient,
+    feeSelection: fixture.feeSelection(Date.now()),
+    callbacks: { requestSignature: async () => { prompts += 1; return fixture.hashes[0]!; } },
+    options: { simulate: false, pollMs: 0, receiptTimeoutMs: 100 },
+  });
+  assert.equal(prompts, 0);
+  assert.equal(balanceTag, 'pending');
+  assert.equal(result.status, 'failed');
+  assert.match(result.error ?? '', /^Not enough ETH for network fees\./);
+  assert.equal(result.steps[0]?.hash, undefined);
+});
+
+test('a funded wallet, or an unreadable balance, still reaches the wallet prompt', async () => {
+  for (const getBalance of [async () => 26_400_000n, async () => { throw new Error('balance read failed'); }]) {
+    const fixture = approvalActionFixture();
+    let prompts = 0;
+    const rpcClient = {
+      ...feeTestClient({ transactions: fixture.planned.transactions, hashes: fixture.hashes, estimateGas: async () => 100_000n }),
+      getBalance,
+    } as unknown as FxPublicClient;
+    const result = await runTransactionRoute({
+      route: fixture.planned,
+      policy: fixture.policy,
+      publicClient: rpcClient,
+      feeSelection: fixture.feeSelection(Date.now()),
+      callbacks: { requestSignature: async () => fixture.hashes[prompts++]! },
+      options: { simulate: false, pollMs: 0, receiptTimeoutMs: 100 },
+    });
+    assert.equal(result.status, 'confirmed');
+    assert.equal(prompts, 2);
+  }
+});

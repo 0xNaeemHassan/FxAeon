@@ -3,7 +3,7 @@ import { formatSignificantDecimal } from './amount';
 import { callSelector, decodeActivityCall, type DecodedActivityCall } from './activityCalldata';
 import { compactAddress } from './addressPresentation';
 import { FX_TOKENS } from '@/lib/fx/tokens';
-import { APPROVE, FX_MINT_ROUTER_ADDRESS, FX_ROUTER_ADDRESS, OFT_SEND, canonicalBridgeTarget, positionPoolAddress } from '@/lib/fx/policy';
+import { APPROVE, FX_MINT_ROUTER_ADDRESS, FX_ROUTER_ADDRESS, OFT_SEND, canonicalBridgeTarget, operationActionDestinations, positionPoolAddress } from '@/lib/fx/policy';
 
 /**
  * Pure explanation of one wallet transaction for History.
@@ -275,6 +275,18 @@ function approvalAction(chainId: ActivityChain, to: string | null | undefined, d
     ...(pool ? { position: { market: pool.market, side: pool.side } } : {}),
     approval: { token: token?.symbol ?? 'token', verified: Boolean(token), positionApproval: Boolean(pool), spender: approve?.spender, amount: approve?.amount, decimals: token?.decimals ?? null },
   };
+}
+
+/**
+ * Journal entries from before step kinds were recorded carry only their route's
+ * intent. A step sent to a token or position contract that is not one of the
+ * operation's action destinations can only have been that route's approval.
+ */
+function legacyApprovalStep(chainId: ActivityChain, journal: ActivityJournalInput | undefined): boolean {
+  if (!journal?.to || !journal.operation || (journal.stepKind !== undefined && journal.stepKind !== 'unknown')) return false;
+  const actionDestinations = operationActionDestinations(journal.operation);
+  if (!actionDestinations || actionDestinations.some((target) => lower(target) === lower(journal.to))) return false;
+  return Boolean(canonicalToken(chainId, journal.to) || positionPool(journal.to));
 }
 
 function bridgeTokenFromFlows(flows: readonly ActivityFlow[]): string | undefined {
@@ -638,7 +650,12 @@ export function classifyActivity(input: ActivityClassificationInput): ActivityCl
   const journal = input.journal;
 
   let action: Action | null = null;
-  if (journal?.stepKind === 'approval') action = approvalAction(input.chainId, journal.to ?? call?.to, decoded);
+  // An approval is only ever a step of the action after it, whatever intent its
+  // route recorded: the journal's step kind, approve calldata, or a legacy step
+  // sent to a token or position contract all say so.
+  if (journal?.stepKind === 'approval' || (walletInitiated && selector === APPROVE) || legacyApprovalStep(input.chainId, journal)) {
+    action = approvalAction(input.chainId, journal?.to ?? call?.to, decoded);
+  }
   if (!action && journal?.bridge) action = { kind: 'bridgeOut', explicit: true };
   if (!action && journal?.intent && INTENT_KINDS[journal.intent]) action = { kind: INTENT_KINDS[journal.intent], explicit: true };
   if (!action && input.protocol?.length) {
