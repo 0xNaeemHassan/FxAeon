@@ -58,10 +58,31 @@
 }
 
 .identityAvatar {
+  position: relative;
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
+}
+
+/* A signed step is still pending: a thin arc circles the avatar, as long as
+   the journal holds it. Under reduced motion it is a still ring. */
+.pendingRing {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0 52%, color-mix(in srgb, var(--mint) 55%, transparent) 78%, var(--mint-bright, var(--mint)) 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+  animation: pending-arc 1.1s linear infinite;
+  pointer-events: none;
+}
+@keyframes pending-arc { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .pendingRing { animation: none; background: var(--mint); }
+}
+@media (forced-colors: active) {
+  .pendingRing { background: Highlight; }
 }
 
 .identityName {

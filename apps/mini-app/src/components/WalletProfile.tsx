@@ -39,12 +39,16 @@ import { WalletAssetModal } from '@/components/WalletAssetDetails';
 import { useRefreshAction } from '@/lib/useRefreshAction';
 import { WalletExportAction } from '@/components/WalletExportAction';
 import { privyConfigured } from '@/lib/privyConfig';
+import { usePendingActivity } from '@/lib/pendingActivity';
+import { TransactionNotices } from '@/components/TransactionNotices';
 
 const WALLET_PROFILE_DEMAND = { expandedAssets: true, chainPulse: true, positions: true } as const;
 export default function WalletProfile() {
   const pathname = usePathname();
   const wallet = usePrivyWallet();
   const activeAddress = activeWalletAddress(wallet);
+  // Signed steps stay visible after a review closes: a ring while pending, a notice when settled.
+  const pendingActivity = usePendingActivity(activeAddress ?? undefined);
   const positionState = useProtocolPositions();
   const refreshPositions = positionState.refresh;
   const walletIdentity = activeAddress?.toLowerCase() ?? '';
@@ -144,10 +148,13 @@ export default function WalletProfile() {
 
   return <>
     <button ref={openerRef} type="button" aria-label="Open wallet profile" onClick={() => { openedAtPathRef.current = pathname; setOpenWallet(walletIdentity); haptic('light'); }}
+      aria-describedby={pendingActivity.pendingCount ? 'wallet-pending-activity' : undefined} data-pending={pendingActivity.pendingCount ? true : undefined}
       className={`${styles.walletTrigger} ${headerWalletControl.trigger} ${headerWalletControl.identityTrigger} glass-press`}>
-      <span className={headerWalletControl.identityAvatar}><WalletAvatar address={activeAddress} size={22} /></span>
+      <span className={headerWalletControl.identityAvatar}>{pendingActivity.pendingCount > 0 && <span className={headerWalletControl.pendingRing} aria-hidden="true" />}<WalletAvatar address={activeAddress} size={22} /></span>
       <span className={headerWalletControl.identityName} data-wallet-identity-name>{verifiedEnsName ?? compactAddress(activeAddress)}</span>
     </button>
+    {pendingActivity.pendingCount > 0 && <span id="wallet-pending-activity" className="sr-only">{pendingActivity.pendingCount === 1 ? '1 transaction pending' : `${pendingActivity.pendingCount} transactions pending`}</span>}
+    <TransactionNotices notices={pendingActivity.notices} onDismiss={pendingActivity.dismiss} />
     {present && typeof document !== 'undefined' && createPortal(
       <div className={`${styles.walletBackdrop} ${presentation.backdrop} wallet-profile-backdrop`} data-state={open ? 'open' : 'closed'} inert={!open} aria-hidden={!open || undefined} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpenWallet(null); }}>
         <aside ref={dialogRef} role="dialog" aria-modal="true" aria-label={profileDialogName} className={presentation.sheet} onMouseDown={(event) => event.stopPropagation()}>

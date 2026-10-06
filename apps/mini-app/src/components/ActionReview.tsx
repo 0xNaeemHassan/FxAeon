@@ -2,6 +2,7 @@
 
 import { type ReactNode } from 'react';
 import { usePauseAutomaticPositionRefresh } from './PositionRefreshActivity';
+import { usePresentedTransactions } from '@/lib/pendingActivity';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -116,6 +117,8 @@ export function ActionReview(props: ActionReviewProps) {
   const { label = 'Review action', disabled = false, blocker = null, operationLabel, destructive = false, editor, decisionBefore, executionCost, surface = 'card', planBuilder } = props;
   const { canSelectReviewedRoute, endConnectFlow, error, execute, feeSelection, gasCost, headingRef, loading, networkSwitching, quoteChanges, quoteExpired, refreshReviewedQuote, refreshing, reset, result, review, reviewTitle, route, routeSummaries, routes, selectedRoute, selectReviewedRoute, selectGasTier, startConnectFlow, stage, status, statusDetail, stepResults, triggerRef, wallet } = lifecycle;
   usePauseAutomaticPositionRefresh(stage === 'planning' || stage === 'review' || stage === 'executing' || refreshing);
+  // This review shows its own progress and result; the header notice stays for steps settling elsewhere.
+  usePresentedTransactions([...stepResults, ...(result?.steps ?? [])].map((step) => step.hash));
 
   if (stage === 'input') {
     const progress = statusPresentation({ stage, status, detail: statusDetail, stepResults, stepCount: 0 });

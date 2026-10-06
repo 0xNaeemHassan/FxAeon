@@ -1,0 +1,77 @@
+/* Settled-transaction notices float just under the app header, centred, and
+ * never cover the header's own controls. Each one is a quiet surface with the
+ * outcome, one line of detail, and a way to History. */
+.region {
+  position: fixed;
+  z-index: 65;
+  top: calc(env(safe-area-inset-top, 0px) + var(--header-height, 56px) + 8px);
+  left: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.notice {
+  display: flex;
+  width: min(100%, 420px);
+  min-height: 56px;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg, 18px);
+  background: color-mix(in srgb, var(--bg-raised, var(--surface)) 92%, transparent);
+  padding: 8px 6px 8px 14px;
+  color: var(--text);
+  box-shadow: var(--elevation-2, 0 12px 32px rgba(0, 0, 0, 0.28));
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  pointer-events: auto;
+  animation: notice-in var(--dur-slow, 260ms) var(--ease-out, ease-out) both;
+}
+
+.icon { width: 22px; height: 22px; flex: 0 0 auto; }
+.notice[data-status='confirmed'] .icon { color: var(--success); }
+.notice[data-status='failed'] .icon { color: var(--danger); }
+
+.copy { display: flex; min-width: 0; flex: 1 1 auto; flex-direction: column; gap: 1px; }
+.copy strong { font-size: var(--fs-small, 13px); font-weight: 650; line-height: 1.3; }
+.copy span { color: var(--mut); font-size: var(--fs-caption, 12px); line-height: 1.35; }
+
+.link,
+.dismiss {
+  display: inline-flex;
+  min-width: 44px;
+  min-height: 44px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: var(--mint-bright, var(--mint));
+  font-size: var(--fs-small, 13px);
+  font-weight: 650;
+  transition: background-color var(--dur-fast, 120ms) ease;
+}
+.dismiss { color: var(--mut); }
+.link:focus-visible,
+.dismiss:focus-visible { outline: 2px solid var(--mint-bright, var(--mint)); outline-offset: 2px; }
+
+@media (hover: hover) {
+  .link:hover,
+  .dismiss:hover { background: var(--surface-2); }
+}
+
+@keyframes notice-in {
+  from { opacity: 0; transform: translate3d(0, -8px, 0); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notice { animation: none; }
+}
+
+@media (forced-colors: active) {
+  .notice { border-color: CanvasText; }
+}

@@ -173,4 +173,35 @@ test.describe('wallet session isolation', () => {
     await expect(submitted).toBeVisible();
     assertNoBackendRequests(requests);
   });
+
+  test('a recent pending step rings the wallet, and its settlement surfaces a notice', async ({ page, requests }) => {
+    const hash = `0x${'d'.repeat(64)}`;
+    const record = { id: `1:${ACCOUNT_A.toLowerCase()}:${hash}`, operation: 'increasePosition', stepKind: 'action', intent: 'Open position', walletAddress: ACCOUNT_A, chainId: 1, hash, to: '0x2222222222222222222222222222222222222222', nonce: 1, dataHash: hash, valueWei: '0', status: 'pending' };
+    await page.addInitScript((entry) => {
+      // Seed only on the first load, so the settled write below is not undone by a reload.
+      if (!sessionStorage.getItem('seeded')) {
+        localStorage.setItem('fxaeon:pending-hashes:v4', JSON.stringify([{ ...entry, submittedAt: Date.now() }]));
+        sessionStorage.setItem('seeded', '1');
+      }
+    }, record);
+    await page.goto('/portfolio', { waitUntil: 'domcontentloaded' });
+    const trigger = page.getByRole('button', { name: 'Open wallet profile' });
+    await expect(trigger).toHaveAttribute('data-pending', 'true');
+    await expect(trigger).toHaveAccessibleDescription('1 transaction pending');
+
+    // The runner records the receipt in this tab and announces the write.
+    await page.evaluate((entry) => {
+      const now = Date.now();
+      localStorage.setItem('fxaeon:pending-hashes:v4', JSON.stringify([{ ...entry, submittedAt: now - 30_000, updatedAt: now, status: 'confirmed' }]));
+      window.dispatchEvent(new Event('fxaeon:journal-updated'));
+    }, record);
+    const notices = page.locator('[data-transaction-notices]');
+    await expect(notices.getByText('Position opened', { exact: true })).toBeVisible();
+    await expect(notices.getByText('Confirmed on Ethereum.', { exact: true })).toBeVisible();
+    await expect(notices.getByRole('link', { name: 'View' })).toHaveAttribute('href', '/history');
+    await expect(trigger).not.toHaveAttribute('data-pending', 'true');
+    await notices.getByRole('button', { name: 'Dismiss: Position opened' }).click();
+    await expect(notices.getByText('Position opened', { exact: true })).toHaveCount(0);
+    assertNoBackendRequests(requests);
+  });
 });
