@@ -47,8 +47,8 @@ export function TradeSections({ market, side, leverage, openPositions, positions
     <Section id="trade-how" title="Leverage in three steps">
       <p className={styles.lede}>{side === 'long'
         ? 'On f(x) Protocol, a long’s leverage is fxUSD minted against its collateral. Before fees, a 3× long is two thirds minted fxUSD and one third yours.'
-        : `A short deposits fxUSD and borrows ${market === 'ETH' ? 'wstETH' : 'WBTC'} from f(x) Protocol’s long-side reserve. Before fees, a 3× short is two thirds borrowed and one third yours.`}</p>
-      <LeverageSplit max={leverage.max} debtLabel={side === 'long' ? 'minted fxUSD' : `borrowed ${market === 'ETH' ? 'wstETH' : 'WBTC'}`} />
+        : `A short deposits fxUSD and borrows ${market === 'ETH' ? 'wstETH' : 'WBTC'} from f(x) Protocol’s long-side reserve. Before fees, a 3× short is three quarters borrowed and one quarter yours.`}</p>
+      <LeverageSplit max={leverage.max} side={side} debtLabel={side === 'long' ? 'minted fxUSD' : `borrowed ${market === 'ETH' ? 'wstETH' : 'WBTC'}`} />
       <Steps steps={[
         { icon: TrendingUp, title: 'Pick a direction', body: 'Long gains when the price rises; short gains when it falls. Positions settle on f(x) Protocol on Ethereum.' },
         { icon: Gauge, title: 'Choose leverage', body: 'Leverage multiplies exposure within the pool’s live range. More leverage moves a position closer to the protocol’s thresholds.' },
