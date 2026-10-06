@@ -26,4 +26,8 @@ the monorepo do not start another landing build.
 Set `NEXT_PUBLIC_TELEGRAM_APP_URL` at build time to the bot or named mini-app
 launcher (`https://t.me/<bot>[/<app>]`, optionally with `?startapp=...`).
 
-The header, footer and favicon use the application's vector mark. The hero is a compressed dimensional interpretation of that mark; the supplied banner remains unchanged for social previews. Artwork provenance is in `docs/landing-art-prompt.md`. The Telegram CTA uses `https://t.me/FxAeonBot`.
+The header, footer, finale, and favicon use the application's vector mark; the supplied banner remains unchanged for social previews. The Telegram CTA uses `https://t.me/FxAeonBot`.
+
+The page is three files: `index.html` (content and HTML renderings of the app with example values), `styles.css`, and two scripts. `script.js` loads in `<head>` so the saved theme (`fxaeon-theme`) applies before the first paint, then runs the menu, theme transition, chapters, reveals, and pointer response. `aurora.js` draws the WebGL aurora; without WebGL, with Save-Data, or under reduced motion the CSS still frame remains. Both run under the strict CSP in `_headers`: no inline code or styles, and no network access.
+
+`npm test` checks the markup, policy, motion rules, and build; `pnpm test:landing:browser` (from the root, after a build) checks every theme at seven widths, including text contrast measured against the painted aurora.
