@@ -269,6 +269,11 @@ export function ActionReview(props: ActionReviewProps) {
 
   if (!route) return null;
   const stepCount = route.transactions.length;
+  // A wallet that cannot pay the network fee would only reach a failed or
+  // stalled signing screen, so the review names the shortfall instead. A
+  // fresh partial estimate still proves it: every step costs at least 21,000 gas.
+  const fundsShort = Boolean(gasCost.current?.insufficientNativeBalance);
+  const feeNetwork = route.chainId === 8453 ? 'Base' : 'Ethereum';
   const feeTierQuote = wallet.isEmbedded && feeSelection?.snapshot.chainId === route.chainId
     ? feeSelection.snapshot.tiers[feeSelection.tier]
     : undefined;
@@ -425,8 +430,13 @@ export function ActionReview(props: ActionReviewProps) {
       </div>
       {stage === 'review' && (
         <div className={styles.reviewInlineActions}>
-          <Button variant={destructive ? 'danger' : 'primary'} disabled={disabled || !planBuilder || loading || (!quoteExpired && status === 'failed')} loading={loading} className={styles.primaryAction} onClick={() => quoteExpired ? void refreshReviewedQuote() : void execute()}>
-            {quoteExpired ? 'Review updated quote' : approvals[0]?.label ?? 'Confirm'}
+          {fundsShort && !quoteExpired && <p className={styles.fundsNote} role="status">
+            {feeNetwork} network fees are paid in ETH, and this wallet does not hold enough to cover them. Add ETH to continue.
+          </p>}
+          <Button variant={destructive ? 'danger' : 'primary'} data-blocked={fundsShort && !quoteExpired ? true : undefined}
+            disabled={disabled || !planBuilder || loading || (!quoteExpired && (status === 'failed' || fundsShort))} loading={loading} className={styles.primaryAction}
+            onClick={() => quoteExpired ? void refreshReviewedQuote() : void execute()}>
+            {quoteExpired ? 'Review updated quote' : fundsShort ? 'Not enough ETH for network fees' : approvals[0]?.label ?? 'Confirm'}
           </Button>
         </div>
       )}

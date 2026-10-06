@@ -25,7 +25,7 @@
   [data-product-ui='v2'] .app-topbar-actions { gap: 6px; }
   [data-product-ui='v2'] .app-topbar-actions > button,
   [data-product-ui='v2'] .network-selector { min-height: 44px; }
-  [data-product-ui='v2'] [data-trade-layout] { display: flex !important; flex-direction: column !important; height: auto !important; max-height: none !important; gap: 12px; align-items: stretch; }
+  [data-product-ui='v2'] [data-trade-layout] { display: flex !important; flex-direction: column !important; height: auto !important; max-height: none !important; gap: 10px; align-items: stretch; }
   [data-product-ui='v2'] [data-trade-market],
   [data-product-ui='v2'] [data-trade-ticket] { flex: 0 0 auto !important; width: 100%; min-height: 0; height: auto; max-height: none; overflow: visible; position: static; }
   [data-product-ui='v2'] .trade-ticket { height: auto !important; max-height: none !important; overflow: visible; }

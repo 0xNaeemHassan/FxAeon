@@ -303,6 +303,35 @@ test('approvals show the token, the spender, and whether the allowance is exact 
   assert.equal(position.approval, undefined);
 });
 
+test('an approval is never the action its route recorded', () => {
+  // The Telegram report: approvals listed as "Opened position", "Added collateral",
+  // "Deposited to fxSAVE" and "Moved funds to Base" beside the real action rows.
+  const approve = encodeFunctionData({ abi: ABI, functionName: 'approve', args: [FX_ROUTER_ADDRESS, E18] });
+  const byCalldata = classify({ status: 'confirmed', journal: { intent: 'Open position', operation: 'increasePosition', to: token('fxUSD') },
+    call: { from: WALLET, to: token('fxUSD'), input: approve }, transfers: [] });
+  assert.equal(byCalldata.kind, 'approve');
+  assert.equal(byCalldata.title, 'Approved fxUSD');
+
+  // Legacy journal steps carry no step kind or calldata: a token or position
+  // contract outside the operation's action destinations is the approval.
+  const legacy = (operation: string, intent: string, to: Address) =>
+    classify({ status: 'confirmed', journal: { intent, operation, to }, transfers: [] }).kind;
+  assert.equal(legacy('increasePosition', 'Open position', token('fxUSD')), 'approve');
+  assert.equal(legacy('depositAndMint', 'Add collateral', positionPoolAddress('ETH', 'long')), 'approve');
+  assert.equal(legacy('depositFxSave', 'Deposit', token('fxUSD')), 'approve');
+  assert.equal(legacy('buildBridgeTx', 'Bridge', token('fxSAVE')), 'approve');
+  assert.equal(classify({ status: 'confirmed', journal: { stepKind: 'unknown', intent: 'Open position', operation: 'increasePosition', to: token('wstETH') }, transfers: [] }).kind, 'approve');
+
+  // The actions themselves keep their intent, and so does anything ambiguous or unknown.
+  assert.equal(legacy('increasePosition', 'Open position', FX_ROUTER_ADDRESS), 'open');
+  assert.equal(legacy('depositFxSave', 'Deposit', token('fxSAVE')), 'deposit');
+  assert.equal(legacy('withdrawFxSave', 'Withdraw', token('fxSAVE')), 'withdraw');
+  assert.equal(legacy('increasePosition', 'Open position', UNKNOWN_CONTRACT), 'open');
+  assert.equal(classify({ status: 'confirmed', journal: { intent: 'Send', operation: 'sendAsset', to: token('fxUSD') }, transfers: [] }).kind, 'send');
+  // A recorded action step is trusted over its destination.
+  assert.equal(classify({ status: 'confirmed', journal: { stepKind: 'action', intent: 'Open position', operation: 'increasePosition', to: token('fxUSD') }, transfers: [] }).kind, 'open');
+});
+
 test('wrapping and unwrapping WETH', () => {
   const weth = token('WETH');
   const wrapped = classify({ call: { from: WALLET, to: weth, input: '0xd0e30db0', value: E18 }, transfers: [transfer({ direction: 'out', amountRaw: E18, counterparty: weth })] });

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { Address, Hex } from 'viem';
+import { encodeFunctionData, parseAbi, type Address, type Hex } from 'viem';
 import { activityCallRequests, mergeWalletActivity } from '../src/lib/walletActivity';
 import type { RecoveryViewModel } from '../src/lib/fx/recovery';
 import type { ProtocolPositionActivity } from '../src/lib/protocolPositionHistory';
@@ -16,10 +16,37 @@ test('journal, indexed transfer and position event produce one row per chain/has
   const rows = mergeWalletActivity([view()], [position], [transfer, transfer], wallet);
   assert.equal(rows.length, 1); assert.equal(rows[0].title, 'Closed ETH long'); assert.equal(rows[0].transfers.length, 1);
 });
-// Intended change: titles are past tense once confirmed ("Approve token" was the old label).
-test('an approval cannot become a completed position or a transfer', () => {
-  const rows = mergeWalletActivity([view('approval')], [position], [transfer], wallet);
-  assert.equal(rows[0].title, 'Approved token'); assert.equal(rows[0].statusLabel, 'Approved'); assert.equal(rows[0].positions.length, 0); assert.equal(rows[0].transfers.length, 0);
+// Intended change: an approval is a step of the action after it, so History leaves it out
+// (it used to be listed as "Approved token"). It still never becomes a position or a transfer.
+test('an approval is left out of History and never becomes a completed position or a transfer', () => {
+  assert.deepEqual(mergeWalletActivity([view('approval')], [position], [transfer], wallet), []);
+  const failed = mergeWalletActivity([{ ...view('approval'), status: 'failed' } as RecoveryViewModel], [position], [transfer], wallet);
+  assert.equal(failed.length, 1, 'a failed approval explains why its action never happened');
+  assert.equal(failed[0].title, 'Approve token'); assert.equal(failed[0].status, 'failed'); assert.equal(failed[0].positions.length, 0); assert.equal(failed[0].transfers.length, 0);
+});
+
+test('legacy journal approvals leave History once their step is known', () => {
+  // Records from before step kinds were recorded, like the Telegram report's dust wallet.
+  const legacy = (id: string, operation: string, intent: string, to: Address, status: RecoveryViewModel['status'] = 'confirmed') => ({
+    record: { id, hash: `0x${id.repeat(64)}`, chainId: 1, submittedAt: 999, to, operation, intent, walletAddress: wallet },
+    status, verification: 'receipt',
+  }) as unknown as RecoveryViewModel;
+  const views = [
+    legacy('1', 'increasePosition', 'Open position', FX_TOKENS.fxUSD.address),
+    legacy('2', 'increasePosition', 'Open position', FX_ROUTER_ADDRESS),
+    legacy('3', 'depositAndMint', 'Add collateral', positionPoolAddress('ETH', 'long')),
+    legacy('4', 'withdrawFxSave', 'Withdraw', FX_TOKENS.fxSAVE.address),
+    legacy('5', 'withdrawFxSave', 'Withdraw', FX_TOKENS.fxSAVE.address),
+  ];
+  // Mined steps without calldata are read once, so an ambiguous destination can be named.
+  assert.deepEqual(activityCallRequests(views, [], []).map((request) => request.hash[2]), ['1', '2', '3', '4', '5']);
+  assert.deepEqual(activityCallRequests([legacy('6', 'increasePosition', 'Open position', FX_ROUTER_ADDRESS, 'pending')], [], []), []);
+  const approveCall = {
+    from: wallet, to: FX_TOKENS.fxSAVE.address as Address, value: 0n,
+    input: encodeFunctionData({ abi: parseAbi(['function approve(address spender,uint256 amount)']), functionName: 'approve', args: [FX_ROUTER_ADDRESS, 10n] }),
+  };
+  const rows = mergeWalletActivity(views, [], [], wallet, { calls: { [`1:0x${'4'.repeat(64)}`]: approveCall } });
+  assert.deepEqual(rows.map((row) => row.title).sort(), ['Opened position', 'Withdrew from fxSAVE']);
 });
 test('source bridge confirmation never means destination delivery', () => {
   assert.equal(mergeWalletActivity([view('action', true)], [], [transfer], wallet)[0].statusLabel, 'Source confirmed');
@@ -82,7 +109,7 @@ test('a confirmed journal record without indexed transfers falls back to its rec
   assert.equal(row.classification.summary, 'You deposited 100 fxUSD into fxSAVE and received 95 fxSAVE.');
 });
 
-test('only rows without a journal record ask for calldata', () => {
+test('rows without a journal record ask for calldata, journal rows with a step kind do not', () => {
   const other = leg({ id: 'other', hash: `0x${'d'.repeat(64)}` as Hex });
   assert.deepEqual(activityCallRequests([view()], [position], [transfer, other]), [{ chainId: 1, hash: `0x${'d'.repeat(64)}` }]);
 });

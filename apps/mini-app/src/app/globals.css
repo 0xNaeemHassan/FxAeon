@@ -1239,19 +1239,36 @@ select.field-control option {
 
 .market-chart-toggle {
   display: none;
+  position: relative;
+  isolation: isolate;
   min-width: 44px;
   min-height: 44px;
   width: 100%;
   align-items: center;
   gap: 8px;
   padding: 0 14px;
+  border-radius: 999px;
   color: var(--mint);
   font-size: 12px;
   font-weight: 600;
   text-align: left;
 }
 
-.market-chart-toggle:hover { background: var(--mint-dim); }
+/* One shape in every state: a rounded tint drawn 36px tall inside the 44px
+   target, adding no width. It used to appear only while :hover stuck after a tap. */
+.market-chart-toggle::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 4px 0;
+  border-radius: inherit;
+  background: var(--mint-dim);
+  transition: background-color var(--dur-fast) ease;
+}
+@media (hover: hover) {
+  .market-chart-toggle:hover::before { background: color-mix(in srgb, var(--mint) 20%, transparent); }
+}
+.market-chart-toggle:active::before { background: color-mix(in srgb, var(--mint) 20%, transparent); }
 .market-chart-content[hidden] { display: none; }
 
 /* The price line carries the chart; no decorative grid competes with it. */
@@ -1946,7 +1963,7 @@ input[type='range'].lever:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3p
     white-space: nowrap;
   }
 
-  .trade-page-heading > a { padding-inline: 9px; }
+  .trade-page-actions > a { padding-inline: 9px; }
 
   .market-chart-header {
     display: grid;

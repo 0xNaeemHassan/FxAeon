@@ -30,6 +30,30 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Every transaction costs at least this much gas. */
+const MIN_TRANSACTION_GAS = 21_000n;
+
+/**
+ * A wallet must hold the value plus gas limit × maximum fee before the network
+ * accepts a transaction. A failed balance read leaves the decision to the
+ * wallet; only a confirmed shortfall stops the step.
+ */
+async function assertNativeFundsCover(client: FxPublicClient, request: WalletTransactionRequest): Promise<void> {
+  if (typeof client.getBalance !== "function") return;
+  const feePerGas = request.maxFeePerGas ?? request.gasPrice;
+  const required = request.value + (feePerGas === undefined ? 0n : (request.gasLimit ?? MIN_TRANSACTION_GAS) * feePerGas);
+  if (required <= 0n) return;
+  let balance: unknown;
+  try {
+    balance = await client.getBalance({ address: request.from, blockTag: "pending" });
+  } catch {
+    return;
+  }
+  if (typeof balance === "bigint" && balance < required) {
+    throw new Error("Not enough ETH for network fees. Add ETH to this wallet, then review again.");
+  }
+}
+
 function normalizeHash(value: string): Hex {
   if (!/^0x[0-9a-fA-F]{64}$/.test(value)) throw new Error("wallet returned an invalid transaction hash");
   return value as Hex;
@@ -571,6 +595,10 @@ export async function runTransactionRoute(params: {
             ...(estimatedGas !== undefined ? { gasLimit: gasLimitWithHeadroom(estimatedGas) } : {}),
             ...feeFields,
           };
+          // The embedded wallet sends an unfundable request into a funding
+          // screen that never settles, so stop before any wallet prompt opens.
+          await assertNativeFundsCover(client, request);
+          assertLockOwned();
           const hash = normalizeHash(await params.callbacks.requestSignature(request, transaction));
           step.hash = hash;
           const pendingRecord = recordPendingHash({

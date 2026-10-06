@@ -399,3 +399,50 @@ test('clearing one route does not strand another route in-flight entry', async (
   releaseA?.();
   await Promise.all([requestA, secondB]);
 });
+
+test('a partial estimate still flags a wallet that cannot pay the 21,000-gas floor', async () => {
+  // The Telegram report: a dust wallet whose action estimate failed, leaving
+  // the review on a partial fee while the wallet could never pay it.
+  const client = {
+    ...clientFor(async (to) => {
+      if (to.toLowerCase() === actionTarget.toLowerCase()) throw new Error('execution reverted');
+      return 46_000n;
+    }),
+    getBalance: async () => 100_000n,
+  } as FxPublicClient;
+  const estimate = await estimatePlannedRouteCost(route(true), { client });
+  assert.equal(estimate.status, 'partial');
+  assert.equal(estimate.requiredNativeCostWei, undefined);
+  assert.equal(estimate.nativeBalanceWei, 100_000n);
+  // 12 wei of value + 2 steps × 21,000 gas × 3 wei = 126,012 wei, above the balance.
+  assert.equal(estimate.insufficientNativeBalance, true);
+});
+
+test('fundability compares the balance with the buffered route cost', async () => {
+  const funded = { ...clientFor(async () => 21_000n), getBalance: async () => 75_612n } as FxPublicClient;
+  const estimate = await estimatePlannedRouteCost(route(), { client: funded });
+  assert.equal(estimate.requiredNativeCostWei, 75_612n);
+  assert.equal(estimate.insufficientNativeBalance, false);
+  const short = { ...clientFor(async () => 21_000n), getBalance: async () => 75_611n } as FxPublicClient;
+  assert.equal((await estimatePlannedRouteCost(route(), { client: short })).insufficientNativeBalance, true);
+});
+
+test('an unreadable balance never blocks the review', async () => {
+  const client = {
+    ...clientFor(async () => 21_000n),
+    getBalance: async () => { throw new Error('balance read failed'); },
+  } as FxPublicClient;
+  const estimate = await estimatePlannedRouteCost(route(), { client });
+  assert.equal(estimate.status, 'current');
+  assert.equal(estimate.nativeBalanceWei, undefined);
+  assert.equal(estimate.insufficientNativeBalance, false);
+});
+
+test('an estimate rejected for insufficient funds names the shortfall', async () => {
+  const client = clientFor(async () => {
+    throw new Error('insufficient funds for gas * price + value: have 790000000000 want 21000000000000');
+  });
+  const estimate = await estimatePlannedRouteCost(route(), { client });
+  assert.equal(estimate.steps[0]?.error, 'Not enough ETH for network fees');
+  assert.equal(estimate.insufficientNativeBalance, true);
+});

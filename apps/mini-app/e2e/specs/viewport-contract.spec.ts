@@ -289,7 +289,6 @@ test.describe("single-viewport route contract", () => {
       page.getByRole("radio", { name: "ETH", exact: true }),
       page.getByRole("radio", { name: "BTC", exact: true }),
       page.getByRole("button", { name: "Show chart", exact: true }),
-      page.getByText("Open position", { exact: true }),
       page.getByRole("radio", { name: "Long", exact: true }),
       page.getByText("Price rises", { exact: true }),
       page.getByText("Price falls", { exact: true }),
