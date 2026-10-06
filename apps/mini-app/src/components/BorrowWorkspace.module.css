@@ -1,8 +1,12 @@
-.workspace { width: min(100%, 680px); margin-inline: auto; }
+/* Borrow shares the Earn tab with fxSAVE, so both keep one column width and
+   switching between them never moves the page. */
+.workspace { width: min(100%, 620px); margin-inline: auto; }
 .card { display: flex; min-width: 0; flex-direction: column; gap: 14px; padding: 18px; }
 
-/* The view switch uses the shared segmented control and its sliding thumb. */
-.viewTabs { margin: 0; }
+/* The view switch uses the shared segmented control and its sliding thumb;
+   the settings gear sits at the right of the same row. */
+.viewTabs { display: flex; min-width: 0; align-items: center; gap: 8px; margin: 0; }
+.viewTabs > :first-child { min-width: 0; flex: 1 1 auto; }
 
 .editor { display: flex; min-width: 0; flex-direction: column; gap: 12px; }
 .formTitle { margin: 0; font-size: var(--fs-title); font-weight: 650; letter-spacing: -.02em; }

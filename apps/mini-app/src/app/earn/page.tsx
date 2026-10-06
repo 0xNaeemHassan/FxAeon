@@ -501,8 +501,9 @@ export default function EarnPage() {
           />
         </ProductSurface>
         {reviewStage === 'input' && <VaultDetails config={config} />}
-        {reviewStage === 'input' && <EarnSections apy={fxSaveApy ? `${fxSaveApy.apy.toFixed(2)}%` : null}
-          cooldown={config ? formatCooldown(config.cooldownPeriodSeconds) : null} instantFee={config ? formatRatio(config.instantRedeemFeeRatio) : null} />}
+        {reviewStage === 'input' && <EarnSections apy={fxSaveApy ? `${fxSaveApy.apy.toFixed(2)}%` : null} apyStatus={fxSaveApyStatus === 'loading' ? 'loading' : 'unavailable'}
+          cooldown={config ? formatCooldown(config.cooldownPeriodSeconds) : null} instantFee={config ? formatRatio(config.instantRedeemFeeRatio) : null}
+          vaultStatus={readWarnings.includes('vault configuration') ? 'unavailable' : 'loading'} />}
       </ActionWorkspace>
     </AppShell>
   );

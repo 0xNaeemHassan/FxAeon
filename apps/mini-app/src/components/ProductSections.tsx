@@ -16,12 +16,12 @@ const rebalancingNote = <Callout icon={ShieldAlert} title="A brake before liquid
 </Callout>;
 
 /** Below the Trade ticket: the market's live facts, how leverage works, and common questions. */
-export function TradeSections({ market, side, leverage, openPositions, connected }: {
+export function TradeSections({ market, side, leverage, openPositions, positionsStatus }: {
   market: MarketSymbol;
   side: 'long' | 'short';
   leverage: { min: number; max: number };
   openPositions: number | null;
-  connected: boolean;
+  positionsStatus: 'disconnected' | 'loading' | 'unavailable' | 'ready';
 }) {
   const live = useLiveMarketQuote(market);
   // The live ticker carries the 24h range. Chart history stays cold until the
@@ -35,7 +35,10 @@ export function TradeSections({ market, side, leverage, openPositions, connected
         { label: '24h low', value: <ValueOrSkeleton value={formatUsdPrice(low)} width="lg" status={rangeStatus} label="24 hour low" />, hint: 'Display price' },
         { label: '24h high', value: <ValueOrSkeleton value={formatUsdPrice(high)} width="lg" status={rangeStatus} label="24 hour high" />, hint: 'Display price' },
         { label: 'Leverage', value: `${leverage.min.toFixed(1)}×–${leverage.max.toFixed(1)}×`, hint: `${side === 'long' ? 'Long' : 'Short'} pool, live limit` },
-        { label: 'Your positions', value: openPositions === null ? '—' : `${openPositions} open`, hint: connected ? 'Ethereum · f(x) Protocol' : 'Connect a wallet to see them' },
+        // Without a wallet there is nothing of yours to count, so the tile names the network instead.
+        positionsStatus === 'disconnected'
+          ? { label: 'Network', value: 'Ethereum', hint: 'f(x) Protocol pools' }
+          : { label: 'Your positions', value: <ValueOrSkeleton value={positionsStatus === 'ready' && openPositions !== null ? `${openPositions} open` : '—'} width="md" status={positionsStatus === 'loading' ? 'loading' : 'unavailable'} label="Your open positions" />, hint: 'Ethereum · f(x) Protocol' },
       ]} />
     </Section>
     <Section id="trade-how" eyebrow="How it works" title="Leverage in three steps">
@@ -58,13 +61,20 @@ export function TradeSections({ market, side, leverage, openPositions, connected
 }
 
 /** Below the fxSAVE form: vault facts, how saving works, and common questions. */
-export function EarnSections({ apy, cooldown, instantFee }: { apy: string | null; cooldown: string | null; instantFee: string | null }) {
+export function EarnSections({ apy, apyStatus, cooldown, instantFee, vaultStatus }: {
+  apy: string | null;
+  apyStatus: 'loading' | 'unavailable';
+  cooldown: string | null;
+  instantFee: string | null;
+  /** How the vault configuration read stands while its values are missing. */
+  vaultStatus: 'loading' | 'unavailable';
+}) {
   return <PageSections label="fxSAVE details">
     <Section id="earn-glance" eyebrow="fxSAVE" title="The vault at a glance">
       <StatGrid stats={[
-        { label: 'APY', value: apy ?? '—', hint: 'Variable · official f(x) feed' },
-        { label: 'Withdrawal cooldown', value: cooldown ?? '—', hint: 'For queued withdrawals' },
-        { label: 'Instant withdrawal fee', value: instantFee ?? '—', hint: 'Skip the cooldown' },
+        { label: 'APY', value: <ValueOrSkeleton value={apy ?? '—'} width="md" status={apyStatus} label="fxSAVE APY" />, hint: 'Variable · official f(x) feed' },
+        { label: 'Withdrawal cooldown', value: <ValueOrSkeleton value={cooldown ?? '—'} width="md" status={vaultStatus} label="Withdrawal cooldown" />, hint: 'For queued withdrawals' },
+        { label: 'Instant withdrawal fee', value: <ValueOrSkeleton value={instantFee ?? '—'} width="md" status={vaultStatus} label="Instant withdrawal fee" />, hint: 'Skip the cooldown' },
         { label: 'Deposit with', value: 'fxUSD · USDC', hint: 'Ethereum' },
       ]} />
     </Section>
