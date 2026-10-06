@@ -201,7 +201,7 @@ async function rpcRequest(
       const error = record(response?.error);
       // Some networks index no internal (trace) transfers; a generic "internal error" is not that.
       if (error && params.category.includes('internal') && typeof error.message === 'string'
-        && /\binternal\b/i.test(error.message) && /categor|not supported|unsupported|only supported|only available/i.test(error.message)) {
+        && /\binternal\b/i.test(error.message) && /categor|support|available|valid|only/i.test(error.message)) {
         throw new UnsupportedInternalCategoryError(error.message);
       }
       if (!response || response.error) throw new Error('Transfer history response was invalid');

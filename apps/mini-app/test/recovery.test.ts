@@ -191,6 +191,9 @@ test("caps only terminal non-bridge history while preserving every unresolved re
   assert.ok(selected.some((record) => record.id === pendingA.id));
   assert.ok(selected.some((record) => record.id === pendingB.id));
   assert.equal(selected.filter((record) => record.status !== "pending").length, 30);
+  // Narrower callers (the cross-tab storage trigger) can still ask for fewer completed records.
+  assert.equal(selectRecoveryRecords(readPendingHashJournal(), WALLET, 8).length, 10);
+  assert.deepEqual(selectRecoveryRecords(readPendingHashJournal(), WALLET, 0).map((record) => record.id).sort(), [pendingA.id, pendingB.id].sort());
 });
 
 test("a verified receipt exposes the mined calldata so History can name the action", async () => {

@@ -74,14 +74,14 @@ export function filterJournalForWallet(
 export function selectRecoveryRecords(
   records: readonly PendingHashRecord[],
   walletAddress: string | undefined,
+  terminalLimit = MAX_TERMINAL_HISTORY_READS,
 ): PendingHashRecord[] {
   const walletRecords = filterJournalForWallet(records, walletAddress);
   const unresolved = walletRecords.filter((record) => record.status === "pending"
     || (record.operation === "buildBridgeTx" && record.status === "confirmed" && Boolean(record.bridge)));
   const unresolvedIds = new Set(unresolved.map((record) => record.id));
-  const terminalHistory = walletRecords
-    .filter((record) => !unresolvedIds.has(record.id))
-    .slice(-MAX_TERMINAL_HISTORY_READS);
+  const completed = walletRecords.filter((record) => !unresolvedIds.has(record.id));
+  const terminalHistory = terminalLimit > 0 ? completed.slice(-terminalLimit) : [];
   return [...unresolved, ...terminalHistory]
     .sort((left, right) => left.submittedAt - right.submittedAt);
 }
