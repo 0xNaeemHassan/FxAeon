@@ -8,7 +8,7 @@ FxAeon presents onchain actions as a calm, precise workspace: one decision per s
 2. **Numbers lead.** Amounts and totals are large, tight, and tabular; units, cents, and labels recede.
 3. **Violet means intent.** The accent marks the primary action, focus, the active selection, and the market's price line. Long and short use their semantic green and red; success, warning, and danger communicate state only.
 4. **Motion explains state.** Every animation corresponds to a real change: a surface opening, a selection moving, a receipt confirming. Nothing loops for decoration, and financial values never count or roll on refresh.
-5. **Honest states.** Unknown, unavailable, or stale data stays distinguishable from zero, and placeholders reserve the final geometry.
+5. **Honest states.** Unknown, unavailable, or stale data stays distinguishable from zero, and placeholders reserve the final geometry. A placeholder announces what it is waiting for ("Loading fxSAVE APY") and only says "unavailable" once a read has failed.
 
 ## Tokens
 
@@ -33,7 +33,7 @@ Geometry uses the 4px rhythm and `--radius-xs` 8, `--radius-sm` 12, `--radius-md
 | Sections | 18–20px separation |
 | Segmented controls | Tinted container with a sliding thumb (`data-thumb`, `--seg-index`, `--seg-count`) |
 | Navigation | Floating dock on phones whose highlight travels between routes; pill navigation on desktop |
-| Charts | One 2px accent line over a fading fill, no grid, recessive axes; a crosshair reads exact values. Candlesticks stay one tap away. Sparklines take the direction color of their 24h change |
+| Charts | One 2px accent line over a fading fill, no grid, recessive axes; a crosshair reads exact values. Axis and crosshair times are in the viewer's time zone. Candlesticks stay one tap away. Sparklines take the direction color of their 24h change |
 
 ## Motion
 

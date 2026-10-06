@@ -534,7 +534,7 @@ function SavingsSummary({ data, loading, connected, onRefresh, readWarnings, fxS
           <small>0 fxSAVE</small>
         </> : <>
           <h2>{value === null
-            ? <MissingValue width="xl" status={loading || snapshot.status === 'loading' ? 'loading' : 'unavailable'} label="fxSAVE position value unavailable" />
+            ? <MissingValue width="xl" status={loading || snapshot.status === 'loading' ? 'loading' : 'unavailable'} label={loading || snapshot.status === 'loading' ? 'Loading fxSAVE position value' : 'fxSAVE position value unavailable'} />
             : <ValueOrSkeleton value={formatUsd(value)} width="xl" label="fxSAVE position value" />}</h2>
           <small>{formatDisplayAmount(balance!.balanceWei)} fxSAVE</small>
         </>}
@@ -542,7 +542,7 @@ function SavingsSummary({ data, loading, connected, onRefresh, readWarnings, fxS
       <div className={presentation.rate}>
         <strong>{fxSaveApy
           ? <ValueOrSkeleton value={`${fxSaveApy.apy.toFixed(2)}%`} width="sm" label="fxSAVE APY" />
-          : <MissingValue width="sm" status={fxSaveApyStatus === 'loading' ? 'loading' : 'unavailable'} label="fxSAVE APY unavailable" />}</strong>
+          : <MissingValue width="sm" status={fxSaveApyStatus === 'loading' ? 'loading' : 'unavailable'} label={fxSaveApyStatus === 'loading' ? 'Loading fxSAVE APY' : 'fxSAVE APY unavailable'} />}</strong>
         <small>Variable APY</small>
       </div>
         {connected && <button type="button" disabled={loading} onClick={() => void onRefresh()} aria-label="Refresh fxSAVE state" className={presentation.refresh}>

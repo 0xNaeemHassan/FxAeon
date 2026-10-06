@@ -215,6 +215,12 @@
 .workspace:global(.portfolio-dashboard) { gap: 14px; }
 .workspace:global(.portfolio-dashboard) .overview { gap: 16px; }
 .disconnectedOverview { min-width: 0; }
+/* Signed out, the shortcuts belong to the connect button above them. Beyond phone
+   width they keep its measure (the outer icons line up with its edges) instead of
+   spreading across the page. */
+@media (min-width: 601px) {
+  .disconnectedOverview > .primaryColumn > :global(section[aria-labelledby='portfolio-actions-title']) { width: min(100%, 360px); align-self: center; }
+}
 .workspace:global(.portfolio-dashboard) .section-heading { margin-top: 0; margin-bottom: 6px; }
 .workspace:global(.portfolio-dashboard) .heading h1 { letter-spacing: -.045em; }
 .workspace:global(.portfolio-dashboard) .tabs { border-color: color-mix(in srgb, var(--line) 82%, var(--mint) 18%); background: linear-gradient(110deg, color-mix(in srgb, var(--input) 92%, var(--mint) 8%), var(--input)); box-shadow: inset 0 1px color-mix(in srgb, var(--text) 4%, transparent); }

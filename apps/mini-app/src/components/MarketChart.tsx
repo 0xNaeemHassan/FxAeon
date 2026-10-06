@@ -11,6 +11,7 @@ import { formatUsdPrice } from '@/lib/prices';
 import { haptic } from '@/lib/telegram';
 import { subscribeToForegroundResume } from '@/lib/foreground';
 import { createCoalescedReadCache } from '@/lib/coalescedRead';
+import { localTimeShiftSeconds } from '@/lib/chartTime';
 import { Segmented } from '@/components/ProtocolForm';
 import { MissingValue, ValueOrSkeleton } from '@/components/MissingValue';
 import styles from '@/components/trade-surfaces.module.css';
@@ -288,16 +289,19 @@ function restyleSeries(entry: SeriesEntry, theme: ChartTheme) {
   else entry.series.applyOptions(candleOptions(theme));
 }
 
-/** Writes the whole history, or only the newest bar when just the tail moved. */
-function writeSeries(entry: SeriesEntry, candles: Candles, tailOnly = false) {
+/**
+ * Writes the whole history, or only the newest bar when just the tail moved.
+ * `shift` moves every time into the viewer's zone; a tail write reuses the shift of the full write before it.
+ */
+function writeSeries(entry: SeriesEntry, candles: Candles, shift: number, tailOnly = false) {
   const source = tailOnly ? candles.slice(-1) : candles;
   if (entry.style === 'line') {
-    const points = source.map((candle) => ({ time: candle.time as UTCTimestamp, value: candle.close }));
+    const points = source.map((candle) => ({ time: (candle.time + shift) as UTCTimestamp, value: candle.close }));
     if (tailOnly) entry.series.update(points[0]);
     else entry.series.setData(points);
     return;
   }
-  const bars = source.map((candle) => ({ time: candle.time as UTCTimestamp, open: candle.open, high: candle.high, low: candle.low, close: candle.close }));
+  const bars = source.map((candle) => ({ time: (candle.time + shift) as UTCTimestamp, open: candle.open, high: candle.high, low: candle.low, close: candle.close }));
   if (tailOnly) entry.series.update(bars[0]);
   else entry.series.setData(bars);
 }
@@ -309,7 +313,7 @@ function LazyPriceChart({ snapshot, chartStyle }: { snapshot: MarketCandleSnapsh
   const styleRef = useRef(chartStyle);
   styleRef.current = chartStyle;
   const renderedCandlesRef = useRef<Candles>([]);
-  const chartRef = useRef<{ chart: IChartApi; module: ChartModule; entry: SeriesEntry } | null>(null);
+  const chartRef = useRef<{ chart: IChartApi; module: ChartModule; entry: SeriesEntry; shift: number } | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     let active = true;
@@ -318,9 +322,9 @@ function LazyPriceChart({ snapshot, chartStyle }: { snapshot: MarketCandleSnapsh
       if (!active || !hostRef.current) return;
       const theme = readChartTheme();
       const chart = module.createChart(hostRef.current, { autoSize: true, ...chartOptions(theme, module) });
-      const state = { chart, module, entry: addPriceSeries(chart, module, styleRef.current, theme) };
+      const state = { chart, module, entry: addPriceSeries(chart, module, styleRef.current, theme), shift: localTimeShiftSeconds(candlesRef.current.at(-1)?.time) };
       chartRef.current = state;
-      writeSeries(state.entry, candlesRef.current);
+      writeSeries(state.entry, candlesRef.current, state.shift);
       renderedCandlesRef.current = candlesRef.current;
       chart.timeScale().fitContent();
       // Theme switches rewrite the tokens; repaint the canvas from them.
@@ -339,7 +343,8 @@ function LazyPriceChart({ snapshot, chartStyle }: { snapshot: MarketCandleSnapsh
     // Swap the series in place so the chart never blanks between styles.
     state.chart.removeSeries(state.entry.series);
     state.entry = addPriceSeries(state.chart, state.module, chartStyle, readChartTheme());
-    writeSeries(state.entry, candlesRef.current);
+    state.shift = localTimeShiftSeconds(candlesRef.current.at(-1)?.time);
+    writeSeries(state.entry, candlesRef.current, state.shift);
     renderedCandlesRef.current = candlesRef.current;
   }, [chartStyle]);
   useEffect(() => {
@@ -349,7 +354,8 @@ function LazyPriceChart({ snapshot, chartStyle }: { snapshot: MarketCandleSnapsh
     const next = snapshot.candles;
     const tailOnly = previous.length > 0 && next.length >= previous.length && next.length <= previous.length + 1
       && previous.slice(0, -1).every((candle, index) => candle === next[index]);
-    writeSeries(state.entry, next, tailOnly && next.length > 0);
+    if (!tailOnly) state.shift = localTimeShiftSeconds(next.at(-1)?.time);
+    writeSeries(state.entry, next, state.shift, tailOnly && next.length > 0);
     // A new range or market replaces the history; frame all of it again.
     if (!tailOnly) state.chart.timeScale().fitContent();
     renderedCandlesRef.current = next;

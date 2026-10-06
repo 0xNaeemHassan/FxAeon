@@ -113,7 +113,7 @@ export function AmountFieldView({ value, onChange, symbol, label, hint, balance,
         <div className={styles.token}>{tokenSelector ?? <span className={styles.tokenLabel} title={tokenSymbol(symbol)}><TokenIcon symbol={symbol} size={24} /><span>{tokenSymbol(symbol)}</span></span>}</div>
       </div>
       {(showUsdValue || showBalance) && <div className={styles.usd} data-amount-usd>
-        {showUsdValue && <span>{!value.trim() ? '≈ $0.00' : worth !== null ? `≈ ${formatUsd(worth)}` : <ValueOrSkeleton value="—" width="sm" status={priceStatus === 'loading' ? 'loading' : 'unavailable'} label="USD value unavailable" />}</span>}
+        {showUsdValue && <span>{!value.trim() ? '≈ $0.00' : worth !== null ? `≈ ${formatUsd(worth)}` : <ValueOrSkeleton value="—" width="sm" status={priceStatus === 'loading' ? 'loading' : 'unavailable'} label={priceStatus === 'loading' ? 'Loading USD value' : 'USD value unavailable'} />}</span>}
         {showBalance && <span className={styles.balance} id={`${id}-balance`} title={balanceState?.reason ?? (available ? `${available} ${tokenSymbol(symbol)}` : 'Balance unavailable')}>
           Available: <strong><ValueOrSkeleton value={available != null ? `${formatExactDecimal(available, 8)} ${tokenSymbol(symbol)}` : '—'} width="sm"
             status={balanceState?.status === 'loading' || !balanceState && available == null ? 'loading' : 'unavailable'} label="Available balance" /></strong>
