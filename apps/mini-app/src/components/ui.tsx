@@ -25,6 +25,7 @@ import WalletProfile from '@/components/WalletProfile';
 import NetworkSelector from '@/components/NetworkSelector';
 import { ValueOrSkeleton } from '@/components/MissingValue';
 import { compactAddress } from '@/lib/addressPresentation';
+import { copyText } from '@/lib/clipboard';
 import headerWalletControl from '@/components/HeaderWalletControl.module.css';
 
 /* ------------------------------------------------------------------ shell */
@@ -309,26 +310,7 @@ export function Stat({
   );
 }
 
-export async function copyText(value: string): Promise<boolean> {
-  try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(value);
-      return true;
-    }
-    const input = document.createElement('textarea');
-    input.value = value;
-    input.setAttribute('readonly', '');
-    input.style.position = 'fixed';
-    input.style.opacity = '0';
-    document.body.appendChild(input);
-    input.select();
-    const copied = document.execCommand('copy');
-    document.body.removeChild(input);
-    return copied;
-  } catch {
-    return false;
-  }
-}
+export { copyText };
 
 export function AddressChip({ address, iconOnly = false }: { address: string; iconOnly?: boolean }) {
   const [copied, setCopied] = useState(false);
