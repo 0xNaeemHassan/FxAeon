@@ -5,7 +5,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { ChevronRight, KeyRound, Plus, RefreshCw, Wallet, type LucideIcon } from 'lucide-react';
 import { useCreateWallet, useExportWallet, usePrivy, useWallets } from '@privy-io/react-auth';
 import { haptic } from '@/lib/telegram';
-import { usePrivyWallet, useWalletReadyTimeout } from '@/lib/wallet';
+import { isWalletConnectCancellation, usePrivyWallet, useWalletReadyTimeout } from '@/lib/wallet';
 import { privyConfigured } from '@/lib/privyConfig';
 import { userSafeError } from '@/lib/errors';
 import { Button } from '@/components/ui';
@@ -52,20 +52,24 @@ function PrivyWalletControls() {
     [selectedWallet?.address, wallets],
   );
 
+  const handleConnect = useCallback(async (external = false) => {
+    setBusy('connect'); setError('');
+    try { await connect({ external }); haptic('success'); }
+    catch (cause) {
+      // Closing the wallet prompt is a choice, not a failure.
+      if (isWalletConnectCancellation(cause)) return;
+      setError(userSafeError(cause, 'Wallet connection was cancelled.')); haptic('error');
+    }
+    finally { setBusy('none'); }
+  }, [connect]);
+
   const handleCreate = useCallback(async () => {
-    if (!authenticated) { await connect(); return; }
+    if (!authenticated) { await handleConnect(); return; }
     setBusy('create'); setError('');
     try { await createWallet(); haptic('success'); }
     catch (cause) { setError(userSafeError(cause, 'Wallet creation was cancelled.')); haptic('error'); }
     finally { setBusy('none'); }
-  }, [authenticated, connect, createWallet]);
-
-  const handleConnect = useCallback(async (external = false) => {
-    setBusy('connect'); setError('');
-    try { await connect({ external }); haptic('success'); }
-    catch (cause) { setError(userSafeError(cause, 'Wallet connection was cancelled.')); haptic('error'); }
-    finally { setBusy('none'); }
-  }, [connect]);
+  }, [authenticated, createWallet, handleConnect]);
 
   const handleExport = useCallback(async () => {
     if (!embedded?.address) return;
