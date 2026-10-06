@@ -125,7 +125,7 @@ export function AppShell({
           id="main-content"
           data-shell-content="true"
           tabIndex={-1}
-          className={`app-content ${tabs ? 'app-content-tabs' : ''} flex-1 outline-none ${['/more', '/settings', '/history', '/qr'].includes(pathname) ? 'utility-content' : ''}`}
+          className={`app-content ${tabs ? 'app-content-tabs' : ''} flex-1 outline-none ${['/more', '/settings', '/history', '/qr', '/send'].includes(pathname) ? 'utility-content' : ''}`}
         >
           {title && (
             <header className="page-header">

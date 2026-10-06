@@ -4,32 +4,38 @@
 .dashboard { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
 .primary, .secondary { display: flex; min-width: 0; flex-direction: column; gap: 18px; }
 
+/* The total is the page's headline, not a box: the figure stands on the canvas
+ * with a slow light behind it, and its actions and breakdown follow directly. */
 .valueCard {
   position: relative;
-  overflow: hidden;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-xl);
-  padding: 18px 20px 6px;
-  background:
-    radial-gradient(90% 120% at 100% -10%, color-mix(in srgb, var(--mint) 22%, transparent), transparent 58%),
-    radial-gradient(70% 90% at -10% 120%, color-mix(in srgb, var(--brand-coral) 10%, transparent), transparent 60%),
-    var(--surface);
-  box-shadow: var(--ring-inset), var(--elevation-1);
+  isolation: isolate;
+  padding: 2px 0 0;
 }
-:root[data-theme='light'] .valueCard {
-  background:
-    radial-gradient(90% 120% at 100% -10%, color-mix(in srgb, var(--mint) 14%, transparent), transparent 58%),
-    radial-gradient(70% 90% at -10% 120%, color-mix(in srgb, var(--brand-coral) 7%, transparent), transparent 60%),
-    var(--surface);
+.valueCard::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: -46px;
+  left: -14%;
+  width: min(520px, 92%);
+  height: 220px;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--mint) 17%, transparent), transparent);
+  pointer-events: none;
+  animation: hero-light 11s var(--ease-in-out) infinite alternate;
 }
-.valueTop { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 12px; color: var(--mut); font-size: var(--fs-small); }
+:root[data-theme='light'] .valueCard::before { background: radial-gradient(closest-side, color-mix(in srgb, var(--mint) 11%, transparent), transparent); }
+@keyframes hero-light {
+  from { transform: translate3d(0, 0, 0) scale(1); opacity: 0.75; }
+  to { transform: translate3d(8%, 10px, 0) scale(1.12); opacity: 1; }
+}
+.valueTop { display: flex; min-width: 0; align-items: center; justify-content: flex-start; gap: 12px; color: var(--mut); font-size: var(--fs-small); }
 .valueTop > div { display: flex; align-items: center; gap: 8px; }
-.valueTop button { display: inline-grid; min-width: 44px; min-height: 44px; place-items: center; border-radius: 50%; color: var(--mut); margin: -8px -10px -8px 0; transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease, transform var(--dur-slow) var(--ease-spring); }
+.valueTop button { display: inline-grid; min-width: 44px; min-height: 44px; place-items: center; border-radius: 50%; color: var(--mut); margin: -8px -10px -8px -6px; transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease, transform var(--dur-slow) var(--ease-spring); }
 .valueTop button:hover:not(:disabled) { background: var(--mint-dim); color: var(--mint-bright); }
 .valueTop button:active:not(:disabled) { transform: rotate(-30deg) scale(0.94); transition-duration: var(--dur-press); }
 .valueLabel { color: var(--mut); font-size: var(--fs-small); font-weight: 500; }
 .partial { color: var(--warn); border-radius: 7px; padding: 4px 7px; background: var(--warn-dim); font-size: var(--fs-micro); }
-.valueNumber { min-width: 0; margin: 2px 0 4px; color: var(--text); }
+.valueNumber { min-width: 0; margin: 0 0 6px; color: var(--text); }
 .helper { color: var(--mut); font-size: var(--fs-caption); line-height: 1.6; margin: 12px 0 0; }
 .sectionTitle { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
 .sectionTitle h2 { font-size: var(--fs-title); font-weight: 650; letter-spacing: -.02em; margin: 0; }
@@ -90,7 +96,11 @@
   .dashboard { grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); gap: 28px; align-items: start; }
   .primary, .secondary { gap: 20px; }
   .secondary { padding-top: 2px; }
-  .valueCard { padding: 24px 24px 8px; }
+}
+/* Beyond phone width the shortcuts keep a phone's rhythm under the figure
+ * instead of spreading across the column. */
+@media (min-width: 601px) {
+  .valueCard .quickActions { grid-template-columns: repeat(4, minmax(0, 92px)); justify-content: start; gap: 6px; }
 }
 @media (max-width: 380px) {
   .dashboard, .primary, .secondary { gap: 14px; }
@@ -98,9 +108,9 @@
   .quickAction { min-height: 76px; font-size: var(--fs-micro); }
   .quickAction > span { width: 46px; height: 46px; }
   .emptyState { gap: 8px; font-size: var(--fs-caption); }
-  .valueCard { padding-inline: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
+  .valueCard::before { animation: none; }
   .quickAction, .quickAction > span, .valueTop button, .positionActions a, .earnActions a { transition: none; }
   .quickAction:hover > span, .quickAction:active > span, .valueTop button:active:not(:disabled) { transform: none; }
 }

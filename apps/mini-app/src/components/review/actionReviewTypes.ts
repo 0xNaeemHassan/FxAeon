@@ -13,6 +13,8 @@ export interface ActionReviewProps {
   prefetchedPlan?: () => Promise<PlannedRoute | readonly PlannedRoute[] | null>;
   label?: string;
   disabled?: boolean;
+  /** What the form still needs; shown on the disabled primary action instead of the review label. */
+  blocker?: string | null;
   /** Runs after verified receipts and confirmation; reads may still be settling. */
   onComplete?: (result: TransactionExecutionResult, confirmedRoute: PlannedRoute) => void | Promise<void>;
   operationLabel?: string;

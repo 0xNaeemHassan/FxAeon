@@ -524,6 +524,7 @@
   user-select: all;
   -webkit-user-select: all;
 }
+.copyDock { display: flex; flex-direction: column; }
 .copyAction svg { width: 18px; height: 18px; }
 .copyAction[data-copied] svg { animation: copy-confirm var(--dur-slow) var(--ease-spring) both; }
 @keyframes copy-confirm {

@@ -70,3 +70,16 @@
 
 /* Light theme: the chevron stroke follows --mut so it stays legible on a pale field. */
 :global(:root[data-theme='light']) .positionSelect select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23675c77' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); }
+
+/* The borrowing limit: loan-to-value filling toward the pool's ceiling, turning
+   amber close to it and red past it, so the form says "too much" before review. */
+.limitMeter { display: grid; gap: 8px; padding: 12px 14px; border-radius: var(--radius-md); background: var(--surface-2); }
+.limitMeterRow { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: 12px; color: var(--mut); font-size: var(--fs-small); }
+.limitMeterRow strong { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; transition: color var(--dur-base) ease; }
+.limitMeterRow small { color: var(--mut); font-size: inherit; font-weight: 500; }
+.limitTrack { height: 6px; overflow: hidden; border-radius: 999px; background: var(--surface-3); }
+.limitTrack > span { display: block; width: var(--fill, 0%); height: 100%; border-radius: inherit; background: var(--mint); transition: width var(--dur-slow) var(--ease-spring), background-color var(--dur-base) ease; }
+.limitMeter[data-tone='near'] .limitTrack > span { background: var(--warn); }
+.limitMeter[data-tone='over'] .limitTrack > span { background: var(--danger); }
+.limitMeter[data-tone='over'] .limitMeterRow strong { color: var(--danger); }
+@media (prefers-reduced-motion: reduce) { .limitTrack > span, .limitMeterRow strong { transition: none; } }

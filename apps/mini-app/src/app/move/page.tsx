@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ArrowLeftRight, ChevronDown, Code2, UserRound } from 'lucide-react';
-import { formatUnits, type Address } from 'viem';
+import { formatUnits, isAddress, type Address } from 'viem';
+import { amountBlocker } from '@/lib/formBlockers';
+import { TransactionSettings } from '@/components/TransactionSettings';
+import { MoveSections } from '@/components/ProductSections';
 import { AppShell, Card } from '@/components/ui';
 import { PageHeading } from '@/components/ProductUI';
 import { ActionWorkspace } from '@/components/ProductLayout';
@@ -334,6 +337,12 @@ export default function MovePage() {
     })();
   }, [advanced, sourceChainId, sourceOft, wallet.address]);
 
+  // The action names the missing piece: an empty source balance, the amount, or a recipient.
+  const reviewBlocker = !wallet.address ? null
+    : amountBlocker(amount, 18, advanced ? 'tokens' : token, moveBalanceState, { emptyLabel: advanced ? undefined : `No ${token} on ${sourceName}` })
+      ?? (customRecipient && !recipientInput.trim() ? `Enter a recipient on ${destinationName}` : null)
+      ?? (customRecipient && !isAddress(recipientInput.trim()) ? 'Enter a valid address' : null);
+
   const planBuilder = useMemo(() => {
     if (!wallet.address || !amountWei) return null;
     return async () => {
@@ -483,6 +492,7 @@ export default function MovePage() {
             key={reviewRevision}
             surface="content"
             editor={<>
+          <div className={moveStyles.cardHead}><h2>Move between networks</h2><TransactionSettings /></div>
           <div className={`${styles.networkFlow} ${styles.moveNetworkFlow} ${moveStyles.moveNetworkFlow}`}>
             <NetworkField label="From" name={sourceName} chainId={sourceChainId} />
             <button
@@ -571,6 +581,7 @@ export default function MovePage() {
           </div>
             </>}
             planBuilder={planBuilder}
+            blocker={reviewBlocker}
             label={`Send ${advanced ? 'custom token' : token} to ${destinationName}`}
             operationLabel={`Send ${advanced ? 'custom token' : token} to ${destinationName}`}
             draftActionKey={draftActionKey}
@@ -587,6 +598,7 @@ export default function MovePage() {
           />
         </Card>
         </div>
+        {reviewStage === 'input' && <MoveSections />}
       </ActionWorkspace>
     </AppShell>
   );

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { AppShell } from '@/components/ui';
 import { formatUnits } from 'viem';
 import TokenIcon from '@/components/TokenIcon';
@@ -18,8 +18,11 @@ import { ConfirmedPositionCards } from '@/components/ConfirmedPositionCards';
 import { AmountField, Segmented, TokenSelect, useWalletTokenBalances } from '@/components/ProtocolForm';
 import { useUsdPrices } from '@/components/PriceProvider';
 import {
+  fallbackDebtRatioRange,
   planDepositAndMint,
   planRepayAndWithdraw,
+  readDebtRatioRange,
+  type DebtRatioRange,
   restoreSignatureRequiredDraftFromSearch,
   signatureDraftIdFromSearch,
   type PlannedRoute,
@@ -49,6 +52,12 @@ import { calculatePositionUsdValuation, formatUsdCents } from '@/lib/positionVal
 import { priceKeyForSymbol } from '@/lib/prices';
 import { resetTransactionAmounts } from '@/lib/transactionState';
 import { ValueOrSkeleton } from '@/components/MissingValue';
+import { TransactionSettings } from '@/components/TransactionSettings';
+import { BorrowSections } from '@/components/ProductSections';
+import { borrowCapacity, BORROW_LIMIT_GUARD_BPS, loanToValueBps, withdrawableCollateralUsdCents } from '@/lib/fx/borrowLimits';
+import { formatSignificantDecimal } from '@/lib/amount';
+import { amountBlocker } from '@/lib/formBlockers';
+import { tokenSymbol } from '@/lib/fx/tokenPresentation';
 
 type BorrowMode = 'mint' | 'manage';
 type ManagementAction = 'none' | 'add' | 'borrow' | 'repay' | 'withdraw' | 'combined';
@@ -184,6 +193,22 @@ export default function BorrowPage() {
     { label: 'Collateral', value: formatPositionCollateral(selected) },
     { label: 'Debt', value: formatPositionDebt(selected) },
   ] : undefined, [selected]);
+  // Borrowing limits come from the pool's own debt-ratio range (the one Trade's
+  // leverage bounds use), applied to collateral at display prices with a guard.
+  const limitMarket = selected?.market ?? market;
+  const [debtRange, setDebtRange] = useState<DebtRatioRange>(() => fallbackDebtRatioRange('ETH', 'long'));
+  useEffect(() => {
+    let active = true;
+    setDebtRange(fallbackDebtRatioRange(limitMarket, 'long'));
+    void readDebtRatioRange(limitMarket, 'long').then((range) => { if (active) setDebtRange(range); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [limitMarket]);
+  const limitPrices = freshDisplayPrices(useUsdPrices());
+  const valueCents = (raw: bigint, decimals: number, symbol: string): bigint | null => {
+    const key = priceKeyForSymbol(symbol);
+    return calculatePositionUsdValuation({ collateralRaw: raw, collateralDecimals: decimals, collateralPrice: key ? limitPrices[key] : undefined,
+      debtRaw: 0n, debtDecimals: 18, debtPrice: 1 }).collateralUsdCents;
+  };
   const collateralTokens = selectedKey === 'new' ? COLLATERAL_TOKENS : collateralTokensForMarket(market);
   const withdrawalTokens = collateralTokensForMarket(selected?.market ?? market);
   const activeTokenOptions = mode === 'manage' ? withdrawalTokens : collateralTokens;
@@ -493,13 +518,68 @@ export default function BorrowPage() {
   const showMint = newPosition || mode === 'mint' && (managementAction === 'borrow' || managementAction === 'combined');
   const showRepay = mode === 'manage' && (managementAction === 'repay' || managementAction === 'combined');
   const showWithdraw = mode === 'manage' && (managementAction === 'withdraw' || managementAction === 'combined');
+  const existingCollateralCents = selected ? valueCents(selected.info.rawColls, positionCollateralDecimals(selected), selected.info.rawCollsToken) : 0n;
+  const existingDebt = selected?.info.rawDebts ?? 0n;
+  const depositWei = parseZeroAmount(deposit, token);
+  const mintWei = parseZeroAmount(mint, 'fxUSD');
+  const depositCents = depositWei === null ? null : valueCents(depositWei, tokenDecimals(token), token);
+  const collateralAfterCents = mode === 'mint' && existingCollateralCents !== null && depositCents !== null ? existingCollateralCents + depositCents : null;
+  const capacity = collateralAfterCents !== null && collateralAfterCents > 0n ? borrowCapacity({ collateralUsdCents: collateralAfterCents, existingDebt, range: debtRange }) : null;
+  const limitBps = debtRange.max * (10_000n - BORROW_LIMIT_GUARD_BPS) / 10n ** 18n;
+  const ltvBps = capacity && collateralAfterCents !== null ? loanToValueBps(existingDebt + (mintWei ?? 0n), collateralAfterCents) : null;
+  const fxUsdLimit = (value: bigint) => formatSignificantDecimal(formatUnits(value, 18), 4);
+  const symbol = tokenSymbol(token);
+  const mintBlocker = (): string | null => {
+    if (showDeposit) {
+      const depositIssue = amountBlocker(deposit, tokenDecimals(token), symbol, balanceStateFor(token), { emptyLabel: `No ${symbol} available` });
+      if (depositIssue === 'Enter an amount') { if (newPosition) return 'Enter collateral'; }
+      else if (depositIssue) return depositIssue;
+    }
+    if (showMint && mint.trim() && mintWei === null) return 'Enter a valid amount';
+    if (newPosition && !mintWei) return 'Enter an amount to borrow';
+    if (!mintWei && !depositWei) return 'Enter an amount';
+    if (capacity && mintWei) {
+      if (mintWei > capacity.maxAdditional) return capacity.maxAdditional > 0n ? `Borrow at most ${fxUsdLimit(capacity.maxAdditional)} fxUSD` : 'Add collateral to borrow';
+      // Rounded up a tenth of a percent, so the figure shown is always enough.
+      if (mintWei < capacity.minAdditional) return `Borrow at least ${fxUsdLimit(capacity.minAdditional * 1001n / 1000n)} fxUSD`;
+    }
+    return null;
+  };
+  const manageBlocker = (): string | null => {
+    if (!selected) return null;
+    const repayAll = repay.trim().toLowerCase() === 'all';
+    const repayWei = repayAll ? selected.info.rawDebts : parseZeroAmount(repay, 'fxUSD');
+    const withdrawWei = parseZeroAmount(withdraw, token);
+    if (repay.trim() && repayWei === null) return 'Enter a valid amount';
+    if (withdraw.trim() && withdrawWei === null) return 'Enter a valid amount';
+    if (!repayWei && !withdrawWei) return showRepay && !showWithdraw ? 'Enter an amount to repay' : showWithdraw && !showRepay ? 'Enter an amount to withdraw' : 'Enter an amount';
+    if (repayWei && repayWei > selected.info.rawDebts) return 'Repay at most your debt';
+    if (repayWei && !repayAll) {
+      const repayIssue = amountBlocker(repay, 18, 'fxUSD', balanceStateFor('fxUSD'));
+      if (repayIssue?.startsWith('Insufficient')) return repayIssue;
+    }
+    if (withdrawWei && existingCollateralCents !== null) {
+      const withdrawableCents = withdrawableCollateralUsdCents(existingCollateralCents, selected.info.rawDebts - (repayWei ?? 0n), debtRange);
+      const withdrawCents = valueCents(withdrawWei, tokenDecimals(token), token);
+      const priceKey = priceKeyForSymbol(token);
+      const price = priceKey ? limitPrices[priceKey] : undefined;
+      if (withdrawCents !== null && withdrawCents > withdrawableCents) {
+        if (withdrawableCents === 0n || !price) return 'Repay debt to withdraw';
+        const withdrawableWei = withdrawableCents * 10n ** BigInt(tokenDecimals(token)) / BigInt(Math.round(price * 100));
+        return `Withdraw at most ${formatSignificantDecimal(formatUnits(withdrawableWei, tokenDecimals(token)), 4)} ${symbol}`;
+      }
+    }
+    return null;
+  };
   const picker = <TokenSelect compact label={mode === 'manage' ? 'Receive collateral as' : 'Collateral asset'} value={token}
     options={activeTokenOptions} onChange={changeToken} balances={wallet.address ? balanceSnapshot.balances : undefined}
     balanceStatus={wallet.address ? balanceStatus : 'disconnected'} />;
   const actionEditor = <div className={presentation.editor}>
     {!newPosition && <h2 className={presentation.formTitle}>{mode === 'mint' ? 'Add collateral or borrow' : 'Manage debt'}</h2>}
     {showMint && <AmountField label={newPosition ? 'fxUSD to borrow' : 'Additional fxUSD to borrow'} symbol="fxUSD" value={mint}
-      onChange={setMint} allowZero maxDecimals={18} showPercentages={false} showMax={false} />}
+      onChange={setMint} allowZero maxDecimals={18} showPercentages={false} showMax={Boolean(capacity && capacity.maxAdditional > 0n)}
+      maxAmount={capacity && capacity.maxAdditional > 0n ? formatUnits(capacity.maxAdditional, 18) : null}
+      hint={capacity ? (capacity.maxAdditional > 0n ? `Up to ${fxUsdLimit(capacity.maxAdditional)} fxUSD with this collateral` : 'This collateral cannot borrow more') : newPosition ? 'Enter collateral to see how much you can borrow' : undefined} />}
     {showDeposit && <AmountField label={newPosition ? 'Starting collateral' : 'Collateral to add'} symbol={token} value={deposit}
       onChange={(value) => { setNativeMaxError(null); setDeposit(value); }} allowZero maxDecimals={tokenDecimals(token)}
       balanceState={balanceStateFor(token)} tokenSelector={picker}
@@ -509,12 +589,14 @@ export default function BorrowPage() {
       balanceState={balanceStateFor('fxUSD')} hint={selected ? `Debt: ${formatPositionDebt(selected)}` : undefined} />}
     {showWithdraw && <AmountField label="Collateral to withdraw" symbol={token} value={withdraw} onChange={setWithdraw}
       allowZero maxDecimals={tokenDecimals(token)} showMax={false} showPercentages={false} tokenSelector={picker} />}
+    {mode === 'mint' && ltvBps !== null && limitBps > 0n && <BorrowLimitMeter ltvBps={ltvBps} limitBps={limitBps} />}
     {withdrawalRequested && <p className={presentation.helper}>Withdrawing collateral can increase liquidation risk.</p>}
     {!newPosition && managementAction !== 'combined' && <button type="button" className={presentation.combined} onClick={() => setManagementAction('combined')}>
       {mode === 'mint' ? 'Add collateral and borrow together' : 'Repay and withdraw together'}
     </button>}
   </div>;
   const showAction = newPosition || Boolean(selected && managementAction !== 'none') || reviewStage !== 'input';
+  const reviewBlocker = !wallet.address || !showAction ? null : mode === 'mint' ? mintBlocker() : manageBlocker();
   const reviewLabel = mode === 'mint' ? 'Review borrowing' : repayRequested && !withdrawalRequested ? 'Review repayment' : 'Review position changes';
 
   return <AppShell>
@@ -527,6 +609,7 @@ export default function BorrowPage() {
         <Segmented value={view} onChange={chooseView} ariaLabel="Borrow workspace" options={[
           { value: 'new', label: 'New position' }, { value: 'positions', label: 'Your positions' },
         ]} />
+        <TransactionSettings />
       </div>}
       {view === 'positions' && wallet.address && initialRead && <StatusNotice>Reading your collateral positions…</StatusNotice>}
       {view === 'positions' && wallet.address && !initialRead && positionReadUnavailable && <ProtocolPositionNotice status="unavailable"
@@ -551,13 +634,31 @@ export default function BorrowPage() {
       </>}
       {showAction && <div data-flow-stage={reviewStage} className={presentation.action}>
         <ActionReview key={reviewRevision} surface="content" planBuilder={newPosition || !initialRead && !positionReadUnavailable ? planBuilder : null}
-          label={reviewLabel} operationLabel={mode === 'mint' ? selected ? 'Update collateral position' : 'Open collateral position' : manageOperationLabel}
+          blocker={reviewBlocker} label={reviewLabel} operationLabel={mode === 'mint' ? selected ? 'Update collateral position' : 'Open collateral position' : manageOperationLabel}
           draftActionKey={draftActionKey} draftResumePath="/borrow" draftState={draftState} resumeReview={resumeReview}
           decisionBefore={decisionBefore} editor={actionEditor} onStageChange={setReviewStage} onComplete={refreshAfterAction} />
       </div>}
       </ProductSurface>
+      {reviewStage === 'input' && <BorrowSections ltvLimit={`${(Number(debtRange.max) / 1e16).toFixed(1)}%`} />}
     </ActionWorkspace>
   </AppShell>;
+}
+
+/** Loan-to-value against the borrowing limit, filling toward it as the borrow grows. */
+function BorrowLimitMeter({ ltvBps, limitBps }: { ltvBps: bigint; limitBps: bigint }) {
+  const used = Number(ltvBps * 1000n / limitBps) / 10;
+  const tone = used > 100 ? 'over' : used >= 85 ? 'near' : 'ok';
+  const percent = (bps: bigint) => `${(Number(bps) / 100).toFixed(1)}%`;
+  return <div className={presentation.limitMeter} data-tone={tone}>
+    <div className={presentation.limitMeterRow}>
+      <span>Loan-to-value</span>
+      <strong>{percent(ltvBps)}<small> of {percent(limitBps)} limit</small></strong>
+    </div>
+    <div className={presentation.limitTrack} role="meter" aria-label="Loan-to-value against the borrowing limit"
+      aria-valuemin={0} aria-valuemax={Number(limitBps) / 100} aria-valuenow={Math.min(Number(ltvBps), Number(limitBps)) / 100} aria-valuetext={`${percent(ltvBps)} of a ${percent(limitBps)} limit`}>
+      <span style={{ '--fill': `${Math.min(used, 100)}%` } as CSSProperties} />
+    </div>
+  </div>;
 }
 
 function PositionSelect({ value, positions, onChange }: { value: string; positions: UiPosition[]; onChange: (value: string) => void }) {

@@ -15,13 +15,15 @@ import { usePrivyWallet } from '@/lib/wallet';
 import { prepareWalletSend, type SendInput, type SendQuote } from '@/lib/walletSend';
 import { recordPendingHash } from '@/lib/fx/journal';
 import { withWalletChainLock } from '@/lib/fx/lock';
-import { GAS_TIERS, readGasTier, type GasTier } from '@/lib/settings';
+import { readGasTier, SETTINGS_KEY, SETTINGS_UPDATED_EVENT, type GasTier } from '@/lib/settings';
 import { userSafeError } from '@/lib/errors';
 import { canonicalAsset } from '@/lib/walletAssets';
 import { decimalInputError, decimalToUnits, formatSignificantDecimal } from '@/lib/amount';
 import { formatUsd } from '@/lib/prices';
 import { displayAssetSymbol } from '@/components/AssetPresentation';
 import { WalletAssetPicker } from '@/components/WalletAssetPicker';
+import { StickyAction } from '@/components/StickyAction';
+import { TransactionSettings } from '@/components/TransactionSettings';
 import styles from './send.module.css';
 const SEND_DEMAND = { expandedAssets: true, chainPulse: true, positions: false } as const;
 
@@ -49,7 +51,6 @@ function SendForm() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [hash, setHash] = useState<string | null>(null);
-  const speedLabelId = useId();
   const recipientHintId = useId();
   const mounted = useRef(true);
   const identity = `${wallet.address?.toLowerCase()}:${wallet.connectionVersion}`;
@@ -57,6 +58,15 @@ function SendForm() {
   currentIdentity.current = identity;
   const lock = useRef(false);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => {
+    const sync = (event: Event) => {
+      if (event.type === 'storage' && (event as StorageEvent).key !== SETTINGS_KEY) return;
+      setTier(readGasTier());
+    };
+    window.addEventListener(SETTINGS_UPDATED_EVENT, sync);
+    window.addEventListener('storage', sync);
+    return () => { window.removeEventListener(SETTINGS_UPDATED_EVENT, sync); window.removeEventListener('storage', sync); };
+  }, []);
   const current = () => mounted.current && currentIdentity.current === identity;
   const trimmedRecipient = recipient.trim();
   const recipientValid = isAddress(trimmedRecipient);
@@ -149,6 +159,7 @@ function SendForm() {
         <div><dt>Network cost</dt><dd>≈ {formatEther(quote.estimatedFee)} ETH</dd></div>
       </dl>
     </> : <>
+      <div className={styles.cardHead}><h2>Send to a wallet</h2><TransactionSettings /></div>
       <div className={styles.amountPanel}>
         <div className={styles.panelHead}>
           <label htmlFor="send-amount">Amount</label>
@@ -170,14 +181,8 @@ function SendForm() {
         </div>
         {trimmedRecipient && !recipientValid && <p id={recipientHintId} className={styles.hint}>Enter a complete 0x wallet address.</p>}
       </div>
-      {wallet.isEmbedded && <div className={styles.speed}>
-        <span id={speedLabelId} className={styles.fieldLabel}>Network speed</span>
-        <div className={styles.tiers} role="group" aria-labelledby={speedLabelId} style={{ '--seg-index': GAS_TIERS.indexOf(tier), '--seg-count': GAS_TIERS.length } as CSSProperties}>
-          {GAS_TIERS.map((option) => <button key={option} type="button" aria-pressed={tier === option} disabled={busy} onClick={() => setTier(option)}>{option}</button>)}
-        </div>
-      </div>}
     </>}
     {error && <p role="alert" className={styles.error}>{error}</p>}
-    <button type="button" className={`button button-primary ${styles.action}`} aria-busy={busy || undefined} disabled={busy || !quote && blocker !== null} onClick={quote ? confirm : review}>{busy ? quote ? 'Confirm in wallet' : 'Preparing' : quote ? 'Confirm' : blocker ?? <>Review<ChevronRight aria-hidden="true" /></>}</button>
+    <StickyAction><button type="button" className={`button button-primary ${styles.action}`} aria-busy={busy || undefined} disabled={busy || !quote && blocker !== null} onClick={quote ? confirm : review}>{busy ? quote ? 'Confirm in wallet' : 'Preparing' : quote ? 'Confirm' : blocker ?? <>Review<ChevronRight aria-hidden="true" /></>}</button></StickyAction>
   </section>;
 }

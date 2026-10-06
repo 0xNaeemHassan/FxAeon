@@ -25,6 +25,17 @@ test('slippage presets are read from device storage as percentages', () => {
   }
 });
 
+test('custom whole basis points between 0.1% and 2% are kept', () => {
+  for (const [slippageBps, expected] of [[30, 0.3], [75, 0.75], [150, 1.5]] as const) {
+    withWindow({ localStorage: { getItem: () => JSON.stringify({ slippageBps }) } }, () => {
+      assert.equal(readSlippagePercent(), expected);
+    });
+  }
+  withWindow({ localStorage: { getItem: () => JSON.stringify({ slippageBps: 12.5 }) } }, () => {
+    assert.equal(readSlippagePercent(), DEFAULT_SLIPPAGE_PERCENT);
+  });
+});
+
 test('invalid, corrupt, out-of-range, and throwing storage use the safe default', () => {
   const values: unknown[] = [
     null,

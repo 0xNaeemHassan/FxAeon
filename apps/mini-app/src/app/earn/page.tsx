@@ -6,7 +6,9 @@ import { AppShell } from '@/components/ui';
 import { ChoiceCards, Disclosure, MetricRows, PageHeading, ProductNav, ProductSurface, StatusNotice } from '@/components/ProductUI';
 import { freshDisplayPrices } from '@/lib/displayPrices';
 import { ActionReview, type ActionReviewStage } from '@/components/ActionReview';
-import { AmountField, Segmented, SlippageField, TokenSelect, useWalletTokenBalances, type TokenBalanceMap } from '@/components/ProtocolForm';
+import { AmountField, Segmented, TokenSelect, useWalletTokenBalances, type TokenBalanceMap } from '@/components/ProtocolForm';
+import { TransactionSettings } from '@/components/TransactionSettings';
+import { EarnSections } from '@/components/ProductSections';
 import { useUsdPrices } from '@/components/PriceProvider';
 import { formatUsd } from '@/lib/prices';
 import { fxSaveUsdValue, normalizedFxSaveAssetsWei } from '@/lib/fxSaveUnits';
@@ -31,6 +33,8 @@ import { selectWalletTasks } from '@/lib/taskState';
 import { fetchFxSaveApy, type FxSaveApyResponse } from '@/lib/fxSaveApy';
 import { formatAmount, parseAmount, type SaveToken } from '@/app/trade/fxUi';
 import { tokenSymbol } from '@/lib/fx/tokenPresentation';
+import { formatUnits } from 'viem';
+import { amountBlocker } from '@/lib/formBlockers';
 import presentation from '@/components/SavingsWorkspace.module.css';
 import { ActionWorkspace } from '@/components/ProductLayout';
 import { MissingValue, ValueOrSkeleton } from '@/components/MissingValue';
@@ -440,6 +444,12 @@ export default function EarnPage() {
     () => load(true), refreshBalances, refreshClaimable, refreshPrices, () => refreshApyRef.current(),
   ]), [load, refreshBalances, refreshClaimable, refreshPrices, runRefreshAction]);
   const reviewLabel = mode === 'claim' ? 'Review claim' : mode === 'withdraw' ? 'Review withdrawal' : 'Review deposit';
+  // Deposit and withdrawal say what is missing; the exact share balance (not the
+  // display-rounded one) decides whether a withdrawal fits.
+  const reviewBlocker = !wallet.address || mode === 'claim' ? null
+    : mode === 'deposit'
+      ? amountBlocker(amount, token === 'usdc' ? 6 : 18, labelToken(token), saveBalances?.[token], { emptyLabel: `No ${labelToken(token)} to deposit` })
+      : amountBlocker(shares, 18, 'fxSAVE', walletData?.balance ? { status: 'ready', amount: formatUnits(walletData.balance.balanceWei, 18) } : undefined, { allowAll: true, emptyLabel: 'No fxSAVE to withdraw' });
   const operationLabel = mode === 'claim' ? 'Claim withdrawal' : mode === 'withdraw' ? 'Withdraw fxSAVE' : 'Deposit into fxSAVE';
   const warningTitle = activeReadWarnings.includes('balance') ? 'fxSAVE balance unavailable'
     : activeReadWarnings.includes('claim status') || activeReadWarnings.includes('redemption status') ? 'Withdrawal status unavailable'
@@ -456,6 +466,7 @@ export default function EarnPage() {
             surface="content"
             planBuilder={planBuilder}
             disabled={mode === 'claim' && Boolean(wallet.address) && !claimState.canReview}
+            blocker={reviewBlocker}
             label={reviewLabel}
             operationLabel={operationLabel}
             draftActionKey={mode === 'claim' ? 'earn:claim' : mode === 'withdraw' ? 'earn:withdraw' : 'earn:deposit'}
@@ -472,6 +483,7 @@ export default function EarnPage() {
                   <Segmented value={mode} onChange={changeMode} ariaLabel="fxSAVE action" options={[
                     { value: 'deposit', label: 'Deposit' }, { value: 'withdraw', label: 'Withdraw' },
                   ]} />
+                  <TransactionSettings slippage />
                 </div>
               </> : <div className={presentation.claimHeading}>
                 <button type="button" onClick={() => changeMode('withdraw')} className={presentation.back}><ArrowLeft size={17} aria-hidden="true" />Back to fxSAVE</button>
@@ -483,12 +495,14 @@ export default function EarnPage() {
               {loading && !walletData && wallet.address && <span role="status" className="sr-only">Reading fxSAVE data</span>}
               <EarnActionEditor mode={mode} token={token} onTokenChange={changeToken} amount={amount} onAmountChange={setAmount}
                 shares={shares} onSharesChange={setShares} instant={instant} onInstantChange={setInstant}
-                slippage={slippage} onSlippageChange={setSlippage} config={config} walletData={walletData}
+                config={config} walletData={walletData}
                 balances={saveBalances} balanceStatus={saveBalanceStatus} balanceUnavailable={readWarnings.includes('balance')} />
             </>}
           />
         </ProductSurface>
         {reviewStage === 'input' && <VaultDetails config={config} />}
+        {reviewStage === 'input' && <EarnSections apy={fxSaveApy ? `${fxSaveApy.apy.toFixed(2)}%` : null}
+          cooldown={config ? formatCooldown(config.cooldownPeriodSeconds) : null} instantFee={config ? formatRatio(config.instantRedeemFeeRatio) : null} />}
       </ActionWorkspace>
     </AppShell>
   );
@@ -560,11 +574,11 @@ function SavingsSummary({ data, loading, connected, onRefresh, readWarnings, fxS
 }
 
 function EarnActionEditor({ mode, token, onTokenChange, amount, onAmountChange, shares, onSharesChange, instant, onInstantChange,
-  slippage, onSlippageChange, config, walletData, balances, balanceStatus, balanceUnavailable,
+  config, walletData, balances, balanceStatus, balanceUnavailable,
 }: {
   mode: EarnMode; token: SaveToken; onTokenChange: (value: SaveToken) => void; amount: string; onAmountChange: (value: string) => void;
   shares: string; onSharesChange: (value: string) => void; instant: boolean; onInstantChange: (value: boolean) => void;
-  slippage: string; onSlippageChange: (value: string) => void; config: SaveConfig | null; walletData?: SaveData | null;
+  config: SaveConfig | null; walletData?: SaveData | null;
   balances?: TokenBalanceMap; balanceStatus?: 'loading' | 'ready' | 'unavailable' | 'disconnected'; balanceUnavailable: boolean;
 }) {
   const disconnected = { status: 'disconnected' as const };
@@ -577,9 +591,6 @@ function EarnActionEditor({ mode, token, onTokenChange, amount, onAmountChange, 
     {mode === 'deposit' && <>
       <AmountField label="Deposit amount" symbol={labelToken(token)} value={amount} onChange={onAmountChange}
         maxDecimals={token === 'usdc' ? 6 : 18} balanceState={amountBalance} tokenSelector={picker} />
-      {token !== 'fxUSDBasePool' && <Disclosure title="Settings" summary={`${slippage}% slippage`}>
-        <SlippageField value={slippage} onChange={onSlippageChange} max={MAX_FX_SLIPPAGE_PERCENT} />
-      </Disclosure>}
     </>}
     {mode === 'withdraw' && <>
       <AmountField label="Amount" symbol="fxSAVE" value={shares} onChange={onSharesChange}
@@ -593,9 +604,6 @@ function EarnActionEditor({ mode, token, onTokenChange, amount, onAmountChange, 
       </div>
       <div className={presentation.receiveRow}><span>{instant && token !== 'fxUSDBasePool' ? 'Receive asset' : 'Withdrawal route'}</span>{picker}</div>
       {(token === 'fxUSDBasePool' || !instant) && <p className={presentation.helper}>A queued withdrawal is claimed later. The claim preview shows the assets available to receive.</p>}
-      {token !== 'fxUSDBasePool' && instant && <Disclosure title="Settings" summary={`${slippage}% slippage`}>
-        <SlippageField value={slippage} onChange={onSlippageChange} max={MAX_FX_SLIPPAGE_PERCENT} />
-      </Disclosure>}
     </>}
     {mode === 'claim' && (walletData ? <ClaimState data={walletData} /> : <p className={presentation.helper}>Connect the requesting wallet to view its withdrawal.</p>)}
   </div>;

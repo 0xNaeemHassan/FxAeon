@@ -43,6 +43,7 @@ import { positionPoolAddress } from '@/lib/fx/policy';
 import { GAS_TIERS } from '@/lib/settings';
 import { formatGasPriceGwei } from '@/lib/fx/gasFeePolicy';
 import styles from './FlowWorkspace.module.css';
+import { StickyAction } from './StickyAction';
 import presentationStyles from './review/ActionReviewPresentation.module.css';
 
 function trimDecimal(value: string): string {
@@ -112,7 +113,7 @@ function statusPresentation(params: Parameters<typeof buildStatusPresentation>[0
 
 export function ActionReview(props: ActionReviewProps) {
   const lifecycle = useActionReviewLifecycle(props);
-  const { label = 'Review action', disabled = false, operationLabel, destructive = false, editor, decisionBefore, executionCost, surface = 'card', planBuilder } = props;
+  const { label = 'Review action', disabled = false, blocker = null, operationLabel, destructive = false, editor, decisionBefore, executionCost, surface = 'card', planBuilder } = props;
   const { canSelectReviewedRoute, endConnectFlow, error, execute, feeSelection, gasCost, headingRef, loading, networkSwitching, quoteChanges, quoteExpired, refreshReviewedQuote, refreshing, reset, result, review, reviewTitle, route, routeSummaries, routes, selectedRoute, selectReviewedRoute, selectGasTier, startConnectFlow, stage, status, statusDetail, stepResults, triggerRef, wallet } = lifecycle;
   usePauseAutomaticPositionRefresh(stage === 'planning' || stage === 'review' || stage === 'executing' || refreshing);
 
@@ -121,6 +122,7 @@ export function ActionReview(props: ActionReviewProps) {
     const disconnected = !wallet.authenticated || !wallet.address;
     const reviewLabel = quoteExpired ? 'Review updated quote' : reviewActionLabel(label, operationLabel);
     const trigger = (
+      <StickyAction>
       <div className={`${styles.reviewTrigger} reviewTrigger flex flex-col gap-2.5`}>
         {error && <InlineError message={error} />}
         {disconnected ? (
@@ -136,12 +138,13 @@ export function ActionReview(props: ActionReviewProps) {
             Connect wallet
           </ConnectWalletButton>
         ) : (
-          <Button ref={triggerRef} variant={destructive ? 'danger' : 'primary'} className={styles.primaryAction} disabled={!planBuilder || disabled || !wallet.ready} loading={loading} onClick={() => void review()}>
-            {reviewLabel}
+          <Button ref={triggerRef} variant={destructive ? 'danger' : 'primary'} className={styles.primaryAction} data-blocked={blocker ? true : undefined} disabled={Boolean(blocker) || !planBuilder || disabled || !wallet.ready} loading={loading} onClick={() => void review()}>
+            {blocker || reviewLabel}
           </Button>
         )}
         {loading && <StatusNotice {...progress} />}
       </div>
+      </StickyAction>
     );
     if (editor) {
       return <>{editor}{trigger}</>;

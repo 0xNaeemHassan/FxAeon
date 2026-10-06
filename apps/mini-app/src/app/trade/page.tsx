@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowDownRight, ArrowUpRight, ChevronRight, Layers2 } from 'lucide-react';
 import { AppShell, Card } from '@/components/ui';
-import { SettingsPopover } from '@/components/SettingsPopover';
+import { TransactionSettings } from '@/components/TransactionSettings';
+import { TradeSections } from '@/components/ProductSections';
 import { ActionWorkspace } from '@/components/ProductLayout';
 import { ActionReview, type ActionReviewStage } from '@/components/ActionReview';
 import { TradeMarketChart } from '@/components/MarketChart';
@@ -16,7 +17,7 @@ import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
 import { ConfirmedPositionCards } from '@/components/ConfirmedPositionCards';
 import { deriveConfirmedPositionHint } from '@/lib/confirmedPositions';
 import { confirmedPositionHintKey } from '@/lib/confirmedPositionStorage';
-import { AmountField, LeverageField, Segmented, SlippageField, TokenSelect, tokenBalanceFor, useWalletTokenBalances, type TokenBalanceView } from '@/components/ProtocolForm';
+import { AmountField, LeverageField, Segmented, TokenSelect, tokenBalanceFor, useWalletTokenBalances, type TokenBalanceView } from '@/components/ProtocolForm';
 import { MAX_FX_SLIPPAGE_PERCENT, clampLeverage, estimatePlannedRouteCost, getEthereumClient, leverageBoundsFor, planIncreasePosition, prepareLeverageReview, readLeverageBounds, readSignatureRequiredDraft, restoreSignatureRequiredDraft, signatureDraftIdFromSearch, type LeverageBounds, type PlannedRoute, type TransactionExecutionResult } from '@/lib/fx';
 import { calculateNativeMax, nativeMaxErrorMessage } from '@/lib/fx/nativeMax';
 import { fetchGasTierQuotes, selectedGasTierQuote } from '@/lib/fx/gasFeePolicy';
@@ -25,6 +26,8 @@ import { RoutePrefetchStore, type RoutePrefetchDescriptor } from '@/lib/fx/route
 import { usePrivyWallet } from '@/lib/wallet';
 import styles from '@/components/trade-surfaces.module.css';
 import { positiveDecimal } from '@/lib/amount';
+import { amountBlocker } from '@/lib/formBlockers';
+import { tokenSymbol } from '@/lib/fx/tokenPresentation';
 import { formatUnits } from 'viem';
 import { DEFAULT_SLIPPAGE_PERCENT, readSlippagePercent, SETTINGS_KEY, SETTINGS_UPDATED_EVENT } from '@/lib/settings';
 import { readTradeDeepLinkContext, resetTransactionAmounts, type TradeDeepLinkContext } from '@/lib/transactionState';
@@ -391,12 +394,6 @@ export default function TradePage() {
     setNativeMaxError(null);
   }, []);
 
-  const changeSlippage = useCallback((value: string) => {
-    setSlippage(value);
-    setNativeMaxAmount(null);
-    setNativeMaxError(null);
-  }, []);
-
   const changeAmount = useCallback((value: string) => {
     setAmount(value);
     setNativeMaxAmount(null);
@@ -514,6 +511,12 @@ export default function TradePage() {
     };
   }, [leverage, leverageBounds, market, side, slippageValue, token, validAmount, wallet.address]);
 
+  // The primary action says what the ticket still needs before it can be reviewed.
+  const reviewBlocker = !wallet.address ? null
+    : amountBlocker(amount, tokenDecimals(token), tokenSymbol(token), selectedTokenBalance)
+      ?? (leverage < leverageBounds.min || leverage > leverageBounds.max ? `Choose ${leverageBounds.min.toFixed(1)}×–${leverageBounds.max.toFixed(1)}× leverage` : null)
+      ?? (!Number.isFinite(slippageValue) || slippageValue <= 0 || slippageValue > MAX_FX_SLIPPAGE_PERCENT ? 'Set slippage in settings' : null);
+
   const marketPositions = positionState.positions.filter((position) => position.market === market);
   const marketHasPendingPosition = positionState.pendingPositions.some((hint) => hint.market === market);
   const showPositionSection = Boolean(wallet.address && (
@@ -557,6 +560,7 @@ export default function TradePage() {
               surface="content"
               planBuilder={planBuilder}
               prefetchedPlan={prefetchedPlan}
+              blocker={reviewBlocker}
               label={`Open ${market} ${sideLabel}`}
               operationLabel={`Open ${market} ${sideLabel}`}
               onStageChange={setReviewStage}
@@ -570,9 +574,7 @@ export default function TradePage() {
                     <div>
                       <h2 className="text-[18px] font-semibold">Open position</h2>
                     </div>
-                    <SettingsPopover summary={`${slippage}% slippage`}>
-                      <SlippageField value={slippage} onChange={changeSlippage} max={MAX_FX_SLIPPAGE_PERCENT} inlineHelp />
-                    </SettingsPopover>
+                    <TransactionSettings slippage />
                   </div>
 
                   <div className={styles.sideControl}><Segmented tone="sides" value={side} onChange={changeSide} ariaLabel="Position side" options={[{ value: 'long', label: 'Long', sub: 'Price rises' }, { value: 'short', label: 'Short', sub: 'Price falls' }]} /></div>
@@ -617,6 +619,8 @@ export default function TradePage() {
             )}
           </section>
         )}
+        {reviewStage === 'input' && <TradeSections market={market} side={side} leverage={leverageBounds}
+          openPositions={wallet.address && positionState.status === 'ready' ? positionState.positions.length : null} connected={Boolean(wallet.address)} />}
       </ActionWorkspace>
       </div>
     </AppShell>

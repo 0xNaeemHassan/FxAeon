@@ -12,14 +12,15 @@ import { MissingValue } from '@/components/MissingValue';
 import { usePrivyWallet } from '@/lib/wallet';
 import { useLocale } from '@/lib/i18n';
 import { haptic } from '@/lib/telegram';
-import { announceSettingsUpdated, GAS_TIERS, readGasTier, readSlippagePercent, SETTINGS_KEY, type GasTier } from '@/lib/settings';
+import { announceSettingsUpdated, GAS_TIERS, readGasTier, readSlippagePercent, SETTINGS_KEY, SLIPPAGE_PRESETS_BPS, type GasTier } from '@/lib/settings';
 import { fetchGasTierQuotes, type GasTierQuotes } from '@/lib/fx/gasFeePolicy';
 import { createCoalescedRefresh } from '@/lib/coalescedRefresh';
 import styles from '@/components/SettingsWorkspace.module.css';
 import { AccountWorkspace } from '@/components/ProductLayout';
+import { StickyAction } from '@/components/StickyAction';
 
 const WalletSection = dynamic(() => import('@/components/WalletSection'), { ssr: false, loading: () => <Skeleton className="h-24" /> });
-const PRESETS = [10, 50, 100, 200] as const;
+const PRESETS: readonly number[] = SLIPPAGE_PRESETS_BPS;
 
 function formatGwei(value: bigint): string {
   const gwei = Number(formatUnits(value, 9));
@@ -112,7 +113,7 @@ export default function SettingsPage() {
           </div>
           <p id={`${id}-help`} className={styles.help}>Max adverse change from the quote.</p>
           <div className={styles.choices} role="radiogroup" aria-label={t('settings.maxSlippage')} aria-describedby={`${id}-help`}>
-            {PRESETS.map((bps, index) => <button type="button" key={bps} role="radio" aria-checked={slippageBps === bps} disabled={!ready} tabIndex={slippageBps === bps ? 0 : -1}
+            {PRESETS.map((bps, index) => <button type="button" key={bps} role="radio" aria-checked={slippageBps === bps} disabled={!ready} tabIndex={slippageBps === bps || (!PRESETS.includes(slippageBps) && index === 0) ? 0 : -1}
               onClick={() => select(bps)} onKeyDown={(event) => {
                 if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
                 event.preventDefault();
@@ -120,6 +121,7 @@ export default function SettingsPage() {
                 select(PRESETS[next]); event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
               }}>{bps / 100}%</button>)}
           </div>
+          {!PRESETS.includes(slippageBps) && <p className={styles.scope}>Custom {slippageBps / 100}% is set from a form’s settings. Choose a preset to replace it.</p>}
           <p className={styles.scope}>Trade, Positions, and eligible fxSAVE; saved on this device.</p>
           {showGasSettings && <div className={styles.gasPreference}>
             <div className={styles.preferenceHeading}>
@@ -140,7 +142,7 @@ export default function SettingsPage() {
               </button>)}
             </div>
           </div>}
-          <Button onClick={save} disabled={!ready || !dirty} className={styles.save}>Save preferences</Button>
+          <StickyAction><Button onClick={save} disabled={!ready || !dirty} className={styles.save}>Save preferences</Button></StickyAction>
           {error && <p role="alert" className={styles.error}>{error}</p>}
         </ProductSurface>
       </section>
