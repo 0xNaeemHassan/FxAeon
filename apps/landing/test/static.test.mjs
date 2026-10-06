@@ -100,9 +100,10 @@ test('markup and scripts fit the strict content security policy', () => {
   assert.doesNotMatch(html, /\sstyle=/, 'Inline style attributes are blocked by style-src');
   assert.doesNotMatch(html, /<style\b/, 'Style elements are blocked by style-src');
   assert.doesNotMatch(html, /\son[a-z]+=/i, 'Inline event handlers are blocked by script-src');
-  for (const tag of html.match(/<script\b[^>]*>[\s\S]*?<\/script>/g) || []) {
-    assert.match(tag, /^<script src="[^"]+"(?: defer)?><\/script>$/, `Scripts must be external files: ${tag}`);
-  }
+  // Exactly the two external scripts the page ships, and nothing inline.
+  assert.equal(html.toLowerCase().split('<script').length - 1, 2, 'Only the two external scripts may appear');
+  assert.ok(html.includes('<script src="script.js"></script>'), 'script.js loads as an external file');
+  assert.ok(html.includes('<script src="aurora.js" defer></script>'), 'aurora.js loads as an external, deferred file');
   for (const [name, source] of Object.entries({ script, aurora })) {
     assert.doesNotMatch(source, /\b(?:fetch|XMLHttpRequest|WebSocket|EventSource|sendBeacon|importScripts)\b|\bimport\(|\beval\(|new Function/, `${name} must not reach the network or evaluate code`);
     assert.doesNotMatch(source, /setAttribute\(\s*["']style["']/, `${name} must set styles through CSSOM, which the policy allows`);
