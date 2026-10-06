@@ -34,6 +34,13 @@ painted aurora) and review both themes on mobile and desktop.
 
 ## Screenshots
 
+The repository README uses four images in [`assets/readme/`](assets/readme/):
+
+- **Hero** (`hero-dark.webp`, `hero-light.webp`). The landing page's own hero at 1440×720 and 2×, with its navigation and buttons hidden, in each theme.
+- **Screens** (`screens-dark.webp`, `screens-light.webp`). The real Portfolio, Trade, Earn and Borrow pages, rendered against deterministic sample data with reduced motion at 390×844 and 2×. No wallet, chain or price feed was involved, and every number on them is a sample.
+
+Recapture all four whenever those pages or the landing hero change visibly.
+
 Standard app screenshots are listed with routes, viewports, capture context,
 and hashes in [`fixtures/standard-screenshot-manifest.json`](fixtures/standard-screenshot-manifest.json).
 They show rendered UI with live external display data; no transaction was

@@ -1,119 +1,176 @@
 <div align="center">
-  <img src="docs/assets/social/fxaeon-x-banner-2172x724.png" alt="FxAeon" width="720" />
 
-  <h1>FxAeon</h1>
-  <p><strong>Trade ETH and BTC, earn with fxSAVE, and borrow fxUSD. In Telegram.</strong></p>
-  <p>
-    <a href="https://t.me/FxAeonBot">Open in Telegram</a> ·
-    <a href="https://fxaeon.com/">Open the web app</a> ·
-    <a href="https://fxaeon.xyz/">Visit FxAeon</a> ·
-    <a href="docs/README.md">Documentation</a>
-  </p>
-  <p>Built with the official <a href="https://github.com/aladdindao/fx-sdk">f(x) SDK</a>; your selected wallet reviews and approves transactions.</p>
+<a href="https://fxaeon.xyz">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/hero-dark.webp">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/readme/hero-light.webp">
+    <img alt="FxAeon: leverage, savings, and credit on f(x) Protocol, inside Telegram" src="docs/assets/readme/hero-dark.webp" width="100%">
+  </picture>
+</a>
 
-  <p>
-    <a href="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/ci.yml"><img src="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/ci.yml/badge.svg" alt="Client CI" /></a>
-    <a href="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/e2e-mini-app.yml"><img src="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/e2e-mini-app.yml/badge.svg" alt="End-to-end tests" /></a>
-    <a href="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/supply-chain.yml"><img src="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/supply-chain.yml/badge.svg" alt="Supply-chain checks" /></a>
-    <a href="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/anvil-fork.yml?query=branch%3Amain+event%3Aworkflow_dispatch"><img src="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/anvil-fork.yml/badge.svg?branch=main&amp;event=workflow_dispatch" alt="Protected Anvil workflow on main" /></a>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-8b6dff.svg" alt="MIT License" /></a>
-  </p>
+### All of f(x) Protocol, inside Telegram.
+
+<a href="https://t.me/FxAeonBot"><b>Open in Telegram</b></a>
+&nbsp;·&nbsp;
+<a href="https://fxaeon.com">Web app</a>
+&nbsp;·&nbsp;
+<a href="https://fxaeon.xyz">Website</a>
+&nbsp;·&nbsp;
+<a href="docs/README.md">Docs</a>
+
+<br>
+<br>
+
+<a href="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/ci.yml"><img alt="Client CI" src="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/ci.yml/badge.svg"></a>
+<a href="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/e2e-mini-app.yml"><img alt="End-to-end tests" src="https://github.com/0xNaeemHassan/FxAeon/actions/workflows/e2e-mini-app.yml/badge.svg"></a>
+<a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-8b6dff"></a>
+
 </div>
 
-## Product preview
+<br>
 
-<p align="center">
-  <img src="docs/review/assets/portfolio-20260930-mobile.png" alt="FxAeon portfolio with illustrative test assets" width="30%" />
-  <img src="docs/review/assets/trade-input-20260930-mobile.png" alt="FxAeon ETH trade form and review action" width="30%" />
-  <img src="docs/review/assets/earn-instant-withdrawal-20260930-mobile.png" alt="FxAeon fxSAVE instant withdrawal options" width="30%" />
-</p>
-<p align="center"><sub>Test-wallet captures · <a href="docs/review/README.md">Capture details</a></sub></p>
+FxAeon is a self-custodial Telegram Mini App and web app for [f(x) Protocol](https://fxprotocol.gitbook.io/fx-docs). It is built on the official [f(x) Protocol SDK](https://github.com/aladdindao/fx-sdk). You can:
 
-## Quick start
+- trade ETH and BTC with leverage;
+- earn with fxSAVE;
+- borrow fxUSD against your collateral;
+- move funds between Ethereum and Base.
 
-Requirements: Node.js 22 and pnpm 11.19.0 through Corepack.
+Every step is simulated and explained before your wallet opens.
 
-```bash
-corepack enable
-corepack prepare pnpm@11.19.0 --activate
-pnpm install --frozen-lockfile
-cp apps/mini-app/.env.example apps/mini-app/.env.local
-pnpm dev
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/screens-dark.webp">
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/readme/screens-light.webp">
+  <img alt="FxAeon on a phone: Portfolio, Trade, Earn with fxSAVE, and Borrow fxUSD" src="docs/assets/readme/screens-dark.webp" width="100%">
+</picture>
 
-Open <http://localhost:3000>. Portfolio is the first screen. A Privy app ID enables Privy login; without it, users can connect an injected EVM wallet. Configure restricted Ethereum and Base Alchemy endpoints before testing protocol reads. All `NEXT_PUBLIC_*` values are included in the browser bundle; never put signing secrets or a Telegram bot token there.
-
-See [SETUP.md](SETUP.md) for environment variables and local testing, and [deployment](docs/deployment.md) for Cloudflare Pages configuration.
+<sub>Screens render the real app with sample data.</sub>
 
 ## What you can do
 
-- **Positions:** view and manage Ethereum ETH/BTC long and short positions, including open, increase, reduce, close, and leverage adjustment.
-- **Borrow:** add long collateral and borrow fxUSD, or repay fxUSD and withdraw collateral.
-- **Earn:** deposit into fxSAVE, track queued redemptions, and claim when ready.
-- **Move:** bridge supported fxUSD and fxSAVE between Ethereum and Base.
-- **Portfolio:** see wallet assets, protocol positions, and transaction history together.
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>Trade</h4>
+      Go long or short on ETH and BTC with leverage, within the pool's live limits.
+    </td>
+    <td width="50%" valign="top">
+      <h4>Manage positions</h4>
+      Add to, reduce, close, or re-lever any position. Each card shows how much is borrowed and how much is yours.
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <h4>Earn</h4>
+      Deposit into fxSAVE and watch its value compound. Withdraw instantly for a fee, or queue and claim after the cooldown.
+    </td>
+    <td valign="top">
+      <h4>Borrow</h4>
+      Borrow fxUSD against ETH or BTC collateral, with your limit shown before you sign. Repay and withdraw the same way.
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <h4>Move</h4>
+      Bridge fxUSD and fxSAVE between Ethereum and Base over LayerZero. The source and destination are tracked separately.
+    </td>
+    <td valign="top">
+      <h4>History</h4>
+      Every transaction reads as the action it was, with exact amounts on demand.
+    </td>
+  </tr>
+</table>
+
+## Built to be trusted
+
+- **Self-custodial.** Your Privy or browser wallet is the only signer. There are no private keys, no server-side signing and no background executor.
+- **Checked before signing.** Each route is policy-checked and simulated before a wallet prompt opens. A step that cannot be paid for, or that changed since review, stops first.
+- **A locked protocol surface.** The app uses exactly 15 f(x) Protocol SDK methods, pinned in [`fx-scope.lock.json`](fx-scope.lock.json) and [the SDK scope](docs/sdk-scope.md).
+- **Honest numbers.** Prices are display context only and never feed planning or signing. Missing data reads as unavailable, never as a guess.
+
+> [!IMPORTANT]
+> FxAeon is unaudited application software for financial transactions. Review every request in your wallet. See [`SECURITY.md`](SECURITY.md) and [the security model](docs/security.md).
 
 ## How it works
 
-FxAeon is a browser and Telegram Mini App built with the official f(x) SDK. The financial app is a static client: protocol reads and transaction plans use the pinned SDK, and the user's selected wallet approves each transaction. FxAeon exposes exactly 15 approved f(x) SDK methods; [`fx-scope.lock.json`](fx-scope.lock.json) and [the SDK scope](docs/sdk-scope.md) define that boundary.
-
 ```mermaid
 flowchart LR
-    WEB[Browser] --> APP[Static Next.js app]
-    TG[Telegram Mini App] --> APP
-    APP --> SDK["Pinned f(x) SDK"]
-    APP --> RPC[Read-only Ethereum and Base RPC]
-    APP --> WALLET[User-selected wallet]
+    TG[Telegram Mini App] --> APP[Static Next.js app]
+    WEB[Browser] --> APP
+    APP --> SDK["f(x) Protocol SDK"]
+    APP --> RPC[Read-only RPC]
+    APP --> WALLET[Your wallet]
     SDK --> ETH[Ethereum]
     WALLET --> ETH
     WALLET --> BASE[Base]
     ETH <--> LZ[LayerZero]
     BASE <--> LZ
-    APP -. display only .-> PRICES[Validated price feeds]
 ```
 
-Protocol actions run in the client. The only server endpoint is the optional, read-only `/api/gas` Pages Function; it cannot plan, sign, or establish protocol state. There is no database, delegated signer, or background executor. Ethereum is authoritative for positions, borrowing, and fxSAVE; bridge source confirmation and destination delivery are tracked separately. See [architecture](docs/architecture.md) for module and data ownership.
+FxAeon is a static client. Protocol reads and transaction plans come from the pinned SDK in the browser, and the user's wallet signs each step after its receipt-verified predecessor.
 
-## Transaction review and safety
+The only server code is an optional, read-only gas endpoint ([`functions/api/gas.ts`](functions/api/gas.ts)). It cannot plan, sign or change protocol state. Ethereum is authoritative for positions, borrowing and fxSAVE. See [the architecture](docs/architecture.md).
 
-The transaction runner validates and simulates the reviewed route before wallet requests, asks for separate confirmation for each step, and waits for a verified receipt before continuing. The selected Privy or browser wallet is the only signing authority; FxAeon does not handle private keys or submit transactions from a server.
+## Quick start
 
-USD prices and charts are display context only. They do not affect planning or signing, and position value is not P&L, ROI, or liquidation value. FxAeon is unaudited application software for financial transactions. Review each request in your wallet and see [`SECURITY.md`](SECURITY.md) and [`docs/security.md`](docs/security.md).
+Requires Node.js 22 and pnpm 11.19.0 (through Corepack).
 
-## Verification
+```bash
+corepack enable
+pnpm install --frozen-lockfile
+cp apps/mini-app/.env.example apps/mini-app/.env.local
+pnpm dev
+```
 
-Run the repository's complete credential-free checks:
+1. Open <http://localhost:3000>.
+2. Add a Privy app ID to sign in with Privy. Without one, an injected EVM wallet still works.
+3. Configure restricted Ethereum and Base Alchemy endpoints for protocol reads.
+
+> [!WARNING]
+> Every `NEXT_PUBLIC_*` value ships in the browser bundle. Never put signing secrets or a bot token there.
+
+See [SETUP.md](SETUP.md) for every environment variable and [deployment](docs/deployment.md) for Cloudflare Pages.
+
+## Quality bar
 
 ```bash
 pnpm verify
 ```
 
-The protected Anvil tests use disposable local accounts and require an operator-supplied Ethereum fork endpoint. They never use production funds:
+One credential-free command runs the gates every change must pass:
+
+| Group | Gates |
+| --- | --- |
+| Static checks | SDK scope and architecture contracts, lint, typecheck, frontend secret scan, dependency audit |
+| Unit tests | The full unit suite |
+| Browser tests | The production build, swept across phone widths, themes and 200% text, plus isolated page harnesses |
+| Landing | Contrast measured on painted pixels, and its strict Content-Security-Policy |
+| Size | The release bundle budget |
+
+Protected fork tests run real transactions against a local Ethereum fork with disposable accounts, never production funds:
 
 ```bash
 pnpm test:anvil:all
-pnpm test:anvil:browser
 ```
 
-See [testing](docs/testing.md) for the CI gates, browser suite, and fork setup. Production browser tests and the isolated Borrow, overlay, and UI state lab suites have separate commands; the lab is development-only. See the [browser test gates](docs/browser-test-gates.md) and [UI state lab guide](docs/ui-state-lab.md).
+More in [testing](docs/testing.md) and the [browser test gates](docs/browser-test-gates.md).
+
+## Repository
+
+| Path | What lives there |
+| --- | --- |
+| [`apps/mini-app`](apps/mini-app) | The Telegram Mini App and fxaeon.com: Next.js 15 static export, React 19, Privy, wagmi and viem |
+| [`apps/landing`](apps/landing) | fxaeon.xyz: a static site with a WebGL aurora and a strict CSP |
+| [`functions/api`](functions/api) | The optional read-only gas endpoint (Cloudflare Pages Function) |
+| [`docs`](docs/README.md) | Product, architecture, security, testing and deployment guides |
+| [`DESIGN.md`](DESIGN.md) | The Aeon design system: surfaces, themes, motion and responsive rules |
 
 ## Documentation
 
-| Guide | Purpose |
-| --- | --- |
-| [Setup](SETUP.md) | Install, configure, and run locally |
-| [Contributing](CONTRIBUTING.md) | Change workflow and review expectations |
-| [Architecture](docs/architecture.md) | Runtime boundaries and data ownership |
-| [Security](docs/security.md) | Threat model and controls |
-| [SDK scope](docs/sdk-scope.md) | Locked protocol capability contract |
-| [Testing](docs/testing.md) | CI, browser, and protected fork checks |
-| [Browser test gates](docs/browser-test-gates.md) | Production browser suite and isolated harness commands |
-| [UI state lab](docs/ui-state-lab.md) | Development-only deterministic component and receipt fixtures |
-| [Deployment](docs/deployment.md) | App and landing Pages projects |
-| [Brand and capture provenance](docs/brand-assets.md) | Marks, themes, and checked-in screenshots |
+[Setup](SETUP.md) · [Contributing](CONTRIBUTING.md) · [Architecture](docs/architecture.md) · [Security](docs/security.md) · [SDK scope](docs/sdk-scope.md) · [Testing](docs/testing.md) · [Deployment](docs/deployment.md) · [Brand assets](docs/brand-assets.md)
 
-The searchable, read-only product guide is available in the app under **More → FxAeon docs**.
+The searchable product guide is also in the app under **More → FxAeon docs**.
 
 ## License
 
-FxAeon is available under the [MIT License](LICENSE).
+[MIT](LICENSE)
