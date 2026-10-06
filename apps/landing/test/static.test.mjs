@@ -62,9 +62,13 @@ test('the hero states the product, keeps Telegram primary, and the web app secon
   assert.match(html, /<a class="pill primary" href="https:\/\/t\.me\/FxAeonBot"/);
   assert.match(html, /<a class="web-link" href="https:\/\/fxaeon\.com\/">Open web app/);
   for (const id of ['moves', 'protocol', 'telegram', 'faq']) assert.equal(html.match(new RegExp(`id="${id}"`, 'g'))?.length, 1, `#${id} should exist exactly once`);
+  assert.match(html, /<a href="#moves">Features<\/a>\s*<a href="#protocol">f\(x\) Protocol<\/a>/);
+  assert.match(html, /<h2 id="moves-title">Everything f\(x\) Protocol SDK does, a tap away\.<\/h2>/);
+  assert.match(html, />Explore f\(x\) Protocol <span aria-hidden="true">↗<\/span><\/a>/);
+  assert.match(html, /Every transaction checked and simulated before signing/);
 });
 
-test('every illustration is labelled as an example and offers no fake controls', () => {
+test('illustrations are described as examples and offer no fake controls', () => {
   const hero = elementSource(html, /<figure class="hero-stage"/, 'figure');
   const stage = elementSource(html, /<figure class="chapter-stage"/, 'figure');
   const review = elementSource(html, /<figure class="review-card"/, 'figure');
@@ -73,8 +77,6 @@ test('every illustration is labelled as an example and offers no fake controls',
   assert.match(stage, /role="img" aria-label="Example FxAeon screens/);
   assert.match(review, /aria-label="Example transaction review"/);
   assert.match(chat, /role="img" aria-label="Example Telegram chat/);
-  for (const phone of [hero, stage]) assert.match(phone, /<span class="example-badge">Example<\/span>/, 'Each phone shows an Example badge');
-  assert.match(review, /<p class="example-badge">Example<\/p>/);
   for (const [name, source] of Object.entries({ hero, stage, review, chat })) {
     assert.doesNotMatch(source, /<(?:a|button|input|select|textarea)\b/, `The ${name} illustration must not contain interactive controls`);
   }
@@ -119,21 +121,18 @@ test('external links use a safe target policy', () => {
   for (const tag of external) assert.match(tag, /rel="noreferrer"/);
 });
 
-test('motion is opt-in, and every loop is ambient and pausable', () => {
+test('motion is opt-in, and every loop stays in an ambient region', () => {
   const motion = cssBlock(css, '@media (prefers-reduced-motion: no-preference)');
   const outside = css.slice(0, motion.start) + css.slice(motion.end + 1);
   assert.doesNotMatch(outside.replace(/@keyframes[^{]+\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g, ''), /\banimation\s*:/,
     'Animations must only be declared for visitors who have not asked for reduced motion');
-  assert.match(motion.body, /:root\[data-motion="paused"\] :is\(\[data-ambient\], \[data-ambient\] \*\) \{ animation-play-state: paused !important; \}/);
   for (const rule of motion.body.match(/[^{}]+\{[^{}]*\binfinite\b[^{}]*\}/g) || []) {
     const selector = rule.slice(0, rule.indexOf('{'));
     assert.match(selector, /\[data-ambient\]|\.traveller-orbit/, `Looping animation outside an ambient region: ${selector.trim()}`);
   }
   assert.match(html, /<g class="traveller-orbit" data-ambient>/);
   assert.match(html, /<figure class="hero-stage"[^>]*data-ambient>/);
-  assert.match(html, /<button class="motion-toggle" type="button">/);
-  assert.match(script, /fxaeon-motion/);
-  assert.match(aurora, /data-motion/);
+  assert.match(aurora, /prefers-reduced-motion: reduce/, 'The aurora holds one frame under reduced motion');
 });
 
 test('built output includes launcher, scripts, and strict static headers', async () => {

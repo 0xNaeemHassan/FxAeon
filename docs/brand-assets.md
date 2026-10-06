@@ -27,7 +27,7 @@ palette.
 
 The landing header is transparent over the aurora, with a soft sky scrim that
 keeps its links legible on any frame, and gains a blurred surface once the page
-scrolls. Respect reduced-motion preferences and the footer's motion control.
+scrolls. Respect reduced-motion preferences.
 When changing the aurora, overlays, typography, colors, or theme behavior,
 rerun `pnpm test:landing:browser` (it measures text contrast against the
 painted aurora) and review both themes on mobile and desktop.
@@ -44,6 +44,7 @@ Populated position screenshots are separate. Their
 is authoritative for the browser-fork provenance, pinned block, verified
 ETH/BTC long/short positions, captures, and restored snapshot state. Displayed
 prices and charts are illustrative and visibly labelled. The landing page
-renders app screens in HTML/CSS with example values labelled Example; it does
+renders app screens in HTML/CSS with example values, described as examples to
+assistive technology; it does
 not embed the populated position screenshots. Those screenshots document a test fixture,
 not production balances or market-price evidence.

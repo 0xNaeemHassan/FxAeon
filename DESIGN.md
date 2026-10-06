@@ -1,6 +1,6 @@
 # FxAeon design contract
 
-FxAeon presents onchain actions as a calm, precise workspace: one decision per surface, numbers as the hero, and violet reserved for intent. Prioritize clear transaction context, readable balances, and obvious next steps over decoration. Product screens use the "Aeon" system described below; the public landing page sets the brand on an aurora field around HTML renderings of the app. Its phones and review show example values, labelled as such, never live data.
+FxAeon presents onchain actions as a calm, precise workspace: one decision per surface, numbers as the hero, and violet reserved for intent. Prioritize clear transaction context, readable balances, and obvious next steps over decoration. Product screens use the "Aeon" system described below; the public landing page sets the brand on an aurora field around HTML renderings of the app. Its phones and review show example values, never live data, and assistive technology hears them described as examples.
 
 ## Principles
 
@@ -64,7 +64,7 @@ The landing page (fxaeon.xyz) is the brand's stage: dark first, with a light the
 | Element | Contract |
 | --- | --- |
 | Aurora | `aurora.js` draws curtains of light in raw WebGL at a fraction of screen resolution and at most 30 frames a second. They hang high above the hero, dim through the middle of the page, and settle behind the finale. The CSS gradient beneath is the still frame and the fallback. Curtain colors are capped so text keeps WCAG AA on the brightest frame; `scripts/verify_landing_browser.mjs` measures contrast against the painted pixels |
-| Phones | HTML screens in the app's Official theme with its tab bar. Every phone and the review card carry an Example badge; illustrations are `role="img"` and contain no controls |
+| Phones | HTML screens in the app's Official theme, with a status bar and its tab bar. Illustrations are `role="img"` with labels that call them examples, and contain no controls |
 | Chapters | From 960px one pinned phone follows the chapter at the middle of the screen: its screen slides in from the side it comes from and its tab highlight travels. Narrower screens stack a phone inside each chapter |
-| Motion | Arrivals settle within a few seconds. Loops are slow, ambient (`data-ambient`), and pause with the footer's motion control, which persists. Reduced motion shows every section in place, removes transitions, and holds one aurora frame |
+| Motion | Arrivals settle within a few seconds. Loops are slow and confined to ambient regions (`data-ambient`). Reduced motion shows every section in place, removes transitions, and holds one aurora frame |
 | Policy | No inline styles or scripts, no network requests, no runtime dependencies. States that wait for script are gated on `:root[data-js]`, so the page is complete without it |

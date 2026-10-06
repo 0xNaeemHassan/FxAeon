@@ -1,9 +1,9 @@
 /* FxAeon landing, "Aeon".
  * An aurora field drawn in WebGL, the real product rendered in HTML, and
  * motion that only ever explains. Every animation sits behind
- * (prefers-reduced-motion: no-preference); ambient loops pause with the
- * footer's motion control; states that wait for script are gated on
- * :root[data-js] so the page is complete without it. */
+ * (prefers-reduced-motion: no-preference), and loops stay in ambient regions;
+ * states that wait for script are gated on :root[data-js] so the page is
+ * complete without it. */
 
 @font-face {
   font-family: "Inter";
@@ -300,42 +300,13 @@ ol, ul { padding: 0; list-style: none; }
 }
 
 /* ---------- Shared type ---------- */
-.eyebrow {
-  display: inline-flex;
-  min-height: 34px;
-  align-items: center;
-  gap: 8px;
-  padding: 0 14px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--surface-solid) 58%, transparent);
-  box-shadow: inset 0 0 0 1px var(--line);
-  color: var(--mut);
-  font-size: 13.5px;
-  font-weight: 600;
-}
-.eyebrow:has(img) { padding-left: 7px; }
-.eyebrow img { border-radius: 50%; }
-.section-head { display: grid; justify-items: start; gap: 20px; max-width: 920px; }
+.section-head { display: grid; justify-items: start; gap: 22px; max-width: 920px; }
 .section-head h2, .trust-copy h2 {
   font-size: clamp(38px, 5.4vw, 78px);
   font-weight: 650;
   letter-spacing: -0.052em;
   line-height: 0.98;
   text-wrap: balance;
-}
-.example-badge {
-  display: inline-flex;
-  height: 20px;
-  align-items: center;
-  padding: 0 8px;
-  border-radius: 999px;
-  background: rgba(185, 160, 255, 0.18);
-  color: #ddd2ff;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  line-height: 1;
-  text-transform: uppercase;
 }
 
 /* ---------- Hero ---------- */
@@ -369,7 +340,6 @@ main > section { width: var(--page); margin-inline: auto; }
 }
 .lede { max-width: 36ch; color: var(--mut); font-size: clamp(17px, 1.4vw, 21px); line-height: 1.55; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
-.micro { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 10px; color: var(--mut); font-size: 14px; }
 .network-pair { display: inline-flex; flex: none; }
 .network-pair img { border-radius: 50%; box-shadow: 0 0 0 2px var(--bg); }
 .network-pair img + img { margin-left: -6px; }
@@ -470,6 +440,7 @@ main > section { width: var(--page); margin-inline: auto; }
 }
 .phone-notch { position: absolute; z-index: 6; top: 20px; left: 50%; width: 92px; height: 27px; border-radius: 999px; background: #050407; transform: translateX(-50%); }
 .phone-status { position: absolute; z-index: 6; top: 24px; left: 32px; right: 30px; display: flex; height: 19px; align-items: center; justify-content: space-between; color: var(--app-text); }
+.status-time { font-size: 14px; font-weight: 650; letter-spacing: -0.01em; }
 .status-icons { width: 36px; height: 12px; }
 .screen {
   position: absolute;
@@ -592,24 +563,22 @@ main > section { width: var(--page); margin-inline: auto; }
 .app-tabbar[data-tab="3"] span:nth-child(4),
 .app-tabbar[data-tab="4"] span:nth-child(5) { color: var(--app-accent); }
 
-/* ---------- Proof ---------- */
+/* ---------- Proof: a quiet row of facts under the hero, divided by hairlines ---------- */
 .proof { padding-bottom: clamp(16px, 3vw, 32px); }
-.proof ul { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 12px; }
+.proof ul { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; row-gap: 16px; padding-top: 26px; border-top: 1px solid var(--line); }
 .proof li {
   display: inline-flex;
-  min-height: 46px;
   align-items: center;
-  gap: 10px;
-  padding: 0 18px 0 12px;
-  border-radius: 999px;
-  background: var(--surface);
-  box-shadow: inset 0 0 0 1px var(--line);
+  gap: 12px;
+  padding: 0 clamp(18px, 3vw, 40px);
   color: var(--mut);
-  font-size: 14.5px;
+  font-size: 15px;
   font-weight: 560;
+  line-height: 1.35;
 }
+.proof li + li { border-left: 1px solid var(--line); }
 .proof li img { border-radius: 50%; }
-.proof li svg { width: 20px; height: 20px; flex: none; fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.proof li svg { width: 22px; height: 22px; flex: none; fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
 /* ---------- Four moves ---------- */
 .moves { padding-top: var(--section); }
@@ -747,7 +716,6 @@ main > section { width: var(--page); margin-inline: auto; }
   color: var(--app-text);
   font-variant-numeric: tabular-nums;
 }
-.review-card .example-badge { justify-self: start; }
 .review-title { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 19px; font-weight: 700; letter-spacing: -0.02em; }
 .review-title span { padding: 4px 10px; border-radius: 999px; background: var(--app-surface-3); color: var(--app-mut); font-size: 12px; font-weight: 650; letter-spacing: 0; }
 .review-amount { font-size: 46px; font-weight: 650; letter-spacing: -0.055em; line-height: 1; }
@@ -841,7 +809,7 @@ main > section { width: var(--page); margin-inline: auto; }
 footer {
   display: grid;
   width: var(--page);
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 14px 24px;
   margin: 0 auto;
@@ -853,26 +821,6 @@ footer {
 .footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 4px; }
 .footer-links a { display: inline-flex; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; padding: 0 11px; border-radius: 999px; transition: color 0.2s ease, background-color 0.2s ease; }
 .footer-links a:hover { color: var(--text); background: color-mix(in srgb, var(--text) 7%, transparent); }
-.motion-toggle {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  gap: 10px;
-  padding: 0 16px 0 15px;
-  border-radius: 999px;
-  box-shadow: inset 0 0 0 1px var(--line-strong);
-  color: var(--mut);
-  font-size: 14px;
-  font-weight: 620;
-  transition: color 0.2s ease, box-shadow 0.2s ease;
-}
-.motion-toggle:hover { color: var(--text); box-shadow: inset 0 0 0 1px var(--accent); }
-.motion-icon { position: relative; width: 10px; height: 12px; flex: none; }
-.motion-icon::before, .motion-icon::after { content: ""; position: absolute; top: 0; bottom: 0; width: 3.5px; border-radius: 1px; background: currentColor; }
-.motion-icon::before { left: 0; }
-.motion-icon::after { right: 0; }
-:root[data-motion="paused"] .motion-icon::before { left: 1px; width: 0; height: 0; border-width: 6px 0 6px 10px; border-style: solid; border-color: transparent transparent transparent currentColor; border-radius: 0; background: none; }
-:root[data-motion="paused"] .motion-icon::after { display: none; }
 .copyright { color: var(--mut); font-size: 14px; }
 
 /* ---------- Layout steps ---------- */
@@ -933,7 +881,9 @@ footer {
   .orbits { inset: 0 -2%; }
   .orb-usdc, .orb-btc { display: none; }
   .hero-toast { bottom: 13%; left: 0; padding: 10px 16px 10px 10px; font-size: 13px; }
-  .proof li { flex: 1 1 100%; padding-block: 8px; border-radius: 22px; line-height: 1.35; }
+  .proof ul { display: grid; padding-top: 0; }
+  .proof li { padding: 15px 2px; border-bottom: 1px solid var(--line); }
+  .proof li + li { border-left: 0; }
   .chapter { padding-left: 22px; }
   .mechanic { padding: 18px 18px 10px; }
   .review-card { padding: 20px; }
@@ -954,10 +904,9 @@ footer {
   /* Arrival. The headline is painted at once; its accent line, the copy
      beneath it, and the stage follow. */
   .hero-accent { animation: accent-in 1s var(--ease-out) 0.1s both, accent-sheen 2.8s var(--ease-in-out) 0.8s both; }
-  .hero .lede, .hero .actions, .hero .micro { animation: rise-in 0.8s var(--ease-out) both; }
+  .hero .lede, .hero .actions { animation: rise-in 0.8s var(--ease-out) both; }
   .hero .lede { animation-delay: 0.2s; }
   .hero .actions { animation-delay: 0.3s; }
-  .hero .micro { animation-delay: 0.4s; }
   .hero-stage .phone { animation: phone-in 1.3s var(--ease-out) 0.15s both; }
   .orb { animation: orb-in 0.9s var(--spring) both; }
   .orb-eth { animation-delay: 0.5s; }
@@ -970,11 +919,10 @@ footer {
   .proof li:nth-child(1) { animation-delay: 0.55s; }
   .proof li:nth-child(2) { animation-delay: 0.62s; }
   .proof li:nth-child(3) { animation-delay: 0.69s; }
-  .proof li:nth-child(4) { animation-delay: 0.76s; }
   .hero-toast { animation: toast-in 0.9s var(--spring) 1.2s both; }
   .toast-check svg path { stroke-dasharray: 24; animation: check-draw 0.6s var(--ease-out) 1.6s both; }
 
-  /* Ambient life: slow, offset loops that the motion control pauses. */
+  /* Ambient life: slow, offset loops in the hero and diagrams. */
   [data-ambient] .phone { animation: phone-in 1.3s var(--ease-out) 0.15s both, bob 9s var(--ease-in-out) 1.5s infinite alternate; }
   [data-ambient] .orb img { animation: float 7s var(--ease-in-out) infinite alternate; }
   [data-ambient] .orb-btc img { animation-duration: 9s; animation-delay: -2s; }
@@ -983,7 +931,6 @@ footer {
   [data-ambient] .orb-usdc img { animation-duration: 11s; animation-delay: -1s; }
   [data-ambient] .orb-base img { animation-duration: 8.5s; animation-delay: -6s; }
   [data-ambient] .hero-toast { animation: toast-in 0.9s var(--spring) 1.2s both, bob 7s var(--ease-in-out) 2.4s infinite alternate-reverse; }
-  :root[data-motion="paused"] :is([data-ambient], [data-ambient] *) { animation-play-state: paused !important; }
 
   /* Sections rise once as they arrive. */
   :root[data-js] [data-reveal] { opacity: 0; transform: translate3d(0, 32px, 0); }
@@ -1012,6 +959,11 @@ footer {
   .chat[data-shown] .bubble.out { transition-delay: 0.3s; }
   .chat[data-shown] .bubble.in { transition-delay: 1s; }
 
+  /* Headlines are read into light: each word brightens as the line scrolls up
+     to where it is read, and stays lit. */
+  .lit-heading .w { color: color-mix(in srgb, var(--text) 22%, transparent); transition: color 0.5s var(--ease-out); }
+  .lit-heading .w[data-lit] { color: var(--text); }
+
   /* Charts draw in when their screen is shown, as they do in the app. */
   :root[data-js] .spark-line { stroke-dasharray: 1; stroke-dashoffset: 1; }
   :root[data-js] .screen[data-drawn] .spark-line { stroke-dashoffset: 0; transition: stroke-dashoffset 1.6s var(--ease-out) 0.2s; }
@@ -1025,7 +977,6 @@ footer {
 @media (prefers-reduced-motion: reduce) {
   /* State changes still happen; they simply arrive without travel or fades. */
   *, *::before, *::after { transition: none !important; }
-  .motion-toggle { display: none; }
 }
 
 @keyframes accent-in { from { opacity: 0; filter: blur(12px); transform: translate3d(0, 10px, 0); } }

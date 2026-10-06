@@ -1,29 +1,24 @@
 // FxAeon landing behaviour. Loaded in <head> before the stylesheet, so the saved
-// theme and motion choice apply before the first paint; the rest waits for the
-// document. The page is complete without this file.
+// theme applies before the first paint; the rest waits for the document. The
+// page is complete without this file.
 (() => {
   const root = document.documentElement;
   const THEME_KEY = "fxaeon-theme";
-  const MOTION_KEY = "fxaeon-motion";
   const read = (key) => {
     try { return window.localStorage.getItem(key); } catch { return null; }
   };
   const write = (key, value) => {
-    try {
-      if (value === null) window.localStorage.removeItem(key);
-      else window.localStorage.setItem(key, value);
-    } catch { /* storage can be unavailable */ }
+    try { window.localStorage.setItem(key, value); } catch { /* storage can be unavailable */ }
   };
 
   root.dataset.theme = read(THEME_KEY) === "light" ? "light" : "dark";
-  if (read(MOTION_KEY) === "paused") root.dataset.motion = "paused";
   root.dataset.js = "";
 
   const init = () => {
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
     const finePointer = window.matchMedia("(hover: hover) and (pointer: fine)");
     const wide = window.matchMedia("(min-width: 960px)");
-    const still = () => reduce.matches || root.dataset.motion === "paused";
+    const still = () => reduce.matches;
 
     const year = document.getElementById("year");
     if (year) year.textContent = String(new Date().getFullYear());
@@ -212,6 +207,52 @@
       showAll();
     }
 
+    // Headlines are read into light: each word brightens as its line scrolls up
+    // to where it is read. Words become spans; the heading's text is unchanged.
+    const headlines = still() ? [] : [...document.querySelectorAll(".section-head h2, .trust-copy h2")].map((heading) => {
+      const words = [];
+      for (const node of [...heading.childNodes]) {
+        if (node.nodeType !== Node.TEXT_NODE) continue;
+        const fragment = document.createDocumentFragment();
+        for (const part of node.textContent.split(/(\s+)/)) {
+          if (!part) continue;
+          if (/^\s+$/.test(part)) {
+            fragment.append(part);
+            continue;
+          }
+          const word = document.createElement("span");
+          word.className = "w";
+          word.textContent = part;
+          fragment.append(word);
+          words.push(word);
+        }
+        node.replaceWith(fragment);
+      }
+      heading.classList.add("lit-heading");
+      return { heading, words, lit: -1 };
+    });
+    let lightFrame = 0;
+    const lightHeadlines = () => {
+      lightFrame = 0;
+      const view = window.innerHeight;
+      for (const line of headlines) {
+        const top = line.heading.getBoundingClientRect().top;
+        // Dark while its top is in the lower tenth; fully lit by the middle.
+        const progress = Math.min(1, Math.max(0, (view * 0.9 - top) / (view * 0.42)));
+        const count = Math.round(progress * line.words.length);
+        if (count === line.lit) continue;
+        line.words.forEach((word, index) => word.toggleAttribute("data-lit", index < count));
+        line.lit = count;
+      }
+    };
+    if (headlines.length) {
+      window.addEventListener("scroll", () => {
+        if (!lightFrame) lightFrame = requestAnimationFrame(lightHeadlines);
+      }, { passive: true });
+      window.addEventListener("resize", lightHeadlines);
+      lightHeadlines();
+    }
+
     // The hero answers the pointer: the phone tilts toward it, the tokens move
     // by depth, and the glass catches the light.
     const heroStage = document.querySelector(".hero-stage");
@@ -264,27 +305,6 @@
         card.style.setProperty("--mx", `${Math.round(event.clientX - box.left)}px`);
         card.style.setProperty("--my", `${Math.round(event.clientY - box.top)}px`);
       });
-    });
-
-    // Motion control: pauses every loop, the aurora, and the pointer response.
-    const motionToggle = document.querySelector(".motion-toggle");
-    const motionLabel = motionToggle?.querySelector(".motion-label");
-    const syncMotion = () => {
-      const paused = root.dataset.motion === "paused";
-      if (motionLabel) motionLabel.textContent = paused ? "Play motion" : "Pause motion";
-    };
-    syncMotion();
-    motionToggle?.addEventListener("click", () => {
-      const pause = root.dataset.motion !== "paused";
-      if (pause) {
-        root.dataset.motion = "paused";
-        resetPointer();
-        showAll();
-      } else {
-        delete root.dataset.motion;
-      }
-      write(MOTION_KEY, pause ? "paused" : null);
-      syncMotion();
     });
 
     reduce.addEventListener?.("change", () => {

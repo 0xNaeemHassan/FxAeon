@@ -1,8 +1,8 @@
 // The aurora behind the page: a domain-warped noise field drawn with raw WebGL
 // at a fraction of the screen's resolution, 30 frames a second at most. The
 // CSS gradient beneath it is the still frame, so no WebGL, Save-Data, or a lost
-// context all leave a complete page. Reduced motion and the motion control
-// hold one frame; a hidden tab stops drawing.
+// context all leave a complete page. Reduced motion holds one frame; a hidden
+// tab stops drawing.
 (() => {
   const host = document.querySelector(".aurora");
   const canvas = host?.querySelector("canvas");
@@ -191,7 +191,7 @@ void main() {
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   };
 
-  const still = () => reduce.matches || saveData || root.dataset.motion === "paused";
+  const still = () => reduce.matches || saveData;
   let running = false;
   let frame = 0;
   let last = 0;
@@ -258,7 +258,7 @@ void main() {
     if (records.some((record) => record.attributeName === "data-theme")) readColors();
     sync();
     redraw();
-  }).observe(root, { attributes: true, attributeFilter: ["data-theme", "data-motion"] });
+  }).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
 
   canvas.addEventListener("webglcontextlost", (event) => {
     event.preventDefault();

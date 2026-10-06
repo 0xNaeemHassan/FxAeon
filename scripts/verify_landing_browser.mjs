@@ -18,15 +18,15 @@ const WIDTHS = [320, 360, 393, 430, 768, 1024, 1440];
 
 /** Text whose contrast is measured against the pixels actually painted behind it. */
 const TEXT_SELECTORS = [
-  '.site-header .brand span', '.site-header nav a', '.hero .eyebrow', '.hero h1', '.hero .lede', '.hero .micro',
-  '.hero .web-link', '.proof li', '.section-head h2', '.section-head .eyebrow', '.chapter h3', '.chapter p',
+  '.site-header .brand span', '.site-header nav a', '.hero h1', '.hero .lede',
+  '.hero .web-link', '.proof li', '.section-head h2', '.trust-copy h2', '.chapter h3', '.chapter p',
   '.chapter .text-link', '.mechanic h3', '.mechanic p', '.mechanic .text-link', '.trust-points li', '.steps h3',
   '.steps p', '.faq summary', '.finale h2', '.finale p', 'footer .brand span', '.footer-links a', '.copyright',
 ].join(', ');
 
 const TARGET_SELECTORS = [
   '.site-header .brand', '.site-header nav a', '.theme-toggle', '.site-header .pill', '.menu', '.hero .actions a',
-  '.text-link', '.faq summary', '.finale .actions a', 'footer .brand', '.footer-links a', '.motion-toggle',
+  '.text-link', '.faq summary', '.finale .actions a', 'footer .brand', '.footer-links a',
 ].join(', ');
 
 const IN_BOUNDS_SELECTORS = [
@@ -260,7 +260,6 @@ try {
             chapter: holder.closest('.chapter').dataset.chapter,
             screens: [...holder.querySelectorAll('.screen')].map((screen) => screen.dataset.for),
             tab: holder.querySelector('.app-tabbar')?.getAttribute('data-tab'),
-            badge: holder.querySelector('.example-badge')?.textContent,
           })),
           stageShown: visible(document.querySelector('.chapter-stage')),
         };
@@ -277,7 +276,7 @@ try {
       assert.equal(state.revealHidden, 0, 'Reduced motion must show every section in place');
       if (width < 960) {
         assert.equal(state.stageShown, false, 'Narrow screens stack a phone in each chapter instead of pinning one');
-        assert.deepEqual(state.phones, CHAPTERS.map((chapter) => ({ chapter, screens: [chapter], tab: CHAPTER_TABS[chapter], badge: 'Example' })));
+        assert.deepEqual(state.phones, CHAPTERS.map((chapter) => ({ chapter, screens: [chapter], tab: CHAPTER_TABS[chapter] })));
       } else {
         assert.equal(state.stageShown, true, 'Wide screens pin one phone beside the chapters');
       }
@@ -318,8 +317,7 @@ try {
   }
   await context.close();
 
-  // With motion welcome: arrivals settle promptly, loops are ambient, and the
-  // motion control pauses them across reloads.
+  // With motion welcome: arrivals settle promptly and loops stay ambient.
   const motionContext = await browser.newContext({ reducedMotion: 'no-preference', viewport: { width: 1440, height: 900 } });
   const motionPage = await motionContext.newPage();
   watch(motionPage);
@@ -334,18 +332,8 @@ try {
     if (timing.iterations === Infinity) assert.ok(timing.ambient, `Looping animation outside an ambient region: ${JSON.stringify(timing)}`);
     else assert.ok(timing.delay + timing.duration * timing.iterations <= 3600, `Arrival motion must settle promptly: ${JSON.stringify(timing)}`);
   }
-  await motionPage.locator('footer').scrollIntoViewIfNeeded();
-  await motionPage.locator('.motion-toggle').click();
-  assert.equal(await motionPage.locator('html').getAttribute('data-motion'), 'paused');
-  assert.equal(await motionPage.locator('.motion-label').innerText(), 'Play motion');
-  assert.equal(await motionPage.evaluate(() => document.getAnimations().filter((animation) => animation.effect.getComputedTiming().iterations === Infinity && animation.playState === 'running').length), 0, 'Pausing motion must pause every loop');
-  await motionPage.reload({ waitUntil: 'load' });
-  assert.equal(await motionPage.locator('html').getAttribute('data-motion'), 'paused', 'The motion choice should persist');
-  assert.equal(await motionPage.evaluate(() => document.querySelectorAll('[data-reveal]').length), 0, 'Paused motion should show sections in place');
 
   // Chapters: the pinned phone follows the chapter at the middle of the screen.
-  await motionPage.locator('.motion-toggle').click();
-  await motionPage.reload({ waitUntil: 'load' });
   for (const chapter of CHAPTERS) {
     await motionPage.locator(`.chapter[data-chapter="${chapter}"]`).evaluate((element) => element.scrollIntoView({ block: 'center' }));
     await motionPage.waitForFunction((name) => document.querySelector(`.chapter[data-chapter="${name}"]`)?.hasAttribute('data-active')
@@ -357,6 +345,17 @@ try {
     }), chapter);
     assert.deepEqual(shown, { tab: CHAPTER_TABS[chapter], active: 'active', chapterActive: true }, `Chapter ${chapter} should drive the phone`);
   }
+
+  // Headlines light word by word as they are read, without changing their text.
+  const headline = motionPage.locator('#protocol-title');
+  assert.equal(await headline.evaluate((element) => element.textContent), 'Mechanics that work for you, stated plainly.');
+  await headline.evaluate((element) => element.scrollIntoView({ block: 'end' }));
+  await motionPage.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+  const unlit = await headline.evaluate((element) => element.querySelectorAll('.w:not([data-lit])').length);
+  assert.ok(unlit > 0, 'A headline entering at the bottom of the screen should still be dim');
+  await headline.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+  await motionPage.waitForFunction(() => document.querySelectorAll('#protocol-title .w:not([data-lit])').length === 0);
+  assert.equal(await headline.evaluate((element) => element.textContent), 'Mechanics that work for you, stated plainly.');
   await motionContext.close();
 
   for (const theme of ['dark', 'light']) {
@@ -390,7 +389,7 @@ try {
   assert.deepEqual(externalRequests, [], 'Landing loaded unneeded external services');
   assert.deepEqual([...new Set(fontContentTypes)], ['font/woff2'], 'Self-hosted Inter font must be served with its font MIME type');
 
-  console.log(`Landing browser checks passed: ${WIDTHS.length * 2} theme/viewport states, contrast over the painted backdrop, visible-content bounds, 44px targets, example labelling, stacked and pinned chapters, menu/theme keyboard and persistence, reduced and paused motion, and zero external requests.`);
+  console.log(`Landing browser checks passed: ${WIDTHS.length * 2} theme/viewport states, contrast over the painted backdrop, visible-content bounds, 44px targets, example semantics, stacked and pinned chapters, menu/theme keyboard and persistence, reduced motion, and zero external requests.`);
 } finally {
   await browser?.close();
   server.kill();
