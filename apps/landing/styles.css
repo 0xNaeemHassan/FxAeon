@@ -1001,11 +1001,8 @@ main > section { width: var(--page); margin-inline: auto; }
 .diagram .muted { stroke: var(--mut-2); stroke-width: 2; }
 .diagram .dashed { stroke-dasharray: 0.014 0.02; }
 .diagram .accent-fill { fill: var(--accent); }
-.diagram .band { fill: color-mix(in srgb, var(--warn) 15%, transparent); stroke: color-mix(in srgb, var(--warn) 42%, transparent); }
-.diagram .danger-line { stroke: color-mix(in srgb, var(--danger) 72%, transparent); stroke-dasharray: 6 6; }
 .diagram .label { fill: var(--mut); font-family: var(--font); font-size: 12.5px; font-weight: 600; }
 .diagram .muted-text { fill: var(--mut-2); }
-.diagram .danger-text { fill: var(--danger); }
 .diagram .center { text-anchor: middle; }
 .diagram .end { text-anchor: end; }
 .diagram .chain-dot { fill: var(--surface-raised); stroke: var(--line-strong); stroke-width: 1.5; }
@@ -1294,9 +1291,9 @@ footer {
 
   /* Diagrams draw themselves once visible; the traveller then keeps crossing. */
   :root[data-js] .duo-item[data-reveal] .diagram .accent { stroke-dashoffset: 1; transition: stroke-dashoffset 1.8s var(--ease-out) 0.35s; }
-  :root[data-js] .duo-item[data-reveal] .diagram :is(.dot, .band, .muted, .traveller-orbit) { opacity: 0; transition: opacity 0.8s ease 0.9s; }
+  :root[data-js] .duo-item[data-reveal] .diagram :is(.dot, .muted, .traveller-orbit) { opacity: 0; transition: opacity 0.8s ease 0.9s; }
   :root[data-js] .duo-item[data-shown] .diagram .accent { stroke-dashoffset: 0; }
-  :root[data-js] .duo-item[data-shown] .diagram :is(.dot, .band, .muted, .traveller-orbit) { opacity: 1; }
+  :root[data-js] .duo-item[data-shown] .diagram :is(.dot, .muted, .traveller-orbit) { opacity: 1; }
   .duo-item[data-shown] .traveller-orbit, :root:not([data-js]) .traveller-orbit { animation: orbit 3.8s var(--ease-in-out) 1.6s infinite; }
 
   /* The vessel's surface ripples and the brake's bead breathes, slowly. */
