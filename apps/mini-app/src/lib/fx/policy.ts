@@ -357,4 +357,8 @@ export function positionDebtTokenAddress(market: "ETH" | "BTC", type: "long" | "
   return market === "ETH" ? FX_TOKENS.wstETH.address : FX_TOKENS.WBTC.address;
 }
 
+/** Canonical Ethereum destinations, exported for History labels only. */
+export const FX_ROUTER_ADDRESS: Address = ROUTER;
+export const FX_MINT_ROUTER_ADDRESS: Address = FX_MINT_ROUTER;
+
 export { OFT_SEND, APPROVE };
