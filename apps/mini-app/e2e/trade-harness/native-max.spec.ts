@@ -18,7 +18,7 @@ const mocks: Record<string, string> = {
   '@/components/ProductLayout': `import React from 'react'; export const ActionWorkspace = ({children,...props}) => <section {...props}>{children}</section>;`,
   '@/components/ActionReview': `import React from 'react'; export const ActionReview = ({editor, label}) => <>{editor}<button type="button">{label}</button></>;`,
   '@/components/MarketChart': `import React from 'react'; export const TradeMarketChart = () => null;`,
-  '@/components/PriceProvider': `export const useUsdPrices = () => ({status:'unavailable',prices:{}});`,
+  '@/components/PriceProvider': `export const useUsdPrices = () => ({status:'unavailable',prices:{}}); export const useLiveMarketQuote = () => ({ quote: null, status: 'unavailable', isFresh: false });`,
   '@/components/TokenIcon': `import React from 'react'; export default () => <span />;`,
   '@/components/MissingValue': `import React from 'react'; export const ValueOrSkeleton = ({value}) => <span>{value}</span>;`,
   '@/components/ProtocolPositionCard': `export const ProtocolPositionCard = () => null; export const ProtocolPositionNotice = () => null;`,
@@ -36,7 +36,7 @@ const mocks: Record<string, string> = {
   '@/lib/fx/tokenPresentation': `export const tokenSymbol=(value)=>value;`,
   '@/lib/telegram': `export const haptic=()=>{};`,
   '@/lib/walletAssets': `export const ASSET_PRICE_MAX_AGE_MS=60000;`,
-  '@/lib/settings': `export const DEFAULT_SLIPPAGE_PERCENT=0.5; export const readSlippagePercent=()=>0.5; export const readGasTier=()=> 'standard'; export const SETTINGS_KEY='settings'; export const SETTINGS_UPDATED_EVENT='settings-updated';`,
+  '@/lib/settings': `export const DEFAULT_SLIPPAGE_PERCENT=0.5; export const readSlippagePercent=()=>0.5; export const readGasTier=()=> 'standard'; export const SETTINGS_KEY='settings'; export const SETTINGS_UPDATED_EVENT='settings-updated'; export const GAS_TIERS=['standard','fast','rapid']; export const DEFAULT_GAS_TIER='standard'; export const MIN_SLIPPAGE_BPS=10; export const MAX_SLIPPAGE_BPS=200; export const SLIPPAGE_PRESETS_BPS=[10,50,100,200]; export const isSlippageBps=(v)=>Number.isInteger(v)&&v>=10&&v<=200; export const writeTransactionSettings=()=>true;`,
   '@/lib/transactionState': `export const readTradeDeepLinkContext=()=>null; export const resetTransactionAmounts=()=>({amount:'',leverage:2});`,
   '@/app/trade/fxUi': `export const parseAmount=(value)=>value ? BigInt(Math.round(Number(value)*1e18)) : null; export const positionInputTokenOptions=(market)=>market==='ETH'?['ETH','WETH','stETH','wstETH']:['WBTC']; export const positionKey=()=>''; export const tokenAddress=()=> '0x0000000000000000000000000000000000000001'; export const tokenDecimals=()=>18;`,
 };

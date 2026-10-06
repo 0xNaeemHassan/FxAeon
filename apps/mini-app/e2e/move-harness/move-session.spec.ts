@@ -11,6 +11,10 @@ const src = resolve(root, 'apps/mini-app/src');
 const entry = resolve(root, 'apps/mini-app/e2e/harness/move-session-entry.tsx');
 
 const mocks: Record<string, string> = {
+  // The settings gear links to Settings and closes with the router; the harness has neither Next's
+  // build-time env nor a mounted app router.
+  'next/link': `import React from 'react'; export default ({ href, children, prefetch, scroll, replace, ...props }) => <a href={typeof href === 'string' ? href : '#'} {...props}>{children}</a>;`,
+  'next/navigation': `export const useRouter = () => ({ push: () => {}, replace: () => {}, back: () => {}, prefetch: () => {} }); export const usePathname = () => '/move'; export const useSearchParams = () => new URLSearchParams();`,
   '@/components/ui': `import React from 'react'; export const AppShell = ({children}) => <main>{children}</main>; export const Card = ({children, ...props}) => <section {...props}>{children}</section>;`,
   '@/components/ProductUI': `import React from 'react'; export const PageHeading = ({title}) => <h1>{title}</h1>;`,
   '@/components/ProductLayout': `import React from 'react'; export const ActionWorkspace = ({children}) => <main>{children}</main>;`,
@@ -20,7 +24,7 @@ const mocks: Record<string, string> = {
   '@/lib/fx': `export const asFxSdkRpcTransport = (value) => value; export const assertAddress = (value) => value; export const assertBridgeActionTarget = () => {}; export const advancedBridgePolicy = () => ({}); export const assertChecksummedAddress = (value) => value; export const assertPublicClientChain = () => {}; export const bridgeDeliveryLowerBound = () => 0n; export const getBridgeApprovalAllowance = async () => 0n; export const getFxReadFacade = () => ({}); export const withReadDeadline = (value) => value; export const getPublicClient = () => ({ readContract: async () => 0n }); export const planBridgeRoute = async () => ({}); export const resolveBridgeApprovalTokenAddress = () => '0x0000000000000000000000000000000000000001'; export const resolveBridgeTokenAddress = () => '0x0000000000000000000000000000000000000001'; export const requireRpcUrl = () => 'http://localhost'; export const restoreSignatureRequiredDraftFromSearch = () => undefined; export const validateAdvancedBridgeContracts = async () => ({});`,
   '@/lib/wallet': `export const usePrivyWallet = () => ({ ...globalThis.__moveSessionHarness.wallet, sendTransaction: async () => ({ hash: '0x' }) });`,
   '@/app/trade/fxUi': `export const parseAmount = (value) => { const parsed = Number(value); return Number.isFinite(parsed) && parsed > 0 ? BigInt(Math.round(parsed * 1e18)) : null; };`,
-  '@/lib/transactionState': `export const resetTransactionAmounts = () => ({deposit:'',mint:'',repay:'',withdraw:''});`,
+  '@/lib/transactionState': `export const resetTransactionAmounts = () => ({amount:'',deposit:'',mint:'',repay:'',withdraw:'',shares:'',fraction:0.5,leverage:2});`,
   '@/components/TokenIcon': `export const ChainIcon = () => null;`,
 };
 
@@ -30,6 +34,7 @@ async function buildHarness(): Promise<string> {
     entryPoints: [entry], bundle: true, write: false, format: 'iife', platform: 'browser', target: 'es2020', jsx: 'automatic',
     loader: { '.tsx': 'tsx', '.ts': 'ts' }, absWorkingDir: root,
     plugins: [{ name: 'move-session-harness', setup(build: BuildApi) {
+      build.onResolve({ filter: /^next\/(link|navigation)$/ }, (args: { path: string }) => ({ path: args.path, namespace: 'mock' }));
       build.onResolve({ filter: /^@\// }, (args: { path: string }) => {
         if (mocks[args.path]) return { path: args.path, namespace: 'mock' };
         const candidate = resolve(src, args.path.slice(2));
