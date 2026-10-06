@@ -1,0 +1,20 @@
+/* Shared hero figure for portfolio and wallet totals. Surfaces are owned by
+ * the composing card; this module only shapes the number and its focus. */
+.hero {
+  position: relative;
+  isolation: isolate;
+}
+
+.hero :where(button, a):focus-visible { outline: 2px solid var(--mint); outline-offset: 3px; }
+:global([data-product-ui='v2']) .hero summary:focus-visible { outline: 2px solid var(--mint); outline-offset: -3px; border-radius: 10px; }
+
+/* The landing's headline scale: a large, tight figure that stands on the
+   canvas without a card. */
+.value {
+  font-size: clamp(40px, 12.4vw, 60px);
+  line-height: 1.02;
+  font-weight: 650;
+  letter-spacing: -.055em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}

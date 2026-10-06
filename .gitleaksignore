@@ -1,0 +1,2 @@
+# Finding-specific exceptions (commit:file:rule:line). Prefer a value allowlist
+# in .gitleaks.toml: fingerprints break whenever history is rewritten.

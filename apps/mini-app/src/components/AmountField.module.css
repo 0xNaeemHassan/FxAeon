@@ -1,0 +1,100 @@
+/* The amount panel: label and shortcuts above, a large figure with its asset
+ * pill, then value and balance context beneath. One surface, no inner boxes. */
+.field { min-width: 0; width: 100%; container-type: inline-size; }
+.labelRow { display: flex; min-width: 0; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; min-height: 30px; margin-bottom: 0; font-size: var(--fs-small); line-height: 1.4; }
+.labelRow > label { flex: 1 0 auto; min-width: 0; color: var(--mut); font-weight: 500; white-space: nowrap; }
+.meta { display: flex; min-width: 0; max-width: 100%; flex-direction: column; text-align: left; color: var(--mut); font-size: var(--fs-small); }
+.meta > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meta strong { color: var(--text); font-weight: 500; }
+.surface:global(.amount-control) {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  min-height: 0;
+  width: 100%;
+  padding: 12px 16px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--amount-ring, inset 0 0 0 1px var(--hairline));
+  transition: border-color var(--dur-fast) ease, box-shadow var(--dur-base) var(--ease-out), background-color var(--dur-base) ease;
+}
+/* Inside a flow card the panel takes the raised tone instead of a hairline.
+ * It clears the resting ring through a variable, never box-shadow itself, so
+ * the focus ring below still applies inside cards. */
+:global([data-flow-stage]) .surface:global(.amount-control),
+:global(.ui-card:not(.trade-ticket)) .surface:global(.amount-control) { background: var(--surface-2); --amount-ring: none; }
+/* The input draws no outline of its own; this 2px accent ring is the focus cue. */
+.surface:focus-within { border-color: var(--mint); box-shadow: 0 0 0 1px var(--mint), 0 0 0 4px var(--mint-dim); }
+.surface[data-invalid='true'] { border-color: color-mix(in srgb, var(--danger) 70%, transparent); box-shadow: 0 0 0 3px var(--danger-dim); }
+.shortcuts { display: flex; max-width: 100%; flex: 0 1 auto; justify-content: flex-end; align-items: center; gap: 0; margin: -8px -10px -8px auto; }
+.shortcuts button { display: flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; padding: 3px 2px; color: var(--mut); background: transparent; border: 0; border-radius: var(--radius-sm); font-size: var(--fs-caption); font-weight: 600; transition: color var(--dur-fast) ease, transform var(--dur-slow) var(--ease-spring); }
+.shortcuts button > span { padding: 5px 9px; border-radius: 999px; background: var(--surface-2); transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease, box-shadow var(--dur-fast) ease; }
+.shortcuts button:hover:not(:disabled), .shortcuts button[data-selected='true'] { color: var(--mint-bright); }
+.shortcuts button:hover:not(:disabled) > span, .shortcuts button[data-selected='true'] > span { background: var(--mint-dim); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mint) 28%, transparent); }
+:root[data-theme='light'] .shortcuts button:hover:not(:disabled), :root[data-theme='light'] .shortcuts button[data-selected='true'] { color: var(--mint); }
+:global([data-flow-stage]) .shortcuts button > span, :global(.ui-card:not(.trade-ticket)) .shortcuts button > span { background: var(--surface-3); }
+:global([data-flow-stage]) .shortcuts button:disabled > span, :global(.ui-card:not(.trade-ticket)) .shortcuts button:disabled > span { background: color-mix(in srgb, var(--surface-3) 60%, transparent); }
+.shortcuts button:active:not(:disabled) { transform: scale(0.94); transition-duration: var(--dur-press); }
+.shortcuts button:focus-visible { outline: 2px solid var(--mint-bright); outline-offset: -2px; }
+.shortcuts button:disabled { cursor: not-allowed; opacity: 1; color: var(--mut-2); }
+.shortcuts button:disabled > span { background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
+.entryRow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-width: 0; min-height: 56px; }
+/* The figure sizes to its own width at every phone size: each extra digit
+ * steps the type down, so exact amounts never run under the asset pill. */
+.entryFit { display: flex; min-width: 0; flex: 1 1 128px; container-type: inline-size; }
+.entryFit > input {
+  width: 100%;
+  min-width: 0;
+  min-height: 52px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: clamp(14px, calc(100cqi / (var(--amount-entry-length, 4) * 0.62 + 0.4)), var(--amount-max-size, var(--fs-amount)));
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-figure);
+  caret-color: var(--mint);
+  transition: font-size var(--dur-base) var(--ease-out);
+}
+.entryFit > input::placeholder { color: var(--mut-2); opacity: 0.7; }
+.token { flex: 0 1 auto; min-width: 0; max-width: 100%; }
+.token :global(button[aria-haspopup='dialog']) {
+  min-height: 44px;
+  max-width: 100%;
+  padding: 6px 12px 6px 6px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--surface-3);
+  box-shadow: var(--ring-inset);
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+.token :global(button[aria-haspopup='dialog']:hover) { border-color: var(--line-strong); }
+.tokenLabel { display: flex; min-width: 0; align-items: center; gap: 8px; padding: 6px 12px 6px 6px; border-radius: 999px; background: var(--surface-2); font-size: var(--fs-body); font-weight: 600; }
+.tokenLabel > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.usd { display: flex; min-width: 0; justify-content: space-between; flex-wrap: wrap; gap: 6px; min-height: 20px; margin-top: 2px; color: var(--mut); font-size: var(--fs-small); line-height: 1.45; font-variant-numeric: tabular-nums; }
+.error { margin: 8px 4px 0; color: var(--danger); font-size: var(--fs-caption); line-height: 1.5; animation: errorIn var(--dur-base) var(--ease-out) both; }
+@keyframes errorIn { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+.field[data-compact] .labelRow { margin-bottom: 0; }
+.field[data-compact] .usd { gap: 4px; min-height: 18px; margin-top: 2px; font-size: var(--fs-caption); }
+@media (max-width: 360px) { .surface:global(.amount-control) { padding-inline: 12px; } .entryRow { gap: 6px; } .labelRow { gap: 8px; } }
+/* The compact Trade ticket shares the first phone screen with its action. */
+@media (max-width: 640px) {
+  .field[data-compact] .labelRow { min-height: 28px; }
+  .field[data-compact] .entryRow, .field[data-compact] .entryFit > input { min-height: 48px; }
+}
+
+.balance { margin-left: auto; text-align: right; color: var(--mut); font-size: inherit; line-height: 1.5; }
+.balance strong { color: var(--text); font-weight: 600; }
+
+.entryFit > input:focus-visible { outline: none; }
+
+@media (max-width: 359px) { .labelRow { flex-wrap: wrap; } .labelRow > label { flex-basis: 100%; } }
+
+.maxSpinner { display: inline-block; width: 10px; height: 10px; margin-left: 4px; border: 1.5px solid currentColor; border-right-color: transparent; border-radius: 50%; vertical-align: middle; animation: max-spin .8s linear infinite; }
+@keyframes max-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .maxSpinner, .error { animation: none; } .entryFit > input { transition: none; } }

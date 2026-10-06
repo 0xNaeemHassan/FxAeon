@@ -1,0 +1,63 @@
+packages:
+  - 'apps/landing'
+  - 'apps/mini-app'
+
+allowBuilds:
+  '@reown/appkit': true
+  bufferutil: true
+  es5-ext: true
+  esbuild: true
+  keccak: true
+  msgpackr-extract: true
+  sharp: true
+  utf-8-validate: true
+  workerd: true
+
+minimumReleaseAgeExclude:
+  # Security fix: Wrangler's Miniflare chain upgrades undici to 7.29.1.
+  - miniflare@5.20260926.1-alpha
+  - wrangler@4.144.0
+
+# pnpm 10+ reads workspace-wide dependency policies from this file. Keeping
+# security overrides here also makes frozen installs match pnpm-lock.yaml.
+overrides:
+  'axios@>=1.0.0 <1.20.0': '1.20.0'
+  'body-parser@<1.20.6': '1.20.6'
+  'brace-expansion@>=1.0.0 <1.1.21': '1.1.21'
+  'brace-expansion@>=4.0.0 <5.0.12': '5.0.12'
+  browserslist: '4.28.8'
+  decode-uri-component: '0.5.0'
+  # GHSA-jggr-w7fw-pc2j: stack exhaustion on deeply nested values (pino-pretty under Privy).
+  'fast-copy@>=3.0.0 <3.1.0': '3.1.0'
+  'fast-uri@<3.1.5': '3.1.5'
+  'tsx>esbuild': '0.28.1'
+  'form-data@>=4.0.0 <4.0.6': '>=4.0.6'
+  hono: '4.13.7'
+  'js-yaml@>=4.0.0 <4.3.2': '4.3.2'
+  'nanoid@<3.3.18': '3.3.18'
+  # GHSA-wq5f-xc86-pv6w: librsvg CVE-2026-96889 bundled with sharp < 0.35.5.
+  'next>sharp': '0.35.5'
+  'miniflare>sharp': '0.35.5'
+  postcss: '8.5.28'
+  # 6.1.3 (CVE-2026-9358) makes Tailwind 3 silently drop group-*/peer-*
+  # variants; 6.1.4 keeps that fix and restores them.
+  postcss-selector-parser: '6.1.4'
+  socket.io-parser: '4.2.7'
+  # GHSA-68fv-2mgg-jv7q: event-loop DoS through indexed source-map section offsets (postcss).
+  'source-map-js@<1.2.2': '1.2.2'
+  use-sync-external-store: '1.6.0'
+  'uuid@<11.1.1': '11.1.1'
+  ws: '8.21.3'
+
+patchedDependencies:
+  '@aladdindao/fx-sdk@1.0.5': patches/@aladdindao__fx-sdk@1.0.5.patch
+  '@privy-io/react-auth@3.45.0': patches/@privy-io__react-auth@3.45.0.patch
+  braces@3.0.3: patches/braces@3.0.3.patch
+  query-string@7.1.3: patches/query-string@7.1.3.patch
+
+peerDependencyRules:
+  # ws 7's optional native accelerator is API-compatible with v6; pnpm's
+  # strict peer checker otherwise flags the transitive WalletConnect pairing.
+  allowedVersions:
+    utf-8-validate: '*'
+    ws: '*'

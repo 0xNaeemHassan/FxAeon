@@ -1,0 +1,78 @@
+name: Protected Anvil mainnet fork
+
+on:
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: Randomized snapshot and ordered-route iterations
+        required: false
+        default: '64'
+      fork_block:
+        description: Optional pinned Ethereum block for reproducible protocol fixtures
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fxaeon-anvil-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ethereum-fork:
+    name: Real positions, fxSAVE, browser, and fork stress
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: production
+    env:
+      FX_ANVIL_ITERATIONS: ${{ inputs.iterations }}
+      ANVIL_FORK_BLOCK: ${{ inputs.fork_block || vars.ANVIL_FORK_BLOCK }}
+      FX_ANVIL_MANIFEST_PATH: artifacts/anvil/protocol-proof.json
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: pnpm
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1
+        with:
+          version: v1.8.1
+          cache: 'false'
+      - run: pnpm install --frozen-lockfile
+      - name: Verify installed financial dependency patches
+        run: |
+          pnpm verify:scope
+          pnpm --dir apps/mini-app exec tsx --test test/sdk-debt-ratio-packing.test.ts
+      - name: Open and verify all four real f(x) positions
+        run: pnpm test:anvil
+        env:
+          ANVIL_FORK_URL: ${{ secrets.NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL }}
+      - name: Verify real fxSAVE Earn lifecycle on disposable fork
+        run: pnpm test:anvil:earn
+        env:
+          ANVIL_FORK_URL: ${{ secrets.NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL }}
+          FX_ANVIL_MANIFEST_PATH: artifacts/anvil/earn-proof.json
+          FX_ANVIL_EARN_MANIFEST_PATH: artifacts/anvil/earn-proof.json
+      - name: Run disposable fork transport stress
+        run: pnpm test:anvil:stress
+        env:
+          ANVIL_FORK_URL: ${{ secrets.NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL }}
+      - name: Install browser acceptance runtime
+        run: pnpm --dir apps/mini-app exec playwright install --with-deps chromium
+      - name: Open and close all positions through the mobile browser UI
+        run: pnpm test:anvil:browser
+        env:
+          ANVIL_FORK_URL: ${{ secrets.NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL }}
+          FX_ANVIL_MANIFEST_PATH: artifacts/anvil/browser-proof.json
+      - name: Upload redacted protocol proof
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fxaeon-anvil-protocol-proof-${{ github.run_id }}
+          path: artifacts/anvil/
+          if-no-files-found: warn
+          retention-days: 14

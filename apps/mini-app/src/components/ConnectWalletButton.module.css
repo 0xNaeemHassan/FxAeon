@@ -1,0 +1,36 @@
+/* Layered on the global .wallet-connect-toast, which owns placement, surface,
+   and the danger tone used for connection failures. */
+.notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* A request that ran out of time with no prompt on screen is not an error. */
+.notice[data-tone='calm'] {
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.noticeAction {
+  flex-shrink: 0;
+  min-height: 36px;
+  margin-block: -6px;
+  padding: 0 14px;
+  border-radius: var(--radius-full);
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 650;
+  transition: background-color var(--dur-fast) ease;
+}
+
+.noticeAction:hover {
+  background: var(--surface-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .noticeAction {
+    transition: none;
+  }
+}

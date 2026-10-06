@@ -1,0 +1,29 @@
+/* Shared page recipes use the active theme tokens and let existing product
+   surfaces keep their own visual treatment. */
+.workspace {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  color: var(--text);
+}
+.workspace > :where(header) { margin-bottom: 0; }
+
+.action { gap: 16px; }
+.compactAction { gap: 12px; }
+.portfolio { gap: 14px; }
+.account { gap: 16px; }
+
+.action > :where(button, a, [role='button'], [role='tab']) { min-height: 44px; }
+.action > :where(nav) { margin-bottom: 0; }
+.portfolio :where([data-financial-value], [data-number]) { font-variant-numeric: tabular-nums; }
+.portfolio :where([data-financial-value]) { min-width: 0; overflow-wrap: anywhere; }
+.account > :where(section) { min-width: 0; }
+.account > :where(section) > h2 { margin: 0 2px 10px; color: var(--mut); font-size: 13px; font-weight: 600; }
+
+@media (max-width: 380px) {
+  .action, .portfolio, .account { gap: 12px; }
+  .compactAction { gap: 8px; }
+}
+
+@media (min-width: 641px) and (max-width: 839px) { .compactAction { gap: 10px; } }
+@media (max-width: 640px) { .compactAction { gap: 8px; } }

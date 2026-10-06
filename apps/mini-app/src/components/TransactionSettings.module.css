@@ -1,0 +1,101 @@
+/* One settings panel for every action form: max slippage and network speed,
+ * each a segmented choice whose thumb glides to the selection. */
+.panel { display: grid; gap: 18px; padding-top: 4px; }
+.section { display: grid; gap: 8px; }
+.heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.heading h3 { color: var(--text); font-size: var(--fs-body); font-weight: 650; letter-spacing: -0.01em; }
+.value { color: var(--mint-bright); font-size: var(--fs-small); font-weight: 650; font-variant-numeric: tabular-nums; }
+:root[data-theme='light'] .value { color: var(--mint); }
+.help { color: var(--mut); font-size: var(--fs-caption); line-height: 1.5; }
+
+.choices,
+.speeds {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  padding: 4px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+.choices[data-thumb]::before,
+.speeds[data-thumb]::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc((100% - 8px) / var(--seg-count, 4));
+  border-radius: calc(var(--radius-md) - 4px);
+  background: var(--surface-3);
+  box-shadow: var(--ring-inset), 0 1px 3px rgba(0, 0, 0, 0.16);
+  transform: translateX(calc(var(--seg-index, 0) * 100%));
+  transition: transform var(--dur-slow) var(--ease-spring);
+}
+:root[data-theme='light'] .choices[data-thumb]::before,
+:root[data-theme='light'] .speeds[data-thumb]::before { background: var(--surface); box-shadow: 0 1px 2px rgba(54, 34, 79, 0.1), 0 2px 8px rgba(54, 34, 79, 0.06); }
+.choices button,
+.speeds button {
+  min-height: 44px;
+  border-radius: calc(var(--radius-md) - 4px);
+  color: var(--mut);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  transition: color var(--dur-fast) ease, transform var(--dur-slow) var(--ease-spring);
+}
+.speeds button { display: flex; min-height: 52px; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.speeds small { color: var(--mut-2); font-size: var(--fs-micro); font-weight: 500; }
+.choices button[aria-checked='true'],
+.speeds button[aria-checked='true'],
+.choices button:hover,
+.speeds button:hover { color: var(--text); }
+.speeds button[aria-checked='true'] small { color: var(--mut); }
+.choices button:active,
+.speeds button:active { transform: scale(0.95); transition-duration: var(--dur-press); }
+.choices button:focus-visible,
+.speeds button:focus-visible { outline: 2px solid var(--mint-bright); outline-offset: -2px; }
+.rateSkeleton { display: inline-block; width: 44px; height: 10px; border-radius: 4px; }
+
+.custom {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--mut);
+  font-size: var(--fs-small);
+  transition: box-shadow var(--dur-fast) ease;
+}
+.custom:focus-within,
+.custom[data-active] { box-shadow: inset 0 0 0 1.5px var(--mint); }
+.custom[data-invalid] { box-shadow: inset 0 0 0 1.5px var(--danger); }
+.custom input { min-width: 0; flex: 1; background: transparent; color: var(--text); font-size: var(--fs-body); font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; outline: none; }
+.custom input::placeholder { color: var(--mut-2); font-weight: 500; }
+.error { color: var(--danger); font-size: var(--fs-caption); line-height: 1.4; }
+
+.more {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-top: -4px;
+  border-radius: 999px;
+  color: var(--mint);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  transition: background-color var(--dur-fast) ease;
+}
+.more:hover { background: var(--mint-dim); }
+.more svg { width: 16px; height: 16px; transition: transform var(--dur-base) var(--ease-out); }
+.more:hover svg { transform: translateX(2px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .choices[data-thumb]::before, .speeds[data-thumb]::before, .choices button, .speeds button, .more svg { transition: none; }
+  .choices button:active, .speeds button:active { transform: none; }
+}

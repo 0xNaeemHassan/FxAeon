@@ -1,0 +1,2 @@
+/* 55% keeps large-figure contrast at or above 3:1 in every theme. */
+.fraction { color: color-mix(in srgb, var(--text) 55%, transparent); }

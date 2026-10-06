@@ -1,0 +1,30 @@
+# EditorConfig — https://editorconfig.org
+# Top-most EditorConfig file for the FxAeon monorepo.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.md]
+# Trailing whitespace can be meaningful (hard line breaks) in Markdown.
+trim_trailing_whitespace = false
+
+[*.{json,jsonc,yml,yaml}]
+indent_size = 2
+
+[*.{ts,tsx,js,jsx,mjs,cjs}]
+indent_size = 2
+
+[*.sol]
+indent_size = 4
+
+[Makefile]
+indent_style = tab
+
+[*.{sh,bash}]
+indent_size = 2

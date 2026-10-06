@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
+        with:
+          version: 11.19.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install browser verification runtime
+        run: pnpm --dir apps/mini-app exec playwright install --with-deps chromium
+
+      - name: Run complete repository verification
+        run: pnpm verify
+        env:
+          NEXT_PUBLIC_ALCHEMY_ETHEREUM_RPC_URL: https://eth-mainnet.g.alchemy.com/v2/release-placeholder
+          NEXT_PUBLIC_ALCHEMY_BASE_RPC_URL: https://base-mainnet.g.alchemy.com/v2/release-placeholder
+          NEXT_PUBLIC_TELEGRAM_APP_URL: https://t.me/FxAeonBot
+
+  release:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create Release
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
+        with:
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,17 @@
+.controls { display: flex; gap: 8px; }
+.controls span { width: 128px; height: 44px; border-radius: 24px; background: var(--surface-2); }
+.controls span:last-child { width: 44px; }
+.content { padding-top: 8px; }
+.heading { width: 120px; height: 32px; margin: 8px 0 24px; border-radius: 8px; background: var(--surface-2); }
+.workspace { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 24px; }
+.overview, .form { padding: 24px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); }
+.overview { display: flex; gap: 16px; align-items: flex-start; }
+.overview span { width: 28%; height: 24px; border-radius: 8px; background: var(--surface-2); }
+.form { display: grid; gap: 16px; }
+.form span { height: 32px; border-radius: 8px; background: var(--surface-2); }
+.form div { height: 88px; border-radius: 16px; background: var(--surface-2); }
+@media (max-width: 767px) {
+  .workspace { grid-template-columns: 1fr; gap: 16px; }
+  .overview { min-height: 100px; padding: 16px; }
+  .form { padding: 16px; }
+}

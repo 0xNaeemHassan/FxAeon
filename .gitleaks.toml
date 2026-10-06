@@ -1,0 +1,20 @@
+# Gitleaks config — extends default rules.
+# NOTE: scanning is from current HEAD forward. Credentials that were committed
+# historically must be considered burned and rotated (see docs/audit/AUDIT.md P0-1).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known non-secrets"
+paths = [
+  '''pnpm-lock\.yaml''',
+  '''bun\.lock''',
+]
+regexes = [
+  # Documentation placeholders
+  '''<from [^>]+>''',
+  '''your_[a-z_]+_here''',
+  # The public fxSAVE token contract. Constants named *TOKEN_ADDRESS trip the
+  # generic-api-key rule; a contract address is public, never a credential.
+  '''0x7743e50F534a7f9F1791DdE7dCD89F7783Eefc39''',
+]

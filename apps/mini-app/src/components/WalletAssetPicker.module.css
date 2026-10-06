@@ -1,0 +1,36 @@
+/* The trigger is the same pill as the protocol forms' asset button, with the
+   holding's network under its symbol. */
+.trigger {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 48px;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 8px;
+  border-radius: var(--radius-full);
+  padding: 4px 12px 4px 6px;
+  background: var(--surface-3);
+  box-shadow: var(--ring-inset);
+  color: var(--text);
+  text-align: left;
+  transition: background-color var(--dur-fast) ease, transform var(--dur-slow) var(--ease-spring);
+}
+.trigger:hover:not(:disabled) { background: color-mix(in srgb, var(--surface-3) 82%, var(--text) 6%); }
+.trigger:active:not(:disabled) { transform: scale(0.97); transition-duration: var(--dur-press); }
+.trigger:disabled { cursor: default; opacity: 0.7; }
+.copy { display: flex; min-width: 0; flex-direction: column; line-height: 1.15; }
+.copy strong { overflow: hidden; font-size: var(--fs-body); font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.copy small { overflow: hidden; color: var(--mut); font-size: var(--fs-micro); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.chevron { width: 16px; height: 16px; flex: 0 0 auto; color: var(--mut); transition: transform var(--dur-base) var(--ease-out); }
+.chevron[data-open] { transform: rotate(180deg); }
+.placeholder { width: 28px; height: 28px; flex: 0 0 auto; border-radius: 50%; }
+
+/* Rows carry the Portfolio holding layout inside the picker's row chrome. */
+.row { gap: 12px; }
+.row > :last-child { margin-left: auto; text-align: right; }
+
+@media (prefers-reduced-motion: reduce) {
+  .trigger, .chevron { transition: none; }
+  .trigger:active:not(:disabled) { transform: none; }
+}

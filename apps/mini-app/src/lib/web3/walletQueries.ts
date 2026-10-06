@@ -1,0 +1,299 @@
+import { QueryClient, queryOptions } from '@tanstack/react-query';
+import { getBalance, readContracts } from 'wagmi/actions';
+import { hashFn } from 'wagmi/query';
+import { erc20Abi, formatUnits, type Address } from 'viem';
+import { getChainId } from 'viem/actions';
+import { FX_TOKENS, type FxTokenKey } from '../fx/tokens';
+import { assertWalletAddress } from '../fx/validation';
+import type { WalletBalancesResult } from '../fx/balances';
+import type { WalletDataConfig } from './config';
+import { CANONICAL_MOVE_ASSETS, canonicalMoveSourceTokenAddress, type CanonicalMoveBalanceMap } from '../moveBalances';
+import type { CanonicalAssetRead } from '../walletAssets';
+import { assertConfiguredPublicClientChain } from '../fx/clients';
+import { getFxReadFacade, withReadDeadline } from '../fx/readFacade';
+
+export const WALLET_QUERY_ROOT = 'fxaeon-wallet';
+export const WALLET_BALANCE_STALE_MS = 15_000;
+export const FX_SAVE_CLAIMABLE_STALE_MS = 60_000;
+export const FX_SAVE_CLAIMABLE_REFETCH_MS = 45_000;
+
+export function walletQueryResultFresh(updatedAt: number, isStale: boolean, isFetching: boolean, now = Date.now(), staleMs = WALLET_BALANCE_STALE_MS): boolean {
+  return updatedAt > 0 && now - updatedAt < staleMs && !isStale && !isFetching;
+}
+
+export function createWalletQueryClient() {
+  return new QueryClient({ defaultOptions: {
+    queries: {
+      queryKeyHashFn: hashFn,
+      staleTime: WALLET_BALANCE_STALE_MS,
+      gcTime: 60_000,
+      retry: 1,
+      retryDelay: 1_000,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+      refetchIntervalInBackground: false,
+      // BigInt balances must remain exact; the default JSON structural-sharing
+      // walk is unnecessary for this small normalized result.
+      structuralSharing: false,
+    },
+    mutations: { retry: false },
+  } });
+}
+
+export function walletBalanceQueryKey(session: string, address: string, chainId: number) {
+  return [WALLET_QUERY_ROOT, session, chainId, address.toLowerCase(), 'balances'] as const;
+}
+
+/** Standard ERC-20 reads only. Protocol state/plans remain with the f(x) SDK. */
+export async function readWagmiWalletBalances(
+  config: WalletDataConfig, walletAddress: string, chainId: number, signal?: AbortSignal,
+): Promise<WalletBalancesResult> {
+  const address: Address = assertWalletAddress(walletAddress);
+  if (chainId !== 1) throw new Error('Supported token balances are available on Ethereum only.');
+  signal?.throwIfAborted();
+  // Wagmi's configured chain is metadata, not evidence about the RPC server.
+  const remoteChain = await getChainId(config.getClient({ chainId }));
+  if (remoteChain !== chainId) throw new Error(`RPC endpoint returned chain ${remoteChain}; expected ${chainId}`);
+  signal?.throwIfAborted();
+  return readWagmiWalletBalancesOnVerifiedChain(config, address, chainId, signal);
+}
+
+async function readWagmiWalletBalancesOnVerifiedChain(
+  config: WalletDataConfig, address: Address, chainId: 1, signal?: AbortSignal,
+): Promise<WalletBalancesResult> {
+  signal?.throwIfAborted();
+  const tokens = Object.values(FX_TOKENS).filter((token) => !token.native);
+  const [native, erc20] = await Promise.allSettled([
+    getBalance(config, { address, chainId }),
+    readContracts(config, {
+      allowFailure: true,
+      contracts: tokens.map((token) => ({
+        chainId, address: token.address, abi: erc20Abi,
+        functionName: 'balanceOf' as const, args: [address] as const,
+      })),
+    }),
+  ]);
+  signal?.throwIfAborted();
+  const balances: WalletBalancesResult['balances'] = [];
+  const failedTokens: FxTokenKey[] = [];
+  if (native.status === 'fulfilled') {
+    const token = FX_TOKENS.ETH;
+    balances.push({ key: token.key, address: token.address, decimals: token.decimals, amountWei: native.value.value });
+  } else failedTokens.push('ETH');
+  tokens.forEach((token, index) => {
+    const result = erc20.status === 'fulfilled' ? erc20.value[index] : undefined;
+    if (result?.status === 'success' && typeof result.result === 'bigint' && result.result >= 0n) {
+      balances.push({ key: token.key, address: token.address, decimals: token.decimals, amountWei: result.result });
+    } else failedTokens.push(token.key);
+  });
+  if (!balances.length) throw new Error('Wallet balances are temporarily unavailable.');
+  return { balances, failedTokens };
+}
+
+export function walletBalanceQueryOptions(config: WalletDataConfig, session: string, address: string, chainId = 1) {
+  return queryOptions({
+    queryKey: walletBalanceQueryKey(session, address, chainId),
+    queryFn: ({ signal }) => readWagmiWalletBalances(config, address, chainId, signal),
+  });
+}
+
+export function fxSaveClaimableQueryKey(session: string, address: string) {
+  return [WALLET_QUERY_ROOT, session, 1, address.toLowerCase(), 'fxsave-claimable'] as const;
+}
+
+export function fxSaveClaimableQueryOptions(
+  session: string,
+  address: string,
+  read = (userAddress: string) => getFxReadFacade().getFxSaveClaimable({ userAddress: assertWalletAddress(userAddress) }),
+  verifyChain = () => assertConfiguredPublicClientChain(1),
+) {
+  return queryOptions({
+    queryKey: fxSaveClaimableQueryKey(session, address),
+    queryFn: async ({ signal }) => {
+      signal.throwIfAborted();
+      await withReadDeadline(verifyChain());
+      signal.throwIfAborted();
+      const result = await withReadDeadline(read(address));
+      signal.throwIfAborted();
+      return result;
+    },
+    staleTime: FX_SAVE_CLAIMABLE_STALE_MS,
+  });
+}
+
+/**
+ * Exact, protocol-facing wallet reads for both supported chains. The legacy
+ * Ethereum-only query above remains available to existing consumers; this
+ * wider read is used by the live portfolio merger so indexed Alchemy data can
+ * never replace a canonical amount.
+ */
+export async function readCanonicalWalletAssets(
+  config: WalletDataConfig, walletAddress: string, chainId: 1 | 8453, signal?: AbortSignal,
+): Promise<CanonicalAssetRead> {
+  const address: Address = assertWalletAddress(walletAddress);
+  signal?.throwIfAborted();
+  const remoteChain = await getChainId(config.getClient({ chainId }));
+  if (remoteChain !== chainId) throw new Error(`RPC endpoint returned chain ${remoteChain}; expected ${chainId}`);
+  signal?.throwIfAborted();
+
+  if (chainId === 1) {
+    const result = await readWagmiWalletBalancesOnVerifiedChain(config, address, chainId, signal);
+    return canonicalAssetReadFromWalletBalances(result);
+  }
+
+  const settled = await Promise.allSettled([
+    getBalance(config, { address, chainId }),
+    readContracts(config, {
+      allowFailure: true,
+      contracts: CANONICAL_MOVE_ASSETS.map((key) => ({
+        chainId,
+        address: canonicalMoveSourceTokenAddress(key, chainId),
+        abi: erc20Abi,
+        functionName: 'balanceOf' as const,
+        args: [address] as const,
+      })),
+    }),
+  ]);
+  signal?.throwIfAborted();
+  const balances: CanonicalAssetRead['balances'] = [];
+  const failedTokens: FxTokenKey[] = [];
+  const native = settled[0];
+  if (native.status === 'fulfilled') balances.push({ key: 'ETH', address: null, decimals: 18, amountWei: native.value.value });
+  else failedTokens.push('ETH');
+  const erc20 = settled[1];
+  CANONICAL_MOVE_ASSETS.forEach((key, index) => {
+    const result = erc20.status === 'fulfilled' ? erc20.value[index] : undefined;
+    if (result?.status === 'success' && typeof result.result === 'bigint' && result.result >= 0n) {
+      balances.push({ key, address: canonicalMoveSourceTokenAddress(key, chainId), decimals: 18, amountWei: result.result });
+    } else failedTokens.push(key);
+  });
+  if (!balances.length) throw new Error('Wallet balances are temporarily unavailable.');
+  return { chainId, balances, failedTokens, updatedAt: Date.now() };
+}
+
+export function canonicalAssetReadFromWalletBalances(result: WalletBalancesResult): CanonicalAssetRead {
+  return {
+    chainId: 1,
+    balances: result.balances.map((balance) => ({
+      key: balance.key,
+      address: balance.key === 'ETH' ? null : balance.address,
+      decimals: balance.decimals,
+      amountWei: balance.amountWei,
+    })),
+    failedTokens: result.failedTokens,
+    updatedAt: Date.now(),
+  };
+}
+
+function ethereumCanonicalWalletAssetQueryOptions(config: WalletDataConfig, session: string, address: string) {
+  return queryOptions({
+    queryKey: walletBalanceQueryKey(session, address, 1),
+    queryFn: ({ signal }) => readWagmiWalletBalances(config, address, 1, signal),
+    select: canonicalAssetReadFromWalletBalances,
+  });
+}
+
+function baseCanonicalWalletAssetQueryOptions(config: WalletDataConfig, session: string, address: string) {
+  return queryOptions({
+    queryKey: [WALLET_QUERY_ROOT, session, 8453, address.toLowerCase(), 'canonical-assets'] as const,
+    queryFn: ({ signal }) => readCanonicalWalletAssets(config, address, 8453, signal),
+  });
+}
+
+export function canonicalWalletAssetQueryOptions(config: WalletDataConfig, session: string, address: string, chainId: 1): ReturnType<typeof ethereumCanonicalWalletAssetQueryOptions>;
+export function canonicalWalletAssetQueryOptions(config: WalletDataConfig, session: string, address: string, chainId: 8453): ReturnType<typeof baseCanonicalWalletAssetQueryOptions>;
+export function canonicalWalletAssetQueryOptions(config: WalletDataConfig, session: string, address: string, chainId: 1 | 8453) {
+  // Ethereum's canonical asset rows are a presentation of the exact balance
+  // result. Share the legacy key/queryFn so portfolio/profile observers join
+  // the same in-flight read instead of issuing a second identical snapshot.
+  return chainId === 1
+    ? ethereumCanonicalWalletAssetQueryOptions(config, session, address)
+    : baseCanonicalWalletAssetQueryOptions(config, session, address);
+}
+
+export function walletQueryScope(address: string, chainId: number) {
+  return {
+    predicate: ({ queryKey }) => queryKey[0] === WALLET_QUERY_ROOT
+      && queryKey[2] === chainId && queryKey[3] === address.toLowerCase(),
+  } satisfies Parameters<QueryClient['invalidateQueries']>[0];
+}
+
+type RefreshWork = { generation: number; promise: Promise<void> };
+const refreshes = new WeakMap<QueryClient, Map<string, RefreshWork>>();
+
+export type WalletQueryRefreshOptions = { afterReceipt?: boolean };
+
+/** Refresh only active wallet reads whose configured freshness has elapsed.
+ * Block notifications are hints for ordinary polling; explicit/manual and
+ * receipt refreshes continue through invalidateWalletQueries below so they
+ * can force a trailing read and win races with pre-receipt work.
+ */
+export function refreshStaleWalletQueries(client: QueryClient, address: string, chainId: number): Promise<void> {
+  const scope = walletQueryScope(address, chainId);
+  return client.refetchQueries({
+    predicate: (query) => scope.predicate(query) && query.isStale(),
+    type: 'active',
+  }, { cancelRefetch: false });
+}
+
+/**
+ * A pre-receipt RPC response must not win a post-receipt refresh. Cancel it,
+ * then refetch; coalesce simultaneous consumers of the same wallet/chain.
+ */
+export function invalidateWalletQueries(
+  client: QueryClient,
+  address: string,
+  chainId: number,
+  options: WalletQueryRefreshOptions = {},
+): Promise<void> {
+  let pending = refreshes.get(client);
+  if (!pending) { pending = new Map(); refreshes.set(client, pending); }
+  const key = `${address.toLowerCase()}:${chainId}`;
+  const existing = pending.get(key);
+  if (existing) {
+    // Ordinary refresh callers join the active read. A confirmed receipt is
+    // different: force a trailing read so pre-receipt work cannot win.
+    if (options.afterReceipt) existing.generation += 1;
+    return existing.promise;
+  }
+  const scope = walletQueryScope(address, chainId);
+  const work: RefreshWork = { generation: 0, promise: Promise.resolve() };
+  work.promise = Promise.resolve().then(async () => {
+    let covered: number;
+    do {
+      covered = work.generation;
+      await client.cancelQueries(scope);
+      await client.invalidateQueries({ ...scope, refetchType: 'active' });
+    } while (covered !== work.generation);
+  }).finally(() => { pending.delete(key); });
+  pending.set(key, work);
+  return work.promise;
+}
+
+export function moveBalanceQueryOptions(config: WalletDataConfig, session: string, address: string, chainId: number) {
+  return queryOptions({
+    queryKey: [WALLET_QUERY_ROOT, session, chainId, address.toLowerCase(), 'move-balances'] as const,
+    queryFn: async ({ signal }): Promise<{ balances: CanonicalMoveBalanceMap; status: 'ready' | 'unavailable' }> => {
+      const owner = assertWalletAddress(address);
+      if (chainId !== 1 && chainId !== 8453) throw new Error('Unsupported bridge chain.');
+      signal.throwIfAborted();
+      if (await getChainId(config.getClient({ chainId })) !== chainId) throw new Error('RPC network does not match the selected source.');
+      signal.throwIfAborted();
+      const results = await readContracts(config, { allowFailure: true, contracts: CANONICAL_MOVE_ASSETS.map((token) => ({
+        chainId, address: canonicalMoveSourceTokenAddress(token, chainId),
+        abi: erc20Abi, functionName: 'balanceOf' as const, args: [owner] as const,
+      })) });
+      signal.throwIfAborted();
+      let successful = 0;
+      const balances = Object.fromEntries(CANONICAL_MOVE_ASSETS.map((token, index) => {
+        const result = results[index];
+        if (result?.status === 'success' && typeof result.result === 'bigint' && result.result >= 0n) {
+          successful += 1;
+          return [token, { status: 'ready', amount: formatUnits(result.result, 18) }];
+        }
+        return [token, { status: 'unavailable', reason: 'This source balance could not be read.' }];
+      })) as CanonicalMoveBalanceMap;
+      return { balances, status: successful ? 'ready' : 'unavailable' };
+    },
+  });
+}
