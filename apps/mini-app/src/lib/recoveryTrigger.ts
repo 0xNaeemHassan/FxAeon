@@ -1,8 +1,11 @@
 import { filterJournalForWallet, selectRecoveryRecords } from './fx/recovery';
 import type { PendingHashRecord } from './fx/types';
 
+/** Another tab's terminal result is among the newest records; History itself reads further back. */
+const STORAGE_TRIGGER_TERMINAL_READS = 8;
+
 /** Focus/online only need unresolved work. A journal storage event can carry a
- * terminal result from another tab, so include the bounded verified-history
+ * terminal result from another tab, so include the newest completed
  * candidates and make the reconciler prove them again from chain data.
  */
 export function selectRecoveryTriggerRecords(
@@ -11,7 +14,7 @@ export function selectRecoveryTriggerRecords(
   includeTerminalHistory: boolean,
 ): PendingHashRecord[] {
   return includeTerminalHistory
-    ? selectRecoveryRecords(records, walletAddress)
+    ? selectRecoveryRecords(records, walletAddress, STORAGE_TRIGGER_TERMINAL_READS)
     : filterJournalForWallet(records, walletAddress).filter((record) => record.status === 'pending');
 }
 

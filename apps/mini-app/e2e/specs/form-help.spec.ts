@@ -1,18 +1,9 @@
 import { expect, test, assertNoBackendRequests } from "../fixtures/test";
 
-type Box = { x: number; y: number; width: number; height: number };
-
-function overlaps(first: Box, second: Box): boolean {
-  return first.x < second.x + second.width
-    && first.x + first.width > second.x
-    && first.y < second.y + second.height
-    && first.y + first.height > second.y;
-}
-
 test.describe("protocol form help and picker keyboard behavior", () => {
   test.use({ telegram: false });
 
-  test("slippage help supports hover, focus, touch toggle, Escape, and compact geometry", async ({ page, requests }) => {
+  test("transaction settings explain slippage inline, save presets, and fit compact phones", async ({ page, requests }) => {
     await page.setViewportSize({ width: 320, height: 844 });
     await page.goto("/trade", { waitUntil: "domcontentloaded" });
 
@@ -22,87 +13,37 @@ test.describe("protocol form help and picker keyboard behavior", () => {
     const settingsPanel = page.getByRole("dialog", { name: "Transaction settings" });
     await expect(settingsPanel).toBeVisible();
     const ticketWidth = await page.locator(".trade-ticket").evaluate((element) => element.getBoundingClientRect().width);
-    const disclosureGeometry = await settingsPanel.evaluate((element) => ({
+    const panelGeometry = await settingsPanel.evaluate((element) => ({
       width: element.getBoundingClientRect().width,
       left: element.getBoundingClientRect().left,
       right: element.getBoundingClientRect().right,
     }));
-    expect(disclosureGeometry.width, "expanded Trade settings must use the ticket width on mobile")
-      .toBeGreaterThan(ticketWidth - 32);
-    expect(disclosureGeometry.left).toBeGreaterThanOrEqual(0);
-    expect(disclosureGeometry.right).toBeLessThanOrEqual(320);
-    await expect(page.getByRole("button", { name: "About slippage tolerance", exact: true })).toBeVisible();
+    expect(panelGeometry.width, "Trade settings must use the ticket width on mobile").toBeGreaterThan(ticketWidth - 32);
+    expect(panelGeometry.left).toBeGreaterThanOrEqual(0);
+    expect(panelGeometry.right).toBeLessThanOrEqual(320);
 
-    const helpButton = page.getByRole("button", { name: "About slippage tolerance", exact: true });
-    const tooltip = page.getByRole("tooltip");
-    const slippageInput = page.getByRole("textbox", { name: "Slippage tolerance percentage", exact: true });
+    // The explanation is always visible and describes the value field; no tooltip to discover.
+    const slippageInput = settingsPanel.getByRole("textbox", { name: "Slippage tolerance percentage", exact: true });
+    await expect(slippageInput).toHaveValue("0.5");
+    const helpId = await slippageInput.getAttribute("aria-describedby");
+    expect(helpId).toBeTruthy();
+    await expect(page.locator(`[id="${helpId}"]`)).toContainText("reverts instead of filling worse");
 
-    await expect(helpButton).toHaveAttribute("aria-expanded", "false");
-    await expect(tooltip).toHaveCount(0);
+    // Presets are 44px targets that save at once and update the gear's label.
+    const presets = settingsPanel.getByRole("radiogroup", { name: "Max slippage" }).getByRole("radio");
+    await expect(presets).toHaveCount(4);
+    for (const box of await presets.evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().height))) {
+      expect(box).toBeGreaterThanOrEqual(44);
+    }
+    await settingsPanel.getByRole("radio", { name: "1%", exact: true }).click();
+    await expect(settings).toHaveAttribute("aria-label", "Transaction settings, 1% slippage");
+    await expect(slippageInput).toHaveValue("1");
+    await expect(settingsPanel.getByRole("radiogroup", { name: "Network speed" })).toBeVisible();
 
-    // Mouse hover opens the contextual explanation and moving away dismisses it.
-    await helpButton.hover();
-    await expect(tooltip).toBeVisible();
+    // Escape closes the panel and returns focus to the gear.
     await page.keyboard.press("Escape");
-    await expect(tooltip).toBeHidden();
     await expect(settingsPanel).toBeHidden();
     await expect(settings).toBeFocused();
-
-    // Reopen the modal to verify hover, keyboard focus, and touch behavior
-    // inside the live settings surface.
-    await settings.click();
-    await expect(settingsPanel).toBeVisible();
-
-    await page.mouse.move(2, 2);
-    await helpButton.hover();
-    await expect(tooltip).toBeVisible();
-    await page.mouse.move(2, 2);
-    await expect(tooltip).toBeHidden();
-
-    // Keyboard focus opens the contextual explanation. Escape closes the
-    // settings dialog and returns focus to its trigger.
-    await helpButton.focus();
-    await expect(tooltip).toBeVisible();
-    await expect(helpButton).toHaveAttribute("aria-describedby", /-help$/);
-    await page.keyboard.press("Escape");
-    await expect(tooltip).toBeHidden();
-    await expect(settingsPanel).toBeHidden();
-    await expect(settings).toBeFocused();
-
-    await settings.click();
-    await expect(settingsPanel).toBeVisible();
-    const reopenedHelpButton = page.getByRole("button", { name: "About slippage tolerance", exact: true });
-    const reopenedTooltip = page.getByRole("tooltip");
-
-    const buttonBox = await reopenedHelpButton.boundingBox();
-    expect(buttonBox).not.toBeNull();
-    expect(buttonBox!.width).toBeGreaterThanOrEqual(44);
-    expect(buttonBox!.height).toBeGreaterThanOrEqual(44);
-
-    // Exercise a real touch pointerdown/click sequence. A second tap must
-    // toggle the disclosure closed rather than being swallowed by focus-open.
-    await reopenedHelpButton.tap();
-    await expect(reopenedTooltip).toBeVisible();
-    // The dialog remounts after its exit animation, generating a new input ID.
-    const slippageLabel = page.locator(`label[for="${await slippageInput.getAttribute("id")}"]`);
-    await reopenedHelpButton.tap();
-    await expect(reopenedTooltip).toBeHidden();
-
-    // At the narrowest supported viewport the popup must not obscure either
-    // the field label or the value input it explains.
-    await page.mouse.move(2, 2);
-    await slippageInput.focus();
-    await reopenedHelpButton.focus();
-    await expect(reopenedTooltip).toBeVisible();
-    const tooltipBox = await reopenedTooltip.boundingBox();
-    const labelBox = await slippageLabel.boundingBox();
-    const inputBox = await slippageInput.boundingBox();
-    expect(tooltipBox).not.toBeNull();
-    expect(labelBox).not.toBeNull();
-    expect(inputBox).not.toBeNull();
-    expect(overlaps(tooltipBox!, labelBox!)).toBe(false);
-    expect(overlaps(tooltipBox!, inputBox!)).toBe(false);
-
     assertNoBackendRequests(requests);
   });
 

@@ -14,7 +14,9 @@
 .rate > small { display: block; margin-top: 2px; color: color-mix(in srgb, var(--success) 70%, var(--mut)); font-size: var(--fs-micro); font-weight: 600; }
 .refresh { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; margin: 0 -10px 0 -2px; color: var(--mut); border-radius: 50%; transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease; }
 .refresh:hover { color: var(--text); background: var(--surface-2); }
-.actionTabs { margin: 14px 0 10px; }
+/* Deposit/Withdraw with the settings gear at the right of the same row. */
+.actionTabs { display: flex; min-width: 0; align-items: center; gap: 8px; margin: 14px 0 10px; }
+.actionTabs > :first-child { min-width: 0; flex: 1 1 auto; }
 .editor { display: flex; min-width: 0; flex-direction: column; gap: 10px; }
 .panel > [role='status'] { margin-block: 12px; }
 .receiveRow { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 12px; font-size: var(--fs-small); color: var(--mut); }

@@ -11,8 +11,10 @@ import { formatUsdPrice } from '@/lib/prices';
 import { haptic } from '@/lib/telegram';
 import { subscribeToForegroundResume } from '@/lib/foreground';
 import { createCoalescedReadCache } from '@/lib/coalescedRead';
+import { localTimeShiftSeconds } from '@/lib/chartTime';
 import { Segmented } from '@/components/ProtocolForm';
 import { MissingValue, ValueOrSkeleton } from '@/components/MissingValue';
+import { RollingFigure } from '@/components/RollingFigure';
 import styles from '@/components/trade-surfaces.module.css';
 
 type HistoryState = { status: 'loading' | 'ready' | 'unavailable'; snapshot: MarketHistorySnapshot | null };
@@ -175,7 +177,7 @@ export function TradeMarketChart({ market, onMarketChange }: { market: MarketSym
   return <section className={`${styles.marketChart} market-chart-panel`} data-mobile-expanded={expanded} aria-label={`${market} market chart`}>
     <header className="market-chart-header">
       <div className="flex min-w-0 items-center gap-3"><span className="market-chart-token"><TokenIcon symbol={market === 'BTC' ? 'WBTC' : 'ETH'} size={34} /></span><div className="min-w-0"><span className="micro-label text-[11px] text-mut">Market</span><h2 className="truncate text-[18px] font-semibold">{market} / USD</h2></div></div>
-      <div className="shrink-0 text-right"><p className="text-display text-[24px] font-semibold tabular-nums"><ValueOrSkeleton value={formatUsdPrice(price)} width="lg" label="Market price loading" /></p><p className={`mt-1 inline-flex items-center gap-1 text-[11px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}><ValueOrSkeleton value={change === undefined ? '—' : <><span aria-hidden="true">{positive ? '↗' : '↘'}</span>{positive ? '+' : ''}{change.toFixed(2)}% 24h</>} width="md" label="24 hour change loading" /></p></div>
+      <div className="shrink-0 text-right"><p className="text-display text-[24px] font-semibold tabular-nums"><ValueOrSkeleton value={formatUsdPrice(price) === '—' ? '—' : <RollingFigure value={formatUsdPrice(price)} />} width="lg" label="Market price loading" /></p><p className={`mt-1 inline-flex items-center gap-1 text-[11px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}><ValueOrSkeleton value={change === undefined ? '—' : <><span aria-hidden="true">{positive ? '↗' : '↘'}</span>{positive ? '+' : ''}{change.toFixed(2)}% 24h</>} width="md" label="24 hour change loading" /></p></div>
     </header>
     <div className="market-chart-instrument-meta">
       <dl className="market-chart-stats"><div><dt>24h high</dt><dd><ValueOrSkeleton value={formatUsdPrice(high)} width="lg" label="24 hour high loading" /></dd></div><div><dt>24h low</dt><dd><ValueOrSkeleton value={formatUsdPrice(low)} width="lg" label="24 hour low loading" /></dd></div></dl>
@@ -200,7 +202,7 @@ export function MarketMiniCard({ market }: { market: MarketSymbol }) {
   const price = live.isFresh ? live.quote?.price : prices[market === 'ETH' ? 'ETH' : 'WBTC'] ?? history.snapshot?.currentPrice;
   const change = live.isFresh ? live.quote?.percentChange24h : history.snapshot?.percentChange;
   const positive = change !== undefined && change >= 0;
-  return <div className={`${styles.marketMiniCard} portfolio-market-card`} aria-label={`${market} market overview`}><div className="flex items-center justify-between gap-2"><span className="flex items-center gap-2"><TokenIcon symbol={market === 'BTC' ? 'WBTC' : 'ETH'} size={28} /><strong className="text-[13px]">{market}</strong></span><span className={`text-[10.5px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}><ValueOrSkeleton value={change === undefined ? '—' : `${positive ? '+' : ''}${change.toFixed(2)}%`} width="md" label="24 hour change loading" /></span></div><p className="mt-3 text-display text-[20px] font-semibold tabular-nums"><ValueOrSkeleton value={formatUsdPrice(price)} width="lg" label="Market price loading" /></p><div className="market-chart-compact mt-2 h-[54px]">{history.status === 'ready' && history.snapshot ? <Sparkline snapshot={history.snapshot} rising={change === undefined ? undefined : positive} /> : history.status === 'loading' ? <div role="status" aria-label="Loading market history" className="market-chart-skeleton h-full rounded-md" /> : <div role="status" aria-label="Market history unavailable" className="flex h-full items-center justify-center"><MissingValue width="xl" status="unavailable" label="Market history unavailable" /></div>}</div></div>;
+  return <div className={`${styles.marketMiniCard} portfolio-market-card`} aria-label={`${market} market overview`}><div className="flex items-center justify-between gap-2"><span className="flex items-center gap-2"><TokenIcon symbol={market === 'BTC' ? 'WBTC' : 'ETH'} size={28} /><strong className="text-[13px]">{market}</strong></span><span className={`text-[10.5px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}><ValueOrSkeleton value={change === undefined ? '—' : `${positive ? '+' : ''}${change.toFixed(2)}%`} width="md" label="24 hour change loading" /></span></div><p className="mt-3 text-display text-[20px] font-semibold tabular-nums"><ValueOrSkeleton value={formatUsdPrice(price) === '—' ? '—' : <RollingFigure value={formatUsdPrice(price)} />} width="lg" label="Market price loading" /></p><div className="market-chart-compact mt-2 h-[54px]">{history.status === 'ready' && history.snapshot ? <Sparkline snapshot={history.snapshot} rising={change === undefined ? undefined : positive} /> : history.status === 'loading' ? <div role="status" aria-label="Loading market history" className="market-chart-skeleton h-full rounded-md" /> : <div role="status" aria-label="Market history unavailable" className="flex h-full items-center justify-center"><MissingValue width="xl" status="unavailable" label="Market history unavailable" /></div>}</div></div>;
 }
 
 type Candles = MarketCandleSnapshot['candles'];
@@ -288,16 +290,19 @@ function restyleSeries(entry: SeriesEntry, theme: ChartTheme) {
   else entry.series.applyOptions(candleOptions(theme));
 }
 
-/** Writes the whole history, or only the newest bar when just the tail moved. */
-function writeSeries(entry: SeriesEntry, candles: Candles, tailOnly = false) {
+/**
+ * Writes the whole history, or only the newest bar when just the tail moved.
+ * `shift` moves every time into the viewer's zone; a tail write reuses the shift of the full write before it.
+ */
+function writeSeries(entry: SeriesEntry, candles: Candles, shift: number, tailOnly = false) {
   const source = tailOnly ? candles.slice(-1) : candles;
   if (entry.style === 'line') {
-    const points = source.map((candle) => ({ time: candle.time as UTCTimestamp, value: candle.close }));
+    const points = source.map((candle) => ({ time: (candle.time + shift) as UTCTimestamp, value: candle.close }));
     if (tailOnly) entry.series.update(points[0]);
     else entry.series.setData(points);
     return;
   }
-  const bars = source.map((candle) => ({ time: candle.time as UTCTimestamp, open: candle.open, high: candle.high, low: candle.low, close: candle.close }));
+  const bars = source.map((candle) => ({ time: (candle.time + shift) as UTCTimestamp, open: candle.open, high: candle.high, low: candle.low, close: candle.close }));
   if (tailOnly) entry.series.update(bars[0]);
   else entry.series.setData(bars);
 }
@@ -309,7 +314,7 @@ function LazyPriceChart({ snapshot, chartStyle }: { snapshot: MarketCandleSnapsh
   const styleRef = useRef(chartStyle);
   styleRef.current = chartStyle;
   const renderedCandlesRef = useRef<Candles>([]);
-  const chartRef = useRef<{ chart: IChartApi; module: ChartModule; entry: SeriesEntry } | null>(null);
+  const chartRef = useRef<{ chart: IChartApi; module: ChartModule; entry: SeriesEntry; shift: number } | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     let active = true;
@@ -318,9 +323,9 @@ function LazyPriceChart({ snapshot, chartStyle }: { snapshot: MarketCandleSnapsh
       if (!active || !hostRef.current) return;
       const theme = readChartTheme();
       const chart = module.createChart(hostRef.current, { autoSize: true, ...chartOptions(theme, module) });
-      const state = { chart, module, entry: addPriceSeries(chart, module, styleRef.current, theme) };
+      const state = { chart, module, entry: addPriceSeries(chart, module, styleRef.current, theme), shift: localTimeShiftSeconds(candlesRef.current.at(-1)?.time) };
       chartRef.current = state;
-      writeSeries(state.entry, candlesRef.current);
+      writeSeries(state.entry, candlesRef.current, state.shift);
       renderedCandlesRef.current = candlesRef.current;
       chart.timeScale().fitContent();
       // Theme switches rewrite the tokens; repaint the canvas from them.
@@ -339,7 +344,8 @@ function LazyPriceChart({ snapshot, chartStyle }: { snapshot: MarketCandleSnapsh
     // Swap the series in place so the chart never blanks between styles.
     state.chart.removeSeries(state.entry.series);
     state.entry = addPriceSeries(state.chart, state.module, chartStyle, readChartTheme());
-    writeSeries(state.entry, candlesRef.current);
+    state.shift = localTimeShiftSeconds(candlesRef.current.at(-1)?.time);
+    writeSeries(state.entry, candlesRef.current, state.shift);
     renderedCandlesRef.current = candlesRef.current;
   }, [chartStyle]);
   useEffect(() => {
@@ -349,7 +355,8 @@ function LazyPriceChart({ snapshot, chartStyle }: { snapshot: MarketCandleSnapsh
     const next = snapshot.candles;
     const tailOnly = previous.length > 0 && next.length >= previous.length && next.length <= previous.length + 1
       && previous.slice(0, -1).every((candle, index) => candle === next[index]);
-    writeSeries(state.entry, next, tailOnly && next.length > 0);
+    if (!tailOnly) state.shift = localTimeShiftSeconds(next.at(-1)?.time);
+    writeSeries(state.entry, next, state.shift, tailOnly && next.length > 0);
     // A new range or market replaces the history; frame all of it again.
     if (!tailOnly) state.chart.timeScale().fitContent();
     renderedCandlesRef.current = next;
@@ -365,7 +372,7 @@ function Sparkline({ snapshot, rising }: { snapshot: MarketHistorySnapshot; risi
   const min = Math.min(...values); const max = Math.max(...values); const span = Math.max(max - min, max * 0.002, 1e-8);
   const coordinates = values.map((value, index) => `${((index / Math.max(1, values.length - 1)) * 100).toFixed(2)},${(8 + ((max - value) / span) * 84).toFixed(2)}`).join(' ');
   const color = (rising ?? snapshot.percentChange >= 0) ? 'var(--success)' : 'var(--danger)';
-  return <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full" role="img" aria-label={`${snapshot.market} 24 hour trend`}><defs><linearGradient id={fillId} x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor={color} stopOpacity="0.2" /><stop offset="1" stopColor={color} stopOpacity="0" /></linearGradient></defs><polygon points={`0,100 ${coordinates} 100,100`} fill={`url(#${fillId})`} /><polyline points={coordinates} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" /><title>{snapshot.market} trend</title></svg>;
+  return <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full" role="img" aria-label={`${snapshot.market} 24 hour trend`}><defs><linearGradient id={fillId} x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor={color} stopOpacity="0.2" /><stop offset="1" stopColor={color} stopOpacity="0" /></linearGradient></defs><polygon className="sparkline-fill" points={`0,100 ${coordinates} 100,100`} fill={`url(#${fillId})`} /><polyline className="sparkline-line" pathLength={1} points={coordinates} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" /><title>{snapshot.market} trend</title></svg>;
 }
 
 function ChartSkeleton() { return <div role="status" aria-label="Loading market chart" className="market-chart-skeleton h-[220px]" />; }

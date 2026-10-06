@@ -8,7 +8,14 @@ export const DEFAULT_SLIPPAGE_PERCENT = 0.5;
 export const GAS_TIERS = ['standard', 'fast', 'rapid'] as const;
 export type GasTier = (typeof GAS_TIERS)[number];
 export const DEFAULT_GAS_TIER: GasTier = 'standard';
-const ALLOWED_SLIPPAGE_BPS = [10, 50, 100, 200] as const;
+/** Quick choices; any whole basis point from 0.1% to the protocol's 2% cap can be saved. */
+export const SLIPPAGE_PRESETS_BPS = [10, 50, 100, 200] as const;
+export const MIN_SLIPPAGE_BPS = 10;
+export const MAX_SLIPPAGE_BPS = 200;
+
+export function isSlippageBps(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= MIN_SLIPPAGE_BPS && value <= MAX_SLIPPAGE_BPS;
+}
 
 export function readGasTier(): GasTier {
   if (typeof window === 'undefined') return DEFAULT_GAS_TIER;
@@ -24,11 +31,30 @@ export function readSlippagePercent(): number {
   if (typeof window === 'undefined') return DEFAULT_SLIPPAGE_PERCENT;
   try {
     const value = (JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || '{}') as { slippageBps?: unknown }).slippageBps;
-    return typeof value === 'number' && ALLOWED_SLIPPAGE_BPS.includes(value as (typeof ALLOWED_SLIPPAGE_BPS)[number])
-      ? value / 100
-      : DEFAULT_SLIPPAGE_PERCENT;
+    return isSlippageBps(value) ? value / 100 : DEFAULT_SLIPPAGE_PERCENT;
   } catch {
     return DEFAULT_SLIPPAGE_PERCENT;
+  }
+}
+
+/**
+ * Save one or both transaction preferences and tell every open form at once.
+ * Invalid values are ignored rather than stored; returns whether anything saved.
+ */
+export function writeTransactionSettings(patch: { slippageBps?: number; gasTier?: GasTier }): boolean {
+  if (typeof window === 'undefined') return false;
+  const slippageBps = patch.slippageBps !== undefined && isSlippageBps(patch.slippageBps) ? patch.slippageBps : undefined;
+  const gasTier = patch.gasTier !== undefined && GAS_TIERS.includes(patch.gasTier) ? patch.gasTier : undefined;
+  if (slippageBps === undefined && gasTier === undefined) return false;
+  try {
+    let previous: Record<string, unknown> = {};
+    try { previous = JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || '{}') as Record<string, unknown>; } catch { previous = {}; }
+    const next = { ...previous, ...(slippageBps !== undefined ? { slippageBps } : {}), ...(gasTier ? { gasTier } : {}) };
+    window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+    announceSettingsUpdated(isSlippageBps(next.slippageBps) ? next.slippageBps : Math.round(DEFAULT_SLIPPAGE_PERCENT * 100), gasTier);
+    return true;
+  } catch {
+    return false;
   }
 }
 

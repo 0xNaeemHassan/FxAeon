@@ -8,6 +8,7 @@ import {
   updatePendingHash,
 } from "../src/lib/fx/journal";
 import {
+  MAX_TERMINAL_HISTORY_READS,
   explorerTransactionUrl,
   filterJournalForWallet,
   reconcileWalletJournal,
@@ -174,8 +175,10 @@ test("never ages unresolved records out of recovery", async () => {
   assert.equal(views.length, 12);
 });
 
+// Intended change: History now re-verifies the last 30 completed records (was 8)
+// so older journal entries stop disappearing from the feed.
 test("caps only terminal non-bridge history while preserving every unresolved record", () => {
-  for (let index = 0; index < 12; index += 1) {
+  for (let index = 0; index < 40; index += 1) {
     const hash = `0x${index.toString(16).padStart(64, "0")}` as Hex;
     addRecord({ hash });
     updatePendingHash(hash, "confirmed");
@@ -183,10 +186,21 @@ test("caps only terminal non-bridge history while preserving every unresolved re
   const pendingA = addRecord({ hash: `0x${"c".repeat(64)}` as Hex });
   const pendingB = addRecord({ hash: `0x${"d".repeat(64)}` as Hex, chainId: 8453 });
   const selected = selectRecoveryRecords(readPendingHashJournal(), WALLET);
-  assert.equal(selected.length, 10);
+  assert.equal(MAX_TERMINAL_HISTORY_READS, 30);
+  assert.equal(selected.length, 32);
   assert.ok(selected.some((record) => record.id === pendingA.id));
   assert.ok(selected.some((record) => record.id === pendingB.id));
-  assert.equal(selected.filter((record) => record.status !== "pending").length, 8);
+  assert.equal(selected.filter((record) => record.status !== "pending").length, 30);
+  // Narrower callers (the cross-tab storage trigger) can still ask for fewer completed records.
+  assert.equal(selectRecoveryRecords(readPendingHashJournal(), WALLET, 8).length, 10);
+  assert.deepEqual(selectRecoveryRecords(readPendingHashJournal(), WALLET, 0).map((record) => record.id).sort(), [pendingA.id, pendingB.id].sort());
+});
+
+test("a verified receipt exposes the mined calldata so History can name the action", async () => {
+  const record = addRecord();
+  const [view] = await reconcileWalletJournal({ walletAddress: WALLET, getClient: () => client(async () => receipt(record), 1) });
+  assert.equal(view?.status, "confirmed");
+  assert.equal(view?.transactionInput, DATA);
 });
 
 test("a missing receipt remains pending even when local storage says confirmed", async () => {

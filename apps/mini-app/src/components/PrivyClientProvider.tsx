@@ -11,15 +11,17 @@
  * Keep one provider above all authenticated routes. Only an explicit native
  * Telegram reconnect restarts it; normal route changes retain the session.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { PrivyProvider } from '@privy-io/react-auth';
+import { PrivyProvider, type PrivyClientConfig } from '@privy-io/react-auth';
 import { base, mainnet } from 'viem/chains';
 import { PRIVY_APP_ID } from '@/lib/privyConfig';
 import { getSavedTheme, type ThemeId } from '@/lib/theme';
 import { getWebApp, isTelegramLaunchContext, restoreTelegramLaunchHash, waitForTelegramWebApp } from '@/lib/telegram';
 import { PrivyWalletBridge, UnavailableWalletProvider } from '@/lib/wallet';
+import { privyAppearance } from '@/lib/wallet/privyAppearance';
 import { TelegramReconnectContext } from '@/lib/wallet/telegramReconnect';
+import './privy-theme.css';
 import WalletRecoveryCoordinator from '@/components/WalletRecoveryCoordinator';
 import ProtocolPositionProvider from '@/components/ProtocolPositionProvider';
 import WalletDataProvider from '@/components/WalletDataProvider';
@@ -52,6 +54,36 @@ export default function PrivyClientProvider({ children }: { children: React.Reac
     window.addEventListener('fxaeon:theme', syncTheme);
     return () => window.removeEventListener('fxaeon:theme', syncTheme);
   }, []);
+  // Privy rebuilds its app configuration whenever this object changes, so it
+  // changes only with the theme, not on every route change.
+  const privyConfig = useMemo<PrivyClientConfig>(() => ({
+    appearance: {
+      // The active theme's Aeon background, accent, mark, and sign-in copy.
+      // Privy takes a background hex as its theme (a dark hex selects its
+      // dark palette), so Official, Dark, and Light each carry through;
+      // privy-theme.css maps the rest of its palette to Aeon tokens.
+      ...privyAppearance(theme),
+      // FxAeon is EVM-only. Do not expose Solana wallet choices.
+      walletChainType: 'ethereum-only',
+      // Keep email and other enabled account methods reachable before the
+      // wallet list. The dashboard remains the source of truth for which
+      // login methods are enabled (including Telegram when configured).
+      showWalletLoginFirst: false,
+    },
+    // The protocol uses Ethereum for f(x) and fxSAVE and Base as the
+    // supported bridge destination/source. Ethereum remains the default.
+    supportedChains: [mainnet, base],
+    defaultChain: mainnet,
+    embeddedWallets: {
+      // Account login may create a user-owned embedded wallet only when
+      // the account has no wallet. Existing external wallets are left
+      // untouched, and every transaction still requires approval.
+      ethereum: { createOnLogin: 'users-without-wallets' },
+      // Always display Privy's signing UI. Transaction components may
+      // repeat this per request; the provider-level setting is fail-safe.
+      showWalletUIs: true,
+    },
+  }), [theme]);
   // Data-heavy providers are deliberately route-scoped. Shell, docs, QR and
   // settings screens must not open wallet RPC/indexer feeds just because the
   // global provider tree is mounted.
@@ -104,34 +136,7 @@ export default function PrivyClientProvider({ children }: { children: React.Reac
     <PrivyProvider
       key={telegramSession}
       appId={PRIVY_APP_ID}
-      config={{
-        appearance: {
-          // Privy only supports light/dark; map FxAeon's violet Official
-          // palette to dark while keeping the user's light choice consistent
-          // inside the wallet selector and signing surfaces.
-          theme: theme === 'light' ? 'light' : 'dark',
-          accentColor: '#7c5cff',
-          // FxAeon is EVM-only. Do not expose Solana wallet choices.
-          walletChainType: 'ethereum-only',
-          // Keep email and other enabled account methods reachable before the
-          // wallet list. The dashboard remains the source of truth for which
-          // login methods are enabled (including Telegram when configured).
-          showWalletLoginFirst: false,
-        },
-        // The protocol uses Ethereum for f(x) and fxSAVE and Base as the
-        // supported bridge destination/source. Ethereum remains the default.
-        supportedChains: [mainnet, base],
-        defaultChain: mainnet,
-        embeddedWallets: {
-          // Account login may create a user-owned embedded wallet only when
-          // the account has no wallet. Existing external wallets are left
-          // untouched, and every transaction still requires approval.
-          ethereum: { createOnLogin: 'users-without-wallets' },
-          // Always display Privy's signing UI. Transaction components may
-          // repeat this per request; the provider-level setting is fail-safe.
-          showWalletUIs: true,
-        },
-      }}
+      config={privyConfig}
     >
       <PrivyWalletBridge>
         <WalletDemandProvider routeDemand={demand} routeKey={pathname}><RouteDataProviders>{children}</RouteDataProviders></WalletDemandProvider>

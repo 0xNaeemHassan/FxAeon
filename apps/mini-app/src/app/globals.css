@@ -251,10 +251,7 @@ body {
   min-height: 0;
   margin: 0;
   overflow: hidden;
-  background:
-    radial-gradient(120% 60% at 50% -18%, var(--canvas-wash), transparent 62%),
-    radial-gradient(60% 40% at 108% 92%, var(--canvas-wash-secondary), transparent 70%),
-    var(--bg);
+  background: var(--bg);
   color: var(--text);
   font-size: var(--fs-body);
   line-height: 1.45;
@@ -337,8 +334,41 @@ body {
   animation: surface-rise var(--dur-slow) var(--ease-out) both;
 }
 
+/* The living canvas: two soft lights drift behind every route on long, offset
+   loops, so the page breathes without ever competing with numbers. Transform-only
+   motion keeps it on the compositor; reduced motion holds the lights still. */
 body::before,
-body::after { content: none; }
+body::after {
+  content: '';
+  position: fixed;
+  z-index: 0;
+  inset: -12vmax;
+  pointer-events: none;
+  will-change: transform;
+}
+body::before {
+  background:
+    radial-gradient(46vmax 30vmax at 50% 4%, var(--canvas-wash), transparent 68%),
+    radial-gradient(30vmax 24vmax at 88% 86%, var(--canvas-wash-secondary), transparent 72%);
+  animation: canvas-drift-a 42s var(--ease-in-out, ease-in-out) infinite alternate;
+}
+body::after {
+  background:
+    radial-gradient(30vmax 22vmax at 14% 22%, color-mix(in srgb, var(--brand-coral) 9%, transparent), transparent 70%),
+    radial-gradient(26vmax 20vmax at 76% 58%, color-mix(in srgb, var(--mint) 6%, transparent), transparent 72%);
+  animation: canvas-drift-b 56s var(--ease-in-out, ease-in-out) infinite alternate;
+}
+@keyframes canvas-drift-a {
+  from { transform: translate3d(-3vmax, -1vmax, 0) scale(1); }
+  to { transform: translate3d(4vmax, 3vmax, 0) scale(1.06); }
+}
+@keyframes canvas-drift-b {
+  from { transform: translate3d(3vmax, 2vmax, 0) rotate(0deg); }
+  to { transform: translate3d(-4vmax, -3vmax, 0) rotate(6deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  body::before, body::after { animation: none; }
+}
 
 button,
 a,
@@ -361,6 +391,35 @@ textarea:focus-visible,
 summary:focus-visible {
   outline: 2px solid var(--mint-bright);
   outline-offset: 3px;
+}
+
+/* Below the desktop layout a form's primary action never rests behind the tab
+   bar. StickyAction keeps it in the form when its place is on screen and lets it
+   ride just above the navigation otherwise; the canvas fade behind it shows only
+   while it rides, so it never covers content beneath a resting action. */
+.sticky-action-sentinel { display: block; height: 0; }
+@media (max-width: 839px) {
+  .sticky-action {
+    position: sticky;
+    /* The scroll area's bottom padding already reserves the tab bar, and
+       sticky offsets are measured inside that padding. */
+    bottom: 8px;
+    z-index: 6;
+  }
+  /* The fade reaches past the action as a soft shadow rather than a wider box:
+     shadows are ink, so they never widen the scroll area. */
+  .sticky-action::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: -14px 0 calc(-8px - var(--content-bottom-clearance));
+    background: var(--bg);
+    box-shadow: 0 -10px 24px 18px var(--bg);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--dur-base) var(--ease-out);
+  }
+  .sticky-action[data-riding]::before { opacity: 1; }
 }
 
 /* Disclosure state lives in plain CSS so it never depends on Tailwind group-*
@@ -397,6 +456,7 @@ details[open] > summary .disclosure-closed-only { display: none; }
 
 .app-shell {
   position: relative;
+  z-index: 1;
   isolation: isolate;
   display: flex;
   width: min(100%, var(--shell-max-width));
@@ -820,7 +880,34 @@ details[open] > summary .disclosure-closed-only { display: none; }
 
 .button-primary:hover:not(:disabled) {
   filter: brightness(1.06);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26), 0 10px 28px color-mix(in srgb, var(--mint) 24%, transparent);
+  transform: translateY(-1px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26), 0 12px 30px color-mix(in srgb, var(--mint) 28%, transparent);
+}
+.button-primary:active:not(:disabled) { transform: translateY(0) scale(0.98); transition-duration: var(--dur-press); }
+/* One light sweep across an enabled primary action on hover. */
+.button-primary { isolation: isolate; overflow: hidden; }
+.button-primary::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 28%, rgba(255, 255, 255, 0.28) 50%, transparent 72%);
+  transform: translateX(-130%);
+  pointer-events: none;
+}
+.button-primary:hover:not(:disabled)::after { transform: translateX(130%); transition: transform 900ms var(--ease-out); }
+.button-primary:disabled::after { content: none; }
+
+/* Sparklines draw in once; their fill settles beneath. */
+.sparkline-line { stroke-dasharray: 1; stroke-dashoffset: 1; animation: sparkline-draw 1100ms var(--ease-out) 80ms forwards; }
+.sparkline-fill { opacity: 0; animation: sparkline-fill 700ms ease 520ms forwards; }
+@keyframes sparkline-draw { to { stroke-dashoffset: 0; } }
+@keyframes sparkline-fill { to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .button-primary:hover:not(:disabled) { transform: none; }
+  .button-primary::after { content: none; }
+  .sparkline-line { stroke-dashoffset: 0; animation: none; }
+  .sparkline-fill { opacity: 1; animation: none; }
 }
 
 /* Not-yet-actionable reads as neutral, never as a muddy accent. */

@@ -204,7 +204,7 @@ export default function DocsPage() {
             <section id="fees" className={`${styles.section} ${activeSection === 'fees' ? styles.sectionActive : ''}`}>
               <h2>Fees & slippage</h2>
               <p>Move shows the current LayerZero fee quote. Other actions show estimated gas and network cost when data is available; Base may add network and operator fees. Unavailable estimates stay labelled.</p>
-              <p>Slippage presets are 0.1%, 0.5%, 1%, and 2% for Trade, Positions, and applicable fxSAVE actions. Borrow and Move use their action defaults. Lower tolerance can fail; higher tolerance allows a lower minimum output.</p>
+              <p>Every action form has the same settings gear. On Trade, Positions, and applicable fxSAVE actions it sets max slippage: 0.1%, 0.5%, 1%, 2%, or a custom value up to 2%. Borrow and Move use their action defaults. Lower tolerance can fail; higher tolerance allows a lower minimum output. Network speed applies to FxAeon’s built-in wallet; a connected external wallet sets its own fee. Changes are saved on this device and apply to every open form.</p>
               <p>USD values and charts are display data. Execution follows the live protocol quote and contract checks.</p>
             </section>
 

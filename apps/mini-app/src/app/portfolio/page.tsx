@@ -243,7 +243,8 @@ function PortfolioWallet() {
   return <div id="overview" className={presentation.dashboard}>
     <div className={presentation.primary}>
       <SupportedValueCard displayTotalUsd={headline.displayTotalUsd}
-        loading={loading || liveLoading || priceSnapshot.refreshing || positionState.refreshing} refreshing={manualRefresh.refreshing} onRefresh={refreshAll}
+        // The total waits for verified positions and first prices; until then it is loading, not unavailable.
+        loading={loading || liveLoading || priceSnapshot.status === 'loading' || priceSnapshot.refreshing || positionState.status === 'loading' || positionState.refreshing} refreshing={manualRefresh.refreshing} onRefresh={refreshAll}
         walletValue={knownWalletSubtotal.totalUsd} positionEquity={positionsComplete || knownPositionCount > 0 ? protocolEquityUsd : null}
         walletComplete={valuation.complete && allWalletRowsPriced} positionsComplete={positionsComplete} />
       {walletTasks.filter((task) => task.kind !== 'transaction' && (task.kind !== 'valuation' || !refreshing)).map((task) => <StatusNotice key={task.id} title={task.title}

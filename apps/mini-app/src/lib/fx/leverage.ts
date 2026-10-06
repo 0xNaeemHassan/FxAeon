@@ -28,6 +28,18 @@ const FALLBACK_DEBT_RATIO_RANGES: Readonly<Record<`${FxSdkMarket}:${FxPositionSi
   "BTC:short": [90_909_090_909_090_909n, 875_000_000_000_000_000n],
 };
 
+/** A pool's debt/collateral ratio window (18-decimal fractions), live or from the reviewed fallback. */
+export interface DebtRatioRange {
+  min: bigint;
+  max: bigint;
+  source: "live" | "fallback";
+}
+
+export function fallbackDebtRatioRange(market: FxSdkMarket, side: FxPositionSide): DebtRatioRange {
+  const [min, max] = FALLBACK_DEBT_RATIO_RANGES[`${market}:${side}`];
+  return { min, max, source: "fallback" };
+}
+
 export interface LeverageBounds {
   min: number;
   max: number;
@@ -100,12 +112,12 @@ export function leverageBoundsFromRatios(
   return { min, max, source: "live" };
 }
 
-export async function readLeverageBounds(
+/** Read a pool's live debt-ratio window; Trade's leverage bounds and Borrow's limits share it. */
+export async function readDebtRatioRange(
   market: FxSdkMarket,
   side: FxPositionSide,
   client?: LeverageBoundsClient,
-  slippagePercent = DEFAULT_SLIPPAGE_PERCENT,
-): Promise<LeverageBounds> {
+): Promise<DebtRatioRange> {
   if (client) await assertPublicClientChain(client, 1);
   else await assertConfiguredPublicClientChain(1);
   const reader = client ?? getEthereumClient();
@@ -117,7 +129,17 @@ export async function readLeverageBounds(
   if (!Array.isArray(result) || result.length < 2 || typeof result[0] !== "bigint" || typeof result[1] !== "bigint") {
     throw new Error("Pool leverage limits returned an invalid response.");
   }
-  return leverageBoundsFromRatios(result[0], result[1], side, slippagePercent);
+  return { min: result[0], max: result[1], source: "live" };
+}
+
+export async function readLeverageBounds(
+  market: FxSdkMarket,
+  side: FxPositionSide,
+  client?: LeverageBoundsClient,
+  slippagePercent = DEFAULT_SLIPPAGE_PERCENT,
+): Promise<LeverageBounds> {
+  const range = await readDebtRatioRange(market, side, client);
+  return leverageBoundsFromRatios(range.min, range.max, side, slippagePercent);
 }
 
 export const FALLBACK_LEVERAGE_BOUNDS: Readonly<Record<`${FxSdkMarket}:${FxPositionSide}`, LeverageBounds>> = Object.fromEntries(

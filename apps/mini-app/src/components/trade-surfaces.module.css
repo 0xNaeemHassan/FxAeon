@@ -533,7 +533,7 @@
   .tradeLayout { grid-template-columns: minmax(0, 1fr) minmax(380px, 420px); align-items: start; gap: 28px; }
   .ticketColumn { max-width: none; }
   .ticketHeader { margin-bottom: 0; }
-  .tradeTicket :global([data-amount-field] input:not([data-long-amount='true'])) { font-size: 44px; }
+  .tradeTicket :global([data-amount-field]) { --amount-max-size: 44px; }
   /* The chart begins level with the first ticket decision (Position side). */
   .marketColumn :global(.market-chart-panel) { margin-top: 54px; position: sticky; top: 24px; }
   .positionManagerGrid { grid-template-columns: minmax(0, 1fr) minmax(380px, 420px); align-items: start; gap: 24px; }

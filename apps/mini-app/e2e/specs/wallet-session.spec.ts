@@ -110,12 +110,13 @@ test.describe('wallet session isolation', () => {
     }, { accountA: ACCOUNT_A, accountB: ACCOUNT_B });
     await page.goto('/history', { waitUntil: 'domcontentloaded' });
     // Account A submitted a position action; account B submitted an fxSAVE deposit.
+    // Unconfirmed rows name the action they await ("Deposit to fxSAVE"); confirmed ones read in the past tense.
     const history = page.locator('section[aria-label="Transaction history"]');
     await expect(history.getByText('Open position', { exact: true })).toBeVisible();
-    await expect(history.getByText('Deposit fxSAVE', { exact: true })).toHaveCount(0);
+    await expect(history.getByText('Deposit to fxSAVE', { exact: true })).toHaveCount(0);
 
     await setAccounts(page, [ACCOUNT_B]);
-    await expect(history.getByText('Deposit fxSAVE', { exact: true })).toBeVisible();
+    await expect(history.getByText('Deposit to fxSAVE', { exact: true })).toBeVisible();
     await expect(history.getByText('Open position', { exact: true })).toHaveCount(0);
     assertNoBackendRequests(requests);
   });

@@ -217,6 +217,11 @@
 .section p { margin-top: 10px; }
 .section ul,
 .section ol { margin-top: 12px; padding-left: 20px; }
+/* The base reset strips list markers; steps keep their numbers and notes their bullets. */
+.section ol { list-style: decimal; }
+.section ul { list-style: disc; }
+.section li { padding-left: 4px; }
+.section li::marker { color: var(--mut-2); font-variant-numeric: tabular-nums; }
 .section li + li { margin-top: 7px; }
 .section strong { color: var(--text); font-weight: 650; }
 .section code { color: var(--mint); font-size: .92em; }

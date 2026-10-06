@@ -49,7 +49,10 @@ export interface ProtocolHistoryCursor {
 
 export interface ProtocolPositionHistoryResult {
   items: ProtocolPositionActivity[];
+  /** Some indexed rows are not shown: an index or receipt read failed, or an event did not verify. */
   partial: boolean;
+  /** An index or receipt read failed, so activity may be missing (a non-matching event is not a failure). */
+  incomplete?: boolean;
   /** One cursor per market index; `-1` means that index is exhausted. */
   cursor: ProtocolHistoryCursor[];
   hasMore: boolean;
@@ -208,7 +211,7 @@ function decodeMatchingEvent(
   return positionRouterEventMatchesRecipient(event, log, receiptLogs, walletAddress);
 }
 
-async function verifyCandidates(candidates: Candidate[], walletAddress: Address, client: FxPublicClient): Promise<ProtocolPositionActivity[]> {
+async function verifyCandidates(candidates: Candidate[], walletAddress: Address, client: FxPublicClient, onReadFailure: () => void): Promise<ProtocolPositionActivity[]> {
   const first = candidates[0];
   if (!first) return [];
   try {
@@ -232,6 +235,8 @@ async function verifyCandidates(candidates: Candidate[], walletAddress: Address,
       timestamp: candidate.timestamp,
     }));
   } catch {
+    // An unreadable receipt is a gap in what History can show, not a rejection.
+    onReadFailure();
     return [];
   }
 }
@@ -295,7 +300,8 @@ export async function loadProtocolPositionHistory(params: {
     client ??= getEthereumClient();
     await withReadDeadline(assertPublicClientChain(client, 1));
   }
-  const verified = client ? (await mapBounded(latest, 4, ([, group]) => verifyCandidates(group, walletAddress, client!))).flat() : [];
+  let receiptReadFailed = false;
+  const verified = client ? (await mapBounded(latest, 4, ([, group]) => verifyCandidates(group, walletAddress, client!, () => { receiptReadFailed = true; }))).flat() : [];
   const itemsByEvent = new Map<string, ProtocolPositionActivity>();
   for (const item of verified) if (item) {
     const key = `${item.chainId}:${item.hash}:${item.poolAddress.toLowerCase()}:${item.positionId}:${item.kind}`;
@@ -305,6 +311,7 @@ export async function loadProtocolPositionHistory(params: {
   return {
     items: [...itemsByEvent.values()].sort((left, right) => right.blockNumber === left.blockNumber ? right.timestamp - left.timestamp : left.blockNumber > right.blockNumber ? -1 : 1),
     partial: indexResults.some((result) => result.status === 'rejected') || [...expectedEventKeys].some((key) => !itemsByEvent.has(key)),
+    incomplete: indexResults.some((result) => result.status === 'rejected') || receiptReadFailed,
     cursor,
     hasMore: cursor.some((item) => item.positions >= 0),
   };

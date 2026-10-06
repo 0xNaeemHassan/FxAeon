@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, type MouseEvent, type MutableRefObject, type ReactNode } from 'react';
 import {
   useConnectWallet,
   useLogin,
@@ -15,6 +15,7 @@ import {
 import { assertLocalForkRpcUrl, configuredRpcUrls } from '@/lib/fx/config';
 import { getInitData, isTelegramLaunchContext } from '@/lib/telegram';
 import { useTelegramReconnect } from '@/lib/wallet/telegramReconnect';
+import { PRIVY_PROMPT_OPEN_GRACE_MS, WalletConnectCancelledError, stepPrivyPrompt, watchPrivyPrompt, type PrivyPromptStep, type PrivyPromptWatch } from './connectWatch';
 import { switchBrowserChain as switchBrowserChainWithConfig } from './switchBrowserChain';
 import { eip6963FocusTrapDestination, getDiscoveredEip6963Providers, recordEip6963Announcement, selectEip6963Provider, shouldBindEip6963ProviderEvents, shouldPromptEip6963Provider, waitForWalletProvider, type DiscoveredEip6963Provider, type Eip6963Announcement } from './eip6963';
 
@@ -70,7 +71,13 @@ export type FxPrivyWallet = {
   chainId?: FxChainId;
   address?: string;
   isEmbedded: boolean;
-  /** Request an account from the user's browser wallet. No private key leaves the wallet. */
+  /** True while a wallet prompt (Privy's modal or the browser wallet chooser) is on screen. */
+  promptOpen?: boolean;
+  /**
+   * Request an account from the user's browser wallet. No private key leaves
+   * the wallet. Rejects with WalletConnectCancelledError when the person
+   * closes the prompt without connecting.
+   */
   connect: (options?: { external?: boolean }) => Promise<void>;
   /** End the app wallet session. This never transfers assets or exposes keys. */
   disconnect: () => Promise<void>;
@@ -113,16 +120,56 @@ function isEmbedded(wallet: ConnectedWallet | undefined): boolean {
   return wallet?.walletClientType === 'privy' || wallet?.walletClientType === 'privy-v2';
 }
 
-function callbackError(cause: unknown, fallback: string): Error {
-  const cancelled = cause === 'exited_auth_flow' || cause === 'user_rejected';
-  return new Error(cancelled ? 'Sign-in cancelled.' : fallback, { cause });
-}
-
 type PendingConnection = {
   kind: 'login' | 'wallet';
   resolve: () => void;
   reject: (cause: Error) => void;
+  /** What has been observed about Privy's prompt for this request. */
+  watch: PrivyPromptWatch;
+  /** Ends the request if Privy never shows a prompt for it. */
+  openTimer?: ReturnType<typeof setTimeout>;
 };
+
+function cancellation(kind: PendingConnection['kind']): WalletConnectCancelledError {
+  return new WalletConnectCancelledError(kind === 'login' ? 'Sign-in cancelled.' : 'Wallet connection was cancelled.');
+}
+
+/** Settle the current request from one observed step. A superseded request stays untouched. */
+function settleConnection(pendingRef: MutableRefObject<PendingConnection | null>, pending: PendingConnection, step: PrivyPromptStep): void {
+  if (pendingRef.current !== pending) return;
+  if (step.outcome === 'pending') {
+    pending.watch = step.watch;
+    return;
+  }
+  pendingRef.current = null;
+  if (pending.openTimer !== undefined) clearTimeout(pending.openTimer);
+  switch (step.outcome) {
+    case 'resolved':
+      pending.resolve();
+      return;
+    case 'cancelled':
+      pending.reject(cancellation(pending.kind));
+      return;
+    case 'unavailable':
+      pending.reject(new Error('The wallet window did not open. Try again.'));
+      return;
+    case 'failed':
+      pending.reject(new Error(
+        pending.kind === 'login' ? 'Sign-in failed. Please try again.' : 'Wallet connection failed. Please try again.',
+        { cause: step.code },
+      ));
+      return;
+  }
+}
+
+/** End the current request without an outcome from Privy (superseded, signed out, unmounted). */
+function retireConnection(pendingRef: MutableRefObject<PendingConnection | null>, cause: Error): void {
+  const pending = pendingRef.current;
+  if (!pending) return;
+  pendingRef.current = null;
+  if (pending.openTimer !== undefined) clearTimeout(pending.openTimer);
+  pending.reject(cause);
+}
 
 type Eip1193Provider = {
   request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
@@ -225,6 +272,12 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
   const [selectedAddress, setSelectedAddress] = useState<string>();
   const [connectionVersion, setConnectionVersion] = useState(0);
   const mountedRef = useRef(false);
+  const readyRef = useRef(ready);
+  readyRef.current = ready;
+  // Privy ignores login() while it holds any non-guest user, so such a
+  // session is treated as signed in when choosing the connection path.
+  const privySessionRef = useRef(false);
+  privySessionRef.current = Boolean(user && !user.isGuest);
   const privyModalOpenRef = useRef(privyModalOpen);
   const walletSessionKeyRef = useRef('');
   const previousEmbeddedPromptRef = useRef<{ walletSessionKey: string } | null>(null);
@@ -234,8 +287,7 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
       const pending = connectPendingRef.current;
       if (!pending || pending.kind !== 'login') return;
       if (!mountedRef.current) {
-        connectPendingRef.current = null;
-        pending.reject(new Error('Wallet connection was cancelled.'));
+        retireConnection(connectPendingRef, cancellation('login'));
         return;
       }
       // Privy's user.wallet is the first linked wallet, which need not be
@@ -243,14 +295,12 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
       const loginAddress = loginAccount?.type === 'wallet' && loginAccount.chainType === 'ethereum'
         ? loginAccount.address : user.wallet?.address;
       if (loginAddress) setSelectedAddress(loginAddress);
-      connectPendingRef.current = null;
-      pending.resolve();
+      settleConnection(connectPendingRef, pending, { outcome: 'resolved' });
     },
     onError: (cause) => {
       const pending = connectPendingRef.current;
       if (!pending || pending.kind !== 'login') return;
-      connectPendingRef.current = null;
-      pending.reject(callbackError(cause, 'Sign-in failed. Please try again.'));
+      settleConnection(connectPendingRef, pending, stepPrivyPrompt(pending.watch, { type: 'error', code: cause, modalOpen: privyModalOpenRef.current }));
     },
   });
   const { connectWallet } = useConnectWallet({
@@ -260,30 +310,34 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
       // Without an active waiter it must not resurrect the selected wallet.
       if (!pending || pending.kind !== 'wallet') return;
       if (!mountedRef.current) {
-        connectPendingRef.current = null;
-        pending.reject(new Error('Wallet connection was cancelled.'));
+        retireConnection(connectPendingRef, cancellation('wallet'));
         return;
       }
       setSelectedAddress(wallet.address);
       setConnectionVersion((version) => version + 1);
-      connectPendingRef.current = null;
-      pending.resolve();
+      settleConnection(connectPendingRef, pending, { outcome: 'resolved' });
     },
     onError: (cause) => {
       const pending = connectPendingRef.current;
       if (!pending || pending.kind !== 'wallet') return;
-      connectPendingRef.current = null;
-      pending.reject(callbackError(cause, 'Wallet connection failed. Please try again.'));
+      settleConnection(connectPendingRef, pending, stepPrivyPrompt(pending.watch, { type: 'error', code: cause, modalOpen: privyModalOpenRef.current }));
     },
   });
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      connectPendingRef.current?.reject(new Error('Wallet connection was cancelled.'));
-      connectPendingRef.current = null;
+      retireConnection(connectPendingRef, new WalletConnectCancelledError());
     };
   }, []);
+  // Privy reports nothing when its connect-only modal is dismissed with the
+  // backdrop or Escape, and a login error may arrive while its modal still
+  // offers a retry. The modal closing without a success callback is
+  // therefore the person ending the request.
+  useEffect(() => {
+    const pending = connectPendingRef.current;
+    if (pending) settleConnection(connectPendingRef, pending, stepPrivyPrompt(pending.watch, { type: 'modal', open: privyModalOpen }));
+  }, [privyModalOpen]);
   const { wallets } = useWallets();
   const { sendTransaction: sendEmbeddedTransaction } = useSendTransaction();
   // A Telegram launch can finish Privy's seamless authentication shortly
@@ -380,37 +434,50 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
     if (wallet) setSelectedAddress(wallet.address);
   }, [wallets]);
 
+  // Register the request before Privy opens its prompt, so its callbacks, the
+  // modal status, and the open grace period can each settle it.
+  const beginConnection = useCallback((kind: PendingConnection['kind'], resolve: () => void, reject: (cause: Error) => void) => {
+    retireConnection(connectPendingRef, new WalletConnectCancelledError('Wallet connection was superseded.'));
+    const pending: PendingConnection = { kind, resolve, reject, watch: watchPrivyPrompt(privyModalOpenRef.current) };
+    connectPendingRef.current = pending;
+    // Before readiness, login() waits for Privy to initialize, so only a
+    // ready SDK is held to showing its prompt promptly.
+    if (readyRef.current) {
+      pending.openTimer = setTimeout(() => {
+        settleConnection(connectPendingRef, pending, stepPrivyPrompt(pending.watch, { type: 'open-timeout' }));
+      }, PRIVY_PROMPT_OPEN_GRACE_MS);
+    }
+    return pending;
+  }, []);
+
   const connectExternalWallet = useCallback(() => new Promise<void>((resolve, reject) => {
-    connectPendingRef.current?.reject(new Error('Wallet connection was superseded.'));
-    connectPendingRef.current = { kind: 'wallet', resolve, reject };
+    const pending = beginConnection('wallet', resolve, reject);
     try {
       // The hook currently returns void, but resolving this through a promise
       // also handles SDK versions that return an async modal operation.
       void Promise.resolve(connectWallet()).catch((cause) => {
-        const pending = connectPendingRef.current;
-        if (!pending || pending.kind !== 'wallet') return;
-        connectPendingRef.current = null;
-        pending.reject(cause instanceof Error ? cause : new Error('Wallet connection was cancelled.'));
+        if (connectPendingRef.current !== pending) return;
+        retireConnection(connectPendingRef, cause instanceof Error ? cause : new Error('Wallet connection failed. Please try again.'));
       });
     } catch (cause) {
-      connectPendingRef.current = null;
-      reject(cause instanceof Error ? cause : new Error('Wallet connection was cancelled.'));
+      retireConnection(connectPendingRef, cause instanceof Error ? cause : new Error('Wallet connection failed. Please try again.'));
     }
-  }), [connectWallet]);
+  }), [beginConnection, connectWallet]);
 
   const connectWithPrivyLogin = useCallback(() => new Promise<void>((resolve, reject) => {
-    connectPendingRef.current?.reject(new Error('Wallet connection was superseded.'));
-    connectPendingRef.current = { kind: 'login', resolve, reject };
+    const pending = beginConnection('login', resolve, reject);
     try {
       // Keep the dashboard as the authority for enabled account methods. The
       // current app enables wallet and email; Telegram becomes available here
       // automatically when its Privy dashboard setting is enabled.
-      login();
+      void Promise.resolve(login()).catch((cause) => {
+        if (connectPendingRef.current !== pending) return;
+        retireConnection(connectPendingRef, cause instanceof Error ? cause : new Error('Sign-in failed. Please try again.'));
+      });
     } catch (cause) {
-      connectPendingRef.current = null;
-      reject(cause instanceof Error ? cause : new Error('Sign-in was cancelled.'));
+      retireConnection(connectPendingRef, cause instanceof Error ? cause : new Error('Sign-in failed. Please try again.'));
     }
-  }), [login]);
+  }), [beginConnection, login]);
 
   const connect = useCallback(async ({ external = false }: { external?: boolean } = {}) => {
     if (external) {
@@ -430,7 +497,9 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
       reconnectTelegram();
       return;
     }
-    if (authenticated) {
+    // login() is a silent no-op while Privy holds a session, so a session
+    // goes straight to the wallet selector instead.
+    if (authenticated || privySessionRef.current) {
       await connectExternalWallet();
       return;
     }
@@ -438,9 +507,7 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
   }, [authenticated, connectExternalWallet, connectWithPrivyLogin, reconnectTelegram]);
 
   const disconnect = useCallback(async () => {
-    const pending = connectPendingRef.current;
-    connectPendingRef.current = null;
-    pending?.reject(new Error('Wallet connection was cancelled.'));
+    retireConnection(connectPendingRef, new WalletConnectCancelledError());
     await logout();
     authenticatedRef.current = false;
     setSelectedAddress(undefined);
@@ -585,6 +652,7 @@ function usePrivyWalletAdapter(): FxPrivyWallet {
     chainId: selectedChainId,
     address: selectedWallet?.address,
     isEmbedded: isEmbedded(selectedWallet),
+    promptOpen: privyModalOpen,
     connect,
     disconnect,
     selectWallet,
@@ -865,12 +933,13 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
     chainId,
     address,
     isEmbedded: false,
+    promptOpen: Boolean(chooser),
     connect,
     disconnect,
     selectWallet: () => undefined,
     switchChain,
     sendTransaction,
-  }), [address, chainId, connect, connectionVersion, disconnect, ready, selectedWallet, sendTransaction, switchChain]);
+  }), [address, chainId, chooser, connect, connectionVersion, disconnect, ready, selectedWallet, sendTransaction, switchChain]);
   const chooseProvider = useCallback((choice: DiscoveredEip6963Provider) => {
     const pending = pendingChoiceRef.current;
     pendingChoiceRef.current = null;

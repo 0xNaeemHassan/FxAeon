@@ -11,6 +11,7 @@ import { haptic } from '@/lib/telegram';
 import { usePrivyWallet } from '@/lib/wallet';
 import styles from '@/components/UtilitySurfaces.module.css';
 import WalletConnectCTA from '@/components/WalletConnectCTA';
+import { StickyAction } from '@/components/StickyAction';
 
 /**
  * Receive screen. The address is read from the selected Privy wallet only;
@@ -74,10 +75,10 @@ function WalletQr() {
         <p className={styles.addressValue} title="Select this address to copy it manually">
           <GroupedAddress address={address} align="center" />
         </p>
-        <Button onClick={copy} className={styles.copyAction} data-copied={copied || undefined}>
+        <StickyAction className={styles.copyDock}><Button onClick={copy} className={styles.copyAction} data-copied={copied || undefined}>
           {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
           <span>{copied ? 'Copied' : 'Copy address'}</span>
-        </Button>
+        </Button></StickyAction>
         <p className={copyFailed ? styles.copyStatus : 'sr-only'} aria-live="polite">
           {copyFailed ? 'Copy was blocked. Press and hold the address to copy it.' : copied ? 'Address copied to clipboard.' : ''}
         </p>

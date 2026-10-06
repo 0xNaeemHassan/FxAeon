@@ -10,4 +10,5 @@ export {
   type FxWalletTransaction,
   type FxWalletTransactionOptions,
 } from './usePrivyWallet';
+export { WalletConnectCancelledError, isWalletConnectCancellation } from './connectWatch';
 export { useWalletReadyTimeout } from './useWalletReadyTimeout';
