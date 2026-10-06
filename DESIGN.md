@@ -1,6 +1,6 @@
 # FxAeon design contract
 
-FxAeon presents onchain actions as a calm, precise workspace: one decision per surface, numbers as the hero, and violet reserved for intent. Prioritize clear transaction context, readable balances, and obvious next steps over decoration. Product screens use the "Aeon" system described below; the public landing page uses warm paper and ink around a dark, illustrative portfolio preview. The landing preview is static and its displayed balances are examples, not live data.
+FxAeon presents onchain actions as a calm, precise workspace: one decision per surface, numbers as the hero, and violet reserved for intent. Prioritize clear transaction context, readable balances, and obvious next steps over decoration. Product screens use the "Aeon" system described below; the public landing page sets the brand on an aurora field around HTML renderings of the app. Its phones and review show example values, never live data, and assistive technology hears them described as examples.
 
 ## Principles
 
@@ -59,4 +59,12 @@ Forms keep labels attached to their controls, errors close to the affected field
 
 ## Public landing page
 
-The landing page is a distinct brand surface: warm neutral paper, near-black editorial type, violet emphasis, and a restrained dark product illustration. Keep the Telegram action primary and the web app secondary. Describe only supported Trade, Earn, Borrow, Move, and protocol behavior. Maintain the responsive composition, theme toggle, keyboard navigation, and reduced-motion behavior when editing it.
+The landing page (fxaeon.xyz) is the brand's stage: dark first, with a light theme, an aurora field, editorial type, and the real product rendered in HTML. Keep the Telegram action primary and the web app secondary, and describe only supported Trade, Earn, Borrow, Move, and protocol behavior in the Docs' reviewed wording.
+
+| Element | Contract |
+| --- | --- |
+| Aurora | `aurora.js` draws curtains of light in raw WebGL at a fraction of screen resolution and at most 30 frames a second. They hang high above the hero, dim through the middle of the page, and settle behind the finale. The CSS gradient beneath is the still frame and the fallback. Curtain colors are capped so text keeps WCAG AA on the brightest frame; `scripts/verify_landing_browser.mjs` measures contrast against the painted pixels |
+| Phones | HTML screens in the app's Official theme, with a status bar and its tab bar. Illustrations are `role="img"` with labels that call them examples, and contain no controls |
+| Chapters | From 960px one pinned phone follows the chapter at the middle of the screen: its screen slides in from the side it comes from and its tab highlight travels. Narrower screens stack a phone inside each chapter |
+| Motion | Arrivals settle within a few seconds. Loops are slow and confined to ambient regions (`data-ambient`). Reduced motion shows every section in place, removes transitions, and holds one aurora frame |
+| Policy | No inline styles or scripts, no network requests, no runtime dependencies. States that wait for script are gated on `:root[data-js]`, so the page is complete without it |

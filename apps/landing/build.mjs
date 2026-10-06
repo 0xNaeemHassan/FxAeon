@@ -7,7 +7,7 @@ const telegramUrl = telegramLauncher(process.env.NEXT_PUBLIC_TELEGRAM_APP_URL ||
 const dist = resolve(root, 'dist');
 await rm(dist, { recursive: true, force: true });
 await mkdir(dist, { recursive: true });
-for (const file of ['index.html', 'styles.css', 'script.js', '404.html', 'robots.txt', 'sitemap.xml', 'document.css']) {
+for (const file of ['index.html', 'styles.css', 'script.js', 'aurora.js', '404.html', 'robots.txt', 'sitemap.xml', 'document.css']) {
   await cp(resolve(root, file), resolve(dist, file));
   if (file === 'index.html') {
     const html = await readFile(resolve(dist, file), 'utf8');
