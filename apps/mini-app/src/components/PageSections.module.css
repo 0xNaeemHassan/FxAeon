@@ -14,31 +14,32 @@
 /* The action wraps under the title when text is large, never past the edge. */
 .sectionHead { display: flex; min-width: 0; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 4px 16px; }
 .sectionHead > div { min-width: 0; }
-.eyebrow { margin-bottom: 6px; color: var(--mint-bright); font-size: var(--fs-micro); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
-:root[data-theme='light'] .eyebrow { color: var(--mint); }
-.sectionHead h2 { color: var(--text); font-size: clamp(22px, 4.6vw, 28px); font-weight: 650; letter-spacing: -0.03em; line-height: 1.12; }
+/* Section titles carry the landing's confidence: large, tight, and read into
+   light word by word as they scroll up (LitWords). */
+.sectionHead h2 { color: var(--text); font-size: clamp(26px, 6.8vw, 34px); font-weight: 680; letter-spacing: -0.045em; line-height: 1.05; text-wrap: balance; }
+.word { transition: color 520ms var(--ease-out); }
+/* A section's one-line premise, above its diagram. */
+.lede { max-width: 56ch; margin: -6px 0 0; color: var(--mut); font-size: var(--fs-small); line-height: 1.6; }
+.litLine[data-lighting] .word:not([data-lit]) { color: color-mix(in srgb, var(--text) 24%, transparent); }
 .sectionAction { display: inline-flex; min-height: 44px; min-width: 0; max-width: 100%; flex: 0 1 auto; align-items: center; gap: 4px; padding-inline: 6px; border-radius: 999px; color: var(--mint); font-size: var(--fs-small); font-weight: 600; transition: background-color var(--dur-fast) ease; }
 .sectionAction:hover { background: var(--mint-dim); }
 .sectionAction svg { width: 16px; height: 16px; transition: transform var(--dur-base) var(--ease-out); }
 .sectionAction:hover svg { transform: translateX(2px); }
 
-/* Facts: two across on phones, four on wide screens; the figure leads. */
-.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+/* Facts: borderless figures on the canvas, two across on phones and four on
+   wide screens, each under a hairline; the figure leads. */
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 18px; }
 @media (min-width: 720px) { .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .stat {
   display: grid;
   align-content: start;
   gap: 4px;
   min-width: 0;
-  padding: 16px;
-  border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--surface) 72%, transparent);
-  box-shadow: var(--ring-inset);
-  transition: transform var(--dur-slow) var(--ease-spring), background-color var(--dur-base) ease;
+  padding-top: 14px;
+  border-top: 1px solid var(--hairline);
 }
-.stat:hover { transform: translateY(-2px); background: var(--surface); }
 .stat dt { color: var(--mut); font-size: var(--fs-caption); font-weight: 500; }
-.stat dd { min-width: 0; color: var(--text); font-size: clamp(18px, 4.4vw, 22px); font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.stat dd { min-width: 0; color: var(--text); font-size: clamp(22px, 6vw, 28px); font-weight: 650; letter-spacing: -0.04em; line-height: 1.1; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .stat .statHint { color: var(--mut-2); font-size: var(--fs-micro); font-weight: 500; letter-spacing: 0; line-height: 1.4; }
 
 /* Steps: a vertical path with a connecting rule on phones, three across on wide screens. */
@@ -84,6 +85,6 @@
 @media (prefers-reduced-motion: reduce) {
   .reveal, .reveal[data-shown] { opacity: 1; transform: none; transition: none; }
   .reveal[data-shown] .step, .answer { animation: none; }
-  .stat, .sectionAction svg { transition: none; }
-  .stat:hover { transform: none; }
+  .sectionAction svg, .word { transition: none; }
+  .litLine[data-lighting] .word:not([data-lit]) { color: inherit; }
 }

@@ -56,6 +56,7 @@ import { ValueOrSkeleton } from '@/components/MissingValue';
 import { PortfolioAssets, type PortfolioNetwork } from '@/components/PortfolioAssets';
 import { PortfolioWorkspace } from '@/components/ProductLayout';
 import { SplitFigure } from '@/components/SplitFigure';
+import { SplitHorizon } from '@/components/SplitHorizon';
 import { useRefreshAction } from '@/lib/useRefreshAction';
 
 const EMPTY_FX_SAVE: FxSaveSnapshot = {
@@ -285,10 +286,20 @@ function PortfolioWallet() {
   </div>;
 }
 
+const WELCOME_MARKS = ['ETH', 'WBTC', 'fxUSD', 'fxSAVE', 'USDC'] as const;
+
 function DisconnectedPortfolio({ authenticated }: { authenticated: boolean }) {
   return (
     <div id="overview" className={`${styles.overview} ${styles.disconnectedOverview}`}>
       <div className={`${styles.primaryColumn} col-span-full`}>
+        {/* Signed out, Portfolio opens as the landing does: the product in one confident line, over the f(x) split in motion. */}
+        <div className={presentation.welcome}>
+          <SplitHorizon className={presentation.welcomeHorizon} />
+          <span className={presentation.welcomeMarks} aria-hidden="true">
+            {WELCOME_MARKS.map((symbol) => <TokenIcon key={symbol} symbol={symbol} size={34} />)}
+          </span>
+          <h2 className={presentation.welcomeTitle}>Leverage, savings, and credit. <span>On f(x) Protocol.</span></h2>
+        </div>
         <ConnectWalletButton className="button button-primary glass-press flex min-h-11 w-full max-w-[320px] self-center items-center justify-center gap-2 rounded-xl px-4 py-3 text-[13px] font-semibold">
           {authenticated ? 'Choose wallet' : 'Connect wallet'}
         </ConnectWalletButton>

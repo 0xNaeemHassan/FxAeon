@@ -14,9 +14,8 @@ export function PageSections({ label, children }: { label: string; children: Rea
   return <div className={styles.sections} aria-label={label} role="region">{children}</div>;
 }
 
-export function Section({ id, eyebrow, title, action, children }: {
+export function Section({ id, title, action, children }: {
   id: string;
-  eyebrow?: string;
   title: string;
   action?: { label: string; href: string; external?: boolean };
   children: ReactNode;
@@ -25,8 +24,7 @@ export function Section({ id, eyebrow, title, action, children }: {
     <section className={styles.section} aria-labelledby={`${id}-title`}>
       <header className={styles.sectionHead}>
         <div>
-          {eyebrow && <p className={styles.eyebrow}>{eyebrow}</p>}
-          <h2 id={`${id}-title`}>{title}</h2>
+          <h2 id={`${id}-title`}><LitWords text={title} /></h2>
         </div>
         {action && (action.external
           ? <a className={styles.sectionAction} href={action.href} target="_blank" rel="noopener noreferrer">{action.label}<ArrowUpRight aria-hidden="true" /></a>
@@ -91,6 +89,54 @@ export function Callout({ icon: Icon, title, children, link }: { icon: LucideIco
       {link && <a href={link.href} target="_blank" rel="noopener noreferrer" className={styles.calloutLink}>{link.label}<ArrowUpRight aria-hidden="true" /></a>}
     </div>
   </div>;
+}
+
+/**
+ * A headline read into light, as on the landing: each word brightens as its
+ * line scrolls up to where it is read, and stays lit. Words are spans; the
+ * heading's text and accessible name are unchanged. Without script, before
+ * hydration, or with reduced motion every word is simply lit.
+ */
+function LitWords({ text }: { text: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const line = ref.current;
+    if (!line || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
+    const words = [...line.querySelectorAll<HTMLElement>('[data-word]')];
+    const scroller = line.closest<HTMLElement>('[data-shell-content]');
+    const target: HTMLElement | Window = scroller ?? window;
+    let frame = 0;
+    let lit = -1;
+    const update = () => {
+      frame = 0;
+      const top = line.getBoundingClientRect().top;
+      const viewTop = scroller ? scroller.getBoundingClientRect().top : 0;
+      const view = scroller ? scroller.clientHeight : window.innerHeight;
+      // Dim while its top is in the lower tenth of the view; fully lit by the middle.
+      const progress = Math.min(1, Math.max(0, (view * 0.9 - (top - viewTop)) / (view * 0.42)));
+      const count = Math.round(progress * words.length);
+      if (count === lit) return;
+      lit = count;
+      words.forEach((word, index) => word.toggleAttribute('data-lit', index < count));
+      if (count === words.length) stop();
+    };
+    const schedule = () => { if (!frame) frame = window.requestAnimationFrame(update); };
+    const stop = () => {
+      target.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+    };
+    line.toggleAttribute('data-lighting', true);
+    target.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', schedule);
+    update();
+    return () => {
+      stop();
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, [text]);
+  return <span ref={ref} className={styles.litLine}>{text.split(/(\s+)/).map((part, index) => /^\s+$/.test(part) || !part
+    ? part
+    : <span key={`${index}:${part}`} data-word className={styles.word}>{part}</span>)}</span>;
 }
 
 /** Rises into place the first time it scrolls into view. */

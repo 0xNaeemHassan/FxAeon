@@ -1,0 +1,18 @@
+/* The f(x) split as a horizon: collateral wanders, the fxUSD floor holds,
+   the band between is the leveraged share. Only the double-width layer
+   moves, and only by transform. */
+/* Zero-specificity positioning, so a consumer can place the horizon absolutely. */
+:where(.horizon) { position: relative; }
+.horizon { overflow: hidden; pointer-events: none; }
+.drift { position: absolute; inset: 0 auto 0 0; width: 200%; }
+.drift svg, .floor { display: block; width: 100%; height: 100%; }
+.floor { position: absolute; inset: 0; }
+.line { fill: none; stroke: var(--mint); stroke-width: 2; stroke-linecap: round; vector-effect: non-scaling-stroke; opacity: 0.85; }
+.share { fill: url(#split-horizon-share); }
+.shareTop { stop-color: var(--mint); stop-opacity: 0.2; }
+.shareBottom { stop-color: var(--brand-coral); stop-opacity: 0.02; }
+.floor path { fill: none; stroke: color-mix(in srgb, var(--text) 38%, transparent); stroke-width: 1.5; stroke-dasharray: 3 5; vector-effect: non-scaling-stroke; }
+@media (prefers-reduced-motion: no-preference) {
+  .drift { animation: split-drift 28s linear infinite; will-change: transform; }
+}
+@keyframes split-drift { to { transform: translate3d(-50%, 0, 0); } }

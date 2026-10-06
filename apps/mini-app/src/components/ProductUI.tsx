@@ -14,7 +14,7 @@ export function ProductSurface({ children, className = '', ...props }: HTMLAttri
 }
 
 export function PageHeading({ title, backHref, action }: { title: string; backHref?: string; action?: ReactNode }) {
-  return <header className={styles.heading}>
+  return <header className={styles.heading} data-page-heading>
     <div>{backHref && <Link href={backHref} aria-label="Go back" className={styles.iconButton}><ArrowLeft aria-hidden="true" size={20} /></Link>}<h1>{title}</h1></div>
     {action}
   </header>;

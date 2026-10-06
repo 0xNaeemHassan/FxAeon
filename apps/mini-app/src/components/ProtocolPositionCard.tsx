@@ -89,6 +89,12 @@ function PositionBody({
     ? missingStatus === 'loading' ? 'Loading position value' : 'Position value unavailable until prices refresh'
     : 'Collateral value minus debt';
   const sideLabel = position.side === 'long' ? 'Long' : 'Short';
+  // The f(x) split on this position: its collateral value is debt plus the
+  // holder's share. Drawn only from the same validated values shown below.
+  const debtShare = valuation.collateralUsdCents !== null && valuation.debtUsdCents !== null
+    && valuation.collateralUsdCents > 0n && valuation.debtUsdCents >= 0n && valuation.debtUsdCents <= valuation.collateralUsdCents
+    ? Number((valuation.debtUsdCents * 10_000n) / valuation.collateralUsdCents) / 10_000
+    : null;
 
   return (
     <div className={`${styles.content} ${compact ? styles.compactContent : ''}`}>
@@ -113,6 +119,9 @@ function PositionBody({
         </div>
         <span className={styles.positionValueNumber}>{netEquity}</span>
       </div>
+      {debtShare !== null && <div className={styles.split} aria-hidden="true" data-position-split style={{ '--debt-share': debtShare } as React.CSSProperties}>
+        <i className={styles.splitDebt} /><i className={styles.splitShare} />
+      </div>}
       <div className={styles.metrics}>
         <div className={styles.metric}>
           <span className={styles.metricLabel}>Collateral</span>

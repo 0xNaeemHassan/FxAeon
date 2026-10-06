@@ -358,6 +358,25 @@ body::after {
     radial-gradient(26vmax 20vmax at 76% 58%, color-mix(in srgb, var(--mint) 6%, transparent), transparent 72%);
   animation: canvas-drift-b 56s var(--ease-in-out, ease-in-out) infinite alternate;
 }
+
+/* A route's heading arrives lit, as the landing's headline does: one band of
+   accent light crosses the word and leaves it in plain text. */
+@media (prefers-reduced-motion: no-preference) {
+  :is(.page-header, .trade-page-heading, [data-page-heading]) h1 {
+    background: linear-gradient(100deg, var(--text) 0 36%, var(--mint-bright) 46%, var(--brand-coral) 52%, var(--text) 60% 100%) 0 0 / 260% 100% no-repeat;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: heading-light 1.5s var(--ease-out) 0.12s both;
+  }
+}
+@keyframes heading-light {
+  from { background-position: 100% 0; }
+  to { background-position: 0 0; }
+}
+@media (forced-colors: active) {
+  :is(.page-header, .trade-page-heading, [data-page-heading]) h1 { background: none; -webkit-text-fill-color: CanvasText; }
+}
 @keyframes canvas-drift-a {
   from { transform: translate3d(-3vmax, -1vmax, 0) scale(1); }
   to { transform: translate3d(4vmax, 3vmax, 0) scale(1.06); }
@@ -974,7 +993,8 @@ details[open] > summary .disclosure-closed-only { display: none; }
   width: calc((100% - var(--tab-inset) * 2) / var(--tab-count, 5));
   border-radius: 18px;
   background: var(--mint-dim);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mint) 14%, transparent);
+  /* The landing phone's tab light: a ring and a soft glow beneath it. */
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mint) 22%, transparent), 0 8px 22px -10px var(--mint-glow);
   transform: translateX(calc(var(--tab-index, 0) * 100%));
   transition: transform var(--dur-slow) var(--ease-spring), opacity var(--dur-fast) ease;
 }

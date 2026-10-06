@@ -6,12 +6,12 @@
 .balanceCopy { min-width: 0; flex: 1; }
 .balanceCopy[data-connected='true'] { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); align-items: baseline; column-gap: 8px; }
 .balanceCopy > p { grid-column: 1 / -1; margin: 0; color: var(--mut); font-size: var(--fs-small); font-weight: 500; }
-.balanceCopy h2 { margin: 4px 0 2px; color: var(--text); font-size: clamp(30px, 8.5vw, 36px); line-height: 1.1; letter-spacing: -.04em; font-variant-numeric: tabular-nums; font-weight: 600; overflow-wrap: break-word; }
+.balanceCopy h2 { margin: 4px 0 2px; color: var(--text); font-size: clamp(32px, 9vw, 40px); line-height: 1.05; letter-spacing: -.05em; font-variant-numeric: tabular-nums; font-weight: 650; overflow-wrap: break-word; }
 .balanceCopy small { display: block; overflow-wrap: anywhere; color: var(--mut); font-size: var(--fs-caption); line-height: 1.5; }
-/* Yield reads as a calm green badge: the rate, then what it is. */
-.rate { flex: 0 0 auto; margin-top: 2px; padding: 8px 12px; border-radius: var(--radius-md); background: var(--success-dim); text-align: right; }
-.rate > strong { display: block; font-size: 20px; line-height: 1.15; color: var(--success); font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-.rate > small { display: block; margin-top: 2px; color: color-mix(in srgb, var(--success) 70%, var(--mut)); font-size: var(--fs-micro); font-weight: 600; }
+/* Yield is a second figure, not a badge: the rate in green, then what it is. */
+.rate { flex: 0 0 auto; margin-top: 2px; text-align: right; }
+.rate > strong { display: block; font-size: 24px; line-height: 1.1; color: var(--success); font-weight: 650; letter-spacing: -0.035em; font-variant-numeric: tabular-nums; }
+.rate > small { display: block; margin-top: 3px; color: var(--mut); font-size: var(--fs-caption); font-weight: 600; }
 .refresh { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; margin: 0 -10px 0 -2px; color: var(--mut); border-radius: 50%; transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease; }
 .refresh:hover { color: var(--text); background: var(--surface-2); }
 /* Deposit/Withdraw with the settings gear at the right of the same row. */
@@ -43,8 +43,8 @@
   .actionTabs { margin-block: 8px; padding-top: 8px; }
   .editor { gap: 8px; }
   .panel > [role='status'] { margin-block: 8px; }
-  .balanceCopy h2 { font-size: 28px; }
-  .rate > strong { font-size: 18px; }
+  .balanceCopy h2 { font-size: 30px; }
+  .rate > strong { font-size: 21px; }
   .withdrawOptions :global(label) { padding: 8px; }
   .withdrawOptions :global(fieldset) { gap: 6px; }
   .withdrawOptions :global(legend) { margin-bottom: 6px; }
