@@ -89,7 +89,7 @@ function ActivityFeed({ walletAddress, compact, inDialog }: { walletAddress: Add
 /** Signed movement for a single indexed transfer; the detail sheet keeps the exact amount. */
 function TransferAmount({ transfer, walletAddress }: { transfer: Activity['transfers'][number]; walletAddress: Address }) {
   const sent = transfer.from.toLowerCase() === walletAddress.toLowerCase();
-  const rounded = formatExactDecimal(formatUnits(transfer.amountRaw, transfer.decimals), 6);
+  const rounded = formatExactDecimal(formatUnits(transfer.amountRaw, transfer.decimals ?? 18), 6);
   // Rounding must never turn a real movement into zero; dust reads as a bound.
   const amount = rounded === '0' && transfer.amountRaw !== 0n ? '<0.000001' : rounded;
   return <strong className={styles.amount} data-direction={sent ? 'out' : 'in'}>
@@ -133,7 +133,7 @@ function ActivityDetail({ item, open, onClose, triggerRef, walletAddress }: { it
           const sent = transfer.from.toLowerCase() === walletAddress.toLowerCase();
           const counterparty = sent ? transfer.to : transfer.from;
           return <div key={transfer.id} className={styles.transfer}>
-            <div><small>{sent ? 'Sent' : 'Received'} · {item.chainId === 1 ? 'Ethereum' : 'Base'}</small><strong>{formatUnits(transfer.amountRaw, transfer.decimals)} {transfer.symbol}</strong>
+            <div><small>{sent ? 'Sent' : 'Received'} · {item.chainId === 1 ? 'Ethereum' : 'Base'}</small><strong>{formatUnits(transfer.amountRaw, transfer.decimals ?? 18)} {transfer.symbol}</strong>
               <span><WalletAvatar address={counterparty} size={18} />{sent ? 'To' : 'From'} <span title={counterparty}>{compactAddress(counterparty)}</span></span></div>
             <TokenIcon symbol={transfer.symbol} size={42} />
           </div>;

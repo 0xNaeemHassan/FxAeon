@@ -172,6 +172,21 @@ test('does not present an indexed close when the receipt event names another rec
 
   assert.equal(result.items.length, 0);
   assert.equal(result.partial, true);
+  // A checked event that is not this wallet's is not a failed read.
+  assert.equal(result.incomplete, false);
+});
+
+test('an unreadable receipt or index marks the history incomplete, not just partial', async () => {
+  const { fetcher } = fakeFetcher();
+  const client = fakeClient(successfulReceipt());
+  client.getTransactionReceipt = async () => { throw new Error('RPC unavailable'); };
+  const unreadable = await loadProtocolPositionHistory({ walletAddress: wallet, client, fetcher });
+  assert.equal(unreadable.items.length, 0);
+  assert.equal(unreadable.partial, true);
+  assert.equal(unreadable.incomplete, true);
+
+  const verified = await loadProtocolPositionHistory({ walletAddress: wallet, client: fakeClient(successfulReceipt()), fetcher: fakeFetcher().fetcher });
+  assert.equal(verified.incomplete, false);
 });
 
 test('verifies official short PositionOperate open through the exact router-to-wallet NFT transfer', async () => {

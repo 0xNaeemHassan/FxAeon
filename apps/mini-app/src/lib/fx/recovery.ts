@@ -39,10 +39,13 @@ export type RecoveryViewModel = {
   receiptNativeValueWei?: bigint;
   /** ERC-20 Transfer facts decoded directly from verified receipt logs. */
   receiptTransfers?: { token: Address; from: Address; to: Address; amountRaw: bigint }[];
+  /** Mined calldata, present only after it matched the reviewed fingerprint. History uses it to name the action. */
+  transactionInput?: Hex;
   message: string;
 };
 
-const MAX_TERMINAL_HISTORY_READS = 8;
+/** Completed records History re-verifies; unresolved records are never capped. */
+export const MAX_TERMINAL_HISTORY_READS = 30;
 
 type ReceiptClient = Pick<FxPublicClient, "getTransactionReceipt" | "getTransaction" | "getChainId" | "getBlockNumber"> & {
   chain?: { id?: number };
@@ -281,6 +284,8 @@ export async function reconcileWalletJournal(params: {
         receiptTransfers: finalView.status === "confirmed"
           ? receiptTransfersFromLogs(finalReceipt.logs ?? [], record.walletAddress)
           : [],
+        // minedTransactionMismatch has already bound this input to the reviewed data hash.
+        transactionInput: (transaction as { input?: Hex; data?: Hex }).input ?? (transaction as { input?: Hex; data?: Hex }).data,
       };
     } catch (error) {
       return pendingView(
