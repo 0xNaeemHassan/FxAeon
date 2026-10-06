@@ -4,12 +4,14 @@ import { useEffect, useRef, type CSSProperties } from 'react';
 import styles from './LeverageSplit.module.css';
 
 /**
- * Leverage on f(x) Protocol as arithmetic: at L× the borrowed part of a
- * position (minted fxUSD for a long, borrowed wstETH or WBTC for a short) is
- * (L − 1) / L of it and the rest is the trader's share. Rows show 2×, 3×, and
- * the pool's current maximum, before fees. The bars fill once on screen.
+ * Debt as a share of collateral value, before fees. A displayed L× long has
+ * collateral/equity = L, so debt/collateral = (L − 1) / L. A displayed L×
+ * short has debt/equity = L, so debt/collateral = L / (L + 1). The remainder
+ * is the trader's share. Rows show 2×, 3×, and the pool's current maximum.
+ * These are educational examples, not position valuations or SDK inputs.
+ * The bars fill once on screen.
  */
-export function LeverageSplit({ max, debtLabel }: { max: number; debtLabel: string }) {
+export function LeverageSplit({ max, side, debtLabel }: { max: number; side: 'long' | 'short'; debtLabel: string }) {
   const ref = useRef<HTMLOListElement>(null);
   useEffect(() => {
     const node = ref.current;
@@ -27,7 +29,7 @@ export function LeverageSplit({ max, debtLabel }: { max: number; debtLabel: stri
   const rows = [2, 3, ...(poolMax !== null && poolMax > 3 ? [poolMax] : [])];
   return <ol ref={ref} className={styles.rows} aria-label={`Share of a position that is ${debtLabel}, by leverage, before fees`}>
     {rows.map((leverage) => {
-      const borrowed = (leverage - 1) / leverage;
+      const borrowed = side === 'short' ? leverage / (leverage + 1) : (leverage - 1) / leverage;
       const borrowedPercent = Math.round(borrowed * 100);
       const label = leverage === poolMax && leverage > 3 ? `${leverage.toFixed(1)}× · pool maximum` : `${leverage}×`;
       return <li key={leverage} className={styles.row} style={{ '--borrowed': borrowed } as CSSProperties}>
