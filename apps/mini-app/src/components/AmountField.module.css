@@ -41,25 +41,26 @@
 .shortcuts button:disabled { cursor: not-allowed; opacity: 1; color: var(--mut-2); }
 .shortcuts button:disabled > span { background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
 .entryRow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-width: 0; min-height: 56px; }
-.entryRow > input {
-  width: 0;
+/* The figure sizes to its own width at every phone size: each extra digit
+ * steps the type down, so exact amounts never run under the asset pill. */
+.entryFit { display: flex; min-width: 0; flex: 1 1 128px; container-type: inline-size; }
+.entryFit > input {
+  width: 100%;
   min-width: 0;
-  flex: 1 1 128px;
   min-height: 52px;
   border: 0;
   outline: none;
   background: transparent;
   color: var(--text);
   font-family: inherit;
-  font-size: clamp(28px, 10cqi, var(--fs-amount));
+  font-size: clamp(14px, calc(100cqi / (var(--amount-entry-length, 4) * 0.62 + 0.4)), var(--amount-max-size, var(--fs-amount)));
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   letter-spacing: var(--tracking-figure);
   caret-color: var(--mint);
   transition: font-size var(--dur-base) var(--ease-out);
 }
-.entryRow > input[data-long-amount='true'] { font-size: clamp(18px, calc(65cqi / var(--amount-entry-length, 10)), 24px); }
-.entryRow > input::placeholder { color: var(--mut-2); opacity: 0.7; }
+.entryFit > input::placeholder { color: var(--mut-2); opacity: 0.7; }
 .token { flex: 0 1 auto; min-width: 0; max-width: 100%; }
 .token :global(button[aria-haspopup='dialog']) {
   min-height: 44px;
@@ -85,10 +86,10 @@
 .balance { margin-left: auto; text-align: right; color: var(--mut); font-size: inherit; line-height: 1.5; }
 .balance strong { color: var(--text); font-weight: 600; }
 
-.entryRow > input:focus-visible { outline: none; }
+.entryFit > input:focus-visible { outline: none; }
 
 @media (max-width: 359px) { .labelRow { flex-wrap: wrap; } .labelRow > label { flex-basis: 100%; } }
 
 .maxSpinner { display: inline-block; width: 10px; height: 10px; margin-left: 4px; border: 1.5px solid currentColor; border-right-color: transparent; border-radius: 50%; vertical-align: middle; animation: max-spin .8s linear infinite; }
 @keyframes max-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .maxSpinner, .error { animation: none; } .entryRow > input { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .maxSpinner, .error { animation: none; } .entryFit > input { transition: none; } }

@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { formatEther, formatUnits, isAddress, type Address } from 'viem';
-import { ArrowLeft, ArrowUpRight, ChevronDown, ChevronRight, Clock3, Wallet } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, ChevronRight, Clock3, Wallet } from 'lucide-react';
 import { AppShell } from '@/components/ui';
 import TokenIcon, { ChainIcon } from '@/components/TokenIcon';
 import { GroupedAddress } from '@/components/GroupedAddress';
@@ -18,6 +18,10 @@ import { withWalletChainLock } from '@/lib/fx/lock';
 import { GAS_TIERS, readGasTier, type GasTier } from '@/lib/settings';
 import { userSafeError } from '@/lib/errors';
 import { canonicalAsset } from '@/lib/walletAssets';
+import { decimalInputError, decimalToUnits, formatSignificantDecimal } from '@/lib/amount';
+import { formatUsd } from '@/lib/prices';
+import { displayAssetSymbol } from '@/components/AssetPresentation';
+import { WalletAssetPicker } from '@/components/WalletAssetPicker';
 import styles from './send.module.css';
 const SEND_DEMAND = { expandedAssets: true, chainPulse: true, positions: false } as const;
 
@@ -56,11 +60,23 @@ function SendForm() {
   const current = () => mounted.current && currentIdentity.current === identity;
   const trimmedRecipient = recipient.trim();
   const recipientValid = isAddress(trimmedRecipient);
-  const input = (value = amount): SendInput => {
-    if (!asset || !wallet.address || !isAddress(recipient.trim())) throw new Error('Enter a valid recipient address.');
-    return { walletAddress: wallet.address as Address, recipient: recipient.trim() as Address, chainId: asset.chainId, tokenAddress: asset.tokenAddress,
+  const input = (value = amount, to = trimmedRecipient): SendInput => {
+    if (!asset || !wallet.address || !isAddress(to)) throw new Error('Enter a valid recipient address.');
+    return { walletAddress: wallet.address as Address, recipient: to as Address, chainId: asset.chainId, tokenAddress: asset.tokenAddress,
       amount: value, tier: wallet.isEmbedded ? tier : 'standard' };
   };
+  const symbol = asset ? displayAssetSymbol(asset.symbol) : '';
+  const trimmedAmount = amount.trim();
+  const amountProblem = asset && trimmedAmount ? decimalInputError(trimmedAmount, asset.decimals) : null;
+  const amountUnits = asset && trimmedAmount && !amountProblem ? decimalToUnits(trimmedAmount, asset.decimals) : null;
+  // The action names the one thing still missing, so a disabled button is never a mystery.
+  const blocker = !asset ? (assets.status === 'loading' || assets.status === 'idle' ? 'Loading assets' : 'No assets to send')
+    : !trimmedAmount ? 'Enter an amount'
+      : amountUnits === null ? 'Enter a valid amount'
+        : amountUnits > asset.balanceWei ? `Insufficient ${symbol}`
+          : !trimmedRecipient ? 'Enter a recipient'
+            : !recipientValid ? 'Enter a valid address'
+              : null;
   const run = async (action: () => Promise<void>) => {
     if (lock.current) return;
     lock.current = true; setBusy(true); setError('');
@@ -69,8 +85,10 @@ function SendForm() {
   };
   const maximum = () => void run(async () => {
     if (!asset) return;
-    if (asset.tokenAddress) { setAmount(asset.balance); return; }
-    const estimate = await prepareWalletSend(input('0.000000000000000001'));
+    if (asset.tokenAddress || !wallet.address) { setAmount(asset.balance); return; }
+    // Until a recipient is entered, cost a transfer back to this wallet. A plain ETH
+    // transfer costs the same, and review re-quotes the real recipient before signing.
+    const estimate = await prepareWalletSend(input('0.000000000000000001', recipientValid ? trimmedRecipient : wallet.address));
     if (!current()) return;
     const reserve = estimate.requiredNative - 1n;
     if (asset.balanceWei <= reserve) throw new Error('Not enough ETH for network cost.');
@@ -104,7 +122,7 @@ function SendForm() {
   if (hash && quote) return <section className={`${styles.card} ${styles.done}`} aria-label="Send submitted">
     <span className={styles.doneMark} aria-hidden="true"><Clock3 /></span>
     <h2>Submitted</h2>
-    <p className={styles.doneAmount}><strong>{quote.input.amount} {quote.symbol}</strong> to {shortAddress(quote.input.recipient)}</p>
+    <p className={styles.doneAmount}><strong title={`${quote.input.amount} ${quote.symbol}`}>{formatSignificantDecimal(quote.input.amount, 8)} {quote.symbol}</strong> to {shortAddress(quote.input.recipient)}</p>
     <p className={styles.doneNote}>Not confirmed by the network yet. History shows its status.</p>
     <Link className={`button button-primary ${styles.action}`} href="/history">View history</Link>
     <a className={`button button-ghost ${styles.action}`} href={`https://${quote.input.chainId === 1 ? 'etherscan.io' : 'basescan.org'}/tx/${hash}`} target="_blank" rel="noopener noreferrer">View transaction<ArrowUpRight aria-hidden="true" /></a>
@@ -117,7 +135,7 @@ function SendForm() {
       </header>
       <div className={styles.reviewHero}>
         <TokenIcon symbol={quote.symbol} size={48} />
-        <p className={styles.reviewAmount}>{quote.input.amount} <span>{quote.symbol}</span></p>
+        <p className={styles.reviewAmount} title={`${quote.input.amount} ${quote.symbol}`}>{formatSignificantDecimal(quote.input.amount, 8)} <span>{quote.symbol}</span></p>
       </div>
       <div className={styles.recipientReview}>
         <span className={styles.fieldLabel}>To</span>
@@ -134,20 +152,14 @@ function SendForm() {
       <div className={styles.amountPanel}>
         <div className={styles.panelHead}>
           <label htmlFor="send-amount">Amount</label>
-          <button type="button" className={styles.max} disabled={busy || !asset || !asset.tokenAddress && !recipientValid} onClick={maximum}><span>Max</span></button>
+          <button type="button" className={styles.max} disabled={busy || !asset} onClick={maximum}><span>Max</span></button>
         </div>
         <div className={styles.amountRow}>
-          <input id="send-amount" className={styles.amountInput} inputMode="decimal" autoComplete="off" placeholder="0" value={amount} disabled={busy} onChange={(event) => { setAmount(event.target.value); setError(''); }} />
-          <span className={styles.assetPicker}>
-            {asset && <TokenIcon symbol={asset.symbol} size={24} />}
-            <select aria-label="Asset to send" disabled={busy || !tokens.length} value={asset?.id ?? ''} onChange={(event) => { setAssetId(event.target.value); setAmount(''); setError(''); }}>
-              {!tokens.length && <option value="">{assets.status === 'loading' || assets.status === 'idle' ? 'Loading assets' : 'No available assets'}</option>}
-              {tokens.map((token) => <option key={token.id} value={token.id}>{token.symbol} · {networkName(token.chainId)}</option>)}
-            </select>
-            <ChevronDown aria-hidden="true" />
-          </span>
+          <span className={styles.amountFit}><input id="send-amount" className={styles.amountInput} style={{ '--amount-length': Math.max(trimmedAmount.length, 1) } as CSSProperties} inputMode="decimal" autoComplete="off" placeholder="0" value={amount} disabled={busy} aria-invalid={Boolean(amountProblem) || undefined} onChange={(event) => { setAmount(event.target.value); setError(''); }} /></span>
+          <WalletAssetPicker label="Asset to send" assets={tokens} value={asset} disabled={busy} loading={assets.status === 'loading' || assets.status === 'idle'} onChange={(next) => { setAssetId(next.id); setAmount(''); setError(''); }} />
         </div>
-        {asset && <p className={styles.balance}>Balance: {asset.balance} {asset.symbol}</p>}
+        {amountProblem && trimmedAmount !== '.' ? <p className={styles.hint}>{amountProblem}</p>
+          : asset && <p className={styles.balance}>Balance <span title={`${asset.balance} ${symbol}`}>{formatSignificantDecimal(asset.balance)} {symbol}</span>{asset.usdValue !== null && <span className={styles.balanceUsd}>{formatUsd(asset.usdValue)}</span>}</p>}
       </div>
       <div className={styles.recipientPanel}>
         <label htmlFor="send-recipient" className={styles.fieldLabel}>To</label>
@@ -166,6 +178,6 @@ function SendForm() {
       </div>}
     </>}
     {error && <p role="alert" className={styles.error}>{error}</p>}
-    <button type="button" className={`button button-primary ${styles.action}`} aria-busy={busy || undefined} disabled={busy || !quote && (!asset || !amount || !recipientValid)} onClick={quote ? confirm : review}>{busy ? quote ? 'Confirm in wallet' : 'Preparing' : quote ? 'Confirm' : <>Review<ChevronRight aria-hidden="true" /></>}</button>
+    <button type="button" className={`button button-primary ${styles.action}`} aria-busy={busy || undefined} disabled={busy || !quote && blocker !== null} onClick={quote ? confirm : review}>{busy ? quote ? 'Confirm in wallet' : 'Preparing' : quote ? 'Confirm' : blocker ?? <>Review<ChevronRight aria-hidden="true" /></>}</button>
   </section>;
 }

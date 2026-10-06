@@ -14,7 +14,7 @@
 }
 .card h2 { color: var(--text); font-size: var(--fs-heading); font-weight: 650; letter-spacing: -0.02em; line-height: 1.15; }
 /* Text fields show focus through their panel ring; controls keep an outline. */
-.card :where(button, a, select):focus-visible { outline: 2px solid var(--mint-bright); outline-offset: 3px; }
+.card :where(button, a):focus-visible { outline: 2px solid var(--mint-bright); outline-offset: 3px; }
 .card :where(input, textarea):focus-visible { outline: none; }
 .fieldLabel,
 .panelHead label { color: var(--mut); font-size: var(--fs-small); font-weight: 500; line-height: 1.4; }
@@ -47,15 +47,18 @@
 .max:hover:not(:disabled) > span { background: var(--mint-dim); }
 .max:active:not(:disabled) { transform: scale(0.94); transition-duration: var(--dur-press); }
 .max:disabled { cursor: not-allowed; color: var(--mut-2); }
-/* The amount keeps a readable width; on narrow phones the asset pill wraps below it. */
+/* The amount keeps a readable width; on the narrowest phones the asset pill
+ * wraps below it. The figure sizes to its own width, like every amount field. */
 .amountRow { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 6px; }
+.amountFit { display: flex; min-width: 0; flex: 1 1 7rem; container-type: inline-size; }
 .amountInput {
-  min-width: 5.5rem;
-  flex: 1 1 5.5rem;
+  width: 100%;
+  min-width: 0;
   min-height: 52px;
   background: transparent;
   color: var(--text);
-  font-size: var(--fs-amount);
+  font-size: clamp(14px, calc(100cqi / (var(--amount-length, 1) * 0.62 + 0.4)), var(--fs-amount));
+  transition: font-size var(--dur-base) var(--ease-out);
   font-weight: 500;
   letter-spacing: var(--tracking-figure);
   line-height: 1.1;
@@ -63,42 +66,9 @@
   outline: none;
 }
 .amountInput::placeholder { color: var(--mut-2); }
-.assetPicker {
-  position: relative;
-  display: inline-flex;
-  min-height: 44px;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 8px;
-  border-radius: 999px;
-  padding: 0 12px 0 8px;
-  background: var(--surface-3);
-  box-shadow: var(--ring-inset);
-  transition: background-color var(--dur-fast) ease;
-}
-.assetPicker:hover { background: color-mix(in srgb, var(--surface-3) 80%, var(--text) 6%); }
-.assetPicker select {
-  max-width: 9.5rem;
-  min-height: 44px;
-  appearance: none;
-  background: transparent;
-  color: var(--text);
-  font-size: var(--fs-body);
-  font-weight: 600;
-  field-sizing: content;
-  padding-right: 18px;
-  text-overflow: ellipsis;
-}
-.assetPicker select option { background: var(--surface); color: var(--text); }
-.assetPicker > svg:last-child {
-  position: absolute;
-  right: 10px;
-  width: 16px;
-  height: 16px;
-  color: var(--mut);
-  pointer-events: none;
-}
-.balance { margin-top: 6px; color: var(--mut); font-size: var(--fs-small); line-height: 1.45; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.balance { display: flex; flex-wrap: wrap; gap: 0 8px; margin-top: 6px; color: var(--mut); font-size: var(--fs-small); line-height: 1.45; font-variant-numeric: tabular-nums; }
+.balance > span:first-of-type { color: var(--text); font-weight: 500; }
+.balanceUsd { margin-left: auto; }
 
 /* Recipient: an avatar appears once the address is complete. */
 .recipientPanel { padding: 12px 16px 10px; }
@@ -255,4 +225,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .doneMark { animation: none; }
+  .amountInput { transition: none; }
 }

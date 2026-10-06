@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type CSSProperties, type ReactNode } from 'react';
 import TokenIcon from '@/components/TokenIcon';
 import { useUsdPrices } from '@/components/PriceProvider';
 import { ValueOrSkeleton } from '@/components/MissingValue';
@@ -99,7 +99,8 @@ export function AmountFieldView({ value, onChange, symbol, label, hint, balance,
       </div>
       {hint && <span className={styles.meta} id={`${id}-hint`}>{hint}</span>}
       <div className={styles.entryRow}>
-        <input id={id} value={value} onChange={(event) => {
+        <span className={styles.entryFit}>
+        <input id={id} value={value} style={{ '--amount-entry-length': Math.max(value.length, placeholder.length, 1) } as CSSProperties} onChange={(event) => {
           const raw = event.target.value;
           if (allowAll && raw.toLowerCase() === 'all') { change('all'); return; }
           const normalized = normalizeAmountInput(raw, inputPolicy);
@@ -108,8 +109,8 @@ export function AmountFieldView({ value, onChange, symbol, label, hint, balance,
           change(normalized ?? raw.slice(0, 100));
         }}
           onBlur={() => setTouched(true)} disabled={inactive} inputMode="decimal" autoComplete="off" spellCheck={false} placeholder={placeholder}
-          aria-label={`${label} in ${symbol}`} aria-describedby={describedBy} aria-invalid={Boolean(error)} aria-errormessage={error ? `${id}-error` : undefined} required={!allowZero}
-          data-long-amount={value.length > 12 || undefined} />
+          aria-label={`${label} in ${symbol}`} aria-describedby={describedBy} aria-invalid={Boolean(error)} aria-errormessage={error ? `${id}-error` : undefined} required={!allowZero} />
+        </span>
         <div className={styles.token}>{tokenSelector ?? <span className={styles.tokenLabel} title={tokenSymbol(symbol)}><TokenIcon symbol={symbol} size={24} /><span>{tokenSymbol(symbol)}</span></span>}</div>
       </div>
       {(showUsdValue || showBalance) && <div className={styles.usd} data-amount-usd>

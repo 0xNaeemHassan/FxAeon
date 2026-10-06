@@ -93,6 +93,34 @@ export function formatExactDecimal(value: string, maxFractionDigits = 4): string
   return `${sign && !isZero ? '-' : ''}${grouped}${roundedFraction ? `.${roundedFraction}` : ''}`;
 }
 
+/** Smallest amount spelled out; anything above zero but below it reads as "<0.000001". */
+export const DISPLAY_DUST = '0.000001';
+
+/**
+ * Display copy for an exact token amount: grouped, at most `significant`
+ * significant digits (whole numbers always kept, two decimals once an amount
+ * reaches 1,000), truncated toward zero so a shown balance never exceeds the
+ * exact one. Callers add direction signs; the input's own sign is kept.
+ */
+export function formatSignificantDecimal(value: string, significant = 5): string {
+  const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(value.trim());
+  if (!match || !Number.isInteger(significant) || significant < 1 || significant > 30) return value;
+  const [, sign, rawInteger, rawFraction = ''] = match;
+  const integer = rawInteger.replace(/^0+(?=\d)/, '');
+  const fraction = rawFraction.replace(/0+$/, '');
+  if (integer === '0' && fraction === '') return '0';
+  if (integer === '0') {
+    const leadingZeros = /^0*/.exec(fraction)![0].length;
+    // DISPLAY_DUST itself has one zero fewer than anything below it.
+    if (leadingZeros >= DISPLAY_DUST.length - 2) return `<${DISPLAY_DUST}`;
+    const kept = fraction.slice(0, leadingZeros + significant).replace(/0+$/, '');
+    return `${sign}0.${kept}`;
+  }
+  const fractionDigits = Math.max(integer.length >= 4 ? 2 : 0, significant - integer.length);
+  const kept = fraction.slice(0, fractionDigits).replace(/0+$/, '');
+  return `${sign}${integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}${kept ? `.${kept}` : ''}`;
+}
+
 /**
  * Thousands separators for an exact unsigned decimal string, for display only.
  * The fraction is left untouched, and anything else is returned as is.
