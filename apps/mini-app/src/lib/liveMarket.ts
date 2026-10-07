@@ -8,6 +8,15 @@ import {
 export type LiveMarketStatus = 'paused' | 'connecting' | 'live' | 'reconnecting' | 'unavailable';
 export type LiveMarketRange = '1H' | '1D' | '7D' | '30D';
 
+/**
+ * Whether a missing live figure is still on its way. Only the first connection
+ * counts: the feed retries forever, so once a connection has failed, a missing
+ * figure is unavailable (until the feed returns), never an endless shimmer.
+ */
+export function liveQuotePending(status: LiveMarketStatus): boolean {
+  return status === 'paused' || status === 'connecting';
+}
+
 export type LiveQuote = {
   market: MarketSymbol;
   productId: 'ETH-USD' | 'BTC-USD';

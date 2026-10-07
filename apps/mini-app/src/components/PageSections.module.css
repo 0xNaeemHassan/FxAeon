@@ -24,7 +24,10 @@
 .exampleSwitch { display: flex; width: min(100%, 300px); align-items: center; gap: 10px; }
 .exampleSwitch > :last-child { min-width: 0; flex: 1 1 auto; }
 .exampleCaption { flex: 0 0 auto; color: var(--mut); font-size: var(--fs-caption); font-weight: 600; }
-.litLine[data-lighting] .word:not([data-lit]) { color: color-mix(in srgb, var(--text) 24%, transparent); }
+/* Unlit words still read: about 3.5:1 on the dark canvases and 3.4:1 on light,
+   above the 3:1 floor for large bold text, so lighting never hides a title. */
+.litLine[data-lighting] .word:not([data-lit]) { color: color-mix(in srgb, var(--text) 40%, transparent); }
+:root[data-theme='light'] .litLine[data-lighting] .word:not([data-lit]) { color: color-mix(in srgb, var(--text) 52%, transparent); }
 .sectionAction { display: inline-flex; min-height: 44px; min-width: 0; max-width: 100%; flex: 0 1 auto; align-items: center; gap: 4px; padding-inline: 6px; border-radius: 999px; color: var(--mint); font-size: var(--fs-small); font-weight: 600; transition: background-color var(--dur-fast) ease; }
 .sectionAction:hover { background: var(--mint-dim); }
 .sectionAction svg { width: 16px; height: 16px; transition: transform var(--dur-base) var(--ease-out); }

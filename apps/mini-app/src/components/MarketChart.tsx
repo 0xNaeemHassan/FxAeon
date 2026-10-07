@@ -1,12 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import Link from 'next/link';
 import { BarChart3, ChartCandlestick, ChartLine, ChevronDown, RefreshCw } from 'lucide-react';
 import type { DeepPartial, IChartApi, ISeriesApi, TimeChartOptions, UTCTimestamp } from 'lightweight-charts';
 import TokenIcon from '@/components/TokenIcon';
 import { useLiveMarketQuote, useUsdPrices } from '@/components/PriceProvider';
 import { type MarketHistorySnapshot, type MarketRange, type MarketSymbol } from '@/lib/marketData';
-import { fetchMarketCandles, fetchMarketHistoryWithCoinbaseFallback, liveQuoteCandle, type LiveMarketRange, type MarketCandleSnapshot } from '@/lib/liveMarket';
+import { fetchMarketCandles, fetchMarketHistoryWithCoinbaseFallback, liveQuoteCandle, liveQuotePending, type LiveMarketRange, type MarketCandleSnapshot } from '@/lib/liveMarket';
 import { formatUsdPrice } from '@/lib/prices';
 import { haptic } from '@/lib/telegram';
 import { subscribeToForegroundResume } from '@/lib/foreground';
@@ -152,6 +153,8 @@ export function TradeMarketChart({ market, onMarketChange }: { market: MarketSym
   const fallbackPrice = prices[market === 'ETH' ? 'ETH' : 'WBTC'];
   const price = live.isFresh ? live.quote?.price : fallbackPrice ?? history.snapshot?.currentPrice;
   const change = live.isFresh ? live.quote?.percentChange24h : history.snapshot?.percentChange;
+  // History loads only while the chart is open, so a closed chart never waits on it.
+  const changeStatus = liveQuotePending(live.status) || (expanded && history.status === 'loading') ? 'loading' : 'unavailable';
   const high = live.isFresh ? live.quote?.high24h : history.snapshot?.high;
   const low = live.isFresh ? live.quote?.low24h : history.snapshot?.low;
   const positive = change !== undefined && change >= 0;
@@ -189,7 +192,7 @@ export function TradeMarketChart({ market, onMarketChange }: { market: MarketSym
           {scrub.changePercent !== null && <><span aria-hidden="true">{scrubRising ? '↗' : '↘'}</span>{scrubRising ? '+' : ''}{scrub.changePercent.toFixed(2)}% · </>}
           <time dateTime={new Date(scrub.unixSeconds * 1_000).toISOString()} className="text-mut">{formatScrubTime(scrub.unixSeconds, range)}</time>
         </p>
-      </> : <><p className="text-display text-[24px] font-semibold tabular-nums"><ValueOrSkeleton value={formatUsdPrice(price) === '—' ? '—' : <RollingFigure value={formatUsdPrice(price)} />} width="lg" label="Market price loading" /></p><p className={`mt-1 inline-flex items-center gap-1 text-[11px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}><ValueOrSkeleton value={change === undefined ? '—' : <><span aria-hidden="true">{positive ? '↗' : '↘'}</span>{positive ? '+' : ''}{change.toFixed(2)}% 24h</>} width="md" label="24 hour change loading" /></p></>}</div>
+      </> : <><p className="text-display text-[24px] font-semibold tabular-nums"><ValueOrSkeleton value={formatUsdPrice(price) === '—' ? '—' : <RollingFigure value={formatUsdPrice(price)} />} width="lg" label="Market price loading" /></p><p className={`mt-1 inline-flex items-center gap-1 text-[11px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}><ValueOrSkeleton value={change === undefined ? '—' : <><span aria-hidden="true">{positive ? '↗' : '↘'}</span>{positive ? '+' : ''}{change.toFixed(2)}% 24h</>} width="md" status={changeStatus} label={changeStatus === 'loading' ? '24 hour change loading' : '24 hour change unavailable'} /></p></>}</div>
     </header>
     <div className="market-chart-instrument-meta">
       <dl className="market-chart-stats"><div><dt>24h high</dt><dd><ValueOrSkeleton value={formatUsdPrice(high)} width="lg" label="24 hour high loading" /></dd></div><div><dt>24h low</dt><dd><ValueOrSkeleton value={formatUsdPrice(low)} width="lg" label="24 hour low loading" /></dd></div></dl>
@@ -214,7 +217,9 @@ export function MarketMiniCard({ market }: { market: MarketSymbol }) {
   const price = live.isFresh ? live.quote?.price : prices[market === 'ETH' ? 'ETH' : 'WBTC'] ?? history.snapshot?.currentPrice;
   const change = live.isFresh ? live.quote?.percentChange24h : history.snapshot?.percentChange;
   const positive = change !== undefined && change >= 0;
-  return <div className={`${styles.marketMiniCard} portfolio-market-card`} aria-label={`${market} market overview`}><div className="flex items-center justify-between gap-2"><span className="flex items-center gap-2"><TokenIcon symbol={market === 'BTC' ? 'WBTC' : 'ETH'} size={28} /><strong className="text-[13px]">{market}</strong></span><span className={`text-[10.5px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}><ValueOrSkeleton value={change === undefined ? '—' : `${positive ? '+' : ''}${change.toFixed(2)}%`} width="md" label="24 hour change loading" /></span></div><p className="mt-3 text-display text-[20px] font-semibold tabular-nums"><ValueOrSkeleton value={formatUsdPrice(price) === '—' ? '—' : <RollingFigure value={formatUsdPrice(price)} />} width="lg" label="Market price loading" /></p><div className="market-chart-compact mt-2 h-[54px]">{history.status === 'ready' && history.snapshot ? <Sparkline snapshot={history.snapshot} rising={change === undefined ? undefined : positive} /> : history.status === 'loading' ? <div role="status" aria-label="Loading market history" className="market-chart-skeleton h-full rounded-md" /> : <div role="status" aria-label="Market history unavailable" className="flex h-full items-center justify-center"><MissingValue width="xl" status="unavailable" label="Market history unavailable" /></div>}</div></div>;
+  const changeStatus = liveQuotePending(live.status) || history.status === 'loading' ? 'loading' : 'unavailable';
+  // The whole card opens its market in Trade; the hidden prefix names the destination.
+  return <Link href={`/trade?market=${market}`} className={`${styles.marketMiniCard} portfolio-market-card`}><div className="flex items-center justify-between gap-2"><span className="flex items-center gap-2"><TokenIcon symbol={market === 'BTC' ? 'WBTC' : 'ETH'} size={28} /><strong className="text-[13px]"><span className="sr-only">Trade </span>{market}</strong></span><span className={`text-[11px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}><ValueOrSkeleton value={change === undefined ? '—' : `${positive ? '+' : ''}${change.toFixed(2)}%`} width="md" status={changeStatus} label={changeStatus === 'loading' ? '24 hour change loading' : '24 hour change unavailable'} /></span></div><p className="mt-3 text-display text-[20px] font-semibold tabular-nums"><ValueOrSkeleton value={formatUsdPrice(price) === '—' ? '—' : <RollingFigure value={formatUsdPrice(price)} />} width="lg" label="Market price loading" /></p><div className="market-chart-compact mt-2 h-[54px]">{history.status === 'ready' && history.snapshot ? <Sparkline snapshot={history.snapshot} rising={change === undefined ? undefined : positive} /> : history.status === 'loading' ? <div role="status" aria-label="Loading market history" className="market-chart-skeleton h-full rounded-md" /> : <div role="status" aria-label="Market history unavailable" className="flex h-full items-center justify-center"><MissingValue width="xl" status="unavailable" label="Market history unavailable" /></div>}</div></Link>;
 }
 
 type Candles = MarketCandleSnapshot['candles'];

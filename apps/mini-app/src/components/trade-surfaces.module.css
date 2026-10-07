@@ -249,6 +249,8 @@
 /* Market panel */
 .marketChart { min-width: 0; }
 .marketMiniCard {
+  display: block;
+  color: inherit;
   border: 1px solid var(--hairline);
   border-radius: var(--radius-lg);
   background:
@@ -258,6 +260,8 @@
   padding: 16px;
   transition: border-color var(--dur-base) ease, transform var(--dur-slow) var(--ease-spring);
 }
+/* The card is a link into its market: it presses like the other links. */
+.marketMiniCard:active { transform: scale(0.985); transition-duration: var(--dur-press); }
 
 .tradeRoot,
 .positionsRoot { display: block; color: var(--text); }
