@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -211,10 +212,11 @@ async function captureAppView(browser: Awaited<ReturnType<typeof chromium.launch
   }
 }
 
-async function setRadio(page: Page, label: string): Promise<void> {
-  const control = page.getByRole('radio', { name: label, exact: true });
+async function setRadio(page: Page, label: string | RegExp): Promise<void> {
+  const control = page.getByRole('radio', { name: label, exact: typeof label === 'string' });
   if (!await control.count()) throw new Error(`required radio option is missing: ${label}`);
-  await control.click();
+  // Choice radios are visually hidden inside their labels, which take the click.
+  await control.check({ force: true });
 }
 
 async function setToken(page: Page, token: string, label = 'Input asset'): Promise<void> {
@@ -322,7 +324,9 @@ async function main(): Promise<void> {
   mkdirSync(outputParent, { recursive: true });
   mkdirSync(output);
   const lab = await ensureStateLab();
-  const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+  // Same browser resolution as the e2e suites: installed Chrome when Playwright's bundle is absent.
+  const { configuredBrowserChannel } = createRequire(import.meta.url)(join(repoRoot, 'scripts', 'e2e_browser_channel.cjs')) as { configuredBrowserChannel: () => string | undefined };
+  const browser = await chromium.launch({ channel: configuredBrowserChannel(), args: ['--no-sandbox', '--disable-dev-shm-usage'] });
   try {
     await captureAppView(browser, { id: 'portfolio-official-mobile', route: '/portfolio', theme: 'official', note: 'Read-only connected test wallet with deterministic token balances; positions are verified ready-empty. All values are illustrative gallery fixtures.' });
     await captureAppView(browser, { id: 'portfolio-dark-mobile', route: '/portfolio', theme: 'dark', note: 'Read-only connected test wallet with deterministic token balances; positions are verified ready-empty. All values are illustrative gallery fixtures.' });
@@ -374,15 +378,15 @@ async function main(): Promise<void> {
     await captureAppView(browser, {
       id: 'earn-withdraw-instant', route: '/earn', theme: 'official', note: 'Earn instant withdrawal editor; fixture selection only, no withdrawal quote.',
       prepare: async (page) => {
-        await page.getByRole('radio', { name: 'Withdraw', exact: true }).click();
-        await page.getByRole('radio', { name: /Instant/ }).click();
+        await setRadio(page, 'Withdraw');
+        await setRadio(page, /Instant/);
       },
     });
     await captureAppView(browser, {
       id: 'earn-withdraw-queued', route: '/earn', theme: 'official', note: 'Earn after-cooldown withdrawal editor; fixture selection only, no withdrawal quote.',
       prepare: async (page) => {
-        await page.getByRole('radio', { name: 'Withdraw', exact: true }).click();
-        await page.getByRole('radio', { name: /After cooldown/ }).click();
+        await setRadio(page, 'Withdraw');
+        await setRadio(page, /After cooldown/);
       },
     });
     await captureAppView(browser, { id: 'borrow-eth-collateral', route: '/borrow', theme: 'official', note: 'Borrow editor with ETH collateral; no protocol balance or quote is asserted.' });
@@ -413,8 +417,8 @@ async function main(): Promise<void> {
         id: `earn-withdraw-instant-${theme}-mobile`, route: '/earn', theme,
         note: `Instant withdrawal editor in the ${theme} theme; fixture selection only, no withdrawal quote.`,
         prepare: async (page) => {
-          await page.getByRole('radio', { name: 'Withdraw', exact: true }).click();
-          await page.getByRole('radio', { name: /Instant/ }).click();
+          await setRadio(page, 'Withdraw');
+          await setRadio(page, /Instant/);
         },
       });
       await captureAppView(browser, {
