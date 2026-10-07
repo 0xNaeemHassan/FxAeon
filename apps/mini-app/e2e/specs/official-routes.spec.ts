@@ -582,7 +582,8 @@ test("Earn links to borrowing without presenting positions as savings", async ({
   await page.goto("/earn", { waitUntil: "domcontentloaded" });
   await page.getByRole("link", { name: "Borrow fxUSD" }).click();
   await expect(page).toHaveURL(/\/borrow\/?$/);
-  await expect(page.getByRole("heading", { name: "Earn", exact: true })).toBeVisible();
+  // Debt is named for what it is, under the Earn tab's fxSAVE | Borrow fxUSD switch.
+  await expect(page.getByRole("heading", { name: "Borrow", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Borrow fxUSD", exact: true })).toHaveAttribute("aria-current", "page");
   assertNoBackendRequests(requests);
 });

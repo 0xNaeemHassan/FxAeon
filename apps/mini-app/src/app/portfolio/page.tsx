@@ -281,7 +281,7 @@ function PortfolioWallet() {
     </div>
     <aside className={presentation.secondary}>
       <MarketOverview />
-      <RowGroup title="Protocol tools"><ActionRow icon={CircleDollarSign} title="Borrow fxUSD" description="Manage collateral and debt" href="/borrow" /></RowGroup>
+      <RowGroup title="Borrow"><ActionRow icon={CircleDollarSign} title="Borrow fxUSD" description="Manage collateral and debt" href="/borrow" /></RowGroup>
     </aside>
   </div>;
 }

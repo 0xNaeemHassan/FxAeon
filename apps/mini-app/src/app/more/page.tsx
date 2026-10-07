@@ -1,6 +1,6 @@
 'use client';
 
-import { BookOpen, History, MessageCircleQuestionMark, QrCode, Settings, Sparkles } from 'lucide-react';
+import { BookOpen, CircleDollarSign, History, MessageCircleQuestionMark, QrCode, Settings, Sparkles } from 'lucide-react';
 import { AppShell } from '@/components/ui';
 import { ActionRow, PageHeading, RowGroup } from '@/components/ProductUI';
 import { AccountSummary } from '@/components/AccountControls';
@@ -23,6 +23,7 @@ export default function MorePage() {
         <ActionRow icon={QrCode} title="Receive" description={wallet.ready && !wallet.address ? 'Connect a wallet to receive' : undefined} href="/qr" />
         <ActionRow icon={Settings} title="Settings" href="/settings" />
       </RowGroup>
+      <RowGroup title="Borrow"><ActionRow icon={CircleDollarSign} title="Borrow fxUSD" description="Manage collateral and debt" href="/borrow" /></RowGroup>
       <RowGroup title="Preferences"><ActionRow icon={Sparkles} title="Appearance" value={ready ? THEMES[theme].name : '—'} href="/settings#appearance" /></RowGroup>
       <RowGroup title="Resources">
         <ActionRow icon={BookOpen} title="FxAeon docs" href="/docs" />
