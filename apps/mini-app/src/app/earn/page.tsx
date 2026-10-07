@@ -487,7 +487,7 @@ export default function EarnPage() {
                   <Segmented value={mode} onChange={changeMode} ariaLabel="fxSAVE action" options={[
                     { value: 'deposit', label: 'Deposit' }, { value: 'withdraw', label: 'Withdraw' },
                   ]} />
-                  <TransactionSettings slippage={mode !== 'deposit' || token === 'fxUSDBasePool'} slippagePercent={slippage} onSlippageChange={setSlippage} />
+                  <TransactionSettings slippage={mode === 'withdraw' && instant && token !== 'fxUSDBasePool'} slippagePercent={slippage} onSlippageChange={setSlippage} />
                 </div>
               </> : <div className={presentation.claimHeading}>
                 <button type="button" onClick={() => changeMode('withdraw')} className={presentation.back}><ArrowLeft size={17} aria-hidden="true" />Back to fxSAVE</button>
@@ -597,19 +597,22 @@ function EarnActionEditor({ mode, token, onTokenChange, amount, onAmountChange, 
       <AmountField label="Deposit amount" symbol={labelToken(token)} value={amount} onChange={onAmountChange}
         maxDecimals={token === 'usdc' ? 6 : 18} balanceState={amountBalance} tokenSelector={picker} />
       {token !== 'fxUSDBasePool' && <p className={presentation.helper}>The SDK sets a base-pool share minimum, shown in review. Final fxSAVE shares have no separate minimum. Your saved slippage setting does not apply to this deposit.</p>}
+      {token === 'fxUSDBasePool' && <p className={presentation.helper}>Base-pool shares are deposited directly into fxSAVE. This route has no minimum-share setting; your saved slippage does not apply.</p>}
     </>}
     {mode === 'withdraw' && <>
       <AmountField label="Amount" symbol="fxSAVE" value={shares} onChange={onSharesChange}
         balanceState={shareBalance} allowAll maxDecimals={18} />
-      <div className={presentation.withdrawOptions}>
-        <ChoiceCards value={token === 'fxUSDBasePool' || !instant ? 'cooldown' : 'instant'}
+      {token !== 'fxUSDBasePool' && <div className={presentation.withdrawOptions}>
+        <ChoiceCards value={!instant ? 'cooldown' : 'instant'}
           onChange={(value) => onInstantChange(value === 'instant')} label="Withdrawal method" options={[
             { value: 'cooldown', label: 'After cooldown', description: config ? `${formatCooldown(config.cooldownPeriodSeconds)} wait · no instant fee` : 'Claim later · cooldown unavailable' },
-            { value: 'instant', label: 'Instant', disabled: token === 'fxUSDBasePool', description: config ? `${formatRatio(config.instantRedeemFeeRatio)} instant fee` : 'Instant-redemption fee applies' },
+            { value: 'instant', label: 'Instant', description: config ? `${formatRatio(config.instantRedeemFeeRatio)} instant fee` : 'Instant-redemption fee applies' },
           ]} />
-      </div>
+      </div>}
       <div className={presentation.receiveRow}><span>{instant && token !== 'fxUSDBasePool' ? 'Receive asset' : 'Withdrawal route'}</span>{picker}</div>
-      {(token === 'fxUSDBasePool' || !instant) && <p className={presentation.helper}>A queued withdrawal is claimed later. The claim preview shows the assets available to receive.</p>}
+      {token === 'fxUSDBasePool'
+        ? <p className={presentation.helper}>This route redeems fxSAVE directly for base-pool shares, without a queued claim. Your saved slippage does not apply.</p>
+        : !instant && <p className={presentation.helper}>A queued withdrawal is claimed later. The claim preview shows the assets available to receive. Your saved slippage does not apply to this request.</p>}
     </>}
     {mode === 'claim' && (walletData ? <ClaimState data={walletData} /> : <p className={presentation.helper}>Connect the requesting wallet to view its withdrawal.</p>)}
   </div>;
