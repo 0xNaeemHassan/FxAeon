@@ -24,6 +24,12 @@ let memoryRecords: PendingHashRecord[] = [];
 // previous write already retained in memory.
 let storageUnavailable = false;
 
+/**
+ * Fired in this tab after every journal write. Storage events only reach other
+ * tabs, so in-tab listeners (the header's pending ring, settle notices) use this.
+ */
+export const JOURNAL_UPDATED_EVENT = "fxaeon:journal-updated";
+
 /** Limit cross-tab recovery work to this journal's own storage mutations. */
 export function isRecoveryJournalStorageKey(key: string | null): boolean {
   return typeof key === "string" && (
@@ -195,13 +201,24 @@ function writeRecord(record: PendingHashRecord): void {
   // loses the hash that was just returned by the wallet.
   memoryRecords = mergeRecords(memoryRecords, [record]);
   const target = storage();
-  if (!target) return;
+  if (target) {
+    try {
+      target.setItem(recordStorageKey(record), JSON.stringify(record));
+    } catch {
+      // A full/private storage area should not block a signed transaction. The
+      // in-memory copy above remains the fallback for all subsequent reads.
+      storageUnavailable = true;
+    }
+  }
+  announceJournalWrite();
+}
+
+/** Display listeners only; a throwing listener can never fail a journal write. */
+function announceJournalWrite(): void {
   try {
-    target.setItem(recordStorageKey(record), JSON.stringify(record));
+    if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") window.dispatchEvent(new Event(JOURNAL_UPDATED_EVENT));
   } catch {
-    // A full/private storage area should not block a signed transaction. The
-    // in-memory copy above remains the fallback for all subsequent reads.
-    storageUnavailable = true;
+    // Notification is best effort.
   }
 }
 

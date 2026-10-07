@@ -11,7 +11,7 @@ import { formatUsdPrice } from '@/lib/prices';
 import { haptic } from '@/lib/telegram';
 import { subscribeToForegroundResume } from '@/lib/foreground';
 import { createCoalescedReadCache } from '@/lib/coalescedRead';
-import { localTimeShiftSeconds } from '@/lib/chartTime';
+import { formatScrubTime, localTimeShiftSeconds, scrubChangePercent, type ChartScrubReading } from '@/lib/chartTime';
 import { Segmented } from '@/components/ProtocolForm';
 import { MissingValue, ValueOrSkeleton } from '@/components/MissingValue';
 import { RollingFigure } from '@/components/RollingFigure';
@@ -155,6 +155,11 @@ export function TradeMarketChart({ market, onMarketChange }: { market: MarketSym
   const high = live.isFresh ? live.quote?.high24h : history.snapshot?.high;
   const low = live.isFresh ? live.quote?.low24h : history.snapshot?.low;
   const positive = change !== undefined && change >= 0;
+  // While a finger or pointer scrubs the chart, the header reads the hovered
+  // bar instead of the live quote; releasing returns it to live.
+  const [scrub, setScrub] = useState<ChartScrubReading | null>(null);
+  useEffect(() => setScrub(null), [market, range, expanded]);
+  const scrubRising = scrub?.changePercent !== null && scrub?.changePercent !== undefined && scrub.changePercent >= 0;
   useEffect(() => {
     // Treat compact tablets as mobile-first as well. The chart stays cold
     // until explicitly expanded below the desktop two-column breakpoint.
@@ -174,10 +179,17 @@ export function TradeMarketChart({ market, onMarketChange }: { market: MarketSym
       window.removeEventListener('resize', update);
     };
   }, []);
-  return <section className={`${styles.marketChart} market-chart-panel`} data-mobile-expanded={expanded} aria-label={`${market} market chart`}>
+  return <section className={`${styles.marketChart} market-chart-panel`} data-mobile-expanded={expanded} data-scrubbing={scrub ? true : undefined} aria-label={`${market} market chart`}>
     <header className="market-chart-header">
       <div className="flex min-w-0 items-center gap-3"><span className="market-chart-token"><TokenIcon symbol={market === 'BTC' ? 'WBTC' : 'ETH'} size={34} /></span><div className="min-w-0"><span className="micro-label text-[11px] text-mut">Market</span><h2 className="truncate text-[18px] font-semibold">{market} / USD</h2></div></div>
-      <div className="shrink-0 text-right"><p className="text-display text-[24px] font-semibold tabular-nums"><ValueOrSkeleton value={formatUsdPrice(price) === '—' ? '—' : <RollingFigure value={formatUsdPrice(price)} />} width="lg" label="Market price loading" /></p><p className={`mt-1 inline-flex items-center gap-1 text-[11px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}><ValueOrSkeleton value={change === undefined ? '—' : <><span aria-hidden="true">{positive ? '↗' : '↘'}</span>{positive ? '+' : ''}{change.toFixed(2)}% 24h</>} width="md" label="24 hour change loading" /></p></div>
+      <div className="shrink-0 text-right">{scrub ? <>
+        {/* A scrub reading follows the finger, so it never rolls digits. */}
+        <p className="text-display text-[24px] font-semibold tabular-nums" data-scrub-price>{formatUsdPrice(scrub.price)}</p>
+        <p className={`mt-1 inline-flex items-center gap-1 text-[11px] font-semibold ${scrub.changePercent === null ? 'text-mut' : scrubRising ? 'text-success' : 'text-danger'}`} data-scrub-time>
+          {scrub.changePercent !== null && <><span aria-hidden="true">{scrubRising ? '↗' : '↘'}</span>{scrubRising ? '+' : ''}{scrub.changePercent.toFixed(2)}% · </>}
+          <time dateTime={new Date(scrub.unixSeconds * 1_000).toISOString()} className="text-mut">{formatScrubTime(scrub.unixSeconds, range)}</time>
+        </p>
+      </> : <><p className="text-display text-[24px] font-semibold tabular-nums"><ValueOrSkeleton value={formatUsdPrice(price) === '—' ? '—' : <RollingFigure value={formatUsdPrice(price)} />} width="lg" label="Market price loading" /></p><p className={`mt-1 inline-flex items-center gap-1 text-[11px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}><ValueOrSkeleton value={change === undefined ? '—' : <><span aria-hidden="true">{positive ? '↗' : '↘'}</span>{positive ? '+' : ''}{change.toFixed(2)}% 24h</>} width="md" label="24 hour change loading" /></p></>}</div>
     </header>
     <div className="market-chart-instrument-meta">
       <dl className="market-chart-stats"><div><dt>24h high</dt><dd><ValueOrSkeleton value={formatUsdPrice(high)} width="lg" label="24 hour high loading" /></dd></div><div><dt>24h low</dt><dd><ValueOrSkeleton value={formatUsdPrice(low)} width="lg" label="24 hour low loading" /></dd></div></dl>
@@ -187,7 +199,7 @@ export function TradeMarketChart({ market, onMarketChange }: { market: MarketSym
     <div id={chartId} className="market-chart-content" hidden={!expanded}><div className="market-chart-frame">
       {history.status === 'loading' && <ChartSkeleton />}
       {history.status === 'unavailable' && <div className="market-chart-empty" role="status" aria-live="polite"><span className="text-[12px] text-mut">Market history is unavailable.</span><button type="button" aria-label="Retry market chart" onClick={history.retry} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-lg text-mut"><RefreshCw className="h-4 w-4" aria-hidden="true" /></button></div>}
-      {history.status === 'ready' && history.snapshot && <LazyPriceChart snapshot={history.snapshot} chartStyle={chartStyle} />}
+      {history.status === 'ready' && history.snapshot && <LazyPriceChart snapshot={history.snapshot} chartStyle={chartStyle} onScrub={setScrub} />}
     </div><footer className="market-chart-footer">
       <div role="radiogroup" aria-label="Chart range" className="chart-range-tabs" data-thumb="" style={{ '--seg-index': RANGE_OPTIONS.indexOf(range), '--seg-count': RANGE_OPTIONS.length } as CSSProperties}>{RANGE_OPTIONS.map((option) => <button key={option} type="button" role="radio" aria-checked={range === option} tabIndex={range === option ? 0 : -1} onClick={() => { setRange(option); haptic('selection'); }} onKeyDown={(event) => moveRadio(event, RANGE_OPTIONS, option, setRange)} className={range === option ? 'chart-range-active' : ''}>{option}</button>)}</div>
       <div role="radiogroup" aria-label="Chart style" className="chart-range-tabs chart-style-tabs" data-thumb="" style={{ '--seg-index': CHART_STYLES.indexOf(chartStyle), '--seg-count': CHART_STYLES.length } as CSSProperties}>{CHART_STYLES.map((option) => { const Icon = option === 'line' ? ChartLine : ChartCandlestick; return <button key={option} type="button" role="radio" aria-checked={chartStyle === option} aria-label={CHART_STYLE_LABELS[option]} title={CHART_STYLE_LABELS[option]} tabIndex={chartStyle === option ? 0 : -1} onClick={() => { setChartStyle(option); haptic('selection'); }} onKeyDown={(event) => moveRadio(event, CHART_STYLES, option, setChartStyle)} className={chartStyle === option ? 'chart-range-active' : ''}><Icon aria-hidden="true" /></button>; })}</div>
@@ -258,6 +270,8 @@ function chartOptions(theme: ChartTheme, module: ChartModule): DeepPartial<TimeC
     // A display chart: vertical swipes and the mouse wheel keep scrolling the page.
     handleScroll: { mouseWheel: false, vertTouchDrag: false },
     handleScale: { mouseWheel: false },
+    // A long press scrubs; lifting the finger ends it, so the header returns to live.
+    trackingMode: { exitMode: module.TrackingModeExitMode.OnTouchEnd },
   };
 }
 
@@ -307,8 +321,10 @@ function writeSeries(entry: SeriesEntry, candles: Candles, shift: number, tailOn
   else entry.series.setData(bars);
 }
 
-function LazyPriceChart({ snapshot, chartStyle }: { snapshot: MarketCandleSnapshot; chartStyle: ChartStyle }) {
+function LazyPriceChart({ snapshot, chartStyle, onScrub }: { snapshot: MarketCandleSnapshot; chartStyle: ChartStyle; onScrub?: (reading: ChartScrubReading | null) => void }) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const onScrubRef = useRef(onScrub);
+  onScrubRef.current = onScrub;
   const candlesRef = useRef(snapshot.candles);
   candlesRef.current = snapshot.candles;
   const styleRef = useRef(chartStyle);
@@ -328,6 +344,16 @@ function LazyPriceChart({ snapshot, chartStyle }: { snapshot: MarketCandleSnapsh
       writeSeries(state.entry, candlesRef.current, state.shift);
       renderedCandlesRef.current = candlesRef.current;
       chart.timeScale().fitContent();
+      // The crosshair's bar becomes the header's reading; leaving the chart clears it.
+      chart.subscribeCrosshairMove((param) => {
+        const report = onScrubRef.current;
+        if (!report) return;
+        const bar = (param.point && param.time !== undefined ? param.seriesData.get(state.entry.series) : undefined) as { value?: unknown; close?: unknown } | undefined;
+        const raw = bar?.value ?? bar?.close;
+        const price = typeof raw === 'number' && Number.isFinite(raw) ? raw : undefined;
+        if (price === undefined || typeof param.time !== 'number') { report(null); return; }
+        report({ price, changePercent: scrubChangePercent(candlesRef.current[0]?.open, price), unixSeconds: param.time - state.shift });
+      });
       // Theme switches rewrite the tokens; repaint the canvas from them.
       themeObserver = new MutationObserver(() => {
         const next = readChartTheme();
@@ -336,7 +362,7 @@ function LazyPriceChart({ snapshot, chartStyle }: { snapshot: MarketCandleSnapsh
       });
       themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     }).catch(() => { if (active) setFailed(true); });
-    return () => { active = false; themeObserver?.disconnect(); chartRef.current?.chart.remove(); chartRef.current = null; };
+    return () => { active = false; themeObserver?.disconnect(); chartRef.current?.chart.remove(); chartRef.current = null; onScrubRef.current?.(null); };
   }, []);
   useEffect(() => {
     const state = chartRef.current;
