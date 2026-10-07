@@ -4,7 +4,7 @@ FxAeon exposes a deliberately narrow, reviewable surface from the official f(x) 
 
 - `AladdinDAO/fx-sdk-skill` — commit `e2c4a6085950a40f238bda1c9159305f6c8acf1f`
 - `AladdinDAO/fx-sdk` — commit `53c0b9805a169e75ad375c92c241e1292b66405f`
-- Installed package `@aladdindao/fx-sdk@1.0.5`, plus the reviewed short-pool correction, diagnostic-log removal, exact debt-ratio packing fix, and chain-bound shared RPC transport support in `patches/@aladdindao__fx-sdk@1.0.5.patch`
+- Installed package `@aladdindao/fx-sdk@1.0.5`, plus the reviewed short-pool correction, diagnostic-log removal, exact debt-ratio packing fix, chain-bound shared RPC transport support, and independent pool-view read scheduling in `patches/@aladdindao__fx-sdk@1.0.5.patch`
 
 The debt-ratio packing fix is a local correction, not a claim that the pinned
 upstream commit contains it. The SDK combines two 60-bit integer limits into
@@ -39,6 +39,23 @@ concurrently. Only a fully validated snapshot can win; a late source cannot
 replace the reviewed snapshot. Existing quote expiry, fee ceilings, chain
 verification, and final transaction simulations remain unchanged. Base uses
 only its own RPC.
+
+## Pool read scheduling
+
+The local patch starts pool data, rate, and oracle view reads together, then
+consumes their outcomes in the original order. Every rejection is observed
+immediately; an early pool failure still returns without waiting for slower
+siblings. Already-started reads finish under the existing transport limits.
+The converter's nonpayable buy and sell simulations remain sequential, after
+the views, and retain their separate execution contexts.
+
+The installed SDK's viem 2.43.1 can combine the rate and oracle views into one
+automatic multicall, alongside the explicit pool-data multicall. No read is
+cached or removed, and no new atomic-block guarantee is implied: calls use
+`latest`, so changing chain state can produce different values than a serial
+schedule. Review validation and final transaction simulation remain required.
+See the [controlled benchmark](performance/sdk-pool-read-waterfall.md) for
+mock conditions and limitations; these are not live-provider latency claims.
 
 ## Protocol fee review data
 
