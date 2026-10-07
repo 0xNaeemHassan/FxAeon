@@ -409,55 +409,61 @@
           <div class="section-head">
             <h2 id="sdk-title">What runs when you tap.</h2>
           </div>
-          <p class="sdk-lede">FxAeon is built on fifteen methods of the official f(x) Protocol SDK, and every f(x) Protocol transaction it prepares comes from one of them. Choose a screen to light up the methods it uses.</p>
-          <div class="sdk-picker" role="group" aria-label="FxAeon screen">
-            <button type="button" data-screen="portfolio" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .7-1.5l7-6a2 2 0 0 1 2.6 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Portfolio</button>
-            <button type="button" data-screen="trade" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v4"/><rect width="4" height="6" x="7" y="9" rx="1"/><path d="M9 15v2M17 3v2"/><rect width="4" height="8" x="15" y="5" rx="1"/><path d="M17 13v3M3 3v16a2 2 0 0 0 2 2h16"/></svg>Trade</button>
-            <button type="button" data-screen="positions" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/></svg>Positions</button>
-            <button type="button" data-screen="borrow" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.6-1-1.7-1.5-3-1.5-1.7 0-3 .9-3 2.1 0 2.9 6 1.5 6 4.4 0 1.2-1.3 2.1-3 2.1-1.3 0-2.4-.5-3-1.5M12 6.5v11"/></svg>Borrow</button>
-            <button type="button" data-screen="earn" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 17h3v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-3a3.2 3.2 0 0 0 2-2h1a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1h-1a5 5 0 0 0-2-4V3a4 4 0 0 0-3.2 1.6l-.3.4H11a6 6 0 0 0-6 6v1a5 5 0 0 0 2 4v3a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1z"/><path d="M16 10h.01M2 8v1a2 2 0 0 0 2 2h1"/></svg>Earn</button>
-            <button type="button" data-screen="move" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4"/></svg>Move</button>
-          </div>
-          <p class="sdk-status" aria-live="polite" data-sdk-status>Trade uses 2 of 15 methods: <code>increasePosition</code> prepares its transactions; <code>getPositions</code> reads the state it shows.</p>
+          <p class="sdk-lede">FxAeon is built on fifteen methods of the official f(x) Protocol SDK. They read your positions and prepare trades, loans, savings, and bridge transfers for your wallet to approve.</p>
         </div>
-        <div class="sdk-board" data-screen="trade">
-          <div class="sdk-group">
-            <h3>Positions</h3>
-            <ul>
-              <li data-method="getPositions" data-on><code>getPositions</code><span>Reads ETH and BTC long and short positions</span></li>
-              <li data-method="increasePosition" data-write data-on><code>increasePosition</code><span>Opens a position or adds to one</span></li>
-              <li data-method="reducePosition" data-write><code>reducePosition</code><span>Reduces or closes a position</span></li>
-              <li data-method="adjustPositionLeverage" data-write><code>adjustPositionLeverage</code><span>Changes a position’s leverage</span></li>
-            </ul>
+        <details class="sdk-details">
+          <summary><span>Explore all 15 SDK methods<small>Positions, credit, savings, and bridging</small></span></summary>
+          <div class="sdk-details-content">
+            <p class="sdk-hint">Choose a screen to highlight the methods it uses.</p>
+            <div class="sdk-picker" role="group" aria-label="FxAeon screen">
+              <button type="button" data-screen="portfolio" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .7-1.5l7-6a2 2 0 0 1 2.6 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Portfolio</button>
+              <button type="button" data-screen="trade" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v4"/><rect width="4" height="6" x="7" y="9" rx="1"/><path d="M9 15v2M17 3v2"/><rect width="4" height="8" x="15" y="5" rx="1"/><path d="M17 13v3M3 3v16a2 2 0 0 0 2 2h16"/></svg>Trade</button>
+              <button type="button" data-screen="positions" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/></svg>Positions</button>
+              <button type="button" data-screen="borrow" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.6-1-1.7-1.5-3-1.5-1.7 0-3 .9-3 2.1 0 2.9 6 1.5 6 4.4 0 1.2-1.3 2.1-3 2.1-1.3 0-2.4-.5-3-1.5M12 6.5v11"/></svg>Borrow</button>
+              <button type="button" data-screen="earn" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 17h3v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-3a3.2 3.2 0 0 0 2-2h1a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1h-1a5 5 0 0 0-2-4V3a4 4 0 0 0-3.2 1.6l-.3.4H11a6 6 0 0 0-6 6v1a5 5 0 0 0 2 4v3a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1z"/><path d="M16 10h.01M2 8v1a2 2 0 0 0 2 2h1"/></svg>Earn</button>
+              <button type="button" data-screen="move" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4"/></svg>Move</button>
+            </div>
+            <p class="sdk-status" aria-live="polite" data-sdk-status>Trade uses 2 of 15 methods: <code>increasePosition</code> prepares its transactions; <code>getPositions</code> reads the state it shows.</p>
+            <div class="sdk-board" data-screen="trade">
+              <div class="sdk-group">
+                <h3>Positions</h3>
+                <ul>
+                  <li data-method="getPositions" data-on><code>getPositions</code><span>Reads ETH and BTC long and short positions</span></li>
+                  <li data-method="increasePosition" data-write data-on><code>increasePosition</code><span>Opens a position or adds to one</span></li>
+                  <li data-method="reducePosition" data-write><code>reducePosition</code><span>Reduces or closes a position</span></li>
+                  <li data-method="adjustPositionLeverage" data-write><code>adjustPositionLeverage</code><span>Changes a position’s leverage</span></li>
+                </ul>
+              </div>
+              <div class="sdk-group">
+                <h3>Credit</h3>
+                <ul>
+                  <li data-method="depositAndMint" data-write><code>depositAndMint</code><span>Adds collateral and borrows fxUSD</span></li>
+                  <li data-method="repayAndWithdraw" data-write><code>repayAndWithdraw</code><span>Repays fxUSD and withdraws collateral</span></li>
+                </ul>
+              </div>
+              <div class="sdk-group">
+                <h3>Savings</h3>
+                <ul>
+                  <li data-method="getFxSaveConfig"><code>getFxSaveConfig</code><span>Reads the vault’s cooldown and fees</span></li>
+                  <li data-method="getFxSaveBalance"><code>getFxSaveBalance</code><span>Reads your fxSAVE shares</span></li>
+                  <li data-method="getFxSaveRedeemStatus"><code>getFxSaveRedeemStatus</code><span>Reads a queued withdrawal’s cooldown</span></li>
+                  <li data-method="getFxSaveClaimable"><code>getFxSaveClaimable</code><span>Previews what a claim would pay</span></li>
+                  <li data-method="depositFxSave" data-write><code>depositFxSave</code><span>Deposits fxUSD or USDC</span></li>
+                  <li data-method="withdrawFxSave" data-write><code>withdrawFxSave</code><span>Withdraws instantly or queues a redemption</span></li>
+                  <li data-method="getRedeemTx" data-write><code>getRedeemTx</code><span>Claims a redemption after the cooldown</span></li>
+                </ul>
+              </div>
+              <div class="sdk-group">
+                <h3>Bridge</h3>
+                <ul>
+                  <li data-method="getBridgeQuote"><code>getBridgeQuote</code><span>Quotes the LayerZero fee</span></li>
+                  <li data-method="buildBridgeTx" data-write><code>buildBridgeTx</code><span>Builds the bridge transfer</span></li>
+                </ul>
+              </div>
+              <p class="sdk-key" aria-hidden="true"><span class="key-write">Prepares a transaction</span><span class="key-read">Reads</span></p>
+            </div>
           </div>
-          <div class="sdk-group">
-            <h3>Credit</h3>
-            <ul>
-              <li data-method="depositAndMint" data-write><code>depositAndMint</code><span>Adds collateral and borrows fxUSD</span></li>
-              <li data-method="repayAndWithdraw" data-write><code>repayAndWithdraw</code><span>Repays fxUSD and withdraws collateral</span></li>
-            </ul>
-          </div>
-          <div class="sdk-group">
-            <h3>Savings</h3>
-            <ul>
-              <li data-method="getFxSaveConfig"><code>getFxSaveConfig</code><span>Reads the vault’s cooldown and fees</span></li>
-              <li data-method="getFxSaveBalance"><code>getFxSaveBalance</code><span>Reads your fxSAVE shares</span></li>
-              <li data-method="getFxSaveRedeemStatus"><code>getFxSaveRedeemStatus</code><span>Reads a queued withdrawal’s cooldown</span></li>
-              <li data-method="getFxSaveClaimable"><code>getFxSaveClaimable</code><span>Previews what a claim would pay</span></li>
-              <li data-method="depositFxSave" data-write><code>depositFxSave</code><span>Deposits fxUSD or USDC</span></li>
-              <li data-method="withdrawFxSave" data-write><code>withdrawFxSave</code><span>Withdraws instantly or queues a redemption</span></li>
-              <li data-method="getRedeemTx" data-write><code>getRedeemTx</code><span>Claims a redemption after the cooldown</span></li>
-            </ul>
-          </div>
-          <div class="sdk-group">
-            <h3>Bridge</h3>
-            <ul>
-              <li data-method="getBridgeQuote"><code>getBridgeQuote</code><span>Quotes the LayerZero fee</span></li>
-              <li data-method="buildBridgeTx" data-write><code>buildBridgeTx</code><span>Builds the bridge transfer</span></li>
-            </ul>
-          </div>
-          <p class="sdk-key" aria-hidden="true"><span class="key-write">Prepares a transaction</span><span class="key-read">Reads</span></p>
-        </div>
+        </details>
       </section>
 
       <section class="trust" aria-labelledby="trust-title">
