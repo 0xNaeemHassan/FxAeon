@@ -47,6 +47,15 @@ function shouldStopRpcFallback(error: Error): boolean {
   return false;
 }
 
+function isChainIdentityRequest(init?: RequestInit): boolean {
+  if (typeof init?.body !== "string") return false;
+  try {
+    const request = JSON.parse(init.body) as { method?: unknown; params?: unknown } | null;
+    return request?.method === "eth_chainId"
+      && (request.params === undefined || (Array.isArray(request.params) && request.params.length === 0));
+  } catch { return false; }
+}
+
 function chainBoundFetch(expectedChainId: FxChainId, rpcUrl: string, fetchFn: typeof fetch) {
   let states = RPC_ENDPOINTS_PER_FETCH.get(fetchFn);
   if (!states) {
@@ -64,30 +73,47 @@ function chainBoundFetch(expectedChainId: FxChainId, rpcUrl: string, fetchFn: ty
     }
     try {
       if (state.verifiedUntil <= Date.now()) {
+        // The first explicit chain guard can itself prove this endpoint. Send
+        // its original request once, under the same short probe deadline, and
+        // return the intact response only after verifying the expected chain.
+        // Other guards still send their own requests; no guard answer is cached.
+        let guardedResponse: Response | undefined;
         state.verification ??= (async () => {
+          const directProof = isChainIdentityRequest(init);
           const controller = new AbortController();
+          const callerSignal = directProof ? init?.signal : undefined;
+          const abort = () => controller.abort(callerSignal?.reason);
+          callerSignal?.addEventListener("abort", abort, { once: true });
+          if (callerSignal?.aborted) abort();
           const timer = setTimeout(
             () => controller.abort(),
             localFork ? LOCAL_FORK_CHAIN_PROBE_TIMEOUT_MS : 1_500,
           );
           try {
-            const probe = await fetchFn(rpcUrl, {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_chainId", params: [] }),
+            const probe = await fetchFn(directProof ? input : rpcUrl, {
+              ...(directProof ? init : {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_chainId", params: [] }),
+              }),
               signal: controller.signal,
             });
             if (!probe.ok) throw new Error("RPC chain identity probe failed");
-            const payload = await probe.json() as { result?: unknown };
-            if (payload.result !== `0x${expectedChainId.toString(16)}`) {
+            const payload = await (directProof ? probe.clone() : probe).json() as { result?: unknown; error?: unknown } | null;
+            if (controller.signal.aborted) throw controller.signal.reason;
+            if (payload?.error || payload?.result !== `0x${expectedChainId.toString(16)}`) {
               throw new Error(`RPC endpoint did not prove chain ${expectedChainId}`);
             }
             state.verifiedUntil = Date.now() + 60_000;
+            if (directProof) guardedResponse = probe;
           } finally {
             clearTimeout(timer);
+            callerSignal?.removeEventListener("abort", abort);
           }
         })();
-        try { await state.verification; } finally { state.verification = undefined; }
+        const verification = state.verification;
+        try { await verification; } finally { if (state.verification === verification) state.verification = undefined; }
+        if (guardedResponse) return guardedResponse;
       }
       const response = await fetchFn(input, init);
       if (response.status === 429 || response.status >= 500) state.cooldownUntil = Date.now() + RPC_ENDPOINT_COOLDOWN_MS;
