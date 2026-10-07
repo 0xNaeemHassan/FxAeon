@@ -24,11 +24,11 @@ const mocks: Record<string, string> = {
   '@/lib/fx': `export const estimatePlannedRouteCost = async () => ({}); export async function planDepositAndMint(input){ globalThis.__borrowHarness.lastPlan = input; globalThis.__borrowHarness.plannerCount += 1; return {}; } export async function planRepayAndWithdraw(){ globalThis.__borrowHarness.plannerCount += 1; return {}; } export const restoreSignatureRequiredDraftFromSearch = () => undefined; export const signatureDraftIdFromSearch = () => undefined; export const assertConfiguredPublicClientChain = () => {}; export const assertPublicClientChain = () => {}; export const getEthereumClient = () => ({}); export const getFxReadFacade = () => ({}); export const fallbackDebtRatioRange = () => ({ min: 25600000000000000n, max: 855000000000000000n, source: 'fallback' }); export const readDebtRatioRange = async () => ({ min: 25600000000000000n, max: 855000000000000000n, source: 'fallback' });`,
   '@/lib/fx/readFacade': `export const FX_READ_DEADLINE_MS = 1; export const withReadDeadline = (promise) => promise;`,
   '@/lib/fx/policy': `export const positionPoolAddress = () => '0x0000000000000000000000000000000000000001';`,
-  '@/components/ActionReview': `import React from 'react'; import { usePrivyWallet } from '@/lib/wallet'; export const ActionReview = ({planBuilder, label, editor, operationLabel, onStageChange}) => { const wallet = usePrivyWallet(); const [reviewing,setReviewing] = React.useState(false); if (reviewing) return <section aria-label="Existing position borrow review"><h2>{operationLabel}</h2><p>ETH long · existing position #17</p><button type="button" onClick={() => onStageChange?.('result')}>Complete borrowing</button><button type="button" onClick={() => { setReviewing(false); onStageChange?.('input'); }}>Edit</button><button type="button">Confirm borrowing</button></section>; return <>{editor}<button type="button" onClick={async () => { globalThis.__borrowHarness.reviewAttemptCount += 1; if (globalThis.__borrowHarness.exerciseReviewStage && label === 'Review borrowing') { setReviewing(true); onStageChange?.('executing'); return; } if (planBuilder) { const route = await planBuilder(); if (route) await wallet.sendTransaction({}); } }}>{label}</button></>; };`,
+  '@/components/ActionReview': `import React from 'react'; import { usePrivyWallet } from '@/lib/wallet'; export const ActionReview = ({planBuilder, label, editor, operationLabel, onStageChange, blocker}) => { const wallet = usePrivyWallet(); const [reviewing,setReviewing] = React.useState(false); if (reviewing) return <section aria-label="Existing position borrow review"><h2>{operationLabel}</h2><p>ETH long · existing position #17</p><button type="button" onClick={() => onStageChange?.('result')}>Complete borrowing</button><button type="button" onClick={() => { setReviewing(false); onStageChange?.('input'); }}>Edit</button><button type="button">Confirm borrowing</button></section>; return <>{editor}<button type="button" disabled={Boolean(blocker)} aria-label={label} data-blocker={blocker ?? undefined} onClick={async () => { globalThis.__borrowHarness.reviewAttemptCount += 1; if (globalThis.__borrowHarness.exerciseReviewStage && label === 'Review borrowing') { setReviewing(true); onStageChange?.('executing'); return; } if (planBuilder) { const route = await planBuilder(); if (route) await wallet.sendTransaction({}); } }}>{label}</button></>; };`,
   '@/components/ProtocolPositionProvider': `export const useProtocolPositions = () => globalThis.__borrowHarness.shared;`,
   '@/components/ProtocolPositionCard': `import React from 'react'; export const ProtocolPositionNotice = ({status}) => status === 'unavailable' ? <div role="status">Positions are temporarily unavailable</div> : null;`,
   '@/components/ConfirmedPositionCards': `export const ConfirmedPositionCards = () => null;`,
-  '@/components/ProtocolForm': `import React from 'react'; export const AmountField = ({label, value, onChange, tokenSelector}) => <div><label>{label}<input aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} /></label>{tokenSelector}</div>; export const Segmented = ({options, value, onChange, ariaLabel}) => <div role="group" aria-label={ariaLabel}>{options.map((option) => <button type="button" key={option.value} aria-pressed={value === option.value} onClick={() => onChange(option.value)}>{option.label}</button>)}</div>; export const TokenSelect = ({label, options, value, onChange}) => <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>{options.map((item) => <option key={item} value={item}>{item}</option>)}</select>; export const useWalletTokenBalances = () => ({ balances: {}, status: 'ready', refresh: async () => {} });`,
+  '@/components/ProtocolForm': `import React from 'react'; export const AmountField = ({label, value, onChange, tokenSelector}) => <div><label>{label}<input aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} /></label>{tokenSelector}</div>; export const Segmented = ({options, value, onChange, ariaLabel}) => <div role="group" aria-label={ariaLabel}>{options.map((option) => <button type="button" key={option.value} aria-pressed={value === option.value} onClick={() => onChange(option.value)}>{option.label}</button>)}</div>; export const TokenSelect = ({label, options, value, onChange}) => <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>{options.map((item) => <option key={item} value={item}>{item}</option>)}</select>; export const useWalletTokenBalances = () => ({ balances: globalThis.__borrowHarness.balances ?? {}, status: 'ready', refresh: async () => {} });`,
   '@/components/PriceProvider': `export const useUsdPrices = () => ({ status: 'unavailable', prices: {} }); export const useLiveMarketQuote = () => ({ quote: null, status: 'unavailable', isFresh: false });`,
   '@/lib/wallet': `export const usePrivyWallet = () => ({ ...globalThis.__borrowHarness.wallet, isEmbedded: false, wallets: [], sendTransaction: async () => { globalThis.__borrowHarness.walletRequestCount += 1; } });`,
   '@/lib/positionValuation': `export const calculatePositionUsdValuation = () => ({collateralUsdCents: null, debtUsdCents: null, netEquityUsdCents: null}); export const formatUsdCents = () => '—';`,
@@ -70,6 +70,7 @@ test.beforeAll(async () => { bundle = await buildHarness(); });
 type BorrowHarnessControl = {
   wallet: { ready: boolean; authenticated: boolean; address?: string; chainId: number; connectionVersion: number };
   shared: { walletAddress: string | null; positions: object[]; status: string; failedGroups: Array<{ market: string; side: string; reason: unknown }>; lastVerifiedAt: number | null; [key: string]: unknown };
+  balances?: Record<string, { status: string; amount: string }>;
   plannerCount: number;
   walletRequestCount: number;
   reviewAttemptCount: number;
@@ -253,4 +254,66 @@ test('account changes preserve the active parent-page review until Edit', async 
   await expect(page.getByLabel('Starting collateral')).toHaveValue('');
   await expect(page.getByLabel('fxUSD to borrow')).toHaveValue('');
   await expect(page.getByRole('button', { name: 'Review borrowing' })).toBeVisible();
+});
+
+
+test('optional collateral treats blank and exact zero equally without skipping positive amount checks', async ({ page }) => {
+  await mount(page);
+  await page.getByRole('button', { name: 'Your positions' }).click();
+  await page.getByRole('button', { name: 'Borrow more' }).click();
+  await page.getByRole('button', { name: 'Add collateral and borrow together' }).click();
+  await page.getByLabel('Additional fxUSD to borrow').fill('10');
+  const deposit = page.getByLabel('Collateral to add');
+  const review = page.getByRole('button', { name: 'Review borrowing' });
+  for (const balance of ['0', '5']) {
+    await changeSnapshot(page, (harness) => { harness.balances = { ETH: { status: 'ready', amount: '0' } }; });
+    if (balance === '5') await changeSnapshot(page, (harness) => { harness.balances = { ETH: { status: 'ready', amount: '5' } }; });
+    for (const amount of ['', '0', '0.000000000000000000']) {
+      await deposit.fill(amount);
+      await expect(review).toBeEnabled();
+      await review.click();
+      const planned = await page.evaluate(() => {
+        const h = globalThis as typeof globalThis & { __borrowHarness: { lastPlan: { depositAmount: bigint; mintAmount: bigint } } };
+        return { deposit: h.__borrowHarness.lastPlan.depositAmount.toString(), borrow: h.__borrowHarness.lastPlan.mintAmount.toString() };
+      });
+      expect(planned).toEqual({ deposit: '0', borrow: '10000000000000000000' });
+    }
+  }
+  for (const [amount, reason] of [['-1', 'Enter a valid amount'], ['0.0000000000000000001', 'Enter a valid amount'], ['1.2.3', 'Enter a valid amount'], ['6', 'Insufficient ETH']]) {
+    await deposit.fill(amount);
+    await expect(review).toBeDisabled();
+    await expect(review).toHaveAttribute('data-blocker', reason);
+  }
+  await deposit.fill('1');
+  await expect(review).toBeEnabled();
+  await changeSnapshot(page, (harness) => { harness.balances = { ETH: { status: 'ready', amount: '0' } }; });
+  await expect(review).toBeDisabled();
+  await expect(review).toHaveAttribute('data-blocker', 'No ETH available');
+  await deposit.fill('0');
+  await page.getByLabel('Additional fxUSD to borrow').fill('0');
+  await expect(review).toBeDisabled();
+  await expect(review).toHaveAttribute('data-blocker', 'Enter an amount');
+});
+
+test('adding collateral alone names an empty wallet instead of asking for an amount', async ({ page }) => {
+  await mount(page);
+  await page.getByRole('button', { name: 'Your positions' }).click();
+  await page.getByRole('group', { name: 'Manage collateral position' }).getByRole('button', { name: 'Add collateral', exact: true }).click();
+  // Collateral is the only amount here, so it is never optional.
+  await expect(page.getByLabel('Additional fxUSD to borrow')).toHaveCount(0);
+  await changeSnapshot(page, (harness) => { harness.balances = { ETH: { status: 'ready', amount: '0' } }; });
+  const review = page.getByRole('button', { name: 'Review borrowing' });
+  await expect(review).toBeDisabled();
+  await expect(review).toHaveAttribute('data-blocker', 'No ETH available');
+});
+
+test('a new position still requires positive starting collateral', async ({ page }) => {
+  await mount(page);
+  await page.getByLabel('fxUSD to borrow').fill('10');
+  const review = page.getByRole('button', { name: 'Review borrowing' });
+  await expect(review).toBeDisabled();
+  await page.getByLabel('Starting collateral').fill('0');
+  await expect(review).toBeDisabled();
+  await page.getByLabel('Starting collateral').fill('1');
+  await expect(review).toBeEnabled();
 });

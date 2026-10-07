@@ -1293,11 +1293,11 @@ async function runProof(captureStage: string) {
           assert.equal(convertInParams.amount, earnDepositAmount, 'reviewed deposit calldata must bind the selected 1,000 USDC amount');
           assert.equal(tokenInAddress.toLowerCase(), usdc.toLowerCase(), 'reviewed deposit calldata must bind USDC as the input');
           assert.equal(receiver.toLowerCase(), wallet.toLowerCase(), 'reviewed deposit calldata must bind the connected wallet recipient');
-          assert.equal(minShares > 0n, true, 'reviewed deposit calldata must retain a positive minimum fxSAVE share output');
+          assert.equal(minShares > 0n, true, 'reviewed deposit calldata must retain a positive minimum base-pool share output');
           const deposit = reviewedFactRow('Deposit');
           await expect(deposit).toContainText(/1,?000(?:\.0+)? USDC/i);
           await expect(reviewedFactRow('Recipient')).toBeVisible();
-          await expect(reviewedFactRow('Minimum fxSAVE received')).toBeVisible();
+          await expect(reviewedFactRow('Minimum base-pool shares')).toBeVisible();
         },
       },
     );

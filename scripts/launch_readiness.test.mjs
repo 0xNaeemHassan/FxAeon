@@ -24,7 +24,10 @@ test('app sitemap URLs resolve to public app pages and omit compatibility/login 
 test('privacy disclosure remains reachable and accurately separates device and provider data', async () => {
   const privacy = await readFile(resolve(publicRoot, 'privacy.html'), 'utf8');
   const docs = await readFile(resolve(root, 'apps/mini-app/src/app/docs/page.tsx'), 'utf8');
-  assert.match(docs, /href="\/privacy\.html"/);
+  const article = await readFile(resolve(root, 'apps/mini-app/src/app/docs/ProductArticle.tsx'), 'utf8');
+  assert.match(docs, /import ProductArticle[^;]+['"]\.\/ProductArticle['"]/);
+  assert.match(docs, /<ProductArticle\s*\/>/);
+  assert.match(article, /href="\/privacy\.html"/);
   assert.match(privacy, /browser storage/);
   assert.match(privacy, /public blockchains are publicly visible/);
   assert.doesNotMatch(privacy, /never collect|fully anonymous|GDPR compliant|CCPA compliant/i);

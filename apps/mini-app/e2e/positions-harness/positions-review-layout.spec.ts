@@ -36,7 +36,6 @@ const mocks: Record<string, string> = {
   '@/lib/addressPresentation': `export const compactAddress = value => value ? value.slice(0,6)+'…'+value.slice(-4) : '';`,
   '@/lib/transactionProgress': `export const hasTransactionHash = step => Boolean(step?.hash); export const transactionStepProgress=()=>({label:'Ready',className:'',icon:null});`,
   '@/lib/taskState': `export const selectExecutionTask=()=>null;`,
-  '@/lib/receiptPresentation': `export const buildReceiptPresentation=()=>({movements:[],technicalMovements:[],executionFee:null,feeLabel:'Network fee',feeCaveat:null,nativeValue:null}); export const receiptTransfersFromLogs=()=>[];`,
   '@/lib/confirmedPositions': `export const receiptMintedPositionIdentity=()=>null;`,
   '@/components/BridgeTracker': `export const BridgeTracker=()=>null;`,
   '@/components/review/ReviewProgress': `import React from 'react'; export const chainName=id=>id===8453?'Base':'Ethereum'; export const stepProgress=()=>({label:'Ready',className:'',icon:null}); export const CalldataDisclosure=({data})=><pre>{data}</pre>; export const StatusNotice=({label,body})=><div role="status"><strong>{label}</strong>{body}</div>; export const InlineError=({message})=><div role="alert">{message}</div>; export const TransactionHashLink=({step})=><a href={"https://etherscan.io/tx/"+step.hash}>Receipt</a>;`,

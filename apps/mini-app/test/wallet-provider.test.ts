@@ -63,3 +63,51 @@ test('wallet provider wait resolves when a delayed EIP-6963 announcement arrives
   }, 30);
   assert.equal(await pending, delayed);
 });
+
+test('invalid wallet announcements do not enter discovery or prevent a later valid provider', () => {
+  clearEip6963AnnouncementsForTest();
+  for (const value of [undefined, null, true, [], {}, { provider: {} }, { provider: { request: true } }]) {
+    assert.equal(recordEip6963Announcement(value as Eip6963Announcement), null);
+  }
+  assert.equal(getDiscoveredEip6963Providers().length, 0);
+  const wallet = provider()!;
+  assert.equal(recordEip6963Announcement({ provider: wallet })?.provider, wallet);
+});
+
+test('wallet provider wait tolerates an initially unavailable injected getter', async () => {
+  const wallet = provider()!;
+  let calls = 0;
+  const result = waitForWalletProvider(() => {
+    calls += 1;
+    if (calls === 1) throw new Error('Extension is initializing');
+    return wallet;
+  }, new EventTarget(), { pollMs: 5, timeoutMs: 250 });
+  assert.equal(await result, wallet);
+});
+
+test('a previously cancelled provider wait does not select an already injected wallet', async () => {
+  const controller = new AbortController();
+  controller.abort();
+  let reads = 0;
+  await assert.rejects(waitForWalletProvider(() => {
+    reads += 1;
+    return provider();
+  }, new EventTarget(), { signal: controller.signal }), /cancelled/);
+  assert.equal(reads, 0);
+});
+
+test('repeated discovery announcements leave no polling reads after cancellation', async () => {
+  const target = new EventTarget();
+  const controller = new AbortController();
+  let reads = 0;
+  const pending = waitForWalletProvider(() => { reads += 1; return undefined; }, target, {
+    signal: controller.signal, pollMs: 5, timeoutMs: 100,
+  });
+  for (let index = 0; index < 5; index += 1) target.dispatchEvent(new Event('eip6963:announceProvider'));
+  controller.abort();
+  await assert.rejects(pending, /cancelled/);
+  const stoppedAt = reads;
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  target.dispatchEvent(new Event('eip6963:announceProvider'));
+  assert.equal(reads, stoppedAt);
+});

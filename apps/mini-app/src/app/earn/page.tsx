@@ -112,6 +112,7 @@ export default function EarnPage() {
   const [shares, setShares] = useState('');
   const [instant, setInstant] = useState(true);
   const [slippage, setSlippage] = useState(String(DEFAULT_SLIPPAGE_PERCENT));
+  const savedSlippageRef = useRef(DEFAULT_SLIPPAGE_PERCENT);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [config, setConfig] = useState<SaveConfig | null>(null);
@@ -191,12 +192,18 @@ export default function EarnPage() {
   }, [resetEarnContext, reviewStage, wallet.address, wallet.chainId]);
 
   useEffect(() => {
-    setSlippage(String(readSlippagePercent()));
+    savedSlippageRef.current = readSlippagePercent();
+    setSlippage(String(savedSlippageRef.current));
   }, []);
   useEffect(() => {
     const onSettingsUpdated = (event: Event) => {
       if (event.type === 'storage' && (event as StorageEvent).key !== SETTINGS_KEY) return;
-      setSlippage(String(readSlippagePercent()));
+      const savedSlippage = readSlippagePercent();
+      // A gas-only update must not replace the slippage of a resumed draft.
+      // Explicit choices in this form also apply when the saved value is the
+      // same, via TransactionSettings' controlled change callback.
+      if (savedSlippage !== savedSlippageRef.current) setSlippage(String(savedSlippage));
+      savedSlippageRef.current = savedSlippage;
     };
     window.addEventListener(SETTINGS_UPDATED_EVENT, onSettingsUpdated);
     window.addEventListener('storage', onSettingsUpdated);
@@ -415,13 +422,10 @@ export default function EarnPage() {
       if (readWarnings.includes('balance')) return null;
       const amountWei = parseAmount(amount, token === 'usdc' ? 'USDC' : token === 'fxUSDBasePool' ? 'fxUSDBasePool' : 'fxUSD');
       if (!amountWei) return null;
-      const slippageValue = Number(slippage);
-      if (token !== 'fxUSDBasePool' && (!Number.isFinite(slippageValue) || slippageValue <= 0 || slippageValue > MAX_FX_SLIPPAGE_PERCENT)) return null;
       return () => planDepositFxSave({
         userAddress: wallet.address!,
         tokenIn: token,
         amount: amountWei,
-        slippage: token === 'fxUSDBasePool' ? undefined : slippageValue,
       });
     }
     const sharesWei = shares.toLowerCase() === 'all'
@@ -483,7 +487,7 @@ export default function EarnPage() {
                   <Segmented value={mode} onChange={changeMode} ariaLabel="fxSAVE action" options={[
                     { value: 'deposit', label: 'Deposit' }, { value: 'withdraw', label: 'Withdraw' },
                   ]} />
-                  <TransactionSettings slippage />
+                  <TransactionSettings slippage={mode === 'withdraw' && instant && token !== 'fxUSDBasePool'} slippagePercent={slippage} onSlippageChange={setSlippage} />
                 </div>
               </> : <div className={presentation.claimHeading}>
                 <button type="button" onClick={() => changeMode('withdraw')} className={presentation.back}><ArrowLeft size={17} aria-hidden="true" />Back to fxSAVE</button>
@@ -596,15 +600,17 @@ function EarnActionEditor({ mode, token, onTokenChange, amount, onAmountChange, 
     {mode === 'withdraw' && <>
       <AmountField label="Amount" symbol="fxSAVE" value={shares} onChange={onSharesChange}
         balanceState={shareBalance} allowAll maxDecimals={18} />
-      <div className={presentation.withdrawOptions}>
-        <ChoiceCards value={token === 'fxUSDBasePool' || !instant ? 'cooldown' : 'instant'}
+      {token !== 'fxUSDBasePool' && <div className={presentation.withdrawOptions}>
+        <ChoiceCards value={!instant ? 'cooldown' : 'instant'}
           onChange={(value) => onInstantChange(value === 'instant')} label="Withdrawal method" options={[
             { value: 'cooldown', label: 'After cooldown', description: config ? `${formatCooldown(config.cooldownPeriodSeconds)} wait · no instant fee` : 'Claim later · cooldown unavailable' },
-            { value: 'instant', label: 'Instant', disabled: token === 'fxUSDBasePool', description: config ? `${formatRatio(config.instantRedeemFeeRatio)} instant fee` : 'Instant-redemption fee applies' },
+            { value: 'instant', label: 'Instant', description: config ? `${formatRatio(config.instantRedeemFeeRatio)} instant fee` : 'Instant-redemption fee applies' },
           ]} />
-      </div>
+      </div>}
       <div className={presentation.receiveRow}><span>{instant && token !== 'fxUSDBasePool' ? 'Receive asset' : 'Withdrawal route'}</span>{picker}</div>
-      {(token === 'fxUSDBasePool' || !instant) && <p className={presentation.helper}>A queued withdrawal is claimed later. The claim preview shows the assets available to receive.</p>}
+      {token === 'fxUSDBasePool'
+        ? <p className={presentation.helper}>Redeems fxSAVE directly for base-pool shares, with no queued claim.</p>
+        : !instant && <p className={presentation.helper}>A queued withdrawal is claimed later. The claim preview shows the assets available to receive.</p>}
     </>}
     {mode === 'claim' && (walletData ? <ClaimState data={walletData} /> : <p className={presentation.helper}>Connect the requesting wallet to view its withdrawal.</p>)}
   </div>;

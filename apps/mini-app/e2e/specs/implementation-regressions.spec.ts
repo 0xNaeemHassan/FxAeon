@@ -118,11 +118,11 @@ test.describe('implementation regressions', () => {
     const article = page.locator('[class*="docsContent"]').first();
     await expect(article).toBeVisible();
     await expect(article.locator('header').first()).toBeVisible();
-    await expect(article.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
+    await expect(article.getByRole('heading', { name: 'FxAeon documentation', exact: true })).toBeVisible();
     await expect(article.getByText('Understand every route.', { exact: true })).toHaveCount(0);
     const helpGeometry = await article.locator('section#overview').evaluate((element) => {
-      const heading = element.querySelector('h2')?.getBoundingClientRect();
-      const paragraph = element.querySelector('p')?.getBoundingClientRect();
+      const heading = element.closest('article')?.querySelector('h1')?.getBoundingClientRect();
+      const paragraph = element.closest('article')?.querySelector('header p[class*="lead"]')?.getBoundingClientRect();
       return { headingTop: heading?.top ?? Infinity, paragraphTop: paragraph?.top ?? Infinity, paragraphBottom: paragraph?.bottom ?? Infinity };
     });
     expect(helpGeometry.headingTop).toBeLessThan(viewport.height);
@@ -133,7 +133,7 @@ test.describe('implementation regressions', () => {
     await expect(contents).toHaveJSProperty('open', false);
     await contents.locator('summary').click();
     await expect(contents).toHaveJSProperty('open', true);
-    await expect(contents.getByRole('link')).toHaveCount(13);
+    await expect(contents.getByRole('link')).toHaveCount(15);
     await expect(contents.getByRole('link', { name: 'Overview', exact: true })).toBeVisible();
     await page.setViewportSize({ width: 1024, height: 500 });
     await page.goto('/docs', { waitUntil: 'domcontentloaded' });

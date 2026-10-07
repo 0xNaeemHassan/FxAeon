@@ -7,6 +7,7 @@ const ROUTE_METADATA = [
   ["/move", "Move", "Ethereum and Base"],
   ["/portfolio", "Portfolio", "wallet"],
   ["/docs", "Docs", "f(x) SDK"],
+  ["/docs/sdk", "f(x) SDK reference", "15-method"],
   ["/settings", "Settings", "appearance"],
 ] as const;
 

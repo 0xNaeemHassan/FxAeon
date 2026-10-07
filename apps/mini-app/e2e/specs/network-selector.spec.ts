@@ -1,4 +1,5 @@
-import { test, expect, type Page } from '../fixtures/test';
+import { test, expect } from '../fixtures/test';
+import type { Page } from '@playwright/test';
 
 const WALLET = '0x930f0000000000000000000000000000000098b9';
 

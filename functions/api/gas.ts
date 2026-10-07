@@ -142,6 +142,8 @@ function jsonResponse(body: unknown, status = 200): Response {
     headers: {
       "content-type": "application/json; charset=utf-8",
       "cache-control": "no-store",
+      // Pages `_headers` rules apply to static assets, not Functions.
+      "x-content-type-options": "nosniff",
     },
   });
 }
@@ -360,7 +362,10 @@ export const onRequestGet: PagesFunction<GasFunctionEnv> = async ({ request, env
 
 export const onRequest: PagesFunction<GasFunctionEnv> = async ({ request, env }) => {
   if (request.method !== "GET") {
-    return new Response(null, { status: 405, headers: { allow: "GET" } });
+    return new Response(null, {
+      status: 405,
+      headers: { allow: "GET", "cache-control": "no-store", "x-content-type-options": "nosniff" },
+    });
   }
   // Keep an unexpected platform/runtime failure inside the JSON contract. The
   // browser can then use its bounded RPC fallback instead of receiving a

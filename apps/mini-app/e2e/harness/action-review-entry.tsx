@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ActionReview } from '@/components/ActionReview';
 import { AppShell } from '@/components/ui';
-import type { PlannedRoute } from '@/lib/fx';
+import type { PlannedRoute, PlannedTransaction } from '@/lib/fx';
 import type { Address, Hex } from 'viem';
 
 type WalletState = { ready: boolean; authenticated: boolean; isEmbedded: boolean; connectionVersion: number; address?: string; chainId?: 1 | 8453 };
@@ -49,12 +49,12 @@ const routeFor = (version: number): HarnessRoute => ({
   operation: 'increasePosition', chainId: 1, walletAddress: H.wallet.address! as Address,
   harnessRouteVersion: version, harnessConnectionVersion: H.wallet.connectionVersion,
   transactions: [
-    ...(H.approvalRequired ? [{ chainId: 1, from: H.wallet.address! as Address, to: '0x00000000000000000000000000000000000000c1' as Address, data: ('0x095ea7b3' + '0'.repeat(24) + '0'.repeat(40) + '0'.repeat(63) + '1') as Hex, value: 0n, kind: 'approval', type: 'approveToken', operation: 'increasePosition' }] : []),
+    ...(H.approvalRequired ? [{ chainId: 1, from: H.wallet.address! as Address, to: '0x00000000000000000000000000000000000000c1' as Address, data: ('0x095ea7b3' + '0'.repeat(24) + '0'.repeat(40) + '0'.repeat(63) + '1') as Hex, value: 0n, kind: 'approval', type: 'approveToken', operation: 'increasePosition' } satisfies PlannedTransaction] : []),
     { chainId: 1, from: H.wallet.address! as Address, to: '0x00000000000000000000000000000000000000bb' as Address, data: '0x12345678' as Hex, value: H.nonzeroTransactionValues ? 123n : 0n, kind: 'action', type: 'increasePosition', operation: 'increasePosition' },
-    ...(H.multiStepExecution ? [{ chainId: 1, from: H.wallet.address! as Address, to: '0x00000000000000000000000000000000000000cc' as Address, data: '0x87654321' as Hex, value: H.nonzeroTransactionValues ? 456n : 0n, kind: 'action', type: 'increasePosition', operation: 'increasePosition' }] : []),
+    ...(H.multiStepExecution ? [{ chainId: 1, from: H.wallet.address! as Address, to: '0x00000000000000000000000000000000000000cc' as Address, data: '0x87654321' as Hex, value: H.nonzeroTransactionValues ? 456n : 0n, kind: 'action', type: 'increasePosition', operation: 'increasePosition' } satisfies PlannedTransaction] : []),
   ],
   details: { routeType: `Terms ${version}` },
-  ...(initialOptions?.presentationMode ? { policy: { reviewedAction: {
+  ...(initialOptions?.presentationMode ? { policy: { walletAddress: H.wallet.address! as Address, chainId: 1, reviewedAction: {
     kind: 'position-increase', poolAddress: '0x00000000000000000000000000000000000000bb' as Address,
     positionId: 42, inputTokenAddress: '0x00000000000000000000000000000000000000c1' as Address,
     inputAmount: 250000000000000000n, nativeInput: false,

@@ -4,10 +4,10 @@
 .overview { display: flex; flex-direction: column; gap: 8px; }
 .balanceTop { display: flex; min-width: 0; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .balanceCopy { min-width: 0; flex: 1; }
-.balanceCopy[data-connected='true'] { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); align-items: baseline; column-gap: 8px; }
-.balanceCopy > p { grid-column: 1 / -1; margin: 0; color: var(--mut); font-size: var(--fs-small); font-weight: 500; }
-.balanceCopy h2 { margin: 4px 0 2px; color: var(--text); font-size: clamp(32px, 9vw, 40px); line-height: 1.05; letter-spacing: -.05em; font-variant-numeric: tabular-nums; font-weight: 650; overflow-wrap: break-word; }
-.balanceCopy small { display: block; overflow-wrap: anywhere; color: var(--mut); font-size: var(--fs-caption); line-height: 1.5; }
+.balanceCopy[data-connected='true'] { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 8px; }
+.balanceCopy > p { flex-basis: 100%; margin: 0; color: var(--mut); font-size: var(--fs-small); font-weight: 500; }
+.balanceCopy h2 { max-width: 100%; margin: 4px 0 2px; color: var(--text); font-size: clamp(32px, 9vw, 40px); line-height: 1.05; letter-spacing: -.05em; font-variant-numeric: tabular-nums; font-weight: 650; overflow-wrap: break-word; }
+.balanceCopy small { display: block; max-width: 100%; overflow-wrap: anywhere; color: var(--mut); font-size: var(--fs-caption); line-height: 1.5; }
 /* Yield is a second figure, not a badge: the rate in green, then what it is. */
 .rate { flex: 0 0 auto; margin-top: 2px; text-align: right; }
 .rate > strong { display: block; font-size: 24px; line-height: 1.1; color: var(--success); font-weight: 650; letter-spacing: -0.035em; font-variant-numeric: tabular-nums; }

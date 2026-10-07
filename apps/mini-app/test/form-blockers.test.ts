@@ -34,3 +34,22 @@ test('"all" passes only where a form accepts it', () => {
   assert.equal(amountBlocker('all', 18, 'fxSAVE', ready('3'), { allowAll: true }), null);
   assert.equal(amountBlocker('all', 18, 'fxSAVE', ready('3')), 'Enter a valid amount');
 });
+
+
+test('optional amount accepts an omitted or exact-zero leg regardless of its balance', () => {
+  for (const balance of [undefined, ready('0'), ready('5'), { status: 'unavailable' }]) {
+    for (const value of ['', '  ', '0', '00', '.0', '0.000000000000000000']) {
+      assert.equal(amountBlocker(value, 18, 'ETH', balance, { optional: true }), null);
+    }
+  }
+});
+
+test('optional amount retains validation and balance checks for nonzero input', () => {
+  const options = { optional: true };
+  for (const value of ['-1', '1.2.3', '0.', '0e0', '0.0000000000000000000', '0.0000000000000000001']) {
+    assert.equal(amountBlocker(value, 18, 'ETH', ready('5'), options), 'Enter a valid amount');
+  }
+  assert.equal(amountBlocker('6', 18, 'ETH', ready('5'), options), 'Insufficient ETH');
+  assert.equal(amountBlocker('1', 18, 'ETH', ready('0'), options), 'No ETH available');
+  assert.equal(amountBlocker('5', 18, 'ETH', ready('5'), options), null);
+});
