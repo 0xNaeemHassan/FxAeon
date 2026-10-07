@@ -32,5 +32,7 @@ async function buildHarness(){const build=await esbuild.build({stdin:{contents:e
  });
  b.onLoad({filter:/.*/,namespace:'fixture'},args=>({contents:mocks[args.path],loader:'tsx',resolveDir:path.join(repo,'apps/mini-app')}));
  b.onLoad({filter:/\/fx\/(service|leverage|reviewPreparation|gasFeePolicy|gasCost)\.ts$/},args=>{let contents=fs.readFileSync(args.path,'utf8');let names=instrument[path.basename(args.path)]||[];for(const name of names){contents=contents.replace('export async function '+name+'(', 'async function __actual_'+name+'(').replace('export async function '+name+'<','async function __actual_'+name+'<');contents+=`\nexport async function ${name}(...args){return globalThis.__longReview.trace('${name}',()=>__actual_${name}(...args),args);}\n`;};return {contents,loader:'ts'};});
- }}]});return {script:build.outputFiles.find(f=>f.path.endsWith('.js')).text,css:build.outputFiles.find(f=>f.path.endsWith('.css')).text};}
+ }}]});const app=path.join(repo,'apps/mini-app');
+ const globals=await req('postcss')([req('tailwindcss')({...require(path.join(app,'tailwind.config.js')),content:[path.join(src,'**/*.{ts,tsx}')]}),req('autoprefixer')()]).process(fs.readFileSync(path.join(src,'app/globals.css'),'utf8'),{from:path.join(src,'app/globals.css')});
+ return {script:build.outputFiles.find(f=>f.path.endsWith('.js')).text,css:globals.css+'\n'+fs.readFileSync(path.join(src,'app/product-shell.css'),'utf8')+'\n'+build.outputFiles.find(f=>f.path.endsWith('.css')).text+'\n:root{--font-sans:system-ui,sans-serif}'};}
 module.exports={buildHarness};

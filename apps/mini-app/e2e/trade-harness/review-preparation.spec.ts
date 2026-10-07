@@ -10,6 +10,7 @@ const { buildHarness } = require('./long-review-build.cjs') as { buildHarness: (
 const { createFixture } = require('./long-review-rpc.cjs') as { createFixture: (options: Record<string, unknown>) => {
   rpc: (request: unknown) => Promise<unknown>;
   block: { number: string };
+  setSimulationFailure?: (index?: number) => void;
 } };
 let bundle: { script: string; css: string };
 test.beforeAll(async () => { bundle = await buildHarness(); });
@@ -21,8 +22,10 @@ type Control = {
   trace: (name: string, fn: () => Promise<unknown>) => Promise<unknown>;
   enabledConfirmSeen: boolean;
 };
-async function mount(page: Page, options: { delayMs?: number; blockDelayMs?: number; funded?: boolean; simulationFailureIndex?: number } = {}) {
-  const fixture = createFixture({ delayMs: options.delayMs ?? 20, ethBalance: options.funded ? 10n ** 20n : 400000000000000n, simulationFailureIndex: options.simulationFailureIndex });
+async function mount(page: Page, options: { delayMs?: number; blockDelayMs?: number; funded?: boolean; simulationFailureIndex?: number; feeDelayMs?: number } = {}) {
+  const transportOptions = { delayMs: options.delayMs ?? 20, ethBalance: options.funded ? 10n ** 20n : 400000000000000n, simulationFailureIndex: options.simulationFailureIndex };
+  const fixture = createFixture(transportOptions);
+  fixture.setSimulationFailure = (index) => { transportOptions.simulationFailureIndex = index; };
   await page.route('**/*', async (route) => {
     const url = route.request().url();
     if (url.includes('/api/gas')) {
@@ -31,12 +34,14 @@ async function mount(page: Page, options: { delayMs?: number; blockDelayMs?: num
     }
     if (url.includes('fake-controlled-fixture')) {
       const request = route.request().postDataJSON();
+      if (options.feeDelayMs && ['eth_getBalance', 'eth_estimateGas'].includes(request.method)) await new Promise(resolve => setTimeout(resolve, options.feeDelayMs));
       if (request.method === 'eth_blockNumber' && options.blockDelayMs) await new Promise((resolve) => setTimeout(resolve, options.blockDelayMs));
       return route.fulfill({ contentType: 'application/json', body: JSON.stringify(await fixture.rpc(request)) });
     }
     if (url.startsWith('http://long-review.test/')) return route.fulfill({ contentType: 'text/html', body: '<!doctype html><div id="root"></div>' });
     return route.abort();
   });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('http://long-review.test/trade');
   await page.evaluate(() => {
     (globalThis as unknown as { process: { env: Record<string, string> } }).process = { env: {} };
@@ -68,7 +73,7 @@ async function planCount(page: Page) {
   return page.evaluate(() => (globalThis as typeof globalThis & { __longReview: Control }).__longReview.events.filter((event) => event.name === 'planIncreasePosition').length);
 }
 async function review(page: Page) { await page.getByRole('button', { name: 'Review ETH Long', exact: true }).click(); }
-async function insufficient(page: Page) { await expect(page.getByRole('button', { name: 'Not enough ETH for network fees', exact: true })).toBeDisabled(); }
+async function insufficient(page: Page) { await expect(page.getByRole('button', { name: 'Not enough ETH', exact: true })).toBeDisabled(); }
 
 test('quick review presents entered facts immediately and starts only one plan', async ({ page }) => {
   await mount(page); await fill(page); await review(page);
@@ -127,4 +132,45 @@ test('fresh-cache visibility refresh disables confirmation until the request set
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
   await expect(page.getByRole('button', { name: 'Checking network fees…', exact: true })).toBeDisabled();
   await expect(confirm).toBeEnabled();
+});
+
+async function geometry(page: Page, seed = false) {
+  return page.evaluate((seed) => {
+    const selectors = ['[data-review-viewport]', '[data-review-fact="Amount"]', '[data-review-fact="Target leverage"]', '[data-review-fact="Position"]', '[data-review-fact="Slippage"]', '[data-review-viewport] > :last-child button'];
+    const nodes = selectors.map(selector => document.querySelector(selector)!);
+    const global = window as unknown as { __reviewNodes?: Element[] };
+    if (seed) global.__reviewNodes = nodes;
+    return { same: nodes.map((node,index) => node === global.__reviewNodes?.[index]), boxes: nodes.map(node => { const r=node.getBoundingClientRect(); return { x:r.x,y:r.y,width:r.width,height:r.height }; }) };
+  }, seed);
+}
+for (const viewport of [{ width:393,height:920 }, { width:320,height:568 }]) {
+  test(`stable review preserves nodes and known-field/action positions at ${viewport.width}px`, async ({ page }) => {
+    await page.setViewportSize(viewport); await mount(page,{feeDelayMs:650}); await fill(page); await review(page);
+    await expect(page.getByRole('button',{name:'Checking transaction…',exact:true})).toBeDisabled();
+    await page.waitForTimeout(120); const before = await geometry(page,true);
+    await expect(page.getByRole('button',{name:'Checking network fees…',exact:true})).toBeDisabled();
+    const during = await geometry(page); await insufficient(page); const after = await geometry(page);
+    for (const frame of [during,after]) { expect(frame.same.every(Boolean)).toBe(true); for(let i=0;i<before.boxes.length;i++) for(const key of ['x','y','width','height'] as const) expect(Math.abs(frame.boxes[i][key]-before.boxes[i][key])).toBeLessThanOrEqual(1); }
+  });
+}
+test('failed preparation stays in the same card and Retry performs a fresh check', async ({page}) => {
+  const fixture=await mount(page,{simulationFailureIndex:0}); await fill(page); await review(page);
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  const before=await geometry(page,true);
+  await expect(page.getByRole('button',{name:'Retry review',exact:true})).toBeEnabled();
+  expect((await geometry(page)).same.every(Boolean)).toBe(true);
+  await expect(page.getByRole('button',{name:'Confirm',exact:true})).toHaveCount(0);
+  await expect(page.getByLabel('Checking transaction steps')).toHaveCount(0);
+  fixture.setSimulationFailure?.(undefined);
+  await page.getByRole('button',{name:'Retry review',exact:true}).click(); await insufficient(page);
+  const after=await geometry(page); expect(after.same.every(Boolean)).toBe(true);
+  expect(Math.abs(after.boxes.at(-1)!.y-before.boxes.at(-1)!.y)).toBeLessThanOrEqual(1);
+  expect(await page.evaluate(() => (globalThis as typeof globalThis & {__longReview:Control}).__longReview.events.filter(event=>event.name==='prepareRoutesForReview').length)).toBe(2);
+});
+test('Telegram Back cancels retained failed preparation and returns to the editor', async ({page}) => {
+  await mount(page,{simulationFailureIndex:0}); await fill(page); await review(page);
+  await expect(page.getByRole('button',{name:'Retry review',exact:true})).toBeEnabled();
+  await page.evaluate(()=>window.dispatchEvent(new CustomEvent('fxaeon:telegram-back')));
+  await expect(page.getByRole('textbox',{name:'Amount in ETH'})).toHaveValue('0.0003');
+  await expect(page.getByRole('button',{name:'Confirm',exact:true})).toHaveCount(0);
 });
