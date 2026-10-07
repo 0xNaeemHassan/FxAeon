@@ -17,7 +17,7 @@ const mocks: Record<string, string> = {
   '@/components/ProductUI': `import React from 'react'; export const Disclosure = ({children}) => <>{children}</>;`,
   '@/components/ProductLayout': `import React from 'react'; export const ActionWorkspace = ({children,...props}) => <section {...props}>{children}</section>;`,
   '@/components/ActionReview': `import React from 'react'; export const ActionReview = ({editor, label}) => <>{editor}<button type="button">{label}</button></>;`,
-  '@/components/MarketChart': `import React from 'react'; export const TradeMarketChart = () => null;`,
+  '@/components/MarketChart': `import React from 'react'; export const TradeMarketChart = ({market,onMarketChange}) => <select aria-label="Market" value={market} onChange={e=>onMarketChange(e.target.value)}><option>ETH</option><option>BTC</option></select>;`,
   '@/components/PriceProvider': `export const useUsdPrices = () => ({status:'unavailable',prices:{}}); export const useLiveMarketQuote = () => ({ quote: null, status: 'unavailable', isFresh: false });`,
   '@/components/TokenIcon': `import React from 'react'; export default () => <span />;`,
   '@/components/MissingValue': `import React from 'react'; export const ValueOrSkeleton = ({value}) => <span>{value}</span>;`,
@@ -26,14 +26,15 @@ const mocks: Record<string, string> = {
   '@/components/ConfirmedPositionCards': `export const ConfirmedPositionCards = () => null;`,
   '@/lib/confirmedPositions': `export const deriveConfirmedPositionHint = () => null;`,
   '@/lib/confirmedPositionStorage': `export const confirmedPositionHintKey = () => '';`,
-  '@/components/ProtocolForm': `import React from 'react'; export { AmountFieldView as AmountField } from '@/components/AmountField'; export const LeverageField = () => null; export const Segmented = ({options,value,onChange,ariaLabel}) => <div role="group" aria-label={ariaLabel}>{options.map(o=><button type="button" key={o.value} aria-pressed={value===o.value} onClick={()=>onChange(o.value)}>{o.label}</button>)}</div>; export const SlippageField = () => null; export const TokenSelect = ({label,value,options,onChange}) => <select aria-label={label} value={value} onChange={e=>onChange(e.target.value)}>{options.map(o=><option key={o} value={o}>{o}</option>)}</select>; export const tokenBalanceFor = (balances,token) => balances[token]; export const useWalletTokenBalances = () => ({balances:{ETH:{status:'ready',amount:globalThis.__tradeMaxHarness.balance}},status:'ready',refresh:async()=>{}});`,
-  '@/lib/fx': `export const MAX_FX_SLIPPAGE_PERCENT=5; export const clampLeverage=(v)=>v; export const estimatePlannedRouteCost=async()=>({}); export const getEthereumClient=()=>({getBlockNumber:async()=>1n}); export const leverageBoundsFor=()=>({min:1,max:10}); export const planIncreasePosition=async(input)=>({input}); export const prepareLeverageReview=async()=>({}); export const readLeverageBounds=async()=>({min:1,max:10}); export const readSignatureRequiredDraft=()=>null; export const restoreSignatureRequiredDraft=()=>null; export const signatureDraftIdFromSearch=()=>null;`,
+  '@/components/WalletDataProvider': `export const useWalletBalances = () => ({status:'ready',data:null});`,
+  '@/components/ProtocolForm': `import React from 'react'; export { AmountFieldView as AmountField } from '@/components/AmountField'; export const LeverageField = ({value,onChange,min,max}) => <input aria-label="Target leverage" type="number" value={value} min={min} max={max} onChange={e=>onChange(Number(e.target.value))} />; export { Segmented } from '${src.replaceAll('\\', '/')}/components/ProtocolForm.tsx'; export const SlippageField = () => null; export const TokenSelect = ({label,value,options,onChange}) => <select aria-label={label} value={value} onChange={e=>onChange(e.target.value)}>{options.map(o=><option key={o} value={o}>{o}</option>)}</select>; export const tokenBalanceFor = (balances,token) => balances[token]; export const useWalletTokenBalances = () => ({balances:{ETH:{status:'ready',amount:globalThis.__tradeMaxHarness.balance}},status:'ready',refresh:async()=>{}});`,
+  '@/lib/fx': `export const MAX_FX_SLIPPAGE_PERCENT=5; export const clampLeverage=(v)=>v; export const estimatePlannedRouteCost=async()=>({}); export const getEthereumClient=()=>({getBlockNumber:async()=>1n}); export const leverageBoundsFor=(market,side)=>({min:side==='long'?1.1:0.1,max:market==='ETH'?(side==='long'?10:6):(side==='long'?8:5)}); export const planIncreasePosition=async(input)=>({input}); export const prepareLeverageReview=async()=>({}); export const readLeverageBounds=async(market,side)=>leverageBoundsFor(market,side); export const readSignatureRequiredDraft=()=>null; export const restoreSignatureRequiredDraft=()=>null; export const signatureDraftIdFromSearch=()=>null;`,
   '@/lib/fx/nativeMax': `export const nativeMaxErrorMessage=()=> 'Current gas fees are unavailable. Try again shortly.'; export const calculateNativeMax = (input) => new Promise((resolve,reject) => globalThis.__tradeMaxHarness.requests.push({balanceWei:input.balanceWei,resolve,reject}));`,
   '@/lib/fx/routePrefetch': `export class RoutePrefetchStore { invalidate(){} prime(){return Promise.resolve();} get(){return null;} }`,
   '@/lib/wallet': `export const usePrivyWallet = () => ({ready:true,authenticated:true,address:globalThis.__tradeMaxHarness.address,chainId:globalThis.__tradeMaxHarness.chainId,connectionVersion:1,isEmbedded:true,wallets:[],sendTransaction:async()=>({})});`,
   '@/lib/amount': `export const positiveDecimal = (value) => /^\\d+(\\.\\d*)?$/.test(value); export const calculateFractionDecimal=(value,fraction)=>value; export const compareExactDecimals=(left,right)=>Number(left)-Number(right); export const decimalInputError=()=>null; export const formatExactDecimal=(value)=>String(value); export const normalizeAmountInput=(value)=>value;`,
   '@/lib/prices': `export const formatUsd=()=> '$0.00'; export const formatUsdPrice=()=> '$0.00'; export const priceKeyForSymbol=()=> null; export const usdValueForDecimal=()=> null;`,
-  '@/lib/fx/tokenPresentation': `export const tokenSymbol=(value)=>value;`,
+  '@/lib/fx/tokenPresentation': `export const tokenSymbol=(value)=>value; export const tokenName=(value)=>value; export const tokenPresentation=(value)=>({symbol:value});`,
   '@/lib/telegram': `export const haptic=()=>{};`,
   '@/lib/walletAssets': `export const ASSET_PRICE_MAX_AGE_MS=60000;`,
   '@/lib/settings': `export const DEFAULT_SLIPPAGE_PERCENT=0.5; export const readSlippagePercent=()=>0.5; export const readGasTier=()=> 'standard'; export const SETTINGS_KEY='settings'; export const SETTINGS_UPDATED_EVENT='settings-updated'; export const GAS_TIERS=['standard','fast','rapid']; export const DEFAULT_GAS_TIER='standard'; export const MIN_SLIPPAGE_BPS=10; export const MAX_SLIPPAGE_BPS=200; export const SLIPPAGE_PRESETS_BPS=[10,50,100,200]; export const isSlippageBps=(v)=>Number.isInteger(v)&&v>=10&&v<=200; export const writeTransactionSettings=()=>true;`,
@@ -124,7 +125,7 @@ test('changing Long/Short cancels the pending Max result', async ({ page }) => {
   const max = page.getByRole('button', { name: 'Calculate 100% after gas reserve' });
   await max.click();
   await expect(max).toBeDisabled();
-  await page.getByRole('group', { name: 'Position side' }).getByRole('button', { name: 'Short' }).click();
+  await page.getByRole('radiogroup', { name: 'Position side' }).getByRole('radio', { name: 'Short' }).click();
   await expect(max).toBeEnabled();
   await resolveRequest(page, 0, '0.8');
   await expect(page.getByRole('textbox', { name: 'Amount in ETH' })).toHaveValue('');
@@ -146,4 +147,81 @@ test('a failed Max request can be retried and each click recalculates', async ({
   await expect.poll(async () => page.evaluate(() => (globalThis as typeof globalThis & { __tradeMaxHarness: Control }).__tradeMaxHarness.requests.length)).toBe(3);
   const balances = await page.evaluate(() => (globalThis as typeof globalThis & { __tradeMaxHarness: Control }).__tradeMaxHarness.requests.map((request) => request.balanceWei.toString()));
   expect(balances).toEqual(['1000000000000000000','1000000000000000000','1000000000000000000']);
+});
+
+for (const market of ['ETH', 'BTC']) {
+  test(`${market} leverage examples switch independently, keep their layout, and leave the live limit to the ticket`, async ({ page }) => {
+    await mount(page);
+    await page.getByRole('combobox', { name: 'Market', exact: true }).selectOption(market);
+    const amount = page.getByRole('textbox', { name: `Amount in ${market === 'ETH' ? 'ETH' : 'WBTC'}` });
+    const leverage = page.getByRole('spinbutton', { name: 'Target leverage' });
+    const ticket = page.getByRole('radiogroup', { name: 'Position side' });
+    const example = page.getByRole('radiogroup', { name: 'Leverage example' });
+    const explanation = page.getByRole('region', { name: 'Leverage in three steps' });
+    const glance = page.getByRole('region', { name: `${market} at a glance` });
+    const split = explanation.getByRole('list', { name: /Share of a position/ });
+    const rows = split.getByRole('listitem');
+    const splitHeight = async () => (await split.boundingBox())!.height;
+    await amount.fill('0.125');
+    await leverage.fill('3');
+    await expect(example.getByRole('radio', { name: 'Long example' })).toBeChecked();
+    await expect(rows).toHaveCount(2);
+    await expect(explanation).not.toContainText('pool maximum');
+    await expect(glance).toContainText(`–${market === 'ETH' ? '10.0' : '8.0'}×`);
+    const longHeight = await splitHeight();
+
+    await example.getByRole('radio', { name: 'Short example' }).click();
+    await expect(example.getByRole('radio', { name: 'Short example' })).toBeChecked();
+    await expect(explanation).toContainText('a 3× short is three quarters borrowed and one quarter yours');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(1)).toContainText(`75% borrowed ${market === 'ETH' ? 'wstETH' : 'WBTC'} · 25% yours`);
+    expect(await rows.nth(1).evaluate((row) => (row as HTMLElement).style.getPropertyValue('--borrowed'))).toBe('0.75');
+    expect(await splitHeight(), 'comparing directions must not move the content below').toBe(longHeight);
+    // The live limit belongs to the ticket's pool, never to the example.
+    await expect(glance).toContainText(`–${market === 'ETH' ? '10.0' : '8.0'}×`);
+    await expect(ticket.getByRole('radio', { name: 'Long' })).toBeChecked();
+    await expect(amount).toHaveValue('0.125');
+    await expect(leverage).toHaveValue('3');
+    await expect(page.getByRole('button', { name: `Open ${market} Long` })).toBeVisible();
+
+    await example.getByRole('radio', { name: 'Short example' }).press('ArrowLeft');
+    await expect(example.getByRole('radio', { name: 'Long example' })).toBeChecked();
+    await expect(example.getByRole('radio', { name: 'Long example' })).toBeFocused();
+    await expect(rows.nth(1)).toContainText('67% minted fxUSD · 33% yours');
+    await example.getByRole('radio', { name: 'Long example' }).press('End');
+    await expect(example.getByRole('radio', { name: 'Short example' })).toBeChecked();
+    await example.getByRole('radio', { name: 'Short example' }).press('Home');
+    await expect(example.getByRole('radio', { name: 'Long example' })).toBeChecked();
+
+    // A deliberate trade-side change still owns the ticket, resets the example, and moves the live limit.
+    await ticket.getByRole('radio', { name: 'Short' }).click();
+    await expect(example.getByRole('radio', { name: 'Short example' })).toBeChecked();
+    await expect(rows).toHaveCount(2);
+    await expect(glance).toContainText(`–${market === 'ETH' ? '6.0' : '5.0'}×`);
+    await amount.fill('0.25');
+    await example.getByRole('radio', { name: 'Long example' }).click();
+    await expect(rows).toHaveCount(2);
+    await expect(ticket.getByRole('radio', { name: 'Short' })).toBeChecked();
+    await expect(amount).toHaveValue('0.25');
+    await expect(page.getByRole('button', { name: `Open ${market} Short` })).toBeVisible();
+
+    // A new market starts with its selected trade side and its own live limit.
+    const nextMarket = market === 'ETH' ? 'BTC' : 'ETH';
+    await page.getByRole('combobox', { name: 'Market', exact: true }).selectOption(nextMarket);
+    await expect(example.getByRole('radio', { name: 'Short example' })).toBeChecked();
+    await expect(page.getByRole('region', { name: `${nextMarket} at a glance` })).toContainText(`–${nextMarket === 'ETH' ? '6.0' : '5.0'}×`);
+    await expect(rows.nth(1)).toContainText(`75% borrowed ${nextMarket === 'ETH' ? 'wstETH' : 'WBTC'} · 25% yours`);
+  });
+}
+
+test('comparing leverage examples preserves an in-flight native Max request', async ({ page }) => {
+  await mount(page);
+  const max = page.getByRole('button', { name: 'Calculate 100% after gas reserve' });
+  await max.click();
+  await expect(max).toBeDisabled();
+  await page.getByRole('radiogroup', { name: 'Leverage example' }).getByRole('radio', { name: 'Short' }).click();
+  await expect(max).toBeDisabled();
+  await resolveRequest(page, 0, '0.8');
+  await expect(page.getByRole('textbox', { name: 'Amount in ETH' })).toHaveValue('0.8');
+  await expect(page.getByRole('radiogroup', { name: 'Position side' }).getByRole('radio', { name: 'Long' })).toBeChecked();
 });

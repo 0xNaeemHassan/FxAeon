@@ -20,6 +20,10 @@
 .word { transition: color 520ms var(--ease-out); }
 /* A section's one-line premise, above its diagram. */
 .lede { max-width: 56ch; margin: -6px 0 0; color: var(--mut); font-size: var(--fs-small); line-height: 1.6; }
+/* An inline caption marks the switch as an example, beside rather than above it. */
+.exampleSwitch { display: flex; width: min(100%, 300px); align-items: center; gap: 10px; }
+.exampleSwitch > :last-child { min-width: 0; flex: 1 1 auto; }
+.exampleCaption { flex: 0 0 auto; color: var(--mut); font-size: var(--fs-caption); font-weight: 600; }
 .litLine[data-lighting] .word:not([data-lit]) { color: color-mix(in srgb, var(--text) 24%, transparent); }
 .sectionAction { display: inline-flex; min-height: 44px; min-width: 0; max-width: 100%; flex: 0 1 auto; align-items: center; gap: 4px; padding-inline: 6px; border-radius: 999px; color: var(--mint); font-size: var(--fs-small); font-weight: 600; transition: background-color var(--dur-fast) ease; }
 .sectionAction:hover { background: var(--mint-dim); }
