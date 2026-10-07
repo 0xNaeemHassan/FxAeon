@@ -174,7 +174,7 @@ test('changed stored slippage reaches a restored form while unrelated storage ch
   await expect(page.getByRole('region', { name: 'Earn review' })).toContainText('Review slippage: 0.75%');
 });
 
-for (const percent of ['0.29', '0.14', '0.57', '1.1', '0.291']) {
+for (const percent of ['0.29', '0.14', '0.57', '1.1', '0.291', '0.101']) {
   test(`restored ${percent}% remains unchanged by focus, blur and gas selection`, async ({ page }) => {
     await mount(page, true, percent);
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
@@ -183,10 +183,14 @@ for (const percent of ['0.29', '0.14', '0.57', '1.1', '0.291']) {
     await input.focus();
     await input.blur();
     await expect(input).toHaveValue(percent);
+    await expect(input).toHaveAttribute('aria-invalid', 'false');
+    await expect(dialog.getByRole('alert')).toHaveCount(0);
     expect(await storedSlippage(page)).toBe(50);
     await input.focus();
     await dialog.getByRole('radio', { name: /Fast/ }).click();
     await expect(input).toHaveValue(percent);
+    await expect(input).toHaveAttribute('aria-invalid', 'false');
+    await expect(dialog.getByRole('alert')).toHaveCount(0);
     expect(await storedSlippage(page)).toBe(50);
     await dialog.getByRole('button', { name: 'Close transaction settings' }).click();
     await page.getByRole('button', { name: 'Review deposit', exact: true }).click();
@@ -212,4 +216,27 @@ test('uncontrolled settings still announce an explicit saved-value commit', asyn
   await input.blur();
   await expect(page.locator('html')).toHaveAttribute('data-settings-updates', '1');
   expect(await storedSlippage(page)).toBe(50);
+});
+
+
+test('editing a finer restored percentage still requires whole-basis-point preferences', async ({ page }) => {
+  await mount(page, true, '0.291');
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  const dialog = await openSettings(page, '0.291');
+  const input = dialog.getByRole('textbox', { name: 'Slippage tolerance percentage' });
+  await input.fill('0.292');
+  await input.blur();
+  await expect(input).toHaveValue('0.291');
+  await expect(input).toHaveAttribute('aria-invalid', 'true');
+  await expect(dialog.getByRole('alert')).toContainText('steps of 0.01%');
+  expect(await storedSlippage(page)).toBe(50);
+  await input.fill('0.29');
+  await input.blur();
+  await expect(input).toHaveValue('0.29');
+  await expect(input).toHaveAttribute('aria-invalid', 'false');
+  await expect(dialog.getByRole('alert')).toHaveCount(0);
+  expect(await storedSlippage(page)).toBe(29);
+  await dialog.getByRole('button', { name: 'Close transaction settings' }).click();
+  await page.getByRole('button', { name: 'Review deposit', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Earn review' })).toContainText('Review slippage: 0.29%');
 });
