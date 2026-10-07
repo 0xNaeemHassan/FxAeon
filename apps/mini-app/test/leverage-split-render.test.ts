@@ -12,7 +12,7 @@ const previousReact = globalReact.React;
 globalReact.React = React;
 const testRequire = createRequire(import.meta.url);
 const previousCssLoader = testRequire.extensions['.css'];
-const stylesPaths = new Set(['LeverageSplit', 'PageSections', 'YieldFlow'].map((name) =>
+const stylesPaths = new Set(['LeverageSplit', 'PageSections', 'YieldFlow', 'trade-surfaces', 'AmountField'].map((name) =>
   fileURLToPath(new URL(`../src/components/${name}.module.css`, import.meta.url)).toLowerCase()));
 testRequire.extensions['.css'] = (loadedModule, filename) => {
   if (!stylesPaths.has(filename.toLowerCase())) {
@@ -65,7 +65,7 @@ test('short illustrations use borrowed exposure over equity for 2×, 3×, and 6�
 test('unavailable or low pool maxima keep finite illustrative rows without a false maximum', async () => {
   const { LeverageSplit } = await import('../src/components/LeverageSplit');
   for (const side of ['long', 'short'] as const) {
-    for (const max of [0, -1, 0.1, 1, 3, Number.NaN, Infinity, -Infinity]) {
+    for (const max of [undefined, 0, -1, 0.1, 1, 3, Number.NaN, Infinity, -Infinity]) {
       const html = renderToStaticMarkup(React.createElement(LeverageSplit, { side, max, debtLabel: 'debt' }));
       const rows = splitRows(html);
       assert.equal(rows.length, 2, `${side} with max ${max}`);
@@ -85,6 +85,8 @@ test('Trade education passes the selected direction and keeps its copy consisten
         openPositions: null, positionsStatus: 'disconnected',
       }));
       const rows = splitRows(html);
+      assert.match(html, /role="radiogroup" aria-label="Leverage example"/);
+      assert.match(html, new RegExp(`role="radio" aria-label="${side === 'long' ? 'Long' : 'Short'}" aria-checked="true"`));
       assert.equal(rows[1].borrowed, side === 'long' ? 2 / 3 : 3 / 4);
       if (side === 'long') {
         assert.match(html, /a 3× long is two thirds minted fxUSD and one third yours/);
