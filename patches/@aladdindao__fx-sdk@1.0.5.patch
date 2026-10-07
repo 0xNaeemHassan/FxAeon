@@ -1,5 +1,5 @@
 diff --git a/dist/index.cjs b/dist/index.cjs
-index d1b4286..9630b7e 100644
+index d1b42864fdfb2717e6d6046bee21de033228ff25..0c06f3aa73c351aa320df897183493a3e0f4e06a 100644
 --- a/dist/index.cjs
 +++ b/dist/index.cjs
 @@ -15,6 +15,12 @@ var axios__default = /*#__PURE__*/_interopDefault(axios);
@@ -120,7 +120,32 @@ index d1b4286..9630b7e 100644
          supplyFeeRatio: poolFeeRatioRes[0],
          withdrawFeeRatio: poolFeeRatioRes[1],
          repayFeeRatio: fxMintPoolFeeRatioRes[3]
-@@ -11920,7 +11936,6 @@ var Pool = class {
+@@ -11914,13 +11930,28 @@ var Pool = class {
+    */
+   async getPoolInfo() {
+     const { isShort } = this.config;
+-    const poolData = await this.getPoolData();
+-    const rateRes = await this.price.getRateRes();
+-    const oraclePrice = await this.price.getOraclePrice();
++    // Only the view reads may share an automatic multicall. Converter quotes
++    // are nonpayable and must keep their original, separate execution contexts.
++    const poolReads = [
++      this.getPoolData(),
++      this.price.getRateRes(),
++      this.price.getOraclePrice()
++    ].map((read) => read.then(
++      (value) => ({ status: "fulfilled", value }),
++      (reason) => ({ status: "rejected", reason })
++    ));
++    // Observe siblings immediately, but retain the original error priority and
++    // fail promptly when the earliest relevant read fails, even if others hang.
++    const poolValues = [];
++    for (const pending of poolReads) {
++      const read = await pending;
++      if (read.status === "rejected") throw read.reason;
++      poolValues.push(read.value);
++    }
++    const [poolData, rateRes, oraclePrice] = poolValues;
      const buyPrice = cBN(await this.price.getBuyPrice()).times(1e18).div(rateRes).toString();
      const sellPrice = cBN(await this.price.getSellPrice()).times(1e18).div(rateRes).toString();
      const averagePrice = cBN(buyPrice).add(cBN(sellPrice)).div(2).toString();
@@ -128,7 +153,7 @@ index d1b4286..9630b7e 100644
      const poolInfo = {
        ...this.config,
        ...poolData,
-@@ -11935,11 +11950,22 @@ var Pool = class {
+@@ -11935,11 +11966,22 @@ var Pool = class {
        closeFeeRatio: cBN(poolData.withdrawFeeRatio ?? 0).div(1e9).toNumber(),
        repayFeeRatio: cBN(poolData.repayFeeRatio ?? 0).div(1e9).toNumber()
      };
@@ -152,7 +177,7 @@ index d1b4286..9630b7e 100644
  // src/configs/layerzero.ts
  var LZ_ENDPOINT_ADDRESS = "0x1a44076050125825900e736c501f859c50fE728c";
  var EID_ETHEREUM = 30101;
-@@ -12110,7 +12136,8 @@ function getBridgeQuote(request) {
+@@ -12110,7 +12152,8 @@ function getBridgeQuote(request) {
      token,
      amount,
      recipient,
@@ -162,7 +187,7 @@ index d1b4286..9630b7e 100644
    } = request;
    assertSupportedChains(sourceChainId, destChainId);
    if (amount <= 0n) {
-@@ -12121,7 +12148,8 @@ function getBridgeQuote(request) {
+@@ -12121,7 +12164,8 @@ function getBridgeQuote(request) {
    }
    const { address: oftAddress, tokenKey } = resolveOftAddress(sourceChainId, token);
    const dstEid = getEidByChainId(destChainId);
@@ -172,7 +197,7 @@ index d1b4286..9630b7e 100644
    if (!rpcUrl) {
      throw new Error("Source RPC URL is required.");
    }
-@@ -12130,9 +12158,9 @@ function getBridgeQuote(request) {
+@@ -12130,9 +12174,9 @@ function getBridgeQuote(request) {
        id: sourceChainId,
        name: sourceChainId === 8453 ? "Base" : "Ethereum",
        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
@@ -184,7 +209,7 @@ index d1b4286..9630b7e 100644
    });
    const sendParam = {
      dstEid,
-@@ -12161,7 +12189,8 @@ async function buildBridgeTx(request) {
+@@ -12161,7 +12205,8 @@ async function buildBridgeTx(request) {
      amount,
      recipient,
      refundAddress,
@@ -194,7 +219,7 @@ index d1b4286..9630b7e 100644
    } = request;
    assertSupportedChains(sourceChainId, destChainId);
    if (amount <= 0n) {
-@@ -16566,7 +16595,7 @@ async function withdrawFxSave(request) {
+@@ -16566,7 +16611,7 @@ async function withdrawFxSave(request) {
  // src/core/index.ts
  var FxSdk = class {
    constructor(config) {
@@ -203,7 +228,7 @@ index d1b4286..9630b7e 100644
    }
    /**
     * Gets all positions for a user in a given market and position type.
-@@ -16660,10 +16689,10 @@ var FxSdk = class {
+@@ -16660,10 +16705,10 @@ var FxSdk = class {
        poolInfo,
        userAddress
      });
@@ -216,7 +241,7 @@ index d1b4286..9630b7e 100644
    }
    /**
     * Reduces a position or closes it fully.
-@@ -16731,10 +16760,10 @@ var FxSdk = class {
+@@ -16731,10 +16776,10 @@ var FxSdk = class {
        poolInfo,
        userAddress
      });
@@ -229,7 +254,7 @@ index d1b4286..9630b7e 100644
    }
    /**
     * Adjusts the leverage of an existing position.
-@@ -16783,7 +16812,7 @@ var FxSdk = class {
+@@ -16783,7 +16828,7 @@ var FxSdk = class {
        poolInfo,
        userAddress
      });
@@ -238,7 +263,7 @@ index d1b4286..9630b7e 100644
    }
    /**
     * Deposits collateral into a position and mints fxUSD. Long positions only.
-@@ -16843,10 +16872,10 @@ var FxSdk = class {
+@@ -16843,10 +16888,10 @@ var FxSdk = class {
        poolInfo,
        userAddress
      });
@@ -251,7 +276,7 @@ index d1b4286..9630b7e 100644
    }
    /**
     * Repays debt and withdraws collateral from a position. Long positions only.
-@@ -16906,10 +16935,10 @@ var FxSdk = class {
+@@ -16906,10 +16951,10 @@ var FxSdk = class {
        poolInfo,
        userAddress
      });
@@ -265,7 +290,7 @@ index d1b4286..9630b7e 100644
    /**
     * Gets a fee quote for bridging tokens between Base and Ethereum via LayerZero V2 OFT.
 diff --git a/dist/index.d.cts b/dist/index.d.cts
-index 2a62888..1500a82 100644
+index 2a628882c348c5a6e3d20e64a3b82a946e226986..1500a82b0c27e6ea213d357eb2911cc766a8459a 100644
 --- a/dist/index.d.cts
 +++ b/dist/index.d.cts
 @@ -62,6 +62,10 @@ interface BridgeQuoteRequest {
@@ -296,7 +321,7 @@ index 2a62888..1500a82 100644
  export { type AdjustPositionLeverageRequest, BRIDGE_OFT_BY_TOKEN, type BridgeQuoteRequest, type BridgeQuoteResult, type BridgeTokenId, type BridgeTxPayload, type BuildBridgeTxRequest, type BuildBridgeTxResult, CHAIN_ID_BASE, CHAIN_ID_ETHEREUM, type ConvertData, DEFAULT_RPC_BY_CHAIN, type DepositAndMintRequest, EID_BASE, EID_ETHEREUM, type FxSaveClaimPreviewReceive, type FxSaveDepositRequest, type FxSaveDepositResult, type FxSaveTokenIn, type FxSaveTx, type FxSaveWithdrawRequest, type FxSaveWithdrawResult, FxSdk, type FxSdkConfig, type GetFxSaveBalanceRequest, type GetFxSaveBalanceResult, type GetFxSaveClaimableRequest, type GetFxSaveClaimableResult, type GetFxSaveRedeemStatusRequest, type GetFxSaveRedeemStatusResult, type GetRedeemTxRequest, type GetRedeemTxResult, type IncreasePositionRequest, LZ_ENDPOINT_ADDRESS, type Market, type PoolConfig, type PoolInfo, PoolName, type PositionInfo, type PositionRequest, type PositionType, type PriceOracle, type ReducePositionRequest, type RepayAndWithdrawRequest, SUPPORTED_BRIDGE_CHAIN_IDS, type SupportedBridgeChainId, type TokenSymbol, getEidByChainId, tokens };
 +import type { Transport } from 'viem';
 diff --git a/dist/index.d.ts b/dist/index.d.ts
-index 2a62888..eb20e20 100644
+index 2a628882c348c5a6e3d20e64a3b82a946e226986..eb20e20251cf7e60d057193a12978c10a9953da7 100644
 --- a/dist/index.d.ts
 +++ b/dist/index.d.ts
 @@ -62,6 +62,10 @@ interface BridgeQuoteRequest {
@@ -327,7 +352,7 @@ index 2a62888..eb20e20 100644
  export { type AdjustPositionLeverageRequest, BRIDGE_OFT_BY_TOKEN, type BridgeQuoteRequest, type BridgeQuoteResult, type BridgeTokenId, type BridgeTxPayload, type BuildBridgeTxRequest, type BuildBridgeTxResult, CHAIN_ID_BASE, CHAIN_ID_ETHEREUM, type ConvertData, DEFAULT_RPC_BY_CHAIN, type DepositAndMintRequest, EID_BASE, EID_ETHEREUM, type FxSaveClaimPreviewReceive, type FxSaveDepositRequest, type FxSaveDepositResult, type FxSaveTokenIn, type FxSaveTx, type FxSaveWithdrawRequest, type FxSaveWithdrawResult, FxSdk, type FxSdkConfig, type GetFxSaveBalanceRequest, type GetFxSaveBalanceResult, type GetFxSaveClaimableRequest, type GetFxSaveClaimableResult, type GetFxSaveRedeemStatusRequest, type GetFxSaveRedeemStatusResult, type GetRedeemTxRequest, type GetRedeemTxResult, type IncreasePositionRequest, LZ_ENDPOINT_ADDRESS, type Market, type PoolConfig, type PoolInfo, PoolName, type PositionInfo, type PositionRequest, type PositionType, type PriceOracle, type ReducePositionRequest, type RepayAndWithdrawRequest, SUPPORTED_BRIDGE_CHAIN_IDS, type SupportedBridgeChainId, type TokenSymbol, getEidByChainId, tokens };
 +import type { Transport } from 'viem';
 diff --git a/dist/index.js b/dist/index.js
-index 0c7b005..bfe2a8e 100644
+index 0c7b00528fe5ff3ca17ae8292bf407bef984dcbe..be3af4c417962c7174c2c21521aa144c1e9aebe3 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -8,6 +8,12 @@ import axios from 'axios';
@@ -448,7 +473,32 @@ index 0c7b005..bfe2a8e 100644
          supplyFeeRatio: poolFeeRatioRes[0],
          withdrawFeeRatio: poolFeeRatioRes[1],
          repayFeeRatio: fxMintPoolFeeRatioRes[3]
-@@ -11913,7 +11929,6 @@ var Pool = class {
+@@ -11907,13 +11923,28 @@ var Pool = class {
+    */
+   async getPoolInfo() {
+     const { isShort } = this.config;
+-    const poolData = await this.getPoolData();
+-    const rateRes = await this.price.getRateRes();
+-    const oraclePrice = await this.price.getOraclePrice();
++    // Only the view reads may share an automatic multicall. Converter quotes
++    // are nonpayable and must keep their original, separate execution contexts.
++    const poolReads = [
++      this.getPoolData(),
++      this.price.getRateRes(),
++      this.price.getOraclePrice()
++    ].map((read) => read.then(
++      (value) => ({ status: "fulfilled", value }),
++      (reason) => ({ status: "rejected", reason })
++    ));
++    // Observe siblings immediately, but retain the original error priority and
++    // fail promptly when the earliest relevant read fails, even if others hang.
++    const poolValues = [];
++    for (const pending of poolReads) {
++      const read = await pending;
++      if (read.status === "rejected") throw read.reason;
++      poolValues.push(read.value);
++    }
++    const [poolData, rateRes, oraclePrice] = poolValues;
      const buyPrice = cBN(await this.price.getBuyPrice()).times(1e18).div(rateRes).toString();
      const sellPrice = cBN(await this.price.getSellPrice()).times(1e18).div(rateRes).toString();
      const averagePrice = cBN(buyPrice).add(cBN(sellPrice)).div(2).toString();
@@ -456,7 +506,7 @@ index 0c7b005..bfe2a8e 100644
      const poolInfo = {
        ...this.config,
        ...poolData,
-@@ -11928,11 +11943,22 @@ var Pool = class {
+@@ -11928,11 +11959,22 @@ var Pool = class {
        closeFeeRatio: cBN(poolData.withdrawFeeRatio ?? 0).div(1e9).toNumber(),
        repayFeeRatio: cBN(poolData.repayFeeRatio ?? 0).div(1e9).toNumber()
      };
@@ -480,7 +530,7 @@ index 0c7b005..bfe2a8e 100644
  // src/configs/layerzero.ts
  var LZ_ENDPOINT_ADDRESS = "0x1a44076050125825900e736c501f859c50fE728c";
  var EID_ETHEREUM = 30101;
-@@ -12103,7 +12129,8 @@ function getBridgeQuote(request) {
+@@ -12103,7 +12145,8 @@ function getBridgeQuote(request) {
      token,
      amount,
      recipient,
@@ -490,7 +540,7 @@ index 0c7b005..bfe2a8e 100644
    } = request;
    assertSupportedChains(sourceChainId, destChainId);
    if (amount <= 0n) {
-@@ -12114,7 +12141,8 @@ function getBridgeQuote(request) {
+@@ -12114,7 +12157,8 @@ function getBridgeQuote(request) {
    }
    const { address: oftAddress, tokenKey } = resolveOftAddress(sourceChainId, token);
    const dstEid = getEidByChainId(destChainId);
@@ -500,7 +550,7 @@ index 0c7b005..bfe2a8e 100644
    if (!rpcUrl) {
      throw new Error("Source RPC URL is required.");
    }
-@@ -12123,9 +12151,9 @@ function getBridgeQuote(request) {
+@@ -12123,9 +12167,9 @@ function getBridgeQuote(request) {
        id: sourceChainId,
        name: sourceChainId === 8453 ? "Base" : "Ethereum",
        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
@@ -512,7 +562,7 @@ index 0c7b005..bfe2a8e 100644
    });
    const sendParam = {
      dstEid,
-@@ -12154,7 +12182,8 @@ async function buildBridgeTx(request) {
+@@ -12154,7 +12198,8 @@ async function buildBridgeTx(request) {
      amount,
      recipient,
      refundAddress,
@@ -522,7 +572,7 @@ index 0c7b005..bfe2a8e 100644
    } = request;
    assertSupportedChains(sourceChainId, destChainId);
    if (amount <= 0n) {
-@@ -16559,7 +16588,7 @@ async function withdrawFxSave(request) {
+@@ -16559,7 +16604,7 @@ async function withdrawFxSave(request) {
  // src/core/index.ts
  var FxSdk = class {
    constructor(config) {
@@ -531,7 +581,7 @@ index 0c7b005..bfe2a8e 100644
    }
    /**
     * Gets all positions for a user in a given market and position type.
-@@ -16653,10 +16682,10 @@ var FxSdk = class {
+@@ -16653,10 +16698,10 @@ var FxSdk = class {
        poolInfo,
        userAddress
      });
@@ -544,7 +594,7 @@ index 0c7b005..bfe2a8e 100644
    }
    /**
     * Reduces a position or closes it fully.
-@@ -16724,10 +16753,10 @@ var FxSdk = class {
+@@ -16724,10 +16769,10 @@ var FxSdk = class {
        poolInfo,
        userAddress
      });
@@ -557,7 +607,7 @@ index 0c7b005..bfe2a8e 100644
    }
    /**
     * Adjusts the leverage of an existing position.
-@@ -16776,7 +16805,7 @@ var FxSdk = class {
+@@ -16776,7 +16821,7 @@ var FxSdk = class {
        poolInfo,
        userAddress
      });
@@ -566,7 +616,7 @@ index 0c7b005..bfe2a8e 100644
    }
    /**
     * Deposits collateral into a position and mints fxUSD. Long positions only.
-@@ -16836,10 +16865,10 @@ var FxSdk = class {
+@@ -16836,10 +16881,10 @@ var FxSdk = class {
        poolInfo,
        userAddress
      });
@@ -579,7 +629,7 @@ index 0c7b005..bfe2a8e 100644
    }
    /**
     * Repays debt and withdraws collateral from a position. Long positions only.
-@@ -16899,10 +16928,10 @@ var FxSdk = class {
+@@ -16899,10 +16944,10 @@ var FxSdk = class {
        poolInfo,
        userAddress
      });
