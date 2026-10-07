@@ -20,8 +20,17 @@ Useful focused checks:
 | `pnpm test:e2e` | Playwright against the static app build |
 | `pnpm test:landing` | Standalone landing static contracts |
 | `pnpm test:landing:browser` | Landing behavior, theme, viewport, accessibility, and network checks |
-| `pnpm typecheck` | App and fork-harness TypeScript |
+| `pnpm typecheck` | App, fork-harness, and complete browser-suite TypeScript |
+| `pnpm typecheck:e2e` | Strict browser specs, React harness entries, fixtures, capture scripts, and Playwright configs |
 | `pnpm audit --prod --audit-level=high` | Runtime dependency audit |
+
+The browser typecheck overrides the app's `e2e` exclusion, includes both `.ts`
+and `.tsx`, and inherits Next's CSS/image declarations. Its coverage contract
+compares TypeScript's effective input set with every browser TypeScript file
+and Playwright config, so a future include/exclude change cannot silently skip
+those files. It uses no emit or incremental output. The existing `pnpm verify`
+and Client CI typecheck step include this gate; browser execution remains a
+separate check.
 
 Browser checks have separate gates. `pnpm test:e2e` runs the production-export
 routes and interactions. Borrow eligibility, overlay lifecycle, and the
