@@ -13,11 +13,15 @@ export function amountBlocker(
   decimals: number,
   symbol: string,
   balance?: BlockerBalance,
-  options: { emptyLabel?: string; allowAll?: boolean } = {},
+  options: { emptyLabel?: string; allowAll?: boolean; optional?: boolean } = {},
 ): string | null {
+  const value = amount.trim();
+  // An omitted optional leg spends nothing, including with an empty wallet.
+  // Validate explicit zero first so malformed or over-precision inputs cannot
+  // bypass the ordinary amount and balance checks below.
+  if (options.optional && (!value || !decimalInputError(value, decimals, { allowZero: true }) && !/[1-9]/.test(value))) return null;
   const settled = balance?.status === 'ready' && typeof balance.amount === 'string' ? balance.amount : null;
   if (settled !== null && !/[1-9]/.test(settled)) return options.emptyLabel ?? `No ${symbol} available`;
-  const value = amount.trim();
   if (!value) return 'Enter an amount';
   if (options.allowAll && value.toLowerCase() === 'all') return null;
   if (decimalInputError(value, decimals)) return 'Enter a valid amount';
