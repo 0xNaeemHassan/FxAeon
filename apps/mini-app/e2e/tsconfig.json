@@ -2,7 +2,15 @@
   "extends": "../tsconfig.json",
   "compilerOptions": {
     "types": ["node", "@playwright/test"],
-    "noEmit": true
+    "noEmit": true,
+    "incremental": false
   },
-  "include": ["**/*.ts", "../playwright.config.ts", "../src/lib/fx/**/*.ts"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    "../playwright*.config.ts",
+    "../src/lib/fx/**/*.ts",
+    "../next-env.d.ts"
+  ],
+  "exclude": []
 }
