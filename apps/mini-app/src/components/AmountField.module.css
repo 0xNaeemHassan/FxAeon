@@ -87,6 +87,13 @@
   .field[data-compact] .labelRow { min-height: 28px; }
   .field[data-compact] .entryRow, .field[data-compact] .entryFit > input { min-height: 48px; }
 }
+/* Short viewports (a Telegram Mini App under its own header) give back a few
+   more pixels so the ticket's leverage slider stays above the riding action. */
+@media (max-width: 640px) and (max-height: 720px) {
+  .field[data-compact] { --amount-max-size: 32px; }
+  .field[data-compact] .surface:global(.amount-control) { padding-block: 8px; }
+  .field[data-compact] .entryRow, .field[data-compact] .entryFit > input { min-height: 44px; }
+}
 
 .balance { margin-left: auto; text-align: right; color: var(--mut); font-size: inherit; line-height: 1.5; }
 .balance strong { color: var(--text); font-weight: 600; }

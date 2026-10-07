@@ -81,7 +81,11 @@ async function pageReady(page: Page, route: string, walletConnected: boolean): P
 function watchPage(page: Page, viewId: string): void {
   page.on('pageerror', (error) => pageErrors.push({ view: viewId, message: error.message, stack: error.stack }));
   page.on('console', (message) => {
-    if (message.type() === 'error') consoleErrors.push({ view: viewId, message: message.text() });
+    if (message.type() !== 'error') return;
+    const url = message.location().url;
+    // The browser's own favicon probe is not part of any captured view.
+    if (/\/favicon\.ico(?:$|\?)/.test(url)) return;
+    consoleErrors.push({ view: viewId, message: url ? `${message.text()} (${url})` : message.text() });
   });
   page.on('requestfailed', (request) => {
     externalRequestFailures.push({ view: viewId, url: request.url(), error: request.failure()?.errorText ?? 'unknown' });
