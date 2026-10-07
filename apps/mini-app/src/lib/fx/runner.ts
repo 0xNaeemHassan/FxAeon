@@ -564,7 +564,9 @@ export async function runTransactionRoute(params: {
             const reviewed = selectedGasTierQuote(feeSelection.snapshot, feeSelection.tier, feeSelection.snapshot.fetchedAt);
             let fee = reviewed;
             if (feeSelection.snapshot.validUntil <= Date.now()) {
-              const fresh = await (params.refreshFeeQuotes ?? ((chainId) => fetchGasTierQuotes(chainId, { forceRefresh: true })))(route.chainId);
+              // Re-price from the reviewed source: the oracle and the RPC compute tips
+              // differently, and a source flip alone must not read as a fee increase.
+              const fresh = await (params.refreshFeeQuotes ?? ((chainId) => fetchGasTierQuotes(chainId, { forceRefresh: true, preferSource: feeSelection.snapshot.source })))(route.chainId);
               if (fresh.chainId !== route.chainId) throw new Error("Refreshed network fee belongs to a different chain.");
               fee = selectedGasTierQuote(fresh, feeSelection.tier);
               if (fee.gasPriceWei > reviewed.maxFeePerGas || fee.maxPriorityFeePerGas > reviewed.maxPriorityFeePerGas) {

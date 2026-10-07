@@ -33,6 +33,9 @@ export interface GasFeeSelection {
 
 export const GAS_TIER_QUOTE_TTL_MS = 30_000;
 const GAS_RPC_TIMEOUT_MS = 8_000;
+// Give the optional same-origin oracle a short head start, then overlap the
+// independent chain-native read instead of putting its full timeout first.
+const GAS_RPC_HEDGE_DELAY_MS = 200;
 const MAX_FEE_PER_GAS_WEI = 1_000_000_000_000_000_000n;
 const GAS_TIERS: readonly GasTier[] = ['standard', 'fast', 'rapid'];
 const gasQuoteCache = new Map<FxChainId, GasTierQuotes>();
@@ -156,7 +159,13 @@ async function fetchRpcTierQuotes(chainId: FxChainId, now: number): Promise<GasT
  * reviewed Etherscan oracle; Base always prices itself through its own RPC. */
 export async function fetchGasTierQuotes(
   chainId: FxChainId,
-  options: { now?: () => number; forceRefresh?: boolean; fetchSnapshot?: () => Promise<GasTierQuotes> } = {},
+  options: {
+    now?: () => number;
+    forceRefresh?: boolean;
+    /** Re-price from the source a reviewed fee came from; the two sources compute tips differently. */
+    preferSource?: GasTierQuotes['source'];
+    fetchSnapshot?: () => Promise<GasTierQuotes>;
+  } = {},
 ): Promise<GasTierQuotes> {
   assertSupportedChainId(chainId);
   const now = options.now ?? Date.now;
@@ -164,11 +173,12 @@ export async function fetchGasTierQuotes(
   if (!Number.isSafeInteger(requestedAt) || requestedAt < 0) throw new Error('network fee quote clock is invalid');
   const cached = gasQuoteCache.get(chainId);
   if (!options.forceRefresh && cached && cached.validUntil > requestedAt) return cached;
-  const pending = gasQuoteRequests.get(chainId);
+  // A pinned refresh cannot join a shared race that may answer from the other source.
+  const pending = options.preferSource ? undefined : gasQuoteRequests.get(chainId);
   if (pending) return pending;
   const generation = gasQuoteCacheGeneration;
-  const request = options.fetchSnapshot ? options.fetchSnapshot() : fetchFreshGasTierQuotes(chainId, now);
-  gasQuoteRequests.set(chainId, request);
+  const request = options.fetchSnapshot ? options.fetchSnapshot() : fetchFreshGasTierQuotes(chainId, now, options.preferSource);
+  if (!options.preferSource) gasQuoteRequests.set(chainId, request);
   try {
     const snapshot = await request;
     if (generation === gasQuoteCacheGeneration) gasQuoteCache.set(chainId, snapshot);
@@ -178,25 +188,70 @@ export async function fetchGasTierQuotes(
   }
 }
 
-async function fetchFreshGasTierQuotes(chainId: FxChainId, now: () => number): Promise<GasTierQuotes> {
-  if (chainId === 1 && !isLocalForkMode()) {
+async function fetchOracleTierQuotes(chainId: FxChainId, now: () => number): Promise<GasTierQuotes> {
+  const snapshot = await fetchEthereumGasFallback({ now });
+  if (!snapshot.stale && snapshot.baseFeePerGasWei && snapshot.tiers) {
+    const baseFee = BigInt(snapshot.baseFeePerGasWei);
+    const prices = {
+      standard: BigInt(snapshot.tiers.standard),
+      fast: BigInt(snapshot.tiers.fast),
+      rapid: BigInt(snapshot.tiers.rapid),
+    } satisfies Record<GasTier, bigint>;
+    return buildGasTierQuotesFromPrices(chainId, baseFee, prices, 'etherscan', snapshot.fetchedAt, now());
+  }
+  throw new Error('network fee oracle is unavailable or stale');
+}
+
+async function fetchFreshGasTierQuotes(chainId: FxChainId, now: () => number, preferSource?: GasTierQuotes['source']): Promise<GasTierQuotes> {
+  if (chainId !== 1 || isLocalForkMode() || preferSource === 'rpc') return fetchRpcTierQuotes(chainId, now());
+  if (preferSource === 'etherscan') {
+    // Re-price from the reviewed oracle without a race; the chain stays
+    // authoritative only when the oracle cannot answer.
     try {
-      const snapshot = await fetchEthereumGasFallback({ now });
-      if (!snapshot.stale && snapshot.baseFeePerGasWei && snapshot.tiers) {
-        const baseFee = BigInt(snapshot.baseFeePerGasWei);
-        const prices = {
-          standard: BigInt(snapshot.tiers.standard),
-          fast: BigInt(snapshot.tiers.fast),
-          rapid: BigInt(snapshot.tiers.rapid),
-        } satisfies Record<GasTier, bigint>;
-        return buildGasTierQuotesFromPrices(chainId, baseFee, prices, 'etherscan', snapshot.fetchedAt, now());
-      }
+      return await fetchOracleTierQuotes(chainId, now);
     } catch {
-      // The chain-native source remains authoritative when the optional oracle
-      // is unavailable, stale, or cannot supply distinct bounded tiers.
+      return fetchRpcTierQuotes(chainId, now());
     }
   }
-  return fetchRpcTierQuotes(chainId, now());
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let rpcStarted = false;
+  let startRpc!: () => void;
+  const rpc = new Promise<GasTierQuotes>((resolve, reject) => {
+    startRpc = () => {
+      if (rpcStarted) return;
+      rpcStarted = true;
+      clearTimeout(timer);
+      void fetchRpcTierQuotes(chainId, now()).then(resolve, reject);
+    };
+    timer = setTimeout(startRpc, GAS_RPC_HEDGE_DELAY_MS);
+  });
+  const oracle = fetchOracleTierQuotes(chainId, now).catch((cause: unknown) => {
+    // Invalid or failed oracle data should not even wait for the hedge.
+    startRpc();
+    throw cause;
+  });
+  try {
+    // Both paths validate their complete snapshot before fulfillment. A fast
+    // failure cannot win, and a late result cannot replace the reviewed fee.
+    // Use ordinary promises to support the app's older browser targets.
+    return await new Promise<GasTierQuotes>((resolve, reject) => {
+      let failures = 0;
+      let rpcError: unknown;
+      const rejectIfBothFailed = () => {
+        failures += 1;
+        // Keep the useful RPC failure used by the previous fallback path.
+        if (failures === 2) reject(rpcError);
+      };
+      void oracle.then(resolve, rejectIfBothFailed);
+      void rpc.then(resolve, (cause: unknown) => {
+        rpcError = cause;
+        rejectIfBothFailed();
+      });
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function validateGasTierQuote(quote: GasTierQuote, now = Date.now()): GasTierQuote {
