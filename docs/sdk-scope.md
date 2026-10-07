@@ -4,7 +4,7 @@ FxAeon exposes a deliberately narrow, reviewable surface from the official f(x) 
 
 - `AladdinDAO/fx-sdk-skill` — commit `e2c4a6085950a40f238bda1c9159305f6c8acf1f`
 - `AladdinDAO/fx-sdk` — commit `53c0b9805a169e75ad375c92c241e1292b66405f`
-- Installed package `@aladdindao/fx-sdk@1.0.5`, plus the reviewed short-pool correction, diagnostic-log removal, exact debt-ratio packing fix, and chain-bound shared RPC transport support in `patches/@aladdindao__fx-sdk@1.0.5.patch`
+- Installed package `@aladdindao/fx-sdk@1.0.5`, plus the reviewed short-pool correction, diagnostic-log removal, exact debt-ratio packing fix, chain-bound shared RPC transport support, and independent pool-view read scheduling in `patches/@aladdindao__fx-sdk@1.0.5.patch`
 
 The debt-ratio packing fix is a local correction, not a claim that the pinned
 upstream commit contains it. The SDK combines two 60-bit integer limits into
@@ -21,6 +21,45 @@ maximum from bits 60–119 and enforce an inclusive range:
 and [60-bit decoder](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/common/codec/WordCodec.sol#L31-L41).
 Zero and equal limits remain representable; this patch does not change the
 contracts' separate full-close handling.
+
+## Review preparation timing
+
+The local SDK patch replaces the unconditional 500 ms sleep after each chunk
+of `batchedMulticall` with pacing: a chunk starts only once 500 ms have passed
+since the previous chunk ended, including a chunk from an earlier call. A
+quote search, which calls `batchedMulticall` up to ten times in a row, keeps
+the original spacing between every request; a one-off read no longer sleeps
+after its last chunk. It retains the 50-call chunk size, result order, and
+failure placeholders. This is a local scheduling correction, not a change to
+quote arithmetic, calldata, nonce order, slippage, or the locked method
+surface. Both installed ESM and CommonJS bundles have deterministic timing
+regression coverage.
+
+Embedded-wallet fee preparation gives the optional same-origin oracle a
+200 ms head start, then tries the already-supported chain-native fee history
+concurrently. Only a fully validated snapshot can win; a late source cannot
+replace the reviewed snapshot. When an approval outlives the quote, the
+signing-time refresh re-prices from the reviewed snapshot's own source, since
+the oracle and the RPC compute tips differently. Existing quote expiry, fee ceilings, chain
+verification, and final transaction simulations remain unchanged. Base uses
+only its own RPC.
+
+## Pool read scheduling
+
+The local patch starts pool data, rate, and oracle view reads together, then
+consumes their outcomes in the original order. Every rejection is observed
+immediately; an early pool failure still returns without waiting for slower
+siblings. Already-started reads finish under the existing transport limits.
+The converter's nonpayable buy and sell simulations remain sequential, after
+the views, and retain their separate execution contexts.
+
+The installed SDK's viem 2.43.1 can combine the rate and oracle views into one
+automatic multicall, alongside the explicit pool-data multicall. No read is
+cached or removed, and no new atomic-block guarantee is implied: calls use
+`latest`, so changing chain state can produce different values than a serial
+schedule. Review validation and final transaction simulation remain required.
+See the [controlled benchmark](performance/sdk-pool-read-waterfall.md) for
+mock conditions and limitations; these are not live-provider latency claims.
 
 ## Protocol fee review data
 
