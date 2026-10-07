@@ -3,6 +3,17 @@ import { test, expect } from '../fixtures/test';
 const legacyFragments = ['overview', 'getting-started', 'access', 'wallets', 'trade', 'positions', 'earn', 'borrow', 'move', 'fees', 'history', 'recovery', 'privacy', 'troubleshooting'];
 
 test.describe('documentation experience', () => {
+  test('keeps the privacy disclosure reachable through the rendered product guide', async ({ page }) => {
+    await page.goto('/docs#privacy');
+    const link = page.getByRole('link', { name: 'How FxAeon handles your data', exact: true });
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute('href', '/privacy.html');
+    await link.click();
+    await expect(page).toHaveURL(/\/privacy\.html$/);
+    await expect(page.locator('body')).toContainText('browser storage');
+    await expect(page.locator('body')).toContainText('public blockchains are publicly visible');
+  });
+
   test('keeps legacy guide fragments reachable below the compact mobile navigation', async ({ page }) => {
     test.setTimeout(120_000);
     await page.setViewportSize({ width: 390, height: 500 });
