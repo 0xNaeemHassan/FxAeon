@@ -1,4 +1,4 @@
-import { LIVE_QUOTE_MAX_AGE_MS, type LiveMarketStatus, type LiveQuote } from './liveMarket';
+import { LIVE_QUOTE_MAX_AGE_MS, isLiveQuoteFresh, type LiveMarketStatus, type LiveQuote } from './liveMarket';
 import type { MarketSymbol } from './marketData';
 
 export type LiveMarketSnapshot = { quote: LiveQuote | null; status: LiveMarketStatus; now: number };
@@ -11,15 +11,24 @@ let expiryTimer: ReturnType<typeof setTimeout> | null = null;
 let lastPublished = 0;
 
 function notify(): void { listeners.forEach((listener) => listener()); }
+function updateSnapshot(market: MarketSymbol, quote: LiveQuote | null, now: number): boolean {
+  const previous = markets[market];
+  // useSyncExternalStore compares snapshot identity. A BTC tick must not
+  // rerender the ETH chart (and vice versa) merely to advance its clock.
+  // Freshness transitions still publish even when the quote is unchanged.
+  if (previous.quote === quote && isLiveQuoteFresh(previous.quote, previous.now) === isLiveQuoteFresh(quote, now)) return false;
+  markets[market] = { quote, status: previous.status, now };
+  return true;
+}
 function publish(): void {
   publishTimer = null;
   const now = Date.now();
+  let changed = false;
   (['ETH', 'BTC'] as const).forEach((market) => {
-    const quote = latest[market] ?? null;
-    markets[market] = { quote, status: markets[market].status, now };
+    if (updateSnapshot(market, latest[market] ?? null, now)) changed = true;
   });
   lastPublished = now;
-  notify();
+  if (changed) notify();
 }
 function schedulePublish(): void {
   if (publishTimer !== null) return;
@@ -28,16 +37,25 @@ function schedulePublish(): void {
 }
 function scheduleExpiry(): void {
   if (expiryTimer !== null) clearTimeout(expiryTimer);
+  expiryTimer = null;
+  const now = Date.now();
   const expiry = Object.values(latest).filter(Boolean).reduce<number | null>((min, quote) => {
     const next = quote!.receivedAt + LIVE_QUOTE_MAX_AGE_MS;
+    // An already expired instrument must not prevent the other instrument's
+    // later expiry from being scheduled, or create a timer on every tick.
+    if (next < now) return min;
     return min === null ? next : Math.min(min, next);
   }, null);
   if (expiry === null) return;
   expiryTimer = setTimeout(() => {
     expiryTimer = null;
     const now = Date.now();
-    (['ETH', 'BTC'] as const).forEach((market) => { markets[market] = { ...markets[market], now }; });
-    notify();
+    let changed = false;
+    (['ETH', 'BTC'] as const).forEach((market) => {
+      if (updateSnapshot(market, markets[market].quote, now)) changed = true;
+    });
+    if (changed) notify();
+    scheduleExpiry();
   }, Math.max(0, expiry - Date.now() + 1));
 }
 export const liveMarketStore = {
