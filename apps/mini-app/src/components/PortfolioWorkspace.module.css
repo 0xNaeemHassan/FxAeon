@@ -129,7 +129,8 @@
 @media (min-width: 1000px) {
   .dashboard { grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); gap: 28px; align-items: start; }
   .primary, .secondary { gap: 20px; }
-  .secondary { padding-top: 2px; }
+  /* The short side column (markets, borrowing) stays in view beside the long ledger. */
+  .secondary { position: sticky; top: 16px; padding-top: 2px; }
 }
 /* Beyond phone width the shortcuts keep a phone's rhythm under the figure
  * instead of spreading across the column. */
