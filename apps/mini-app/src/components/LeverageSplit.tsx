@@ -7,11 +7,11 @@ import styles from './LeverageSplit.module.css';
  * Debt as a share of collateral value, before fees. A displayed L× long has
  * collateral/equity = L, so debt/collateral = (L − 1) / L. A displayed L×
  * short has debt/equity = L, so debt/collateral = L / (L + 1). The remainder
- * is the trader's share. Rows show 2×, 3×, and the pool's current maximum.
+ * is the trader's share. Rows show 2×, 3×, and the pool's maximum when known.
  * These are educational examples, not position valuations or SDK inputs.
  * The bars fill once on screen.
  */
-export function LeverageSplit({ max, side, debtLabel }: { max: number; side: 'long' | 'short'; debtLabel: string }) {
+export function LeverageSplit({ max, side, debtLabel }: { max?: number; side: 'long' | 'short'; debtLabel: string }) {
   const ref = useRef<HTMLOListElement>(null);
   useEffect(() => {
     const node = ref.current;
@@ -25,7 +25,7 @@ export function LeverageSplit({ max, side, debtLabel }: { max: number; side: 'lo
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
-  const poolMax = Number.isFinite(max) && max > 1 ? Math.round(max * 10) / 10 : null;
+  const poolMax = max !== undefined && Number.isFinite(max) && max > 1 ? Math.round(max * 10) / 10 : null;
   const rows = [2, 3, ...(poolMax !== null && poolMax > 3 ? [poolMax] : [])];
   return <ol ref={ref} className={styles.rows} aria-label={`Share of a position that is ${debtLabel}, by leverage, before fees`}>
     {rows.map((leverage) => {

@@ -1,6 +1,8 @@
 'use client';
 
 import { ArrowLeftRight, BadgeCheck, CircleDollarSign, Clock3, Coins, Gauge, Layers2, PiggyBank, Route, ShieldAlert, Signature, TrendingUp, Wallet } from 'lucide-react';
+import { useState } from 'react';
+import { Segmented } from '@/components/ProtocolForm';
 import { useLiveMarketQuote } from '@/components/PriceProvider';
 import { ValueOrSkeleton } from '@/components/MissingValue';
 import { formatUsdPrice } from '@/lib/prices';
@@ -17,6 +19,21 @@ const FX_BORROWING_DOCS = 'https://fxprotocol.gitbook.io/fx-docs/f-x-protocol-me
 const rebalancingNote = <Callout icon={ShieldAlert} title="A brake before liquidation" link={{ label: 'How rebalancing works', href: FX_REBALANCING_DOCS }}>
   Automatic rebalancing can reduce leverage at protocol thresholds. Liquidation remains possible, so keep room between your position and the limits.
 </Callout>;
+
+/** Local examples only: comparing directions never edits the trade ticket. */
+function TradeLeverageExample({ market, side, max }: { market: MarketSymbol; side: 'long' | 'short'; max: number }) {
+  const [exampleSide, setExampleSide] = useState(side);
+  return <>
+    <div className={styles.exampleSwitch}>
+      <Segmented value={exampleSide} onChange={setExampleSide} ariaLabel="Leverage example" options={[{ value: 'long', label: 'Long' }, { value: 'short', label: 'Short' }]} />
+    </div>
+    <p className={styles.lede}>{exampleSide === 'long'
+      ? 'On f(x) Protocol, a long’s leverage is fxUSD minted against its collateral. Before fees, a 3× long is two thirds minted fxUSD and one third yours.'
+      : `A short deposits fxUSD and borrows ${market === 'ETH' ? 'wstETH' : 'WBTC'} from f(x) Protocol’s long-side reserve. Before fees, a 3× short is three quarters borrowed and one quarter yours.`}</p>
+    {/* Only the trade side's limit is available. Keep the other side illustrative. */}
+    <LeverageSplit max={exampleSide === side ? max : undefined} side={exampleSide} debtLabel={exampleSide === 'long' ? 'minted fxUSD' : `borrowed ${market === 'ETH' ? 'wstETH' : 'WBTC'}`} />
+  </>;
+}
 
 /** Below the Trade ticket: the market's live facts, how leverage works, and common questions. */
 export function TradeSections({ market, side, leverage, openPositions, positionsStatus }: {
@@ -45,10 +62,7 @@ export function TradeSections({ market, side, leverage, openPositions, positions
       ]} />
     </Section>
     <Section id="trade-how" title="Leverage in three steps">
-      <p className={styles.lede}>{side === 'long'
-        ? 'On f(x) Protocol, a long’s leverage is fxUSD minted against its collateral. Before fees, a 3× long is two thirds minted fxUSD and one third yours.'
-        : `A short deposits fxUSD and borrows ${market === 'ETH' ? 'wstETH' : 'WBTC'} from f(x) Protocol’s long-side reserve. Before fees, a 3× short is three quarters borrowed and one quarter yours.`}</p>
-      <LeverageSplit max={leverage.max} side={side} debtLabel={side === 'long' ? 'minted fxUSD' : `borrowed ${market === 'ETH' ? 'wstETH' : 'WBTC'}`} />
+      <TradeLeverageExample key={`${market}:${side}`} market={market} side={side} max={leverage.max} />
       <Steps steps={[
         { icon: TrendingUp, title: 'Pick a direction', body: 'Long gains when the price rises; short gains when it falls. Positions settle on f(x) Protocol on Ethereum.' },
         { icon: Gauge, title: 'Choose leverage', body: 'Leverage multiplies exposure within the pool’s live range. More leverage moves a position closer to the protocol’s thresholds.' },
