@@ -68,7 +68,7 @@ async function mount(page: import('@playwright/test').Page, failAttempts: Record
   partialReads: Record<string, number[]> = {}, initialStatus = 'unavailable') {
   await page.setContent('<div id="root"></div>');
   await page.evaluate(({ failures, foreground, partialReads }) => {
-    (window as Window & { __positionRetryConfig?: { failAttempts: Record<string, number>; partialReads: Record<string, number[]>; foreground: boolean } }).__positionRetryConfig = {
+    (window as typeof window & { __positionRetryConfig?: { failAttempts: Record<string, number>; partialReads: Record<string, number[]>; foreground: boolean } }).__positionRetryConfig = {
       failAttempts: Object.fromEntries(Object.entries(failures).map(([address, count]) => [address.toLowerCase(), count])),
       partialReads: Object.fromEntries(Object.entries(partialReads).map(([address, calls]) => [address.toLowerCase(), calls])),
       foreground,
@@ -85,7 +85,7 @@ test('review pauses coalesce block refreshes while manual refresh and wallet cha
   await mount(page, {}, true, {}, 'ready');
   const activity = async (pauses: number, block: number) => {
     await page.evaluate(({ pauses, block }) => {
-      (window as Window & { __positionRetryHarness: { setActivity: (pauses: number, block: number) => void } }).__positionRetryHarness.setActivity(pauses, block);
+      (window as typeof window & { __positionRetryHarness: { setActivity: (pauses: number, block: number) => void } }).__positionRetryHarness.setActivity(pauses, block);
     }, { pauses, block });
     // Flush effects, including the pause lease update, before the next block.
     await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
@@ -101,7 +101,7 @@ test('review pauses coalesce block refreshes while manual refresh and wallet cha
   await expect(page.getByTestId('reads')).toHaveText(String(Number(baseline) + 1));
   await activity(1, 103);
   await expect(page.getByTestId('reads')).toHaveText(String(Number(baseline) + 1));
-  await page.evaluate((address) => (window as Window & { __positionRetryHarness: { setWallet: (address: string) => void } }).__positionRetryHarness.setWallet(address), walletB);
+  await page.evaluate((address) => (window as typeof window & { __positionRetryHarness: { setWallet: (address: string) => void } }).__positionRetryHarness.setWallet(address), walletB);
   await expect(page.getByTestId('reads')).toHaveText(String(Number(baseline) + 2));
   await activity(0, 104);
   await expect(page.getByTestId('reads')).toHaveText(String(Number(baseline) + 3));
@@ -119,7 +119,7 @@ test('a failure while backgrounded retries when the wallet session resumes', asy
   await mount(page, { [walletA]: 1 }, false);
   await expect(page.getByTestId('reads')).toHaveText('1');
   await page.evaluate(() => {
-    const harness = (window as Window & { __positionRetryHarness: { foreground: boolean; resume?: () => void } }).__positionRetryHarness;
+    const harness = (window as typeof window & { __positionRetryHarness: { foreground: boolean; resume?: () => void } }).__positionRetryHarness;
     harness.foreground = true;
     harness.resume?.();
   });
@@ -140,32 +140,32 @@ test('partial failed groups retain verified rows and recover automatically', asy
 
 test('wallet switch cancels a pending retry for the previous session', async ({ page }) => {
   await mount(page, { [walletA]: 1, [walletB]: 0 });
-  await page.evaluate((address) => (window as Window & { __positionRetryHarness: { setWallet: (next: string) => void } }).__positionRetryHarness.setWallet(address), walletB);
+  await page.evaluate((address) => (window as typeof window & { __positionRetryHarness: { setWallet: (next: string) => void } }).__positionRetryHarness.setWallet(address), walletB);
   await expect(page.getByTestId('position')).toHaveText('BTC:long:927');
   await page.waitForTimeout(2_500);
-  const reads = await page.evaluate(() => (window as Window & { __positionRetryHarness: { reads: string[] } }).__positionRetryHarness.reads);
+  const reads = await page.evaluate(() => (window as typeof window & { __positionRetryHarness: { reads: string[] } }).__positionRetryHarness.reads);
   expect(reads).toEqual([walletA, walletB]);
 });
 
 test('unmount cancels a pending retry', async ({ page }) => {
   await mount(page, { [walletA]: 99 });
-  await page.evaluate(() => (window as Window & { __positionRetryHarness: { unmount: () => void } }).__positionRetryHarness.unmount());
+  await page.evaluate(() => (window as typeof window & { __positionRetryHarness: { unmount: () => void } }).__positionRetryHarness.unmount());
   await page.waitForTimeout(2_500);
-  const reads = await page.evaluate(() => (window as Window & { __positionRetryHarness: { reads: string[] } }).__positionRetryHarness.reads);
+  const reads = await page.evaluate(() => (window as typeof window & { __positionRetryHarness: { reads: string[] } }).__positionRetryHarness.reads);
   expect(reads).toEqual([walletA]);
 });
 
 test('position retry budget stops after two retries', async ({ page }) => {
   await mount(page, { [walletA]: 99 });
   await page.waitForTimeout(7_500);
-  let reads = await page.evaluate(() => (window as Window & { __positionRetryHarness: { reads: string[] } }).__positionRetryHarness.reads);
+  let reads = await page.evaluate(() => (window as typeof window & { __positionRetryHarness: { reads: string[] } }).__positionRetryHarness.reads);
   expect(reads).toHaveLength(3);
   await page.waitForTimeout(1_000);
-  reads = await page.evaluate(() => (window as Window & { __positionRetryHarness: { reads: string[] } }).__positionRetryHarness.reads);
+  reads = await page.evaluate(() => (window as typeof window & { __positionRetryHarness: { reads: string[] } }).__positionRetryHarness.reads);
   expect(reads).toHaveLength(3);
   await page.getByRole('button', { name: 'Manual refresh' }).click();
   await expect(page.getByTestId('reads')).toHaveText('4');
   await page.waitForTimeout(2_500);
-  reads = await page.evaluate(() => (window as Window & { __positionRetryHarness: { reads: string[] } }).__positionRetryHarness.reads);
+  reads = await page.evaluate(() => (window as typeof window & { __positionRetryHarness: { reads: string[] } }).__positionRetryHarness.reads);
   expect(reads).toHaveLength(5);
 });

@@ -116,7 +116,7 @@ async function openHarness(page: import('@playwright/test').Page): Promise<void>
 
 async function setState(page: import('@playwright/test').Page, state: Record<string, unknown>): Promise<void> {
   await page.evaluate((next) => {
-    const harness = (globalThis as typeof globalThis & { __privyHarness: Record<string, unknown> }).__privyHarness;
+    const harness = (globalThis as typeof globalThis & { __privyHarness: Record<string, unknown> & { adapterRerender?: () => void; rerender?: () => void } }).__privyHarness;
     if (typeof next.walletClientType === 'string') {
       next.wallets = [{
         address: typeof next.walletAddress === 'string' ? next.walletAddress : '0x00000000000000000000000000000000000000bb',

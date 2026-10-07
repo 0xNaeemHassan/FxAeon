@@ -4,7 +4,7 @@ import BorrowPage from '@/app/borrow/page';
 
 type HarnessState = {
   wallet: { ready: boolean; authenticated: boolean; address?: string; chainId: number; connectionVersion: number };
-  shared: Record<string, unknown>;
+  shared: { walletAddress: string | null; positions: object[]; status: string; failedGroups: Array<{ market: string; side: string; reason: unknown }>; lastVerifiedAt: number | null; [key: string]: unknown };
   plannerCount: number;
   walletRequestCount: number;
   reviewAttemptCount: number;

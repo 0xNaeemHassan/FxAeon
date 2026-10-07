@@ -21,7 +21,7 @@ const receiptExamples = {
   base: buildReceiptPresentation({ chainId: 8453, walletAddress: address, status: 'success', transfers: [{ token: '0x3333333333333333333333333333333333333333', from: address, to: '0x00000000000000000000000000000000000000bb', amountRaw: 9n }], executionCostWei: 21_000_000_000_000n }),
 };
 function presentationFor(stage: string) {
-  const transaction = { chainId: 1, from: address, to: '0x00000000000000000000000000000000000000bb' as const, data: '0x12345678' as const, value: 0n, kind: 'action' as const, type: 'increasePosition' as const, operation: 'increasePosition' as const };
+  const transaction: TransactionStepResult['transaction'] = { chainId: 1, from: address, to: '0x00000000000000000000000000000000000000bb' as const, data: '0x12345678' as const, value: 0n, kind: 'action' as const, type: 'increasePosition' as const, operation: 'increasePosition' as const };
   const receipt = {
     transactionHash: hash, transactionIndex: 0, blockHash, blockNumber: 1n,
     from: address, to: transaction.to, cumulativeGasUsed: 21_000n, gasUsed: 21_000n,
@@ -93,7 +93,7 @@ function Lab() {
       <section className="lab-panel" aria-labelledby="transaction-heading"><h2 id="transaction-heading">Transaction stages</h2>
         <p className="subtle">Selected fixture: <strong>{stage}</strong>. These are display fixtures; signing and submission are disabled.</p>
         <div className="stage-list" aria-label="Transaction state examples">{txStages.map((item, index) => <div className="stage" data-current={item === stage || undefined} key={item}><strong>{item}</strong><span className="subtle">{['Edit terms', 'Quote pending', 'Accepted terms', 'Awaiting wallet', 'Hash available', 'One step remains', 'Receipt verified', 'Status needs checking'][index]}</span></div>)}</div>
-        {(() => { const presentation = presentationFor(stage); if (!presentation) return null; const Icon = presentation.icon; return <div className="presentation"><h3>Review progress presentation</h3><StatusNotice label={presentation.title} body={presentation.body} className={presentation.className} icon={<Icon aria-hidden="true" size={16} />}/></div>; })()}
+        {(() => { const presentation = presentationFor(stage); if (!presentation) return null; const Icon = presentation.icon; return <div className="presentation"><h3>Review progress presentation</h3><StatusNotice label={presentation.title} body={presentation.body} className={'className' in presentation ? presentation.className : ''} icon={<Icon aria-hidden="true" size={16} />}/></div>; })()}
         <div className="consequence-example"><h3>Review consequence summary</h3><ActionConsequenceSummary facts={[{ label: 'Deposit', value: '1.23456789 ETH' }, { label: 'Borrow', value: '4,000 fxUSD' }, { label: 'Estimated debt', value: '4,000 fxUSD' }]} /></div><p className="access-note">No transaction controls are connected in this catalog.</p>
       </section>
       <section className="lab-panel"><h2>Layout stress</h2><p className="subtle">Resize the viewport to inspect narrow phone, short phone, tablet, and desktop layouts.</p><div className="amount-preview" aria-label="Long amount example">1234567890.123456789012345</div><p className="long-label">Long label fixture: Expected receipt after estimated route and network fee adjustments</p></section>
