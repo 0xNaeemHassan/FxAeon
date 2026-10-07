@@ -13,18 +13,18 @@ const mocks: Record<string, string> = {
   'next/link': `export default ({href,children,...props}) => <a href={href} {...props}>{children}</a>;`,
   'next/navigation': `export const useRouter = () => ({push:(href) => {history.pushState({},'',href);globalThis.__earnHarness.navigate();}});`,
   '@/components/ui': `export const AppShell = ({children}) => <main style={{padding:16}}>{children}</main>;`,
-  '@/components/ProductUI': `export const PageHeading = ({title}) => <h1>{title}</h1>; export const ProductNav = () => <nav>Products</nav>; export const ProductSurface = ({children,...props}) => <section {...props}>{children}</section>; export const Disclosure = () => null; export const MetricRows = () => null; export const StatusNotice = ({title}) => <p>{title}</p>; export const ChoiceCards = () => null;`,
+  '@/components/ProductUI': `export const PageHeading = ({title}) => <h1>{title}</h1>; export const ProductNav = () => <nav>Products</nav>; export const ProductSurface = ({children,...props}) => <section {...props}>{children}</section>; export const Disclosure = () => null; export const MetricRows = () => null; export const StatusNotice = ({title}) => <p>{title}</p>; export { ChoiceCards } from ${JSON.stringify(resolve(root, 'src/components/ProductUI.tsx'))};`,
   '@/components/ProductSections': `export const EarnSections = () => null;`,
   '@/components/TokenIcon': `export default () => <span />;`,
   '@/components/MissingValue': `export const MissingValue = () => <span>Unavailable</span>; export const ValueOrSkeleton = ({value}) => <span>{value}</span>;`,
   '@/components/PriceProvider': `export const useUsdPrices = () => ({status:'ready',prices:{fxUSDBasePool:1,fxUSD:1},refresh:async () => {}});`,
   '@/lib/displayPrices': `export const freshDisplayPrices = snapshot => snapshot.prices;`,
   '@/lib/fxSaveApy': `export const fetchFxSaveApy = async () => ({apy:6.25});`,
-  '@/lib/telegram': `export const haptic = () => {};`,
+  '@/lib/telegram': `export const haptic = () => {}; export const openExternalLink = () => false;`,
   '@/lib/fx/gasFeePolicy': `export const fetchGasTierQuotes = async () => ({tiers:{standard:{gasPriceWei:1n},fast:{gasPriceWei:2n},rapid:{gasPriceWei:3n}}});`,
   '@/lib/wallet': `export const usePrivyWallet = () => ({address:'0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',chainId:1,isEmbedded:true});`,
   '@/components/WalletDataProvider': `const refresh = async () => {}; export const useFxSaveClaimable = () => ({status:'ready',data:{hasPendingRedeem:false},refresh});`,
-  '@/components/ProtocolForm': `export const AmountField = ({label,value,onChange,tokenSelector}) => <>{tokenSelector}<label>{label}<input aria-label={label} value={value} onChange={event => onChange(event.target.value)} /></label></>; export const TokenSelect = ({value,onChange,options}) => <select aria-label="Earn asset" value={value} onChange={event => onChange(event.target.value)}>{options.map(token => <option key={token} value={token}>{token}</option>)}</select>; export const Segmented = ({options,onChange}) => <div>{options.map(option => <button key={option.value} onClick={() => onChange(option.value)}>{option.label}</button>)}</div>; const refresh = async () => {}; const balances = {fxUSD:{status:'ready',amount:'1000'},usdc:{status:'ready',amount:'1000'}}; export const useWalletTokenBalances = () => ({status:'ready',balances,refresh});`,
+  '@/components/ProtocolForm': `export const AmountField = ({label,value,onChange,tokenSelector}) => <>{tokenSelector}<label>{label}<input aria-label={label} value={value} onChange={event => onChange(event.target.value)} /></label></>; export const TokenSelect = ({value,onChange,options}) => <select aria-label="Earn asset" value={value} onChange={event => onChange(event.target.value)}>{options.map(token => <option key={token} value={token}>{token}</option>)}</select>; export const Segmented = ({options,onChange}) => <div>{options.map(option => <button key={option.value} onClick={() => onChange(option.value)}>{option.label}</button>)}</div>; const refresh = async () => {}; const balances = {fxUSD:{status:'ready',amount:'1000'},usdc:{status:'ready',amount:'1000'},fxUSDBasePool:{status:'ready',amount:'1000'}}; export const useWalletTokenBalances = () => ({status:'ready',balances,refresh});`,
   '@/components/ActionReview': `import React from 'react'; export const ActionReview = ({editor,planBuilder,resumeReview,onStageChange,label,blocker}) => {
     const [review,setReview] = React.useState(false); const resumed = React.useRef(false);
     const open = async () => {if (!planBuilder || blocker) return; await planBuilder();setReview(true);onStageChange('review');};
@@ -34,7 +34,7 @@ const mocks: Record<string, string> = {
   '@/lib/fx': `export const assertPublicClientChain = async () => {}; export const getEthereumClient = () => ({}); export const MAX_FX_SLIPPAGE_PERCENT = 2; export const assertConfiguredPublicClientChain = async () => {}; export const withReadDeadline = promise => promise;
     export const getFxReadFacade = () => ({getFxSaveConfig:async () => ({cooldownPeriodSeconds:3600n,instantRedeemFeeRatio:1000000000000000n,expenseRatio:0n,harvesterRatio:0n,threshold:0n,totalAssetsWei:1000n*10n**18n,totalSupplyWei:1000n*10n**18n}),getFxSaveBalance:async () => ({balanceWei:600n*10n**18n,assetsWei:62045n*10n**16n}),getFxSaveRedeemStatus:async () => ({hasPendingRedeem:false})});
     export const signatureDraftIdFromSearch = search => new URLSearchParams(search).get('fxDraft');
-    export const restoreSignatureRequiredDraftFromSearch = (search,scope) => new URLSearchParams(search).has('fxDraft') && scope.actionKey === (new URLSearchParams(search).get('fixtureMode') === 'deposit' ? 'earn:deposit' : 'earn:withdraw') ? ({draft:{resumePath:'/earn'},formState:{mode:new URLSearchParams(search).get('fixtureMode') === 'deposit' ? 'deposit' : 'withdraw',token:'fxUSD',amount:'10',shares:'10',instant:true,slippage:new URLSearchParams(search).get('fixtureSlippage') ?? '2'}}) : undefined;
+    export const restoreSignatureRequiredDraftFromSearch = (search,scope) => new URLSearchParams(search).has('fxDraft') && scope.actionKey === (new URLSearchParams(search).get('fixtureMode') === 'deposit' ? 'earn:deposit' : 'earn:withdraw') ? ({draft:{resumePath:'/earn'},formState:{mode:new URLSearchParams(search).get('fixtureMode') === 'deposit' ? 'deposit' : 'withdraw',token:new URLSearchParams(search).get('fixtureToken') ?? 'fxUSD',amount:'10',shares:'10',instant:new URLSearchParams(search).get('fixtureInstant') !== 'false',slippage:new URLSearchParams(search).get('fixtureSlippage') ?? '2'}}) : undefined;
     export const planDepositFxSave = async input => {globalThis.__earnHarness.plans.push(input);return {};}; export const planWithdrawFxSave = planDepositFxSave; export const planRedeem = planDepositFxSave;`,
 };
 let script = '';
@@ -64,13 +64,13 @@ test.beforeAll(async () => {
   css=result.outputFiles.find(file => file.path.endsWith('.css'))!.text;
 });
 
-async function mount(page:Page,resume=true,slippage='2',mode:'withdraw'|'deposit'='withdraw') {
+async function mount(page:Page,resume=true,slippage='2',mode:'withdraw'|'deposit'='withdraw',fixture:{token?:string;instant?:boolean}={}) {
   await page.route('http://earn.test/**',route => route.fulfill({body:'<!doctype html><html><head></head><body><div id="root"></div></body></html>',contentType:'text/html'}));
-  await page.goto(`http://earn.test/earn${resume ? `?fxDraft=fixture${mode === 'deposit' ? '&fixtureMode=deposit' : ''}${slippage === '2' ? '' : `&fixtureSlippage=${slippage}`}` : ''}`);
+  await page.goto(`http://earn.test/earn${resume ? `?fxDraft=fixture${mode === 'deposit' ? '&fixtureMode=deposit' : ''}${slippage === '2' ? '' : `&fixtureSlippage=${slippage}`}${fixture.token ? `&fixtureToken=${fixture.token}` : ''}${fixture.instant === false ? '&fixtureInstant=false' : ''}` : ''}`);
   await page.evaluate(() => localStorage.setItem('fxaeon.settings.v1',JSON.stringify({slippageBps:50,gasTier:'standard'})));
   await page.addStyleTag({content:`*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;--fs-small:14px;--fs-caption:12px;--text:#111;--mut:#555;--surface:#fff;--surface-2:#eee;--line:#ccc;--success:#16803b;--radius-sm:8px;--dur-fast:0ms}button{font:inherit;border:0;padding:0;cursor:pointer;background:none}${css}`});
   await page.addScriptTag({content:script});
-  if(resume) await expect(page.getByRole('region',{name:'Earn review'})).toContainText(`Review slippage: ${mode === 'deposit' ? '' : slippage}%`);
+  if(resume) await expect(page.getByRole('region',{name:'Earn review'})).toContainText(`Review slippage: ${mode === 'deposit' || fixture.token === 'fxUSDBasePool' || fixture.instant === false ? '' : slippage}%`);
   else await expect(page.getByText('600 fxSAVE',{exact:true})).toBeVisible();
 }
 async function openSettings(page:Page,percent:string) {
@@ -83,11 +83,11 @@ async function storedSlippage(page:Page) {
   return page.evaluate(() => JSON.parse(localStorage.getItem('fxaeon.settings.v1')!).slippageBps);
 }
 
-test('stable deposits disclose SDK limits and never offer or forward an unused slippage setting', async ({ page }) => {
+test('all deposits disclose SDK limits and never offer or forward an unused slippage setting', async ({ page }) => {
   await mount(page, false);
-  for (const token of ['fxUSD', 'usdc']) {
+  for (const token of ['fxUSD', 'usdc', 'fxUSDBasePool']) {
     await page.getByLabel('Earn asset', { exact: true }).selectOption(token);
-    await expect(page.getByText(/Final fxSAVE shares have no separate minimum/)).toBeVisible();
+    await expect(page.getByText(token === 'fxUSDBasePool' ? /This route has no minimum-share setting/ : /Final fxSAVE shares have no separate minimum/)).toBeVisible();
     await page.getByRole('button', { name: 'Transaction settings, Standard speed', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Transaction settings', exact: true });
     await expect(dialog.getByRole('textbox', { name: 'Slippage tolerance percentage' })).toHaveCount(0);
@@ -273,3 +273,92 @@ test('editing a finer restored percentage still requires whole-basis-point prefe
   await page.getByRole('button', { name: 'Review withdrawal', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Earn review' })).toContainText('Review slippage: 0.29%');
 });
+
+async function latestPlan(page: Page) {
+  return page.evaluate(() => {
+    const harness = globalThis as typeof globalThis & { __earnHarness: { plans: Array<{ tokenOut: string; amount: bigint; instant: boolean; slippage?: number }> } };
+    const plan = harness.__earnHarness.plans.at(-1);
+    return plan && { ...plan, amount: String(plan.amount) };
+  });
+}
+
+async function gasOnlySettings(page: Page) {
+  await page.getByRole('button', { name: /^Transaction settings,/ }).click();
+  const dialog = page.getByRole('dialog', { name: 'Transaction settings', exact: true });
+  await expect(dialog.getByRole('heading', { name: 'Max slippage' })).toHaveCount(0);
+  await expect(dialog.getByRole('textbox', { name: 'Slippage tolerance percentage' })).toHaveCount(0);
+  await expect(dialog.getByRole('radiogroup', { name: 'Network speed' })).toBeVisible();
+  await dialog.getByRole('radio', { name: /Fast/ }).click();
+  expect(await storedSlippage(page)).toBe(50);
+  await dialog.getByRole('button', { name: 'Close transaction settings' }).click();
+}
+
+test('queued stable and direct base-pool withdrawals hide unused settings and preserve active tolerance', async ({ page }) => {
+  await mount(page, true, '0.291');
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  for (const token of ['fxUSD', 'usdc']) {
+    await page.getByLabel('Earn asset', { exact: true }).selectOption(token);
+    await page.getByRole('radio', { name: /After cooldown/ }).locator('..').click();
+    await expect(page.getByText(/Your saved slippage does not apply to this request/)).toBeVisible();
+    await gasOnlySettings(page);
+    await page.getByLabel('Amount', { exact: true }).fill('10.000000000000000001');
+    // The restored draft resumes review after the asset change remounts it.
+    await expect(page.getByRole('region', { name: 'Earn review' })).toBeVisible();
+    expect(await latestPlan(page)).toMatchObject({ tokenOut: token, amount: '10000000000000000001', instant: false });
+    expect((await latestPlan(page))?.slippage).toBeUndefined();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.getByRole('radio', { name: /^Instant/ }).locator('..').click();
+    const dialog = await openSettings(page, '0.291');
+    await dialog.getByRole('button', { name: 'Close transaction settings' }).click();
+    await page.getByRole('button', { name: 'Review withdrawal', exact: true }).click();
+    expect(await latestPlan(page)).toMatchObject({ tokenOut: token, amount: '10000000000000000001', instant: true, slippage: 0.291 });
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  }
+  await page.getByLabel('Earn asset', { exact: true }).selectOption('fxUSDBasePool');
+  await expect(page.getByRole('group', { name: 'Withdrawal method' })).toHaveCount(0);
+  await expect(page.getByText(/without a queued claim/)).toBeVisible();
+  await expect(page.getByText(/A queued withdrawal is claimed later/)).toHaveCount(0);
+  await gasOnlySettings(page);
+  await page.getByLabel('Amount', { exact: true }).fill('10.000000000000000001');
+  await expect(page.getByRole('region', { name: 'Earn review' })).toBeVisible();
+  expect(await latestPlan(page)).toMatchObject({ tokenOut: 'fxUSDBasePool', amount: '10000000000000000001', instant: false });
+  expect((await latestPlan(page))?.slippage).toBeUndefined();
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await page.getByLabel('Earn asset', { exact: true }).selectOption('fxUSD');
+  const dialog = await openSettings(page, '0.291');
+  await dialog.getByRole('button', { name: 'Close transaction settings' }).click();
+  expect(await storedSlippage(page)).toBe(50);
+});
+
+test('hiding unused controls does not enable missing or invalid withdrawal amounts', async ({ page }) => {
+  await mount(page, false);
+  await page.getByRole('button', { name: 'Withdraw', exact: true }).click();
+  for (const token of ['fxUSD', 'usdc', 'fxUSDBasePool']) {
+    await page.getByLabel('Earn asset', { exact: true }).selectOption(token);
+    if (token !== 'fxUSDBasePool') await page.getByRole('radio', { name: /After cooldown/ }).locator('..').click();
+    const review = page.getByRole('button', { name: 'Review withdrawal', exact: true });
+    await expect(review).toBeDisabled();
+    await gasOnlySettings(page);
+    for (const amount of ['0', '-1', 'bad', '601', '1.0000000000000000001']) {
+      await page.getByLabel('Amount', { exact: true }).fill(amount);
+      await expect(review).toBeDisabled();
+    }
+    await page.getByLabel('Amount', { exact: true }).fill('600');
+    await expect(review).toBeEnabled();
+  }
+  expect(await latestPlan(page)).toBeUndefined();
+});
+
+for (const instant of [false, true]) {
+  test(`restored base-pool withdrawal with instant=${instant} remains a direct gas-only route`, async ({ page }) => {
+    await mount(page, true, '0.101', 'withdraw', { token: 'fxUSDBasePool', instant });
+    expect(await latestPlan(page)).toMatchObject({ tokenOut: 'fxUSDBasePool', instant: false });
+    expect((await latestPlan(page))?.slippage).toBeUndefined();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await expect(page.getByRole('group', { name: 'Withdrawal method' })).toHaveCount(0);
+    await gasOnlySettings(page);
+    await page.getByLabel('Earn asset', { exact: true }).selectOption('usdc');
+    const dialog = await openSettings(page, '0.101');
+    await dialog.getByRole('button', { name: 'Close transaction settings' }).click();
+  });
+}
