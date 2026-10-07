@@ -70,7 +70,7 @@
 .section a:not(.headingLink):hover { color: var(--mint-bright); }
 .section strong { color: var(--text); font-weight: 600; }
 .section :not(pre) > code { border-radius: 4px; padding: 2px 4px; background: var(--surface-2); color: var(--text); font-size: .85em; overflow-wrap: anywhere; }
-.section dl { margin-top: 12px; padding: 15px 18px; border-left: 2px solid var(--hairline); }
+.section dl { margin-top: 12px; padding: 15px 18px; border-radius: var(--radius-sm); background: var(--surface-2); }
 .section dt { margin-top: 8px; color: var(--text); font-weight: 600; font-size: 12px; }
 .section dt:first-child { margin-top: 0; }
 .section dd { margin-top: 2px; font-size: 14px; }
@@ -80,7 +80,7 @@
 .topicIcon { display: flex; justify-content: space-between; width: 100%; color: var(--mint-bright); }
 .topicCard strong { font-size: 15px; font-weight: 600; }
 .topicCard > span:last-child { color: var(--mut); font-size: 13px; line-height: 1.55; }
-.callout { margin-top: 20px; padding: 16px 18px; border-left: 2px solid var(--mint); border-radius: 0 10px 10px 0; background: var(--mint-dim); }
+.callout { margin-top: 20px; padding: 16px 18px; border: 1px solid color-mix(in srgb, var(--mint) 24%, transparent); border-radius: 10px; background: var(--mint-dim); }
 .callout > strong { display: block; margin-bottom: 4px; font-size: 13px; }
 .callout p { margin-top: 4px; font-size: 14px; line-height: 1.7; }
 .codeBlock { margin: 19px 0; border: 1px solid var(--hairline); border-radius: var(--radius-sm); overflow: hidden; background: var(--surface); }

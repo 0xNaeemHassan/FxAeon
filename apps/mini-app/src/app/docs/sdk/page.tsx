@@ -5,8 +5,10 @@ import { productSections } from '../ProductArticle';
 import { createDocsEntries } from '../docsSearch';
 import SdkArticle, { sdkSections } from './SdkArticle';
 
-// The shared route metadata keeps the FxAeon banner on share cards.
-export const metadata: Metadata = routeMetadata('docsSdk');
+// The shared route metadata keeps the FxAeon banner on share cards. The title is
+// absolute because the docs layout's own title stops the root template here.
+const shared = routeMetadata('docsSdk');
+export const metadata: Metadata = { ...shared, title: { absolute: 'f(x) SDK reference · FxAeon' } };
 
 export default function SdkPage() {
   const entries = [
