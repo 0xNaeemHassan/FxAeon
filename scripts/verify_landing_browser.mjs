@@ -14,7 +14,7 @@ const origin = `http://127.0.0.1:${port}`;
 const output = resolve(root, 'artifacts/landing');
 const CHAPTERS = ['trade', 'earn', 'borrow', 'move'];
 const CHAPTER_TABS = { trade: '1', earn: '2', borrow: '2', move: '3' };
-const WIDTHS = [320, 360, 393, 430, 768, 1024, 1440];
+const WIDTHS = [320, 360, 390, 393, 430, 768, 1024, 1440];
 
 /** Text whose contrast is measured against the pixels actually painted behind it. */
 const TEXT_SELECTORS = [
@@ -317,10 +317,39 @@ try {
         assert.equal(await menu.getAttribute('aria-expanded'), 'true');
         assert.equal(await menu.getAttribute('aria-label'), 'Close menu');
         assert.equal(await page.locator('.site-header nav a').first().evaluate((element) => element === document.activeElement), true, 'Opening the menu should move focus into navigation');
+        // Inset hairlines separate the rows; the first row has none and no row gains an outer border.
+        const separators = await page.locator('.site-header nav a').evaluateAll((links) => links.map((link) => {
+          const before = getComputedStyle(link, '::before');
+          return { content: before.content, height: before.height, left: before.left, right: before.right, color: before.backgroundColor, borderTop: getComputedStyle(link).borderTopWidth, borderBottom: getComputedStyle(link).borderBottomWidth };
+        }));
+        assert.equal(separators[0].content, 'none', 'No separator above the first mobile row');
+        for (const separator of separators.slice(1)) {
+          assert.equal(separator.content, '""');
+          assert.equal(separator.height, '1px');
+          assert.equal(separator.left, '16px');
+          assert.equal(separator.right, '16px');
+          assert.notEqual(separator.color, 'rgba(0, 0, 0, 0)');
+        }
+        assert.ok(separators.every((separator) => separator.borderTop === '0px' && separator.borderBottom === '0px'), 'Rows should have internal dividers, not outer borders');
+        if ([320, 390].includes(width)) {
+          await page.locator('.site-header nav').screenshot({ path: resolve(output, `mobile-menu-${theme}-${width}.png`) });
+        }
         await page.keyboard.press('Escape');
         assert.equal(await menu.getAttribute('aria-expanded'), 'false');
         assert.equal(await menu.getAttribute('aria-label'), 'Open menu');
         assert.equal(await menu.evaluate((element) => element === document.activeElement), true, 'Closing the menu should return focus to its trigger');
+        await menu.click();
+        await page.locator('.site-header nav a[href="#moves"]').click();
+        assert.equal(await menu.getAttribute('aria-expanded'), 'false', 'Selecting a section closes the menu');
+        assert.equal(new URL(page.url()).hash, '#moves');
+        await menu.click();
+        await menu.click();
+        assert.equal(await menu.getAttribute('aria-expanded'), 'false', 'Repeated menu toggle closes cleanly');
+        await menu.click();
+        await page.mouse.click(1, 450);
+        assert.equal(await menu.getAttribute('aria-expanded'), 'false', 'Outside click closes the menu');
+      } else {
+        assert.equal(await page.locator('.site-header nav a').nth(1).evaluate((element) => getComputedStyle(element, '::before').content), 'none', 'Desktop navigation must not gain dividers');
       }
       assert.equal(await page.evaluate(() => document.getAnimations().filter((animation) => animation.playState === 'running').length), 0, `Reduced motion must not animate at ${width}px`);
     }
