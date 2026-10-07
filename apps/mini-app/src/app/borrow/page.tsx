@@ -533,7 +533,7 @@ export default function BorrowPage() {
   const symbol = tokenSymbol(token);
   const mintBlocker = (): string | null => {
     if (showDeposit) {
-      const depositIssue = amountBlocker(deposit, tokenDecimals(token), symbol, balanceStateFor(token), { emptyLabel: `No ${symbol} available` });
+      const depositIssue = amountBlocker(deposit, tokenDecimals(token), symbol, balanceStateFor(token), { emptyLabel: `No ${symbol} available`, optional: !newPosition });
       if (depositIssue === 'Enter an amount') { if (newPosition) return 'Enter collateral'; }
       else if (depositIssue) return depositIssue;
     }
