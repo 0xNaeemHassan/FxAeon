@@ -22,6 +22,24 @@ and [60-bit decoder](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e
 Zero and equal limits remain representable; this patch does not change the
 contracts' separate full-close handling.
 
+## Review preparation timing
+
+The local SDK patch removes the unconditional 500 ms sleep after the final
+chunk of `batchedMulticall`. It retains the original 50-call chunk size,
+500 ms pause between chunks, result order, and failure placeholders. This is
+a local scheduling correction, not a change to quote arithmetic, calldata,
+nonce order, slippage, or the locked method surface. Both installed ESM and
+CommonJS bundles have deterministic timing regression coverage. Subsequent
+quote-search iterations may start sooner, so live RPC rate-limit behavior
+still needs verification before release.
+
+Embedded-wallet fee preparation gives the optional same-origin oracle a
+200 ms head start, then tries the already-supported chain-native fee history
+concurrently. Only a fully validated snapshot can win; a late source cannot
+replace the reviewed snapshot. Existing quote expiry, fee ceilings, chain
+verification, and final transaction simulations remain unchanged. Base uses
+only its own RPC.
+
 ## Protocol fee review data
 
 The local SDK patch also preserves `PoolConfiguration.getPoolFeeRatio` results
