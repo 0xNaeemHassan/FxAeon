@@ -112,6 +112,7 @@ export default function EarnPage() {
   const [shares, setShares] = useState('');
   const [instant, setInstant] = useState(true);
   const [slippage, setSlippage] = useState(String(DEFAULT_SLIPPAGE_PERCENT));
+  const savedSlippageRef = useRef(DEFAULT_SLIPPAGE_PERCENT);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [config, setConfig] = useState<SaveConfig | null>(null);
@@ -191,12 +192,18 @@ export default function EarnPage() {
   }, [resetEarnContext, reviewStage, wallet.address, wallet.chainId]);
 
   useEffect(() => {
-    setSlippage(String(readSlippagePercent()));
+    savedSlippageRef.current = readSlippagePercent();
+    setSlippage(String(savedSlippageRef.current));
   }, []);
   useEffect(() => {
     const onSettingsUpdated = (event: Event) => {
       if (event.type === 'storage' && (event as StorageEvent).key !== SETTINGS_KEY) return;
-      setSlippage(String(readSlippagePercent()));
+      const savedSlippage = readSlippagePercent();
+      // A gas-only update must not replace the slippage of a resumed draft.
+      // Explicit choices in this form also apply when the saved value is the
+      // same, via TransactionSettings' controlled change callback.
+      if (savedSlippage !== savedSlippageRef.current) setSlippage(String(savedSlippage));
+      savedSlippageRef.current = savedSlippage;
     };
     window.addEventListener(SETTINGS_UPDATED_EVENT, onSettingsUpdated);
     window.addEventListener('storage', onSettingsUpdated);
@@ -483,7 +490,7 @@ export default function EarnPage() {
                   <Segmented value={mode} onChange={changeMode} ariaLabel="fxSAVE action" options={[
                     { value: 'deposit', label: 'Deposit' }, { value: 'withdraw', label: 'Withdraw' },
                   ]} />
-                  <TransactionSettings slippage />
+                  <TransactionSettings slippage slippagePercent={slippage} onSlippageChange={setSlippage} />
                 </div>
               </> : <div className={presentation.claimHeading}>
                 <button type="button" onClick={() => changeMode('withdraw')} className={presentation.back}><ArrowLeft size={17} aria-hidden="true" />Back to fxSAVE</button>
