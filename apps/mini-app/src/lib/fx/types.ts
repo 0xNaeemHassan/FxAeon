@@ -290,7 +290,7 @@ type ReviewedActionIntentBase =
       amount: bigint;
       receiver: Address;
       directBasePool: boolean;
-      /** Present for routed deposits; direct base-pool deposits have no slippage input. */
+      /** Not set by FxAeon: SDK 1.0.5 ignores deposit slippage, so a reviewed deposit carries only the decoded base-pool floor. */
       slippagePercent?: number;
     }
   | {

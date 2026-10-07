@@ -433,7 +433,9 @@ function validateFxSaveDeposit(
     ...binding,
     economicLimits: [
       ...(binding.economicLimits ?? []),
-      { label: "fxSAVE minimum shares", value: minShares },
+      // SavingFxUSDFacet forwards this bound to FxUSDBasePool.deposit.
+      // It is not a minimum on the final ERC-4626 fxSAVE shares.
+      { label: "fxSAVE deposit base-pool minimum shares", value: minShares },
     ],
   };
 }
