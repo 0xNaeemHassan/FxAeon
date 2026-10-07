@@ -43,6 +43,12 @@ All `NEXT_PUBLIC_*` values are exposed in the compiled client. The production
 validator requires the Privy ID, both Alchemy RPCs, Data API key, Telegram URL,
 and bot token. Configure Privy for the exact production and preview origins and
 Ethereum/Base networks. Do not reuse the local Privy application in production.
+The validator rejects any populated `NEXT_PUBLIC_FX_SCREENSHOT_*`,
+`NEXT_PUBLIC_FX_LOCAL_FORK_*` or `NEXT_PUBLIC_FX_ANVIL_*` variable, matched by
+prefix, and placeholder optional Infura endpoints. Keep all of those unset in
+production and preview deployment dashboards. The validator checks the process
+environment supplied to it; it does not inspect dashboard settings or load Next.js
+`.env` files. Local fork builds remain available for disposable testing.
 
 The landing site only needs its optional Telegram URL when building. It has no
 wallet, Privy, RPC, or protocol configuration. The Pages build can use the

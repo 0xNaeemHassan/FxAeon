@@ -10,8 +10,13 @@ const discovered: DiscoveredEip6963Provider[] = [];
 const DEFAULT_PROVIDER_WAIT_TIMEOUT_MS = 1_000;
 const DEFAULT_PROVIDER_WAIT_POLL_MS = 25;
 const safeText = (value: unknown, fallback: string) => typeof value === 'string' ? value.replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e]/g, '').trim().slice(0, 96) || fallback : fallback;
-export function recordEip6963Announcement(announcement: Eip6963Announcement): DiscoveredEip6963Provider | null {
-  if (!announcement.provider || discovered.some((item) => item.provider === announcement.provider)) return null;
+export function recordEip6963Announcement(value: unknown): DiscoveredEip6963Provider | null {
+  // Browser events are a runtime boundary; TypeScript cannot validate an
+  // extension's announcement or guarantee that it supplies a request method.
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const announcement = value as Eip6963Announcement;
+  if (!announcement.provider || typeof announcement.provider.request !== 'function'
+    || discovered.some((item) => item.provider === announcement.provider)) return null;
   const index = discovered.length + 1;
   const item = { provider: announcement.provider, name: safeText(announcement.info?.name, 'Browser wallet'), rdns: safeText(announcement.info?.rdns, `unknown-wallet-${index}`) };
   discovered.push(item);
@@ -36,9 +41,6 @@ export function waitForWalletProvider(
     pollMs?: number;
   } = {},
 ): Promise<Eip6963Provider> {
-  const immediate = getProvider();
-  if (immediate) return Promise.resolve(immediate);
-
   const timeoutMs = options.timeoutMs ?? DEFAULT_PROVIDER_WAIT_TIMEOUT_MS;
   const pollMs = options.pollMs ?? DEFAULT_PROVIDER_WAIT_POLL_MS;
   return new Promise<Eip6963Provider>((resolve, reject) => {
@@ -60,6 +62,11 @@ export function waitForWalletProvider(
       else reject(reason ?? new Error('No browser wallet detected. Install MetaMask, Coinbase Wallet, or another EVM wallet to continue.'));
     };
     const check = () => {
+      if (settled) return;
+      // An announcement can arrive between polls. Replace the existing
+      // timer rather than starting a second polling chain that outlives cleanup.
+      if (pollTimer !== undefined) clearTimeout(pollTimer);
+      pollTimer = undefined;
       let provider: Eip6963Provider | undefined;
       try {
         provider = getProvider();

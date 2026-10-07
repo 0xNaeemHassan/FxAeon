@@ -4,6 +4,7 @@ import {
   CACHE_TTL_MS,
   ETHERSCAN_API_URL,
   fetchEtherscanGasOracle,
+  onRequest,
   onRequestGet,
   resetGasOracleCacheForTests,
   STALE_MAX_AGE_MS,
@@ -135,6 +136,31 @@ test('query parameters are rejected and cannot alter upstream parameters', async
   });
   assert.equal(bad.status, 400);
   assert.equal(unknown.status, 400);
+});
+
+test('Pages Function responses carry their own content-type and cache protections', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalWarn = console.warn;
+  globalThis.fetch = (async () => upstreamResponse({ LastBlock: '234', ProposeGasPrice: '0.5' })) as typeof fetch;
+  console.warn = () => undefined;
+  try {
+    for (const [method, suffix, env, status] of [
+      ['GET', '', { ETHERSCAN_API_KEY: 'server-key' }, 200],
+      ['GET', '?unexpected=1', {}, 400],
+      ['GET', '', {}, 503],
+      ['POST', '', {}, 405],
+    ] as const) {
+      const response = await onRequest({ request: new Request(`https://fxaeon.pages.dev/api/gas${suffix}`, { method }), env });
+      assert.equal(response.status, status);
+      assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+      assert.equal(response.headers.get('cache-control'), 'no-store');
+      if (status === 405) assert.equal(response.headers.get('allow'), 'GET');
+      else assert.equal(response.headers.get('content-type'), 'application/json; charset=utf-8');
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.warn = originalWarn;
+  }
 });
 
 test('parses the fixed Ethereum gas oracle and never returns the secret', async () => {

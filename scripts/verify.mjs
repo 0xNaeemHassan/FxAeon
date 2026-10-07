@@ -68,6 +68,7 @@ const quickChecks = await runGroup([
   { args: ['lint'], label: 'lint' },
   { args: ['test:anvil:contract'], label: 'Anvil harness contract' },
   { args: ['test:deploy-workflow'], label: 'Deployment workflow contract' },
+  { args: ['exec', 'node', '--test', 'scripts/build_environment.contract.test.mjs'], label: 'Build environment contract' },
   { args: ['test:telegram:contract'], label: 'Telegram deployment contract' },
   { args: ['test:live-public-config:contract'], label: 'Live public configuration contract' },
   { args: ['test:architecture:contract'], label: 'Architecture import contract' },
