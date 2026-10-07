@@ -1,0 +1,100 @@
+import type { ReactNode } from 'react';
+import { ArrowRight, ArrowLeftRight, CandlestickChart, Landmark, Sprout } from 'lucide-react';
+import { DocSection } from './DocsPrimitives';
+import styles from './Docs.module.css';
+
+// Keep the card tree materialized so the content index sees its visible copy.
+const topicCards = <div className={styles.topicGrid}>
+    {[
+      { href: '#trade', title: 'Trade & positions', description: 'Understand ETH and BTC longs, shorts, and leverage.', icon: CandlestickChart },
+      { href: '#earn', title: 'Earn with fxSAVE', description: 'Deposit, withdraw, and follow a queued redemption.', icon: Sprout },
+      { href: '#borrow', title: 'Borrow fxUSD', description: 'Manage collateral, debt, and repayments.', icon: Landmark },
+      { href: '#move', title: 'Move between chains', description: 'Bridge supported assets between Ethereum and Base.', icon: ArrowLeftRight },
+    ].map(({ href, title, description, icon: Icon }) => <a key={href} href={href} className={styles.topicCard}>
+      <span className={styles.topicIcon}><Icon size={19} strokeWidth={1.5} aria-hidden="true" /><ArrowRight size={15} aria-hidden="true" /></span>
+      <strong>{title}</strong><span>{description}</span>
+    </a>)}
+  </div>;
+
+export const productSections: { id: string; title: string; aliases?: string[]; content: ReactNode }[] = [
+  { id: 'overview', title: 'Overview', content: <>
+<p>Trade ETH and BTC, earn with fxSAVE, and borrow fxUSD on Ethereum. Move fxUSD and fxSAVE between Ethereum and Base.</p>
+              <p>FxAeon is an independent interface built on the f(x) SDK. These guides cover the actions available here, with every transaction approved in your wallet. For protocol design and contract details, read the <a href="https://fxprotocol.gitbook.io/fx-docs" target="_blank" rel="noopener noreferrer">f(x) protocol docs</a>.</p>
+              {topicCards}
+  </> },
+  { id: 'getting-started', title: 'Getting started', content: <>
+<ol>
+                <li>Open FxAeon in a supported browser or Telegram. The app workspace starts on Portfolio.</li>
+                <li>Connect your wallet, then choose Trade, Earn, Borrow, or Move.</li>
+                <li>Enter the amount and check the asset, network, recipient, output, and fees.</li>
+                <li>Confirm each transaction in your wallet. Each step continues after its matching receipt is verified.</li>
+              </ol>
+  </> },
+  { id: 'access', title: 'Browser & Telegram', content: <>
+<p>The web app and Telegram Mini App offer the same actions. Telegram adds native sizing, haptics, and navigation.</p>
+              <p>Use Connect wallet to sign in with email or an existing wallet, on the web or in Telegram. Each transaction requires confirmation in your selected wallet.</p>
+  </> },
+  { id: 'wallets', title: 'Wallets & signing', content: <>
+<p>Your connected wallet supplies the sender. FxAeon does not receive or store private keys.</p>
+              <p>A transaction may need more than one approval. If its terms change before signing, review the updated details and choose the action again.</p>
+              <div className={styles.callout}><p><strong>Before approval:</strong> confirm the address, network, recipient, amount, contract, and any approval request in your wallet.</p></div>
+  </> },
+  { id: 'trade', title: 'Trade & leverage', content: <>
+<p>Trade supports ETH and BTC long and short positions on Ethereum. Choose an input asset, amount, side, and leverage. The market panel shows current price and 1H, 1D, 7D, and 30D charts.</p>
+              <p>Action details show the transaction steps, minimum output, approvals, and slippage. Before opening your wallet, the app checks and simulates the displayed action. If the preview expires or signing-relevant details change, review the updated details and choose the action again.</p>
+  </> },
+  { id: 'positions', title: 'Position management', content: <>
+<p>Positions are read from Ethereum and show market, side, collateral, debt, and leverage. Increase, reduce, close, or adjust leverage when the selected action supports it.</p>
+              <p>Cards show a reference market price and estimated collateral and debt. These are display values, not health, P&amp;L, ROI, entry, or liquidation metrics.</p>
+              <p>When display prices are validated, <strong>position value</strong> is estimated collateral value minus debt in USD. It is a display estimate, not a liquidation value or execution quote. Unavailable values stay blank or show a loading skeleton while available position data remains visible.</p>
+              <p>After a transaction, the app rereads state. Stale data can block an action until the current position and plan are available.</p>
+  </> },
+  { id: 'earn', title: 'Earn with fxSAVE', content: <>
+<p>Earn reads fxSAVE balances, vault value, redemption status, and claimable amounts from Ethereum. Its actions are deposit, withdraw, and claim.</p>
+              <p>Deposit supports fxUSD and USDC. Forms show the selected wallet’s verified balance, and token pickers pair quantity with estimated USD worth. Unavailable balances remain unknown, never zero; fxSAVE remains the withdrawal limit.</p>
+              <p>Withdrawals may be instant or queued. Queued redemptions remain pending through cooldown and expose Claim when ready. Action details show the transaction steps, slippage, and the instant-redemption fee when applicable.</p>
+  </> },
+  { id: 'borrow', title: 'Borrow fxUSD', content: <>
+<p>Borrow manages a long ETH or BTC collateral position. Deposit collateral and mint fxUSD, or repay fxUSD and withdraw collateral. The position selector keeps collateral and debt context visible.</p>
+              <p>Fields show the selected wallet’s verified Ethereum balance when available. Pending reads stay distinct from zero. Withdrawable collateral is limited by the selected position and contract rules.</p>
+              <p>Review the action details before signing. Withdrawing collateral can reduce the safety margin and increase liquidation risk.</p>
+  </> },
+  { id: 'move', title: 'Move between chains', content: <>
+<p>Move bridges supported fxUSD and fxSAVE between Ethereum and Base through the f(x) bridge. Choose direction, asset, amount, and recipient. The connected wallet signs the transfer and pays its required fees; the recipient defaults to that wallet.</p>
+              <p>Supported actions are checked against the selected chain, asset, balance, bridge connection, fee quote, and recipient. Advanced bridge mode exposes token and deployment fields for expert users. Ethereum may require one approval before the send.</p>
+              <div className={styles.callout}><p><strong>Before approval:</strong> check both networks, token identity, recipient, amount, and fee. Source confirmation and destination delivery are separate states; FxAeon verifies matching LayerZero events.</p></div>
+  </> },
+  { id: 'fees', title: 'Fees & slippage', content: <>
+<p>Move shows the current LayerZero fee quote. Other actions show estimated gas and network cost when data is available; Base may add network and operator fees. Unavailable estimates stay labelled.</p>
+              <p>Every action form has the same settings gear. On Trade, Positions, and applicable fxSAVE actions it sets max slippage: 0.1%, 0.5%, 1%, 2%, or a custom value up to 2%. Borrow and Move use their action defaults. Lower tolerance can fail; higher tolerance allows a lower minimum output. Network speed applies to FxAeon’s built-in wallet; a connected external wallet sets its own fee. Changes are saved on this device and apply to every open form.</p>
+              <p>USD values and charts are display data. Execution follows the live protocol quote and contract checks.</p>
+  </> },
+  { id: 'history', title: 'History & recovery', aliases: ['recovery'], content: <>
+              <p>History keeps drafts separate from submitted transactions. A draft is saved just before FxAeon asks your wallet to sign; it does not prove a wallet prompt opened or a transaction was submitted. Continue restores saved form values into a fresh review, never executable data. Connecting or refreshing never opens a wallet prompt.</p>
+              <p>After a transaction hash is returned, FxAeon saves it on this device and checks the matching receipt and mined transaction details. A step is complete after its receipt is verified. This record is not a complete blockchain history.</p>
+              <p>History checks the selected wallet and chain and never resends automatically. Inspect partially completed actions and wait for separate bridge delivery verification before retrying.</p>
+  </> },
+  { id: 'privacy', title: 'Privacy & risks', content: <>
+<p><a href="/privacy.html">How FxAeon handles your data</a></p>
+              <ul>
+                <li>FxAeon has no account server, delegated signer, background executor, or private-key field. Your wallet approves each transaction.</li>
+                <li>Theme, slippage, and recovery hints are stored on this device and reread against chain state.</li>
+                <li>Review the address, network, contract, amount, recipient, and approval in every wallet prompt.</li>
+                <li>Contract outcomes and liquidation risk are determined by the protocol and network. Wallets, network services, token contracts, bridges, and chains remain external dependencies.</li>
+              </ul>
+  </> },
+  { id: 'troubleshooting', title: 'Troubleshooting', content: <>
+<h3>Wallet is not available</h3>
+              <p>Wait for the wallet to load, reload if the screen reports a timeout, or reopen the Mini App from Telegram’s bot menu. Confirm that the wallet is connected and selected.</p>
+              <h3>The action button is disabled</h3>
+              <p>Check that an amount is positive, the amount format is valid for the selected token, the selected position is current, and any slippage or leverage value is within the displayed bounds.</p>
+              <h3>The action stopped or a receipt is unclear</h3>
+              <p>Read the status and History entry. A rejection, failed transaction, changed account, timeout, or receipt that does not match stops later steps. Do not resubmit until the wallet and chain state are understood.</p>
+              <h3>Sent but not received</h3>
+              <p>Keep the History entry open. A source transaction can confirm before destination funds arrive; FxAeon checks delivery separately.</p>
+  </> },
+];
+
+export default function ProductArticle() {
+  return <>{productSections.map((section) => <DocSection key={section.id} id={section.id} title={section.title} aliases={section.aliases}>{section.content}</DocSection>)}</>;
+}
