@@ -8,6 +8,7 @@ export type MissingValueProps = {
   width?: MissingValueWidth;
   status?: MissingValueStatus;
   loading?: boolean;
+  announce?: boolean;
   label?: string;
   className?: string;
 };
@@ -20,6 +21,7 @@ export function MissingValue({
   width = 'md',
   status,
   loading,
+  announce = true,
   label,
   className = '',
 }: MissingValueProps) {
@@ -28,6 +30,7 @@ export function MissingValue({
   return (
     <span
       role="status"
+      aria-live={announce ? undefined : 'off'}
       aria-label={accessibleLabel}
       title={unavailable ? accessibleLabel : undefined}
       className={`missing-value missing-value-${width}${unavailable ? ' missing-value-unavailable' : ''} ${className}`.trim()}

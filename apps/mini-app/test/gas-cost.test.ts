@@ -446,3 +446,20 @@ test('an estimate rejected for insufficient funds names the shortfall', async ()
   assert.equal(estimate.steps[0]?.error, 'Not enough ETH for network fees');
   assert.equal(estimate.insufficientNativeBalance, true);
 });
+
+test('cache exposes a shared in-flight refresh separately from its fresh estimate', async () => {
+  const cache = new RouteGasCostCache({ now: () => 1000, ttlMs: 1000 });
+  const planned = route();
+  const first = await cache.refresh(planned, { client: clientFor(async () => 21_000n) });
+  let release: (() => void) | undefined;
+  const delayed = new Promise<void>((resolve) => { release = resolve; });
+  const pending = cache.refresh(planned, { client: clientFor(async () => { await delayed; return 22_000n; }) });
+  assert.equal(cache.view(planned).current, first);
+  assert.equal(cache.view(planned).status, 'current');
+  assert.equal(cache.isRefreshing(planned), true);
+  const joined = cache.refresh(planned, { client: clientFor(async () => { throw new Error('must share the active request'); }) });
+  release?.();
+  assert.equal(await joined, await pending);
+  assert.equal(cache.isRefreshing(planned), false);
+  assert.equal(cache.view(planned).current?.estimatedGasUnits, 22_000n);
+});

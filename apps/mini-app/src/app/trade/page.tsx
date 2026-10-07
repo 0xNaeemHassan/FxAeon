@@ -77,6 +77,11 @@ export default function TradePage() {
   const [nativeMaxPending, setNativeMaxPending] = useState(false);
   const [nativeMaxError, setNativeMaxError] = useState<string | null>(null);
   const [reviewStage, setReviewStage] = useState<ActionReviewStage>('input');
+  const reviewStageRef = useRef<ActionReviewStage>('input');
+  const handleReviewStageChange = useCallback((stage: ActionReviewStage) => {
+    reviewStageRef.current = stage;
+    setReviewStage(stage);
+  }, []);
   const prefetchStoreRef = useRef<RoutePrefetchStore | null>(null);
   const prefetchSessionRef = useRef(createPrefetchSessionId());
   const prefetchDescriptorRef = useRef<RoutePrefetchDescriptor | null>(null);
@@ -417,11 +422,11 @@ export default function TradePage() {
     let active = true;
     const ticket = currentTicketRef.current;
     const timer = window.setTimeout(() => {
-      if (document.visibilityState !== 'visible' || !navigator.onLine) return;
+      if (reviewStageRef.current !== 'input' || document.visibilityState !== 'visible' || !navigator.onLine) return;
       void (async () => {
         try {
           const blockNumber = await getEthereumClient().getBlockNumber();
-          if (!active || currentTicketRef.current !== ticket || document.visibilityState !== 'visible' || !navigator.onLine) return;
+          if (!active || reviewStageRef.current !== 'input' || currentTicketRef.current !== ticket || document.visibilityState !== 'visible' || !navigator.onLine) return;
           const descriptor: RoutePrefetchDescriptor = {
             sessionId: prefetchSessionRef.current,
             walletAddress: wallet.address!,
@@ -464,6 +469,9 @@ export default function TradePage() {
   }, [foreground, leverage, leverageBounds.max, leverageBounds.min, market, side, slippageValue, token, validAmount, wallet.address, wallet.chainId]);
 
   const prefetchedPlan = useCallback(async (): Promise<PlannedRoute | readonly PlannedRoute[] | null> => {
+    // Latch at the click boundary, before a pending warm-up timer or block read
+    // can launch a duplicate plan. An already-started exact quote stays usable.
+    reviewStageRef.current = 'planning';
     const descriptor = prefetchDescriptorRef.current;
     if (!descriptor || !prefetchStoreRef.current) return null;
     const ticket = currentTicketRef.current;
@@ -567,7 +575,13 @@ export default function TradePage() {
               blocker={reviewBlocker}
               label={`Open ${market} ${sideLabel}`}
               operationLabel={`Open ${market} ${sideLabel}`}
-              onStageChange={setReviewStage}
+              onStageChange={handleReviewStageChange}
+              preparationFacts={[
+                { label: 'Amount', value: `${validAmount ?? amount} ${tokenSymbol(token)}` },
+                { label: 'Target leverage', value: `${leverage}×` },
+                { label: 'Position', value: 'New position' },
+                { label: 'Slippage', value: `${slippageValue}%` },
+              ]}
               draftState={draftState}
               draftActionKey={draftActionKey}
               draftResumePath="/trade"

@@ -83,6 +83,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
   // account, and component changes invalidate the generation so late SDK/RPC
   // responses can never repopulate a newer wallet session.
   const generationRef = useRef(0);
+  const failedPreparationGenerationRef = useRef<number | null>(null);
   const preparedAtRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
   const liveWalletRef = useRef({
@@ -137,6 +138,8 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
   });
   const intentKey = draftState === undefined ? planBuilder : JSON.stringify(draftState);
   const previousIntentKey = useRef<typeof intentKey>(intentKey);
+  const liveIntentKeyRef = useRef<typeof intentKey>(intentKey);
+  liveIntentKeyRef.current = intentKey;
   const previousWalletMode = useRef(wallet.isEmbedded);
 
   useEffect(() => {
@@ -149,10 +152,11 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
   }, [expireQuote, preparedAt, stage]);
 
   useEffect(() => {
-    if (stage === 'review' || stage === 'result') {
+    const stableTrade = Boolean(props.preparationFacts?.length);
+    if (stage === 'result' || (stableTrade ? stage === 'planning' : stage === 'review')) {
       headingRef.current?.focus({ preventScroll: true });
     }
-  }, [stage]);
+  }, [props.preparationFacts?.length, stage]);
 
   const reset = useCallback(() => {
     if (busyRef.current && stage !== 'planning') return;
@@ -204,7 +208,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
 
   useEffect(() => {
     const onTelegramBack = (event: Event) => {
-      if (stage !== 'review' && stage !== 'result') return;
+      if (stage !== 'review' && stage !== 'result' && !(stage === 'planning' && props.preparationFacts?.length)) return;
       const detail = (event as CustomEvent<{ consume?: () => void; isConsumed?: () => boolean }>).detail;
       if (detail?.isConsumed?.()) return;
       reset();
@@ -212,7 +216,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
     };
     window.addEventListener('fxaeon:telegram-back', onTelegramBack);
     return () => window.removeEventListener('fxaeon:telegram-back', onTelegramBack);
-  }, [reset, stage]);
+  }, [props.preparationFacts?.length, reset, stage]);
 
   const invalidatePreparedRoute = useCallback((message: string) => {
     generationRef.current += 1;
@@ -257,11 +261,25 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
   useEffect(() => {
     if (previousIntentKey.current !== intentKey) {
       previousIntentKey.current = intentKey;
-      if (stage === 'review' || stage === 'planning') {
-        invalidatePreparedRoute('The inputs changed. Check the action again before signing.');
+      if ((stage === 'review' || (stage === 'planning' && status !== 'failed'))
+        && failedPreparationGenerationRef.current !== generationRef.current) {
+        const generation = generationRef.current;
+        const invalidate = () => {
+          if (generationRef.current === generation && failedPreparationGenerationRef.current !== generation) {
+            invalidatePreparedRoute('The inputs changed. Check the action again before signing.');
+          }
+        };
+        if (loading) {
+          // Let a planner's synchronous input correction and rejection settle
+          // together. A successful plan separately checks live intent before
+          // acceptance, so this turn cannot accept an obsolete route.
+          const timer = window.setTimeout(invalidate, 0);
+          return () => window.clearTimeout(timer);
+        }
+        invalidate();
       }
     }
-  }, [invalidatePreparedRoute, intentKey, stage]);
+  }, [invalidatePreparedRoute, intentKey, loading, stage, status]);
 
   useEffect(() => {
     // Results are non-signable historical evidence. Retain their original
@@ -294,7 +312,8 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
   }, [invalidatePreparedRoute, reviewSession, sessionMismatch, stage, wallet.address, wallet.authenticated, wallet.chainId, wallet.connectionVersion]);
 
   const review = useCallback(async () => {
-    if (!planBuilder || disabled || loading || busyRef.current || stage !== 'input') return;
+    const retryingPreparation = Boolean(props.preparationFacts?.length) && stage === 'planning' && status === 'failed';
+    if (!planBuilder || disabled || loading || busyRef.current || (stage !== 'input' && !retryingPreparation)) return;
     if (!wallet.authenticated || !wallet.address) {
       setError('Connect a wallet before preparing a transaction.');
       return;
@@ -309,6 +328,10 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
     const reviewSessionSnapshot = { walletAddress: reviewWalletAddress, chainId: reviewChainId, connectionVersion: reviewConnectionVersion };
     const assertReviewSession = () => {
       if (!isCurrentGeneration(generation)) return false;
+      if (liveIntentKeyRef.current !== intentKey) {
+        invalidatePreparedRoute('The inputs changed. Check the action again before signing.');
+        return false;
+      }
       const liveWallet = liveWalletRef.current;
       const mismatch = checkSession(reviewSessionSnapshot, {
         walletAddress: liveWallet.address?.toLowerCase() ?? '', authenticated: liveWallet.authenticated,
@@ -325,7 +348,18 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
     busyRef.current = true;
     setLoading(true);
     transition('prepare');
+    // A new attempt must not display or accept any previous review metadata.
+    clearAcceptedRoute();
+    setRoutes([]);
+    setSelectedRoute(0);
+    setFeeSelection(null);
+    setQuoteChanges([]);
+    setPreparedAt(null);
+    preparedAtRef.current = null;
     setError(null);
+    // Retry retains the same mounted card and stage, so the stage effect does
+    // not run again. Move focus before its action becomes disabled.
+    headingRef.current?.focus({ preventScroll: true });
     setStatus('planning');
     setStatusDetail('Preparing a fresh route.');
     try {
@@ -377,7 +411,12 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
       haptic('selection');
     } catch (cause) {
       if (!isCurrentGeneration(generation)) return;
-      transition('prepare-failed');
+      // Keep Trade's existing card mounted on a failed check; Retry starts a
+      // fresh planning generation and can never execute this unfinished route.
+      if (!props.preparationFacts?.length) transition('prepare-failed');
+      // The planner may update its own clamped input before rejecting. An
+      // already-scheduled input effect must not replace that failure message.
+      failedPreparationGenerationRef.current = generation;
       setStatus('failed');
       setError(userSafeError(cause, 'The transaction could not be prepared. Check the inputs and network, then try again.'));
       haptic('error');
@@ -387,7 +426,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
         setLoading(false);
       }
     }
-  }, [acceptRoute, bindSession, checkSession, disabled, isCurrentGeneration, loading, operationLabel, planBuilder, prefetchedPlan, intentKey, setQuoteChanges, stage, transition, wallet.address, wallet.authenticated, wallet.chainId, wallet.connectionVersion, wallet.isEmbedded]);
+  }, [acceptRoute, bindSession, checkSession, clearAcceptedRoute, disabled, invalidatePreparedRoute, isCurrentGeneration, loading, operationLabel, planBuilder, prefetchedPlan, intentKey, props.preparationFacts?.length, setQuoteChanges, stage, status, transition, wallet.address, wallet.authenticated, wallet.chainId, wallet.connectionVersion, wallet.isEmbedded]);
 
   const refreshReviewedQuote = useCallback(async () => {
     if (stage !== 'review' || !quoteExpired || !planBuilder || disabled || busyRef.current) return;
@@ -400,8 +439,12 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
     const connectionVersion = wallet.connectionVersion;
     const requestedGasTier = wallet.isEmbedded ? readGasTier() : undefined;
     const reviewIsEmbedded = wallet.isEmbedded;
-    const sessionMatches = () => {
+    const sessionMatches = (allowChangedIntent = false) => {
       if (!isCurrentGeneration(generation)) return false;
+      if (!allowChangedIntent && liveIntentKeyRef.current !== intentKey) {
+        invalidatePreparedRoute('The inputs changed. Check the action again before signing.');
+        return false;
+      }
       const live = liveWalletRef.current;
       return live.authenticated
         && live.address?.toLowerCase() === walletAddress
@@ -474,7 +517,10 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
       setStatusDetail('Review the updated transaction terms.');
       haptic('selection');
     } catch (cause) {
-      if (sessionMatches()) {
+      if (sessionMatches(true)) {
+        // A refresh starts from an expired, non-signable route. Preserve a
+        // planner's self-clamp failure; the next refresh uses the new inputs.
+        failedPreparationGenerationRef.current = generation;
         setError(userSafeError(cause, 'The updated quote could not be prepared. The reviewed terms remain unchanged.'));
         setStatus('failed');
       }
@@ -484,7 +530,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
         setLoading(false);
       }
     }
-  }, [acceptRoute, acceptedTerms, bindSession, disabled, feeSelection, isCurrentGeneration, operationLabel, planBuilder, intentKey, quoteExpired, routes, selectedRoute, stage, wallet.chainId, wallet.connectionVersion, wallet.isEmbedded]);
+  }, [acceptRoute, acceptedTerms, bindSession, disabled, feeSelection, invalidatePreparedRoute, isCurrentGeneration, operationLabel, planBuilder, intentKey, quoteExpired, routes, selectedRoute, stage, wallet.chainId, wallet.connectionVersion, wallet.isEmbedded]);
 
   // History restores editable primitives only. Once the route owner has
   // applied those values and exposes its planner, immediately reopen the
@@ -505,7 +551,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
 
   const execute = useCallback(async () => {
     const startingRoute = route;
-    if (disabled || !planBuilder || !startingRoute || loading || busyRef.current || stage !== 'review' || status === 'failed' || stepResults.some(hasTransactionHash)) return;
+    if (disabled || !planBuilder || !startingRoute || gasCost.checking || loading || busyRef.current || stage !== 'review' || status === 'failed' || stepResults.some(hasTransactionHash)) return;
     if (wallet.isEmbedded && (!feeSelection
       || feeSelection.snapshot.chainId !== startingRoute.chainId
       || feeSelection.tier !== readGasTier()
@@ -772,7 +818,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
         setLoading(false);
       }
     }
-  }, [bindSession, disabled, draftActionKey, draftResumePath, draftState, expireQuote, feeSelection, invalidateWalletData, isCurrentGeneration, loading, matchesAcceptedRoute, onComplete, planBuilder, intentKey, quoteExpired, reviewTitle, route, stage, status, stepResults, transition, wallet]);
+  }, [bindSession, disabled, gasCost.checking, draftActionKey, draftResumePath, draftState, expireQuote, feeSelection, invalidateWalletData, isCurrentGeneration, loading, matchesAcceptedRoute, onComplete, planBuilder, intentKey, quoteExpired, reviewTitle, route, stage, status, stepResults, transition, wallet]);
 
   // Connecting leaves the editor in place without preparing a transaction. The user
   // must click the action again after the wallet is connected.

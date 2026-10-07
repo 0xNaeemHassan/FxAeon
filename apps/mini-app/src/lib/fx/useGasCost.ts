@@ -20,6 +20,8 @@ export interface UseGasCostOptions {
 }
 
 export interface UseGasCostResult extends GasCostCacheView {
+  /** Initial or active fee checks have not settled; keep confirmation disabled. */
+  checking: boolean;
   /** Current estimate when available, otherwise the retained prior snapshot. */
   estimate?: RouteGasCostEstimate;
   /** Whether `estimate` is fresh enough to be used as a current review fact. */
@@ -103,7 +105,7 @@ export function useRouteGasCost(
         scheduleRefresh(15_000);
       }
     };
-    if (initial.status === 'current') {
+    if (initial.status === 'current' && !routeGasCostCache.isRefreshing(activeRoute, options.feeTierQuote)) {
       scheduleRefresh(Math.max(1, (initial.current?.validUntil ?? Date.now()) - Date.now()));
     } else {
       void refreshRoute();
@@ -135,6 +137,7 @@ export function useRouteGasCost(
   const estimate = view.current ?? view.previous;
   return {
     ...view,
+    checking: enabled && (Boolean(route && routeGasCostCache.isRefreshing(route, options.feeTierQuote)) || view.status === 'refreshing' || (!estimate && !(errorState.key === routeKey && errorState.value))),
     estimate,
     estimateIsCurrent: Boolean(view.current && view.current.status === 'current' && !view.current.fee?.stale),
     error: enabled && errorState.key === routeKey ? errorState.value : undefined,
