@@ -15,7 +15,6 @@ import {
 import styles from './TransactionSettings.module.css';
 
 const SPEED_LABELS: Record<GasTier, string> = { standard: 'Standard', fast: 'Fast', rapid: 'Rapid' };
-const DEFAULT_SLIPPAGE_BPS = Math.round(DEFAULT_SLIPPAGE_PERCENT * 100);
 const percentNumber = (bps: number) => (bps / 100).toString();
 const formatPercent = (bps: number) => `${percentNumber(bps)}%`;
 const formatGwei = (wei: bigint) => {
@@ -53,23 +52,21 @@ export function TransactionSettings({ slippage = false, slippagePercent, onSlipp
   onSlippageChange?: (percent: string) => void;
 }) {
   const { bps: storedBps, tier } = useStoredSettings();
-  const requestedBps = slippagePercent === undefined ? storedBps : Number(slippagePercent) * 100;
-  const wholeBps = Math.round(requestedBps);
-  // Multiplication can turn 0.29% into 28.999999999999996 bps. Normalize only
-  // exact whole-basis-point percentages; never round a draft's actual intent.
-  const bps = slippagePercent !== undefined && wholeBps / 100 === Number(slippagePercent) ? wholeBps : requestedBps;
-  const summary = slippage ? `${formatPercent(bps)} slippage` : `${SPEED_LABELS[tier]} speed`;
+  // Keep a restored form's exact display text. Round-tripping through basis
+  // points can turn 0.101% into 0.10100000000000002%.
+  const percent = slippagePercent ?? percentNumber(storedBps);
+  const summary = slippage ? `${percent}% slippage` : `${SPEED_LABELS[tier]} speed`;
   const changes = [
-    slippage && bps !== DEFAULT_SLIPPAGE_BPS ? `${formatPercent(bps)} slippage` : null,
+    slippage && Number(percent) !== DEFAULT_SLIPPAGE_PERCENT ? `${percent}% slippage` : null,
     tier !== DEFAULT_GAS_TIER ? SPEED_LABELS[tier] : null,
   ].filter(Boolean);
   return <SettingsPopover summary={summary} chip={changes.length ? changes.join(' · ') : null}>
-    <TransactionSettingsPanel slippage={slippage} bps={bps} tier={tier} controlledSlippage={slippagePercent !== undefined} onSlippageChange={onSlippageChange} />
+    <TransactionSettingsPanel slippage={slippage} percent={percent} tier={tier} controlledSlippage={slippagePercent !== undefined} onSlippageChange={onSlippageChange} />
   </SettingsPopover>;
 }
 
-function TransactionSettingsPanel({ slippage, bps, tier, controlledSlippage, onSlippageChange }: {
-  slippage: boolean; bps: number; tier: GasTier; controlledSlippage: boolean; onSlippageChange?: (percent: string) => void;
+function TransactionSettingsPanel({ slippage, percent, tier, controlledSlippage, onSlippageChange }: {
+  slippage: boolean; percent: string; tier: GasTier; controlledSlippage: boolean; onSlippageChange?: (percent: string) => void;
 }) {
   const id = useId();
   const wallet = usePrivyWallet();
@@ -78,7 +75,7 @@ function TransactionSettingsPanel({ slippage, bps, tier, controlledSlippage, onS
   const [error, setError] = useState('');
   const [gas, setGas] = useState<GasTierQuotes | null>(null);
   const [gasStatus, setGasStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading');
-  const presetIndex = (SLIPPAGE_PRESETS_BPS as readonly number[]).indexOf(bps);
+  const presetIndex = SLIPPAGE_PRESETS_BPS.findIndex((value) => value / 100 === Number(percent));
   const walletSetsFees = Boolean(wallet.address) && !wallet.isEmbedded;
 
   useEffect(() => {
@@ -95,8 +92,11 @@ function TransactionSettingsPanel({ slippage, bps, tier, controlledSlippage, onS
   };
   const commit = () => {
     if (draft === null) return;
-    const text = draft.trim().replace(',', '.');
     setDraft(null);
+    // An untouched restored value is not a new saved preference. It can
+    // legitimately have finer precision than the settings editor permits.
+    if (controlledSlippage && draft === percent) { setError(''); return; }
+    const text = draft.trim().replace(',', '.');
     if (!text) { setError(''); return; }
     const value = Math.round(Number(text) * 100);
     if (!/^\d*\.?\d+$/.test(text) || !isSlippageBps(value) || Math.abs(Number(text) * 100 - value) > 1e-9) {
@@ -104,8 +104,6 @@ function TransactionSettingsPanel({ slippage, bps, tier, controlledSlippage, onS
       return;
     }
     setError('');
-    // Focusing and leaving a restored value is not a preference change.
-    if (controlledSlippage && value === bps) return;
     if (writeTransactionSettings({ slippageBps: value })) onSlippageChange?.(percentNumber(value));
   };
   const chooseTier = (value: GasTier) => {
@@ -117,19 +115,19 @@ function TransactionSettingsPanel({ slippage, bps, tier, controlledSlippage, onS
     {slippage && <section className={styles.section} aria-labelledby={`${id}-slippage`}>
       <div className={styles.heading}>
         <h3 id={`${id}-slippage`}>Max slippage</h3>
-        <span className={styles.value}>{formatPercent(bps)}</span>
+        <span className={styles.value}>{percent}%</span>
       </div>
       <p className={styles.help} id={`${id}-slippage-help`}>If the price moves more than this before confirmation, the transaction reverts instead of filling worse.</p>
       <div className={styles.choices} role="radiogroup" aria-labelledby={`${id}-slippage`} data-thumb={presetIndex >= 0 || undefined}
         style={{ '--seg-index': Math.max(presetIndex, 0), '--seg-count': SLIPPAGE_PRESETS_BPS.length } as CSSProperties}>
-        {SLIPPAGE_PRESETS_BPS.map((value) => <button key={value} type="button" role="radio" aria-checked={bps === value}
+        {SLIPPAGE_PRESETS_BPS.map((value) => <button key={value} type="button" role="radio" aria-checked={value / 100 === Number(percent)}
           onClick={() => choosePreset(value)}>{formatPercent(value)}</button>)}
       </div>
       <label className={styles.custom} data-active={presetIndex < 0 || undefined} data-invalid={Boolean(error) || undefined}>
         <span>Custom</span>
-        <input inputMode="decimal" autoComplete="off" value={draft ?? percentNumber(bps)} aria-label="Slippage tolerance percentage"
+        <input inputMode="decimal" autoComplete="off" value={draft ?? percent} aria-label="Slippage tolerance percentage"
           aria-describedby={`${id}-slippage-help`} aria-invalid={Boolean(error)}
-          onFocus={() => setDraft(percentNumber(bps))} onChange={(event) => { setDraft(event.target.value.slice(0, 6)); setError(''); }}
+          onFocus={() => setDraft(percent)} onChange={(event) => { setDraft(event.target.value.slice(0, 6)); setError(''); }}
           onBlur={commit} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); (event.target as HTMLInputElement).blur(); } }} />
         <span aria-hidden="true">%</span>
       </label>
