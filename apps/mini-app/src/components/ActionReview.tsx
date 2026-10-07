@@ -40,7 +40,8 @@ import { PositionOutcomeSummary, TransactionProgressPresentation, UpdatedQuoteSu
 import { TransactionResultView } from '@/components/review/TransactionResultView';
 import { ReviewViewport } from '@/components/review/ReviewViewport';
 import { positionPoolAddress } from '@/lib/fx/policy';
-import { GAS_TIERS } from '@/lib/settings';
+import { stableTradeReviewFacts } from './review/stableTradeReviewFacts';
+import { GAS_TIERS, readGasTier } from '@/lib/settings';
 import { formatGasPriceGwei } from '@/lib/fx/gasFeePolicy';
 import styles from './FlowWorkspace.module.css';
 import { StickyAction } from './StickyAction';
@@ -152,21 +153,7 @@ export function ActionReview(props: ActionReviewProps) {
     return trigger;
   }
 
-  if (stage === 'planning' && props.preparationFacts?.length) {
-    return (
-      <ReviewSurface surface={surface} className={`${styles.reviewCard} ${styles.reviewInlineCard} p-4 sm:p-5`}>
-        <button type="button" onClick={reset} className="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-1 text-[12px] font-semibold text-mut"><ArrowLeft aria-hidden="true" className="h-4 w-4" /> Edit</button>
-        <h3 data-review-focus tabIndex={-1} className="text-display mt-2 text-[21px] font-semibold outline-none">{operationLabel ?? label}</h3>
-        <dl className="my-4 grid gap-3">
-          {props.preparationFacts.map((fact) => <div key={fact.label} className="flex justify-between gap-4"><dt className="text-mut">{fact.label}</dt><dd className="break-all text-right">{fact.value}</dd></div>)}
-        </dl>
-        <p role="status" aria-live="polite" className="my-4 text-[13px] text-mut">{status === 'reviewing' ? 'Checking the route and network fees.' : 'Finding the route. Estimates and fees will appear after verification.'}</p>
-        <Button disabled className={styles.primaryAction}>Checking transaction…</Button>
-      </ReviewSurface>
-    );
-  }
-
-  if (stage === 'planning') {
+  if (stage === 'planning' && !props.preparationFacts?.length) {
     return (
       <ReviewSurface surface={surface} className={`${styles.reviewCard} ${styles.reviewInlineCard} p-4 sm:p-5`}>
           <button type="button" onClick={reset} className="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-1 text-[12px] font-semibold text-mut"><ArrowLeft aria-hidden="true" className="h-4 w-4" /> Edit</button>
@@ -281,31 +268,37 @@ export function ActionReview(props: ActionReviewProps) {
     );
   }
 
-  if (!route) return null;
-  const stepCount = route.transactions.length;
+  const stablePreparation = Boolean(props.preparationFacts?.length);
+  const preparing = stage === 'planning';
+  if (!route && !stablePreparation) return null;
+  const reviewChainId = route?.chainId ?? 1; // Trade's inputs are Ethereum-only.
+  const stepCount = route?.transactions.length ?? 0;
   // A wallet that cannot pay the network fee would only reach a failed or
   // stalled signing screen, so the review names the shortfall instead. A
   // fresh partial estimate still proves it: every step costs at least 21,000 gas.
   const fundsShort = Boolean(gasCost.current?.insufficientNativeBalance);
   const checkingGas = gasCost.checking;
-  const feeNetwork = route.chainId === 8453 ? 'Base' : 'Ethereum';
-  const feeTierQuote = wallet.isEmbedded && feeSelection?.snapshot.chainId === route.chainId
+  const feeNetwork = reviewChainId === 8453 ? 'Base' : 'Ethereum';
+  const feeTierQuote = wallet.isEmbedded && feeSelection?.snapshot.chainId === reviewChainId
     ? feeSelection.snapshot.tiers[feeSelection.tier]
     : undefined;
-  const facts = buildRouteFacts(route, gasCost, executionCost, feeTierQuote);
+  const facts = route ? buildRouteFacts(route, gasCost, executionCost, feeTierQuote) : [];
   const missingGasFee = missingGasFeeFact(gasCost);
   if (missingGasFee && !facts.some((fact) => fact.label === 'Gas fee')) facts.push(missingGasFee);
-  const missingTotalCost = missingTotalCostFact(route, gasCost);
+  const missingTotalCost = route ? missingTotalCostFact(route, gasCost) : undefined;
   if (missingTotalCost && !facts.some((fact) => fact.label === 'Total cost')) facts.push(missingTotalCost);
   const reviewFacts = splitReviewFacts(facts);
-  const consequenceFacts = consequenceSummary(primaryReviewFacts(route));
+  const consequenceFacts = route ? consequenceSummary(primaryReviewFacts(route)) : [];
   const positionChanges = pairVerifiedPositionFacts(decisionBefore ?? [], facts);
   const pairedOutcomeLabels = new Set(positionChanges.paired.map((fact) => `estimated ${fact.label.toLowerCase()}`));
   const actionConsequences = consequenceFacts.filter((fact) => !pairedOutcomeLabels.has(fact.label.toLowerCase()));
   const remainingSummaryFacts = factsOutsideConsequenceSummary(reviewFacts.summary, actionConsequences);
-  const summaryFacts = [...actionConsequences, ...remainingSummaryFacts].filter((fact) => !['Gas tier', 'Action'].includes(fact.label));
+  const verifiedSummaryFacts = [...actionConsequences, ...remainingSummaryFacts].filter((fact) => !['Gas tier', 'Action'].includes(fact.label));
+  const summaryFacts = stablePreparation
+    ? stableTradeReviewFacts(props.preparationFacts ?? [], verifiedSummaryFacts, { preparing, failed: status === 'failed', checkingGas, hasVerifiedRoute: Boolean(route), totalIsGasOnly: Boolean(route && gasCost.estimateIsCurrent && gasCost.estimate?.nativeValueWei === 0n && gasCost.estimate.totalNativeCostWei !== undefined) })
+    : verifiedSummaryFacts;
   const primaryAmount = summaryFacts.find((fact) => ['Amount', 'Input amount', 'Deposit', 'Repay', 'fxSAVE'].includes(fact.label));
-  const approvals = route.transactions
+  const approvals = (route?.transactions ?? [])
     .map((transaction) => {
       const approval = approvalFacts(transaction);
       if (!approval) return null;
@@ -315,21 +308,21 @@ export function ActionReview(props: ActionReviewProps) {
       return { label: stepTitle(transaction), value: amount.value, title: `${amount.title} → ${approval.spender}` };
     })
     .filter((value): value is { label: string; value: string; title: string } => value !== null);
-  const progress = statusPresentation({ stage, status, detail: statusDetail, stepResults, stepCount, operation: route.operation, refreshing, networkSwitching });
+  const progress = statusPresentation({ stage, status, detail: statusDetail, stepResults, stepCount, operation: route?.operation, refreshing, networkSwitching });
   const showExecutionProgress = stage === 'executing' || stepResults.some(hasTransactionHash);
-  const wrongNetwork = wallet.chainId !== undefined && wallet.chainId !== route.chainId;
+  const wrongNetwork = wallet.chainId !== undefined && wallet.chainId !== reviewChainId;
   const unsupportedNetwork = wallet.chainId === undefined;
   return (
-    <ReviewSurface surface={surface} className={`${styles.reviewCard} ${styles.reviewInlineCard} p-4 sm:p-5`}>
-      <ReviewViewport>
+    <ReviewSurface stable={stablePreparation} surface={surface} className={`${styles.reviewCard} ${styles.reviewInlineCard} p-4 sm:p-5`}>
+      <ReviewViewport stable={stablePreparation}>
       <header className={presentationStyles.reviewHeader}>
         <div>
           <h3 ref={headingRef} data-review-focus tabIndex={-1} className="text-display outline-none">
-            {reviewTitle ?? route.operation}
+            {reviewTitle ?? operationLabel ?? route?.operation ?? label}
           </h3>
-          <p>{chainName(route.chainId)}</p>
+          <p>{chainName(reviewChainId)}</p>
         </div>
-        <button type="button" disabled={loading} onClick={reset} className={presentationStyles.editButton}>
+        <button type="button" disabled={loading && !preparing} onClick={reset} className={presentationStyles.editButton}>
           <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Edit
         </button>
       </header>
@@ -337,7 +330,7 @@ export function ActionReview(props: ActionReviewProps) {
 
       {showExecutionProgress && (
         <div className={presentationStyles.actualProgress}>
-          <TransactionProgressPresentation label="Submitted transactions" status={status} stepResults={stepResults} chainId={route.chainId} presentation={progress} />
+          <TransactionProgressPresentation label="Submitted transactions" status={status} stepResults={stepResults} chainId={reviewChainId} presentation={progress} />
         </div>
       )}
 
@@ -375,29 +368,30 @@ export function ActionReview(props: ActionReviewProps) {
         </div>
       )}
 
-      <div className={styles.reviewFacts}>
-        {summaryFacts.map((fact) => <ReviewRow key={`${fact.label}-${fact.value}`} label={fact.label} value={fact.value} title={fact.title} className={fact === primaryAmount ? presentationStyles.primaryAmount : undefined} />)}
+      <div className={`${styles.reviewFacts} ${stablePreparation ? presentationStyles.stableFacts : ''}`}>
+        {summaryFacts.map((fact) => <ReviewRow key={stablePreparation ? fact.label : `${fact.label}-${fact.value}`} label={fact.label} value={fact.value} title={fact.title} className={fact === primaryAmount ? presentationStyles.primaryAmount : undefined} />)}
         {approvals.map((approval, index) => <ReviewRow key={`${approval.label}-${index}`} label={approval.label} value={approval.value} title={approval.title} />)}
      </div>
 
-      {wallet.isEmbedded && feeSelection && <fieldset className={styles.feeSelector} disabled={loading || stage !== 'review'}>
+      {wallet.isEmbedded && (feeSelection || stablePreparation) && <fieldset className={styles.feeSelector} disabled={loading || stage !== 'review' || !feeSelection}>
         <legend className="sr-only">Network fee speed</legend>
         {GAS_TIERS.map((tier) => <label key={tier}>
-          <input type="radio" name="review-gas-tier" value={tier} checked={feeSelection.tier === tier} onChange={() => void selectGasTier(tier)} />
-          <span><strong>{tier === 'standard' ? 'Standard' : tier === 'fast' ? 'Fast' : 'Rapid'}</strong><small>{formatGasPriceGwei(feeSelection.snapshot.tiers[tier].gasPriceWei)}</small></span>
+          <input type="radio" name="review-gas-tier" value={tier} checked={(feeSelection?.tier ?? readGasTier()) === tier} onChange={() => void selectGasTier(tier)} />
+          <span><strong>{tier === 'standard' ? 'Standard' : tier === 'fast' ? 'Fast' : 'Rapid'}</strong><small><ValueOrSkeleton value={feeSelection ? formatGasPriceGwei(feeSelection.snapshot.tiers[tier].gasPriceWei) : status === 'failed' ? 'Unavailable' : '—'} width="xs" label={`Loading ${tier} gas price`} /></small></span>
         </label>)}
       </fieldset>}
 
       {quoteExpired && <div role="status" className="mt-3 rounded-xl border border-[rgba(255,194,102,.28)] bg-[var(--warn-dim)] px-3 py-2 text-[12px] text-warn">This reviewed quote expired. Refresh and review the updated terms before signing.</div>}
       <UpdatedQuoteSummary changes={quoteChanges} />
 
-      {wrongNetwork && <p role="status" className="mt-2 rounded-xl border border-[rgba(255,194,102,.24)] bg-[var(--warn-dim)] px-3 py-2 text-[11.5px] leading-relaxed text-warn">Wallet is on {chainName(wallet.chainId!)}. Confirmation will switch to {chainName(route.chainId)} before signing.</p>}
-      {unsupportedNetwork && <p role="status" className="mt-2 rounded-xl border border-[rgba(255,194,102,.24)] bg-[var(--warn-dim)] px-3 py-2 text-[11.5px] leading-relaxed text-warn">Wallet network is unavailable or unsupported. Confirmation will request {chainName(route.chainId)} before signing.</p>}
+      {route && wrongNetwork && <p role="status" className="mt-2 rounded-xl border border-[rgba(255,194,102,.24)] bg-[var(--warn-dim)] px-3 py-2 text-[11.5px] leading-relaxed text-warn">Wallet is on {chainName(wallet.chainId!)}. Confirmation will switch to {chainName(reviewChainId)} before signing.</p>}
+      {route && unsupportedNetwork && <p role="status" className="mt-2 rounded-xl border border-[rgba(255,194,102,.24)] bg-[var(--warn-dim)] px-3 py-2 text-[11.5px] leading-relaxed text-warn">Wallet network is unavailable or unsupported. Confirmation will request {chainName(reviewChainId)} before signing.</p>}
 
       <PositionOutcomeSummary facts={positionChanges.paired} />
       <details className={presentationStyles.reviewDetails} aria-label="Review details">
-        <summary><span>Details</span><span>{stepCount} {stepCount === 1 ? 'transaction' : 'transactions'}<ChevronDown size={16} aria-hidden="true" /></span></summary>
+        <summary><span>Details</span><span>{route ? `${stepCount} ${stepCount === 1 ? 'transaction' : 'transactions'}` : <ValueOrSkeleton value={status === 'failed' ? 'Unavailable' : '—'} width="sm" label="Checking transaction steps" />}<ChevronDown size={16} aria-hidden="true" /></span></summary>
       <div className={presentationStyles.disclosures}>
+      {route ? <>
       <DecisionContext beforeFacts={positionChanges.remainingBefore.length ? positionChanges.remainingBefore : undefined} />
       {/* Summary facts are already visible above. Keep Quote details for the
        * remaining exact route metadata so a fact has one deliberate home. */}
@@ -437,21 +431,29 @@ export function ActionReview(props: ActionReviewProps) {
         </section>
       </details>
 
+      </> : <p className="py-3 text-[12px] text-mut">Transaction details will appear after verification.</p>}
       </div>
       </details>
 
-      {!showExecutionProgress && !(stage === 'review' && status === 'reviewing') && <div className="mt-4"><StatusNotice {...progress} /></div>}
-      {error && <div className="mt-3"><InlineError message={error} /></div>}
+      {!stablePreparation && !showExecutionProgress && !(stage === 'review' && status === 'reviewing') && <div className="mt-4"><StatusNotice {...progress} /></div>}
+      {(!stablePreparation || stage === 'executing') && error && <div className="mt-3"><InlineError message={error} /></div>}
       </div>
-      {stage === 'review' && (
+      {(stage === 'review' || preparing) && (
         <div className={styles.reviewInlineActions}>
-          {fundsShort && !quoteExpired && <p className={styles.fundsNote} role="status">
+          {stablePreparation && <p role={error ? 'alert' : 'status'} aria-live="polite" className={`${presentationStyles.stableReviewStatus} ${error || fundsShort ? 'text-warn' : 'text-mut'}`}>
+            {error ?? (fundsShort && !quoteExpired
+              ? `${feeNetwork} network fees are paid in ETH. Add ETH to cover this transaction.`
+              : preparing ? status === 'reviewing' ? 'Verifying the route and network fees.' : 'Finding the route. Estimates and fees are being checked.'
+                : checkingGas ? 'Checking network fees and available ETH.'
+                  : quoteExpired ? 'Refresh and review the updated terms before signing.' : 'Review the details before confirming in your wallet.')}
+          </p>}
+          {!stablePreparation && fundsShort && !quoteExpired && <p className={styles.fundsNote} role="status">
             {feeNetwork} network fees are paid in ETH, and this wallet does not hold enough to cover them. Add ETH to continue.
           </p>}
           <Button variant={destructive ? 'danger' : 'primary'} data-blocked={fundsShort && !quoteExpired ? true : undefined}
-            disabled={disabled || !planBuilder || loading || (!quoteExpired && (status === 'failed' || fundsShort || checkingGas))} loading={loading} className={styles.primaryAction}
-            onClick={() => quoteExpired ? void refreshReviewedQuote() : void execute()}>
-            {quoteExpired ? 'Review updated quote' : fundsShort ? 'Not enough ETH for network fees' : checkingGas ? 'Checking network fees…' : approvals[0]?.label ?? 'Confirm'}
+            disabled={disabled || !planBuilder || loading || (preparing && status !== 'failed') || (!preparing && !quoteExpired && (status === 'failed' || fundsShort || checkingGas))} loading={loading && !preparing} className={styles.primaryAction}
+            onClick={() => preparing ? void review() : quoteExpired ? void refreshReviewedQuote() : void execute()}>
+            {preparing ? status === 'failed' ? 'Retry review' : 'Checking transaction…' : quoteExpired ? 'Review updated quote' : fundsShort ? stablePreparation ? 'Not enough ETH' : 'Not enough ETH for network fees' : checkingGas ? 'Checking network fees…' : approvals[0]?.label ?? 'Confirm'}
           </Button>
         </div>
       )}
@@ -461,14 +463,14 @@ export function ActionReview(props: ActionReviewProps) {
 
 }
 
-function ReviewSurface({ surface, className, children }: { surface: 'card' | 'content'; className: string; children: ReactNode }) {
-  if (surface === 'content') return <div className={`${styles.reviewInlineContent} reviewInlineContent ${presentationStyles.surfaceEnter}`}>{children}</div>;
-  return <Card className={`${className} ${presentationStyles.surfaceEnter}`}>{children}</Card>;
+function ReviewSurface({ surface, className, children, stable = false }: { surface: 'card' | 'content'; className: string; children: ReactNode; stable?: boolean }) {
+  if (surface === 'content') return <div className={`${styles.reviewInlineContent} reviewInlineContent ${stable ? '' : presentationStyles.surfaceEnter}`}>{children}</div>;
+  return <Card className={`${className} ${stable ? '' : presentationStyles.surfaceEnter}`}>{children}</Card>;
 }
 
 function ReviewRow({ label, value, title, className }: { label: string; value: ReactNode; title?: string; className?: string }) {
   const valueTitle = title ?? (typeof value === 'string' ? value : undefined);
-  return <div className={`flex items-start justify-between gap-4 text-[13px] ${className ?? ''}`}><span className="text-mut">{label}</span><span title={valueTitle} className="max-w-[62%] break-words text-right font-semibold tabular-nums"><ValueOrSkeleton value={value} width="md" label={`Loading ${label.toLowerCase()}`} /></span></div>;
+  return <div data-review-fact={label} className={`flex items-start justify-between gap-4 text-[13px] ${className ?? ''}`}><span className="text-mut">{label}</span><span title={valueTitle} className="max-w-[62%] break-words text-right font-semibold tabular-nums"><ValueOrSkeleton value={value} width="md" label={`Loading ${label.toLowerCase()}`} /></span></div>;
 }
 
 function AdvancedReviewDetails({ route }: { route: PlannedRoute }) {
