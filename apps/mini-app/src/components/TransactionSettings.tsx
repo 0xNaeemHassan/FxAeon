@@ -46,22 +46,34 @@ function useStoredSettings() {
  * quiet at the defaults and shows a chip once something differs. Changes save
  * at once and reach every open form and review.
  */
-export function TransactionSettings({ slippage = false }: { slippage?: boolean }) {
-  const { bps, tier } = useStoredSettings();
+export function TransactionSettings({ slippage = false, slippagePercent, onSlippageChange }: {
+  slippage?: boolean;
+  /** A restored form can differ from the saved preference. Show its actual input. */
+  slippagePercent?: string;
+  onSlippageChange?: (percent: string) => void;
+}) {
+  const { bps: storedBps, tier } = useStoredSettings();
+  const requestedBps = slippagePercent === undefined ? storedBps : Number(slippagePercent) * 100;
+  const wholeBps = Math.round(requestedBps);
+  // Multiplication can turn 0.29% into 28.999999999999996 bps. Normalize only
+  // exact whole-basis-point percentages; never round a draft's actual intent.
+  const bps = slippagePercent !== undefined && wholeBps / 100 === Number(slippagePercent) ? wholeBps : requestedBps;
   const summary = slippage ? `${formatPercent(bps)} slippage` : `${SPEED_LABELS[tier]} speed`;
   const changes = [
     slippage && bps !== DEFAULT_SLIPPAGE_BPS ? `${formatPercent(bps)} slippage` : null,
     tier !== DEFAULT_GAS_TIER ? SPEED_LABELS[tier] : null,
   ].filter(Boolean);
   return <SettingsPopover summary={summary} chip={changes.length ? changes.join(' · ') : null}>
-    <TransactionSettingsPanel slippage={slippage} bps={bps} tier={tier} />
+    <TransactionSettingsPanel slippage={slippage} bps={bps} tier={tier} controlledSlippage={slippagePercent !== undefined} onSlippageChange={onSlippageChange} />
   </SettingsPopover>;
 }
 
-function TransactionSettingsPanel({ slippage, bps, tier }: { slippage: boolean; bps: number; tier: GasTier }) {
+function TransactionSettingsPanel({ slippage, bps, tier, controlledSlippage, onSlippageChange }: {
+  slippage: boolean; bps: number; tier: GasTier; controlledSlippage: boolean; onSlippageChange?: (percent: string) => void;
+}) {
   const id = useId();
   const wallet = usePrivyWallet();
-  // The field always shows the saved value; while focused it holds the draft.
+  // Show the current form value (or saved default); hold edits while focused.
   const [draft, setDraft] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [gas, setGas] = useState<GasTierQuotes | null>(null);
@@ -79,7 +91,7 @@ function TransactionSettingsPanel({ slippage, bps, tier }: { slippage: boolean; 
   const choosePreset = (value: number) => {
     haptic('selection');
     setDraft(null); setError('');
-    writeTransactionSettings({ slippageBps: value });
+    if (writeTransactionSettings({ slippageBps: value })) onSlippageChange?.(percentNumber(value));
   };
   const commit = () => {
     if (draft === null) return;
@@ -92,7 +104,9 @@ function TransactionSettingsPanel({ slippage, bps, tier }: { slippage: boolean; 
       return;
     }
     setError('');
-    writeTransactionSettings({ slippageBps: value });
+    // Focusing and leaving a restored value is not a preference change.
+    if (controlledSlippage && value === bps) return;
+    if (writeTransactionSettings({ slippageBps: value })) onSlippageChange?.(percentNumber(value));
   };
   const chooseTier = (value: GasTier) => {
     haptic('selection');
