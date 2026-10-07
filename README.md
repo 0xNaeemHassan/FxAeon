@@ -8,7 +8,7 @@
   </picture>
 </a>
 
-### All of f(x) Protocol, inside Telegram.
+### f(x) Protocol, now inside Telegram.
 
 <a href="https://t.me/FxAeonBot"><b>Open in Telegram</b></a>
 &nbsp;·&nbsp;
