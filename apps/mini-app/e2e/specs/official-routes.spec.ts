@@ -246,7 +246,7 @@ test.describe("connected browser wallet flows", () => {
     await expect(btcPicker.getByRole("option", { name: /^WBTC\b.*\bselected$/i })).toBeVisible();
     await btcPicker.getByRole("option", { name: /^WBTC\b.*\bselected$/i }).click();
     await page.getByRole("radio", { name: "ETH" }).click();
-    await page.getByRole("radio", { name: "Short" }).click();
+    await page.getByRole("radiogroup", { name: "Position side" }).getByRole("radio", { name: "Short" }).click();
     await asset.click();
     await expect(page.getByRole("listbox", { name: "Input asset options" }).getByRole("option", { name: /^stETH/i })).toBeVisible();
     await page.getByRole("listbox", { name: "Input asset options" }).getByRole("option", { name: /^ETH\b.*\bselected$/i }).click();
@@ -257,7 +257,7 @@ test.describe("connected browser wallet flows", () => {
       { market: "BTC", side: "Short", label: "Target leverage", min: "0.1", max: "6" },
     ] as const) {
       await page.getByRole("radio", { name: flow.market, exact: true }).click();
-      await page.getByRole("radio", { name: flow.side, exact: true }).click();
+      await page.getByRole("radiogroup", { name: "Position side" }).getByRole("radio", { name: flow.side, exact: true }).click();
       const leverage = page.getByRole("spinbutton", { name: flow.label, exact: true });
       await expect(leverage).toHaveAttribute("min", flow.min);
       await expect(leverage).toHaveAttribute("max", flow.max);
