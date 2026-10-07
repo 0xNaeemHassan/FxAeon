@@ -422,13 +422,10 @@ export default function EarnPage() {
       if (readWarnings.includes('balance')) return null;
       const amountWei = parseAmount(amount, token === 'usdc' ? 'USDC' : token === 'fxUSDBasePool' ? 'fxUSDBasePool' : 'fxUSD');
       if (!amountWei) return null;
-      const slippageValue = Number(slippage);
-      if (token !== 'fxUSDBasePool' && (!Number.isFinite(slippageValue) || slippageValue <= 0 || slippageValue > MAX_FX_SLIPPAGE_PERCENT)) return null;
       return () => planDepositFxSave({
         userAddress: wallet.address!,
         tokenIn: token,
         amount: amountWei,
-        slippage: token === 'fxUSDBasePool' ? undefined : slippageValue,
       });
     }
     const sharesWei = shares.toLowerCase() === 'all'
@@ -490,7 +487,7 @@ export default function EarnPage() {
                   <Segmented value={mode} onChange={changeMode} ariaLabel="fxSAVE action" options={[
                     { value: 'deposit', label: 'Deposit' }, { value: 'withdraw', label: 'Withdraw' },
                   ]} />
-                  <TransactionSettings slippage slippagePercent={slippage} onSlippageChange={setSlippage} />
+                  <TransactionSettings slippage={mode !== 'deposit' || token === 'fxUSDBasePool'} slippagePercent={slippage} onSlippageChange={setSlippage} />
                 </div>
               </> : <div className={presentation.claimHeading}>
                 <button type="button" onClick={() => changeMode('withdraw')} className={presentation.back}><ArrowLeft size={17} aria-hidden="true" />Back to fxSAVE</button>
@@ -599,6 +596,7 @@ function EarnActionEditor({ mode, token, onTokenChange, amount, onAmountChange, 
     {mode === 'deposit' && <>
       <AmountField label="Deposit amount" symbol={labelToken(token)} value={amount} onChange={onAmountChange}
         maxDecimals={token === 'usdc' ? 6 : 18} balanceState={amountBalance} tokenSelector={picker} />
+      {token !== 'fxUSDBasePool' && <p className={presentation.helper}>The SDK sets a base-pool share minimum, shown in review. Final fxSAVE shares have no separate minimum. Your saved slippage setting does not apply to this deposit.</p>}
     </>}
     {mode === 'withdraw' && <>
       <AmountField label="Amount" symbol="fxSAVE" value={shares} onChange={onSharesChange}
