@@ -8,6 +8,7 @@ const ROUTE_METADATA = {
   move: ['Move', 'Move supported fxUSD and fxSAVE assets between Ethereum and Base in FxAeon.'],
   more: ['More', 'Open FxAeon account tools, history, receive, settings, and documentation.'],
   docs: ['Docs', 'Learn how FxAeon uses the f(x) SDK for trading, borrowing, earning, and moving assets.'],
+  docsSdk: ['f(x) SDK reference', 'Explore FxAeon’s 15-method f(x) SDK integration: supported reads, transaction plans, network scope, and local patches.'],
   history: ['History', 'Review submitted and confirmed FxAeon wallet transactions.'],
   positions: ['Positions', 'Review and manage your FxAeon ETH and BTC positions.'],
   qr: ['Receive', 'Receive supported assets into your connected FxAeon wallet.'],

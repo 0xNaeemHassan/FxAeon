@@ -168,11 +168,11 @@ test.describe('cohesive responsive design', () => {
       await contents.locator('summary').click();
     }
     await expect(contents).toHaveJSProperty('open', true);
-    await expect(nav.getByRole('link')).toHaveCount(13);
-    await search.fill('slippage');
+    await expect(nav.getByRole('link')).toHaveCount(15);
+    await search.fill('network speed');
     await expect(nav.getByRole('link')).toHaveCount(1);
     // The compact summary announces the filtered count.
-    await expect(nav.getByText('1 section', { exact: true })).toHaveCount(1);
+    await expect(nav.getByText('1 result', { exact: true })).toHaveCount(1);
     // Search filters the index, never the underlying article or anchors.
     await expect(page.getByRole('heading', { name: 'Getting started', exact: true })).toBeAttached();
     await search.press('Tab');
@@ -180,7 +180,7 @@ test.describe('cohesive responsive design', () => {
     await page.keyboard.press('Tab');
     await expect(contents.locator('summary')).toBeFocused();
     await page.keyboard.press('Tab');
-    await expect(nav.getByRole('link', { name: 'Fees & slippage', exact: true })).toBeFocused();
+    await expect(nav.getByRole('link', { name: /^Fees & slippage/ })).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/#fees$/);
     const articleHeading = page.getByRole('heading', { name: 'Fees & slippage', exact: true });
@@ -194,7 +194,7 @@ test.describe('cohesive responsive design', () => {
     await expect(nav.getByRole('link')).toHaveCount(0);
     await expect(nav.getByText('No matches', { exact: true })).toBeVisible();
     await nav.getByRole('button', { name: 'Clear', exact: true }).click();
-    await expect(nav.getByRole('link')).toHaveCount(13);
+    await expect(nav.getByRole('link')).toHaveCount(15);
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(articleHeading).toBeInViewport();
     assertNoBackendRequests(requests);
