@@ -14,7 +14,7 @@ const origin = `http://127.0.0.1:${port}`;
 const output = resolve(root, 'artifacts/landing');
 const CHAPTERS = ['trade', 'earn', 'borrow', 'move'];
 const CHAPTER_TABS = { trade: '1', earn: '2', borrow: '2', move: '3' };
-const WIDTHS = [320, 360, 393, 430, 768, 1024, 1440];
+const WIDTHS = [320, 360, 390, 393, 430, 768, 1024, 1440];
 
 /** Text whose contrast is measured against the pixels actually painted behind it. */
 const TEXT_SELECTORS = [
@@ -25,13 +25,13 @@ const TEXT_SELECTORS = [
   '.brake-options button', '.brake-figures dt', '.brake-figures dd', '.ruler-mark span', '.ruler-scale',
   '.ruler-caption', '.scene-note', '.defenses h4', '.defenses p', '.duo-item h3', '.duo-item p',
   '.duo-item .text-link', '.sdk-lede', '.sdk-picker button', '.sdk-status', '.sdk-group h3', '.sdk-group li',
-  '.sdk-key', '.trust-points li', '.steps h3',
+  '.sdk-key', '.sdk-details > summary', '.sdk-hint', '.trust-points li', '.steps h3',
   '.steps p', '.faq summary', '.finale h2', '.finale p', 'footer .brand span', '.footer-links a', '.copyright',
 ].join(', ');
 
 const TARGET_SELECTORS = [
   '.site-header .brand', '.site-header nav a', '.theme-toggle', '.site-header .pill', '.menu', '.hero .actions a',
-  '.text-link', '#split-price', '.brake-options button', '.sdk-picker button', '.faq summary', '.finale .actions a',
+  '.text-link', '#split-price', '.brake-options button', '.sdk-picker button', '.sdk-details > summary', '.faq summary', '.finale .actions a',
   'footer .brand', '.footer-links a',
 ].join(', ');
 
@@ -39,7 +39,7 @@ const IN_BOUNDS_SELECTORS = [
   '.site-header', '.hero-copy', '.hero h1', '.hero .lede', '.hero .actions', '.hero-stage', '.proof li',
   '.section-head', '.chapter', '.chapter-phone .phone', '.scene', '.scene-copy', '.scene-art', '.vessel',
   '.split-readout', '.split-control', '.brake-options', '.brake-figures', '.ruler', '.ruler-mark span',
-  '.peg-chart', '.defenses li', '.flow', '.duo-item', '.sdk-copy', '.sdk-picker', '.sdk-group li',
+  '.peg-chart', '.defenses li', '.flow', '.duo-item', '.sdk-copy', '.sdk-details', '.sdk-details > summary', '.sdk-picker', '.sdk-group li',
   '.trust-copy', '.review-card', '.chat', '.steps li', '.faq-list', '.finale h2', '.finale .actions', 'footer',
 ].join(', ');
 
@@ -160,6 +160,20 @@ async function measureContrast(page) {
       return target.colors.length && worst < target.minimum ? [{ text: target.text, ratio: Number(worst.toFixed(2)), minimum: target.minimum }] : [];
     });
   }, { png: shot.toString('base64'), targets });
+}
+
+/** Read native details state from Chromium's accessibility tree. */
+async function sdkExpandedState(page) {
+  const session = await page.context().newCDPSession(page);
+  try {
+    const { nodes } = await session.send('Accessibility.getFullAXTree');
+    const summary = nodes.find((node) => node.role?.value === 'DisclosureTriangle'
+      && node.name?.value.startsWith('Explore all 15 SDK methods'));
+    assert.ok(summary, 'SDK summary must be an accessible native disclosure');
+    return summary.properties.find((property) => property.name === 'expanded')?.value.value;
+  } finally {
+    await session.detach();
+  }
 }
 
 let browser;
@@ -294,6 +308,47 @@ try {
         if (href.startsWith('#')) assert.equal(await page.locator(href).count(), 1, `Broken fragment target: ${href}`);
       }
 
+      // Native disclosure is compact by default, keyboard operable, and keeps
+      // the full method explorer available without a second source of state.
+      const sdkDetails = page.locator('.sdk-details');
+      const sdkSummary = sdkDetails.locator('summary');
+      const sdkBoard = page.locator('.sdk-board');
+      assert.equal(await sdkDetails.evaluate((element) => element.open), false);
+      assert.equal(await sdkBoard.isVisible(), false, 'SDK methods should start collapsed');
+      await sdkSummary.scrollIntoViewIfNeeded();
+      await sdkSummary.focus();
+      assert.equal(await sdkSummary.evaluate((element) => getComputedStyle(element).outlineStyle), 'solid', 'Disclosure needs a visible keyboard focus outline');
+      await page.keyboard.press('Tab');
+      assert.equal(await page.evaluate(() => Boolean(document.activeElement.closest('.sdk-details-content'))), false, 'Collapsed controls must leave the tab order');
+      if ([320, 390, 1440].includes(width)) {
+        await page.locator('#sdk').screenshot({ path: resolve(output, `sdk-collapsed-${theme}-${width}.png`) });
+      }
+      await sdkSummary.focus();
+      await page.keyboard.press('Enter');
+      assert.equal(await sdkDetails.evaluate((element) => element.open), true, 'Enter should expand the SDK');
+      assert.equal(await sdkExpandedState(page), true, 'Native summary should expose its expanded state');
+      assert.equal(await sdkBoard.isVisible(), true);
+      assert.equal(await page.locator('.sdk-group li:visible').count(), 15, 'All 15 methods remain available');
+      await page.keyboard.press('Tab');
+      assert.equal(await page.locator('.sdk-picker button').first().evaluate((element) => element === document.activeElement), true, 'Expansion should restore the explorer to the tab order');
+      await page.keyboard.press('Space');
+      assert.equal(await page.locator('.sdk-picker button[data-screen="portfolio"]').getAttribute('aria-pressed'), 'true');
+      await sdkSummary.focus();
+      await page.keyboard.press('Space');
+      assert.equal(await sdkDetails.evaluate((element) => element.open), false, 'Space should collapse the SDK');
+      assert.equal(await sdkExpandedState(page), false);
+      assert.equal(await sdkSummary.evaluate((element) => element === document.activeElement), true, 'Collapse should retain focus on its trigger');
+      await page.keyboard.press('Enter');
+      assert.equal(await page.locator('.sdk-picker button[data-screen="portfolio"]').getAttribute('aria-pressed'), 'true', 'Reopening should preserve the chosen screen');
+      await page.locator('.sdk-picker button[data-screen="move"]').focus();
+      await page.keyboard.press('Enter');
+      assert.deepEqual(await page.locator('.sdk-board li[data-on]').evaluateAll((rows) => rows.map((row) => row.dataset.method)), ['getBridgeQuote', 'buildBridgeTx']);
+      const expandedBounds = await sdkDetails.evaluate((element) => ({ left: element.getBoundingClientRect().left, right: element.getBoundingClientRect().right, width: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth }));
+      assert.ok(expandedBounds.left >= 0 && expandedBounds.right <= width + 1 && expandedBounds.scrollWidth <= expandedBounds.width + 1, `Expanded SDK overflows at ${width}px (${theme})`);
+      if ([390, 1440].includes(width)) {
+        await sdkDetails.screenshot({ path: resolve(output, `sdk-expanded-${theme}-${width}.png`) });
+      }
+
       // Contrast over the real backdrop, section by section, at two sizes.
       if (width === 393 || width === 1440) {
         const failures = [];
@@ -317,11 +372,41 @@ try {
         assert.equal(await menu.getAttribute('aria-expanded'), 'true');
         assert.equal(await menu.getAttribute('aria-label'), 'Close menu');
         assert.equal(await page.locator('.site-header nav a').first().evaluate((element) => element === document.activeElement), true, 'Opening the menu should move focus into navigation');
+        const separators = await page.locator('.site-header nav a').evaluateAll((links) => links.map((link) => {
+          const before = getComputedStyle(link, '::before');
+          return { content: before.content, height: before.height, left: before.left, right: before.right, color: before.backgroundColor, borderTop: getComputedStyle(link).borderTopWidth, borderBottom: getComputedStyle(link).borderBottomWidth };
+        }));
+        assert.equal(separators[0].content, 'none', 'No separator above the first mobile row');
+        for (const separator of separators.slice(1)) {
+          assert.equal(separator.content, '""');
+          assert.equal(separator.height, '1px');
+          assert.equal(separator.left, '16px');
+          assert.equal(separator.right, '16px');
+          assert.notEqual(separator.color, 'rgba(0, 0, 0, 0)');
+        }
+        assert.ok(separators.every((separator) => separator.borderTop === '0px' && separator.borderBottom === '0px'), 'Rows should have internal dividers, not outer borders');
+        if ([320, 390].includes(width)) {
+          await page.locator('.site-header nav').screenshot({ path: resolve(output, `mobile-menu-${theme}-${width}.png`) });
+        }
         await page.keyboard.press('Escape');
         assert.equal(await menu.getAttribute('aria-expanded'), 'false');
         assert.equal(await menu.getAttribute('aria-label'), 'Open menu');
         assert.equal(await menu.evaluate((element) => element === document.activeElement), true, 'Closing the menu should return focus to its trigger');
+        await menu.click();
+        await page.locator('.site-header nav a[href="#moves"]').click();
+        assert.equal(await menu.getAttribute('aria-expanded'), 'false', 'Selecting a section closes the menu');
+        assert.equal(new URL(page.url()).hash, '#moves');
+        await menu.click();
+        await menu.click();
+        assert.equal(await menu.getAttribute('aria-expanded'), 'false', 'Repeated menu toggle closes cleanly');
+        await menu.click();
+        await page.mouse.click(1, 450);
+        assert.equal(await menu.getAttribute('aria-expanded'), 'false', 'Outside click closes the menu');
+      } else {
+        assert.equal(await page.locator('.site-header nav a').nth(1).evaluate((element) => getComputedStyle(element, '::before').content), 'none', 'Desktop navigation must not gain dividers');
       }
+      await sdkSummary.click();
+      assert.equal(await sdkDetails.evaluate((element) => element.open), false);
       assert.equal(await page.evaluate(() => document.getAnimations().filter((animation) => animation.playState === 'running').length), 0, `Reduced motion must not animate at ${width}px`);
     }
   }
@@ -392,6 +477,7 @@ try {
   })), { rebalance: '9.09', liquidation: '15.79', pressed: ['5×'] });
 
   // What runs when you tap: Move lights exactly its two bridge methods.
+  await motionPage.locator('.sdk-details > summary').click();
   await motionPage.locator('.sdk-picker button[data-screen="move"]').click();
   assert.deepEqual(await motionPage.evaluate(() => [...document.querySelectorAll('.sdk-board li[data-on]')].map((row) => row.dataset.method)),
     ['getBridgeQuote', 'buildBridgeTx']);
@@ -409,7 +495,13 @@ try {
   await staticPage.goto(origin, { waitUntil: 'load' });
   assert.deepEqual(await staticPage.evaluate(() => ['.split-control', '.brake-picker', '.sdk-picker', '.sdk-status']
     .map((selector) => getComputedStyle(document.querySelector(selector)).display)), ['none', 'none', 'none', 'none']);
-  assert.equal(await staticPage.locator('.sdk-group li').count(), 15);
+  assert.equal(await staticPage.locator('.sdk-board').isVisible(), false);
+  await staticPage.locator('.sdk-details > summary').focus();
+  await staticPage.keyboard.press('Enter');
+  assert.equal(await staticPage.locator('.sdk-group li:visible').count(), 15, 'Native disclosure must work without JavaScript');
+  assert.equal(await staticPage.locator('.sdk-group li span').evaluateAll((spans) => spans.every((span) => getComputedStyle(span).position !== 'absolute')), true, 'Every method description must remain readable without JavaScript');
+  await staticPage.keyboard.press('Space');
+  assert.equal(await staticPage.locator('.sdk-board').isVisible(), false);
   await staticContext.close();
 
   for (const theme of ['dark', 'light']) {
@@ -443,7 +535,7 @@ try {
   assert.deepEqual(externalRequests, [], 'Landing loaded unneeded external services');
   assert.deepEqual([...new Set(fontContentTypes)], ['font/woff2'], 'Self-hosted Inter font must be served with its font MIME type');
 
-  console.log(`Landing browser checks passed: ${WIDTHS.length * 2} theme/viewport states, contrast over the painted backdrop, visible-content bounds, 44px targets, example semantics, stacked and pinned chapters, menu/theme keyboard and persistence, reduced motion, and zero external requests.`);
+  console.log(`Landing browser checks passed: ${WIDTHS.length * 2} theme/viewport states, contrast over the painted backdrop, visible-content bounds, 44px targets, example semantics, stacked and pinned chapters, mobile row dividers, menu/theme keyboard and persistence, SDK disclosure keyboard/no-script flows, reduced motion, and zero external requests.`);
 } finally {
   await browser?.close();
   server.kill();
