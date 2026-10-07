@@ -31,8 +31,8 @@ function assertOptionalAlchemyRpc(name, expectedHost) {
 }
 
 function assertOptionalInfuraRpc(name, expectedHost) {
-  const value = process.env[name]?.trim();
-  if (!value) return;
+  if (!process.env[name]?.trim()) return;
+  const value = requireValue(name);
   let url;
   try { url = new URL(value); } catch { throw new Error(`${name} must be an absolute HTTPS URL`); }
   if (url.protocol !== 'https:') throw new Error(`${name} must use HTTPS`);
@@ -78,6 +78,17 @@ function assertTelegramBotToken() {
 }
 
 try {
+  // Local screenshot/fork settings are valid for disposable local builds,
+  // but must never be accepted as production deployment configuration.
+  for (const name of [
+    'NEXT_PUBLIC_FX_SCREENSHOT_MODE',
+    'NEXT_PUBLIC_FX_SCREENSHOT_WALLET_ADDRESS',
+    'NEXT_PUBLIC_FX_ANVIL_RPC_URL',
+    'NEXT_PUBLIC_FX_LOCAL_FORK_TEST_MODE',
+    'NEXT_PUBLIC_FX_LOCAL_FORK_RPC_URL',
+  ]) {
+    if (process.env[name]?.trim()) throw new Error(`${name} must be unset for production`);
+  }
   const privyAppId = requireValue('NEXT_PUBLIC_PRIVY_APP_ID');
   if (/\s/.test(privyAppId)) throw new Error('NEXT_PUBLIC_PRIVY_APP_ID cannot contain whitespace');
   // This public ID is reserved for local development and must never be
