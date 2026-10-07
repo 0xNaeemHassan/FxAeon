@@ -6,6 +6,7 @@ import { FX_TOKENS } from '../src/lib/fx/tokens';
 import { factsOutsideConsequenceSummary, primaryReviewFacts, routeFacts } from '../src/components/review/actionReviewPresentation';
 import { consequenceSummary } from '../src/components/review/actionReviewModel';
 import { resultBodyDuringRefresh, resultPresentation } from '../src/components/review/executionResult';
+import { splitReviewFacts } from '../src/components/review/reviewSummary';
 import type { OfficialFxMethod, PlannedRoute, PlannedTransaction, ReviewedActionIntent, RouteDetails, TransactionExecutionResult } from '../src/lib/fx/types';
 
 const WALLET = '0x1111111111111111111111111111111111111111';
@@ -261,12 +262,36 @@ test('fxSAVE deposits show independent input-conversion and share minimum units'
     const facts = routeFinancialReviewFacts(route(intent, {
       economicLimits: [
         { label: 'fxSAVE deposit conversion minimum output', value: raw },
-        { label: 'fxSAVE minimum shares', value: '2500000000000000000' },
+        { label: 'fxSAVE deposit base-pool minimum shares', value: '2500000000000000000' },
       ],
     }));
     assert.equal(facts[0].value, `1.234567 ${token.key}`);
-    assert.equal(facts[1].value, '2.5 fxSAVE');
+    assert.equal(facts[1].value, '2.5 fxUSDBasePool');
   }
+});
+
+test('stable fxSAVE deposit review discloses the final-share limitation without claiming selected slippage', () => {
+  for (const token of [FX_TOKENS.USDC, FX_TOKENS.fxUSD]) {
+    const intent: ReviewedActionIntent = {
+      kind: 'fxsave-deposit', tokenInAddress: token.address, amount: 1n,
+      receiver: WALLET, directBasePool: false, slippagePercent: 0.5,
+    };
+    const planned = route(intent, { economicLimits: [
+      { label: 'fxSAVE deposit base-pool minimum shares', value: '79968000000000000000' },
+    ] });
+    const facts = routeFacts(planned, { estimate: undefined, estimateIsCurrent: false }, {});
+    const { summary } = splitReviewFacts(facts);
+    assert.deepEqual(summary.find(fact => fact.label === 'Final fxSAVE minimum'), {
+      label: 'Final fxSAVE minimum', value: 'Not enforced by this route',
+    });
+    assert.equal(summary.find(fact => fact.label === 'Minimum base-pool shares')?.value, '79.968 fxUSDBasePool');
+    assert.equal(facts.some(fact => fact.label === 'Slippage' || fact.label === 'Minimum fxSAVE received'), false);
+  }
+  const withdrawal: ReviewedActionIntent = {
+    kind: 'fxsave-withdraw', tokenOutAddress: FX_TOKENS.USDC.address, amount: 1n,
+    receiver: WALLET, directBasePool: false, instant: true, slippagePercent: 0.75,
+  };
+  assert.equal(primaryReviewFacts(route(withdrawal, {})).find(fact => fact.label === 'Slippage')?.value, '0.75%');
 });
 
 test('identity fxSAVE deposits omit only the zero converter no-op and retain the positive share floor', () => {
@@ -277,13 +302,13 @@ test('identity fxSAVE deposits omit only the zero converter no-op and retain the
   const planned = route(intent, {
     economicLimits: [
       { label: 'fxSAVE deposit conversion minimum output', value: '0' },
-      { label: 'fxSAVE minimum shares', value: '892022464500000000000' },
+      { label: 'fxSAVE deposit base-pool minimum shares', value: '892022464500000000000' },
     ],
     conversionPaths: [{ label: 'fxSAVE deposit conversion', fingerprint: `0x${'1'.repeat(64)}` }],
   });
   const facts = routeFinancialReviewFacts(planned);
   assert.deepEqual(facts.map(({ label, value }) => ({ label, value })), [
-    { label: 'Minimum fxSAVE received', value: '892.0224645 fxSAVE' },
+    { label: 'Minimum base-pool shares', value: '892.0224645 fxUSDBasePool' },
   ]);
 });
 
@@ -296,14 +321,14 @@ test('routed fxSAVE deposit conversion floors, including zero-valued other limit
     economicLimits: [
       { label: 'fxSAVE deposit conversion minimum output', value: '900000' },
       { label: 'unrecognized route limit', value: '0' },
-      { label: 'fxSAVE minimum shares', value: '800000000000000000' },
+      { label: 'fxSAVE deposit base-pool minimum shares', value: '800000000000000000' },
     ],
     conversionPaths: [{ label: 'fxSAVE deposit conversion', fingerprint: `0x${'2'.repeat(64)}` }],
   });
   const facts = routeFinancialReviewFacts(planned);
   assert.equal(facts.find((fact) => fact.label === 'Minimum converted deposit')?.value, '0.9 USDC');
   assert.equal(facts.find((fact) => fact.label === 'Additional limits')?.value, 'See advanced details');
-  assert.equal(facts.find((fact) => fact.label === 'Minimum fxSAVE received')?.value, '0.8 fxSAVE');
+  assert.equal(facts.find((fact) => fact.label === 'Minimum base-pool shares')?.value, '0.8 fxUSDBasePool');
 });
 
 test('both instant fxSAVE output legs use the destination token decimals', () => {
