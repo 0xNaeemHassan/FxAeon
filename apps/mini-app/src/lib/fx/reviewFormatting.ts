@@ -97,8 +97,8 @@ function limitUnit(label: string, intent: ReviewedActionIntent, pool: Pool | und
     case 'withdraw output conversion minimum output':
       if (pool && intent.kind === 'repay-and-withdraw') return { label: 'Minimum received', unit: unitForAddress(intent.withdrawTokenAddress) };
       break;
-    case 'fxSAVE minimum shares':
-      if (intent.kind === 'fxsave-deposit' && !intent.directBasePool) return { label: 'Minimum fxSAVE received', unit: tokenUnit(FX_TOKENS.fxSAVE) };
+    case 'fxSAVE deposit base-pool minimum shares':
+      if (intent.kind === 'fxsave-deposit' && !intent.directBasePool) return { label: 'Minimum base-pool shares', unit: tokenUnit(FX_TOKENS.fxUSDBasePool) };
       break;
     case 'fxSAVE deposit conversion minimum output':
       if (intent.kind === 'fxsave-deposit' && !intent.directBasePool) {
@@ -157,8 +157,8 @@ export function routeFinancialReviewFacts(route: PlannedRoute): ReviewFact[] {
   let unsupportedLimits = 0;
   for (const limit of details?.economicLimits ?? []) {
     // Validated fxSAVE USDC/fxUSD identity routes carry a zero converter
-    // minOut because there is no conversion output to bound. The vault's
-    // positive share minimum remains the actual deposit floor. Suppress only
+    // minOut because there is no conversion output to bound. The positive
+    // base-pool share minimum remains the actual deposit floor. Suppress only
     // this precisely labeled, bound no-op fact; keep other zero floors visible.
     const identityDepositNoOp = intent.kind === 'fxsave-deposit'
       && limit.label === 'fxSAVE deposit conversion minimum output'

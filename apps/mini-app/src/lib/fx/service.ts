@@ -463,7 +463,8 @@ export async function planDepositFxSave(request: FxSaveDepositRequest): Promise<
         amount: request.amount,
         receiver: assertAddress(request.userAddress, "wallet address"),
         directBasePool: request.tokenIn === "fxUSDBasePool",
-        slippagePercent: request.slippage,
+        // SDK 1.0.5 does not apply the requested deposit slippage. Keep the
+        // decoded base-pool floor; do not present an unsupported tolerance.
       },
     },
   );
