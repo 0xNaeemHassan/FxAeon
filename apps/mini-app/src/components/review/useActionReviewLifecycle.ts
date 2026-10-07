@@ -149,10 +149,11 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
   }, [expireQuote, preparedAt, stage]);
 
   useEffect(() => {
-    if (stage === 'review' || stage === 'result') {
+    const stableTrade = Boolean(props.preparationFacts?.length);
+    if (stage === 'result' || (stableTrade ? stage === 'planning' : stage === 'review')) {
       headingRef.current?.focus({ preventScroll: true });
     }
-  }, [stage]);
+  }, [props.preparationFacts?.length, stage]);
 
   const reset = useCallback(() => {
     if (busyRef.current && stage !== 'planning') return;
@@ -204,7 +205,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
 
   useEffect(() => {
     const onTelegramBack = (event: Event) => {
-      if (stage !== 'review' && stage !== 'result') return;
+      if (stage !== 'review' && stage !== 'result' && !(stage === 'planning' && props.preparationFacts?.length)) return;
       const detail = (event as CustomEvent<{ consume?: () => void; isConsumed?: () => boolean }>).detail;
       if (detail?.isConsumed?.()) return;
       reset();
@@ -212,7 +213,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
     };
     window.addEventListener('fxaeon:telegram-back', onTelegramBack);
     return () => window.removeEventListener('fxaeon:telegram-back', onTelegramBack);
-  }, [reset, stage]);
+  }, [props.preparationFacts?.length, reset, stage]);
 
   const invalidatePreparedRoute = useCallback((message: string) => {
     generationRef.current += 1;
@@ -294,7 +295,8 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
   }, [invalidatePreparedRoute, reviewSession, sessionMismatch, stage, wallet.address, wallet.authenticated, wallet.chainId, wallet.connectionVersion]);
 
   const review = useCallback(async () => {
-    if (!planBuilder || disabled || loading || busyRef.current || stage !== 'input') return;
+    const retryingPreparation = Boolean(props.preparationFacts?.length) && stage === 'planning' && status === 'failed';
+    if (!planBuilder || disabled || loading || busyRef.current || (stage !== 'input' && !retryingPreparation)) return;
     if (!wallet.authenticated || !wallet.address) {
       setError('Connect a wallet before preparing a transaction.');
       return;
@@ -377,7 +379,9 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
       haptic('selection');
     } catch (cause) {
       if (!isCurrentGeneration(generation)) return;
-      transition('prepare-failed');
+      // Keep Trade's existing card mounted on a failed check; Retry starts a
+      // fresh planning generation and can never execute this unfinished route.
+      if (!props.preparationFacts?.length) transition('prepare-failed');
       setStatus('failed');
       setError(userSafeError(cause, 'The transaction could not be prepared. Check the inputs and network, then try again.'));
       haptic('error');
@@ -387,7 +391,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
         setLoading(false);
       }
     }
-  }, [acceptRoute, bindSession, checkSession, disabled, isCurrentGeneration, loading, operationLabel, planBuilder, prefetchedPlan, intentKey, setQuoteChanges, stage, transition, wallet.address, wallet.authenticated, wallet.chainId, wallet.connectionVersion, wallet.isEmbedded]);
+  }, [acceptRoute, bindSession, checkSession, disabled, isCurrentGeneration, loading, operationLabel, planBuilder, prefetchedPlan, intentKey, props.preparationFacts?.length, setQuoteChanges, stage, status, transition, wallet.address, wallet.authenticated, wallet.chainId, wallet.connectionVersion, wallet.isEmbedded]);
 
   const refreshReviewedQuote = useCallback(async () => {
     if (stage !== 'review' || !quoteExpired || !planBuilder || disabled || busyRef.current) return;

@@ -251,3 +251,19 @@
   .resultMark, .resultMark::after { animation: none !important; }
   .resultMark circle, .resultMark path { animation: none !important; stroke-dashoffset: 0; }
 }
+
+/* Trade keeps the same card, fields and action anchor while checks settle. */
+.stableReviewViewport { height: min(740px, var(--review-available-height, calc(100dvh - 160px))); }
+.stableReviewViewport > .reviewScrollBody { flex: 1; }
+.stableFacts > [data-review-fact] { min-height: 20px; }
+.stableFacts > [data-review-fact="Protocol fee rate"] { min-height: 38px; }
+.stableReviewStatus { margin: 0 0 8px; height: 4.35em; overflow-y: auto; font-size: var(--fs-small); line-height: 1.45; }
+
+.stableReviewViewport { overflow-anchor: none; }
+.stableFacts .primaryAmount { animation: none; }
+
+@media (max-width: 380px) {
+  .stableFacts > [data-review-fact="Estimated collateral"],
+  .stableFacts > [data-review-fact="Estimated debt"] { min-height: 40px; }
+  .stableFacts > [data-review-fact="Protocol fee rate"] { min-height: 60px; }
+}
