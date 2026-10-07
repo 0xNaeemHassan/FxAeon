@@ -116,6 +116,8 @@ export default function WalletProfile() {
   const nonZero = useMemo(() => displayAssets?.assets.filter((asset) => asset.balanceWei > 0n) ?? [], [displayAssets]);
   // Like Portfolio, the sheet lists six holdings so its account rows stay within reach.
   const visibleAssets = assetsExpanded ? nonZero : nonZero.slice(0, WALLET_SHEET_ASSET_LIMIT);
+  // On Portfolio (also the app's home) "View portfolio" would only close the sheet.
+  const onPortfolio = pathname === '/' || pathname === '/portfolio' || pathname.startsWith('/portfolio/');
   const selectedAsset = selectedAssetId ? nonZero.find((asset) => asset.id === selectedAssetId) ?? null : null;
   useEffect(() => {
     if (selectedAssetId && !loading && displayAssets && !nonZero.some((asset) => asset.id === selectedAssetId)) setSelectedAssetId(null);
@@ -188,7 +190,7 @@ export default function WalletProfile() {
                 <Link href="/qr" className={presentation.primaryAction}><ArrowDownToLine size={18} aria-hidden="true" />Receive</Link>
                 <Link href="/send" className={presentation.primaryAction}><ArrowUpRight size={18} aria-hidden="true" />Send</Link>
               </div>
-              {pathname !== '/portfolio' && pathname !== '/' && <Link href="/portfolio" className={presentation.portfolioLink}>View portfolio<ChevronRight size={16} aria-hidden="true" /></Link>}
+              {!onPortfolio && <Link href="/portfolio" className={presentation.portfolioLink}>View portfolio<ChevronRight size={16} aria-hidden="true" /></Link>}
             </section>
             <section className={presentation.assets} aria-labelledby="wallet-profile-balances-title">
               <div className={presentation.sectionHeading}><h3 id="wallet-profile-balances-title">Assets</h3><span>All networks</span></div>
