@@ -579,6 +579,7 @@ export default function TradePage() {
               preparationFacts={[
                 { label: 'Amount', value: `${validAmount ?? amount} ${tokenSymbol(token)}` },
                 { label: 'Target leverage', value: `${leverage}×` },
+                { label: 'Position', value: 'New position' },
                 { label: 'Slippage', value: `${slippageValue}%` },
               ]}
               draftState={draftState}
