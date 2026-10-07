@@ -82,7 +82,7 @@ async function mount(page: import('@playwright/test').Page) {
   await page.setContent('<div id="root"></div>');
   await page.addScriptTag({ content: bundle });
   await expect(page.locator('html[data-harness-ready="true"]')).toHaveCount(1);
-  await expect(page.getByText('Earn', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Borrow', exact: true })).toBeVisible();
 }
 
 async function changeSnapshot(page: import('@playwright/test').Page, update: (harness: BorrowHarnessControl) => void) {
@@ -180,12 +180,13 @@ test('mounted Borrow page removes a selection when its provider snapshot changes
 });
 
 
-test('one collateral picker plans both ETH and BTC with borrowing above collateral', async ({ page }) => {
+test('one collateral picker plans both ETH and BTC with collateral above borrowing', async ({ page }) => {
   await mount(page);
   await expect(page.getByRole('group', { name: 'Collateral market' })).toHaveCount(0);
+  // The borrowing limit is computed from collateral, so collateral is asked for first.
   const fields = page.getByRole('textbox');
-  await expect(fields.nth(0)).toHaveAttribute('aria-label', 'fxUSD to borrow');
-  await expect(fields.nth(1)).toHaveAttribute('aria-label', 'Starting collateral');
+  await expect(fields.nth(0)).toHaveAttribute('aria-label', 'Starting collateral');
+  await expect(fields.nth(1)).toHaveAttribute('aria-label', 'fxUSD to borrow');
   const picker = page.getByLabel('Collateral asset');
   await expect(picker.locator('option[value="WBTC"]')).toHaveCount(1);
   for (const [asset, market] of [['WBTC', 'BTC'], ['ETH', 'ETH']]) {

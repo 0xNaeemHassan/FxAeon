@@ -35,7 +35,7 @@ const mocks: Record<string, string> = {
   '@/lib/amount': `export const positiveDecimal = (value) => /^\\d+(\\.\\d*)?$/.test(value); export const calculateFractionDecimal=(value,fraction)=>value; export const compareExactDecimals=(left,right)=>Number(left)-Number(right); export const decimalInputError=()=>null; export const formatExactDecimal=(value)=>String(value); export const normalizeAmountInput=(value)=>value;`,
   '@/lib/prices': `export const formatUsd=()=> '$0.00'; export const formatUsdPrice=()=> '$0.00'; export const priceKeyForSymbol=()=> null; export const usdValueForDecimal=()=> null;`,
   '@/lib/fx/tokenPresentation': `export const tokenSymbol=(value)=>value; export const tokenName=(value)=>value; export const tokenPresentation=(value)=>({symbol:value});`,
-  '@/lib/telegram': `export const haptic=()=>{};`,
+  '@/lib/telegram': `export const haptic=()=>{}; export const openExternalLink=()=>false;`,
   '@/lib/walletAssets': `export const ASSET_PRICE_MAX_AGE_MS=60000;`,
   '@/lib/settings': `export const DEFAULT_SLIPPAGE_PERCENT=0.5; export const readSlippagePercent=()=>0.5; export const readGasTier=()=> 'standard'; export const SETTINGS_KEY='settings'; export const SETTINGS_UPDATED_EVENT='settings-updated'; export const GAS_TIERS=['standard','fast','rapid']; export const DEFAULT_GAS_TIER='standard'; export const MIN_SLIPPAGE_BPS=10; export const MAX_SLIPPAGE_BPS=200; export const SLIPPAGE_PRESETS_BPS=[10,50,100,200]; export const isSlippageBps=(v)=>Number.isInteger(v)&&v>=10&&v<=200; export const writeTransactionSettings=()=>true;`,
   '@/lib/transactionState': `export const readTradeDeepLinkContext=()=>null; export const resetTransactionAmounts=()=>({amount:'',leverage:2});`,

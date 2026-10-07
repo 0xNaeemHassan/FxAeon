@@ -571,7 +571,7 @@ test.describe("market price context", () => {
     await expect(page.getByRole("region", { name: "ETH market chart" }).getByText("$2,400.00", { exact: true })).toBeVisible();
     await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("region", { name: "Market prices" })).toHaveCount(0);
-    const marketCard = page.getByRole("link", { name: /^Trade ETH\b/ });
+    const marketCard = page.getByRole("link", { name: "Trade ETH", exact: true });
     await expect(marketCard.getByText("$2,400.00", { exact: true })).toBeVisible();
     await expect.poll(() => calls).toBeGreaterThan(1);
     assertNoBackendRequests(requests);
@@ -625,8 +625,8 @@ test.describe("browser wallet connection", () => {
     await page.goto('/portfolio', { waitUntil: 'domcontentloaded' });
     const markets = page.getByRole('heading', { name: 'Markets', exact: true });
     await expect(markets).toBeVisible();
-    await expect(page.getByRole('link', { name: /^Trade ETH\b/ })).toHaveAttribute('href', /\/trade\?market=ETH$/);
-    await expect(page.getByRole('link', { name: /^Trade BTC\b/ })).toHaveAttribute('href', /\/trade\?market=BTC$/);
+    await expect(page.getByRole('link', { name: 'Trade ETH', exact: true })).toHaveAttribute('href', /\/trade\?market=ETH$/);
+    await expect(page.getByRole('link', { name: 'Trade BTC', exact: true })).toHaveAttribute('href', /\/trade\?market=BTC$/);
     assertNoBackendRequests(requests);
   });
 });
