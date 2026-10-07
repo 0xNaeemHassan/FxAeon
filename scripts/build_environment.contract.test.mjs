@@ -53,7 +53,7 @@ test('production validation rejects populated local-only build variables without
     const value = name.endsWith('_MODE') ? '1' : 'local-only-test-value';
     const result = validate({ [name]: value });
     assert.equal(result.status, 1, `${name} must not pass production validation`);
-    assert.match(result.stderr, new RegExp(`${name} must be unset for production`));
+    assert.ok(result.stderr.includes(`${name} must be unset for production`), result.stderr);
     if (value !== '1') assert.ok(!result.stderr.includes(value));
   }
 });
@@ -65,7 +65,7 @@ test('optional Infura endpoints reject placeholder project identifiers before a 
   ]) {
     const result = validate({ [name]: `https://${host}/v3/YOUR_INFURA_PROJECT_ID` });
     assert.equal(result.status, 1);
-    assert.match(result.stderr, new RegExp(`${name} contains a placeholder value`));
+    assert.ok(result.stderr.includes(`${name} contains a placeholder value`), result.stderr);
     assert.ok(!result.stderr.includes('YOUR_INFURA_PROJECT_ID'));
   }
 });

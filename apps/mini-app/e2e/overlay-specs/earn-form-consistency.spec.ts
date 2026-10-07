@@ -13,7 +13,7 @@ const mocks: Record<string, string> = {
   'next/link': `export default ({href,children,...props}) => <a href={href} {...props}>{children}</a>;`,
   'next/navigation': `export const useRouter = () => ({push:(href) => {history.pushState({},'',href);globalThis.__earnHarness.navigate();}});`,
   '@/components/ui': `export const AppShell = ({children}) => <main style={{padding:16}}>{children}</main>;`,
-  '@/components/ProductUI': `export const PageHeading = ({title}) => <h1>{title}</h1>; export const ProductNav = () => <nav>Products</nav>; export const ProductSurface = ({children,...props}) => <section {...props}>{children}</section>; export const Disclosure = () => null; export const MetricRows = () => null; export const StatusNotice = ({title}) => <p>{title}</p>; export { ChoiceCards } from ${JSON.stringify(resolve(root, 'src/components/ProductUI.tsx'))};`,
+  '@/components/ProductUI': `export const PageHeading = ({title}) => <h1>{title}</h1>; export const ProductNav = () => <nav>Products</nav>; export const ProductSurface = ({children,...props}) => <section {...props}>{children}</section>; export const Disclosure = () => null; export const MetricRows = () => null; export const StatusNotice = ({title}) => <p>{title}</p>; export { ChoiceCards } from 'real:components/ProductUI';`,
   '@/components/ProductSections': `export const EarnSections = () => null;`,
   '@/components/TokenIcon': `export default () => <span />;`,
   '@/components/MissingValue': `export const MissingValue = () => <span>Unavailable</span>; export const ValueOrSkeleton = ({value}) => <span>{value}</span>;`,
@@ -56,6 +56,11 @@ test.beforeAll(async () => {
         if(mocks[path]) return {path,namespace:'fixture'};
         const base=resolve(root,'src',path.slice(2));
         return {path:[base,`${base}.ts`,`${base}.tsx`].find(existsSync) ?? base};
+      });
+      // A fixture re-exports a real module by a fixed alias, never by a path spliced into its source.
+      build.onResolve({filter:/^real:/},({path}) => {
+        const base=resolve(root,'src',path.slice('real:'.length));
+        return {path:[`${base}.tsx`,`${base}.ts`].find(existsSync) ?? base};
       });
       build.onLoad({filter:/.*/,namespace:'fixture'},({path}) => ({contents:mocks[path],loader:'tsx',resolveDir:root}));
     }}],

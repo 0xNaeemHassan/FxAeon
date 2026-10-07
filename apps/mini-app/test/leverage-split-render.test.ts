@@ -29,10 +29,21 @@ after(() => {
   else Reflect.deleteProperty(globalThis, 'React');
 });
 
+/** Visible text of rendered markup: strip tags until none remain, since one pass can leave fragments. */
+function textOf(html: string) {
+  let text = html;
+  let previous;
+  do {
+    previous = text;
+    text = text.replace(/<[^<>]*>/g, '');
+  } while (text !== previous);
+  return text;
+}
+
 function splitRows(html: string) {
   return [...html.matchAll(/<li[^>]*style="--borrowed:([^"]+)"[^>]*>(.*?)<\/li>/g)].map((match) => ({
     borrowed: Number(match[1]),
-    text: match[2].replace(/<[^>]+>/g, ''),
+    text: textOf(match[2]),
   }));
 }
 
