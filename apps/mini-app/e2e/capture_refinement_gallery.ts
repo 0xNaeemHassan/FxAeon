@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, type BrowserContext, type Page } from '@playwright/test';
@@ -272,7 +272,7 @@ async function captureStateLab(browser: Awaited<ReturnType<typeof chromium.launc
   }
 }
 
-async function ensureStateLab(): Promise<{ url: string; child?: ChildProcessWithoutNullStreams }> {
+async function ensureStateLab(): Promise<{ url: string; child?: ChildProcess }> {
   try {
     const response = await fetch(`${labUrl}/`);
     if (response.ok) return { url: labUrl };

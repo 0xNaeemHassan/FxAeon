@@ -4,12 +4,17 @@ import { useEffect, useRef, type CSSProperties } from 'react';
 import styles from './LeverageSplit.module.css';
 
 /**
- * Leverage on f(x) Protocol as arithmetic: at L× the borrowed part of a
- * position (minted fxUSD for a long, borrowed wstETH or WBTC for a short) is
- * (L − 1) / L of it and the rest is the trader's share. Rows show 2×, 3×, and
- * the pool's current maximum, before fees. The bars fill once on screen.
+ * Debt as a share of collateral value, before fees. A displayed L× long has
+ * collateral/equity = L, so debt/collateral = (L − 1) / L. A displayed L×
+ * short has debt/equity = L, so debt/collateral = L / (L + 1). The remainder
+ * is the trader's share. Both directions show the same 2× and 3× rows, so
+ * comparing them never changes the layout; the pool's live range is Trade's
+ * Leverage stat. These are educational examples, not position valuations or
+ * SDK inputs. The bars fill once on screen.
  */
-export function LeverageSplit({ max, debtLabel }: { max: number; debtLabel: string }) {
+const EXAMPLE_LEVERAGES = [2, 3] as const;
+
+export function LeverageSplit({ side, debtLabel }: { side: 'long' | 'short'; debtLabel: string }) {
   const ref = useRef<HTMLOListElement>(null);
   useEffect(() => {
     const node = ref.current;
@@ -23,15 +28,12 @@ export function LeverageSplit({ max, debtLabel }: { max: number; debtLabel: stri
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
-  const poolMax = Number.isFinite(max) && max > 1 ? Math.round(max * 10) / 10 : null;
-  const rows = [2, 3, ...(poolMax !== null && poolMax > 3 ? [poolMax] : [])];
   return <ol ref={ref} className={styles.rows} aria-label={`Share of a position that is ${debtLabel}, by leverage, before fees`}>
-    {rows.map((leverage) => {
-      const borrowed = (leverage - 1) / leverage;
+    {EXAMPLE_LEVERAGES.map((leverage) => {
+      const borrowed = side === 'short' ? leverage / (leverage + 1) : (leverage - 1) / leverage;
       const borrowedPercent = Math.round(borrowed * 100);
-      const label = leverage === poolMax && leverage > 3 ? `${leverage.toFixed(1)}× · pool maximum` : `${leverage}×`;
       return <li key={leverage} className={styles.row} style={{ '--borrowed': borrowed } as CSSProperties}>
-        <span className={styles.leverage}>{label}</span>
+        <span className={styles.leverage}>{leverage}×</span>
         <span className={styles.bar} aria-hidden="true"><i className={styles.borrowed} /><i className={styles.share} /></span>
         <span className={styles.figures}><b>{borrowedPercent}%</b> {debtLabel} · <b>{100 - borrowedPercent}%</b> yours</span>
       </li>;

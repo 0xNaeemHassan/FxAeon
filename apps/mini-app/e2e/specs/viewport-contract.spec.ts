@@ -289,7 +289,7 @@ test.describe("single-viewport route contract", () => {
       page.getByRole("radio", { name: "ETH", exact: true }),
       page.getByRole("radio", { name: "BTC", exact: true }),
       page.getByRole("button", { name: "Show chart", exact: true }),
-      page.getByRole("radio", { name: "Long", exact: true }),
+      page.getByRole("radiogroup", { name: "Position side" }).getByRole("radio", { name: "Long", exact: true }),
       page.getByText("Price rises", { exact: true }),
       page.getByText("Price falls", { exact: true }),
       page.getByLabel("Amount in ETH"),
@@ -305,7 +305,7 @@ test.describe("single-viewport route contract", () => {
     const navBox = await nav.evaluate((element) => element.getBoundingClientRect().toJSON());
     expect(navBox.width).toBeGreaterThan(0);
     expect(navBox.height).toBeGreaterThan(0);
-    await expect(page.getByRole("radio", { name: "Long", exact: true })).toBeChecked();
+    await expect(page.getByRole("radiogroup", { name: "Position side" }).getByRole("radio", { name: "Long", exact: true })).toBeChecked();
     for (const item of required) {
       await expect(item).toBeVisible();
       await item.scrollIntoViewIfNeeded();

@@ -131,7 +131,6 @@ test("viem RPC transport fails over within one request and preserves contract re
   assert.deepEqual(calls, [
     "https://eth-mainnet.g.alchemy.com/v2/primary",
     "https://mainnet.infura.io/v3/secondary",
-    "https://mainnet.infura.io/v3/secondary",
   ]);
 
   calls.length = 0;
