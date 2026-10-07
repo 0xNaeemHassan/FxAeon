@@ -101,3 +101,29 @@ test('Trade education passes the selected direction and keeps its copy consisten
     }
   }
 });
+
+test('the ticket caption states the split at the chosen leverage, with the same figures as the examples', async () => {
+  const { LeverageSplit, LeverageSplitCaption } = await import('../src/components/LeverageSplit');
+  const caption = (side: 'long' | 'short', leverage: number, debtLabel: string) => renderToStaticMarkup(React.createElement(LeverageSplitCaption, {
+    id: 'leverage-split', side, debtLabel, leverage, min: 1.1, max: 6.1,
+  }));
+  assert.equal(textOf(caption('long', 3, 'minted fxUSD')), '67% minted fxUSD · 33% yours at 3.0×, before fees');
+  assert.equal(textOf(caption('short', 3, 'borrowed WBTC')), '75% borrowed WBTC · 25% yours at 3.0×, before fees');
+  assert.match(caption('long', 3, 'minted fxUSD'), /<span class="sr-only"> at 3\.0×, before fees<\/span>/);
+  // The caption and the examples come from one calculation, so they can never disagree.
+  for (const side of ['long', 'short'] as const) {
+    const examples = splitRows(renderToStaticMarkup(React.createElement(LeverageSplit, { side, debtLabel: 'debt' })));
+    for (const [index, leverage] of [2, 3].entries()) {
+      const figures = textOf(caption(side, leverage, 'debt')).replace(/ at .*$/, '');
+      assert.equal(`${leverage}×${figures}`, examples[index].text);
+    }
+  }
+});
+
+test('outside the live range, while typing, the caption keeps its slot but says nothing', async () => {
+  const { LeverageSplitCaption } = await import('../src/components/LeverageSplit');
+  for (const leverage of [0, 0.5, 1, 6.2, Number.NaN]) {
+    const html = renderToStaticMarkup(React.createElement(LeverageSplitCaption, { id: 'split', side: 'long', debtLabel: 'minted fxUSD', leverage, min: 1.1, max: 6.1 }));
+    assert.match(html, /^<span id="split" class="[^"]+" data-empty="true"><\/span>$/, `${leverage}×`);
+  }
+});
