@@ -74,7 +74,7 @@ export function PortfolioAssets({ snapshot, loading, network = 'all', onNetworkC
       : <ul className={styles.assetList}>{visibleAssets.map((asset) => <li key={asset.id}><button type="button" className={styles.assetRow} onClick={() => setSelection({ wallet: snapshot.walletAddress, id: asset.id })} aria-label={`View ${displayAssetSymbol(asset.symbol)} on ${networkLabel(asset.chainId)}`}>
         <AssetRowContent asset={asset} loading={loading} />
       </button></li>)}</ul>}
-    {!query && assets.length > 6 && <button type="button" className="min-h-11 w-full rounded-xl px-3 text-[12px] font-medium text-mint" onClick={() => setExpanded((value) => !value)}>{expanded ? 'Show fewer assets' : `View all ${assets.length} assets`}</button>}
+    {!query && assets.length > 6 && <button type="button" className="min-h-11 w-full rounded-xl px-3 text-[13px] font-semibold text-mint" onClick={() => setExpanded((value) => !value)}>{expanded ? 'Show fewer assets' : `View all ${assets.length} assets`}</button>}
     {selected && <WalletAssetModal asset={selected} walletAddress={displaySnapshot?.walletAddress} onClose={() => setSelection(null)} />}
   </section>;
 }

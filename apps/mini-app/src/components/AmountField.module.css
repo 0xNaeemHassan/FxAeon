@@ -93,7 +93,12 @@
 
 .entryFit > input:focus-visible { outline: none; }
 
-@media (max-width: 359px) { .labelRow { flex-wrap: wrap; } .labelRow > label { flex-basis: 100%; } }
+/* Narrow phones keep a short label and its presets on one line; a longer label
+   still wraps the presets beneath it. Each preset keeps its 44px tap target. */
+@media (max-width: 359px) {
+  .labelRow { flex-wrap: wrap; column-gap: 4px; }
+  .shortcuts button > span { padding: 4px 6px; }
+}
 
 .maxSpinner { display: inline-block; width: 10px; height: 10px; margin-left: 4px; border: 1.5px solid currentColor; border-right-color: transparent; border-radius: 50%; vertical-align: middle; animation: max-spin .8s linear infinite; }
 @keyframes max-spin { to { transform: rotate(360deg); } }

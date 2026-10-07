@@ -464,7 +464,7 @@ export default function PositionsPage() {
                   const key = positionKey(position);
                   const isSelected = key === selectedKey;
                   return (
-                    <div key={key} className={styles.positionListItem}>
+                    <div key={key} className={styles.positionListItem} data-selected={isSelected || undefined}>
                       <ProtocolPositionCard
                         position={position}
                         compact

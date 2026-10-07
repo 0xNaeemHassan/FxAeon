@@ -120,6 +120,12 @@
 .positionsSection :global(details), .earnSection :global(details) { border-top: 0; }
 .positionsSection :global(details > summary), .earnSection :global(details > summary) { min-height: 56px; color: var(--text); font-size: var(--fs-body); font-weight: 600; }
 .positionsSection :global(details > summary > span:nth-child(2)), .earnSection :global(details > summary > span:nth-child(2)) { color: var(--mut); font-weight: 500; }
+/* Once the content column stops short of the viewport, its horizontal clip
+ * would cut the light off in a visible seam; start the light inside the column,
+ * where it fades to nothing at the edge. */
+@media (min-width: 840px) {
+  .valueCard::before { left: 0; }
+}
 @media (min-width: 1000px) {
   .dashboard { grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); gap: 28px; align-items: start; }
   .primary, .secondary { gap: 20px; }
