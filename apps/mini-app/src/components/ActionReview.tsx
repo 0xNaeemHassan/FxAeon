@@ -152,6 +152,20 @@ export function ActionReview(props: ActionReviewProps) {
     return trigger;
   }
 
+  if (stage === 'planning' && props.preparationFacts?.length) {
+    return (
+      <ReviewSurface surface={surface} className={`${styles.reviewCard} ${styles.reviewInlineCard} p-4 sm:p-5`}>
+        <button type="button" onClick={reset} className="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-1 text-[12px] font-semibold text-mut"><ArrowLeft aria-hidden="true" className="h-4 w-4" /> Edit</button>
+        <h3 data-review-focus tabIndex={-1} className="text-display mt-2 text-[21px] font-semibold outline-none">{operationLabel ?? label}</h3>
+        <dl className="my-4 grid gap-3">
+          {props.preparationFacts.map((fact) => <div key={fact.label} className="flex justify-between gap-4"><dt className="text-mut">{fact.label}</dt><dd className="break-all text-right">{fact.value}</dd></div>)}
+        </dl>
+        <p role="status" aria-live="polite" className="my-4 text-[13px] text-mut">{status === 'reviewing' ? 'Checking the route and network fees.' : 'Finding the route. Estimates and fees will appear after verification.'}</p>
+        <Button disabled className={styles.primaryAction}>Checking transaction…</Button>
+      </ReviewSurface>
+    );
+  }
+
   if (stage === 'planning') {
     return (
       <ReviewSurface surface={surface} className={`${styles.reviewCard} ${styles.reviewInlineCard} p-4 sm:p-5`}>
@@ -273,6 +287,7 @@ export function ActionReview(props: ActionReviewProps) {
   // stalled signing screen, so the review names the shortfall instead. A
   // fresh partial estimate still proves it: every step costs at least 21,000 gas.
   const fundsShort = Boolean(gasCost.current?.insufficientNativeBalance);
+  const checkingGas = gasCost.checking;
   const feeNetwork = route.chainId === 8453 ? 'Base' : 'Ethereum';
   const feeTierQuote = wallet.isEmbedded && feeSelection?.snapshot.chainId === route.chainId
     ? feeSelection.snapshot.tiers[feeSelection.tier]
@@ -434,9 +449,9 @@ export function ActionReview(props: ActionReviewProps) {
             {feeNetwork} network fees are paid in ETH, and this wallet does not hold enough to cover them. Add ETH to continue.
           </p>}
           <Button variant={destructive ? 'danger' : 'primary'} data-blocked={fundsShort && !quoteExpired ? true : undefined}
-            disabled={disabled || !planBuilder || loading || (!quoteExpired && (status === 'failed' || fundsShort))} loading={loading} className={styles.primaryAction}
+            disabled={disabled || !planBuilder || loading || (!quoteExpired && (status === 'failed' || fundsShort || checkingGas))} loading={loading} className={styles.primaryAction}
             onClick={() => quoteExpired ? void refreshReviewedQuote() : void execute()}>
-            {quoteExpired ? 'Review updated quote' : fundsShort ? 'Not enough ETH for network fees' : approvals[0]?.label ?? 'Confirm'}
+            {quoteExpired ? 'Review updated quote' : fundsShort ? 'Not enough ETH for network fees' : checkingGas ? 'Checking network fees…' : approvals[0]?.label ?? 'Confirm'}
           </Button>
         </div>
       )}
