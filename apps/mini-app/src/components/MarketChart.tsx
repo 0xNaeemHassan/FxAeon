@@ -270,6 +270,8 @@ function chartOptions(theme: ChartTheme, module: ChartModule): DeepPartial<TimeC
     // A display chart: vertical swipes and the mouse wheel keep scrolling the page.
     handleScroll: { mouseWheel: false, vertTouchDrag: false },
     handleScale: { mouseWheel: false },
+    // A long press scrubs; lifting the finger ends it, so the header returns to live.
+    trackingMode: { exitMode: module.TrackingModeExitMode.OnTouchEnd },
   };
 }
 
