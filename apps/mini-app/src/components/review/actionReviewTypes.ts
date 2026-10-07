@@ -27,6 +27,8 @@ export interface ActionReviewProps {
   editor?: ReactNode;
   surface?: 'card' | 'content';
   decisionBefore?: ReviewFact[];
+  /** User-entered facts only; no quote, fee or execution readiness is implied. */
+  preparationFacts?: ReviewFact[];
   executionCost?: {
     estimatedGas?: string;
     gasFee?: string;

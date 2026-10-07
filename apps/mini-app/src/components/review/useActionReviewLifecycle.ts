@@ -505,7 +505,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
 
   const execute = useCallback(async () => {
     const startingRoute = route;
-    if (disabled || !planBuilder || !startingRoute || loading || busyRef.current || stage !== 'review' || status === 'failed' || stepResults.some(hasTransactionHash)) return;
+    if (disabled || !planBuilder || !startingRoute || gasCost.checking || loading || busyRef.current || stage !== 'review' || status === 'failed' || stepResults.some(hasTransactionHash)) return;
     if (wallet.isEmbedded && (!feeSelection
       || feeSelection.snapshot.chainId !== startingRoute.chainId
       || feeSelection.tier !== readGasTier()
@@ -772,7 +772,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
         setLoading(false);
       }
     }
-  }, [bindSession, disabled, draftActionKey, draftResumePath, draftState, expireQuote, feeSelection, invalidateWalletData, isCurrentGeneration, loading, matchesAcceptedRoute, onComplete, planBuilder, intentKey, quoteExpired, reviewTitle, route, stage, status, stepResults, transition, wallet]);
+  }, [bindSession, disabled, gasCost.checking, draftActionKey, draftResumePath, draftState, expireQuote, feeSelection, invalidateWalletData, isCurrentGeneration, loading, matchesAcceptedRoute, onComplete, planBuilder, intentKey, quoteExpired, reviewTitle, route, stage, status, stepResults, transition, wallet]);
 
   // Connecting leaves the editor in place without preparing a transaction. The user
   // must click the action again after the wallet is connected.
