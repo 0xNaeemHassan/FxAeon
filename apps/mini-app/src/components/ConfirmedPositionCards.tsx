@@ -10,8 +10,10 @@ export function ConfirmedPositionCards({ market }: { market?: 'ETH' | 'BTC' }) {
   const { pendingPositions, checkingConfirmedPositions, refreshConfirmedPositions } = useProtocolPositions();
   const hints = pendingPositions.filter((hint) => !market || hint.market === market);
   if (!hints.length) return null;
-  return <div className="flex flex-col gap-2" aria-live="polite">
-    {hints.map((hint) => <div key={confirmedPositionHintKey(hint)} data-confirmed-position-key={confirmedPositionHintKey(hint)} aria-busy={checkingConfirmedPositions} className="min-w-0 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-3.5">
+  // A confirmed position still syncing reads as the first row of its list:
+  // no box, a hairline beneath, like the rows that follow it.
+  return <div className="flex flex-col" aria-live="polite">
+    {hints.map((hint) => <div key={confirmedPositionHintKey(hint)} data-confirmed-position-key={confirmedPositionHintKey(hint)} aria-busy={checkingConfirmedPositions} className="min-w-0 border-b border-[var(--line)] px-2.5 py-3.5">
       <div className="flex min-w-0 items-start gap-x-3">
         <TokenIcon symbol={hint.market === 'ETH' ? 'ETH' : 'WBTC'} size={34} />
         <div className="min-w-0 flex-1"><p className={`text-display text-[15px] font-semibold ${hint.side === 'long' ? 'text-success' : 'text-danger'}`}>{hint.market} {hint.side === 'long' ? 'Long' : 'Short'}</p><p className="mt-1 text-[12px] text-mut">#{hint.positionId}</p></div>
