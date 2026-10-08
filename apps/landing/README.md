@@ -10,7 +10,7 @@ npm run build
 npm run serve
 ```
 
-The build copies the static site to `dist/`; the server previews it at `http://localhost:4173` (or `PORT`). Any static host can deploy the contents of `dist/`. Build-time assets are checked in, so building needs Node.js but no installed package dependencies. The five static feature icons are generated from the app's pinned Lucide components and license; the landing test suite verifies them against those workspace dependencies.
+The build copies the static site to `dist/`; the server previews it at `http://localhost:4173` (or `PORT`). Any static host can deploy the contents of `dist/`. Build-time assets are checked in, so building needs Node.js but no installed package dependencies. The four static feature icons are generated from the app's pinned Lucide components and license; the landing test suite verifies them against those workspace dependencies. Every file under `assets/` must be referenced by the page, its styles, or its metadata; the tests fail on an unreferenced one.
 
 From the repository root, use `pnpm build:landing` and `pnpm preview:landing`.
 For Cloudflare Pages set the root directory to `apps/landing`, build command

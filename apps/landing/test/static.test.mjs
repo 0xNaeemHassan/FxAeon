@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { access, cp, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { access, cp, mkdir, mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -255,7 +255,7 @@ test('standalone build succeeds in a minimal checkout with no node_modules', asy
 
     await assert.rejects(access(resolve(tempRoot, 'node_modules')));
     await assert.rejects(access(resolve(tempLanding, 'node_modules')));
-    for (const file of ['aurora.js', 'script.js', 'assets/icons/receive.svg', 'assets/icons/trade.svg', 'assets/icons/move.svg', 'assets/icons/earn.svg', 'assets/icons/borrow.svg', 'assets/icons/LICENSE.txt']) {
+    for (const file of ['aurora.js', 'script.js', 'assets/icons/receive.svg', 'assets/icons/trade.svg', 'assets/icons/move.svg', 'assets/icons/earn.svg', 'assets/icons/LICENSE.txt']) {
       await access(resolve(tempLanding, 'dist', file));
     }
   } finally {
@@ -270,7 +270,7 @@ test('checked-in icons match the app’s pinned Lucide renderer and license', as
   const lucide = appRequire('lucide-react');
   const lucidePackagePath = appRequire.resolve('lucide-react/package.json');
 
-  const icons = { receive: lucide.ArrowDownToLine, trade: lucide.CandlestickChart, move: lucide.ArrowLeftRight, earn: lucide.PiggyBank, borrow: lucide.Layers };
+  const icons = { receive: lucide.ArrowDownToLine, trade: lucide.CandlestickChart, move: lucide.ArrowLeftRight, earn: lucide.PiggyBank };
   for (const [name, Icon] of Object.entries(icons)) {
     const rendered = renderToStaticMarkup(react.createElement(Icon, { size: 24, color: '#c6a7ff', strokeWidth: 2 }));
     assert.equal(await readFile(resolve(root, 'assets/icons', `${name}.svg`), 'utf8'), rendered, `${name}.svg should match the pinned app icon`);
@@ -291,4 +291,21 @@ test('all landing images declare text alternatives and all local resources exist
   }
   assert.match(headers, /Strict-Transport-Security: max-age=31536000/);
   assert.match(headers, /upgrade-insecure-requests/);
+});
+
+test('the build ships no asset that nothing references', async () => {
+  const site = await Promise.all(['index.html', 'styles.css', 'script.js', 'aurora.js', '404.html', 'document.css']
+    .map((file) => readFile(resolve(root, 'dist', file), 'utf8')));
+  const shipped = (await readdir(resolve(root, 'dist/assets'), { recursive: true, withFileTypes: true }))
+    .filter((entry) => entry.isFile())
+    .map((entry) => relative(resolve(root, 'dist'), resolve(entry.parentPath, entry.name)).split(sep).join('/'));
+  assert.ok(shipped.length > 0);
+  for (const file of shipped) {
+    // License notices travel with the font and icons they cover.
+    if (/LICENSE\.txt$/.test(file)) continue;
+    assert.ok(site.some((source) => source.includes(file)), `${file} ships, but no page, style, script, or meta tag uses it`);
+  }
+  for (const removed of ['portfolio-preview.png', 'portfolio-mobile.png', 'fxaeon-sculpture.webp', 'icons/borrow.svg']) {
+    await assert.rejects(access(resolve(root, 'assets', removed)), `assets/${removed} should stay out of the landing`);
+  }
 });
