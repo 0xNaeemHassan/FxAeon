@@ -1210,11 +1210,15 @@ footer {
 }
 @media (max-width: 640px) {
   body { font-size: 16px; }
-  .hero { gap: 8px; }
-  .hero-copy { gap: 22px; }
-  .hero h1 { font-size: clamp(40px, 12.4vw, 62px); }
-  .actions { width: 100%; }
-  .actions .pill.primary, .actions .web-link { flex: 1 1 100%; }
+  /* The hero scales down with the screen so the phone's top edge shows on the
+     first screen, below the browser's own bars. */
+  .hero { gap: 4px; padding-top: clamp(12px, 3vh, 32px); }
+  .hero-copy { gap: clamp(16px, 4.8vw, 22px); }
+  .hero h1 { font-size: clamp(40px, 10.6vw, 54px); }
+  .lede { font-size: clamp(16px, 4.2vw, 17px); line-height: 1.5; }
+  .actions { width: 100%; gap: 10px; }
+  .actions .pill.primary, .actions .web-link { flex: 1 1 100%; min-height: clamp(48px, 13.4vw, 58px); font-size: 16px; }
+  .hero-stage { padding-top: 16px; }
   .hero-stage .phone { --phone-w: min(300px, 72vw); }
   .orb[data-depth="near"] { --size: 54px; }
   .orb[data-depth="mid"] { --size: 42px; }

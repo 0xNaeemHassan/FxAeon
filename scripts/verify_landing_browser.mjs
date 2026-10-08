@@ -15,6 +15,14 @@ const output = resolve(root, 'artifacts/landing');
 const CHAPTERS = ['trade', 'earn', 'borrow', 'move'];
 const CHAPTER_TABS = { trade: '1', earn: '2', borrow: '2', move: '3' };
 const WIDTHS = [320, 360, 390, 393, 430, 768, 1024, 1440];
+/**
+ * A phone browser's own bars cover part of its screen. On a 375×812 iPhone,
+ * Safari's status, address, and tab bars leave 629 px (its innerHeight), and
+ * Telegram's in-app browser leaves about the same.
+ */
+const BROWSER_BARS = 183;
+/** How much of the hero's phone mockup must show above those bars. */
+const MOCKUP_PEEK = 40;
 
 /** Text whose contrast is measured against the pixels actually painted behind it. */
 const TEXT_SELECTORS = [
@@ -441,6 +449,25 @@ try {
   assert.equal(await staticPage.locator('.sdk-group li').count(), 15);
   await staticContext.close();
 
+  // On phones the smaller hero leaves the mockup's top edge on the first
+  // screen, below the browser's own bars.
+  for (const [width, height] of [[360, 740], [375, 812], [390, 844], [393, 852], [430, 850]]) {
+    const phoneContext = await browser.newContext({ viewport: { width, height }, isMobile: true, hasTouch: true, reducedMotion: 'reduce' });
+    const phonePage = await phoneContext.newPage();
+    watch(phonePage);
+    await phonePage.goto(origin, { waitUntil: 'load' });
+    await phonePage.evaluate(() => document.fonts.ready);
+    const fit = await phonePage.evaluate(() => ({
+      actionsBottom: document.querySelector('.hero .actions').getBoundingClientRect().bottom,
+      mockupTop: document.querySelector('.hero-stage .phone').getBoundingClientRect().top,
+    }));
+    await phoneContext.close();
+    const firstScreen = height - BROWSER_BARS;
+    assert.ok(fit.actionsBottom <= firstScreen, `Both hero actions fit the first screen at ${width}×${height}`);
+    assert.ok(fit.mockupTop + MOCKUP_PEEK <= firstScreen,
+      `The phone mockup's top edge should show on the first screen at ${width}×${height}: it starts at ${Math.round(fit.mockupTop)}px of ${firstScreen}px`);
+  }
+
   for (const theme of ['dark', 'light']) {
     for (const width of [393, 1440]) {
       const capture = await browser.newPage({ reducedMotion: 'reduce', viewport: { width, height: width === 393 ? 852 : 900 } });
@@ -472,7 +499,7 @@ try {
   assert.deepEqual(externalRequests, [], 'Landing loaded unneeded external services');
   assert.deepEqual([...new Set(fontContentTypes)], ['font/woff2'], 'Self-hosted Inter font must be served with its font MIME type');
 
-  console.log(`Landing browser checks passed: ${WIDTHS.length * 2} theme/viewport states, contrast over the painted backdrop, visible-content bounds, 44px targets, example semantics, stacked and pinned chapters, menu/theme keyboard and persistence, reduced motion, and zero external requests.`);
+  console.log(`Landing browser checks passed: ${WIDTHS.length * 2} theme/viewport states, contrast over the painted backdrop, visible-content bounds, 44px targets, example semantics, stacked and pinned chapters, menu/theme keyboard and persistence, reduced motion, the hero fit on 360-430px phones, and zero external requests.`);
 } finally {
   await browser?.close();
   server.kill();
