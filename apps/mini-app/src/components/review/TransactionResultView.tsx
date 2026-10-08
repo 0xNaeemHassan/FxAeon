@@ -9,6 +9,7 @@ import { Button } from '@/components/ui';
 import { ReceiptSummary } from '@/components/review/ActionReviewSummary';
 import { chainName, TransactionHashLink } from '@/components/review/ReviewProgress';
 import styles from './ActionReviewPresentation.module.css';
+import flowStyles from '../FlowWorkspace.module.css';
 import { resultBodyDuringRefresh, type resultPresentation } from '@/components/review/executionResult';
 
 type ResultPresentation = ReturnType<typeof resultPresentation>;
@@ -22,7 +23,6 @@ export function TransactionResultView({
   receipts,
   bridgeTracker,
   nextLabel,
-  nextAriaLabel,
   onNext,
   headingRef,
 }: {
@@ -33,8 +33,8 @@ export function TransactionResultView({
   positionLabel?: string;
   receipts: readonly ReceiptPresentation[];
   bridgeTracker?: ReactNode;
+  /** Also the accessible name, so speech and sight name the same action. */
   nextLabel: string;
-  nextAriaLabel: string;
   onNext: () => void;
   headingRef?: Ref<HTMLHeadingElement>;
 }) {
@@ -64,7 +64,7 @@ export function TransactionResultView({
       <ReceiptSummary receipts={receipts} />
       {positionLabel && <p className={styles.resultMeta}>Position: {positionLabel}</p>}
       {bridgeTracker}
-      <Button variant={presentation.tone === 'danger' ? 'ghost' : 'primary'} aria-label={nextAriaLabel} className="mt-5" onClick={onNext}>{nextLabel}</Button>
+      <Button variant={presentation.tone === 'danger' ? 'ghost' : 'primary'} className={`mt-5 ${flowStyles.primaryAction}`} onClick={onNext}>{nextLabel}</Button>
     </div>
   );
 }

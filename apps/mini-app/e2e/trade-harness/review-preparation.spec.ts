@@ -178,10 +178,47 @@ for (const viewport of [{ width:393,height:920 }, { width:320,height:568 }, { wi
     expect(fit.statusHeight).toBeLessThanOrEqual(fit.lineHeight * 2 + 1);
   });
 }
+test('a Max-length exact amount stays inside the card at 320px while preparing and once checked', async ({ page }) => {
+  // The owner's phone report (9.jpg): light theme, preparing, and a 17-decimal
+  // amount pushed the value column out of the card ("New position" read "Nev").
+  await page.setViewportSize({ width: 320, height: 640 });
+  await mount(page, { feeDelayMs: 650 });
+  await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
+  await fill(page, '0.00024443113696627'); await review(page);
+  const expectInsideCard = async () => {
+    const fit = await page.evaluate(() => {
+      const viewport = document.querySelector('[data-review-viewport]')!;
+      const body = viewport.querySelector<HTMLElement>('[aria-label="Review information"]')!;
+      const bounds = body.getBoundingClientRect();
+      const escaped = Array.from(viewport.querySelectorAll<HTMLElement>('[data-review-fact]'))
+        .filter((row) => row.getBoundingClientRect().height > 0)
+        .flatMap((row) => Array.from(row.children)
+          .filter((cell) => { const box = cell.getBoundingClientRect(); return box.left < bounds.left - 0.5 || box.right > bounds.right + 0.5; })
+          .map(() => row.dataset.reviewFact));
+      return { pageOverflow: document.documentElement.scrollWidth - innerWidth, bodyOverflow: body.scrollWidth - body.clientWidth, escaped };
+    });
+    expect(fit.pageOverflow, 'no horizontal page overflow').toBeLessThanOrEqual(0);
+    expect(fit.bodyOverflow, 'no hidden horizontal overflow in the card').toBeLessThanOrEqual(0);
+    expect(fit.escaped, 'labels and values stay inside the card').toEqual([]);
+    // Exact, never "≈", before and after the route is checked.
+    await expect(page.locator('[data-review-fact="Amount"] > span').last()).toHaveText('0.00024443113696627 ETH');
+    for (const [label, value] of [['Target leverage', '2.8×'], ['Position', 'New position']]) {
+      const cell = page.locator(`[data-review-fact="${label}"] > span`).last();
+      await expect(cell).toHaveText(value);
+      await expect(cell).toBeInViewport();
+    }
+  };
+  await expect(page.getByRole('button', { name: 'Checking transaction…', exact: true })).toBeDisabled();
+  await expectInsideCard();
+  await insufficient(page);
+  await expectInsideCard();
+  await expect(page.locator('p', { hasText: 'Add at least' })).toHaveText(/^Add at least \d[\d,]*(?:\.\d+)? ETH on Ethereum to cover network fees\. Receive ETH$/);
+});
+
 test('failed preparation stays in the same card and Retry performs a fresh check', async ({page}) => {
   const fixture=await mount(page,{simulationFailureIndex:0}); await fill(page); await review(page);
   await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
-  const before=await geometry(page,true);
+  await geometry(page,true); // seed the node identities compared below
   await expect(page.getByRole('button',{name:'Retry review',exact:true})).toBeEnabled();
   expect((await geometry(page)).same.every(Boolean)).toBe(true);
   await expect(page.getByRole('button',{name:'Confirm',exact:true})).toHaveCount(0);
