@@ -85,7 +85,7 @@ test.describe('implementation regressions', () => {
     test.use({ browserWallet: { address: WALLET, initiallyConnected: true } });
     test('exposes protocol resources and disconnects through the account drawer', async ({ page, requests }) => {
       await page.goto('/more', { waitUntil: 'domcontentloaded' });
-      const resource = page.getByRole('link', { name: /f\(x\) Protocol docs/i });
+      const resource = page.getByRole('link', { name: /^Protocol docs/ });
       await expect(resource).toBeVisible();
       await expect(resource).toHaveAttribute('href', 'https://fxprotocol.gitbook.io/fx-docs');
       await expect(resource).toHaveAttribute('target', '_blank');

@@ -131,7 +131,7 @@ test.describe('unified product presentation', () => {
   test('More distinguishes internal destinations from external resources', async ({ page, requests }) => {
     await page.goto('/more', { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('link', { name: /FxAeon docs/ })).toHaveAttribute('href', '/docs');
-    const protocol = page.getByRole('link', { name: /f\(x\) Protocol docs/i });
+    const protocol = page.getByRole('link', { name: /^Protocol docs/ });
     await expect(protocol).toHaveAttribute('href', 'https://fxprotocol.gitbook.io/fx-docs');
     await expect(protocol).toHaveAttribute('target', '_blank');
     await expect(page.getByRole('button', { name: 'Disconnect wallet', exact: true })).toHaveCount(0);

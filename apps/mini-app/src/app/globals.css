@@ -312,6 +312,19 @@ body {
   animation: toast-in var(--dur-slow) var(--ease-spring) both;
 }
 
+/* Sign-in, not-found and error screens: centred when they fit, scrollable
+   from their top when they do not (landscape phones, enlarged text), and
+   painted above the canvas lights like the app shell. */
+main.utility-stage {
+  position: relative;
+  z-index: 1;
+  height: var(--tg-viewport-height, 100dvh);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  justify-content: safe center;
+}
+
 .wallet-provider-chooser-backdrop {
   position: fixed;
   inset: 0;

@@ -261,6 +261,93 @@ test('with data saver on, the canvas stays still from the first paint', async ({
   expect(await canvasStates(page)).toEqual([]);
 });
 
+test('More groups its rows in pairs, never repeats a group in its row, and marks only external rows', async ({ page }) => {
+  await open(page);
+  await setLab(page, { path: '/more', wallet: STATES[2][1] });
+  await expect(page.getByRole('heading', { level: 1, name: 'More' })).toBeVisible();
+  const groups = await page.locator('main section').evaluateAll((sections) => sections.map((section) => ({
+    title: section.querySelector('h2')?.textContent ?? '',
+    rows: [...section.querySelectorAll('a, button')].map((row) => ({
+      title: row.querySelector('strong')?.textContent ?? '',
+      described: Boolean(row.querySelector('small')),
+      external: row.getAttribute('target') === '_blank',
+      leaveIcon: Boolean(row.querySelector('.lucide-external-link')),
+    })),
+  })));
+  expect(groups.map((group) => group.title)).toEqual(['Account', 'Preferences', 'f(x) Protocol', 'Resources']);
+  for (const group of groups) {
+    expect(group.rows, `${group.title} holds two rows`).toHaveLength(2);
+    for (const row of group.rows) {
+      expect(row.title.toLowerCase().startsWith(group.title.toLowerCase()), `${row.title} repeats its group`).toBe(false);
+      expect(row.leaveIcon, `${row.title}: the leave-the-app icon marks external rows only`).toBe(row.external);
+    }
+    expect(new Set(group.rows.map((row) => row.described)).size, `${group.title} describes all of its rows or none`).toBe(1);
+  }
+  const docs = page.getByRole('link', { name: 'Protocol docs How the protocol works (opens in a new tab)', exact: true });
+  await expect(docs).toHaveAttribute('target', '_blank');
+  await expect(page.getByRole('link', { name: 'Borrow fxUSD Manage collateral and debt', exact: true })).toHaveAttribute('href', '/borrow');
+});
+
+test('the account card holds its loaded shape while the wallet starts, in More and Settings', async ({ page }) => {
+  await open(page);
+  for (const path of ['/more', '/settings']) {
+    await setLab(page, { path, wallet: STATES[0][1] });
+    const loading = page.getByRole('status', { name: 'Loading account' });
+    await expect(loading).toBeVisible();
+    const avatarRadius = await loading.locator('.skeleton').first().evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { radius: style.borderRadius, width: element.getBoundingClientRect().width };
+    });
+    expect(avatarRadius).toEqual({ radius: '50%', width: 40 });
+    const loadingHeight = (await loading.boundingBox())!.height;
+    await setLab(page, { wallet: STATES[2][1] });
+    const card = page.getByRole('button', { name: 'View connected account' });
+    await expect(card).toBeVisible();
+    expect(Math.abs((await card.boundingBox())!.height - loadingHeight), `${path} account card keeps its height`).toBeLessThanOrEqual(1);
+  }
+});
+
+test('docs search results stay in the app with an arrow; only links that leave carry the leave mark', async ({ page }) => {
+  await open(page);
+  await setLab(page, { path: '/docs' });
+  const nav = page.getByRole('navigation', { name: 'Documentation sections' });
+  await nav.getByRole('searchbox', { name: 'Search docs' }).fill('wallet');
+  const results = nav.getByRole('link');
+  await expect(results.first()).toBeVisible();
+  expect(await results.evaluateAll((links) => links.filter((link) => link.querySelector('.lucide-arrow-up-right')).length)).toBe(0);
+  expect(await results.evaluateAll((links) => links.every((link) => !link.getAttribute('target')))).toBe(true);
+  const leaving = page.locator('footer a[target="_blank"]');
+  expect(await leaving.count()).toBeGreaterThan(0);
+  for (const link of await leaving.all()) {
+    await expect(link.locator('.lucide-arrow-up-right')).toHaveCount(1);
+    await expect(link).toContainText('(opens in a new tab)');
+  }
+  await expect(page.locator('footer').getByRole('link', { name: 'Open FxAeon' })).not.toHaveAttribute('target', '_blank');
+});
+
+test('sign-in, not-found and error screens scroll from their top when they do not fit, and lead back to Portfolio', async ({ page }) => {
+  await open(page, { width: 568, height: 320 });
+  const stages = [['/missing', 'link', 'Back to Portfolio'], ['/error', 'button', 'Try again'], ['/login', 'button', 'Connect browser wallet']] as const;
+  for (const [path, role, action] of stages) {
+    await setLab(page, { path, wallet: STATES[1][1] });
+    const stage = page.locator('main.utility-stage');
+    await expect(stage).toBeVisible();
+    const geometry = await stage.evaluate((element) => ({
+      firstTop: element.firstElementChild!.getBoundingClientRect().top,
+      stageTop: element.getBoundingClientRect().top,
+      overflowY: getComputedStyle(element).overflowY,
+      zIndex: getComputedStyle(element).zIndex,
+    }));
+    expect(geometry.firstTop, `${path} is not cut off above`).toBeGreaterThanOrEqual(geometry.stageTop);
+    expect(geometry.overflowY).toBe('auto');
+    expect(geometry.zIndex, `${path} paints above the canvas lights`).toBe('1');
+    const target = page.getByRole(role, { name: action });
+    await target.scrollIntoViewIfNeeded();
+    await expect(target).toBeInViewport();
+    if (path !== '/missing') await expect(page.getByRole('link', { name: 'Back to Portfolio' })).toHaveAttribute('href', '/');
+  }
+});
+
 test('the dock names Portfolio, matching its page, and every label fits a 320px dock in each theme', async ({ page }) => {
   await open(page, { width: 320, height: 700 });
   await setLab(page, { wallet: STATES[2][1] });

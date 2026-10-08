@@ -73,7 +73,15 @@ const mocks: Record<string, string> = {
       }, [ready]);
       return !ready && timedOut;
     }`,
-  '@/lib/telegram': 'export const haptic = () => {}; export const openExternalLink = () => false; export const applyTelegramChromeColors = () => {};',
+  '@/lib/telegram': 'export const haptic = () => {}; export const openExternalLink = () => false; export const applyTelegramChromeColors = () => {}; export const isTelegramLaunchContext = () => false;',
+  '@/lib/privyConfig': "export const PRIVY_APP_ID = ''; export const privyConfigured = () => false;",
+  './PrivyFlow': 'export default function PrivyFlow() { return null; }',
+  // Settings and More dependencies that would reach a chain or a provider.
+  'next/dynamic': "export default function dynamic(load, options) { return function Dynamic() { return options && options.loading ? options.loading() : null; }; }",
+  wagmi: 'export const useEnsName = () => ({ data: undefined }); export const useEnsAddress = () => ({ data: undefined });',
+  '@/components/WalletDemandProvider': 'export const useWalletProfileSession = () => ({ walletProfileAddress: null, setWalletProfileAddress() {} });',
+  '@/components/WalletSection': 'export default function WalletSection() { return null; }',
+  '@/lib/fx/gasFeePolicy': "export async function fetchGasTierQuotes() { return { tiers: { standard: { gasPriceWei: 1200000000n }, fast: { gasPriceWei: 1500000000n }, rapid: { gasPriceWei: 2100000000n } } }; }",
   '@/components/ConnectWalletButton': `import React from 'react';
     export default function ConnectWalletButton({ children, loadingLabel, onConnectStart, onConnected, onConnectError, resumeIfConnected, ...props }) {
       return <button type="button" {...props}>{children}</button>;
@@ -116,7 +124,7 @@ export async function buildAppShellLab(): Promise<{ script: string; css: string;
       onResolve(options: { filter: RegExp }, callback: (args: { path: string }) => unknown): void;
       onLoad(options: { filter: RegExp; namespace?: string }, callback: (args: { path: string }) => unknown): void;
     }) {
-      build.onResolve({ filter: /^next\/(link|navigation)$/ }, (args) => ({ path: args.path, namespace: 'shell-mock' }));
+      build.onResolve({ filter: /^(next\/(link|navigation|dynamic)|wagmi|\.\/PrivyFlow)$/ }, (args) => ({ path: args.path, namespace: 'shell-mock' }));
       build.onResolve({ filter: /^@\// }, (args) => mocks[args.path] ? { path: args.path, namespace: 'shell-mock' } : { path: resolveSource(args.path) });
       build.onLoad({ filter: /.*/, namespace: 'shell-mock' }, (args) => ({ contents: mocks[args.path], loader: 'tsx', resolveDir: appRoot }));
     } }],

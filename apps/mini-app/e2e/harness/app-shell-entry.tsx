@@ -1,8 +1,13 @@
 import React, { useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BookOpen, History, QrCode, Settings } from 'lucide-react';
 import { AppShell } from '@/components/ui';
-import { ActionRow, PageHeading, RowGroup } from '@/components/ProductUI';
+import { PageHeading } from '@/components/ProductUI';
+import MorePage from '@/app/more/page';
+import SettingsPage from '@/app/settings/page';
+import DocsPage from '@/app/docs/page';
+import NotFound from '@/app/not-found';
+import RouteError from '@/app/error';
+import LoginPage from '@/app/login/page';
 
 /** The shell lab state lives on globalThis so the mocked wallet and router
  * modules (see e2e/overlay-specs/app-shell.spec.ts) read the same store. */
@@ -21,25 +26,17 @@ function Page({ path }: { path: string }) {
   if (path === '/trade') {
     return <AppShell><div className="trade-workspace"><header className="trade-page-heading"><div><h1>Trade</h1></div></header><p>Ticket</p></div></AppShell>;
   }
-  if (path === '/more') {
-    return <AppShell>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <PageHeading title="More" />
-        <RowGroup title="Account">
-          <ActionRow icon={History} title="History" href="/history" />
-          <ActionRow icon={QrCode} title="Receive" href="/qr" />
-          <ActionRow icon={Settings} title="Settings" href="/settings" />
-        </RowGroup>
-        <RowGroup title="Resources">
-          <ActionRow icon={BookOpen} title="FxAeon docs" href="/docs" />
-          <ActionRow icon={BookOpen} title="f(x) Protocol docs" href="https://fxprotocol.gitbook.io/fx-docs" external />
-        </RowGroup>
-      </div>
-    </AppShell>;
-  }
+  // The real More, Settings and Docs routes, against the lab's wallet and router.
+  if (path === '/more') return <MorePage />;
+  if (path === '/settings') return <SettingsPage />;
+  if (path === '/docs') return <DocsPage />;
+  // Full-screen stages outside the shell.
+  if (path === '/missing') return <NotFound />;
+  if (path === '/error') return <RouteError error={new Error('lab')} reset={() => undefined} />;
+  if (path === '/login') return <LoginPage />;
   return <AppShell>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <PageHeading title={path === '/settings' ? 'Settings' : 'Portfolio'} />
+      <PageHeading title="Portfolio" />
       <p style={{ height: 1200 }}>Holdings</p>
     </div>
   </AppShell>;

@@ -102,6 +102,9 @@
 .footerLinks { display: flex; flex-wrap: wrap; gap: 0 20px; margin-top: 8px; }
 .footerLinks a { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; color: var(--mut); }
 .footerLinks a:hover { color: var(--text); }
+/* ↗ marks a link that leaves FxAeon (ExternalLink); in-app links use →. */
+.externalMark { display: inline-block; flex-shrink: 0; width: .8em; height: .8em; margin-left: .15em; vertical-align: -.05em; }
+.footerLinks .externalMark { margin-left: 0; }
 .docsPage :where(a, button, summary, pre):focus-visible { outline: 2px solid var(--mint-bright); outline-offset: 3px; border-radius: 5px; }
 .docsPage h2:focus { outline: none; }
 
