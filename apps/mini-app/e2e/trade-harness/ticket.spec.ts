@@ -3,9 +3,9 @@ import { resolve } from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { debtShare } from '../../src/lib/leverageShare';
 
-// The real Trade ticket (LeverageField and its split slider) over the offline
-// RPC fixture used by the review preparation harness. No wallet connector,
-// signature or live RPC is used.
+// The real Trade ticket (LeverageField, the warmed route and its outcome
+// preview, ActionReview) over the offline RPC fixture used by the review
+// preparation harness. No wallet connector, signature or live RPC is used.
 const require = createRequire(resolve(__dirname, 'ticket.spec.ts'));
 const { buildHarness } = require('./long-review-build.cjs') as { buildHarness: () => Promise<{ script: string; css: string }> };
 const { createFixture } = require('./long-review-rpc.cjs') as { createFixture: (options: Record<string, unknown>) => { rpc: (request: unknown) => Promise<unknown> } };
@@ -19,13 +19,20 @@ type Control = {
 };
 type Harness = typeof globalThis & { __longReview: Control };
 
-async function mount(page: Page, options: { delayMs?: number; reducedMotion?: 'reduce' | 'no-preference' } = {}) {
+/** `failCalls` makes every contract read fail while it returns true (the bounds read has settled by then). */
+async function mount(page: Page, options: { delayMs?: number; failCalls?: () => boolean; reducedMotion?: 'reduce' | 'no-preference' } = {}) {
   const fixture = createFixture({ delayMs: options.delayMs ?? 20, ethBalance: 400000000000000n });
   await page.route('**/*', async (route) => {
     const url = route.request().url();
     if (url.includes('/api/gas')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ source: 'etherscan', chainId: 1, gasPriceWei: '3000000000', baseFeePerGasWei: '1000000000', tiers: { standard: '3000000000', fast: '4000000000', rapid: '5000000000' }, fetchedAt: Date.now(), stale: false }) });
     if (url.includes('fake-controlled-fixture')) {
-      return route.fulfill({ contentType: 'application/json', body: JSON.stringify(await fixture.rpc(route.request().postDataJSON())) });
+      const body = route.request().postDataJSON();
+      const calls: Array<{ id: number; method: string }> = Array.isArray(body) ? body : [body];
+      if (options.failCalls?.() && calls.some((call) => call.method === 'eth_call')) {
+        const failed = calls.map((call) => ({ jsonrpc: '2.0', id: call.id, error: { code: -32000, message: 'fixture: reads unavailable' } }));
+        return route.fulfill({ contentType: 'application/json', body: JSON.stringify(Array.isArray(body) ? failed : failed[0]) });
+      }
+      return route.fulfill({ contentType: 'application/json', body: JSON.stringify(await fixture.rpc(body)) });
     }
     if (url.startsWith('http://long-review.test/')) return route.fulfill({ contentType: 'text/html', body: '<!doctype html><div id="root"></div>' });
     return route.abort();
@@ -49,8 +56,105 @@ async function mount(page: Page, options: { delayMs?: number; reducedMotion?: 'r
   await expect(page.getByRole('textbox', { name: 'Amount in ETH' })).toBeVisible();
   await expect.poll(() => page.evaluate(() => (globalThis as Harness).__longReview.events.some((event) => event.name === 'readLeverageBounds' && event.end !== undefined))).toBe(true);
 }
+const planCount = (page: Page) => page.evaluate(() => (globalThis as Harness).__longReview.events.filter((event) => event.name === 'planIncreasePosition').length);
+const outcome = (page: Page) => page.getByRole('group', { name: 'Estimated position' });
+const fact = (page: Page, label: string) => outcome(page).locator(`[data-outcome-fact="${label}"] dd`);
+/** A preview row's figure, without the USD line that may follow it. */
+const figure = async (page: Page, label: string) => (await fact(page, label).locator('span').first().textContent()) ?? '';
+/** The review's summary row for a fact (its Details disclosure repeats some facts exactly, further down). */
+const reviewFact = (page: Page, label: string) => page.locator(`[data-review-fact="${label}"]`).first().locator('> span').last();
 const slider = (page: Page) => page.getByRole('slider', { name: 'Target leverage slider', exact: true });
 const leverageField = (page: Page) => page.getByRole('spinbutton', { name: 'Target leverage', exact: true });
+
+test.describe('the ticket’s outcome preview', () => {
+  test('previews the warmed route with the figures its review then shows, from the same single plan', async ({ page }) => {
+    await mount(page);
+    await expect(outcome(page)).toHaveCount(0);
+    await page.getByRole('textbox', { name: 'Amount in ETH' }).fill('0.0003');
+    await slider(page).fill('2.8');
+    await expect(outcome(page)).toHaveAttribute('data-trade-outcome', 'ready');
+    const preview = {
+      collateral: await figure(page, 'Estimated collateral'),
+      debt: await figure(page, 'Estimated debt'),
+      fee: await figure(page, 'Protocol fee rate'),
+    };
+    expect(preview.collateral).toMatch(/^≈ [\d,]+(?:\.\d+)? wstETH$/);
+    expect(preview.debt).toMatch(/^≈ [\d,]+(?:\.\d+)? fxUSD$/);
+    expect(preview.fee).toMatch(/%/);
+    const plansBeforeReview = await planCount(page);
+
+    await page.getByRole('button', { name: 'Review ETH Long', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Not enough ETH', exact: true })).toBeDisabled();
+    // The same digits, units and labels; only the ticket marks every amount as an estimate.
+    const sameFigure = (value: string) => new RegExp(`^(?:≈ )?${value.replace(/^≈ /, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
+    await expect(reviewFact(page, 'Estimated collateral')).toHaveText(sameFigure(preview.collateral));
+    await expect(reviewFact(page, 'Estimated debt')).toHaveText(sameFigure(preview.debt));
+    await expect(reviewFact(page, 'Protocol fee rate')).toHaveText(preview.fee);
+    // The review reused the warm route it validated: the preview cost no plan of its own.
+    expect(await planCount(page)).toBe(plansBeforeReview);
+  });
+
+  test('clears its figures the moment an input changes, then estimates the new ticket', async ({ page }) => {
+    await mount(page, { delayMs: 150 });
+    await page.getByRole('textbox', { name: 'Amount in ETH' }).fill('0.0003');
+    await slider(page).fill('2.8');
+    await expect(outcome(page)).toHaveAttribute('data-trade-outcome', 'ready');
+    const debtAt28 = await figure(page, 'Estimated debt');
+    const box = (await outcome(page).boundingBox())!;
+
+    await slider(page).fill('3.5');
+    // Checked on the very next frame: no figure for 2.8× survives next to 3.5×.
+    expect(await page.evaluate(() => {
+      const group = document.querySelector('[data-trade-outcome]');
+      return { state: group?.getAttribute('data-trade-outcome'), text: group?.textContent ?? '' };
+    })).toEqual({ state: 'pending', text: 'Estimated collateralEstimated debtProtocol fee rate' });
+    // The placeholder keeps the rows where they were.
+    const pending = (await outcome(page).boundingBox())!;
+    expect(Math.abs(pending.y - box.y)).toBeLessThanOrEqual(1);
+    await expect(outcome(page)).toHaveAttribute('data-trade-outcome', 'ready');
+    const debtAt35 = await figure(page, 'Estimated debt');
+    const amount = (text: string) => Number(text.replace(/[^\d.]/g, ''));
+    expect(amount(debtAt35)).toBeGreaterThan(amount(debtAt28));
+
+    // Clearing the amount leaves nothing to estimate.
+    await page.getByRole('textbox', { name: 'Amount in ETH' }).fill('');
+    await expect(outcome(page)).toHaveCount(0);
+  });
+
+  test('a failed warm-up leaves no preview and no error behind, and review still plans afresh', async ({ page }) => {
+    let failing = false;
+    await mount(page, { failCalls: () => failing });
+    failing = true;
+    await page.getByRole('textbox', { name: 'Amount in ETH' }).fill('0.0003');
+    await slider(page).fill('2.8');
+    await expect.poll(() => page.evaluate(() => (globalThis as Harness).__longReview.events.some((event) => event.name === 'planIncreasePosition' && event.error))).toBe(true);
+    await expect(outcome(page)).toHaveCount(0);
+    await expect(page.locator('[data-trade-ticket] [role="alert"]')).toHaveCount(0);
+    failing = false;
+    const plansBeforeReview = await planCount(page);
+    await page.getByRole('button', { name: 'Review ETH Long', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Not enough ETH', exact: true })).toBeDisabled();
+    expect(await planCount(page)).toBe(plansBeforeReview + 1);
+  });
+
+  test('back from review, the figures stay in place while the ticket re-estimates from the current chain', async ({ page }) => {
+    await mount(page);
+    await page.getByRole('textbox', { name: 'Amount in ETH' }).fill('0.0003');
+    await slider(page).fill('2.8');
+    await expect(outcome(page)).toHaveAttribute('data-trade-outcome', 'ready');
+    const debt = await figure(page, 'Estimated debt');
+    await page.getByRole('button', { name: 'Review ETH Long', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Not enough ETH', exact: true })).toBeDisabled();
+    expect(await planCount(page)).toBe(1);
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    // Same inputs, same figures, never a placeholder flash; a fresh warm-up runs behind them.
+    await expect(outcome(page)).toHaveAttribute('data-trade-outcome', 'ready');
+    await expect(fact(page, 'Estimated debt')).toHaveText(debt);
+    await expect.poll(() => planCount(page)).toBe(2);
+    await expect.poll(() => page.evaluate(() => (globalThis as Harness).__longReview.events.filter((event) => event.name === 'planIncreasePosition').every((event) => event.end !== undefined))).toBe(true);
+    await expect(fact(page, 'Estimated debt')).toHaveText(debt);
+  });
+});
 
 /** The drawn bar and thumb, and the screen x of a share along the bar. */
 async function track(page: Page) {
