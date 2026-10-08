@@ -16,10 +16,14 @@ type PreviewRequest = {
   settled: boolean;
   resolve: () => void;
 };
+type HarnessGasEstimate = {
+  status: 'current' | 'partial'; nativeValueWei: bigint; executionGasFeeWei?: bigint; totalNativeCostWei?: bigint;
+  nativeBalanceWei?: bigint; insufficientNativeBalance?: boolean;
+};
 type HarnessState = {
   wallet: WalletState; version: number; mode: 'auto' | 'deferred'; failNextPrepare: boolean; executeVersion?: number; partialResult: boolean;
   deferRunner: boolean; failRunner: boolean; executionResolvers: Array<() => void>; deferWalletResponse: boolean; walletResolvers: Array<(reject?: boolean) => void>; lastExecutedRouteVersion?: number;
-  multiStepExecution: boolean; nonzeroTransactionValues: boolean; gasCost: { status: 'refreshing' | 'unavailable' | 'current'; estimate?: { status: 'current' | 'partial'; nativeValueWei: bigint; executionGasFeeWei?: bigint; totalNativeCostWei?: bigint }; estimateIsCurrent: boolean; error?: string };
+  multiStepExecution: boolean; nonzeroTransactionValues: boolean; gasCost: { status: 'refreshing' | 'unavailable' | 'current'; checking: boolean; current?: HarnessGasEstimate; previous?: HarnessGasEstimate; estimate?: HarnessGasEstimate; estimateIsCurrent: boolean; error?: string };
   rejectActionSignature: boolean;
   prepareCount: number; planCount: number; runnerCount: number; sendCount: number; draftSaveCount: number; draftCancelCount: number; draftRemoveCount: number;
   feeQuoteCount: number; lastFeeSelection?: unknown;
@@ -27,20 +31,21 @@ type HarnessState = {
   deferRefresh: boolean; refreshStarted: boolean; completeStarted: boolean; refreshResolvers: Array<() => void>; rerender?: () => void;
   approvalRequired: boolean; sentTransactions: Array<{ maxFeePerGas?: string; maxPriorityFeePerGas?: string }>;
   previewDelayMs: number; refreshDelayMs: number; accountRefreshCount: number;
+  stableTradeReview: boolean; omitReviewedLeverage: boolean; failNextClamp: boolean;
 };
 
 const initialOptions = (globalThis as typeof globalThis & { __actionReviewHarnessInitialOptions?: { mode?: 'auto' | 'deferred'; previewDelayMs?: number; refreshDelayMs?: number; presentationMode?: boolean } }).__actionReviewHarnessInitialOptions;
 const H = (globalThis as typeof globalThis & { __actionReviewHarness?: HarnessState }).__actionReviewHarness ??= {
   wallet: { ready: true, authenticated: true, isEmbedded: false, connectionVersion: 1, address: '0x00000000000000000000000000000000000000aa', chainId: 1 },
   version: 1, mode: initialOptions?.mode ?? 'auto', failNextPrepare: false, executeVersion: undefined, partialResult: false, deferRunner: false, failRunner: false, executionResolvers: [], deferWalletResponse: false, walletResolvers: [],
-  multiStepExecution: false, nonzeroTransactionValues: false, approvalRequired: false, sentTransactions: [], gasCost: initialOptions?.presentationMode
-    ? { status: 'current', estimate: { status: 'current', nativeValueWei: 0n, executionGasFeeWei: 840000000000000n, totalNativeCostWei: 840000000000000n }, estimateIsCurrent: true }
-    : { status: 'refreshing', estimateIsCurrent: false },
+  multiStepExecution: false, nonzeroTransactionValues: false, approvalRequired: false, sentTransactions: [],
+  gasCost: { status: 'current', checking: false, estimate: { status: 'current', nativeValueWei: 0n, executionGasFeeWei: 840000000000000n, totalNativeCostWei: 840000000000000n }, estimateIsCurrent: true },
   prepareCount: 0, planCount: 0, runnerCount: 0, sendCount: 0, draftSaveCount: 0, draftCancelCount: 0, draftRemoveCount: 0, feeQuoteCount: 0,
   previewRequests: [], nextPreviewRequestId: 1,
   deferRefresh: false, refreshStarted: false, completeStarted: false, refreshResolvers: [],
   rejectActionSignature: false,
   previewDelayMs: initialOptions?.previewDelayMs ?? 0, refreshDelayMs: initialOptions?.refreshDelayMs ?? 0, accountRefreshCount: 0,
+  stableTradeReview: false, omitReviewedLeverage: false, failNextClamp: false,
 };
 
 type HarnessRoute = PlannedRoute & { harnessRouteVersion: number; harnessConnectionVersion: number };
@@ -54,19 +59,20 @@ const routeFor = (version: number): HarnessRoute => ({
     ...(H.multiStepExecution ? [{ chainId: 1, from: H.wallet.address! as Address, to: '0x00000000000000000000000000000000000000cc' as Address, data: '0x87654321' as Hex, value: H.nonzeroTransactionValues ? 456n : 0n, kind: 'action', type: 'increasePosition', operation: 'increasePosition' } satisfies PlannedTransaction] : []),
   ],
   details: { routeType: `Terms ${version}` },
-  ...(initialOptions?.presentationMode ? { policy: { walletAddress: H.wallet.address! as Address, chainId: 1, reviewedAction: {
+  ...(initialOptions?.presentationMode || H.stableTradeReview ? { policy: { walletAddress: H.wallet.address! as Address, chainId: 1, reviewedAction: {
     kind: 'position-increase', poolAddress: '0x00000000000000000000000000000000000000bb' as Address,
-    positionId: 42, inputTokenAddress: '0x00000000000000000000000000000000000000c1' as Address,
-    inputAmount: 250000000000000000n, nativeInput: false,
+    positionId: 41 + version, inputTokenAddress: '0x00000000000000000000000000000000000000c1' as Address,
+    inputAmount: BigInt(version) * 250000000000000000n, nativeInput: false,
     collateralTokenAddress: '0x00000000000000000000000000000000000000c1' as Address,
     debtTokenAddress: '0x00000000000000000000000000000000000000c2' as Address,
-    positionType: 'long', requestedLeverage: 3, slippagePercent: 0.5,
+    positionType: 'long', requestedLeverage: H.omitReviewedLeverage ? undefined : 2 + version, slippagePercent: version * 0.5,
   } } } : {}),
 });
 
 function Harness() {
   const [, redraw] = useState(0);
   const [version, setVersion] = useState(H.version);
+  const [preparationVersion, setPreparationVersion] = useState(H.version);
   const [builderRevision, setBuilderRevision] = useState(0);
   const [resumeReview, setResumeReview] = useState(0);
   const [disabled, setDisabled] = useState(false);
@@ -81,10 +87,19 @@ function Harness() {
   useEffect(() => () => { H.rerender = undefined; }, []);
   const planBuilder = useCallback(async () => {
     H.planCount += 1;
+    // Match Trade's safety clamp: the failed planner updates its own input
+    // before rejecting, so the lifecycle must preserve the actionable error.
+    if (H.failNextClamp) {
+      H.failNextClamp = false;
+      H.version = version + 1;
+      setVersion(version + 1);
+      setPreparationVersion(version + 1);
+      throw new RangeError('Pool leverage limits changed to 4.0x-10.0x. The target was updated; review it again.');
+    }
     const route = routeFor(H.executeVersion ?? version);
     return route;
   }, [builderRevision, version]);
-  const setTerms = () => { H.version = version + 1; setVersion((value) => value + 1); };
+  const setTerms = () => { H.version = version + 1; setVersion((value) => value + 1); setPreparationVersion(version + 1); };
   const disconnect = () => { H.wallet = { ...H.wallet, ready: true, authenticated: false, address: undefined, chainId: undefined }; H.rerender?.(); };
   const connect = () => { H.wallet = { ...H.wallet, ready: true, authenticated: true, connectionVersion: H.wallet.connectionVersion + 1, address: '0x00000000000000000000000000000000000000aa', chainId: 1 }; H.rerender?.(); };
   const switchAccount = () => { H.wallet = { ...H.wallet, ready: true, authenticated: true, connectionVersion: H.wallet.connectionVersion + 1, address: '0x00000000000000000000000000000000000000dd', chainId: 1 }; H.rerender?.(); };
@@ -93,6 +108,10 @@ function Harness() {
   const contents = <>
     <div data-harness-ready="true" />
     <div role="toolbar" style={presentationMode ? { display: 'none' } : undefined}>
+      <button type="button" onClick={() => { H.stableTradeReview = true; H.rerender?.(); }}>Use stable Trade review</button>
+      <button type="button" onClick={() => setPreparationVersion((value) => value + 1)}>Change preparation facts</button>
+      <button type="button" onClick={() => { H.omitReviewedLeverage = true; }}>Omit reviewed leverage</button>
+      <button type="button" onClick={() => { H.failNextClamp = true; }}>Clamp next preparation</button>
       <button type="button" onClick={setTerms}>Change terms</button>
       <button type="button" onClick={() => setBuilderRevision((value) => value + 1)}>Recreate planner</button>
       <button type="button" onClick={() => setDisabled((value) => !value)}>{disabled ? 'Enable action' : 'Disable action'}</button>
@@ -124,8 +143,19 @@ function Harness() {
       <button type="button" onClick={() => { H.nonzeroTransactionValues = true; H.rerender?.(); }}>Use nonzero transaction values</button>
       <button type="button" onClick={() => { H.approvalRequired = true; H.rerender?.(); }}>Use approval route</button>
       <button type="button" onClick={() => { H.rejectActionSignature = true; }}>Reject action signature</button>
-      <button type="button" onClick={() => { H.gasCost = { status: 'unavailable', estimateIsCurrent: false, error: 'RPC unavailable' }; H.rerender?.(); }}>Gas estimate unavailable</button>
-      <button type="button" onClick={() => { H.gasCost = { status: 'current', estimate: { status: 'current', nativeValueWei: 0n, executionGasFeeWei: 840000000000000n, totalNativeCostWei: 840000000000000n }, estimateIsCurrent: true }; H.rerender?.(); }}>Gas estimate current</button>
+      <button type="button" onClick={() => { H.gasCost = { status: 'refreshing', checking: true, estimateIsCurrent: false }; H.rerender?.(); }}>Gas estimate loading</button>
+      <button type="button" onClick={() => { H.gasCost = { status: 'unavailable', checking: false, estimateIsCurrent: false, error: 'RPC unavailable' }; H.rerender?.(); }}>Gas estimate unavailable</button>
+      <button type="button" onClick={() => { H.gasCost = { status: 'current', checking: false, estimate: { status: 'current', nativeValueWei: 0n, executionGasFeeWei: 840000000000000n, totalNativeCostWei: 840000000000000n }, estimateIsCurrent: true }; H.rerender?.(); }}>Gas estimate current</button>
+      <button type="button" onClick={() => {
+        const estimate: HarnessGasEstimate = { status: 'current', nativeValueWei: 0n, executionGasFeeWei: 840000000000000n, totalNativeCostWei: 840000000000000n, nativeBalanceWei: 0n, insufficientNativeBalance: true };
+        H.gasCost = { status: 'current', checking: false, current: estimate, estimate, estimateIsCurrent: true };
+        H.rerender?.();
+      }}>Gas balance insufficient</button>
+      <button type="button" onClick={() => {
+        const previous = H.gasCost.current ?? H.gasCost.estimate;
+        H.gasCost = { status: 'refreshing', checking: true, previous, estimate: previous, estimateIsCurrent: false };
+        H.rerender?.();
+      }}>Refresh expired gas estimate</button>
       <button type="button" onClick={() => setReviewMounted((mounted) => !mounted)}>{reviewMounted ? 'Unmount review' : 'Mount review'}</button>
     </div>
     {reviewMounted && <ActionReview
@@ -135,6 +165,12 @@ function Harness() {
       surface={presentationMode ? 'card' : 'content'}
       resumeReview={resumeReview}
       draftState={draftState}
+      preparationFacts={H.stableTradeReview ? [
+        { label: 'Amount', value: `${preparationVersion * 0.25} fxUSD` },
+        { label: 'Target leverage', value: `${preparationVersion + 2}×` },
+        { label: 'Position', value: `#${preparationVersion + 41}` },
+        { label: 'Slippage', value: `${preparationVersion * 0.5}%` },
+      ] : undefined}
       disabled={disabled}
       editor={<p>Editor terms v{version}</p>}
       onComplete={async () => {
