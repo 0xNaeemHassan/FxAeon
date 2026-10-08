@@ -73,7 +73,7 @@ test.describe('implementation regressions', () => {
     test('never presents duplicate collateral inputs', async ({ page, requests }) => {
       await page.goto('/borrow', { waitUntil: 'domcontentloaded' });
       await expect(page.getByRole('main')).toBeVisible();
-      const input = page.locator('input[aria-label^="Starting collateral in "], input[aria-label^="Collateral to add in "]');
+      const input = page.locator('input[aria-label^="Collateral in "], input[aria-label^="Collateral to add in "]');
       await expect(input).toHaveCount(1);
       await expect(input).toBeVisible();
       await expect(page.getByRole('radio', { name: 'New position', exact: true })).toHaveAttribute('aria-checked', 'true');

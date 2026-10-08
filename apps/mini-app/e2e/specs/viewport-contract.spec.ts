@@ -458,11 +458,11 @@ test.describe("single-viewport route contract", () => {
     await expect.poll(() => page.locator('input[aria-label="Amount in fxUSD"]:visible').first().evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(120);
 
     await page.goto("/borrow", { waitUntil: "domcontentloaded" });
-    const collateral = page.getByLabel("Starting collateral in ETH");
+    const collateral = page.getByLabel("Collateral in ETH", { exact: true });
     const debt = page.getByLabel("fxUSD to borrow in fxUSD");
     await expect(collateral).toBeVisible();
     await expect(debt).toBeVisible();
-    await expect.poll(() => page.locator('input[aria-label="Starting collateral in ETH"]:visible').first().evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(120);
+    await expect.poll(() => page.locator('input[aria-label="Collateral in ETH"]:visible').first().evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(120);
     await expect.poll(() => page.locator('input[aria-label="fxUSD to borrow in fxUSD"]:visible').first().evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(120);
     await assertViewportGeometry(page, "/borrow", viewport);
   });

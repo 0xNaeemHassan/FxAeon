@@ -20,7 +20,7 @@ import { TransactionSettings } from '@/components/TransactionSettings';
 import { MAX_FX_SLIPPAGE_PERCENT, clampLeverage, leverageBoundsFor, planAdjustPositionLeverage, planIncreasePosition, planReducePosition, prepareLeverageReview, readLeverageBounds, readSignatureRequiredDraft, restoreSignatureRequiredDraftFromSearch, signatureDraftIdFromSearch, type LeverageBounds, type SignatureDraftState } from '@/lib/fx';
 import { usePrivyWallet } from '@/lib/wallet';
 import styles from '@/components/trade-surfaces.module.css';
-import { positiveDecimal } from '@/lib/amount';
+import { groupDigits, positiveDecimal } from '@/lib/amount';
 import { DEFAULT_SLIPPAGE_PERCENT, readSlippagePercent, SETTINGS_KEY, SETTINGS_UPDATED_EVENT } from '@/lib/settings';
 import { haptic } from '@/lib/telegram';
 import { resetTransactionAmounts } from '@/lib/transactionState';
@@ -198,8 +198,8 @@ export default function PositionsPage() {
   const selectedStale = selected ? positionIsStale(selected, positionState.failedGroups) : false;
   const selectedSplit = selected ? { side: selected.side, debtLabel: leverageDebtLabel(selected.side, selected.market) } : undefined;
   const decisionBefore = useMemo(() => managerPosition ? [
-    { label: 'Collateral', value: `${formatAmount(managerPosition.info.rawColls, positionCollateralDecimals(managerPosition))} ${managerPosition.info.rawCollsToken}` },
-    { label: 'Debt', value: `${formatAmount(managerPosition.info.rawDebts, positionDebtDecimals(managerPosition))} ${managerPosition.info.rawDebtsToken}` },
+    { label: 'Collateral', value: `${groupDigits(formatAmount(managerPosition.info.rawColls, positionCollateralDecimals(managerPosition)))} ${managerPosition.info.rawCollsToken}` },
+    { label: 'Debt', value: `${groupDigits(formatAmount(managerPosition.info.rawDebts, positionDebtDecimals(managerPosition)))} ${managerPosition.info.rawDebtsToken}` },
   ] : undefined, [managerPosition]);
   const marketTokens = selected
     ? action === 'reduce' || action === 'close'
