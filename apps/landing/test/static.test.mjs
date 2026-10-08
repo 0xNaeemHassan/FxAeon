@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { test } from 'node:test';
 import { relative, resolve, sep } from 'node:path';
-import { escapeAttribute, telegramLauncher } from '../config.mjs';
+import { escapeAttribute, telegramLauncher, telegramStartLink } from '../config.mjs';
 import { qrModules, qrSvg } from '../qr.mjs';
 
 const root = resolve(import.meta.dirname, '..');
@@ -136,6 +136,31 @@ test('illustrations are described as examples and offer no fake controls', () =>
   }
 });
 
+test('section buttons open their screen in the Mini App on phones and keep the web page', async () => {
+  const sections = [
+    ['trade', 'Trade', elementSource(html, /<li class="chapter" data-chapter="trade">/, 'li')],
+    ['earn', 'Earn', elementSource(html, /<li class="chapter" data-chapter="earn">/, 'li')],
+    ['borrow', 'Borrow', elementSource(html, /<li class="chapter" data-chapter="borrow">/, 'li')],
+    ['move', 'Move', elementSource(html, /<li class="chapter" data-chapter="move">/, 'li')],
+    ['earn', 'Earn', elementSource(html, /<article class="scene scene-pool"/, 'article')],
+    ['move', 'Move', elementSource(html, /<article class="duo-item" aria-labelledby="bridge-title">/, 'article')],
+  ];
+  for (const [route, name, source] of sections) {
+    assert.deepEqual(linksByDevice(source), {
+      mobile: [`text-link https://t.me/FxAeonBot?startapp=${route} Open ${name} in Telegram ↗`, `text-link quiet https://fxaeon.com/${route} Open ${name} on the web →`],
+      desktop: [`text-link https://fxaeon.com/${route} Open ${name} →`],
+    }, `${name} section links`);
+  }
+  // Every start parameter on the page is one the app routes, to the screen its web link opens.
+  const telegram = await readFile(resolve(root, '../mini-app/src/lib/telegram.ts'), 'utf8');
+  const listed = telegram.match(/const START_PARAM_ROUTES[^=]*= new Map\(\[([\s\S]*?)\]\);/)?.[1];
+  assert.ok(listed, 'The app lists the start parameters it routes');
+  const appRoutes = new Map([...listed.matchAll(/\['([a-z-]+)', '([^']+)'\]/g)].map(([, startParam, path]) => [startParam, path]));
+  const used = [...html.matchAll(/href="https:\/\/t\.me\/FxAeonBot\?startapp=([^"]*)"/g)].map(([, startParam]) => startParam);
+  assert.equal(used.length, sections.length);
+  for (const startParam of used) assert.equal(appRoutes.get(startParam), `/${startParam}`, `The app opens /${startParam} for startapp=${startParam}`);
+});
+
 test('protocol and safety copy keeps its caveats', () => {
   assert.match(html, /Borrow at 0% annual interest/);
   assert.match(html, /Protocol fees and liquidation risk still apply/);
@@ -246,9 +271,10 @@ test('motion is opt-in, and every loop stays in an ambient region', () => {
   assert.match(aurora, /prefers-reduced-motion: reduce/, 'The aurora holds one frame under reduced motion');
 });
 
-test('built output includes launcher, QR code, scripts, and strict static headers', async () => {
+test('built output includes launcher, start links, QR code, scripts, and strict static headers', async () => {
   const launcher = telegramLauncher(process.env.NEXT_PUBLIC_TELEGRAM_APP_URL || undefined);
   assert.ok(builtHtml.includes(`href="${escapeAttribute(launcher)}"`));
+  for (const route of ['trade', 'earn', 'borrow', 'move']) assert.ok(builtHtml.includes(`href="${escapeAttribute(telegramStartLink(launcher, route))}"`), `${route} start link`);
   assert.equal(await readFile(resolve(root, 'dist/assets/telegram-qr.svg'), 'utf8'), qrSvg(launcher), 'The QR code opens the same launcher');
   for (const file of ['script.js', 'aurora.js', 'styles.css']) await access(resolve(root, 'dist', file));
   assert.match(headers, /Content-Security-Policy: default-src 'self'/);
@@ -267,6 +293,12 @@ test('launcher accepts bot and mini-app links but rejects unsafe or ambiguous de
     'https://t.me/FxAeonBot?startapp=one&startapp=two',
     'https://t.me/FxAeonBot?startapp=%22onclick=alert(1)']) {
     assert.throws(() => telegramLauncher(value), value);
+  }
+  // Section links put their screen in the launcher's one start parameter.
+  assert.equal(telegramStartLink(undefined, 'trade'), 'https://t.me/FxAeonBot?startapp=trade');
+  assert.equal(telegramStartLink('https://t.me/FxAeonBot/app?startapp=launch_1', 'trade-btc'), 'https://t.me/FxAeonBot/app?startapp=trade-btc');
+  for (const startParam of ['', 'Trade', 'trade/earn', 'trade?x=1', '../trade', 'trade earn', '"trade"', 'x'.repeat(33)]) {
+    assert.throws(() => telegramStartLink(undefined, startParam), startParam);
   }
 });
 
@@ -337,7 +369,11 @@ test('standalone build succeeds in a minimal checkout with no node_modules', asy
     }
     const built = await readFile(resolve(tempLanding, 'dist/index.html'), 'utf8');
     const destinations = [...built.matchAll(/href="(https:\/\/t\.me\/[^"]*)"/g)].map(([, href]) => href);
-    assert.deepEqual([...new Set(destinations)], ['https://t.me/FxAeonBot/app?startapp=launch_1']);
+    assert.deepEqual([...new Set(destinations)].sort(), [
+      'https://t.me/FxAeonBot/app?startapp=borrow', 'https://t.me/FxAeonBot/app?startapp=earn',
+      'https://t.me/FxAeonBot/app?startapp=launch_1', 'https://t.me/FxAeonBot/app?startapp=move',
+      'https://t.me/FxAeonBot/app?startapp=trade',
+    ]);
     assert.equal(await readFile(resolve(tempLanding, 'dist/assets/telegram-qr.svg'), 'utf8'), qrSvg(launcher));
   } finally {
     await rm(tempRoot, { recursive: true, force: true });

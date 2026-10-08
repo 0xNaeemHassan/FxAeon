@@ -17,6 +17,8 @@ const CHAPTER_TABS = { trade: '1', earn: '2', borrow: '2', move: '3' };
 const WIDTHS = [320, 360, 390, 393, 430, 768, 1024, 1440];
 const TELEGRAM = 'https://t.me/FxAeonBot';
 const WEB = 'https://fxaeon.com/';
+/** Section buttons in page order: the four chapters, the pool scene, and the bridge. */
+const SECTION_ROUTES = [...CHAPTERS, 'earn', 'move'];
 /**
  * A phone browser's own bars cover part of its screen. On a 375×812 iPhone,
  * Safari's status, address, and tab bars leave 629 px (its innerHeight), and
@@ -46,7 +48,7 @@ const TARGET_SELECTORS = [
 ].join(', ');
 
 const IN_BOUNDS_SELECTORS = [
-  '.site-header', '.hero-copy', '.hero h1', '.hero .lede', '.hero .actions', '.telegram-qr', '.hero-stage', '.proof li',
+  '.site-header', '.hero-copy', '.hero h1', '.hero .lede', '.hero .actions', '.telegram-qr', '.hero-stage', '.proof li', '.route-links',
   '.section-head', '.chapter', '.chapter-phone .phone', '.scene', '.scene-copy', '.scene-art', '.vessel',
   '.split-readout', '.split-control', '.brake-options', '.brake-figures', '.ruler', '.ruler-mark span',
   '.peg-chart', '.defenses li', '.flow', '.duo-item', '.sdk-copy', '.sdk-picker', '.sdk-group li',
@@ -200,6 +202,7 @@ function deviceState() {
     hero: hrefs('.hero .actions a'),
     firstFrame: window.__firstFrame,
     qr: visible(qr) ? { width: Math.round(qr.getBoundingClientRect().width), loaded: qr.complete && qr.naturalWidth > 0 } : null,
+    sections: hrefs('.route-links a'),
     finale: hrefs('.finale .actions a'),
     actionsBottom: document.querySelector('.hero .actions').getBoundingClientRect().bottom,
     mockupTop: document.querySelector('.hero-stage .phone').getBoundingClientRect().top,
@@ -330,7 +333,7 @@ try {
       assert.equal(state.heroQr, desktop ? 1 : 0, `The QR code shows only on a wide screen with a mouse (${width}px)`);
       assert.deepEqual(state.undersizedTargets, [], `Interactive targets smaller than 44px at ${width}px`);
       assert.ok(state.images.every((image) => image.loaded), `Missing visible image at ${width}px: ${JSON.stringify(state.images.filter((image) => !image.loaded))}`);
-      assert.deepEqual(state.chapterLinks, CHAPTERS.map((route) => `${WEB}${route}`));
+      assert.deepEqual(state.chapterLinks, CHAPTERS.flatMap((route) => desktop ? [`${WEB}${route}`] : [`${TELEGRAM}?startapp=${route}`, `${WEB}${route}`]));
       assert.equal(state.revealHidden, 0, 'Reduced motion must show every section in place');
       if (width < 960) {
         assert.equal(state.stageShown, false, 'Narrow screens stack a phone in each chapter instead of pinning one');
@@ -509,9 +512,9 @@ try {
     return { ...shown, qrRequested: requested.some((path) => path.endsWith('/assets/telegram-qr.svg')) };
   };
 
-  // Phones lead with Telegram and never show or download the QR code. The
-  // smaller hero leaves the mockup's top edge on the first screen, below the
-  // browser's own bars.
+  // Phones lead with Telegram, open each section's screen in the Mini App, and
+  // never show or download the QR code. The smaller hero leaves the mockup's
+  // top edge on the first screen, below the browser's own bars.
   for (const [width, height] of [[360, 740], [375, 812], [390, 844], [393, 852], [430, 850]]) {
     const shown = await openAs({ viewport: { width, height }, isMobile: true, hasTouch: true });
     const firstScreen = height - BROWSER_BARS;
@@ -520,6 +523,7 @@ try {
     assert.deepEqual(shown.firstFrame, { hero: shown.hero, qr: false }, 'The first frame already shows the phone actions');
     assert.equal(shown.qr, null, 'Phones do not show the QR code');
     assert.equal(shown.qrRequested, false, 'Phones do not download the QR code');
+    assert.deepEqual(shown.sections, SECTION_ROUTES.flatMap((route) => [`${TELEGRAM}?startapp=${route}`, `${WEB}${route}`]));
     assert.deepEqual(shown.finale, [TELEGRAM, WEB]);
     assert.ok(shown.actionsBottom <= firstScreen, `Both hero actions fit the first screen at ${width}×${height}`);
     assert.ok(shown.mockupTop + MOCKUP_PEEK <= firstScreen,
@@ -531,13 +535,15 @@ try {
   assert.deepEqual({ header: tablet.header, hero: tablet.hero, firstFrame: tablet.firstFrame, qr: tablet.qr, qrRequested: tablet.qrRequested },
     { header: [TELEGRAM], hero: [TELEGRAM, WEB], firstFrame: { hero: [TELEGRAM, WEB], qr: false }, qr: null, qrRequested: false });
 
-  // A desktop leads with the web app and shows the QR code beside "Open in Telegram".
+  // A desktop leads with the web app, shows the QR code beside "Open in Telegram",
+  // and keeps the sections on the web.
   const desktop = await openAs({ viewport: { width: 1440, height: 900 } }, true);
   assert.equal(desktop.pointer, 'fine');
   assert.deepEqual(desktop.header, [WEB]);
   assert.deepEqual(desktop.hero, [WEB, TELEGRAM]);
   assert.deepEqual(desktop.firstFrame, { hero: desktop.hero, qr: true }, 'The first frame already shows the desktop actions and QR code');
   assert.deepEqual(desktop.qr, { width: 88, loaded: true });
+  assert.deepEqual(desktop.sections, SECTION_ROUTES.map((route) => `${WEB}${route}`));
   assert.deepEqual(desktop.finale, [WEB, TELEGRAM]);
 
   for (const theme of ['dark', 'light']) {

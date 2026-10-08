@@ -299,6 +299,10 @@ ol, ul { padding: 0; list-style: none; }
   color: var(--link);
   font-weight: 640;
 }
+/* A section opens its screen in Telegram on phones, with the web as the quieter way in. */
+.route-links { display: flex; flex-wrap: wrap; align-items: center; column-gap: 22px; }
+.text-link.quiet { color: var(--mut); font-weight: 600; }
+.text-link.quiet:hover { color: var(--text); }
 
 /* The desktop hero's code opens the bot on a phone. Its light square and
    quiet zone keep it scannable in either theme. */
