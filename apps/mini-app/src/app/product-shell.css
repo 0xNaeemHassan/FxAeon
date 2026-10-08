@@ -12,7 +12,7 @@
 /* Weight and tracking only: the Trade heading keeps its own responsive size. */
 [data-product-ui='v2'] .trade-page-heading h1 { font-weight: 680; letter-spacing: -0.045em; }
 [data-product-ui='v2'] .app-content { scroll-padding-bottom: 140px; }
-[data-product-ui='v2'] .app-content :where(button, a, input, select, summary):focus-visible { outline: 2px solid var(--mint); outline-offset: 3px; }
+[data-product-ui='v2'] .app-content :where(button, a, input, select, summary):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
 /* The amount surface already supplies a visible focus-within ring. */
 [data-product-ui='v2'] .app-content .amount-control input:focus-visible { outline: none; }
 [data-product-ui='v2'] .segmented { box-shadow: none; }

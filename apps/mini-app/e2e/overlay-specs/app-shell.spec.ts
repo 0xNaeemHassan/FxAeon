@@ -428,6 +428,64 @@ test('disabled and busy actions stay readable (AA) and look unavailable, in ever
   for (const option of options) expect(option.ratio, `${option.text} option`).toBeGreaterThanOrEqual(4.5);
 });
 
+test('keyboard focus shows one accent ring on the header, dock, rows and choices, and fields use the accent caret', async ({ page }) => {
+  await open(page);
+  await setLab(page, { path: '/more', wallet: STATES[2][1] });
+  await expect(page.getByRole('heading', { level: 1, name: 'More' })).toBeVisible();
+  const targets = ['.network-selector', '.theme-toggle', 'nav.mobile-tabbar a[aria-current="page"]', 'main a[href="/history"]'];
+  for (const theme of ['official', 'dark', 'light']) {
+    await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+    await settle(page);
+    for (const selector of targets) {
+      // Focus by keyboard, so :focus-visible applies as it does for a keyboard user.
+      await page.locator(selector).first().evaluate((element) => (element as HTMLElement).blur());
+      await page.locator(selector).first().focus();
+      const ring = await page.locator(selector).first().evaluate((element) => {
+        const probe = document.createElement('span');
+        probe.style.color = 'var(--focus-ring)';
+        document.body.append(probe);
+        const expected = getComputedStyle(probe).color;
+        probe.remove();
+        const style = getComputedStyle(element);
+        return { color: style.outlineColor, style: style.outlineStyle, width: style.outlineWidth, expected, visible: element.matches(':focus-visible') };
+      });
+      expect(ring.visible, `${selector} takes keyboard focus`).toBe(true);
+      expect({ color: ring.color, style: ring.style, width: ring.width }, `${selector} ring in ${theme}`).toEqual({ color: ring.expected, style: 'solid', width: '2px' });
+    }
+  }
+  // A choice card rings for keyboard focus on its radio, not for a tap.
+  await setLab(page, { path: '/controls' });
+  const instant = page.getByRole('radio', { name: 'Instant' });
+  await instant.focus();
+  const choiceRing = await instant.evaluate((input) => {
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--focus-ring)';
+    document.body.append(probe);
+    const expected = getComputedStyle(probe).color;
+    probe.remove();
+    const style = getComputedStyle(input.closest('label')!);
+    return { color: style.outlineColor, style: style.outlineStyle, expected };
+  });
+  expect(choiceRing).toEqual({ color: choiceRing.expected, style: 'solid', expected: choiceRing.expected });
+  await page.getByText('Queued', { exact: true }).click({ force: true });
+  await page.mouse.click(5, 5);
+  await page.getByText('Instant', { exact: true }).click();
+  expect(await instant.evaluate((input) => getComputedStyle(input.closest('label')!).outlineStyle), 'a tap shows no focus ring').toBe('none');
+
+  await setLab(page, { path: '/docs' });
+  const search = page.getByRole('searchbox', { name: 'Search docs' });
+  await expect(search).toBeEnabled();
+  const caret = await search.evaluate((element) => {
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--mint)';
+    document.body.append(probe);
+    const expected = getComputedStyle(probe).color;
+    probe.remove();
+    return { caret: getComputedStyle(element).caretColor, expected };
+  });
+  expect(caret.caret).toBe(caret.expected);
+});
+
 test('the dock names Portfolio, matching its page, and every label fits a 320px dock in each theme', async ({ page }) => {
   await open(page, { width: 320, height: 700 });
   await setLab(page, { wallet: STATES[2][1] });

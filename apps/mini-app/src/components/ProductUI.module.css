@@ -63,7 +63,9 @@
 .choice strong { display: block; font-size: var(--fs-small); font-weight: 650; }
 .choice small { display: block; margin-top: 3px; font-size: var(--fs-caption); line-height: 1.45; color: var(--mut); }
 .choice[data-selected='true'] { border-color: color-mix(in srgb, var(--mint) 70%, transparent); background: var(--mint-dim); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mint) 10%, transparent); }
-.choice:focus-within { outline: 2px solid var(--mint); outline-offset: 3px; }
+/* The ring is for keyboard focus; a tap already shows the selection ring. */
+.choice:has(> input:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+@supports not selector(:has(*)) { .choice:focus-within { outline: 2px solid var(--focus-ring); outline-offset: 3px; } }
 /* Unavailable options stay readable: quieter text, an empty mark, no hover. */
 .choice[data-disabled='true'] { cursor: not-allowed; }
 .choice[data-disabled='true'], .choice[data-disabled='true']:hover { background: var(--surface-2); }
