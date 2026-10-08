@@ -9,7 +9,6 @@ identify their assets. Do not imply that an asset mark is the FxAeon brand.
 | --- | --- | --- |
 | FxAeon application mark | `apps/mini-app/public/icon.svg` | App icon and product identity |
 | Landing mark | `apps/landing/assets/fxaeon-mark.svg` | Landing header, footer, finale, and favicon; its paths match the app mark |
-| Landing sculpture | `apps/landing/assets/fxaeon-sculpture.webp` | Supporting artwork derived from the FxAeon mark, not used by the current landing page; source prompt in [`landing-art-prompt.md`](landing-art-prompt.md) |
 | Token and chain marks | `apps/mini-app/public/token-icons/` and `chain-icons/` | Vendored token/network identity; the landing copies use the same app files |
 | Supplied social banner and profile image | [`assets/social/`](assets/social/) | Social exports; keep the supplied masters unchanged |
 | App social-preview image | `apps/mini-app/public/landing/fxaeon-banner.png` | Open Graph/Twitter metadata, not the visible landing hero |
