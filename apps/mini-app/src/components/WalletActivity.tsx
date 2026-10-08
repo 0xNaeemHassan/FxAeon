@@ -110,6 +110,7 @@ function ActivityFeed({ walletAddress, compact, inDialog }: { walletAddress: Add
   const [selected, setSelected] = useState<Activity | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreFailed, setLoadMoreFailed] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const { data } = activity;
   // Each source keeps its identity between renders, so typing in search never re-explains the feed.
@@ -175,9 +176,11 @@ function ActivityFeed({ walletAddress, compact, inDialog }: { walletAddress: Add
         <strong>Only unverified tokens so far</strong>
         <span>{compact ? 'Tokens FxAeon doesn’t recognize stay in the full history.' : 'Tokens FxAeon doesn’t recognize are kept below and may be spam.'}</span>
       </div>}
+    {!compact && loadMoreFailed && !loadingMore && <p role="status" className={styles.loadMoreError}>Older activity couldn’t load. Nothing above changed.</p>}
     {!compact && activity.hasMore && <button type="button" className={styles.more} disabled={loadingMore} onClick={() => {
-      setLoadingMore(true); void activity.loadMore().catch(() => undefined).finally(() => setLoadingMore(false));
-    }} aria-busy={loadingMore}>{loadingMore ? <><RefreshCw size={16} className="animate-spin" aria-hidden="true" />Loading more…</> : 'Load more'}</button>}
+      setLoadingMore(true); setLoadMoreFailed(false);
+      void activity.loadMore().catch(() => setLoadMoreFailed(true)).finally(() => setLoadingMore(false));
+    }} aria-busy={loadingMore}>{loadingMore ? <><RefreshCw size={16} className="animate-spin" aria-hidden="true" />Loading more…</> : loadMoreFailed ? 'Try again' : 'Load more'}</button>}
     {!compact && unverified.length > 0 && <>
       <button type="button" className={styles.unverifiedToggle} aria-expanded={showUnverified} onClick={() => setShowUnverified((value) => !value)}>
         {showUnverified ? 'Hide' : 'Show'} unverified ({unverified.length})<ChevronDown size={16} aria-hidden="true" data-open={showUnverified || undefined} />

@@ -443,7 +443,7 @@ export function TokenSelect<T extends string>({
                     {showBalanceColumn && (
                       <span className={styles.tokenPickerValue}>
                         <span id={balanceId} className={styles.tokenPickerBalance} title={balance?.amount ? `${balance.amount} ${displayTokenSymbol(option)}` : balance?.reason}>
-                          {balance?.status === 'ready' && <span className="sr-only">Available: </span>}{optionBalanceLabel(balance, option)}
+                          {balance?.status === 'ready' && <span className="sr-only">Available: </span>}{optionBalanceLabel(balance, option, pickerStatus)}
                         </span>
                         <span id={balanceUsdId} className={styles.tokenPickerBalanceUsd}>{optionBalanceUsdContent(balance, option, prices)}</span>
                       </span>
@@ -646,10 +646,13 @@ function listOfSymbols(symbols: readonly string[]): string {
   return `${symbols.slice(0, -1).join(', ')}, or ${symbols[symbols.length - 1]}`;
 }
 
-function optionBalanceLabel(balance: TokenBalanceView | undefined, symbol: string): ReactNode {
+function optionBalanceLabel(balance: TokenBalanceView | undefined, symbol: string, listStatus?: string): ReactNode {
   const display = displayTokenSymbol(symbol);
   if (balance?.status === 'disconnected') return <ValueOrSkeleton value="—" width="sm" status="unavailable" label={balance.reason ?? 'Balance unavailable'} />;
-  if (!balance) return <ValueOrSkeleton value="—" width="sm" label="Loading balance" />;
+  // A settled balance list without this token never fills in later: say so instead of loading forever.
+  if (!balance) return listStatus === 'ready' || listStatus === 'unavailable'
+    ? <ValueOrSkeleton value="—" width="sm" status="unavailable" label="Balance unavailable" />
+    : <ValueOrSkeleton value="—" width="sm" label="Loading balance" />;
   if (balance.status === 'unavailable') return <ValueOrSkeleton value="—" width="sm" status="unavailable" label={balance.reason ?? 'Balance unavailable'} />;
   if (balance.status === 'loading') return <ValueOrSkeleton value="—" width="sm" label="Loading balance" />;
   if (balance.amount === undefined) return <ValueOrSkeleton value="—" width="sm" label="Loading balance" />;

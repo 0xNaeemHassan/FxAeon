@@ -87,6 +87,7 @@
 .empty[data-compact] { justify-items: start; padding: 4px 0 6px; text-align: left; }
 .more { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; width: 100%; margin-top: 8px; border-radius: 999px; color: var(--mint); font-size: var(--fs-small); font-weight: 600; transition: background-color var(--dur-fast) ease; }
 .more:hover:not(:disabled) { background: var(--surface-2); }
+.loadMoreError { margin: 8px 0 0; color: var(--mut); font-size: var(--fs-caption); line-height: 1.45; text-align: center; }
 .notice { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; padding: 0 4px 0 14px; border-radius: var(--radius-sm); background: var(--surface-2); color: var(--mut); font-size: var(--fs-caption); line-height: 1.4; }
 .notice span { flex: 1; min-width: 0; }
 .notice button, .unavailable button { min-height: 44px; padding: 0 14px; border-radius: 999px; color: var(--mint); font-weight: 600; transition: background-color var(--dur-fast) ease; }
