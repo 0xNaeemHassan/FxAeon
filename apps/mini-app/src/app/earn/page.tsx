@@ -611,9 +611,9 @@ function EarnActionEditor({ mode, token, onTokenChange, amount, onAmountChange, 
       </div>}
       <div className={presentation.receiveRow}><span>{instant && token !== 'fxUSDBasePool' ? 'Receive asset' : 'Withdrawal route'}</span>{picker}</div>
       {token === 'fxUSDBasePool'
-        ? <p className={presentation.helper}>Redeems fxSAVE directly for base-pool shares, with no queued claim.</p>
+        ? <p className={presentation.helper}>Redeems fxSAVE directly for fxSP, the Stability Pool share it holds, with no queued claim.</p>
         // The SDK queues fxUSD and USDC requests alike (requestRedeem); the claim pays both, so say so here.
-        : !instant && <p className={presentation.helper}>A queued withdrawal is claimed later and pays out in fxUSD and USDC, as the claim preview shows. Choose base-pool shares here to redeem directly instead.</p>}
+        : !instant && <p className={presentation.helper}>A queued withdrawal is claimed later and pays out in fxUSD and USDC, as the claim preview shows. Choose fxSP here to redeem directly instead.</p>}
     </>}
     {mode === 'claim' && (walletData ? <ClaimState data={walletData} /> : <p className={presentation.helper}>Connect the requesting wallet to view its withdrawal.</p>)}
   </div>;
@@ -627,7 +627,7 @@ function ClaimState({ data }: { data: SaveData }) {
   return <div className={presentation.editor}>
     <p className={presentation.helper}>{state.status === 'ready' ? 'Review the current receipt amounts before confirming.' : state.message}</p>
     <MetricRows rows={[
-      ...(pending !== undefined && pending > 0n ? [{ label: 'Queued base-pool shares', value: formatDisplayAmount(pending) }] : []),
+      ...(pending !== undefined && pending > 0n ? [{ label: 'Queued fxSP', value: formatDisplayAmount(pending) }] : []),
       ...(state.status === 'cooldown' && data.claimable?.redeemableAt ? [{ label: 'Available to claim', value: formatTimestamp(data.claimable.redeemableAt) }] : []),
       // A preview of today's claim, so an estimate: marked "≈" like every other estimate.
       ...(preview ? [
@@ -640,15 +640,15 @@ function ClaimState({ data }: { data: SaveData }) {
 
 function VaultDetails({ config }: { config: SaveConfig | null }) {
   return <Disclosure title="Vault details">
-    <p className={presentation.helper}>The displayed APY is variable. fxSAVE and its underlying base-pool shares are different units.</p>
+    <p className={presentation.helper}>The displayed APY is variable. fxSAVE and the fxSP it holds are different units.</p>
     {/* The cooldown and instant fee are figures in "The vault at a glance" just below, so they are not repeated here. */}
     {config ? <MetricRows rows={[
-      { label: 'Vault holdings', value: `${formatDisplayAmount(config.totalAssetsWei)} fxUSD base-pool shares` },
+      { label: 'Vault holdings', value: `${formatDisplayAmount(config.totalAssetsWei)} fxSP` },
       { label: 'fxSAVE supply', value: `${formatDisplayAmount(config.totalSupplyWei)} fxSAVE` },
       { label: 'Expense ratio', value: formatVaultRatio(config.expenseRatio) },
       { label: 'Harvester ratio', value: formatVaultRatio(config.harvesterRatio) },
-      // The vault stakes idle base-pool shares in batches once they reach this amount.
-      { label: 'Batch deposit threshold', value: `${formatDisplayAmount(config.threshold)} fxUSD base-pool shares` },
+      // The vault stakes idle fxSP in batches once it reaches this amount.
+      { label: 'Batch deposit threshold', value: `${formatDisplayAmount(config.threshold)} fxSP` },
     ]} /> : <p className={presentation.helper}>Vault details unavailable. Retry to load them.</p>}
   </Disclosure>;
 }

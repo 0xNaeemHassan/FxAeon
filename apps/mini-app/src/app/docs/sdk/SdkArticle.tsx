@@ -112,7 +112,7 @@ export const sdkSections: { id: string; title: string; content: ReactNode }[] = 
         <Callout title="Keep units attached to values">
           <p>
             Amounts are integer <code>bigint</code> values in the relevant token&apos;s
-            smallest unit. USDC uses 6 decimals; fxUSD, fxSAVE, and base-pool shares
+            smallest unit. USDC uses 6 decimals; fxUSD, fxSAVE, and fxSP base-pool shares
             use 18. Slippage is a percentage, so <code>0.5</code> means 0.5%, not
             50%. FxAeon accepts values greater than zero and no more than 2% where
             slippage applies, a narrower limit than the upstream API.
@@ -270,21 +270,21 @@ export const sdkSections: { id: string; title: string; content: ReactNode }[] = 
       <>
         <p>
           All seven fxSAVE methods use Ethereum. Keep vault shares, underlying
-          base-pool shares, and redemption outputs distinct. They are different
+          fxSP base-pool shares, and redemption outputs distinct. They are different
           assets even when they share an 18-decimal representation.
         </p>
         <h3 id="getFxSaveBalance" tabIndex={-1}><a href="#getFxSaveBalance" className={styles.headingLink}><code>getFxSaveBalance</code><span className={styles.anchorMark} aria-hidden="true">#</span></a></h3>
         <p>Read a wallet&apos;s fxSAVE shares and their underlying-asset conversion.</p>
         <dl>
           <dt>Input</dt><dd><code>userAddress</code>.</dd>
-          <dt>Output</dt><dd><code>balanceWei</code> in fxSAVE shares and optional <code>assetsWei</code> in fxUSD base-pool shares. A successful zero balance can omit <code>assetsWei</code>.</dd>
+          <dt>Output</dt><dd><code>balanceWei</code> in fxSAVE shares and optional <code>assetsWei</code> in fxSP, the f(x) Stability Pool share (SDK key <code>fxUSDBasePool</code>). A successful zero balance can omit <code>assetsWei</code>.</dd>
           <dt>Refresh</dt><dd>On Earn/Portfolio open and after every fxSAVE write. No signing; a failed read must not be presented as zero.</dd>
         </dl>
         <h3 id="getFxSaveConfig" tabIndex={-1}><a href="#getFxSaveConfig" className={styles.headingLink}><code>getFxSaveConfig</code><span className={styles.anchorMark} aria-hidden="true">#</span></a></h3>
         <p>Read vault totals and live configuration.</p>
         <dl>
           <dt>Input</dt><dd>No arguments required; an empty request object is also accepted.</dd>
-          <dt>Output</dt><dd><code>totalSupplyWei</code> (fxSAVE), <code>totalAssetsWei</code> (base-pool shares), <code>cooldownPeriodSeconds</code>, <code>instantRedeemFeeRatio</code>, <code>expenseRatio</code>, <code>harvesterRatio</code>, and <code>threshold</code>.</dd>
+          <dt>Output</dt><dd><code>totalSupplyWei</code> (fxSAVE), <code>totalAssetsWei</code> (fxSP), <code>cooldownPeriodSeconds</code>, <code>instantRedeemFeeRatio</code>, <code>expenseRatio</code>, <code>harvesterRatio</code>, and <code>threshold</code>.</dd>
           <dt>Instant-redemption fee precision</dt><dd><code>instantRedeemFeeRatio</code> uses <code>1e18</code> precision: divide by 1e18 for the fractional rate, then multiply by 100 for a percentage. This is separate from the pool/router fee ratios at <code>1e9</code> precision described below.</dd>
           <dt>Refresh</dt><dd>With the other Earn reads. No signing. Read cooldown and fee settings live rather than hardcoding them.</dd>
         </dl>
@@ -292,7 +292,7 @@ export const sdkSections: { id: string; title: string; content: ReactNode }[] = 
         <p>Read a pending queued redemption and its cooldown state.</p>
         <dl>
           <dt>Input</dt><dd><code>userAddress</code>.</dd>
-          <dt>Output</dt><dd><code>hasPendingRedeem</code>, <code>pendingSharesWei</code> (base-pool shares), <code>cooldownPeriodSeconds</code>, <code>redeemableAt</code> (Unix seconds or null), and <code>isCooldownComplete</code>.</dd>
+          <dt>Output</dt><dd><code>hasPendingRedeem</code>, <code>pendingSharesWei</code> (fxSP), <code>cooldownPeriodSeconds</code>, <code>redeemableAt</code> (Unix seconds or null), and <code>isCooldownComplete</code>.</dd>
           <dt>Refresh</dt><dd>On Earn open, after withdrawal or claim, and around cooldown completion. No signing. A local countdown alone does not authorize a claim.</dd>
         </dl>
         <h3 id="getFxSaveClaimable" tabIndex={-1}><a href="#getFxSaveClaimable" className={styles.headingLink}><code>getFxSaveClaimable</code><span className={styles.anchorMark} aria-hidden="true">#</span></a></h3>
@@ -310,7 +310,7 @@ export const sdkSections: { id: string; title: string; content: ReactNode }[] = 
           <dt>Review and refresh</dt><dd>Require fresh pending/cooldown state and successful simulation, then explicit wallet approval. Reload balance, redemption status, and claimable state after the canonical receipt.</dd>
         </dl>
         <h3 id="depositFxSave" tabIndex={-1}><a href="#depositFxSave" className={styles.headingLink}><code>depositFxSave</code><span className={styles.anchorMark} aria-hidden="true">#</span></a></h3>
-        <p>Prepare a deposit of USDC, fxUSD, or base-pool shares.</p>
+        <p>Prepare a deposit of USDC, fxUSD, or fxSP base-pool shares.</p>
         <dl>
           <dt>Input</dt><dd><code>userAddress</code>, <code>tokenIn</code> (<code>usdc</code>, <code>fxUSD</code>, or <code>fxUSDBasePool</code>), positive <code>amount</code> in input-token units, and optional <code>slippage</code>.</dd>
           <dt>Output</dt><dd><code>{'{ txs }'}</code>, with an exact input-token approval when needed before the deposit action.</dd>
@@ -323,7 +323,7 @@ export const sdkSections: { id: string; title: string; content: ReactNode }[] = 
           <ExternalLink href="https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/core/FxUSDBasePool.sol#L281-L299">base-pool minimum-share check</ExternalLink>.
         </p>
         <h3 id="withdrawFxSave" tabIndex={-1}><a href="#withdrawFxSave" className={styles.headingLink}><code>withdrawFxSave</code><span className={styles.anchorMark} aria-hidden="true">#</span></a></h3>
-        <p>Prepare a queued redemption, an instant exit, or a direct base-pool-share redemption.</p>
+        <p>Prepare a queued redemption, an instant exit, or a direct redemption to fxSP base-pool shares.</p>
         <dl>
           <dt>Input</dt><dd><code>userAddress</code>, <code>tokenOut</code> (<code>usdc</code>, <code>fxUSD</code>, or <code>fxUSDBasePool</code>), positive <code>amount</code> in fxSAVE share units, optional <code>instant</code>, and <code>slippage</code> required for an instant exit.</dd>
           <dt>Output</dt><dd><code>{'{ txs }'}</code>, with any required approval before the action. Instant USDC/fxUSD exits apply a fee and slippage. Base-pool-share output is a direct redemption and cannot use <code>instant: true</code> in FxAeon.</dd>

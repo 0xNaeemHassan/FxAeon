@@ -133,7 +133,7 @@ export function AmountFieldView({ value, onChange, symbol, label, hint, balance,
           change(normalized ?? raw.slice(0, 100));
         }}
           onKeyDown={submitNearestAction} disabled={inactive} inputMode="decimal" autoComplete="off" spellCheck={false} placeholder={placeholder}
-          aria-label={`${label} in ${symbol}`} aria-describedby={describedBy} aria-invalid={Boolean(error)} aria-errormessage={error ? `${id}-error` : undefined} required={!allowZero} />
+          aria-label={`${label} in ${tokenSymbol(symbol)}`} aria-describedby={describedBy} aria-invalid={Boolean(error)} aria-errormessage={error ? `${id}-error` : undefined} required={!allowZero} />
         </span>
         <div className={styles.token}>{tokenSelector ?? <span className={styles.tokenLabel} title={tokenSymbol(symbol)}><TokenIcon symbol={symbol} size={24} /><span>{tokenSymbol(symbol)}</span></span>}</div>
       </div>

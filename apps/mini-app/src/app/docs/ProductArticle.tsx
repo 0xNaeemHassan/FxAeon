@@ -63,7 +63,7 @@ export const productSections: { id: string; title: string; aliases?: string[]; c
   </> },
   { id: 'earn', title: 'Earn with fxSAVE', content: <>
 <p>Earn reads fxSAVE balances, vault value, redemption status, and claimable amounts from Ethereum. Its actions are deposit, withdraw, and claim.</p>
-              <p>Deposit supports fxUSD, USDC, and fxUSD base-pool shares. Forms show the selected wallet’s verified balance, and token pickers pair quantity with estimated USD worth. Unavailable balances remain unknown, never zero; fxSAVE remains the withdrawal limit.</p>
+              <p>Deposit supports fxUSD, USDC, and fxSP, the f(x) Stability Pool share. Forms show the selected wallet’s verified balance, and token pickers pair quantity with estimated USD worth. Unavailable balances remain unknown, never zero; fxSAVE remains the withdrawal limit.</p>
               <p>Withdrawals may be instant or queued. Queued redemptions remain pending through cooldown and expose Claim when ready. Action details show the transaction steps and, for instant withdrawals, the slippage and instant withdrawal fee. Deposits use the SDK’s fixed base-pool share minimum, shown in review.</p>
               <h3 id="earn-steps">Earn in three steps</h3>
               <ol>

@@ -1,6 +1,7 @@
 import { formatUnits } from 'viem';
 import { positionCollateralTokenAddress, positionDebtTokenAddress, positionPoolAddress } from './policy';
 import { FX_TOKENS, type FxTokenDefinition } from './tokens';
+import { tokenSymbol } from './tokenPresentation';
 import type { OfficialFxMethod, PlannedRoute, ReviewedActionIntent } from './types';
 import { calculateProtocolFee } from './protocolFee';
 
@@ -9,7 +10,7 @@ type Unit = { symbol: string; decimals: number };
 type Pool = { market: 'ETH' | 'BTC'; side: 'long' | 'short' };
 
 const sameAddress = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
-const tokenUnit = (token: FxTokenDefinition): Unit => ({ symbol: token.key, decimals: token.decimals });
+const tokenUnit = (token: FxTokenDefinition): Unit => ({ symbol: tokenSymbol(token.key), decimals: token.decimals });
 
 function unitForAddress(address: string): Unit | undefined {
   const token = Object.values(FX_TOKENS).find((candidate) => sameAddress(address, candidate.address));
@@ -110,7 +111,7 @@ function limitUnit(label: string, intent: ReviewedActionIntent, pool: Pool | und
       if (pool && intent.kind === 'repay-and-withdraw') return { label: 'Minimum received', unit: unitForAddress(intent.withdrawTokenAddress) };
       break;
     case 'fxSAVE deposit base-pool minimum shares':
-      if (intent.kind === 'fxsave-deposit' && !intent.directBasePool) return { label: 'Minimum base-pool shares', unit: tokenUnit(FX_TOKENS.fxUSDBasePool) };
+      if (intent.kind === 'fxsave-deposit' && !intent.directBasePool) return { label: 'Minimum fxSP', unit: tokenUnit(FX_TOKENS.fxUSDBasePool) };
       break;
     case 'fxSAVE deposit conversion minimum output':
       if (intent.kind === 'fxsave-deposit' && !intent.directBasePool) {

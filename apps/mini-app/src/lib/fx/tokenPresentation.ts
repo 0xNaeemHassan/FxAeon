@@ -11,7 +11,7 @@ const PRESENTATIONS: Partial<Record<FxTokenKey, TokenPresentation>> = {
   USDC: { symbol: 'USDC', name: 'USD Coin', role: 'Stablecoin' },
   USDT: { symbol: 'USDT', name: 'Tether USD', role: 'Stablecoin' },
   fxUSD: { symbol: 'fxUSD', name: 'f(x) USD', role: 'Protocol stablecoin' },
-  fxUSDBasePool: { symbol: 'fxUSDBasePool', name: 'f(x) USD base-pool shares', role: 'Pool share token' },
+  fxUSDBasePool: { symbol: 'fxSP', name: 'f(x) Stability Pool', role: 'Pool share token' },
   fxSAVE: { symbol: 'fxSAVE', name: 'f(x) Savings', role: 'Savings share token' },
   FXN: { symbol: 'FXN', name: 'f(x) Network', role: 'Protocol token' },
 };

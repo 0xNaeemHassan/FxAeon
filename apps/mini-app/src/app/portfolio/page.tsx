@@ -400,7 +400,7 @@ function EarnPositionCard({ protocol, loading, prices, pricesLoading = false, on
         <strong><ValueOrSkeleton value={formatUsd(value)} width="md" status={valueStatus} label="fxSAVE position value" /></strong></div>
       <div className={presentation.earnActions}><Link href="/earn?mode=deposit">Deposit</Link><Link href="/earn?mode=withdraw">Withdraw</Link>
         {claimAvailability(protocol.claimable).status === 'ready' && <Link href="/earn?mode=claim">Review claim</Link>}</div>
-      <Disclosure title="Underlying holdings"><p className={presentation.helper}><ValueOrSkeleton value={protocol.fxSaveAssets === null ? '—' : `${formatExactDecimal(protocol.fxSaveAssets, 6)} fxUSD base-pool shares`} status={loading ? 'loading' : 'unavailable'} label="Underlying holdings" /></p></Disclosure>
+      <Disclosure title="Underlying holdings"><p className={presentation.helper}><ValueOrSkeleton value={protocol.fxSaveAssets === null ? '—' : `${formatExactDecimal(protocol.fxSaveAssets, 6)} fxSP`} status={loading ? 'loading' : 'unavailable'} label="Underlying holdings" /></p></Disclosure>
     </div>,
     <ValueOrSkeleton value={formatUsd(value)} width="md" status={valueStatus} label="fxSAVE position value" />,
   );

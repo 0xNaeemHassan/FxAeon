@@ -14,7 +14,7 @@ export function CompactQuoteMetrics({ facts, gasStatus }: {
   const primaryOutcome = facts.find((fact) =>
     fact.label === 'Receive'
     || fact.label === 'Minimum received'
-    || fact.label.startsWith('Minimum base-pool shares'),
+    || fact.label.startsWith('Minimum fxSP'),
   );
   const candidates: Array<ReviewFact | undefined> = [
     primaryOutcome ?? byLabel.get('Estimated collateral'),

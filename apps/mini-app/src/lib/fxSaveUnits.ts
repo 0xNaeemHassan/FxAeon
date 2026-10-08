@@ -3,15 +3,15 @@ import { usdValueForDecimal, usdValueForUnits, type UsdPriceMap } from './prices
 
 /**
  * SDK 1.0.5: convertToAssets/totalAssets are denominated in fxSAVE.asset(),
- * the fxUSD base-pool share token, not fxUSD. Pending redemptions come from
+ * the fxUSD base-pool share token (fxSP, the f(x) Stability Pool share), not fxUSD. Pending redemptions come from
  * that base pool's redeemRequests, whereas balance/totalSupply are fxSAVE.
  */
 export const FX_SAVE_UNITS = {
   balanceWei: { priceKey: 'fxSAVE', label: 'fxSAVE' },
   totalSupplyWei: { priceKey: 'fxSAVE', label: 'fxSAVE' },
-  assetsWei: { priceKey: 'fxUSDBasePool', label: 'fxUSD base-pool shares' },
-  totalAssetsWei: { priceKey: 'fxUSDBasePool', label: 'fxUSD base-pool shares' },
-  pendingSharesWei: { priceKey: 'fxUSDBasePool', label: 'fxUSD base-pool shares' },
+  assetsWei: { priceKey: 'fxUSDBasePool', label: 'fxSP' },
+  totalAssetsWei: { priceKey: 'fxUSDBasePool', label: 'fxSP' },
+  pendingSharesWei: { priceKey: 'fxUSDBasePool', label: 'fxSP' },
 } as const;
 
 /**

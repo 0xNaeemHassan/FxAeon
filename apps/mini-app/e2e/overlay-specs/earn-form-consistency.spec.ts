@@ -182,7 +182,7 @@ test('withdrawals compare the exact fxSAVE balance, and vault details read in th
   const vault=page.getByRole('region',{name:'Vault details'});
   // fxSAVE's harvester ratio has 1e9 precision: 100000 is 0.01%, not 0%.
   await expect(vault).toContainText('Harvester ratio0.01%');
-  await expect(vault).toContainText('Batch deposit threshold100 fxUSD base-pool shares');
+  await expect(vault).toContainText('Batch deposit threshold100 fxSP');
   await expect(vault).not.toContainText(/raw units|Instant-redemption fee|Cooldown/);
 });
 

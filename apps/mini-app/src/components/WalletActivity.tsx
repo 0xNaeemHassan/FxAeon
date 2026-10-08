@@ -16,7 +16,7 @@ import { useUsdPrices } from '@/components/PriceProvider';
 import { useWalletActivity } from '@/lib/useWalletActivity';
 import { mergeWalletActivity, operationTitle, type WalletActivity as Activity } from '@/lib/walletActivity';
 import {
-  activityLegs, formatActivityAmount, networkName, signedLegText, UNVERIFIED_TOKEN_ICON,
+  activityLegs, flowSymbolText, formatActivityAmount, networkName, signedLegText, UNVERIFIED_TOKEN_ICON,
   type ActivityClassification, type ActivityFlow, type ActivityGlyph, type ActivityLeg,
 } from '@/lib/activityClassification';
 import { activityDayKey, activityDayLabel, activityRelativeTime } from '@/lib/activityTime';
@@ -85,7 +85,7 @@ export function RecentActivitySkeleton() {
 function searchText(item: Activity): string {
   const { classification } = item;
   return [item.title, classification.summary, item.hash, classification.counterparty?.label, classification.counterparty?.address,
-    ...classification.flowsIn.map((flow) => flow.symbol), ...classification.flowsOut.map((flow) => flow.symbol)].join(' ').toLowerCase();
+    ...[...classification.flowsIn, ...classification.flowsOut].flatMap((flow) => [flow.symbol, flowSymbolText(flow)])].join(' ').toLowerCase();
 }
 
 /** Rows grouped under local day headers, newest first. */
@@ -208,7 +208,7 @@ function legText(leg: ActivityLeg): string {
 type Secondary = { text: string; tone?: 'warn' | 'danger'; title?: string };
 
 /** Exact signed amount for a title tooltip. */
-const exactLegText = (leg: ActivityLeg) => `${leg.direction === 'in' ? '+' : '−'}${leg.flow.exact ?? leg.flow.amount ?? '?'} ${leg.flow.symbol}${leg.flow.verified ? '' : ' (unverified)'}`;
+const exactLegText = (leg: ActivityLeg) => `${leg.direction === 'in' ? '+' : '−'}${leg.flow.exact ?? leg.flow.amount ?? '?'} ${flowSymbolText(leg.flow)}${leg.flow.verified ? '' : ' (unverified)'}`;
 
 /** The right side of a row: a signed headline amount and one quiet line beneath it. Never blank. */
 function rowOutcome(item: Activity, prices: UsdPriceMap): { primary?: ActivityLeg; secondary?: Secondary } {
@@ -285,7 +285,7 @@ function FlowList({ label, legs, prices }: { label: string; legs: ActivityLeg[];
       return <li key={`${leg.direction}:${leg.flow.token ?? 'native'}`} className={styles.flow}>
         <span className={styles.flowToken}>
           <span aria-hidden="true"><TokenMark symbol={leg.flow.verified ? leg.flow.symbol : UNVERIFIED_TOKEN_ICON} size={30} /></span>
-          <span className={styles.flowSymbol} title={leg.flow.token ?? undefined}>{leg.flow.symbol}</span>
+          <span className={styles.flowSymbol} title={leg.flow.token ?? undefined}>{flowSymbolText(leg.flow)}</span>
           {!leg.flow.verified && <span className={styles.unverified}>Unverified</span>}
         </span>
         <span className={styles.flowAmount}>
@@ -330,7 +330,7 @@ function ActivityDetail({ item, open, onClose, triggerRef, prices }: { item: Act
   const statusTone = indexedReceipt?.status ?? item.status;
   // Only amounts that rounding changed need their exact value spelled out.
   const rounded = [...sent, ...received].filter((leg) => leg.flow.exact !== null && leg.flow.exact !== leg.flow.amount?.replace(/,/g, ''));
-  const exactLine = rounded.map((leg) => `${leg.direction === 'in' ? '+' : '−'}${leg.flow.exact} ${leg.flow.symbol}${leg.flow.verified ? '' : ' (unverified)'}`).join(', ');
+  const exactLine = rounded.map((leg) => `${leg.direction === 'in' ? '+' : '−'}${leg.flow.exact} ${flowSymbolText(leg.flow)}${leg.flow.verified ? '' : ' (unverified)'}`).join(', ');
   const counterparty = classification.counterparty;
   const bridge = view?.record.bridge;
   const explorer = `${explorerHost(item.chainId)}/tx/${item.hash}`;

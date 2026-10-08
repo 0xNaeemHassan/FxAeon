@@ -1297,7 +1297,7 @@ async function runProof(captureStage: string) {
           const deposit = reviewedFactRow('Deposit');
           await expect(deposit).toContainText(/1,?000(?:\.0+)? USDC/i);
           await expect(reviewedFactRow('Recipient')).toBeVisible();
-          await expect(reviewedFactRow('Minimum base-pool shares')).toBeVisible();
+          await expect(reviewedFactRow('Minimum fxSP')).toBeVisible();
         },
       },
     );
