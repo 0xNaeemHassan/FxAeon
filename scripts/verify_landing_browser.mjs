@@ -30,7 +30,7 @@ const MOCKUP_PEEK = 40;
 
 /** Text whose contrast is measured against the pixels actually painted behind it. */
 const TEXT_SELECTORS = [
-  '.site-header .brand span', '.site-header nav a', '.hero h1', '.hero .lede',
+  '.site-header .brand span', '.hero h1', '.hero .lede',
   '.hero .secondary', '.telegram-qr figcaption', '.proof li', '.section-head h2', '.trust-copy h2', '.chapter h3', '.chapter p',
   '.chapter .text-link', '.scene-title', '.scene-copy > p', '.scene-copy .text-link', '.split-readout dt',
   '.split-readout b', '.split-readout small', '.split-control label', '.range-scale', '.brake-picker-label',
@@ -42,7 +42,7 @@ const TEXT_SELECTORS = [
 ].join(', ');
 
 const TARGET_SELECTORS = [
-  '.site-header .brand', '.site-header nav a', '.theme-toggle', '.site-header .pill', '.menu', '.hero .actions a',
+  '.site-header .brand', '.theme-toggle', '.site-header .pill', '.menu-toggle', '.hero .actions a',
   '.text-link', '#split-price', '.brake-options button', '.sdk-picker button', '.faq summary', '.finale .actions a',
   'footer .brand', '.footer-links a',
 ].join(', ');
@@ -255,7 +255,7 @@ try {
       await page.evaluate(() => document.fonts.ready);
       assert.equal(await page.locator('h1').count(), 1, 'There should be one page heading');
 
-      const themeToggle = page.locator('.theme-toggle');
+      const themeToggle = page.locator('.site-header .theme-toggle');
       if (await page.locator('html').getAttribute('data-theme') !== theme) {
         await themeToggle.focus();
         await page.keyboard.press('Enter');
@@ -363,47 +363,12 @@ try {
         await page.evaluate(() => window.scrollTo(0, 0));
       }
 
-      const menu = page.locator('button.menu');
-      if (await menu.isVisible()) {
-        await menu.focus();
-        await page.keyboard.press('Enter');
-        assert.equal(await menu.getAttribute('aria-expanded'), 'true');
-        assert.equal(await menu.getAttribute('aria-label'), 'Close menu');
-        assert.equal(await page.locator('.site-header nav a').first().evaluate((element) => element === document.activeElement), true, 'Opening the menu should move focus into navigation');
-        // Inset hairlines separate the rows; the first row has none and no row gains an outer border.
-        const separators = await page.locator('.site-header nav a').evaluateAll((links) => links.map((link) => {
-          const before = getComputedStyle(link, '::before');
-          return { content: before.content, height: before.height, left: before.left, right: before.right, color: before.backgroundColor, borderTop: getComputedStyle(link).borderTopWidth, borderBottom: getComputedStyle(link).borderBottomWidth };
-        }));
-        assert.equal(separators[0].content, 'none', 'No separator above the first mobile row');
-        for (const separator of separators.slice(1)) {
-          assert.equal(separator.content, '""');
-          assert.equal(separator.height, '1px');
-          assert.equal(separator.left, '16px');
-          assert.equal(separator.right, '16px');
-          assert.notEqual(separator.color, 'rgba(0, 0, 0, 0)');
-        }
-        assert.ok(separators.every((separator) => separator.borderTop === '0px' && separator.borderBottom === '0px'), 'Rows should have internal dividers, not outer borders');
-        if ([320, 390].includes(width)) {
-          await page.locator('.site-header nav').screenshot({ path: resolve(output, `mobile-menu-${theme}-${width}.png`) });
-        }
-        await page.keyboard.press('Escape');
-        assert.equal(await menu.getAttribute('aria-expanded'), 'false');
-        assert.equal(await menu.getAttribute('aria-label'), 'Open menu');
-        assert.equal(await menu.evaluate((element) => element === document.activeElement), true, 'Closing the menu should return focus to its trigger');
-        await menu.click();
-        await page.locator('.site-header nav a[href="#moves"]').click();
-        assert.equal(await menu.getAttribute('aria-expanded'), 'false', 'Selecting a section closes the menu');
-        assert.equal(new URL(page.url()).hash, '#moves');
-        await menu.click();
-        await menu.click();
-        assert.equal(await menu.getAttribute('aria-expanded'), 'false', 'Repeated menu toggle closes cleanly');
-        await menu.click();
-        await page.mouse.click(1, 450);
-        assert.equal(await menu.getAttribute('aria-expanded'), 'false', 'Outside click closes the menu');
-      } else {
-        assert.equal(await page.locator('.site-header nav a').nth(1).evaluate((element) => getComputedStyle(element, '::before').content), 'none', 'Desktop navigation must not gain dividers');
-      }
+      // The header leads to the menu at every width; its links live in the menu, which stays closed until asked.
+      assert.deepEqual(await page.evaluate(() => ({
+        nav: document.querySelectorAll('.site-header nav').length,
+        menu: getComputedStyle(document.querySelector('.site-header .menu-toggle')).display !== 'none',
+        open: document.getElementById('site-menu').open,
+      })), { nav: 0, menu: true, open: false }, `Header at ${width}px`);
       assert.equal(await page.evaluate(() => document.getAnimations().filter((animation) => animation.playState === 'running').length), 0, `Reduced motion must not animate at ${width}px`);
     }
   }
@@ -494,6 +459,8 @@ try {
   assert.equal(await staticPage.locator('.sdk-group li').count(), 15);
   // The device-aware actions are CSS alone, so they need no script either.
   assert.deepEqual(await staticPage.evaluate(deviceState).then(({ hero }) => hero), [TELEGRAM, WEB]);
+  // The menu needs script, so without it there is no Menu pill to press.
+  assert.equal(await staticPage.evaluate(() => getComputedStyle(document.querySelector('.menu-toggle')).display), 'none');
   await staticContext.close();
 
   // Device-aware actions, as phones, a touch tablet, and a desktop see them.
@@ -579,7 +546,7 @@ try {
   assert.deepEqual(externalRequests, [], 'Landing loaded unneeded external services');
   assert.deepEqual([...new Set(fontContentTypes)], ['font/woff2'], 'Self-hosted Inter font must be served with its font MIME type');
 
-  console.log(`Landing browser checks passed: ${WIDTHS.length * 2} theme/viewport states, contrast over the painted backdrop, visible-content bounds, 44px targets, example semantics, stacked and pinned chapters, menu/theme keyboard and persistence, reduced motion, device-aware actions on phones, a tablet, and a desktop, the hero fit on 360-430px phones, and zero external requests.`);
+  console.log(`Landing browser checks passed: ${WIDTHS.length * 2} theme/viewport states, contrast over the painted backdrop, visible-content bounds, 44px targets, example semantics, stacked and pinned chapters, the header's Menu pill, theme keyboard and persistence, reduced motion, device-aware actions on phones, a tablet, and a desktop, the hero fit on 360-430px phones, and zero external requests.`);
 } finally {
   await browser?.close();
   server.kill();

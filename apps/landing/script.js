@@ -36,15 +36,16 @@
     syncHeader();
 
     // Theme: the new theme spreads from the toggle where View Transitions exist.
-    const themeToggle = document.querySelector(".theme-toggle");
+    // The header and the open menu each have a toggle.
+    const themeToggles = [...document.querySelectorAll(".theme-toggle")];
     const themeColor = document.querySelector('meta[name="theme-color"]');
     const syncTheme = () => {
       const dark = root.dataset.theme !== "light";
-      themeToggle?.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
+      themeToggles.forEach((toggle) => toggle.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme"));
       themeColor?.setAttribute("content", dark ? "#08070d" : "#f6f4f0");
     };
     syncTheme();
-    themeToggle?.addEventListener("click", () => {
+    themeToggles.forEach((toggle) => toggle.addEventListener("click", () => {
       const next = root.dataset.theme === "light" ? "dark" : "light";
       const apply = () => {
         root.dataset.theme = next;
@@ -55,38 +56,145 @@
         apply();
         return;
       }
-      const box = themeToggle.getBoundingClientRect();
+      const box = toggle.getBoundingClientRect();
       root.style.setProperty("--vt-x", `${Math.round(box.left + box.width / 2)}px`);
       root.style.setProperty("--vt-y", `${Math.round(box.top + box.height / 2)}px`);
       document.startViewTransition(apply);
-    });
+    }));
 
-    // Menu on narrow screens.
-    const menu = document.querySelector(".menu");
-    const nav = document.querySelector(".site-header nav");
-    const setMenu = (open) => {
-      menu?.setAttribute("aria-expanded", String(open));
-      menu?.setAttribute("aria-label", open ? "Close menu" : "Open menu");
-      nav?.classList.toggle("open", open);
-    };
-    menu?.addEventListener("click", () => {
-      const open = menu.getAttribute("aria-expanded") !== "true";
-      setMenu(open);
-      if (open) nav?.querySelector("a")?.focus();
-    });
-    nav?.querySelectorAll("a").forEach((link) => link.addEventListener("click", () => setMenu(false)));
-    document.addEventListener("click", (event) => {
-      if (menu?.getAttribute("aria-expanded") !== "true") return;
-      if (event.target instanceof Node && !menu.contains(event.target) && !nav?.contains(event.target)) setMenu(false);
-    });
-    document.addEventListener("keydown", (event) => {
-      if (event.key !== "Escape" || menu?.getAttribute("aria-expanded") !== "true") return;
-      setMenu(false);
-      menu.focus();
-    });
-    window.addEventListener("resize", () => {
-      if (window.innerWidth > 860 && menu?.getAttribute("aria-expanded") === "true") setMenu(false);
-    });
+    // Menu: a modal dialog over the whole page that grows out of the Menu pill
+    // as a circle and shrinks back into it. The browser keeps focus inside it,
+    // makes the page inert, and reports Escape as "cancel". Without motion it
+    // fades. Choosing a section closes it first, then follows the link, so the
+    // page's own scroll offset applies.
+    const menuButton = document.querySelector(".site-header .menu-toggle");
+    const menu = document.getElementById("site-menu");
+    if (menuButton && menu && typeof menu.showModal === "function") {
+      const menuNav = menu.querySelector(".menu-nav");
+      const glow = menu.querySelector(".menu-glow");
+      let motion = null;
+      let afterClose = null;
+      let glowRow = null;
+
+      // The circle's centre is the pill; its full radius reaches the farthest corner.
+      const circle = () => {
+        const pill = menuButton.getBoundingClientRect();
+        const x = pill.left + pill.width / 2;
+        const y = pill.top + pill.height / 2;
+        const width = menu.clientWidth || window.innerWidth;
+        const height = menu.clientHeight || window.innerHeight;
+        const at = `at ${x.toFixed(1)}px ${y.toFixed(1)}px`;
+        const far = Math.ceil(Math.hypot(Math.max(x, width - x), Math.max(y, height - y))) + 2;
+        return { closed: `circle(0px ${at})`, open: `circle(${far}px ${at})` };
+      };
+
+      const placeGlow = (row) => {
+        if (!menuNav || !glow) return;
+        glowRow = row;
+        if (!row) {
+          menuNav.removeAttribute("data-glow");
+          return;
+        }
+        const from = menuNav.getBoundingClientRect();
+        const box = row.getBoundingClientRect();
+        // Arriving from nowhere it appears in place; between rows it glides.
+        const arriving = !menuNav.hasAttribute("data-glow");
+        glow.toggleAttribute("data-snap", arriving);
+        glow.style.setProperty("--glow-y", `${(box.top - from.top).toFixed(1)}px`);
+        glow.style.setProperty("--glow-h", `${box.height.toFixed(1)}px`);
+        if (arriving) void glow.offsetWidth;
+        glow.removeAttribute("data-snap");
+        menuNav.toggleAttribute("data-glow", true);
+      };
+
+      const openMenu = () => {
+        if (menu.open) return;
+        // Where locking the page hides a scrollbar, pad by its width so nothing
+        // shifts. Phones' scrollbars take no room, so most visits skip this.
+        const scrollbar = Math.max(0, window.innerWidth - root.clientWidth);
+        if (scrollbar) [root, menu].forEach((element) => element.style.setProperty("padding-right", `${scrollbar}px`));
+        root.toggleAttribute("data-menu-open", true);
+        menuButton.setAttribute("aria-expanded", "true");
+        menu.showModal();
+        // Commit the closed styles first, so the entrance transitions run.
+        void menu.offsetWidth;
+        menu.dataset.state = "open";
+        const { closed, open } = circle();
+        motion?.cancel();
+        motion = still()
+          ? menu.animate({ opacity: [0, 1] }, { duration: 180, easing: "linear" })
+          : menu.animate({ clipPath: [closed, open] }, { duration: 560, easing: "cubic-bezier(0.32, 0.72, 0, 1)" });
+      };
+
+      const closeMenu = (then = null) => {
+        if (!menu.open || menu.dataset.state === "closing") return;
+        afterClose = then;
+        menuButton.setAttribute("aria-expanded", "false");
+        // A menu still opening shrinks back from wherever it has reached.
+        const current = getComputedStyle(menu);
+        const { closed, open } = circle();
+        menu.dataset.state = "closing";
+        const from = { clip: current.clipPath.startsWith("circle") ? current.clipPath : open, opacity: Number(current.opacity) };
+        motion?.cancel();
+        motion = still()
+          ? menu.animate({ opacity: [from.opacity, 0] }, { duration: 140, easing: "linear", fill: "forwards" })
+          : menu.animate({ clipPath: [from.clip, closed] }, { duration: 320, easing: "cubic-bezier(0.4, 0, 0.2, 1)", fill: "forwards" });
+        motion.finished.then(() => menu.close(), () => {});
+      };
+
+      // However it closes (the Close pill, Escape, or a link), it ends here.
+      menu.addEventListener("close", () => {
+        motion?.cancel();
+        motion = null;
+        menu.removeAttribute("data-state");
+        root.removeAttribute("data-menu-open");
+        [root, menu].forEach((element) => element.style.removeProperty("padding-right"));
+        menuButton.setAttribute("aria-expanded", "false");
+        menu.querySelectorAll('.menu-row[aria-expanded="true"]').forEach((row) => row.setAttribute("aria-expanded", "false"));
+        placeGlow(null);
+        const then = afterClose;
+        afterClose = null;
+        if (then) then();
+        else menuButton.focus({ preventScroll: true });
+      });
+      menu.addEventListener("cancel", (event) => {
+        event.preventDefault();
+        closeMenu();
+      });
+      menuButton.addEventListener("click", openMenu);
+      menu.querySelector(".menu-close")?.addEventListener("click", () => closeMenu());
+
+      menu.querySelectorAll(".menu-row[aria-controls]").forEach((row) => {
+        row.addEventListener("click", () => row.setAttribute("aria-expanded", String(row.getAttribute("aria-expanded") !== "true")));
+      });
+      menu.addEventListener("click", (event) => {
+        const link = event.target instanceof Element ? event.target.closest("a[href]") : null;
+        if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        const href = link.getAttribute("href");
+        if (href.startsWith("#") && href.length > 1) {
+          event.preventDefault();
+          closeMenu(() => window.location.assign(link.href));
+        } else {
+          closeMenu();
+        }
+      });
+
+      menuNav?.addEventListener("pointerover", (event) => {
+        if (event.pointerType !== "mouse") return;
+        const row = event.target instanceof Element ? event.target.closest(".menu-row") : null;
+        if (row && row !== glowRow) placeGlow(row);
+      });
+      menuNav?.addEventListener("pointerleave", (event) => {
+        if (event.pointerType === "mouse") placeGlow(null);
+      });
+      window.addEventListener("resize", () => {
+        if (glowRow) placeGlow(glowRow);
+      });
+      // A page restored from the back/forward cache never comes back with the menu open.
+      window.addEventListener("pageshow", (event) => {
+        if (event.persisted && menu.open) menu.close();
+      });
+    }
 
     // Chapters: one phone follows the chapter at the middle of the screen on
     // wide screens; narrow screens get a phone inside each chapter.

@@ -45,13 +45,13 @@ function cssBlock(source, prelude) {
   throw new Error(`Unclosed CSS block ${prelude}`);
 }
 
-/** Each link in `source` as "class destination", grouped by the devices that show it. */
+/** Each link in `source` as "class destination text", grouped by the devices that show it. */
 function linksByDevice(source) {
   const shown = { mobile: [], desktop: [] };
   for (const [, attributes, text] of source.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g)) {
     const attribute = (name) => attributes.match(new RegExp(`\\b${name}="([^"]*)"`))?.[1];
     const device = attribute('data-device');
-    const link = `${attribute('class')} ${attribute('href')} ${text.replace(/<[^>]+>/g, '').trim()}`;
+    const link = [attribute('class'), attribute('href'), text.replace(/<[^>]+>/g, '').trim()].filter(Boolean).join(' ');
     for (const name of Object.keys(shown)) if (!device || device === name) shown[name].push(link);
   }
   return shown;
@@ -105,16 +105,91 @@ test('the hero states the product and leads with Telegram on phones and the web 
   });
   // Desktop visitors get a code for their phone beside the Telegram action; it is a picture, not a control.
   assert.match(heroActions, /<figure class="telegram-qr" data-device="desktop">\s*<img src="assets\/telegram-qr\.svg" width="88" height="88" alt="QR code" loading="lazy" decoding="async" \/>\s*<figcaption>Scan with your phone to open FxAeon in Telegram\.<\/figcaption>\s*<\/figure>/);
-  assert.equal(html.match(/telegram-qr\.svg/g)?.length, 1, 'One QR code, in the hero');
+  // The same code appears once more, in the open menu's desktop card; lazy, so phones never fetch it.
+  assert.equal(html.match(/telegram-qr\.svg/g)?.length, 2, 'One QR code in the hero and one in the menu');
+  assert.match(elementSource(html, /<div class="menu-card" data-device="desktop">/, 'div'), /<img src="assets\/telegram-qr\.svg" width="104" height="104" alt="QR code" loading="lazy" decoding="async" \/>/);
   // Media queries choose the set before the first paint: no user-agent sniffing, no script.
   assert.match(css, new RegExp(`@media ${DESKTOP.replace(/[()]/g, '\\$&')} \\{\\s*:root \\[data-device="mobile"\\] \\{ display: none; \\}`));
   assert.match(css, new RegExp(`@media not all and ${DESKTOP.replace(/[()]/g, '\\$&')} \\{\\s*:root \\[data-device="desktop"\\] \\{ display: none; \\}\\s*\\}`));
   for (const source of [script, aurora]) assert.doesNotMatch(source, /userAgent|maxTouchPoints|ontouchstart|data-device|dataset\.device/);
   for (const id of ['moves', 'protocol', 'telegram', 'faq']) assert.equal(html.match(new RegExp(`id="${id}"`, 'g'))?.length, 1, `#${id} should exist exactly once`);
-  assert.match(html, /<a href="#moves">Features<\/a>\s*<a href="#protocol">f\(x\) Protocol<\/a>/);
   assert.match(html, /<h2 id="moves-title">Everything f\(x\) Protocol SDK does, a tap away\.<\/h2>/);
   assert.match(html, />Explore f\(x\) Protocol <span aria-hidden="true">↗<\/span><\/a>/);
   assert.match(html, /Every transaction checked and simulated before signing/);
+});
+
+test('the header opens a fullscreen menu: a native modal dialog with a ruled list and ways in', () => {
+  // The header keeps the brand, the theme toggle, the device's action, and a Menu pill; its links moved into the menu.
+  const header = elementSource(html, /<header class="site-header">/, 'header');
+  assert.doesNotMatch(header, /<nav\b/, 'The header has no inline navigation');
+  assert.match(header, /<button class="menu-toggle" type="button" aria-label="Open menu" aria-controls="site-menu" aria-expanded="false" aria-haspopup="dialog"><span class="menu-words" aria-hidden="true"><span>Menu<\/span><span>Close<\/span><\/span><span class="menu-lines" aria-hidden="true"><i><\/i><i><\/i><\/span><\/button>/);
+  assert.equal(html.match(/<dialog\b/g)?.length, 1);
+  const menu = elementSource(html, /<dialog class="site-menu" id="site-menu" aria-label="Menu">/, 'dialog');
+
+  // Its bar repeats the header, so the Close pill opens where the Menu pill was, and takes focus.
+  const bar = elementSource(menu, /<div class="menu-bar">/, 'div');
+  assert.deepEqual(linksByDevice(elementSource(bar, /<div class="header-actions">/, 'div')), linksByDevice(elementSource(header, /<div class="header-actions">/, 'div')));
+  assert.match(bar, /<a class="brand" href="\/" aria-label="FxAeon home">/);
+  assert.match(bar, /<button class="theme-toggle" type="button" aria-label="Switch to light theme">/);
+  assert.match(bar, /<button class="menu-toggle menu-close" type="button" aria-label="Close menu" autofocus>/);
+
+  // The list keeps the old navigation's id and anchors: six rows in order, no numbers, the external ones marked ↗.
+  assert.equal(html.match(/id="main-navigation"/g)?.length, 1);
+  const nav = elementSource(menu, /<nav class="menu-nav" id="main-navigation" aria-label="Main navigation">/, 'nav');
+  const rows = [...nav.matchAll(/<(button|a) class="menu-row"([^>]*)>([\s\S]*?)<\/\1>/g)].map(([, tag, attributes, inner]) => ({
+    tag,
+    href: attributes.match(/\bhref="([^"]*)"/)?.[1],
+    external: /target="_blank" rel="noreferrer"/.test(attributes),
+    label: inner.replace(/<svg[\s\S]*?<\/svg>/g, '').replace(/<[^>]+>/g, '').trim(),
+    mark: inner.match(/<svg class="(menu-[a-z]+)"/)?.[1],
+  }));
+  assert.deepEqual(rows, [
+    { tag: 'button', href: undefined, external: false, label: 'Features', mark: 'menu-chevron' },
+    { tag: 'a', href: '#protocol', external: false, label: 'f(x) Protocol', mark: 'menu-arrow' },
+    { tag: 'a', href: '#telegram', external: false, label: 'Telegram', mark: 'menu-arrow' },
+    { tag: 'a', href: '#faq', external: false, label: 'FAQ', mark: 'menu-arrow' },
+    { tag: 'a', href: 'https://fxaeon.com/docs', external: true, label: 'Docs', mark: 'menu-arrow' },
+    { tag: 'a', href: 'https://github.com/fxaeon/FxAeon', external: true, label: 'Source code', mark: 'menu-arrow' },
+  ]);
+  assert.doesNotMatch(menu + css + script, /menu-index/, 'The list has no number column');
+  assert.match(nav, /<button class="menu-row" type="button" aria-expanded="false" aria-controls="menu-features">/);
+  assert.match(nav, /<div class="menu-sub" id="menu-features">/);
+
+  // The side column: the bot's code and the web app on desktop, Telegram on phones, then where to follow.
+  const card = elementSource(menu, /<div class="menu-card" data-device="desktop">/, 'div');
+  assert.match(card, /<figure class="menu-qr">\s*<img src="assets\/telegram-qr\.svg"[^>]*>\s*<figcaption>Scan to open in Telegram<\/figcaption>\s*<\/figure>/);
+  assert.deepEqual(linksByDevice(card).desktop, ['text-link https://fxaeon.com/ Open web app →']);
+  const chips = ['menu-chip https://t.me/FxAeonBot Telegram ↗', 'menu-chip https://github.com/fxaeon/FxAeon GitHub ↗', 'menu-chip https://fxaeon.com/docs Docs ↗'];
+  assert.deepEqual(linksByDevice(elementSource(menu, /<div class="menu-side">/, 'div').replace(card, '')), {
+    mobile: ['pill primary https://t.me/FxAeonBot Open in Telegram ↗', ...chips],
+    desktop: chips,
+  });
+  // Group labels read like the page's own, and the menu states only what is true today.
+  assert.deepEqual([...menu.matchAll(/<h2 class="menu-kicker">([^<]*)<\/h2>/g)].map(([, text]) => text), ['Open FxAeon', 'Connect']);
+  assert.doesNotMatch(css, /text-transform:\s*uppercase/, 'The landing uses no uppercase eyebrow labels');
+  assert.match(menu, /<p class="menu-foot">FxAeon · Built on f\(x\) Protocol<\/p>/);
+  assert.doesNotMatch(menu.replace(/<[^>]+>/g, ' '), /\d+(?:\.\d+)?\s*%|\$\s?\d|APY|official|phishing|scam|risk|guarantee/i);
+
+  // Behaviour: the browser's modal dialog, an animated close on Escape, a locked page, and nothing left of the old dropdown.
+  assert.match(script, /menu\.showModal\(\)/);
+  assert.match(script, /menu\.addEventListener\("cancel", \(event\) => \{\s*event\.preventDefault\(\);\s*closeMenu\(\);/);
+  assert.match(script, /menu\.addEventListener\("close", /);
+  assert.match(script, /else menuButton\.focus\(\{ preventScroll: true \}\)/, 'Closing returns focus to the Menu pill');
+  assert.match(script, /closeMenu\(\(\) => window\.location\.assign\(link\.href\)\)/, 'A section link closes the menu, then follows the link');
+  assert.match(css, /:root\[data-menu-open\] \{ overflow: hidden; \}/);
+  assert.match(css, /:root:not\(\[data-js\]\) \.menu-toggle \{ display: none; \}/);
+  assert.match(css, /--menu-size: clamp\(/, 'Labels scale with the screen');
+  assert.match(css, /\.menu-list > li::before, \.menu-list::after \{[^}]*background: var\(--line\);/, 'Hairlines rule the list');
+  assert.doesNotMatch(css, /\.site-header nav|nav\.open|\.menu[\s{[:,]/, 'No rules remain for the old dropdown');
+  assert.doesNotMatch(script, /classList\.toggle\("open"|querySelector\("\.menu"\)|\.site-header nav/, 'No script remains for the old dropdown');
+  // Without motion the menu fades; every travel, stagger, and drawn line waits for motion to be welcome.
+  assert.match(script, /motion = still\(\)\s*\? menu\.animate\(\{ opacity: \[0, 1\] \}/);
+  const motion = cssBlock(css, '@media (prefers-reduced-motion: no-preference)');
+  const outside = css.slice(0, motion.start) + css.slice(motion.end + 1);
+  for (const hidden of ['.menu-text { transform: translate3d(0, 115%, 0); }', '.menu-list::after { transform: scaleX(0); }', ':is(.menu-side, .menu-foot) { opacity: 0;']) {
+    assert.ok(motion.body.includes(hidden), `${hidden} is part of the motion`);
+    assert.ok(!outside.includes(hidden), `${hidden} must not apply under reduced motion`);
+  }
 });
 
 test('illustrations are described as examples and offer no fake controls', () => {
@@ -151,13 +226,19 @@ test('section buttons open their screen in the Mini App on phones and keep the w
       desktop: [`text-link https://fxaeon.com/${route} Open ${name} →`],
     }, `${name} section links`);
   }
+  // The menu's Features row opens the same four screens the same way, one link per device.
+  const routes = [['trade', 'Trade'], ['earn', 'Earn'], ['borrow', 'Borrow'], ['move', 'Move']];
+  assert.deepEqual(linksByDevice(elementSource(html, /<div class="menu-sub" id="menu-features">/, 'div')), {
+    mobile: ['#moves Overview', ...routes.map(([route, name]) => `https://t.me/FxAeonBot?startapp=${route} Open ${name} in Telegram ↗`)],
+    desktop: ['#moves Overview', ...routes.map(([route, name]) => `https://fxaeon.com/${route} Open ${name} →`)],
+  }, 'Menu feature links');
   // Every start parameter on the page is one the app routes, to the screen its web link opens.
   const telegram = await readFile(resolve(root, '../mini-app/src/lib/telegram.ts'), 'utf8');
   const listed = telegram.match(/const START_PARAM_ROUTES[^=]*= new Map\(\[([\s\S]*?)\]\);/)?.[1];
   assert.ok(listed, 'The app lists the start parameters it routes');
   const appRoutes = new Map([...listed.matchAll(/\['([a-z-]+)', '([^']+)'\]/g)].map(([, startParam, path]) => [startParam, path]));
   const used = [...html.matchAll(/href="https:\/\/t\.me\/FxAeonBot\?startapp=([^"]*)"/g)].map(([, startParam]) => startParam);
-  assert.equal(used.length, sections.length);
+  assert.equal(used.length, sections.length + routes.length);
   for (const startParam of used) assert.equal(appRoutes.get(startParam), `/${startParam}`, `The app opens /${startParam} for startapp=${startParam}`);
 });
 
