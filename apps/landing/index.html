@@ -34,20 +34,73 @@
 
     <header class="site-header">
       <a class="brand" href="/" aria-label="FxAeon home"><img src="assets/fxaeon-mark.svg" width="36" height="36" alt="" /><span>FxAeon</span></a>
-      <nav id="main-navigation" aria-label="Main navigation">
-        <a href="#moves">Features</a>
-        <a href="#protocol">f(x) Protocol</a>
-        <a href="#telegram">Telegram</a>
-        <a href="#faq">FAQ</a>
-        <a href="https://fxaeon.com/docs" target="_blank" rel="noreferrer">Docs <span aria-hidden="true">↗</span></a>
-      </nav>
       <div class="header-actions">
         <button class="theme-toggle" type="button" aria-label="Switch to light theme"><svg class="theme-icon theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="currentColor"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><svg class="theme-icon theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.5 8.5 0 0 1 8.8 4 8.5 8.5 0 1 0 20 15.2Z" fill="currentColor"/></svg></button>
         <a class="pill small" href="https://t.me/FxAeonBot" target="_blank" rel="noreferrer" data-device="mobile">Open in Telegram <span aria-hidden="true">↗</span></a>
         <a class="pill small" href="https://fxaeon.com/" data-device="desktop">Open web app <span aria-hidden="true">→</span></a>
-        <button class="menu" type="button" aria-label="Open menu" aria-controls="main-navigation" aria-expanded="false"><span aria-hidden="true"></span><span aria-hidden="true"></span></button>
+        <button class="menu-toggle" type="button" aria-label="Open menu" aria-controls="site-menu" aria-expanded="false" aria-haspopup="dialog"><span class="menu-words" aria-hidden="true"><span>Menu</span><span>Close</span></span><span class="menu-lines" aria-hidden="true"><i></i><i></i></span></button>
       </div>
     </header>
+
+    <dialog class="site-menu" id="site-menu" aria-label="Menu">
+      <div class="menu-bar">
+        <a class="brand" href="/" aria-label="FxAeon home"><img src="assets/fxaeon-mark.svg" width="36" height="36" alt="" /><span>FxAeon</span></a>
+        <div class="header-actions">
+          <button class="theme-toggle" type="button" aria-label="Switch to light theme"><svg class="theme-icon theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="currentColor"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><svg class="theme-icon theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.5 8.5 0 0 1 8.8 4 8.5 8.5 0 1 0 20 15.2Z" fill="currentColor"/></svg></button>
+          <a class="pill small" href="https://t.me/FxAeonBot" target="_blank" rel="noreferrer" data-device="mobile">Open in Telegram <span aria-hidden="true">↗</span></a>
+          <a class="pill small" href="https://fxaeon.com/" data-device="desktop">Open web app <span aria-hidden="true">→</span></a>
+          <button class="menu-toggle menu-close" type="button" aria-label="Close menu" autofocus><span class="menu-words" aria-hidden="true"><span>Menu</span><span>Close</span></span><span class="menu-lines" aria-hidden="true"><i></i><i></i></span></button>
+        </div>
+      </div>
+      <div class="menu-body">
+        <div class="menu-grid">
+          <nav class="menu-nav" id="main-navigation" aria-label="Main navigation">
+            <span class="menu-glow" aria-hidden="true"></span>
+            <ol class="menu-list">
+              <li>
+                <button class="menu-row" type="button" aria-expanded="false" aria-controls="menu-features"><span class="menu-label"><span class="menu-text">Features<svg class="menu-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></span></button>
+                <div class="menu-sub" id="menu-features">
+                  <ul class="menu-sublist">
+                    <li><a href="#moves">Overview</a></li>
+                    <li><a href="https://t.me/FxAeonBot?startapp=trade" target="_blank" rel="noreferrer" data-device="mobile">Open Trade in Telegram <span aria-hidden="true">↗</span></a><a href="https://fxaeon.com/trade" data-device="desktop">Open Trade <span aria-hidden="true">→</span></a></li>
+                    <li><a href="https://t.me/FxAeonBot?startapp=earn" target="_blank" rel="noreferrer" data-device="mobile">Open Earn in Telegram <span aria-hidden="true">↗</span></a><a href="https://fxaeon.com/earn" data-device="desktop">Open Earn <span aria-hidden="true">→</span></a></li>
+                    <li><a href="https://t.me/FxAeonBot?startapp=borrow" target="_blank" rel="noreferrer" data-device="mobile">Open Borrow in Telegram <span aria-hidden="true">↗</span></a><a href="https://fxaeon.com/borrow" data-device="desktop">Open Borrow <span aria-hidden="true">→</span></a></li>
+                    <li><a href="https://t.me/FxAeonBot?startapp=move" target="_blank" rel="noreferrer" data-device="mobile">Open Move in Telegram <span aria-hidden="true">↗</span></a><a href="https://fxaeon.com/move" data-device="desktop">Open Move <span aria-hidden="true">→</span></a></li>
+                  </ul>
+                </div>
+              </li>
+              <li><a class="menu-row" href="#protocol"><span class="menu-label"><span class="menu-text">f(x) Protocol<svg class="menu-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span></span></a></li>
+              <li><a class="menu-row" href="#telegram"><span class="menu-label"><span class="menu-text">Telegram<svg class="menu-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span></span></a></li>
+              <li><a class="menu-row" href="#faq"><span class="menu-label"><span class="menu-text">FAQ<svg class="menu-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span></span></a></li>
+              <li><a class="menu-row" href="https://fxaeon.com/docs" target="_blank" rel="noreferrer"><span class="menu-label"><span class="menu-text">Docs<svg class="menu-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M7 7h10v10"/></svg></span></span></a></li>
+              <li><a class="menu-row" href="https://github.com/fxaeon/FxAeon" target="_blank" rel="noreferrer"><span class="menu-label"><span class="menu-text">Source code<svg class="menu-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M7 7h10v10"/></svg></span></span></a></li>
+            </ol>
+          </nav>
+          <div class="menu-side">
+            <div class="menu-group">
+              <h2 class="menu-kicker">Open FxAeon</h2>
+              <div class="menu-card" data-device="desktop">
+                <figure class="menu-qr">
+                  <img src="assets/telegram-qr.svg" width="104" height="104" alt="QR code" loading="lazy" decoding="async" />
+                  <figcaption>Scan to open in Telegram</figcaption>
+                </figure>
+                <a class="text-link" href="https://fxaeon.com/">Open web app <span aria-hidden="true">→</span></a>
+              </div>
+              <a class="pill primary" href="https://t.me/FxAeonBot" target="_blank" rel="noreferrer" data-device="mobile">Open in Telegram <span aria-hidden="true">↗</span></a>
+            </div>
+            <div class="menu-group">
+              <h2 class="menu-kicker">Connect</h2>
+              <ul class="menu-chips">
+                <li><a class="menu-chip" href="https://t.me/FxAeonBot" target="_blank" rel="noreferrer">Telegram <span aria-hidden="true">↗</span></a></li>
+                <li><a class="menu-chip" href="https://github.com/fxaeon/FxAeon" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a></li>
+                <li><a class="menu-chip" href="https://fxaeon.com/docs" target="_blank" rel="noreferrer">Docs <span aria-hidden="true">↗</span></a></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <p class="menu-foot">FxAeon · Built on f(x) Protocol</p>
+      </div>
+    </dialog>
 
     <main id="main">
       <section class="hero" aria-labelledby="hero-title">

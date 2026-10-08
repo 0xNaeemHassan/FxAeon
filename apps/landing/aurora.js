@@ -2,7 +2,7 @@
 // at a fraction of the screen's resolution, 30 frames a second at most. The
 // CSS gradient beneath it is the still frame, so no WebGL, Save-Data, or a lost
 // context all leave a complete page. Reduced motion holds one frame; a hidden
-// tab stops drawing.
+// tab, or the open menu, stops drawing.
 (() => {
   const host = document.querySelector(".aurora");
   const canvas = host?.querySelector("canvas");
@@ -222,8 +222,9 @@ void main() {
     });
   };
 
+  // The open menu covers the whole page, so the field holds still beneath it.
   const sync = () => {
-    const run = !still() && !document.hidden;
+    const run = !still() && !document.hidden && !root.hasAttribute("data-menu-open");
     if (run && !running) {
       running = true;
       last = performance.now();
@@ -258,7 +259,7 @@ void main() {
     if (records.some((record) => record.attributeName === "data-theme")) readColors();
     sync();
     redraw();
-  }).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+  }).observe(root, { attributes: true, attributeFilter: ["data-theme", "data-menu-open"] });
 
   canvas.addEventListener("webglcontextlost", (event) => {
     event.preventDefault();

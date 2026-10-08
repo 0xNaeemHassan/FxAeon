@@ -40,6 +40,7 @@
   --aurora-3: #9a3fd0;
   --aurora-bg: #08070d;
   --grain-opacity: 0.06;
+  --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 0 0 0 1 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
   --header-bg: rgba(8, 7, 13, 0.64);
 
   /* Phones, the review, the toast, and the chat always show the app's
@@ -168,21 +169,25 @@ ol, ul { padding: 0; list-style: none; }
   inset: 0;
   pointer-events: none;
   opacity: var(--grain-opacity);
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 0 0 0 1 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  background-image: var(--grain);
 }
 .site-header, main, footer { position: relative; z-index: 2; }
 
 /* ---------- Header ---------- */
-.site-header {
-  position: sticky;
-  top: 0;
-  z-index: 40;
+/* The page header and the menu's own bar are the same row, so the menu's
+   Close pill opens exactly where the Menu pill was. */
+.site-header, .menu-bar {
   display: flex;
   min-height: 72px;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   padding: 12px max(var(--gutter), calc((100vw - 1240px) / 2));
+}
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
   transition: background-color 0.35s ease, box-shadow 0.35s ease;
 }
 .site-header::before {
@@ -203,22 +208,8 @@ ol, ul { padding: 0; list-style: none; }
   backdrop-filter: blur(18px) saturate(160%);
 }
 .brand { display: inline-flex; min-height: 44px; align-items: center; gap: 10px; font-size: 19px; font-weight: 680; letter-spacing: -0.03em; }
-.site-header nav { display: flex; align-items: center; gap: 2px; }
-.site-header nav a {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  gap: 4px;
-  padding: 0 14px;
-  border-radius: 999px;
-  color: var(--mut);
-  font-size: 15px;
-  font-weight: 560;
-  transition: color 0.2s ease, background-color 0.2s ease;
-}
-.site-header nav a:hover { color: var(--text); background: color-mix(in srgb, var(--text) 7%, transparent); }
 .header-actions { display: flex; align-items: center; gap: 8px; }
-.theme-toggle, .menu {
+.theme-toggle {
   position: relative;
   display: inline-grid;
   width: 44px;
@@ -228,18 +219,263 @@ ol, ul { padding: 0; list-style: none; }
   color: var(--mut);
   transition: color 0.2s ease, background-color 0.2s ease, transform 0.5s var(--spring);
 }
-.theme-toggle:hover, .menu:hover { color: var(--text); background: color-mix(in srgb, var(--text) 8%, transparent); }
-.theme-toggle:active, .menu:active { transform: scale(0.9); transition-duration: 0.1s; }
+.theme-toggle:hover { color: var(--text); background: color-mix(in srgb, var(--text) 8%, transparent); }
+.theme-toggle:active { transform: scale(0.9); transition-duration: 0.1s; }
 .theme-icon { width: 20px; height: 20px; }
 .theme-moon { display: none; }
 :root[data-theme="light"] .theme-sun { display: none; }
 :root[data-theme="light"] .theme-moon { display: block; }
-.menu { display: none; }
-.menu span { position: absolute; left: 13px; width: 18px; height: 2px; border-radius: 2px; background: currentColor; transition: transform 0.4s var(--spring), top 0.4s var(--spring); }
-.menu span:first-child { top: 17px; }
-.menu span:last-child { top: 25px; }
-.menu[aria-expanded="true"] span:first-child { top: 21px; transform: rotate(45deg); }
-.menu[aria-expanded="true"] span:last-child { top: 21px; transform: rotate(-45deg); }
+
+/* The Menu pill. Its copy in the open menu reads Close: the word rolls over
+   and the two lines cross, then roll back as the menu shrinks into it. */
+.menu-toggle {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px 0 18px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 620;
+  letter-spacing: -0.01em;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.5s var(--spring);
+}
+@media (hover: hover) and (pointer: fine) {
+  .menu-toggle:hover { background: color-mix(in srgb, var(--text) 10%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent); }
+}
+.menu-toggle:active { transform: scale(0.95); transition-duration: 0.1s; }
+/* The menu needs script; without it the page reads top to bottom. */
+:root:not([data-js]) .menu-toggle { display: none; }
+.menu-words { display: grid; height: 20px; overflow: hidden; line-height: 20px; }
+.menu-words span { grid-area: 1 / 1; transition: transform 0.55s var(--ease-out); }
+.menu-words span + span { transform: translate3d(0, 100%, 0); }
+.menu-lines { position: relative; width: 18px; height: 18px; flex: none; }
+.menu-lines i { position: absolute; top: 8px; left: 1px; width: 16px; height: 2px; border-radius: 2px; background: currentColor; transition: transform 0.55s var(--spring); }
+.menu-lines i:first-child { transform: translate3d(0, -3px, 0); }
+.menu-lines i:last-child { transform: translate3d(0, 3px, 0); }
+.site-menu[data-state="open"] .menu-words span:first-child { transform: translate3d(0, -100%, 0); }
+.site-menu[data-state="open"] .menu-words span + span { transform: none; }
+.site-menu[data-state="open"] .menu-lines i:first-child { transform: rotate(45deg); }
+.site-menu[data-state="open"] .menu-lines i:last-child { transform: rotate(-45deg); }
+
+/* ---------- Menu ----------
+ * A modal dialog over the whole page, revealed by script as a circle that
+ * grows from the Menu pill: its own copy of the header bar, a ruled list, and
+ * a side column. The browser's modal dialog keeps focus inside it and
+ * makes the page beneath inert. The page stops scrolling while it is open;
+ * where that hides a scrollbar, script pads the page and the menu by its
+ * width, so the page holds still and the menu's bar sits exactly over the
+ * header. */
+:root[data-menu-open] { overflow: hidden; }
+.site-menu {
+  position: fixed;
+  inset: 0;
+  width: auto;
+  max-width: none;
+  height: auto;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(64% 52% at 92% 0%, color-mix(in srgb, var(--aurora-1) 30%, transparent), transparent 72%),
+    radial-gradient(56% 46% at 4% 100%, color-mix(in srgb, var(--aurora-2) 16%, transparent), transparent 72%),
+    var(--bg);
+  color: var(--text);
+}
+.site-menu[open] { display: flex; flex-direction: column; }
+.site-menu::backdrop { background: transparent; }
+.site-menu::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: var(--grain-opacity); background-image: var(--grain); }
+.menu-bar, .menu-body { position: relative; z-index: 1; }
+.menu-bar { flex: none; box-shadow: inset 0 -1px 0 var(--line); }
+.menu-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: clamp(36px, 6vh, 72px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: clamp(18px, 4.5vh, 56px) max(var(--gutter), calc((100vw - 1240px) / 2)) calc(20px + env(safe-area-inset-bottom, 0px));
+}
+.menu-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 32px; }
+
+/* The list: big labels that scale with the screen, so the longest one stays
+   on one line from 320px up, ruled above, between, and below by hairlines. */
+.menu-nav {
+  --menu-size: clamp(32px, min(10.4vw, 7.5vh), 64px);
+  position: relative;
+  min-width: 0;
+}
+.menu-list { position: relative; display: grid; padding-bottom: 1px; }
+.menu-list > li { position: relative; }
+.menu-list > li::before, .menu-list::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--line);
+  transform-origin: left;
+}
+.menu-list > li::before { top: 0; }
+.menu-list::after { bottom: 0; }
+/* One highlight glides to whichever row the pointer is on, between that
+   row's lines. The keyboard gets the focus ring instead. */
+.menu-glow {
+  position: absolute;
+  top: 5px;
+  right: -12px;
+  left: -12px;
+  height: calc(var(--glow-h, 0px) - 10px);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(0, var(--glow-y, 0px), 0);
+  transition: transform 0.5s var(--spring), opacity 0.25s ease;
+}
+.menu-glow[data-snap] { transition: none; }
+.menu-nav[data-glow] .menu-glow { opacity: 1; }
+.menu-row {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-height: 44px;
+  align-items: center;
+  padding: clamp(7px, 1.5vh, 16px) 0;
+  border-radius: 14px;
+  color: var(--text);
+  text-align: left;
+  transition: color 0.25s ease;
+}
+/* The label is a mask its text rises through; its padding keeps descenders
+   and the hover nudge inside it. */
+.menu-label {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  margin-bottom: -0.16em;
+  padding: 0 0.2em 0.16em 0;
+  font-size: var(--menu-size);
+  font-weight: 650;
+  letter-spacing: -0.045em;
+  line-height: 1.04;
+  transition: transform 0.5s var(--spring);
+}
+.menu-text { display: inline-flex; align-items: center; gap: 0.16em; }
+.menu-chevron, .menu-arrow {
+  width: 0.42em;
+  min-width: 18px;
+  height: 0.42em;
+  min-height: 18px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--mut-2);
+  transition: transform 0.5s var(--spring), opacity 0.25s ease, color 0.25s ease;
+}
+.menu-row[href^="#"] .menu-arrow { opacity: 0; transform: translate3d(-0.12em, 0, 0); }
+.menu-row[aria-expanded="true"], .menu-row[aria-expanded="true"] .menu-chevron { color: var(--accent); }
+.menu-row[aria-expanded="true"] .menu-chevron { transform: rotate(180deg); }
+.menu-row:focus-visible { outline-offset: 4px; color: var(--accent); }
+.menu-row:focus-visible :is(.menu-arrow, .menu-chevron) { color: var(--accent); }
+.menu-row:focus-visible .menu-arrow { opacity: 1; transform: none; }
+@media (hover: hover) and (pointer: fine) {
+  .menu-row:hover { color: var(--accent); }
+  .menu-row:hover .menu-label { transform: translate3d(6px, 0, 0); }
+  .menu-row:hover :is(.menu-arrow, .menu-chevron) { color: var(--accent); }
+  .menu-row:hover .menu-arrow { opacity: 1; transform: translate3d(0.06em, 0, 0); }
+}
+
+/* An opened row's links unfold beneath its label. */
+.menu-sub {
+  display: grid;
+  grid-template-rows: 0fr;
+  visibility: hidden;
+  transition: grid-template-rows 0.5s var(--ease-out), visibility 0s linear 0.5s;
+}
+.menu-row[aria-expanded="true"] + .menu-sub { grid-template-rows: 1fr; visibility: visible; transition-delay: 0s; }
+.menu-sublist {
+  display: grid;
+  min-height: 0;
+  overflow: hidden;
+  justify-items: start;
+  margin: 0 -8px;
+  padding: 0 8px;
+}
+/* Room inside the clip for the links' focus rings. */
+.menu-sublist li:first-child { padding-top: 6px; }
+.menu-sublist li:last-child { padding-bottom: 14px; }
+.menu-sublist a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 8px;
+  color: var(--mut);
+  font-size: 17px;
+  font-weight: 600;
+  transition: color 0.2s ease;
+}
+.menu-sublist a span { transition: transform 0.45s var(--spring); }
+.menu-sublist a:focus-visible { color: var(--text); }
+@media (hover: hover) and (pointer: fine) {
+  .menu-sublist a:hover { color: var(--text); }
+  .menu-sublist a:hover span { transform: translate3d(3px, 0, 0); }
+}
+
+/* The side column: a way into the app for this device, and where to follow. */
+.menu-side { display: grid; min-width: 0; align-content: start; gap: clamp(28px, 4.5vh, 40px); padding-top: 8px; }
+/* Group labels read like the page's own (the SDK board's groups). */
+.menu-kicker { margin-bottom: 12px; color: var(--mut); font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
+.menu-card {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  padding: 18px 18px 8px;
+  border-radius: 28px;
+  background:
+    radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 64%),
+    color-mix(in srgb, var(--text) 5%, transparent);
+}
+.menu-qr { display: flex; align-items: center; gap: 18px; }
+/* Like the hero's code: a light square with its quiet zone, in either theme. */
+.menu-qr img { width: 104px; height: 104px; flex: none; border-radius: 16px; background: #fff; box-shadow: 0 0 0 1px var(--line-strong), 0 18px 40px -20px var(--accent-glow); }
+.menu-qr figcaption { max-width: 10em; font-size: 18px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.3; text-wrap: balance; }
+.menu-group > .pill.primary { width: 100%; min-height: 54px; font-size: 16px; }
+.menu-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.menu-chip {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+.menu-chip span { color: var(--mut-2); transition: color 0.2s ease, transform 0.45s var(--spring); }
+@media (hover: hover) and (pointer: fine) {
+  .menu-chip:hover { background: color-mix(in srgb, var(--text) 6%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent); }
+  .menu-chip:hover span { color: var(--accent); transform: translate3d(2px, -2px, 0); }
+}
+.menu-foot { margin-top: auto; padding-top: 18px; border-top: 1px solid var(--line); color: var(--mut-2); font-size: 13.5px; font-weight: 560; }
+/* From tablet width the side column stands beside the list. */
+@media (min-width: 720px) {
+  .menu-grid { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); align-items: start; gap: clamp(32px, 5vw, 96px); }
+  .menu-nav { --menu-size: clamp(30px, min(5.4vw, 7.4vh), 76px); }
+  .menu-side { padding: 6px 0 0 clamp(24px, 3.4vw, 56px); border-left: 1px solid var(--line); }
+}
 
 /* ---------- Actions ---------- */
 .pill {
@@ -272,6 +508,9 @@ ol, ul { padding: 0; list-style: none; }
 }
 .pill:hover { transform: translateY(-2px); filter: brightness(1.04); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42), 0 18px 44px -8px var(--accent-glow); }
 .pill:active { transform: translateY(0) scale(0.97); transition-duration: 0.1s; }
+/* On the sticky bar the action's glow stays on the bar, off the page scrolling beneath it. */
+.header-actions .pill { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.36), 0 6px 16px -8px var(--accent-glow); }
+.header-actions .pill:hover { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42), 0 8px 20px -8px var(--accent-glow); }
 .pill.primary { min-height: 58px; padding: 0 28px; font-size: 17px; }
 .secondary {
   display: inline-flex;
@@ -1206,30 +1445,12 @@ footer {
   :root[data-js] .sdk-group li:not([data-on]) span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
 @media (max-width: 860px) {
-  .site-header nav {
-    position: fixed;
-    z-index: 30;
-    top: 72px;
-    right: var(--gutter);
-    left: var(--gutter);
-    display: grid;
-    gap: 2px;
-    padding: 10px;
-    border-radius: 26px;
-    background: var(--surface-solid);
-    box-shadow: inset 0 0 0 1px var(--line), 0 30px 80px -20px rgba(0, 0, 0, 0.55);
-    opacity: 0;
-    visibility: hidden;
-    transform: translateY(-8px) scale(0.98);
-    transform-origin: top right;
-    transition: opacity 0.2s ease, transform 0.35s var(--spring), visibility 0s linear 0.35s;
-  }
-  .site-header nav.open { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
-  .site-header nav a { position: relative; min-height: 52px; padding: 0 16px; color: var(--text); font-size: 17px; }
-  .site-header nav a + a::before { content: ""; position: absolute; top: -1px; left: 16px; right: 16px; height: 1px; background: var(--line); pointer-events: none; }
-  .menu { display: inline-grid; }
-  .header-actions .pill { display: none; }
   footer { grid-template-columns: minmax(0, 1fr); justify-items: center; text-align: center; }
+}
+/* Below this the header's action pill no longer fits beside the Menu pill;
+   the hero's own actions sit right under it. */
+@media (max-width: 559px) {
+  .header-actions .pill { display: none; }
 }
 @media (max-width: 640px) {
   body { font-size: 16px; }
@@ -1272,7 +1493,7 @@ footer {
   .sdk-picker { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 380px) {
-  .site-header { gap: 6px; }
+  .site-header, .menu-bar { gap: 6px; }
   .header-actions { gap: 2px; }
   .hero-toast { display: none; }
   .split-art { gap: 18px 14px; }
@@ -1374,6 +1595,33 @@ footer {
   :root[data-js] .screen[data-drawn] .spark-line { stroke-dashoffset: 0; transition: stroke-dashoffset 1.6s var(--ease-out) 0.2s; }
   :root[data-js] .meter-track i { transform: scaleX(0); }
   :root[data-js] .screen[data-drawn] .meter-track i { transform: none; transition: transform 1.2s var(--ease-out) 0.3s; }
+
+  /* The menu: while script grows it out of the pill, each label rises through
+     its mask in turn as its line draws in from the left, then the side column
+     arrives. Closing drops them away quickly as it shrinks back. */
+  :root[data-js] .menu-text { transform: translate3d(0, 115%, 0); }
+  :root[data-js] .menu-list > li::before, :root[data-js] .menu-list::after { transform: scaleX(0); }
+  :root[data-js] :is(.menu-side, .menu-foot) { opacity: 0; transform: translate3d(0, 16px, 0); }
+  .site-menu[data-state="open"] .menu-text { transform: none; transition: transform 0.8s var(--ease-out) calc(0.08s + var(--i, 0) * 50ms); }
+  .site-menu[data-state="open"] .menu-list > li::before { transform: none; transition: transform 0.7s var(--ease-out) calc(0.04s + var(--i, 0) * 50ms); }
+  .site-menu[data-state="open"] .menu-list::after { transform: none; transition: transform 0.7s var(--ease-out) 0.34s; }
+  .site-menu[data-state="open"] :is(.menu-side, .menu-foot) { opacity: 1; transform: none; transition: opacity 0.6s ease 0.36s, transform 0.9s var(--ease-out) 0.36s; }
+  .site-menu[data-state="closing"] :is(.menu-text, .menu-side, .menu-foot),
+  .site-menu[data-state="closing"] .menu-list > li::before,
+  .site-menu[data-state="closing"] .menu-list::after { transition: opacity 0.16s ease, transform 0.24s cubic-bezier(0.5, 0, 0.75, 0); }
+  .site-menu[data-state="closing"] :is(.menu-words span, .menu-lines i) { transition-duration: 0.3s; }
+  .menu-list > li:nth-child(2) { --i: 1; }
+  .menu-list > li:nth-child(3) { --i: 2; }
+  .menu-list > li:nth-child(4) { --i: 3; }
+  .menu-list > li:nth-child(5) { --i: 4; }
+  .menu-list > li:nth-child(6) { --i: 5; }
+  /* An opened row's links follow it in, one after another. */
+  .menu-sublist li { opacity: 0; transform: translate3d(0, 8px, 0); transition: opacity 0.2s ease, transform 0.3s var(--ease-out); }
+  .menu-row[aria-expanded="true"] + .menu-sub li { opacity: 1; transform: none; transition: opacity 0.4s ease calc(0.06s + var(--j, 0) * 40ms), transform 0.6s var(--ease-out) calc(0.06s + var(--j, 0) * 40ms); }
+  .menu-sublist li:nth-child(2) { --j: 1; }
+  .menu-sublist li:nth-child(3) { --j: 2; }
+  .menu-sublist li:nth-child(4) { --j: 3; }
+  .menu-sublist li:nth-child(5) { --j: 4; }
 
   /* Theme changes spread from the toggle. */
   ::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
