@@ -69,7 +69,7 @@ test.describe('Earn unavailable reads', () => {
     for (const mode of ['deposit', 'withdraw']) {
       await page.goto(`/earn?mode=${mode}&token=fxUSDBasePool`, { waitUntil: 'domcontentloaded' });
       await expect(page.getByRole('button', { name: 'Open wallet profile', exact: true })).toBeVisible();
-      await page.getByRole('textbox', { name: mode === 'deposit' ? 'Deposit amount in fxUSDBasePool' : 'Amount in fxSAVE', exact: true }).fill('1');
+      await page.getByRole('textbox', { name: mode === 'deposit' ? 'Amount in fxUSDBasePool' : 'Amount in fxSAVE', exact: true }).fill('1');
       await expect(page.getByRole('button', { name: mode === 'deposit' ? 'Review deposit' : 'Review withdrawal', exact: true })).toBeDisabled();
       await page.getByRole('button', { name: /^Transaction settings,/ }).click();
       const dialog = page.getByRole('dialog', { name: 'Transaction settings', exact: true });

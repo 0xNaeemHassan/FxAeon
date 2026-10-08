@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium, expect as playwrightExpect, type Locator, type Page, type Route } from '@playwright/test';
 import { configuredBrowserChannel } from '../../../../scripts/e2e_browser_channel.cjs';
 import { createPublicClient, decodeFunctionData, decodeFunctionResult, encodeFunctionData, formatUnits, http, multicall3Abi, parseAbi, parseUnits, type Address, type Hex } from 'viem';
-import { formatExactDecimal, groupDigits } from '../../src/lib/amount';
+import { formatBalanceDecimal, groupDigits } from '../../src/lib/amount';
 import { formatAmount, readPositionGroupWithDirectFallback, tokenAddress } from '../../src/app/trade/fxUi';
 import { readCanonicalPositionInfo } from '../../src/app/trade/canonicalPositionReader';
 import { DIRECT_POSITION_SCAN_MAX_IDS, DIRECT_POSITION_SCAN_BATCH_SIZE } from '../../src/app/trade/directPositionDiscovery';
@@ -756,7 +756,7 @@ async function runProof(captureStage: string) {
     const fundedUsdc = await client.readContract({ address: usdc, abi: tokenAbi, functionName: 'balanceOf', args: [wallet] });
     const alternateUsdc = await client.readContract({ address: usdc, abi: tokenAbi, functionName: 'balanceOf', args: [alternateWallet] });
     assert.notEqual(fundedUsdc, alternateUsdc, 'session balances must be distinguishable');
-    const availableLabel = (value: bigint) => `Available: ${formatExactDecimal(formatUnits(value, 6), 4)} USDC`;
+    const availableLabel = (value: bigint) => `Available: ${formatBalanceDecimal(formatUnits(value, 6), 4)} USDC`;
     await expect(sessionUsdcOption).toContainText(availableLabel(fundedUsdc));
     await page.evaluate(`window.__fxForkChangeAccount(${JSON.stringify(alternateWallet)})`);
     await expect(page.getByRole('button', { name: 'Open wallet profile' }))
@@ -796,7 +796,7 @@ async function runProof(captureStage: string) {
       await ensureInputAssetPickerOpen();
       const responsiveUsdc = page.getByRole('option', { name: /^USDC\b/i });
       const responsiveBalance = await client.readContract({ address: usdc, abi: tokenAbi, functionName: 'balanceOf', args: [wallet] });
-      await expect(responsiveUsdc).toContainText(`Available: ${formatExactDecimal(formatUnits(responsiveBalance, 6), 4)} USDC`);
+      await expect(responsiveUsdc).toContainText(`Available: ${formatBalanceDecimal(formatUnits(responsiveBalance, 6), 4)} USDC`);
       await responsiveUsdc.click();
       const responsiveAmount = page.getByLabel('Amount in USDC', { exact: true });
       const responsiveMeta = page.locator('[data-amount-usd]').filter({ hasText: /Available:/ }).first();
@@ -874,7 +874,7 @@ async function runProof(captureStage: string) {
       await ensureInputAssetPickerOpen();
       const usdcOption = page.getByRole('option', { name: /^USDC\b/i });
       const availableUsdc = await client.readContract({ address: usdc, abi: tokenAbi, functionName: 'balanceOf', args: [wallet] });
-      await expect(usdcOption).toContainText(`Available: ${formatExactDecimal(formatUnits(availableUsdc, 6), 4)} USDC`);
+      await expect(usdcOption).toContainText(`Available: ${formatBalanceDecimal(formatUnits(availableUsdc, 6), 4)} USDC`);
       await usdcOption.click();
       const usdcAmount = page.getByLabel('Amount in USDC', { exact: true });
       await usdcAmount.fill('1000');
@@ -925,7 +925,7 @@ async function runProof(captureStage: string) {
       await ensureInputAssetPickerOpen();
       await page.getByRole('option', { name: /^USDC\b/i }).click();
       const remainingUsdc = await client.readContract({ address: usdc, abi: tokenAbi, functionName: 'balanceOf', args: [wallet] });
-      await expect(page.locator('.trade-ticket')).toContainText(`Available: ${formatExactDecimal(formatUnits(remainingUsdc, 6), 8)} USDC`);
+      await expect(page.locator('.trade-ticket')).toContainText(`Available: ${formatBalanceDecimal(formatUnits(remainingUsdc, 6), 8)} USDC`);
       await expect(positionCard).toBeVisible();
       const transactions = [];
       for (const tx of submitted.slice(signedBefore)) {
@@ -1276,7 +1276,7 @@ async function runProof(captureStage: string) {
     await expect(page.getByRole('button', { name: 'Open wallet profile' })).toBeVisible({ timeout: 30_000 });
     await page.getByLabel('Asset', { exact: true }).click();
     await page.getByRole('listbox', { name: 'Asset options', exact: true }).getByRole('option', { name: /^USDC\b/i }).click();
-    await page.getByLabel('Deposit amount in USDC', { exact: true }).fill('1000');
+    await page.getByLabel('Amount in USDC', { exact: true }).fill('1000');
     await expect(page.getByRole('button', { name: 'Review deposit', exact: true })).toBeEnabled({ timeout: 180_000 });
     const earnDepositSignatureBaseline = submitted.length;
     const { signedBefore: earnDepositSignedBefore, transactionCount: earnDepositTransactionCount } = await driveDirectAction(
