@@ -186,12 +186,13 @@ export function formatWholeUsd(value: number): string {
   return wholeUsd.format(value);
 }
 
+// "≈" stays with its figure (a no-break space), so a narrow line never strands it.
 function moveWords(percent: number): string {
-  return percent < 1 ? 'less than 1%' : `≈ ${percent.toLocaleString('en-US')}%`;
+  return percent < 1 ? 'less than 1%' : `≈\u00a0${percent.toLocaleString('en-US')}%`;
 }
 
 function priceWords(price: number | null): string {
-  return price === null ? '' : ` (≈ ${formatWholeUsd(price)})`;
+  return price === null ? '' : ` (≈\u00a0${formatWholeUsd(price)})`;
 }
 
 /** Plain words for the card: the market, the direction that matters, and the distance. */

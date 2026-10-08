@@ -131,15 +131,15 @@ test('a current brake read draws the marker and the plain line, with liquidation
     assert.match(long, /--liquidate-at:0\.95/);
     assert.match(long, /data-brake-marker="rebalance"/);
     assert.match(long, /data-brake-marker="liquidation"/);
-    assert.match(long, /data-position-brake="clear"[^>]*><span>Rebalances if ETH falls ≈ 25% \(≈ \$1,800\)<span class="sr-only"> If rebalancing can’t keep up, liquidation becomes possible once ETH falls ≈ 30% \(≈ \$1,668\)\.<\/span><\/span>/);
+    assert.match(long, /data-position-brake="clear"[^>]*><span>Rebalances if ETH falls ≈\u00a025% \(≈\u00a0\$1,800\)<span class="sr-only"> If rebalancing can’t keep up, liquidation becomes possible once ETH falls ≈\u00a030% \(≈\u00a0\$1,668\)\.<\/span><\/span>/);
     // The bar stays decorative; its words are in the line.
     assert.match(long, /<div class="test-split" aria-hidden="true"/);
 
     const short = render(btcShort, readyEntry(btcShort, 75n * E18 / 100n, { rebalanceRatio: 90n * E18 / 100n, liquidateRatio: 95n * E18 / 100n }, 81_354.96));
-    assert.match(short, /Rebalances if BTC rises ≈ 20% \(≈ \$97,625\)/);
+    assert.match(short, /Rebalances if BTC rises ≈\u00a020% \(≈\u00a0\$97,625\)/);
 
     const noQuote = render(ethLong, readyEntry(ethLong, 66n * E18 / 100n, undefined, null));
-    assert.match(noQuote, /Rebalances if ETH falls ≈ 25%<span class="sr-only">/);
+    assert.match(noQuote, /Rebalances if ETH falls ≈\u00a025%<span class="sr-only">/);
   });
 });
 

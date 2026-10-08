@@ -42,7 +42,8 @@ const line = (cardLocator: Locator) => cardLocator.locator('[data-position-brake
 const shown = (cardLocator: Locator) => expect.poll(() => line(cardLocator).evaluate((element) => {
   const copy = element.cloneNode(true) as HTMLElement;
   copy.querySelectorAll('.sr-only').forEach((hidden) => hidden.remove());
-  return copy.textContent?.trim();
+  // "≈" is bound to its figure with a no-break space; compare words, not spacing.
+  return copy.textContent?.replace(/\u00a0/g, ' ').trim();
 }).catch(() => null));
 const multicalls = (page: Page) => page.evaluate(() => (window as unknown as HarnessWindow).__brakeHarness.calls.map((call) => call.map((item) => item.functionName)));
 

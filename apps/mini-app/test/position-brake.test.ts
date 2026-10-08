@@ -15,6 +15,9 @@ import {
   type BrakeReading,
 } from '../src/lib/positionBrake';
 
+/** Copy keeps "≈" with its figure through a no-break space. */
+const nb = (text: string): string => text.replaceAll('≈ ', '≈\u00a0');
+
 const ratio = (value: string): bigint => {
   const [whole, fraction = ''] = value.split('.');
   return BigInt(whole) * DEBT_RATIO_PRECISION + BigInt(fraction.padEnd(18, '0'));
@@ -70,8 +73,8 @@ test('a long position shows its distance, price, fill and both thresholds', () =
   assert.equal(view.liquidateAt, 0.95);
   assert.deepEqual(positionBrakeCopy(view, 'ETH', 'long'), {
     tone: 'neutral',
-    line: 'Rebalances if ETH falls ≈ 25% (≈ $1,800)',
-    liquidation: 'If rebalancing can’t keep up, liquidation becomes possible once ETH falls ≈ 30% (≈ $1,668).',
+    line: nb('Rebalances if ETH falls ≈ 25% (≈ $1,800)'),
+    liquidation: nb('If rebalancing can’t keep up, liquidation becomes possible once ETH falls ≈ 30% (≈ $1,668).'),
     docsUrl: FX_REBALANCING_DOCS_URL,
     docsLabel: 'How rebalancing works',
   });
@@ -84,11 +87,11 @@ test('a short position shows the rise that reaches its brake', () => {
   assert.equal(view.rebalancePrice, 2_880);
   assert.equal(view.liquidateMovePercent, 26); // 0.95 / 0.75 − 1 = 26.7%
   assert.equal(view.liquidatePrice, 3_040);
-  assert.equal(positionBrakeCopy(view, 'ETH', 'short').line, 'Rebalances if ETH rises ≈ 20% (≈ $2,880)');
+  assert.equal(positionBrakeCopy(view, 'ETH', 'short').line, nb('Rebalances if ETH rises ≈ 20% (≈ $2,880)'));
   const btc = positionBrakeView({ ...short('0.7632'), priceAtRead: 81_354.96 }, 81_354.96)!;
   // 81354.96 × 0.9 / 0.7632 = 95,937.45: a short's price rounds down, toward today's.
   assert.equal(btc.rebalancePrice, 95_937);
-  assert.equal(positionBrakeCopy(btc, 'BTC', 'short').line, 'Rebalances if BTC rises ≈ 17% (≈ $95,937)');
+  assert.equal(positionBrakeCopy(btc, 'BTC', 'short').line, nb('Rebalances if BTC rises ≈ 17% (≈ $95,937)'));
 });
 
 test('percentages round toward safety, showing the smaller distance', () => {
@@ -153,7 +156,7 @@ test('the rebalance point is reached at the threshold itself, as the pool checks
   assert.equal(copy.tone, 'warn');
   assert.equal(copy.line, 'At the rebalance point. The protocol may rebalance part of this position.');
   assert.equal(copy.docsUrl, FX_REBALANCING_DOCS_URL);
-  assert.equal(copy.liquidation, 'If rebalancing can’t keep up, liquidation becomes possible once ETH falls ≈ 7%.');
+  assert.equal(copy.liquidation, nb('If rebalancing can’t keep up, liquidation becomes possible once ETH falls ≈ 7%.'));
 
   const justBelow = positionBrakeView({ ...long('0.88'), debtRatio: LONG_THRESHOLDS.rebalanceRatio - 1n }, null)!;
   assert.equal(justBelow.state, 'clear');
@@ -202,7 +205,9 @@ test('the bar keeps its fill in range and drops markers that fall beyond it', ()
   const crashed = positionBrakeView(long('0.5', 2_000), 100)!;
   assert.equal(crashed.fill, 1);
   // A deep short far from its brake keeps a grouped, finite figure.
-  assert.equal(positionBrakeCopy(positionBrakeView(short('0.009'), null)!, 'ETH', 'short').line, 'Rebalances if ETH rises ≈ 9,900%');
+  assert.equal(positionBrakeCopy(positionBrakeView(short('0.009'), null)!, 'ETH', 'short').line, nb('Rebalances if ETH rises ≈ 9,900%'));
+  // "≈" never ends a line apart from its figure.
+  assert.doesNotMatch(positionBrakeCopy(positionBrakeView(long('0.66', 2_400), 2_400)!, 'ETH', 'long').line, /≈ /);
 });
 
 test('copy never presents a zero distance', () => {
