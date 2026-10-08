@@ -348,6 +348,86 @@ test('sign-in, not-found and error screens scroll from their top when they do no
   }
 });
 
+/** WCAG contrast of each element's text against what is painted behind it,
+ * compositing translucent backgrounds and the element's own opacity. */
+async function contrasts(page: Page, selector: string) {
+  return page.locator(selector).evaluateAll((elements) => {
+    const parse = (value: string): number[] => {
+      const srgb = value.match(/color\(srgb ([\d.]+) ([\d.]+) ([\d.]+)(?: \/ ([\d.]+))?\)/);
+      if (srgb) return [Number(srgb[1]) * 255, Number(srgb[2]) * 255, Number(srgb[3]) * 255, srgb[4] === undefined ? 1 : Number(srgb[4])];
+      const parts = value.match(/[\d.]+/g)!.map(Number);
+      return [parts[0], parts[1], parts[2], parts[3] ?? 1];
+    };
+    const over = (top: number[], bottom: number[]) => [0, 1, 2].map((i) => top[i] * top[3] + bottom[i] * (1 - top[3])).concat(1);
+    const backdrop = (element: Element | null): number[] => {
+      const layers: number[][] = [];
+      for (let node = element; node; node = node.parentElement) {
+        const color = parse(getComputedStyle(node).backgroundColor);
+        if (color[3] > 0) layers.push(color);
+        if (color[3] >= 1) break;
+      }
+      return layers.reverse().reduce((base, layer) => over(layer, base), parse(getComputedStyle(document.body).backgroundColor));
+    };
+    const luminance = (color: number[]) => {
+      const [r, g, b] = color.slice(0, 3).map((channel) => {
+        const value = channel / 255;
+        return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    return elements.map((element) => {
+      let opacity = 1;
+      for (let node: Element | null = element; node; node = node.parentElement) opacity *= Number(getComputedStyle(node).opacity);
+      const behind = backdrop(element.parentElement?.closest('*') ?? null);
+      const own = backdrop(element);
+      const text = over(parse(getComputedStyle(element).color), own);
+      const [paintedText, paintedBg] = [over([...text.slice(0, 3), opacity], behind), over([...own.slice(0, 3), opacity], behind)];
+      const [light, dark] = [luminance(paintedText), luminance(paintedBg)].sort((a, b) => b - a);
+      return { text: element.textContent?.trim().slice(0, 40), ratio: Math.round(((light + 0.05) / (dark + 0.05)) * 100) / 100, opacity };
+    });
+  });
+}
+
+/** Wait out the route fade and theme transitions (finite animations only). */
+async function settle(page: Page) {
+  await page.evaluate(() => Promise.all(document.getAnimations()
+    .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
+    .map((animation) => animation.finished.catch(() => undefined))));
+}
+
+test('disabled and busy actions stay readable (AA) and look unavailable, in every theme', async ({ page }) => {
+  await open(page);
+  await setLab(page, { path: '/controls', wallet: STATES[1][1] });
+  await expect(page.getByRole('button', { name: 'Not enough ETH for network fees' })).toBeDisabled();
+  for (const theme of ['official', 'dark', 'light']) {
+    await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+    await settle(page);
+    const results = await contrasts(page, 'main .button, main button:disabled strong, main label[data-disabled] strong, main label[data-disabled] small');
+    expect(results.length).toBeGreaterThanOrEqual(8);
+    for (const result of results) expect(result.ratio, `${result.text} in ${theme}`).toBeGreaterThanOrEqual(4.5);
+    const unavailable = await page.getByRole('button', { name: 'Not enough ETH for network fees' }).evaluate((element) => {
+      const probe = document.createElement('span');
+      probe.style.color = 'var(--mint)';
+      element.parentElement!.append(probe);
+      const mint = getComputedStyle(probe).color;
+      probe.remove();
+      const style = getComputedStyle(element);
+      return { opacity: style.opacity, background: style.backgroundColor, mint, cursor: style.cursor };
+    });
+    expect(unavailable.opacity).toBe('1');
+    expect(unavailable.background, 'a disabled primary action does not look like an accent one').not.toBe(unavailable.mint);
+    expect(unavailable.cursor).toBe('not-allowed');
+  }
+  // The network menu's options wait for a wallet without fading their names.
+  await setLab(page, { path: '/portfolio' });
+  await page.locator('.network-selector').click();
+  await expect(page.locator('.network-selector-menu')).toBeVisible();
+  await settle(page);
+  const options = await contrasts(page, '.network-selector-menu button[data-network-option]:disabled');
+  expect(options).toHaveLength(2);
+  for (const option of options) expect(option.ratio, `${option.text} option`).toBeGreaterThanOrEqual(4.5);
+});
+
 test('the dock names Portfolio, matching its page, and every label fits a 320px dock in each theme', async ({ page }) => {
   await open(page, { width: 320, height: 700 });
   await setLab(page, { wallet: STATES[2][1] });

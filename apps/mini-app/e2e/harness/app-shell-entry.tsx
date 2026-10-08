@@ -1,7 +1,8 @@
 import React, { useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AppShell } from '@/components/ui';
-import { PageHeading } from '@/components/ProductUI';
+import { History } from 'lucide-react';
+import { AppShell, Button } from '@/components/ui';
+import { ActionRow, ChoiceCards, PageHeading, ProductSurface } from '@/components/ProductUI';
 import MorePage from '@/app/more/page';
 import SettingsPage from '@/app/settings/page';
 import DocsPage from '@/app/docs/page';
@@ -34,6 +35,21 @@ function Page({ path }: { path: string }) {
   if (path === '/missing') return <NotFound />;
   if (path === '/error') return <RouteError error={new Error('lab')} reset={() => undefined} />;
   if (path === '/login') return <LoginPage />;
+  // Every shared control in its unavailable and busy states, on a card.
+  if (path === '/controls') {
+    return <AppShell>
+      <ProductSurface style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <Button disabled>Not enough ETH for network fees</Button>
+        <Button loading>Checking transaction…</Button>
+        <Button variant="ghost" disabled>Retry review</Button>
+        <Button variant="danger" disabled>Close position</Button>
+        <Button variant="outline" disabled>Outline action</Button>
+        <ActionRow icon={History} title="Unavailable row" description="Explains why" onClick={() => undefined} disabled />
+        <ChoiceCards label="Withdraw" value="instant" onChange={() => undefined}
+          options={[{ value: 'instant', label: 'Instant' }, { value: 'queued', label: 'Queued', description: 'Not available yet', disabled: true }]} />
+      </ProductSurface>
+    </AppShell>;
+  }
   return <AppShell>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <PageHeading title="Portfolio" />

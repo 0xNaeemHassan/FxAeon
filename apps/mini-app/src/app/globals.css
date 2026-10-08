@@ -773,7 +773,9 @@ details[open] > summary .disclosure-closed-only { display: none; }
 .network-selector-menu button { display: flex; width: 100%; min-height: 48px; align-items: center; justify-content: space-between; gap: 12px; border-radius: var(--radius-sm); padding: 6px 10px; color: var(--text); text-align: left; transition: background-color var(--dur-fast) ease; }
 .network-selector-menu button:hover:not(:disabled), .network-selector-menu button[aria-checked='true'] { background: var(--surface-3); }
 .network-selector-menu button[aria-checked='true'] svg:last-child { color: var(--mint); }
-.network-selector-menu button:disabled { cursor: default; opacity: .48; }
+/* Networks wait for a wallet: the names stay readable, only the marks dim. */
+.network-selector-menu button:disabled { cursor: not-allowed; color: var(--mut); }
+.network-selector-menu button:disabled img { opacity: .5; }
 .network-selector-menu strong, .network-selector-menu small { display: block; }
 .network-selector-menu strong { font-size: var(--fs-small); font-weight: 600; }
 .network-selector-menu small { margin-top: 2px; color: var(--mut-2); font-size: var(--fs-micro); }
@@ -1015,6 +1017,19 @@ details[open] > summary .disclosure-closed-only { display: none; }
 .button-danger:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--danger) 40%, transparent);
   background: color-mix(in srgb, var(--danger) 18%, transparent);
+}
+
+/* A disabled action stays legible: never faded, its label takes the secondary
+   text tone on a neutral surface (AA in every theme) and the cursor says it is
+   unavailable. :where() keeps these at the weight of one class, after the
+   variants above, so a component that styles its own disabled state wins. */
+.button:where(:disabled, [aria-disabled='true']) {
+  color: var(--mut);
+  cursor: not-allowed;
+}
+.button:where(.button-ghost, .button-danger):where(:disabled, [aria-disabled='true']) {
+  border-color: transparent;
+  background: var(--surface-2);
 }
 
 /* Navigation: a floating dock. The highlight travels between tabs on a

@@ -268,8 +268,10 @@ function buttonClasses(variant: 'primary' | 'ghost' | 'danger' | 'outline' | 'gl
           : variant === 'glass'
             ? 'astryx-card text-[var(--text)] hover:border-[var(--astryx-border-strong)]'
             : 'button-ghost text-[var(--text)]';
-  // `.button` sets the body size; a utility here would only be overridden.
-  return `button glass-press astryx-interactive flex min-h-12 w-full items-center justify-center gap-2 px-5 py-3 disabled:cursor-not-allowed disabled:opacity-50 ${styles} ${className}`;
+  // `.button` sets the body size and the disabled look (globals.css). No
+  // disabled: utility here: Tailwind appends variants after every custom rule,
+  // so one would override that look, and fading a label breaks its contrast.
+  return `button glass-press astryx-interactive flex min-h-12 w-full items-center justify-center gap-2 px-5 py-3 ${styles} ${className}`;
 }
 
 export const Button = forwardRef<HTMLButtonElement, Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'onClick' | 'disabled' | 'className'> & {

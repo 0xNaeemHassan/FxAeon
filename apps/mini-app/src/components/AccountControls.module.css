@@ -14,7 +14,7 @@ button.account:active { background: var(--surface-3); }
 .session { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 4px; }
 .session > button { display: flex; width: 100%; min-height: 48px; align-items: center; justify-content: center; gap: 8px; border-radius: 12px; color: var(--danger); font-size: var(--fs-small); }
 .session > button:hover { background: var(--danger-dim); }
-.session > button:disabled { cursor: not-allowed; opacity: .6; }
+.session > button:disabled { cursor: progress; color: var(--mut); }
 .session > p { color: var(--danger); font-size: var(--fs-caption); line-height: 1.5; text-align: center; }
 /* Placeholder lines sit in the name's and the address's own line heights. */
 .loading .copy { min-height: calc((var(--fs-body) + var(--fs-caption)) * 1.45 + 4px); justify-content: center; }
