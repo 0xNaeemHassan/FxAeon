@@ -219,13 +219,46 @@ test('a route heading is never inside the route fade; heading-less content still
   expect(await page.locator('.app-content > p').evaluate((element) => element.getAnimations().map((animation) => (animation as CSSAnimation).animationName))).toContain('route-in');
 });
 
-test('reduced motion shows plain headings with no sweep', async ({ page }) => {
+test('reduced motion shows plain headings with no sweep and a still canvas', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await open(page);
   const heading = page.locator('[data-page-heading] h1');
   await expect(heading).toBeVisible();
   expect(await heading.evaluate((element) => element.getAnimations().length)).toBe(0);
   expect(await heading.evaluate((element) => getComputedStyle(element).webkitTextFillColor === getComputedStyle(element).color)).toBe(true);
+  expect(await page.evaluate(() => document.getAnimations().filter((animation) => /^canvas-drift-/.test((animation as CSSAnimation).animationName)).length)).toBe(0);
+});
+
+/** Play states of the two drifting canvas lights (body::before/::after). */
+async function canvasStates(page: Page) {
+  return page.evaluate(() => document.getAnimations()
+    .filter((animation) => /^canvas-drift-/.test((animation as CSSAnimation).animationName))
+    .map((animation) => animation.playState));
+}
+
+test('the canvas drifts, and holds still under a sheet or review and while the page is hidden', async ({ page }) => {
+  await open(page);
+  await expect.poll(() => canvasStates(page)).toEqual(['running', 'running']);
+  for (const overlay of ['dialog', 'review'] as const) {
+    await setLab(page, { overlay });
+    await expect.poll(() => canvasStates(page), `${overlay} pauses the canvas`).toEqual(['paused', 'paused']);
+    await setLab(page, { overlay: 'none' });
+    await expect.poll(() => canvasStates(page), `${overlay} closed resumes it`).toEqual(['running', 'running']);
+  }
+  const setVisibility = (state: 'hidden' | 'visible') => page.evaluate((value) => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => value });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, state);
+  await setVisibility('hidden');
+  await expect.poll(() => canvasStates(page)).toEqual(['paused', 'paused']);
+  await setVisibility('visible');
+  await expect.poll(() => canvasStates(page)).toEqual(['running', 'running']);
+});
+
+test('with data saver on, the canvas stays still from the first paint', async ({ page }) => {
+  await open(page, { initScript: "Object.defineProperty(navigator,'connection',{configurable:true,value:{saveData:true,addEventListener(){}}})" });
+  await expect(page.locator('html')).toHaveAttribute('data-save-data', '');
+  expect(await canvasStates(page)).toEqual([]);
 });
 
 test('the dock names Portfolio, matching its page, and every label fits a 320px dock in each theme', async ({ page }) => {

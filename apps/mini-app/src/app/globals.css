@@ -394,6 +394,20 @@ body::after {
 @media (prefers-reduced-motion: reduce) {
   body::before, body::after { animation: none; }
 }
+/* The canvas rests when nobody is looking at it. With data saver on it stays
+   still from the first paint; while the page is hidden it holds its frame. */
+:root[data-save-data] body::before,
+:root[data-save-data] body::after { animation: none; will-change: auto; }
+:root[data-page-hidden] body::before,
+:root[data-page-hidden] body::after { animation-play-state: paused; }
+/* It also holds its frame under a sheet, dialog or transaction review, where
+   attention (and a backdrop blur) sits above it. Markers: overlays are
+   aria-modal; reviews render ActionReview's viewport, or mark their form with
+   data-review (Trade, Positions) or a data-flow-stage past input. */
+body:has([aria-modal='true'], [data-review-viewport], [data-review], [data-flow-stage]:not([data-flow-stage='input']))::before,
+body:has([aria-modal='true'], [data-review-viewport], [data-review], [data-flow-stage]:not([data-flow-stage='input']))::after {
+  animation-play-state: paused;
+}
 
 button,
 a,
