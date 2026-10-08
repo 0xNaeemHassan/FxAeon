@@ -514,7 +514,7 @@ export default function TradePage() {
         : prepared.bounds);
       if (prepared.adjusted) {
         setLeverage(prepared.leverage);
-        throw new RangeError(`Pool leverage limits changed to ${prepared.bounds.min.toFixed(1)}x-${prepared.bounds.max.toFixed(1)}x. The target was updated; review it again.`);
+        throw new RangeError(`Pool leverage limits changed to ${prepared.bounds.min.toFixed(1)}×–${prepared.bounds.max.toFixed(1)}×. The target was updated; review it again.`);
       }
       return prepared.plan;
     };
