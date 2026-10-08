@@ -18,6 +18,12 @@ const headers = await readFile(resolve(root, 'dist/_headers'), 'utf8');
 const appRequire = createRequire(resolve(root, '../mini-app/package.json'));
 const DESKTOP = '(hover: hover) and (pointer: fine) and (min-width: 861px)';
 
+/** `value` as a literal inside a RegExp: every metacharacter, backslash included, escaped. */
+const literal = (value) => value.replace(/[.*+?^${}()|[\]\\/-]/g, '\\$&');
+
+/** The text of a markup fragment: tags removed, then any stray angle bracket, so no tag can survive. */
+const textOf = (markup, separator = '') => markup.replace(/<[^>]*>/g, separator).replace(/[<>]/g, '');
+
 /** The markup between an element's opening tag (matched by `open`) and its closing tag. */
 function elementSource(source, open, tag) {
   const start = source.search(open);
@@ -51,7 +57,7 @@ function linksByDevice(source) {
   for (const [, attributes, text] of source.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g)) {
     const attribute = (name) => attributes.match(new RegExp(`\\b${name}="([^"]*)"`))?.[1];
     const device = attribute('data-device');
-    const link = [attribute('class'), attribute('href'), text.replace(/<[^>]+>/g, '').trim()].filter(Boolean).join(' ');
+    const link = [attribute('class'), attribute('href'), textOf(text).trim()].filter(Boolean).join(' ');
     for (const name of Object.keys(shown)) if (!device || device === name) shown[name].push(link);
   }
   return shown;
@@ -109,8 +115,8 @@ test('the hero states the product and leads with Telegram on phones and the web 
   assert.equal(html.match(/telegram-qr\.svg/g)?.length, 2, 'One QR code in the hero and one in the menu');
   assert.match(elementSource(html, /<div class="menu-card" data-device="desktop">/, 'div'), /<img src="assets\/telegram-qr\.svg" width="104" height="104" alt="QR code" loading="lazy" decoding="async" \/>/);
   // Media queries choose the set before the first paint: no user-agent sniffing, no script.
-  assert.match(css, new RegExp(`@media ${DESKTOP.replace(/[()]/g, '\\$&')} \\{\\s*:root \\[data-device="mobile"\\] \\{ display: none; \\}`));
-  assert.match(css, new RegExp(`@media not all and ${DESKTOP.replace(/[()]/g, '\\$&')} \\{\\s*:root \\[data-device="desktop"\\] \\{ display: none; \\}\\s*\\}`));
+  assert.match(css, new RegExp(`@media ${literal(DESKTOP)} \\{\\s*:root \\[data-device="mobile"\\] \\{ display: none; \\}`));
+  assert.match(css, new RegExp(`@media not all and ${literal(DESKTOP)} \\{\\s*:root \\[data-device="desktop"\\] \\{ display: none; \\}\\s*\\}`));
   for (const source of [script, aurora]) assert.doesNotMatch(source, /userAgent|maxTouchPoints|ontouchstart|data-device|dataset\.device/);
   for (const id of ['moves', 'protocol', 'telegram', 'faq']) assert.equal(html.match(new RegExp(`id="${id}"`, 'g'))?.length, 1, `#${id} should exist exactly once`);
   assert.match(html, /<h2 id="moves-title">Everything f\(x\) Protocol SDK does, a tap away\.<\/h2>/);
@@ -140,7 +146,7 @@ test('the header opens a fullscreen menu: a native modal dialog with a ruled lis
     tag,
     href: attributes.match(/\bhref="([^"]*)"/)?.[1],
     external: /target="_blank" rel="noreferrer"/.test(attributes),
-    label: inner.replace(/<svg[\s\S]*?<\/svg>/g, '').replace(/<[^>]+>/g, '').trim(),
+    label: textOf(inner.replace(/<svg[\s\S]*?<\/svg>/g, '')).trim(),
     mark: inner.match(/<svg class="(menu-[a-z]+)"/)?.[1],
   }));
   assert.deepEqual(rows, [
@@ -168,7 +174,7 @@ test('the header opens a fullscreen menu: a native modal dialog with a ruled lis
   assert.deepEqual([...menu.matchAll(/<h2 class="menu-kicker">([^<]*)<\/h2>/g)].map(([, text]) => text), ['Open FxAeon', 'Connect']);
   assert.doesNotMatch(css, /text-transform:\s*uppercase/, 'The landing uses no uppercase eyebrow labels');
   assert.match(menu, /<p class="menu-foot">FxAeon · Built on f\(x\) Protocol<\/p>/);
-  assert.doesNotMatch(menu.replace(/<[^>]+>/g, ' '), /\d+(?:\.\d+)?\s*%|\$\s?\d|APY|official|phishing|scam|risk|guarantee/i);
+  assert.doesNotMatch(textOf(menu, ' '),/\d+(?:\.\d+)?\s*%|\$\s?\d|APY|official|phishing|scam|risk|guarantee/i);
 
   // Behaviour: the browser's modal dialog, an animated close on Escape, a locked page, and nothing left of the old dropdown.
   assert.match(script, /menu\.showModal\(\)/);
