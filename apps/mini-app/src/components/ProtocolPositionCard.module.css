@@ -220,23 +220,26 @@
 .notice > button svg { width: 15px; height: 15px; }
 
 /* The loading card: each placeholder sits where the card's own line or tile
-   does (token mark, market and meta lines, value, split, four tiles). Bar
-   margins add up to the text line boxes they replace, so the loaded card
-   arrives at the same height. */
+   does (token mark, market and meta lines, value, split, brake line, four
+   tiles). Each bar is centred in the line box it replaces (--line, from the
+   same type tokens), and flex columns keep those margins from collapsing, so
+   the loaded card arrives at the same height. */
 .skeletonToken { flex: 0 0 40px; width: 40px; height: 40px; border-radius: 50%; }
 .compactContent .skeletonToken { flex-basis: 34px; width: 34px; height: 34px; }
-.skeletonLines { min-width: 0; flex: 1; }
-.skeletonLines > * { width: 42%; max-width: 132px; height: 13px; margin: 4px 0 5px; border-radius: var(--radius-full); }
-.skeletonLines > * + * { width: 58%; max-width: 168px; height: 10px; margin: 7px 0 3px; }
-.positionValue .skeletonLines > * { width: 64%; max-width: 104px; height: 11px; margin: 3px 0 3px; }
-.positionValue .skeletonLines > * + * { width: 48%; max-width: 80px; height: 9px; margin: 4px 0 3px; }
+.skeletonLines, .skeletonMetric { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; }
+.skeletonLines { flex: 1; }
+.skeletonLines > *, .skeletonMetric > * { border-radius: var(--radius-full); }
+.skeletonLines > * { --line: calc(var(--fs-title) * 1.15); width: 42%; max-width: 132px; height: 13px; margin: calc((var(--line) - 13px) / 2) 0; }
+.skeletonLines > * + * { --line: calc(var(--fs-caption) * 1.3); width: 58%; max-width: 168px; height: 10px; margin: calc(4px + (var(--line) - 10px) / 2) 0 calc((var(--line) - 10px) / 2); }
+.positionValue .skeletonLines > * { --line: calc(var(--fs-small) * 1.3); width: 64%; max-width: 104px; height: 11px; margin: calc((var(--line) - 11px) / 2) 0; }
+.positionValue .skeletonLines > * + * { --line: calc(var(--fs-micro) * 1.25); width: 48%; max-width: 80px; height: 9px; margin: calc(2px + (var(--line) - 9px) / 2) 0 calc((var(--line) - 9px) / 2); }
 .skeletonFigure { flex: 0 0 auto; width: clamp(96px, 30%, 132px); height: 24px; margin-bottom: 1px; border-radius: var(--radius-xs); }
 .skeletonSplit { height: 6px; margin-top: 12px; border-radius: var(--radius-full); }
-.skeletonMetric > * { width: 46%; height: 9px; margin: 3px 0 2px; border-radius: var(--radius-full); }
-.skeletonMetric > :nth-child(2) { width: 72%; height: 12px; margin: 7px 0 3px; }
-.compactContent .skeletonMetric > :nth-child(2) { margin: 6px 0 3px; }
-.skeletonMetric > :nth-child(3) { width: 40%; height: 10px; margin: 5px 0 3px; }
-.compactContent .skeletonMetric > :nth-child(3) { margin: 4px 0 2px; }
+.skeletonMetric > * { --line: calc(var(--fs-micro) * 1.3); width: 46%; height: 9px; margin: calc((var(--line) - 9px) / 2) 0; }
+.skeletonMetric > :nth-child(2) { --line: calc(14px * 1.3); width: 72%; height: 12px; margin: calc(4px + (var(--line) - 12px) / 2) 0 calc((var(--line) - 12px) / 2); }
+.compactContent .skeletonMetric > :nth-child(2) { --line: calc(var(--fs-small) * 1.3); }
+.skeletonMetric > :nth-child(3) { --line: calc(var(--fs-caption) * 1.3); width: 40%; height: 10px; margin: calc(2px + (var(--line) - 10px) / 2) 0 calc((var(--line) - 10px) / 2); }
+.compactContent .skeletonMetric > :nth-child(3) { --line: calc(var(--fs-micro) * 1.3); }
 
 @media (max-width: 359px) {
   .card { padding: 12px; }
@@ -246,6 +249,7 @@
   .metrics { gap: 6px; }
   .metric { padding: 8px; }
   .metricValue { font-size: var(--fs-caption); }
+  .skeletonMetric > :nth-child(2) { --line: calc(var(--fs-caption) * 1.3); }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -445,7 +445,7 @@ export default function PositionsPage() {
         ) : null}
         {reviewStage === 'input' && <ConfirmedPositionCards />}
         {wallet.address && positionState.status === 'loading' && !positions.length && !positionState.pendingPositions.length && reviewStage === 'input' ? (
-          <div className="flex flex-col gap-3"><ProtocolPositionSkeleton /><ProtocolPositionSkeleton /></div>
+          <div className="flex flex-col gap-3"><ProtocolPositionSkeleton compact /><ProtocolPositionSkeleton compact /></div>
         ) : wallet.address && positionState.status === 'unavailable' && !positions.length && !positionState.pendingPositions.length && reviewStage === 'input' ? (
           <div role="status" aria-live="polite" className="flex items-center gap-3 rounded-2xl bg-[var(--warn-dim)] py-2 pl-4 pr-2"><span className="text-[13px] text-warn">Position data is unavailable.</span><button type="button" aria-label="Retry positions" onClick={() => void positionState.refresh()} className="glass-press ml-auto flex min-h-11 min-w-11 items-center justify-center rounded-xl text-mut"><RefreshCw className="h-4 w-4" aria-hidden="true" /></button></div>
         ) : wallet.address && positionState.status === 'partial' && !positions.length && !positionState.pendingPositions.length && reviewStage === 'input' ? (
