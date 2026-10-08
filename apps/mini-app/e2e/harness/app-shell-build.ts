@@ -76,6 +76,13 @@ const mocks: Record<string, string> = {
   '@/lib/telegram': 'export const haptic = () => {}; export const openExternalLink = () => false; export const applyTelegramChromeColors = () => {}; export const isTelegramLaunchContext = () => false;',
   '@/lib/privyConfig': "export const PRIVY_APP_ID = ''; export const privyConfigured = () => false;",
   './PrivyFlow': 'export default function PrivyFlow() { return null; }',
+  // History's feed module: only its skeleton renders before a wallet exists.
+  '@tanstack/react-query': 'export const useQuery = () => ({});',
+  './BridgeTracker': 'export const BridgeTracker = () => null;',
+  '@/components/PriceProvider': "export const useUsdPrices = () => ({ prices: {}, status: 'unavailable', refresh() {} });",
+  '@/lib/useWalletActivity': 'export const useWalletActivity = () => ({ isPending: true, isFetching: true, hasMore: false, data: undefined, refetch: async () => {}, loadMore: async () => {} });',
+  '@/lib/fx/drafts': "export const cancelSignatureRequiredDraft = () => {}; export const signatureDraftResumePath = () => '/trade';",
+  '@/lib/activityReceipt': 'export const loadActivityReceipt = async () => ({});',
   // Settings and More dependencies that would reach a chain or a provider.
   'next/dynamic': "export default function dynamic(load, options) { return function Dynamic() { return options && options.loading ? options.loading() : null; }; }",
   wagmi: 'export const useEnsName = () => ({ data: undefined }); export const useEnsAddress = () => ({ data: undefined });',
@@ -124,7 +131,7 @@ export async function buildAppShellLab(): Promise<{ script: string; css: string;
       onResolve(options: { filter: RegExp }, callback: (args: { path: string }) => unknown): void;
       onLoad(options: { filter: RegExp; namespace?: string }, callback: (args: { path: string }) => unknown): void;
     }) {
-      build.onResolve({ filter: /^(next\/(link|navigation|dynamic)|wagmi|\.\/PrivyFlow)$/ }, (args) => ({ path: args.path, namespace: 'shell-mock' }));
+      build.onResolve({ filter: /^(next\/(link|navigation|dynamic)|wagmi|@tanstack\/react-query|\.\/(PrivyFlow|BridgeTracker))$/ }, (args) => ({ path: args.path, namespace: 'shell-mock' }));
       build.onResolve({ filter: /^@\// }, (args) => mocks[args.path] ? { path: args.path, namespace: 'shell-mock' } : { path: resolveSource(args.path) });
       build.onLoad({ filter: /.*/, namespace: 'shell-mock' }, (args) => ({ contents: mocks[args.path], loader: 'tsx', resolveDir: appRoot }));
     } }],

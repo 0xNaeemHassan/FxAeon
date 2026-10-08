@@ -486,6 +486,21 @@ test('keyboard focus shows one accent ring on the header, dock, rows and choices
   expect(caret.caret).toBe(caret.expected);
 });
 
+test('History first loads in its own feed layout, and names a wallet provider that never starts', async ({ page }) => {
+  await open(page);
+  await setLab(page, { readyTimeoutMs: 800, path: '/history-page', wallet: STATES[0][1] });
+  const feed = page.getByRole('region', { name: 'Transaction history' });
+  await expect(feed).toBeVisible();
+  await expect(feed).toHaveAttribute('aria-busy', 'true');
+  // The waiting filters keep their place but take no focus or taps.
+  expect(await feed.locator('select, input, button').evaluateAll((controls) => controls.length > 0 && controls.every((control) => control.closest('[inert]')))).toBe(true);
+  await expect(page.locator('main .animate-pulse')).toHaveCount(0);
+  await expect(page.getByRole('alert')).toContainText('Wallet provider did not load');
+  await expect(feed).toHaveCount(0);
+  await setLab(page, { wallet: STATES[1][1] });
+  await expect(page.locator('main').getByRole('button', { name: 'Connect wallet' })).toBeVisible();
+});
+
 test('the dock names Portfolio, matching its page, and every label fits a 320px dock in each theme', async ({ page }) => {
   await open(page, { width: 320, height: 700 });
   await setLab(page, { wallet: STATES[2][1] });

@@ -9,6 +9,7 @@ import DocsPage from '@/app/docs/page';
 import NotFound from '@/app/not-found';
 import RouteError from '@/app/error';
 import LoginPage from '@/app/login/page';
+import HistoryPage from '@/app/history/page';
 
 /** The shell lab state lives on globalThis so the mocked wallet and router
  * modules (see e2e/overlay-specs/app-shell.spec.ts) read the same store. */
@@ -24,6 +25,7 @@ const lab = (globalThis as typeof globalThis & { __shellLab: ShellLab }).__shell
 
 function Page({ path }: { path: string }) {
   if (path === '/history') return <AppShell title="History"><p>Activity</p></AppShell>;
+  if (path === '/history-page') return <HistoryPage />;
   if (path === '/trade') {
     return <AppShell><div className="trade-workspace"><header className="trade-page-heading"><div><h1>Trade</h1></div></header><p>Ticket</p></div></AppShell>;
   }
