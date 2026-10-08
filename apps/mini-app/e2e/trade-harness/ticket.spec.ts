@@ -213,10 +213,17 @@ test.describe('the leverage slider is the debt/your-share split', () => {
       expect(target.width, `${width}px`).toBeGreaterThan(ticket.width * 0.72);
       expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth), `${width}px`).toBeLessThanOrEqual(0);
       // The range ends and the split caption share one row, inside the ticket.
-      const bounds = (await page.locator('[data-leverage-bounds]').boundingBox())!;
-      expect(bounds.x).toBeGreaterThanOrEqual(ticket.x - 0.5);
-      expect(bounds.x + bounds.width).toBeLessThanOrEqual(ticket.x + ticket.width + 0.5);
-      expect(bounds.height, `${width}px caption stays on one line`).toBeLessThan(24);
+      // Read once the resize has settled: a slow runner can measure mid-layout.
+      await expect.poll(async () => {
+        const bounds = (await page.locator('[data-leverage-bounds]').boundingBox())!;
+        const settled = (await page.locator('.trade-ticket').boundingBox())!;
+        return {
+          insideLeft: bounds.x >= settled.x - 0.5,
+          insideRight: bounds.x + bounds.width <= settled.x + settled.width + 0.5,
+          oneLine: bounds.height < 24,
+        };
+      }, { message: `${side} ${width}px: the range row sits inside the ticket on one line` })
+        .toEqual({ insideLeft: true, insideRight: true, oneLine: true });
     }
   });
 
