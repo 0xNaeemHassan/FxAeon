@@ -610,7 +610,9 @@ test.describe("browser wallet connection", () => {
   test("Move keeps recipient editable and centralizes wallet connection in review", async ({ page, requests }) => {
     await page.goto("/move", { waitUntil: "domcontentloaded" });
     const recipient = page.getByText(/^Recipient on (Ethereum|Base)$/).locator("xpath=../..");
-    await expect(recipient.getByText("Connect wallet", { exact: true })).toBeVisible();
+    // The recipient row is a status, not a second connect control.
+    await expect(recipient.getByText("Not connected", { exact: true })).toBeVisible();
+    await expect(recipient.getByText("Connect wallet", { exact: true })).toHaveCount(0);
     await expect(page.locator(".reviewTrigger").getByRole("button", { name: "Connect wallet", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Connect wallet for recipient", exact: true })).toHaveCount(0);
     // The shortest phone layout keeps derived route metadata out of the first
