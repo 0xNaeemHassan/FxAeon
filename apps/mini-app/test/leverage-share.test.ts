@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { debtShare, leverageAtShare, leverageDebtLabel, leverageForShare, splitPercents, splitTicks, stepLeverage, wholeLeverageTicks } from '../src/lib/leverageShare';
+import { debtShare, leverageAtShare, leverageDebtLabel, leverageForShare, SPLIT_TICK_MIN_GAP_PX, SPLIT_TICK_THUMB_CLEARANCE_PX, splitPercents, splitTicks, splitTicksOnTrack, stepLeverage, wholeLeverageTicks } from '../src/lib/leverageShare';
 
 const BOUNDS = { long: { min: 1.1, max: 6.1 }, short: { min: 0.1, max: 6 } } as const;
 const tenthsBetween = (min: number, max: number) => Array.from({ length: Math.round((max - min) * 10) + 1 }, (_, index) => Number((min + index / 10).toFixed(1)));
@@ -122,4 +122,51 @@ test('ticks sit at each whole leverage’s debt share and stop before they crowd
   for (const side of ['long', 'short'] as const) {
     for (const tick of splitTicks(side, 0.1, 30)) assert.equal(tick.share, debtShare(side, tick.leverage));
   }
+  // The range's start is not a whole ×: a first tick that would crowd it is skipped, and the scale carries on.
+  assert.deepEqual(leverages('long', 1.95, 6.1), [3, 4, 5]);
+});
+
+test('on a measured track, visible ticks keep 14px apart and stay clear of the range ends', () => {
+  const ticks = (side: 'long' | 'short', min: number, max: number, width: number) => splitTicksOnTrack(side, min, max, min, width, 13).map((tick) => tick.leverage);
+  // The ticket's track at a 320px phone is about 260px, at 390px about 330px.
+  assert.deepEqual(ticks('long', 1.1, 6.1, 260), [2, 3, 4]);
+  assert.deepEqual(ticks('long', 1.1, 6.1, 330), [2, 3, 4, 5]);
+  assert.deepEqual(ticks('short', 0.1, 6, 260), [1, 2, 3]);
+  assert.deepEqual(ticks('long', 1.9, 6.1, 260), [3, 4]);
+  // An unmeasured track draws none.
+  assert.deepEqual(splitTicksOnTrack('long', 1.1, 6.1, 2, 0, 13), []);
+  assert.deepEqual(splitTicksOnTrack('long', 1.1, 6.1, 2, Number.NaN, 13), []);
+  for (const side of ['long', 'short'] as const) {
+    const [min, max] = side === 'long' ? [1.1, 9.5] : [0.1, 9];
+    for (let width = 180; width <= 640; width += 7) {
+      const drawn = splitTicksOnTrack(side, min, max, min, width, 13).map((tick) => tick.share * width);
+      for (let index = 1; index < drawn.length; index += 1) {
+        assert.ok(drawn[index] - drawn[index - 1] >= SPLIT_TICK_MIN_GAP_PX, `${side} at ${width}px: ${drawn.join(', ')}`);
+      }
+      for (const x of drawn) {
+        assert.ok(x - debtShare(side, min) * width >= SPLIT_TICK_MIN_GAP_PX && debtShare(side, max) * width - x >= SPLIT_TICK_MIN_GAP_PX / 2, `${side} at ${width}px clears the range ends`);
+      }
+    }
+  }
+});
+
+test('a tick within 10px of the thumb’s edge steps aside, and comes back as the thumb moves away', () => {
+  const near = (leverage: number, width = 330) => splitTicksOnTrack('long', 1.1, 6.1, leverage, width, 13)
+    .filter((tick) => tick.nearThumb).map((tick) => tick.leverage);
+  // At 2.9× the thumb's centre is 4px from the 3× tick: it hides, while 2× and 4× (about 50px and 31px away) stay.
+  assert.deepEqual(near(2.9), [3]);
+  assert.deepEqual(near(2.8), [3]);
+  assert.deepEqual(near(2), [2]);
+  assert.deepEqual(near(1.5), []);
+  // Moving away, the clearance (13px radius + 10px) is measured on the track, not in ×.
+  for (const leverage of [2.4, 3.5, 4.5]) {
+    for (const tick of splitTicksOnTrack('long', 1.1, 6.1, leverage, 330, 13)) {
+      const distance = Math.abs(tick.share - debtShare('long', leverage)) * 330;
+      assert.equal(tick.nearThumb, distance < 13 + SPLIT_TICK_THUMB_CLEARANCE_PX, `${tick.leverage}× with the thumb at ${leverage}×`);
+    }
+  }
+  // A typed leverage outside the range puts the thumb at the bound it is drawn at: 6.1× sits 12px from 5×.
+  assert.deepEqual(splitTicksOnTrack('long', 1.1, 6.1, 0, 330, 13).filter((tick) => tick.nearThumb), []);
+  assert.deepEqual(near(40), [5]);
+  assert.deepEqual(near(6.1), [5]);
 });

@@ -29,7 +29,8 @@
    share right of it, in the position card's colours. Beyond the live range the
    split carries on thinned and dimmed: drawn, never selectable. --lever-ground
    is the surface the slider sits on (a card's surface unless its host says
-   otherwise), so ticks and the dimmed ends read as cut into the bar. */
+   otherwise), so the dimmed ends read as cut into the bar and the ticks'
+   ink stays quiet against it. */
 .slider {
   position: relative;
   height: 44px;
@@ -54,15 +55,27 @@
 .sliderDebt, .sliderYours { display: block; height: 100%; }
 .sliderDebt { flex: 0 0 calc(var(--share) * 100%); background: color-mix(in srgb, var(--text) 24%, transparent); }
 .sliderYours { flex: 1 1 auto; background: linear-gradient(90deg, var(--mint), var(--brand-coral)); }
+/* Whole-× ticks are hairlines standing on the bar's upper edge, in an ink
+   mixed from the text and the ground: they mark the scale without ever
+   cutting the split, and step aside near the thumb (see LeverageSplitRange). */
+.sliderTicks {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 0;
+  pointer-events: none;
+}
 .sliderTick {
   position: absolute;
-  top: 0;
-  bottom: 0;
+  bottom: 4px;
   left: calc(var(--at) * 100%);
-  width: 2px;
-  background: color-mix(in srgb, var(--lever-ground, var(--surface)) 55%, transparent);
-  transform: translateX(-50%);
+  width: 1px;
+  height: 5px;
+  margin-left: -0.5px;
+  background: color-mix(in srgb, var(--text) 40%, var(--lever-ground, var(--surface)));
 }
+.sliderTick[data-near-thumb] { opacity: 0; }
 .sliderOff {
   --ground: var(--lever-ground, var(--surface));
   position: absolute;
@@ -111,14 +124,16 @@
   .sliderThumb { transition: box-shadow var(--dur-base) var(--ease-out); }
   .slider:not([data-dragging]) .sliderThumb { transition: left var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out); }
   .slider:not([data-dragging]) .sliderDebt { transition: flex-basis var(--dur-base) var(--ease-out); }
-  .slider:not([data-dragging]) .sliderOff,
-  .slider:not([data-dragging]) .sliderTick { transition: left var(--dur-base) var(--ease-out), width var(--dur-base) var(--ease-out); }
+  .slider:not([data-dragging]) .sliderOff { transition: left var(--dur-base) var(--ease-out), width var(--dur-base) var(--ease-out); }
+  /* A tick fades out as the thumb nears and back as it leaves, and glides to the other side's split. */
+  .sliderTick { transition: opacity var(--dur-fast) var(--ease-out), left var(--dur-base) var(--ease-out); }
 }
 @media (forced-colors: active) {
   .sliderBar { border: 1px solid CanvasText; }
   .sliderDebt { background: GrayText; forced-color-adjust: none; }
   .sliderYours { background: Highlight; forced-color-adjust: none; }
-  .sliderTick, .sliderOff { background: Canvas; forced-color-adjust: none; opacity: 0.6; }
+  .sliderOff { background: Canvas; forced-color-adjust: none; opacity: 0.6; }
+  .sliderTick { background: CanvasText; forced-color-adjust: none; }
   .sliderThumb { border: 2px solid CanvasText; background: Canvas; box-shadow: none; forced-color-adjust: none; }
   .slider:not([data-pointer-focus]) .sliderInput:focus-visible ~ .sliderThumb { outline: 2px solid Highlight; outline-offset: 2px; }
 }

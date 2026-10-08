@@ -156,14 +156,41 @@ test.describe('the ticket’s outcome preview', () => {
   });
 });
 
+/** Two frames, so a change's transitions (0.01ms under reduced motion) have run before anything is measured. */
+const nextFrames = (page: Page) => page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
 /** The drawn bar and thumb, and the screen x of a share along the bar. */
 async function track(page: Page) {
   const root = slider(page).locator('..');
-  const bar = (await root.locator('div[aria-hidden="true"]').boundingBox())!;
+  // The slider draws two layers: the split bar, then the ticks above it.
+  const bar = (await root.locator(':scope > div[aria-hidden="true"]').first().boundingBox())!;
   const thumb = root.locator('span[aria-hidden="true"]');
   return { bar, thumb, y: bar.y + bar.height / 2, at: (share: number) => bar.x + share * bar.width };
 }
+/**
+ * The drawn ticks, measured against the bar and the thumb. Two frames pass
+ * first: the track is re-measured after a resize, and even reduced motion's
+ * 0.01ms transitions report their starting value until a frame has run.
+ */
+async function tickLayout(page: Page) {
+  await nextFrames(page);
+  return slider(page).evaluate((input) => {
+    const root = input.parentElement!;
+    const [barLayer, tickLayer] = Array.from(root.querySelectorAll<HTMLElement>(':scope > div[aria-hidden="true"]'));
+    const bar = barLayer.getBoundingClientRect();
+    const thumb = root.querySelector(':scope > span[aria-hidden="true"]')!.getBoundingClientRect();
+    return {
+      bar: { top: bar.top, bottom: bar.bottom },
+      thumbCentre: thumb.left + thumb.width / 2,
+      thumbRadius: thumb.width / 2,
+      ticks: Array.from(tickLayer.children, (tick) => {
+        const box = tick.getBoundingClientRect();
+        return { x: box.left + box.width / 2, top: box.top, bottom: box.bottom, width: box.width, near: tick.hasAttribute('data-near-thumb'), opacity: Number(getComputedStyle(tick).opacity) };
+      }),
+    };
+  });
+}
 async function thumbCentre(thumb: Locator) {
+  await nextFrames(thumb.page());
   const box = (await thumb.boundingBox())!;
   return box.x + box.width / 2;
 }
@@ -287,12 +314,44 @@ test.describe('the leverage slider is the debt/your-share split', () => {
     });
   });
 
-  test('the boundary glides to a typed leverage unless reduced motion is asked for', async ({ page }) => {
+  test('whole-× ticks stand on the bar’s upper edge, keep 14px apart and step aside near the thumb', async ({ page }) => {
+    await mount(page);
+    for (const width of [320, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const leverage of ['2.9', '4.6', '2']) {
+        await leverageField(page).fill(leverage);
+        await expect.poll(async () => (await tickLayout(page)).ticks.length, `${width}px`).toBeGreaterThan(1);
+        const layout = await tickLayout(page);
+        let lastVisible = Number.NEGATIVE_INFINITY;
+        for (const tick of layout.ticks) {
+          // A hairline on the bar's upper edge: it never cuts into the split.
+          expect(tick.bottom, `${width}px ${leverage}×`).toBeLessThanOrEqual(layout.bar.top + 0.5);
+          expect(tick.width).toBeLessThanOrEqual(1.5);
+          const clearance = Math.abs(tick.x - layout.thumbCentre) - layout.thumbRadius;
+          if (clearance < 9) expect({ near: tick.near, opacity: tick.opacity }, `${width}px ${leverage}×: tick ${clearance.toFixed(1)}px from the thumb`).toEqual({ near: true, opacity: 0 });
+          if (clearance > 11) expect({ near: tick.near, opacity: tick.opacity }, `${width}px ${leverage}×: tick ${clearance.toFixed(1)}px from the thumb`).toEqual({ near: false, opacity: 1 });
+          if (tick.opacity === 0) continue;
+          expect(tick.x - lastVisible, `${width}px ${leverage}×: visible ticks keep 14px apart`).toBeGreaterThanOrEqual(13.5);
+          lastVisible = tick.x;
+        }
+      }
+      // At 2.9× the thumb sits just short of 3×: that tick alone steps aside.
+      await leverageField(page).fill('2.9');
+      expect((await tickLayout(page)).ticks.filter((tick) => tick.near)).toHaveLength(1);
+    }
+  });
+
+  test('the boundary glides to a typed leverage, and ticks fade aside, unless reduced motion is asked for', async ({ page }) => {
     await mount(page, { reducedMotion: 'no-preference' });
     const thumb = slider(page).locator('..').locator('span[aria-hidden="true"]');
+    const tick = slider(page).locator('..').locator(':scope > div[aria-hidden="true"]').nth(1).locator('i').first();
+    await expect(tick).toBeAttached();
     expect(await thumb.evaluate((element) => getComputedStyle(element).transitionProperty)).toContain('left');
+    expect(await tick.evaluate((element) => getComputedStyle(element).transitionProperty)).toContain('opacity');
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    // The app's reduced-motion reset leaves transitions at 0.01ms: instant, never a glide.
-    expect(await thumb.evaluate((element) => getComputedStyle(element).transitionDuration.split(',').every((duration) => parseFloat(duration) < 0.001))).toBe(true);
+    // The app's reduced-motion reset leaves transitions at 0.01ms: instant, never a glide or a fade.
+    for (const element of [thumb, tick]) {
+      expect(await element.evaluate((node) => getComputedStyle(node).transitionDuration.split(',').every((duration) => parseFloat(duration) < 0.001))).toBe(true);
+    }
   });
 });

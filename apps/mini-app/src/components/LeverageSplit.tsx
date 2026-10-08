@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
-import { debtShare, leverageAtShare, splitPercents, splitTicks, stepLeverage, type LeverageSide } from '@/lib/leverageShare';
+import { debtShare, leverageAtShare, splitPercents, splitTicksOnTrack, stepLeverage, type LeverageSide } from '@/lib/leverageShare';
 import { haptic } from '@/lib/telegram';
 import styles from './LeverageSplit.module.css';
 
@@ -85,8 +85,10 @@ function crossesWholeLeverage(from: number, to: number): boolean {
  * the position's value, the debt (quiet) left of the thumb and the trader's
  * share (the accent) right of it, so the thumb sits where the debt ends, at
  * debtShare(side, L). Leverage outside the live range lies on thinned, dimmed
- * ends the thumb cannot enter, and faint ticks at each whole × show why every
- * extra × moves the boundary less. The range ends are labelled where they sit.
+ * ends the thumb cannot enter. Faint hairline ticks stand on the bar's upper
+ * edge at each whole × (never cutting the split), showing why every extra ×
+ * moves the boundary less: they keep at least 14px apart on the measured track
+ * and step aside near the thumb. The range ends are labelled where they sit.
  *
  * Semantics and keys come from a native range input in leverage units, laid
  * transparently over the drawing. Assistive technology gets a real slider
@@ -124,6 +126,25 @@ export function LeverageSplitRange({ id, label, side, debtLabel, value, leverage
   const valueRef = useRef(value);
   valueRef.current = value;
   const [dragging, setDragging] = useState(false);
+  // Tick spacing and the thumb's clearance are in pixels, so the drawn track
+  // is measured (layout sizes, unaffected by any press transform). Until it
+  // is, no ticks are drawn.
+  const [track, setTrack] = useState<{ width: number; thumbRadius: number } | null>(null);
+  useEffect(() => {
+    const bar = barRef.current;
+    if (!bar) return undefined;
+    const measure = () => {
+      const width = bar.offsetWidth;
+      const thumbRadius = (thumbRef.current?.offsetWidth ?? 0) / 2;
+      setTrack((current) => current?.width === width && current.thumbRadius === thumbRadius ? current : { width, thumbRadius });
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(bar);
+    return () => observer.disconnect();
+  }, []);
+  const ticks = track ? splitTicksOnTrack(side, min, max, value, track.width, track.thumbRadius) : [];
   const { debt } = splitPercents(side, value);
   const shares = {
     '--share': debtShare(side, value),
@@ -224,8 +245,10 @@ export function LeverageSplitRange({ id, label, side, debtLabel, value, leverage
     >
       <div ref={barRef} className={styles.sliderBar} aria-hidden="true">
         <i className={styles.sliderDebt} /><i className={styles.sliderYours} />
-        {splitTicks(side, min, max).map((tick) => <i key={tick.leverage} className={styles.sliderTick} style={{ '--at': tick.share } as CSSProperties} />)}
         <i className={styles.sliderOff} data-end="min" /><i className={styles.sliderOff} data-end="max" />
+      </div>
+      <div className={styles.sliderTicks} aria-hidden="true">
+        {ticks.map((tick) => <i key={tick.leverage} className={styles.sliderTick} data-near-thumb={tick.nearThumb || undefined} style={{ '--at': tick.share } as CSSProperties} />)}
       </div>
       <input
         ref={inputRef}

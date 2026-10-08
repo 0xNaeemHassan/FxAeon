@@ -162,10 +162,11 @@ test('the leverage slider is a native slider in leverage units whose track draws
   // The thumb sits at the debt share, and the range's ends where their leverages fall on the split.
   const style = /class="test-slider"[^>]*style="([^"]+)"/.exec(long)![1];
   assert.equal(style, `--share:${debtShare('long', 2.8)};--min-share:${debtShare('long', 1.1)};--max-share:${debtShare('long', 6.1)}`);
-  // Faint ticks at whole leverages, each at its own share; drawing only, hidden from assistive technology.
-  const ticks = [...long.matchAll(/class="test-sliderTick" style="--at:([^"]+)"/g)].map((match) => Number(match[1]));
-  assert.deepEqual(ticks, [2, 3, 4, 5].map((leverage) => debtShare('long', leverage)));
-  assert.match(long, /<div class="test-sliderBar" aria-hidden="true">/);
+  // The bar is the split alone: nothing is ever cut into it. Ticks live on their own layer, drawing
+  // only, and need the measured track for their spacing, so none is drawn before layout.
+  assert.match(long, /<div class="test-sliderBar" aria-hidden="true"><i class="test-sliderDebt"><\/i><i class="test-sliderYours"><\/i><i class="test-sliderOff" data-end="min"><\/i><i class="test-sliderOff" data-end="max"><\/i><\/div>/);
+  assert.match(long, /<div class="test-sliderTicks" aria-hidden="true"><\/div>/);
+  assert.doesNotMatch(long, /class="test-sliderTick"/);
   assert.match(long, /<span class="test-sliderThumb" aria-hidden="true"><\/span>/);
   // The range ends and the caption keep their row under the track.
   assert.equal(textOf(/<div class="test-bounds"[^>]*>(.*)<\/div>/.exec(long)![1]), '1.1×64% minted fxUSD · 36% yours at 2.8×, before fees6.1×');

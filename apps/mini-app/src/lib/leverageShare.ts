@@ -71,20 +71,47 @@ export function wholeLeverageTicks(min: number, max: number): number[] {
  * The split slider's faint ticks: whole leverages placed at their debt share.
  * Each extra × moves the boundary less, so the ticks close up toward the high
  * end; they stop once the next would sit nearer than `minGap` (a fraction of
- * the track) to the last, since the rest only get closer, and a tick that
- * would sit on the range's end is left to the end itself.
+ * the track) to the last, since the rest only get closer. A tick that would
+ * crowd either end of the live range is left to the end itself.
  */
 export function splitTicks(side: LeverageSide, min: number, max: number, minGap = 0.025): { leverage: number; share: number }[] {
   const ticks: { leverage: number; share: number }[] = [];
+  const start = debtShare(side, min);
   const end = debtShare(side, max);
-  let last = debtShare(side, min);
+  let last = start;
   for (const leverage of wholeLeverageTicks(min, max)) {
     const share = debtShare(side, leverage);
-    if (share - last < minGap) break;
+    if (share - last < minGap) {
+      // The range's start is not a whole ×, so only the first tick can sit too close to it.
+      if (last === start) continue;
+      break;
+    }
     if (end - share >= minGap / 2) ticks.push({ leverage, share });
     last = share;
   }
   return ticks;
+}
+
+/** Visible ticks keep at least this much room between them on the drawn track. */
+export const SPLIT_TICK_MIN_GAP_PX = 14;
+/** A tick this close to the thumb's edge steps aside, so nothing clutters the thumb. */
+export const SPLIT_TICK_THUMB_CLEARANCE_PX = 10;
+
+/**
+ * The ticks for a track measured at `trackPx` with the thumb at `leverage`:
+ * spaced at least SPLIT_TICK_MIN_GAP_PX apart (never closer than the 2.5%
+ * rule either), each marked when it falls within SPLIT_TICK_THUMB_CLEARANCE_PX
+ * of the thumb's edge. An unmeasured track draws none.
+ */
+export function splitTicksOnTrack(
+  side: LeverageSide, min: number, max: number, leverage: number, trackPx: number, thumbRadiusPx: number,
+): { leverage: number; share: number; nearThumb: boolean }[] {
+  if (!Number.isFinite(trackPx) || trackPx <= 0) return [];
+  const thumb = debtShare(side, Math.min(max, Math.max(min, leverage)));
+  return splitTicks(side, min, max, Math.max(0.025, SPLIT_TICK_MIN_GAP_PX / trackPx)).map((tick) => ({
+    ...tick,
+    nearThumb: Math.abs(tick.share - thumb) * trackPx < thumbRadiusPx + SPLIT_TICK_THUMB_CLEARANCE_PX,
+  }));
 }
 
 /** What the debt is: a long mints fxUSD against its collateral; a short borrows the market's asset. */
