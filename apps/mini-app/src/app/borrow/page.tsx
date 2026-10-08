@@ -49,6 +49,7 @@ import presentation from '@/components/BorrowWorkspace.module.css';
 import { ActionWorkspace } from '@/components/ProductLayout';
 import { borrowSelectionIsActionable } from './selectionEligibility';
 import { calculatePositionUsdValuation, formatUsdCents } from '@/lib/positionValuation';
+import { positionCollateralSymbol } from '@/lib/positionUnits';
 import { priceKeyForSymbol } from '@/lib/prices';
 import { resetTransactionAmounts } from '@/lib/transactionState';
 import { ValueOrSkeleton } from '@/components/MissingValue';
@@ -729,5 +730,5 @@ function PositionSummary({ position }: { position: UiPosition }) {
     ]} />
   </div>;
 }
-function formatPositionCollateral(position: UiPosition): string { return `${groupDigits(formatAmount(position.info.rawColls, positionCollateralDecimals(position)))} ${position.info.rawCollsToken}`; }
+function formatPositionCollateral(position: UiPosition): string { return `${groupDigits(formatAmount(position.info.rawColls, positionCollateralDecimals(position)))} ${positionCollateralSymbol(position)}`; }
 function formatPositionDebt(position: UiPosition): string { return `${groupDigits(formatAmount(position.info.rawDebts, positionDebtDecimals(position)))} ${position.info.rawDebtsToken}`; }

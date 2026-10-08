@@ -24,6 +24,7 @@ import { MAX_FX_SLIPPAGE_PERCENT, clampLeverage, leverageBoundsFor, planAdjustPo
 import { usePrivyWallet } from '@/lib/wallet';
 import styles from '@/components/trade-surfaces.module.css';
 import { groupDigits, positiveDecimal } from '@/lib/amount';
+import { positionCollateralSymbol } from '@/lib/positionUnits';
 import { DEFAULT_SLIPPAGE_PERCENT, readSlippagePercent, SETTINGS_KEY, SETTINGS_UPDATED_EVENT } from '@/lib/settings';
 import { haptic } from '@/lib/telegram';
 import { resetTransactionAmounts } from '@/lib/transactionState';
@@ -374,7 +375,7 @@ export default function PositionsPage() {
   const selectedStale = selected ? positionIsStale(selected, positionState.failedGroups) : false;
   const selectedSplit = selected ? { side: selected.side, debtLabel: leverageDebtLabel(selected.side, selected.market) } : undefined;
   const decisionBefore = useMemo(() => managerPosition ? [
-    { label: 'Collateral', value: `${groupDigits(formatAmount(managerPosition.info.rawColls, positionCollateralDecimals(managerPosition)))} ${managerPosition.info.rawCollsToken}` },
+    { label: 'Collateral', value: `${groupDigits(formatAmount(managerPosition.info.rawColls, positionCollateralDecimals(managerPosition)))} ${positionCollateralSymbol(managerPosition)}` },
     { label: 'Debt', value: `${groupDigits(formatAmount(managerPosition.info.rawDebts, positionDebtDecimals(managerPosition)))} ${managerPosition.info.rawDebtsToken}` },
   ] : undefined, [managerPosition]);
   const marketTokens = selected

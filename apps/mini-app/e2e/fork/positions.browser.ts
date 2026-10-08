@@ -24,6 +24,7 @@ import { getFxReadFacade } from '../../src/lib/fx/readFacade';
 import type { FxPublicClient } from '../../src/lib/fx/types';
 import { positionPoolAddress } from '../../src/lib/fx/policy';
 import { decodePositionRouterEvent, positionRouterEventMatchesRecipient } from '../../src/lib/positionRouterEvents';
+import { positionCollateralSymbol } from '../../src/lib/positionUnits';
 import { mainnet } from 'viem/chains';
 import { readReviewedTransactions as readReviewedTransactionsFromUi, type ReviewedTransaction } from './reviewedTransactions';
 
@@ -747,7 +748,8 @@ async function runProof(captureStage: string) {
     const assertCanonicalDetails = async (group: { market: 'ETH' | 'BTC'; side: 'long' | 'short' }, positionId: number, details: Locator): Promise<void> => {
       const { info, leverage } = await canonicalLeverage(group, positionId);
       for (const label of ['Collateral', 'Debt', 'Market price', 'Debt / collateral']) await expect(details.getByText(label, { exact: true })).toBeVisible();
-      await expect(details).toContainText(`${groupDigits(formatAmount(info.rawColls, info.rawCollsDecimals))} ${info.rawCollsToken}`);
+      // An ETH long's collateral is named for its stETH accounting, not the SDK's "ETH".
+      await expect(details).toContainText(`${groupDigits(formatAmount(info.rawColls, info.rawCollsDecimals))} ${positionCollateralSymbol({ ...group, info })}`);
       await expect(details).toContainText(`${groupDigits(formatAmount(info.rawDebts, info.rawDebtsDecimals))} ${info.rawDebtsToken}`);
       await expect(details).toContainText(`${leverage}× leverage`);
     };
