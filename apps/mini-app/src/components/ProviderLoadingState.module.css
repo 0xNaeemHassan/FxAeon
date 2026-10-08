@@ -7,9 +7,15 @@
 .identity { flex: 0 1 auto; width: 82px; min-width: 28px; height: 10px; border-radius: var(--radius-full); }
 .themeMark { width: 18px; height: 18px; border-radius: 50%; }
 
+/* The content area: .app-content's width and the live scroll area's flex,
+   without its class name. */
+.content { min-height: 0; flex: 1 1 auto; overflow: hidden; }
+
 /* Portfolio's market cards (the frame MarketChart's mini card draws). */
 .marketCard {
   display: block;
+  min-width: 0;
+  overflow: hidden;
   border: 1px solid var(--hairline);
   border-radius: var(--radius-lg);
   background:
@@ -18,6 +24,7 @@
   box-shadow: var(--ring-inset);
   padding: 16px;
 }
+.marketCard :global(.market-chart-skeleton) { border-radius: 6px; }
 
 /* A route title drawn before the live one: plain, so the live title's light
    crosses it only once. */

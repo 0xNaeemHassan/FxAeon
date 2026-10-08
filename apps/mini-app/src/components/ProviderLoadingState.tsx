@@ -72,7 +72,8 @@ export function ProviderLoadingState() {
     <span className="sr-only">Loading FxAeon</span>
     <div className="app-workspace" data-route={pathname} aria-hidden="true" inert>
       <ShellTopBar pathname={pathname} />
-      <div className={`app-content app-content-tabs flex-1 ${UTILITY_ROUTES.includes(pathname) ? 'utility-content' : ''}`}>
+      {/* Shares .app-content's geometry but not the live page's scroll or card class names, which tests and scripts look up. */}
+      <div className={`app-content ${styles.content} ${UTILITY_ROUTES.includes(pathname) ? 'utility-content' : ''}`}>
         {portfolioRoute ? <PortfolioSilhouette /> : pathname === '/history' ? <HistorySilhouette /> : <>
           <div className={`skeleton ${styles.heading}`} />
           <div className={styles.workspace}>
@@ -228,7 +229,7 @@ function PortfolioSilhouette() {
             <a className="glass-press flex min-h-11 items-center gap-0.5 px-1.5 text-[13px] font-semibold text-mint">Open trade<ChevronRight className="h-3.5 w-3.5" aria-hidden="true" /></a>
           </div>
           <div className={`${account.market} grid grid-cols-2 gap-2.5`}>
-            {(['ETH', 'BTC'] as const).map((market) => <a key={market} className={`${styles.marketCard} portfolio-market-card`}>
+            {(['ETH', 'BTC'] as const).map((market) => <a key={market} className={styles.marketCard}>
               <div className="flex items-center justify-between gap-2">
                 <span className="flex items-center gap-2"><TokenIcon symbol={market === 'BTC' ? 'WBTC' : 'ETH'} size={28} /><strong className="text-[13px]">{market}</strong></span>
                 <span className="text-[11px] font-semibold"><span className="missing-value missing-value-md"><span className="missing-value-bar" /></span></span>

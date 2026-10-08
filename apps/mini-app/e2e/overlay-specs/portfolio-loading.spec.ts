@@ -50,7 +50,7 @@ async function portfolioLandmarks(page: Page) {
       networkTabs: box(content.querySelector('[class*="networkTabs"]')),
       assetRows: [...content.querySelectorAll('[class*="loadingRow"]')].map(box),
       historyRows: [...content.querySelectorAll('ul li')].map(box),
-      marketCards: [...content.querySelectorAll('.portfolio-market-card')].map(box),
+      marketCards: [...content.querySelectorAll('aside > section:first-child > div:last-child > a')].map(box),
       borrow: box(content.querySelector('[class*="rowGroup"]')),
       topBarActions: box(document.querySelector('.app-topbar-actions')),
       dock: box(document.querySelector('.tabbar')),
@@ -71,6 +71,11 @@ for (const width of [320, 393, 480, 1280]) {
     expect(fallback.figure).not.toBeNull();
     expect(fallback.actions).toHaveLength(4);
     expect(fallback.assetRows).toHaveLength(3);
+    expect(fallback.marketCards).toHaveLength(2);
+    // The fallback never answers the live page's own lookups (scroll area, market cards).
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await open(page, 'provider');
+    expect(await page.locator('.app-content-tabs, .portfolio-market-card, [data-shell-tabs], [data-header-wallet-control]').count()).toBe(0);
     // The wallet control keeps its height; its width only follows the label text.
     expect(fallback.topBarActions![3]).toBe(live.topBarActions![3]);
     expect(Math.abs(fallback.topBarActions![2] - live.topBarActions![2])).toBeLessThanOrEqual(8);
