@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowDownRight, ArrowUpRight, ChevronRight, Layers2 } from 'lucide-react';
+import { ChevronRight, Layers2 } from 'lucide-react';
 import { AppShell, Card } from '@/components/ui';
 import { TransactionSettings } from '@/components/TransactionSettings';
 import { TradeSections } from '@/components/ProductSections';
