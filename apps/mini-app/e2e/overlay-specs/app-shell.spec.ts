@@ -216,7 +216,8 @@ test('a route heading is never inside the route fade; heading-less content still
   expect(await fadingAncestors('.trade-page-heading h1')).toEqual([]);
   await setLab(page, { path: '/history' });
   expect(await fadingAncestors('.page-header h1')).toEqual([]);
-  expect(await page.locator('.app-content > p').evaluate((element) => element.getAnimations().map((animation) => (animation as CSSAnimation).animationName))).toContain('route-in');
+  // History's feed, below its heading, still arrives with the route fade.
+  expect(await page.locator('.app-content > :not(.page-header)').first().evaluate((element) => element.getAnimations().map((animation) => (animation as CSSAnimation).animationName))).toContain('route-in');
 });
 
 test('reduced motion shows plain headings with no sweep and a still canvas', async ({ page }) => {
@@ -488,7 +489,7 @@ test('keyboard focus shows one accent ring on the header, dock, rows and choices
 
 test('History first loads in its own feed layout, and names a wallet provider that never starts', async ({ page }) => {
   await open(page);
-  await setLab(page, { readyTimeoutMs: 800, path: '/history-page', wallet: STATES[0][1] });
+  await setLab(page, { readyTimeoutMs: 800, path: '/history', wallet: STATES[0][1] });
   const feed = page.getByRole('region', { name: 'Transaction history' });
   await expect(feed).toBeVisible();
   await expect(feed).toHaveAttribute('aria-busy', 'true');
@@ -499,6 +500,55 @@ test('History first loads in its own feed layout, and names a wallet provider th
   await expect(feed).toHaveCount(0);
   await setLab(page, { wallet: STATES[1][1] });
   await expect(page.locator('main').getByRole('button', { name: 'Connect wallet' })).toBeVisible();
+});
+
+/** The shell parts both the first-paint outline and the live shell draw. */
+async function shellLayout(page: Page) {
+  return page.evaluate(() => {
+    const rect = (selector: string) => {
+      const element = document.querySelector(selector);
+      if (!element) return null;
+      const box = element.getBoundingClientRect();
+      return [box.left, box.top, box.width, box.height].map((value) => Math.round(value));
+    };
+    const control = '.app-topbar-actions > span:first-child';
+    return {
+      brand: rect('.app-topbar > a'),
+      control: rect(control),
+      network: rect(`${control} .network-selector`),
+      identity: rect(`${control} > :last-child`),
+      // The identity placeholder's shapes: an avatar and an address bar.
+      shapes: [...document.querySelectorAll(`${control} > :last-child .skeleton`)].map((shape) => {
+        const box = shape.getBoundingClientRect();
+        return [box.left, box.top, box.width, box.height].map((value) => Math.round(value));
+      }),
+      toggle: rect('.app-topbar-actions > button'),
+      dock: [...document.querySelectorAll('.tabbar .nav-item-mobile')].map((item) => `${item.textContent}${item.classList.contains('nav-item-active') ? '*' : ''}`),
+      heading: rect('.app-content h1'),
+    };
+  });
+}
+
+test('the first-paint outline hands over to the live shell in place, at every phone width', async ({ page }) => {
+  await open(page);
+  for (const path of ['/portfolio', '/history']) {
+    for (const width of [320, 360, 390, 430]) {
+      await page.setViewportSize({ width, height: 844 });
+      await setLab(page, { path, outline: true, wallet: STATES[0][1] });
+      await expect(page.getByRole('status', { name: 'Loading FxAeon' })).toBeVisible();
+      const outline = await shellLayout(page);
+      await setLab(page, { outline: false });
+      await expect(page.locator('header.app-topbar')).toBeVisible();
+      const live = await shellLayout(page);
+      expect(live, `${path} at ${width}px`).toEqual(outline);
+      expect(live.shapes, 'the identity placeholder draws an avatar and an address').toHaveLength(2);
+    }
+  }
+  // History's feed was already drawn by the outline, so it takes its place without fading in again.
+  await setLab(page, { path: '/history', outline: true });
+  await setLab(page, { outline: false });
+  const feed = page.locator('.app-content > :not(.page-header)').first();
+  expect(await feed.evaluate((element) => element.getAnimations().map((animation) => (animation as CSSAnimation).animationName))).not.toContain('route-in');
 });
 
 test('the dock names Portfolio, matching its page, and every label fits a 320px dock in each theme', async ({ page }) => {

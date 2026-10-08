@@ -28,7 +28,7 @@ const store = `
       path: '/portfolio', overlay: 'none',
       wallet: { ready: false, authenticated: false, address: undefined, chainId: undefined, connectionVersion: 0, ensName: undefined },
     };
-    let snapshot = { path: state.path, overlay: state.overlay };
+    let snapshot = { path: state.path, overlay: state.overlay, outline: false };
     return {
       state,
       get path() { return state.path; },
@@ -39,7 +39,8 @@ const store = `
         if (patch.path) state.path = patch.path;
         if (patch.overlay) state.overlay = patch.overlay;
         if (patch.readyTimeoutMs) state.readyTimeoutMs = patch.readyTimeoutMs;
-        snapshot = { path: state.path, overlay: state.overlay };
+        if ('outline' in patch) state.outline = Boolean(patch.outline);
+        snapshot = { path: state.path, overlay: state.overlay, outline: Boolean(state.outline) };
         for (const listener of [...listeners]) listener();
       },
     };

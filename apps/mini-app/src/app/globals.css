@@ -559,8 +559,10 @@ details[open] > summary .disclosure-closed-only { display: none; }
    values inside a mounted route never replay it. A route heading is never
    inside the fade: the title is readable from its first frame, even when a
    busy phone stalls the fade mid-way, so a workspace that holds the heading
-   appears at once (its heading brings its own light). */
-.app-content > :not(.page-header):not(:has(:is([data-page-heading], .trade-page-heading))) {
+   appears at once (its heading brings its own light). Content marked
+   data-continued replaces the first-paint outline (ProviderLoadingState),
+   which already drew it, so it does not fade in a second time. */
+.app-content > :not(.page-header):not([data-continued]):not(:has(:is([data-page-heading], .trade-page-heading))) {
   animation: route-in var(--dur-slow) var(--ease-out) both;
 }
 .app-content > *:nth-child(2) { animation-delay: 40ms; }

@@ -155,8 +155,8 @@ function HeaderWallet() {
   if (wallet.ready) return <WalletProfile />;
   return (
     <span role="status" className={headerWalletControl.identityPlaceholder} data-settled={timedOut || undefined}>
-      <span className={headerWalletControl.placeholderAvatar} aria-hidden="true" />
-      <span className={headerWalletControl.placeholderName} aria-hidden="true" />
+      <span className={`skeleton ${headerWalletControl.placeholderAvatar}`} aria-hidden="true" />
+      <span className={`skeleton ${headerWalletControl.placeholderName}`} aria-hidden="true" />
       <span className="sr-only">{timedOut ? 'Wallet unavailable' : 'Loading wallet'}</span>
     </span>
   );

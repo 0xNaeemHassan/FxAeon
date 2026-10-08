@@ -117,8 +117,9 @@
   text-overflow: ellipsis;
 }
 
-/* While the wallet provider starts: the avatar and the address as quiet
-   shapes in the connected chip's place, in the app's placeholder tone. */
+/* While the wallet provider starts: the avatar and the address as skeleton
+   shapes in the connected chip's place, the same shapes the first-paint
+   outline (ProviderLoadingState) draws, so the handoff does not change them. */
 .identityPlaceholder {
   display: inline-flex;
   min-width: var(--identity-width);
@@ -130,28 +131,12 @@
 }
 .placeholderAvatar,
 .placeholderName,
-.control :global(.network-selector-placeholder) {
-  display: block;
-  flex: 0 0 auto;
-  background:
-    linear-gradient(100deg, transparent 25%, color-mix(in srgb, var(--mint) 34%, transparent) 50%, transparent 75%) 0 0 / 220% 100%,
-    color-mix(in srgb, var(--mut) 16%, transparent);
-  animation: header-placeholder 1.6s var(--ease-in-out) infinite;
-}
+.control :global(.network-selector-placeholder) { display: block; flex: 0 0 auto; }
 .placeholderAvatar { width: 22px; height: 22px; border-radius: 50%; }
-.placeholderName { width: calc(7 * var(--fs-caption)); height: 8px; border-radius: 999px; }
+.placeholderName { width: 82px; height: 10px; border-radius: 999px; }
 .control :global(.network-selector-placeholder) { width: 17px; height: 17px; border-radius: 50%; }
 /* A provider that never became ready is not loading anymore. */
 .identityPlaceholder[data-settled] > * { animation: none; background-position: 50% 0; }
-@keyframes header-placeholder {
-  from { background-position: 160% 0; }
-  to { background-position: -60% 0; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .placeholderAvatar,
-  .placeholderName,
-  .control :global(.network-selector-placeholder) { animation: none; background-position: 50% 0; }
-}
 
 /* Touch screens keep :hover after a tap; only a real pointer gets the tint. */
 @media (hover: hover) {

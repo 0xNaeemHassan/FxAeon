@@ -10,6 +10,7 @@ import NotFound from '@/app/not-found';
 import RouteError from '@/app/error';
 import LoginPage from '@/app/login/page';
 import HistoryPage from '@/app/history/page';
+import { ProviderLoadingState } from '@/components/ProviderLoadingState';
 
 /** The shell lab state lives on globalThis so the mocked wallet and router
  * modules (see e2e/overlay-specs/app-shell.spec.ts) read the same store. */
@@ -18,14 +19,13 @@ type ShellLab = {
   overlay: 'none' | 'dialog' | 'review';
   subscribe: (listener: () => void) => () => void;
   set: (patch: Record<string, unknown>) => void;
-  snapshot: () => { path: string; overlay: string };
+  snapshot: () => { path: string; overlay: string; outline: boolean };
 };
 
 const lab = (globalThis as typeof globalThis & { __shellLab: ShellLab }).__shellLab;
 
 function Page({ path }: { path: string }) {
-  if (path === '/history') return <AppShell title="History"><p>Activity</p></AppShell>;
-  if (path === '/history-page') return <HistoryPage />;
+  if (path === '/history') return <HistoryPage />;
   if (path === '/trade') {
     return <AppShell><div className="trade-workspace"><header className="trade-page-heading"><div><h1>Trade</h1></div></header><p>Ticket</p></div></AppShell>;
   }
@@ -63,8 +63,10 @@ function Page({ path }: { path: string }) {
 function Lab() {
   const state = useSyncExternalStore(lab.subscribe, lab.snapshot);
   return <>
-    {/* Routes remount their shell, as Next's per-page AppShell does. */}
-    <Page key={state.path} path={state.path} />
+    {/* Routes remount their shell, as Next's per-page AppShell does. The
+        outline is the first paint before the wallet providers load; turning
+        it off hands over to the live page in one commit, as the app does. */}
+    {state.outline ? <ProviderLoadingState /> : <Page key={state.path} path={state.path} />}
     {state.overlay === 'dialog' && <div role="dialog" aria-modal="true" aria-label="Lab sheet">Sheet</div>}
     {state.overlay === 'review' && <div data-review-viewport="">Review</div>}
   </>;

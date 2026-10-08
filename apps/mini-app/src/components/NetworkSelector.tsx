@@ -190,7 +190,7 @@ export default function NetworkSelector() {
   // placeholder holds the icon's place. Without a wallet, the two supported
   // networks stand in for "which network".
   const idleIcon = !wallet.ready
-    ? <span className="network-selector-placeholder" aria-hidden="true" />
+    ? <span className="network-selector-placeholder skeleton" aria-hidden="true" />
     : <span className="network-selector-chains" aria-hidden="true">{CHAINS.map((chain) => <ChainIcon key={chain.id} chainId={chain.id} size={15} />)}</span>;
   const switchError = failedTarget === null
     ? 'Switch failed.'

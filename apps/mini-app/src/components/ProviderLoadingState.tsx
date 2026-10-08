@@ -155,7 +155,7 @@ function ShellDock({ pathname }: { pathname: string }) {
         {TABS.map(({ href, labelKey, icon: Icon }, index) => <span key={href}
           className={`nav-item nav-item-mobile ${index === activeIndex ? 'nav-item-active text-mint' : 'text-mut'}`}>
           <span className="nav-icon"><Icon aria-hidden="true" className="h-5 w-5" strokeWidth={index === activeIndex ? 2.2 : 1.8} /></span>
-          <span>{t(labelKey)}</span>
+          <span className="nav-label">{href === '/' ? 'Portfolio' : t(labelKey)}</span>
         </span>)}
       </div>
     </div>
@@ -216,7 +216,7 @@ function PortfolioSilhouette() {
         </section>)}
         <section className={activity.section}>
           <div className="section-heading mb-2 flex items-center justify-between">
-            <h2 className="text-[16px] font-semibold tracking-tight text-[var(--text)]">History</h2>
+            <h2 className="text-[length:var(--fs-title)] font-semibold tracking-tight text-[var(--text)]">History</h2>
             <div className={activity.toolbar}><a>View all<ChevronRight size={14} aria-hidden="true" /></a><button type="button" tabIndex={-1} className={activity.refresh}><RefreshCw size={16} aria-hidden="true" /></button></div>
           </div>
           <ActivityRows count={3} />
@@ -225,7 +225,7 @@ function PortfolioSilhouette() {
       <aside className={portfolio.secondary}>
         <section>
           <div className="section-heading mb-2 flex items-center justify-between">
-            <h2 className="text-[16px] font-semibold tracking-tight text-[var(--text)]">Markets</h2>
+            <h2 className="text-[length:var(--fs-title)] font-semibold tracking-tight text-[var(--text)]">Markets</h2>
             <a className="glass-press flex min-h-11 items-center gap-0.5 px-1.5 text-[13px] font-semibold text-mint">Open trade<ChevronRight className="h-3.5 w-3.5" aria-hidden="true" /></a>
           </div>
           <div className={`${account.market} grid grid-cols-2 gap-2.5`}>
