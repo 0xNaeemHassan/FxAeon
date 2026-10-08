@@ -74,7 +74,7 @@ export const productSections: { id: string; title: string; aliases?: string[]; c
               <h3 id="earn-questions">Before you deposit</h3>
               <p><strong>Is the APY guaranteed?</strong><br />No. It is variable and shown for information from f(x) Protocol’s feed. It never changes what you sign.</p>
               <p><strong>What does the stability pool do?</strong><br />It holds fxUSD and USDC, keeps fxUSD near a dollar by buying it below the peg and selling it above, and supplies the funds that rebalance leveraged positions. Its depositors earn from position fees, wstETH staking, and USDC lending; fxSAVE compounds those rewards.</p>
-              <p><strong>How does a queued withdrawal work?</strong><br />It stays pending through the cooldown. When it is ready, Claim appears on Earn and on your Portfolio.</p>
+              <p><strong>How does a queued withdrawal work?</strong><br />It stays pending through the cooldown. When it is ready, Claim appears on Earn and on your Portfolio, and the claim pays out in fxUSD and USDC.</p>
               <p><strong>Can I use fxSAVE on Base?</strong><br />Yes. Move bridges fxUSD and fxSAVE between Ethereum and Base.</p>
   </> },
   { id: 'borrow', title: 'Borrow fxUSD', content: <>

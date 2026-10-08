@@ -612,7 +612,8 @@ function EarnActionEditor({ mode, token, onTokenChange, amount, onAmountChange, 
       <div className={presentation.receiveRow}><span>{instant && token !== 'fxUSDBasePool' ? 'Receive asset' : 'Withdrawal route'}</span>{picker}</div>
       {token === 'fxUSDBasePool'
         ? <p className={presentation.helper}>Redeems fxSAVE directly for base-pool shares, with no queued claim.</p>
-        : !instant && <p className={presentation.helper}>A queued withdrawal is claimed later. The claim preview shows the assets available to receive.</p>}
+        // The SDK queues fxUSD and USDC requests alike (requestRedeem); the claim pays both, so say so here.
+        : !instant && <p className={presentation.helper}>A queued withdrawal is claimed later and pays out in fxUSD and USDC, as the claim preview shows. Choose base-pool shares here to redeem directly instead.</p>}
     </>}
     {mode === 'claim' && (walletData ? <ClaimState data={walletData} /> : <p className={presentation.helper}>Connect the requesting wallet to view its withdrawal.</p>)}
   </div>;
