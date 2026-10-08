@@ -64,22 +64,12 @@
   box-shadow: 0 0 0 3px var(--surface-2);
 }
 .identityText { min-width: 0; flex: 1; }
-.marketLine { display: flex; min-width: 0; align-items: center; gap: 8px; }
+.marketLine { display: flex; min-width: 0; align-items: baseline; gap: 8px; }
 .market { color: var(--text); font-size: var(--fs-title); font-weight: 650; letter-spacing: -.02em; line-height: 1.15; }
-.side {
-  display: inline-flex;
-  min-height: 22px;
-  align-items: center;
-  border: 0;
-  border-radius: 999px;
-  padding: 3px 9px;
-  font-size: var(--fs-micro);
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  line-height: 1;
-}
-.long { background: var(--long-dim); color: var(--long); }
-.short { background: var(--short-dim); color: var(--short); }
+/* The side is a word in its own color beside the market, not a badge. */
+.side { font-size: var(--fs-small); font-weight: 650; line-height: 1.15; }
+.long { color: var(--long); }
+.short { color: var(--short); }
 .positionMeta {
   display: flex;
   min-width: 0;
