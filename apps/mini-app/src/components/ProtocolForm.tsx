@@ -664,7 +664,8 @@ function optionBalanceUsdContent(balance: TokenBalanceView | undefined, symbol: 
     return <span className="text-warn" aria-label="Price unavailable">Price unavailable</span>;
   }
   if (cents === null) return null;
-  if (cents === 0n && /[1-9]/.test(balance?.amount ?? '')) return '<$0.01';
+  // An empty balance is exactly $0.00, and "<$0.01" already says it is approximate: "≈" marks only a priced estimate.
+  if (cents === 0n) return /[1-9]/.test(balance?.amount ?? '') ? '<$0.01' : formatUsdCents(0n);
   return `≈ ${formatUsdCents(cents)}`;
 }
 
