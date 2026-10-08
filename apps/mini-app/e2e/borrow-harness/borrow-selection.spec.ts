@@ -350,6 +350,22 @@ test('the withdrawal field names how much collateral can leave before review', a
   await expect(hint).toHaveText('Your limit shows once prices are available');
 });
 
+test('a single collateral asset is named, not offered as a one-row picker', async ({ page }) => {
+  await mount(page);
+  await changeSnapshot(page, (harness) => {
+    const btc = { market: 'BTC', side: 'long', stale: false, info: { positionId: 23, rawColls: 10n ** 8n, rawCollsDecimals: 8, rawCollsToken: 'WBTC', rawDebts: 100n * 10n ** 18n, rawDebtsDecimals: 18, rawDebtsToken: 'fxUSD', currentLeverage: 1.5 } };
+    harness.shared = { ...harness.shared, positions: [btc] };
+  });
+  await page.getByRole('button', { name: 'Your positions' }).click();
+  await expect(page.getByText('BTC position #23')).toBeVisible();
+  await page.getByRole('group', { name: 'Manage collateral position' }).getByRole('button', { name: 'Add collateral', exact: true }).click();
+  await expect(page.getByLabel('Collateral to add', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Collateral asset', { exact: true })).toHaveCount(0);
+  // A new position still chooses among every collateral asset.
+  await page.getByRole('button', { name: 'New position' }).click();
+  await expect(page.getByLabel('Collateral asset', { exact: true }).locator('option')).toHaveCount(5);
+});
+
 test('a new position still requires positive starting collateral', async ({ page }) => {
   await mount(page);
   await page.getByLabel('fxUSD to borrow').fill('10');

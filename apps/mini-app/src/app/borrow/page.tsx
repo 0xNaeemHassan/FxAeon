@@ -582,9 +582,10 @@ export default function BorrowPage() {
     const remainingDebt = selected.info.rawDebts > repaid ? selected.info.rawDebts - repaid : 0n;
     return tokenAmountForUsdWad(withdrawableCollateralUsd(existingCollateralUsd, remainingDebt, debtRange), tokenDecimals(token), limitPrice(token));
   })();
-  const picker = <TokenSelect compact label={mode === 'manage' ? 'Receive collateral as' : 'Collateral asset'} value={token}
+  // A BTC position has one collateral asset: the field then names it rather than offering a one-row picker.
+  const picker = activeTokenOptions.length > 1 ? <TokenSelect compact label={mode === 'manage' ? 'Receive collateral as' : 'Collateral asset'} value={token}
     options={activeTokenOptions} onChange={changeToken} balances={wallet.address ? balanceSnapshot.balances : undefined}
-    balanceStatus={wallet.address ? balanceStatus : 'disconnected'} />;
+    balanceStatus={wallet.address ? balanceStatus : 'disconnected'} /> : undefined;
   const actionEditor = <div className={presentation.editor}>
     {!newPosition && <h2 className={presentation.formTitle}>{mode === 'mint' ? 'Add collateral or borrow' : 'Repay or withdraw'}</h2>}
     {/* Collateral first: the borrowing limit below is computed from it. */}
