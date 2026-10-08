@@ -620,7 +620,8 @@ export function LeverageField({
         </>
       ) : (
         <>
-          <FieldLabel htmlFor={inputId} hint={`${min.toFixed(1)}×–${max.toFixed(1)}×`}>{label}</FieldLabel>
+          {/* The live range is stated once, at the slider's ends, as on Trade. */}
+          <FieldLabel htmlFor={inputId}>{label}</FieldLabel>
           <div className={`${styles.rangeField} range-control p-3 ${invalid ? 'field-error' : ''}`}>
             <div className="flex items-center gap-3">
               {numberInput}
