@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ChevronRight, Layers2 } from 'lucide-react';
 import { AppShell, Card } from '@/components/ui';
 import { TransactionSettings } from '@/components/TransactionSettings';
@@ -18,6 +19,7 @@ import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
 import { ConfirmedPositionCards } from '@/components/ConfirmedPositionCards';
 import { deriveConfirmedPositionHint } from '@/lib/confirmedPositions';
 import { confirmedPositionHintKey } from '@/lib/confirmedPositionStorage';
+import { carryNewPosition } from '@/lib/positionBorn';
 import { AmountField, LeverageField, Segmented, TokenSelect, tokenBalanceFor, useWalletTokenBalances, type TokenBalanceView } from '@/components/ProtocolForm';
 import { leverageDebtLabel } from '@/lib/leverageShare';
 import { MAX_FX_SLIPPAGE_PERCENT, clampLeverage, estimatePlannedRouteCost, getEthereumClient, leverageBoundsFor, planIncreasePosition, prepareLeverageReview, readLeverageBounds, readSignatureRequiredDraft, restoreSignatureRequiredDraft, signatureDraftIdFromSearch, type LeverageBounds, type PlannedRoute, type TransactionExecutionResult } from '@/lib/fx';
@@ -62,6 +64,7 @@ function positionHref(market: UiMarket, side: UiSide, positionId: string | numbe
 }
 
 export default function TradePage() {
+  const router = useRouter();
   const wallet = usePrivyWallet();
   // Trade inputs are settled against the Ethereum FX token registry. Read
   // those funds before wallet network switching so review stays informative.
@@ -580,6 +583,26 @@ export default function TradePage() {
     ? [highlightedPosition, ...marketPositions.filter((position) => positionKey(position) !== highlightedPositionKey).slice(-1)]
     : marketPositions.slice(-2).reverse();
 
+  // A confirmed result usually leads to the new position: have its page ready.
+  useEffect(() => {
+    if (reviewStage === 'result') router.prefetch('/positions');
+  }, [reviewStage, router]);
+
+  // "View position" on the new position's result: once the chain has returned
+  // the position, the split chosen above travels into the position's own bar;
+  // until then its page shows the receipt's syncing row. A second tap while
+  // the page changes does nothing.
+  const viewingNewPositionRef = useRef(false);
+  const viewNewPosition = useCallback(({ key, href }: { key: string; href: string }) => {
+    if (viewingNewPositionRef.current) return;
+    viewingNewPositionRef.current = true;
+    carryNewPosition({
+      key,
+      readable: positionState.positions.some((position) => positionKey(position) === key),
+      navigate: () => router.push(href),
+    });
+  }, [positionState.positions, router]);
+
   const handleOpenComplete = async (execution: TransactionExecutionResult, route: PlannedRoute) => {
     if (execution.status !== 'confirmed' || execution.operation !== 'increasePosition' || execution.chainId !== 1
       || execution.walletAddress.toLowerCase() !== wallet.address?.toLowerCase()) return;
@@ -644,6 +667,7 @@ export default function TradePage() {
                 </>
               }
               onComplete={handleOpenComplete}
+              onViewNewPosition={viewNewPosition}
             />
           </Card>
         </div>

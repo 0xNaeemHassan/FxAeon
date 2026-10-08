@@ -103,7 +103,7 @@ test('swap titles cap at two symbols and then count the rest', () => {
 test('long and short position calls name the market, side, and open/add/reduce/close', () => {
   const opened = classify({ status: 'confirmed', call: { from: WALLET, to: FX_ROUTER_ADDRESS, input: openLong(0n) }, transfers: [tokenTransfer('wstETH', 'out', E18 / 2n, FX_ROUTER_ADDRESS)] });
   assert.equal(opened.kind, 'open');
-  assert.equal(opened.title, 'Opened ETH long');
+  assert.equal(opened.title, 'Opened ETH Long');
   assert.equal(opened.summary, 'You opened an ETH long with 0.5 wstETH.');
   assert.equal(opened.counterparty?.label, 'f(x) Router');
   assert.equal(opened.glyph, 'long');
@@ -111,28 +111,28 @@ test('long and short position calls name the market, side, and open/add/reduce/c
   assert.deepEqual(opened.position, { market: 'ETH', side: 'long' });
 
   const added = classify({ call: { from: WALLET, to: FX_ROUTER_ADDRESS, input: openLong(7n, 'BTC') }, transfers: [tokenTransfer('WBTC', 'out', 10_000_000n, FX_ROUTER_ADDRESS)] });
-  assert.equal(added.title, 'Added to BTC long');
+  assert.equal(added.title, 'Added to BTC Long');
   assert.equal(added.summary, 'You added 0.1 WBTC to your BTC long.');
 
   const closed = classify({ call: { from: WALLET, to: FX_ROUTER_ADDRESS, input: closeLong(POSITION_CLOSE_SENTINEL) }, transfers: [transfer({ direction: 'in', amountRaw: 6n * E18 / 10n, counterparty: FX_ROUTER_ADDRESS })] });
-  assert.equal(closed.title, 'Closed ETH long');
+  assert.equal(closed.title, 'Closed ETH Long');
   assert.equal(closed.summary, 'You closed your ETH long and received 0.6 ETH.');
   assert.deepEqual(closed.icons, ['ETH']);
 
   const reduced = classify({ call: { from: WALLET, to: FX_ROUTER_ADDRESS, input: closeLong(E18) }, transfers: [transfer({ direction: 'in', amountRaw: E18 / 5n, counterparty: FX_ROUTER_ADDRESS })] });
-  assert.equal(reduced.title, 'Reduced ETH long');
+  assert.equal(reduced.title, 'Reduced ETH Long');
 
   const shortOpen = encodeFunctionData({ abi: ABI, functionName: 'openOrAddShortPositionFlashLoan',
     args: [{ ...convertIn, tokenIn: token('fxUSD') }, positionPoolAddress('BTC', 'short'), 0n, 0n, '0x'] });
   const shortOpened = classify({ call: { from: WALLET, to: FX_ROUTER_ADDRESS, input: shortOpen }, transfers: [tokenTransfer('fxUSD', 'out', 500n * E18, FX_ROUTER_ADDRESS)] });
-  assert.equal(shortOpened.title, 'Opened BTC short');
+  assert.equal(shortOpened.title, 'Opened BTC Short');
   assert.equal(shortOpened.glyph, 'short');
   assert.equal(shortOpened.summary, 'You opened a BTC short with 500 fxUSD.');
 
   const shortClose = encodeFunctionData({ abi: ABI, functionName: 'closeOrRemoveShortPositionFlashLoan',
     args: [convertOut, positionPoolAddress('ETH', 'short'), 3n, POSITION_CLOSE_SENTINEL, 0n, '0x'] });
   const shortClosed = classify({ call: { from: WALLET, to: FX_ROUTER_ADDRESS, input: shortClose }, transfers: [tokenTransfer('fxUSD', 'in', 480n * E18, FX_ROUTER_ADDRESS)] });
-  assert.equal(shortClosed.title, 'Closed ETH short');
+  assert.equal(shortClosed.title, 'Closed ETH Short');
   assert.equal(shortClosed.glyph, 'short');
 });
 
@@ -140,35 +140,35 @@ test('a bare selector plus position NFT movements still identifies the position'
   const pool = positionPoolAddress('ETH', 'long');
   const opened = classify({ call: { from: WALLET, to: FX_ROUTER_ADDRESS, selector: '0xef9e1aa7' },
     nfts: [{ pool, tokenId: 12n, direction: 'in', counterparty: FX_ROUTER_ADDRESS }], transfers: [transfer({ direction: 'out', amountRaw: E18, counterparty: FX_ROUTER_ADDRESS })] });
-  assert.equal(opened.title, 'Opened ETH long');
+  assert.equal(opened.title, 'Opened ETH Long');
 
   const added = classify({ call: { from: WALLET, to: FX_ROUTER_ADDRESS, selector: '0xef9e1aa7' },
     nfts: [{ pool, tokenId: 12n, direction: 'out', counterparty: FX_ROUTER_ADDRESS }, { pool, tokenId: 12n, direction: 'in', counterparty: FX_ROUTER_ADDRESS }],
     transfers: [transfer({ direction: 'out', amountRaw: E18, counterparty: FX_ROUTER_ADDRESS })] });
-  assert.equal(added.title, 'Added to ETH long');
+  assert.equal(added.title, 'Added to ETH Long');
 
   const shortReduced = classify({ call: { from: WALLET, to: FX_ROUTER_ADDRESS, selector: '0xad0acfdc' },
     nfts: [{ pool: positionPoolAddress('BTC', 'short'), tokenId: 4n, direction: 'out', counterparty: FX_ROUTER_ADDRESS }],
     transfers: [tokenTransfer('fxUSD', 'in', E18, FX_ROUTER_ADDRESS)] });
-  assert.equal(shortReduced.title, 'Reduced BTC short');
+  assert.equal(shortReduced.title, 'Reduced BTC Short');
 
   // Without any calldata, the NFT alone still marks a new position.
   const fromNftOnly = classify({ nfts: [{ pool, tokenId: 9n, direction: 'in', counterparty: FX_ROUTER_ADDRESS }], transfers: [tokenTransfer('USDC', 'out', 100_000_000n, FX_ROUTER_ADDRESS)] });
-  assert.equal(fromNftOnly.title, 'Opened ETH long');
+  assert.equal(fromNftOnly.title, 'Opened ETH Long');
   assert.equal(fromNftOnly.summary, 'You opened an ETH long with 100 USDC.');
 });
 
 test('the protocol index outranks calldata, and the journal intent outranks both', () => {
   const closed = classify({ status: 'confirmed', protocol: [{ market: 'ETH', side: 'long', kind: 'close', positionId: 4 }],
     call: { from: WALLET, to: FX_ROUTER_ADDRESS, input: closeLong(E18) }, transfers: [] });
-  assert.equal(closed.title, 'Closed ETH long');
+  assert.equal(closed.title, 'Closed ETH Long');
   assert.equal(closed.position?.positionId, 4);
   const intent = classify({ status: 'confirmed', journal: { intent: 'Reduce position', operation: 'reducePosition', stepKind: 'action', to: FX_ROUTER_ADDRESS },
     protocol: [{ market: 'BTC', side: 'short', kind: 'close' }], transfers: [] });
-  assert.equal(intent.title, 'Reduced BTC short');
+  assert.equal(intent.title, 'Reduced BTC Short');
   // The index's Open also covers additions; calldata decides which.
   const added = classify({ protocol: [{ market: 'ETH', side: 'long', kind: 'open' }], call: { from: WALLET, to: FX_ROUTER_ADDRESS, input: openLong(5n) }, transfers: [] });
-  assert.equal(added.title, 'Added to ETH long');
+  assert.equal(added.title, 'Added to ETH Long');
 });
 
 test('fxSAVE deposits, withdrawals, queued withdrawals, and claims', () => {
@@ -298,7 +298,7 @@ test('approvals show the token, the spender, and whether the allowance is exact 
 
   const position = classify({ status: 'confirmed', journal: { stepKind: 'approval', operation: 'reducePosition', to: positionPoolAddress('ETH', 'short') },
     call: { from: WALLET, to: positionPoolAddress('ETH', 'short'), input: approve(12n) }, transfers: [] });
-  assert.equal(position.title, 'Approved ETH short position');
+  assert.equal(position.title, 'Approved ETH Short position');
   assert.equal(position.summary, 'You allowed the f(x) Router to manage your ETH short position.');
   assert.equal(position.approval, undefined);
 });

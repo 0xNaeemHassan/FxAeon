@@ -5,6 +5,7 @@ import { compactAddress } from './addressPresentation';
 import { FX_TOKENS } from '@/lib/fx/tokens';
 import { tokenSymbol } from '@/lib/fx/tokenPresentation';
 import { APPROVE, FX_MINT_ROUTER_ADDRESS, FX_ROUTER_ADDRESS, OFT_SEND, canonicalBridgeTarget, operationActionDestinations, positionPoolAddress } from '@/lib/fx/policy';
+import { openedPositionTitle, positionName } from './positionNaming';
 
 /**
  * Pure explanation of one wallet transaction for History.
@@ -407,6 +408,11 @@ function positionPhrase(position: Action['position']): string {
   return 'position';
 }
 
+/** A title names a position as its row does ("ETH Long"); sentences keep the phrase. */
+function positionTitle(position: Action['position']): string {
+  return position?.market && position.side ? positionName(position.market, position.side) : positionPhrase(position);
+}
+
 const withArticle = (phrase: string) => `${/^(?:ETH|[aeiou])/i.test(phrase) ? 'an' : 'a'} ${phrase}`;
 const marketIcon = (position: Action['position']) => position?.market === 'BTC' ? 'BTC' : position?.market === 'ETH' ? 'ETH' : undefined;
 
@@ -444,9 +450,12 @@ type Context = {
 
 function titleFor({ action, kind, done, flowsIn, flowsOut }: Context): string {
   const pick = (past: string, base: string) => done ? past : base;
-  const position = positionPhrase(action.position);
+  const position = positionTitle(action.position);
   switch (kind) {
-    case 'open': return pick(`Opened ${position}`, `Open ${position}`);
+    // The same words the confirmed result used for this transaction.
+    case 'open': return pick(action.position?.market && action.position.side
+      ? openedPositionTitle(action.position.market, action.position.side)
+      : `Opened ${position}`, `Open ${position}`);
     case 'increase': return pick(`Added to ${position}`, `Add to ${position}`);
     case 'reduce': return pick(`Reduced ${position}`, `Reduce ${position}`);
     case 'close': return pick(`Closed ${position}`, `Close ${position}`);

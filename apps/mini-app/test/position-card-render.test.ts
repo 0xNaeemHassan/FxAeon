@@ -109,7 +109,7 @@ test('a position row leads with identity and value; its details keep every figur
 
     const details = renderToStaticMarkup(React.createElement(ProtocolPositionDetails, { position: ethLong, headingId: 'manage-position-heading' }));
     assert.match(details, /<section class="test-details " data-position-details="ETH:long:42" aria-labelledby="manage-position-heading">/);
-    assert.match(details, /<h2 id="manage-position-heading" class="sr-only">ETH long · #42<\/h2>/);
+    assert.match(details, /<h2 id="manage-position-heading" class="sr-only">ETH Long · #42<\/h2>/);
     for (const [label, value] of [['Collateral', '1 wstETH'], ['Debt', '0.5 fxUSD'], ['Market price', ''], ['Debt / collateral', '']]) {
       assert.match(details, new RegExp(`<dt>${label.replace('/', '\\/')}</dt><dd>${value}`), `${label} is listed`);
     }

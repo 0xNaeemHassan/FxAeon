@@ -12,7 +12,7 @@ const entry = resolve(root, 'apps/mini-app/e2e/harness/trade-native-max-entry.ts
 
 const mocks: Record<string, string> = {
   'next/link': `import React from 'react'; export default ({children,...props}) => <a {...props}>{children}</a>;`,
-  'next/navigation': `export const useRouter = () => ({ push: () => {} });`,
+  'next/navigation': `export const useRouter = () => ({ push: () => {}, prefetch: () => {} });`,
   '@/components/ui': `import React from 'react'; export const AppShell = ({children}) => <main>{children}</main>; export const Card = ({children,...props}) => <section {...props}>{children}</section>;`,
   '@/components/ProductUI': `import React from 'react'; export const Disclosure = ({children}) => <>{children}</>;`,
   '@/components/ProductLayout': `import React from 'react'; export const ActionWorkspace = ({children,...props}) => <section {...props}>{children}</section>;`,

@@ -925,7 +925,8 @@ async function runProof(captureStage: string) {
       await assertCanonicalRow(scenario, positionId, positionCard);
       confirmedBeforeIndexer.add(key);
       await expect(page.getByRole('button', { name: 'View position', exact: true })).toBeVisible({ timeout: 180_000 });
-      await expect(page.getByRole('heading', { name: 'Confirmed', exact: true })).toBeVisible();
+      // The result names the new position as History will name this transaction.
+      await expect(page.getByRole('heading', { name: `Opened ${scenario.market} ${scenario.side === 'long' ? 'Long' : 'Short'}`, exact: true })).toBeVisible();
       const own = await client.readContract({ address: scenario.pool, abi: poolAbi, functionName: 'ownerOf', args: [BigInt(positionId)] });
       assert.equal(own.toLowerCase(), wallet.toLowerCase());
       const [collateral, debt] = await client.readContract({ address: scenario.pool, abi: poolAbi, functionName: 'getPosition', args: [BigInt(positionId)] });
@@ -1560,7 +1561,7 @@ async function runProof(captureStage: string) {
     assert.equal(closedPositions.length, scenarios.length, 'every supported position must close through the browser');
     await page.goto(`${baseUrl}/history`);
     for (const position of closedPositions) {
-      const row = page.getByRole('listitem').filter({ hasText: `Closed ${position.market} ${position.side} #${position.positionId}` });
+      const row = page.getByRole('listitem').filter({ hasText: `Closed ${position.market} ${position.side === 'long' ? 'Long' : 'Short'} #${position.positionId}` });
       await expect(row).toBeVisible({ timeout: 180_000 });
       let closeHash: Hex | undefined;
       for (const transaction of position.transactions) {
