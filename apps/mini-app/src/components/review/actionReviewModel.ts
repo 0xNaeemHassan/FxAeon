@@ -80,7 +80,7 @@ export function consequenceSummary(facts: readonly ReviewFact[]): ReviewFact[] {
     'Minimum received', 'Quoted minimum received', 'Position', 'Target leverage', 'Leverage',
     'Source network', 'Destination network', 'Asset', 'Recipient', 'Bridge fee', 'Mode', 'Collateral', 'Debt',
     'Current collateral', 'Expected collateral', 'Current debt', 'Expected debt', 'Expected receive',
-    'Estimated collateral', 'Estimated debt',
+    'Estimated collateral', 'Estimated debt', 'Loan-to-value',
   ]);
   const targetLeverage = facts.find((fact) => fact.label === 'Target leverage');
   return facts.filter((fact) => consequenceLabels.has(fact.label)

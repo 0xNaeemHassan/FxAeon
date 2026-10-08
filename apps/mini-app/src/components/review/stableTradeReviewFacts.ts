@@ -1,4 +1,5 @@
 import type { ReviewFact } from '@/lib/fx/reviewFormatting';
+import { exactAmountValue } from './actionReviewPresentation';
 
 const ROWS = ['Amount', 'Target leverage', 'Position', 'Slippage', 'Estimated collateral', 'Estimated debt', 'Protocol fee rate', 'Minimum converted input', 'Gas fee', 'Total cost'] as const;
 const ENTERED = new Set(['Amount', 'Target leverage', 'Position', 'Slippage']);
@@ -9,7 +10,9 @@ export function stableTradeReviewFacts(
   verified: readonly ReviewFact[],
   state: { preparing: boolean; failed: boolean; checkingGas: boolean; totalIsGasOnly?: boolean; hasVerifiedRoute?: boolean },
 ): ReviewFact[] {
-  const inputs = new Map(entered.map((fact) => [fact.label, fact]));
+  // The typed amount reads exactly as its verified route will ("0.50" is
+  // "0.5", "1234" is "1,234"), so nothing changes when verification lands.
+  const inputs = new Map(entered.map((fact) => [fact.label, fact.label === 'Amount' ? { ...fact, value: exactAmountValue(fact.value) } : fact]));
   const quotes = new Map(verified.map((fact) => [fact.label, fact]));
   const rows = ROWS.map((label) => {
     // Once a route exists, every displayed term belongs to that route, even

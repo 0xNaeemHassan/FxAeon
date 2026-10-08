@@ -52,7 +52,7 @@ export function UpdatedQuoteSummary({ changes }: { changes: readonly ChangedRevi
       <div className="mt-1.5 flex flex-col gap-1.5">
         {visibleChanges.map((change) => <div key={change.label} className="grid grid-cols-[minmax(84px,.7fr)_minmax(0,1.3fr)] gap-x-3 text-[13px]">
           <span className="text-mut">{change.label}</span>
-          <span className="text-right font-semibold tabular-nums">{change.before ? `${change.before} → ` : ''}{change.after ?? 'No longer included'}</span>
+          <span className="min-w-0 text-right font-semibold tabular-nums [overflow-wrap:anywhere]">{change.before ? `${change.before} → ` : ''}{change.after ?? 'No longer included'}</span>
         </div>)}
       </div>
     </section>

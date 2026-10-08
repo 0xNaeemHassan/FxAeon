@@ -42,19 +42,31 @@ function compactDecimal(value: string, places: number): string {
   return `${truncated ? '≈ ' : ''}${grouped}${shown ? `.${shown}` : ''}`;
 }
 
-function amountFact(label: string, raw: string | undefined, unit: Unit | undefined): ReviewFact | undefined {
+/** Every digit, grouped: a value the wallet will sign is never rounded. */
+function exactDecimal(value: string): string {
+  const [whole, fraction = ''] = value.split('.');
+  const integer = whole.replace(/^0+(?=\d)/, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const shown = fraction.replace(/0+$/, '');
+  return shown ? `${integer}.${shown}` : integer;
+}
+
+/**
+ * Quote estimates read compactly with "≈"; signed values (approvals and the
+ * minimums a transaction enforces) read exactly.
+ */
+function amountFact(label: string, raw: string | undefined, unit: Unit | undefined, precision: 'estimate' | 'exact' = 'estimate'): ReviewFact | undefined {
   if (raw === undefined || !unit || !/^\d+$/.test(raw)) return undefined;
   const exact = formatUnits(BigInt(raw), unit.decimals);
   return {
     label,
-    value: `${compactDecimal(exact, Math.min(unit.decimals, 8))} ${unit.symbol}`,
+    value: `${precision === 'exact' ? exactDecimal(exact) : compactDecimal(exact, Math.min(unit.decimals, 8))} ${unit.symbol}`,
     title: `${exact} ${unit.symbol}`,
   };
 }
 
-/** Compact display only; the exact amount remains available for inspection. */
+/** An approval is signed as an exact amount, so it reads exactly. */
 export function tokenAmountReviewFact(label: string, value: bigint, address: string): ReviewFact {
-  return amountFact(label, value.toString(), unitForAddress(address))
+  return amountFact(label, value.toString(), unitForAddress(address), 'exact')
     ?? { label, value: `${value} raw units`, title: `${value} raw units` };
 }
 
@@ -166,12 +178,12 @@ export function routeFinancialReviewFacts(route: PlannedRoute): ReviewFact[] {
       && details?.conversionPaths?.some((path) => path.label === 'fxSAVE deposit conversion');
     if (identityDepositNoOp) continue;
     const known = limitUnit(limit.label, intent, pool);
-    const fact = known && amountFact(known.label, limit.value, known.unit);
+    const fact = known && amountFact(known.label, limit.value, known.unit, 'exact');
     if (fact) add(fact);
     else unsupportedLimits += 1;
   }
   if (pool && intent.kind === 'position-reduce') {
-    const minimum = amountFact('Minimum received', details?.minOut, unitForAddress(intent.outputTokenAddress));
+    const minimum = amountFact('Minimum received', details?.minOut, unitForAddress(intent.outputTokenAddress), 'exact');
     const boundMinimum = facts.find((fact) => fact.label === 'Minimum received');
     if (minimum && (!boundMinimum || boundMinimum.title !== minimum.title)) {
       add({ ...minimum, label: boundMinimum ? 'Quoted minimum received' : minimum.label });

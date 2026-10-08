@@ -12,13 +12,29 @@ import type { OfficialFxMethod, PlannedRoute, PlannedTransaction, ReviewedAction
 const WALLET = '0x1111111111111111111111111111111111111111';
 const UNKNOWN = '0x2222222222222222222222222222222222222222';
 
-test('approval summaries stay compact without losing exact token quantities', () => {
+test('approvals read as the exact amount the wallet signs, never rounded or marked "≈"', () => {
+  // An approval is signed exactly, so it reads exactly (and matches the
+  // exact input it usually equals) instead of a rounded "≈" figure.
   const fact = tokenAmountReviewFact('Approval', 89237941012345678901n, FX_TOKENS.fxSAVE.address);
-  assert.equal(fact.value, '≈ 89.23794101 fxSAVE');
+  assert.equal(fact.value, '89.237941012345678901 fxSAVE');
   assert.equal(fact.title, '89.237941012345678901 fxSAVE');
-  assert.equal(tokenAmountReviewFact('Approval', 1n, FX_TOKENS.fxSAVE.address).value, '<0.00000001 fxSAVE');
+  assert.equal(tokenAmountReviewFact('Approval', 1n, FX_TOKENS.fxSAVE.address).value, '0.000000000000000001 fxSAVE');
+  assert.equal(tokenAmountReviewFact('Approval', 1234567890000n, FX_TOKENS.USDC.address).value, '1,234,567.89 USDC');
   assert.equal(tokenAmountReviewFact('Approval', 1234567n, FX_TOKENS.USDC.address).value, '1.234567 USDC');
   assert.equal(tokenAmountReviewFact('Approval', 123n, UNKNOWN).value, '123 raw units');
+});
+
+test('signed minimums read exactly while quote estimates keep "≈"', () => {
+  const intent: ReviewedActionIntent = {
+    kind: 'deposit-and-mint', poolAddress: positionPoolAddress('ETH', 'long'), positionId: 0,
+    depositTokenAddress: FX_TOKENS.ETH.address, depositAmount: 244431136966270n, nativeInput: true, mintAmount: 100000000000000000n,
+  };
+  const facts = routeFinancialReviewFacts(route(intent, {
+    colls: '244431136966270000', debts: '100000000000000000',
+    economicLimits: [{ label: 'deposit conversion minimum output', value: '195994373861452' }],
+  }));
+  assert.equal(facts.find((fact) => fact.label === 'Estimated collateral')?.value, '≈ 0.24443113 stETH');
+  assert.equal(facts.find((fact) => fact.label === 'Minimum converted deposit')?.value, '0.000195994373861452 wstETH');
 });
 const operations: Record<ReviewedActionIntent['kind'], OfficialFxMethod> = {
   'position-increase': 'increasePosition',
