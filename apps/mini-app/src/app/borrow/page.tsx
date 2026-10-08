@@ -530,6 +530,15 @@ export default function BorrowPage() {
   const limitBps = debtRange.max * (10_000n - BORROW_LIMIT_GUARD_BPS) / 10n ** 18n;
   const debtAfter = existingDebt + (mintWei ?? 0n);
   const ltvBps = capacity && collateralAfterUsd !== null ? loanToValueBps(debtAfter, collateralAfterUsd) : null;
+  // The position's loan-to-value now, against the live limit, stated as the
+  // meter states them, so the review can show before → after. Verified figures
+  // only: a current position, a fresh price and the pool's live range.
+  const currentLtv = selected && !selectedStale && debtRange.source === 'live' && existingCollateralUsd !== null && existingCollateralUsd > 0n && limitBps > 0n
+    ? `${formatTenths(loanToValueTenthsUp(existingDebt, existingCollateralUsd))} of ${formatTenths(limitBps / 10n)} limit`
+    : null;
+  const reviewBefore = useMemo(() => decisionBefore && currentLtv
+    ? [...decisionBefore, { label: 'Loan-to-value', value: currentLtv }]
+    : decisionBefore, [currentLtv, decisionBefore]);
   // A ceiling rounds down (what may still be borrowed) and a floor rounds up
   // (what must be borrowed), so a figure shown is always safe to type.
   const fxUsdLimit = (value: bigint) => formatSignificantDecimal(formatUnits(value, 18), 4);
@@ -654,7 +663,7 @@ export default function BorrowPage() {
         <ActionReview key={reviewRevision} surface="content" planBuilder={newPosition || !initialRead && !positionReadUnavailable ? planBuilder : null}
           blocker={reviewBlocker} label={reviewLabel} operationLabel={mode === 'mint' ? selected ? 'Update collateral position' : 'Open collateral position' : manageOperationLabel}
           draftActionKey={draftActionKey} draftResumePath="/borrow" draftState={draftState} resumeReview={resumeReview}
-          decisionBefore={decisionBefore} editor={actionEditor} onStageChange={setReviewStage} onComplete={refreshAfterAction} />
+          decisionBefore={reviewBefore} editor={actionEditor} onStageChange={setReviewStage} onComplete={refreshAfterAction} />
       </div>}
       </ProductSurface>
       {/* A limit, so rounded down to the tenth of a percent. */}
@@ -663,6 +672,10 @@ export default function BorrowPage() {
   </AppShell>;
 }
 
+/** Loan-to-value in tenths of a percent, rounded up: a risk figure never reads lower than it is. */
+function loanToValueTenthsUp(debt: bigint, collateralUsd: bigint): bigint { return (debt * 1000n + collateralUsd - 1n) / collateralUsd; }
+function formatTenths(tenths: bigint): string { return `${(Number(tenths) / 10).toFixed(1)}%`; }
+
 /** Loan-to-value against the borrowing limit, filling toward it as the borrow grows. */
 function BorrowLimitMeter({ debt, collateralUsd, limitBps }: { debt: bigint; collateralUsd: bigint; limitBps: bigint }) {
   const ltvBps = debt * 10_000n / collateralUsd;
@@ -670,9 +683,9 @@ function BorrowLimitMeter({ debt, collateralUsd, limitBps }: { debt: bigint; col
   const tone = used > 100 ? 'over' : used >= 85 ? 'near' : 'ok';
   // In tenths of a percent: the loan-to-value rounds up and the limit down, so
   // the room the meter shows is never more than the room there is.
-  const ltvTenths = (debt * 1000n + collateralUsd - 1n) / collateralUsd;
+  const ltvTenths = loanToValueTenthsUp(debt, collateralUsd);
   const limitTenths = limitBps / 10n;
-  const percent = (tenths: bigint) => `${(Number(tenths) / 10).toFixed(1)}%`;
+  const percent = formatTenths;
   return <div className={presentation.limitMeter} data-tone={tone}>
     <div className={presentation.limitMeterRow}>
       <span>Loan-to-value</span>
@@ -704,7 +717,7 @@ function PositionSummary({ position }: { position: UiPosition }) {
     collateralPrice: collateralKey ? prices[collateralKey] : undefined, debtRaw: position.info.rawDebts, debtDecimals: positionDebtDecimals(position), debtPrice: debtKey ? prices[debtKey] : undefined });
   // Rounded up to the tenth, like the form's meter: a risk figure never reads lower than it is.
   const ltv = valuation.collateralUsdCents !== null && valuation.collateralUsdCents > 0n && valuation.debtUsdCents !== null
-    ? `${(Number((valuation.debtUsdCents * 1000n + valuation.collateralUsdCents - 1n) / valuation.collateralUsdCents) / 10).toFixed(1)}%` : '—';
+    ? formatTenths(loanToValueTenthsUp(valuation.debtUsdCents, valuation.collateralUsdCents)) : '—';
   return <div className={presentation.positionSummary}>
     <div className={presentation.positionIdentity}><TokenIcon symbol={position.market === 'BTC' ? 'WBTC' : 'ETH'} size={34} />
       <div><h2>{position.market} position #{position.info.positionId}</h2><p>Ethereum</p></div></div>
