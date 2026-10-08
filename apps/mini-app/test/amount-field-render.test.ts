@@ -88,4 +88,8 @@ test('an amount above the balance says how much is available and how to recover'
   assert.match(withoutMax.text, /Amount exceeds your available 1\.25 ETH\. Enter less\./);
   // The field and the form's own blocker compare the exact balance, not the rounded figure.
   assert.doesNotMatch((await field({ value: '1.256789123', balanceState: { status: 'ready', amount: '1.256789123' } })).text, /exceeds/);
+  // An empty wallet is named as such rather than "exceeds your available 0 ETH".
+  assert.match((await field({ value: '1', balanceState: { status: 'ready', amount: '0' } })).text, /This wallet has no ETH\. Add some to continue\./);
+  assert.match((await field({ value: '1', balanceState: { status: 'ready', amount: '0' }, tokenSelector: React.createElement('span', null, 'picker') })).text,
+    /This wallet has no ETH\. Add some or choose another asset to continue\./);
 });

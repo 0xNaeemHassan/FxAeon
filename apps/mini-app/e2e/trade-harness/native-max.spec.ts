@@ -112,6 +112,10 @@ test('Enter in the amount asks for the review, as a form submit would, only once
   await expect(review).toBeDisabled();
   await amount.press('Enter');
   expect(await reviews()).toBe(0);
+  // Leaving the empty field (to pick an asset, say) never paints it red: the action already asks for an amount.
+  await amount.blur();
+  await expect(amount).toHaveAttribute('aria-invalid', 'false');
+  await expect(page.getByRole('alert')).toHaveCount(0);
   await amount.fill('0.5');
   await expect(review).toBeEnabled();
   await amount.press('Enter');

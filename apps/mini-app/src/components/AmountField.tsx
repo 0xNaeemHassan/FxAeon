@@ -67,11 +67,10 @@ export function AmountFieldView({ value, onChange, symbol, label, hint, balance,
   maxPending = false, tokenSelector, inputPolicy = 'dot-decimal', unitPrice: price, priceStatus = 'unavailable',
 }: AmountFieldViewProps) {
   const id = useId();
-  const [touched, setTouched] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [maxError, setMaxError] = useState('');
   useEffect(() => { setHydrated(true); }, []);
-  useEffect(() => { setTouched(false); setMaxError(''); }, [symbol]);
+  useEffect(() => { setMaxError(''); }, [symbol]);
   // An explicit unavailable state always wins over a legacy balance prop.
   const available = balanceState ? balanceState.status === 'ready' ? balanceState.amount ?? null : null : balance;
   const entered = value.trim();
@@ -84,9 +83,12 @@ export function AmountFieldView({ value, onChange, symbol, label, hint, balance,
   const maximum = maxAmount === null ? null : maxAmount ?? available;
   const hasMaximum = Boolean(maximum && positiveDecimal(maximum, maxDecimals));
   const exceedsBalance = Boolean(available && value && compareExactDecimals(value, available, maxDecimals) === 1);
+  // An empty field is not an error: the form's action already says "Enter an amount",
+  // so leaving the field (to pick an asset, say) never paints it red.
   const error = decimalInputError(value, maxDecimals, { allowAll, allowZero }) ?? constraintError
-    ?? (exceedsBalance ? `Amount exceeds your available ${formatBalanceDecimal(available!, 8)} ${tokenSymbol(symbol)}. Enter less${showMax ? ' or use Max' : ''}.` : null)
-    ?? (touched && !value && !allowZero ? 'Enter an amount.' : null);
+    ?? (!exceedsBalance ? null : hasBalance
+      ? `Amount exceeds your available ${formatBalanceDecimal(available!, 8)} ${tokenSymbol(symbol)}. Enter less${showMax ? ' or use Max' : ''}.`
+      : `This wallet has no ${tokenSymbol(symbol)}. Add some${tokenSelector ? ' or choose another asset' : ''} to continue.`);
   const showBalance = balanceState?.status !== 'disconnected' && (balance !== undefined || balanceState !== undefined);
   const canUseMax = allowAll ? hasBalance : hasMaximum || (maxAmount === null && hasBalance);
   const hasShortcuts = showPercentages || showMax;
@@ -130,7 +132,7 @@ export function AmountFieldView({ value, onChange, symbol, label, hint, balance,
           // leaving a previous valid amount silently executable.
           change(normalized ?? raw.slice(0, 100));
         }}
-          onBlur={() => setTouched(true)} onKeyDown={submitNearestAction} disabled={inactive} inputMode="decimal" autoComplete="off" spellCheck={false} placeholder={placeholder}
+          onKeyDown={submitNearestAction} disabled={inactive} inputMode="decimal" autoComplete="off" spellCheck={false} placeholder={placeholder}
           aria-label={`${label} in ${symbol}`} aria-describedby={describedBy} aria-invalid={Boolean(error)} aria-errormessage={error ? `${id}-error` : undefined} required={!allowZero} />
         </span>
         <div className={styles.token}>{tokenSelector ?? <span className={styles.tokenLabel} title={tokenSymbol(symbol)}><TokenIcon symbol={symbol} size={24} /><span>{tokenSymbol(symbol)}</span></span>}</div>
