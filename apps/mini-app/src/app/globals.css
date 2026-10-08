@@ -1278,8 +1278,8 @@ select.field-control option {
 }
 
 .market-chart-stats > div { display: flex; align-items: baseline; gap: 7px; }
-.market-chart-stats dt { color: var(--mut); font-size: 10px; }
-.market-chart-stats dd { margin: 0; color: var(--text); font-size: 12px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.market-chart-stats dt { color: var(--mut); font-size: var(--fs-micro); }
+.market-chart-stats dd { margin: 0; color: var(--text); font-size: var(--fs-caption); font-weight: 650; font-variant-numeric: tabular-nums; }
 
 .market-chart-market-switch { min-width: 0; }
 
@@ -1295,7 +1295,7 @@ select.field-control option {
   padding: 0 14px;
   border-radius: 999px;
   color: var(--mint);
-  font-size: 12px;
+  font-size: var(--fs-caption);
   font-weight: 600;
   text-align: left;
 }
@@ -1843,7 +1843,6 @@ input[type='range'].lever:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3p
   .desktop-navigation a[aria-current='page'] { color: var(--text); background: var(--surface-3); box-shadow: var(--ring-inset); }
   :root[data-theme='light'] .desktop-navigation a[aria-current='page'] { background: var(--surface); box-shadow: 0 1px 2px rgba(54, 34, 79, 0.1), 0 2px 8px rgba(54, 34, 79, 0.06); }
   .page-header { max-width: 1120px; margin: 0 auto 20px; }
-  .page-header h1 { font-size: 34px; }
   .mobile-tabbar { display: none; }
   .app-content-tabs { padding-bottom: 0; scroll-padding-bottom: 0; }
 
@@ -1890,7 +1889,6 @@ input[type='range'].lever:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3p
   /* The logo lockup keeps its own size; it is a mark, not running text. */
   .brand-wordmark { font-size: 20px; line-height: 44px; }
   .page-header { margin-bottom: 8px; }
-  .page-header h1 { font-size: 26px; line-height: 1.08; }
   .page-subtitle { margin-top: 2px; font-size: var(--fs-caption); line-height: 1.4; }
   /* Trade keeps its compact route heading and Positions shortcut. Portfolio
      tabs carry the same context, so its standalone heading can disappear. */
@@ -1965,9 +1963,6 @@ input[type='range'].lever:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3p
     align-items: center;
     gap: 10px;
   }
-
-  .trade-page-heading h1,
-  .portfolio-page-heading h1 { font-size: 25px; }
 
   .market-chart-header {
     align-items: flex-start;

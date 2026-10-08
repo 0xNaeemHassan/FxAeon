@@ -268,7 +268,8 @@ function buttonClasses(variant: 'primary' | 'ghost' | 'danger' | 'outline' | 'gl
           : variant === 'glass'
             ? 'astryx-card text-[var(--text)] hover:border-[var(--astryx-border-strong)]'
             : 'button-ghost text-[var(--text)]';
-  return `button glass-press astryx-interactive flex min-h-12 w-full items-center justify-center gap-2 px-5 py-3 text-[14px] disabled:cursor-not-allowed disabled:opacity-50 ${styles} ${className}`;
+  // `.button` sets the body size; a utility here would only be overridden.
+  return `button glass-press astryx-interactive flex min-h-12 w-full items-center justify-center gap-2 px-5 py-3 disabled:cursor-not-allowed disabled:opacity-50 ${styles} ${className}`;
 }
 
 export const Button = forwardRef<HTMLButtonElement, Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'onClick' | 'disabled' | 'className'> & {
@@ -324,11 +325,11 @@ export function Stat({
     <div className="stat-card glass flex flex-col gap-1.5 p-4">
       <span className="micro-label">{label}</span>
       <span
-        className={`text-display text-[20px] font-semibold leading-none ${accent ? 'text-mint' : ''}`}
+        className={`text-display text-[length:var(--fs-heading)] font-semibold leading-none ${accent ? 'text-mint' : ''}`}
       >
         <ValueOrSkeleton value={value} width="md" />
       </span>
-      {sub && <span className="text-[11px] text-mut">{sub}</span>}
+      {sub && <span className="text-[length:var(--fs-micro)] text-mut">{sub}</span>}
     </div>
   );
 }
@@ -352,7 +353,7 @@ export function AddressChip({ address, iconOnly = false }: { address: string; ic
           haptic('error');
         }
       }}
-      className={`address-chip glass glass-press inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-1.5 font-mono text-[12px] text-mut${iconOnly ? ' min-w-11' : ''}`}
+      className={`address-chip glass glass-press inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-1.5 font-mono text-[length:var(--fs-caption)] text-mut${iconOnly ? ' min-w-11' : ''}`}
     >
       {!iconOnly && short}
       {copied ? (
@@ -380,8 +381,8 @@ export function EmptyState({
       <span className="empty-icon flex h-14 w-14 items-center justify-center rounded-lg bg-[var(--mint-dim)]">
         <Icon aria-hidden="true" className="h-6 w-6 text-mint" strokeWidth={1.8} />
       </span>
-      <p className="mt-1 text-[17px] font-semibold tracking-tight">{title}</p>
-      {body && <p className="max-w-[340px] text-[14px] leading-relaxed text-mut">{body}</p>}
+      <p className="mt-1 text-[length:var(--fs-title)] font-semibold tracking-tight">{title}</p>
+      {body && <p className="max-w-[340px] text-[length:var(--fs-small)] leading-relaxed text-mut">{body}</p>}
       {action && <div className="mt-3 w-full">{action}</div>}
     </div>
   );
@@ -392,7 +393,7 @@ export function SectionTitle({ children, right, level = 2 }: { children: ReactNo
   const Heading = level === 3 ? 'h3' : 'h2';
   return (
     <div className="section-heading mb-2 flex items-center justify-between">
-      <Heading className="text-[16px] font-semibold tracking-tight text-[var(--text)]">
+      <Heading className="text-[length:var(--fs-title)] font-semibold tracking-tight text-[var(--text)]">
         {children}
       </Heading>
       {right}
@@ -433,10 +434,10 @@ export function FullScreenSpinner({ asMain = false }: { asMain?: boolean } = {})
         <FxLogo size={56} />
       </div>
       <div>
-        <h1 className="text-display text-2xl font-semibold">
+        <h1 className="text-display text-[length:var(--fs-heading)] font-semibold">
           Fx<span className="text-gradient">Aeon</span>
         </h1>
-        <p className="mt-1.5 text-[12.5px] text-mut">{t('common.loading')}</p>
+        <p className="mt-1.5 text-[length:var(--fs-small)] text-mut">{t('common.loading')}</p>
       </div>
       <span className="loading-line" aria-hidden="true" />
     </Element>
