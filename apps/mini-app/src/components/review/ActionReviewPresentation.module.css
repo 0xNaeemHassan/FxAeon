@@ -269,6 +269,16 @@
 @keyframes mark-ripple { 0% { opacity: 0.45; transform: scale(0.92); } 100% { opacity: 0; transform: scale(1.45); } }
 /* Context reads as a plain caption, not a pill. */
 .resultMeta { max-width: 100%; margin: 8px 0 0; color: var(--mut); font-size: var(--fs-caption); font-weight: 500; line-height: 1.4; overflow-wrap: anywhere; }
+/* A position just opened, as a borderless row: token, name and number, its
+   target, then the split chosen on the ticket in the row's own bar. */
+.newPosition { width: 100%; min-width: 0; margin-top: 16px; text-align: left; }
+.newPositionLine { display: flex; min-width: 0; align-items: center; gap: 8px; margin: 0; font-size: var(--fs-small); line-height: 20px; }
+.newPositionToken { display: flex; flex: 0 0 auto; }
+.newPositionName { min-width: 0; flex: 1 1 auto; color: var(--text); font-weight: 650; overflow-wrap: anywhere; }
+.newPositionId { color: var(--mut); font-weight: 500; font-variant-numeric: tabular-nums; }
+.newPositionTarget { flex: 0 0 auto; color: var(--mut); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.newPositionTarget b { color: var(--text); font-weight: 650; }
+.newPosition > [data-position-born-source] { margin-top: 10px; }
 @media (prefers-reduced-motion: reduce) {
   .resultMark, .resultMark::after { animation: none !important; }
   .resultMark circle, .resultMark path { animation: none !important; stroke-dashoffset: 0; }

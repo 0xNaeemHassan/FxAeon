@@ -39,6 +39,7 @@ import { useActionReviewLifecycle } from '@/components/review/useActionReviewLif
 import { selectExecutionTask } from '@/lib/taskState';
 import { buildReceiptPresentation, receiptTransfersFromLogs } from '@/lib/receiptPresentation';
 import { receiptMintedPositionIdentity } from '@/lib/confirmedPositions';
+import { openedPositionTitle, positionSideLabel } from '@/lib/positionNaming';
 import { rawQuoteReviewFacts, tokenAmountReviewFact, type ReviewFact } from '@/lib/fx/reviewFormatting';
 import { buildStatusPresentation } from '@/components/review/actionReviewStatusModel';
 import { PositionOutcomeSummary, TransactionProgressPresentation, UpdatedQuoteSummary } from '@/components/review/ActionReviewSummary';
@@ -206,7 +207,6 @@ export function ActionReview(props: ActionReviewProps) {
     const transactionTask = selectExecutionTask(result);
     const bridgeQuote = route?.operation === 'buildBridgeTx' && isBridgeQuote(route.quote) ? route.quote : null;
     const bridge = Boolean(bridgeQuote);
-    const presentation = resultPresentation(result, bridge);
     const bridgeStep = bridge
       ? [...result.steps].reverse().find((step) => step.transaction.kind === 'action' && step.hash)
       : undefined;
@@ -236,10 +236,28 @@ export function ActionReview(props: ActionReviewProps) {
       ? positionIntent.positionId
       : receiptPositionIdentity?.positionId;
     const positionLabel = positionAction && result.status === 'confirmed' && positionId !== undefined
-      ? `${positionMarket ?? 'Protocol'}${positionSide ? ` ${positionSide}` : ''} · #${positionId}`
+      ? `${positionMarket ?? 'Protocol'}${positionSide ? ` ${positionSideLabel(positionSide)}` : ''} · #${positionId}`
       : undefined;
     const positionHref = positionId !== undefined && positionMarket && positionSide
       ? `/positions?position=${encodeURIComponent(`${positionMarket}:${positionSide}:${positionId}`)}&action=${positionIntent?.kind === 'position-reduce' && positionIntent.isClosePosition ? 'close' : positionIntent?.kind === 'position-reduce' || positionIntent?.kind === 'repay-and-withdraw' ? 'reduce' : positionIntent?.kind === 'position-adjust' ? 'leverage' : 'increase'}`
+      : undefined;
+    // A position Trade just opened is named as History names this transaction,
+    // and drawn as its row with the split chosen on the ticket.
+    const opened = result.status === 'confirmed' && route?.operation === 'increasePosition'
+      && positionIntent?.kind === 'position-increase' && positionIntent.positionId === 0 && poolLocation
+      ? { ...poolLocation, targetLeverage: positionIntent.requestedLeverage }
+      : undefined;
+    const presentation = resultPresentation(result, bridge, opened ? openedPositionTitle(opened.market, opened.side) : undefined);
+    const newPosition = opened && receiptPositionIdentity
+      && receiptPositionIdentity.market === opened.market && receiptPositionIdentity.side === opened.side
+      && opened.targetLeverage !== undefined && Number.isFinite(opened.targetLeverage) && opened.targetLeverage > 0
+      ? {
+        key: `${opened.market}:${opened.side}:${receiptPositionIdentity.positionId}`,
+        market: opened.market,
+        side: opened.side,
+        positionId: receiptPositionIdentity.positionId,
+        targetLeverage: opened.targetLeverage,
+      }
       : undefined;
     const approvalSubmittedWithoutAction = result.status === 'partial'
       && result.steps.some((step) => step.transaction.kind === 'approval' && hasTransactionHash(step))
@@ -270,6 +288,7 @@ export function ActionReview(props: ActionReviewProps) {
           refreshing={refreshing}
           positionAction={positionAction}
           positionLabel={positionLabel}
+          newPosition={newPosition}
           receipts={receiptFacts}
           headingRef={headingRef}
           bridgeTracker={bridgeQuote && bridgeStep?.hash ? (

@@ -7,7 +7,11 @@ function looksLikeWalletRejection(value: string | undefined): boolean {
   return Boolean(value && /(reject|denied|declin|cancel(?:led|ed)|user refused|user denied)/i.test(value));
 }
 
-export function resultPresentation(result: TransactionExecutionResult, bridge: boolean): {
+/**
+ * `confirmedTitle` names a fully confirmed action as History will ("Opened
+ * ETH Long"); every other state keeps the title that says what happened.
+ */
+export function resultPresentation(result: TransactionExecutionResult, bridge: boolean, confirmedTitle?: string): {
   title: string;
   body: string;
   tone: 'success' | 'warning' | 'danger';
@@ -21,7 +25,7 @@ export function resultPresentation(result: TransactionExecutionResult, bridge: b
   if (result.status === 'confirmed') {
     return bridge
       ? { title: 'Confirmed on source', body: 'The source route is confirmed. Destination delivery is verified separately below.', tone: 'success', icon: CheckCircle2 }
-      : { title: 'Confirmed', body: `All transaction steps are confirmed on ${result.chainId === 8453 ? 'Base' : result.chainId === 1 ? 'Ethereum' : `Chain ${result.chainId}`}.`, tone: 'success', icon: CheckCircle2 };
+      : { title: confirmedTitle ?? 'Confirmed', body: `All transaction steps are confirmed on ${result.chainId === 8453 ? 'Base' : result.chainId === 1 ? 'Ethereum' : `Chain ${result.chainId}`}.`, tone: 'success', icon: CheckCircle2 };
   }
   if (confirmationUnknown) return { title: 'Confirmation unknown', body: 'A transaction was submitted, but its receipt could not be verified. Check History from the wallet profile. Do not submit this action again.', tone: 'warning', icon: Clock3 };
   if (verificationIncomplete) return { title: 'Verification incomplete', body: 'A receipt exists, but the submitted transaction could not be fully verified. Check History. Do not submit this action again.', tone: 'warning', icon: AlertTriangle };
