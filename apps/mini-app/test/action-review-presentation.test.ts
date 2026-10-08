@@ -121,6 +121,9 @@ test('inputs read exactly with grouping, so an entered amount matches its verifi
   assert.equal(exactAmountText('007'), '7');
   assert.equal(exactAmountValue('0.50 ETH'), '0.5 ETH');
   assert.equal(exactAmountValue('1234 USDC'), '1,234 USDC');
+  // Trade groups the typed amount before review; trailing zeros still go.
+  assert.equal(exactAmountValue('1,234.50 USDC'), '1,234.5 USDC');
+  assert.equal(exactAmountValue('12,345,678 USDC'), '12,345,678 USDC');
   assert.equal(exactAmountValue('New position'), 'New position');
   const planned = {
     ...route(244_431_136_966_270n),

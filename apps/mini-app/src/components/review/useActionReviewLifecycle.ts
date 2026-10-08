@@ -17,6 +17,7 @@ import { announceSettingsUpdated, readGasTier, readSlippagePercent, SETTINGS_KEY
 import { changedConsequenceFacts, reviewGenerationIsCurrent, updatedRouteTermsRequired, type ChangedReviewFact, type ReviewTransition } from '@/components/review/actionReviewModel';
 import { useActionReviewController } from '@/components/review/useActionReviewController';
 import type { ActionReviewProps } from './actionReviewTypes';
+import { tokenSymbol } from '@/lib/fx/tokenPresentation';
 
 const REVIEW_FRESHNESS_MS = 30_000;
 
@@ -656,7 +657,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
             setStatus('awaiting-user');
             const approvalToken = Object.values(FX_TOKENS).find((token) => token.address.toLowerCase() === transaction.to.toLowerCase());
             const signingLabel = transaction.kind === 'approval'
-              ? transaction.type === 'approvePosition' ? 'Approve position' : `Approve ${approvalToken?.key ?? 'token'}`
+              ? transaction.type === 'approvePosition' ? 'Approve position' : `Approve ${approvalToken ? tokenSymbol(approvalToken.key) : 'token'}`
               : 'Confirm';
             // Name the exact request the wallet is showing; the status model
             // appends the instruction to review it there.

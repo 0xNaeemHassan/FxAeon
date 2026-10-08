@@ -33,6 +33,7 @@ import { resultPresentation } from '@/components/review/executionResult';
 import { splitReviewFacts } from '@/components/review/reviewSummary';
 import { exactAmountText, factsOutsideConsequenceSummary, missingGasFeeFact, missingTotalCostFact, nativeFundsNotice, primaryReviewFacts, routeFacts as buildRouteFacts } from '@/components/review/actionReviewPresentation';
 import { ChainIcon } from '@/components/TokenIcon';
+import { tokenSymbol } from '@/lib/fx/tokenPresentation';
 import { consequenceSummary, pairVerifiedPositionFacts, reviewActionLabel } from '@/components/review/actionReviewModel';
 import { useActionReviewLifecycle } from '@/components/review/useActionReviewLifecycle';
 import { selectExecutionTask } from '@/lib/taskState';
@@ -60,10 +61,16 @@ function tokenForAddress(address: string | undefined) {
   return Object.values(FX_TOKENS).find((token) => token.address.toLowerCase() === address.toLowerCase());
 }
 
+/** A known token's display symbol (fxSP for the base-pool share), never its SDK key. */
+function tokenSymbolForAddress(address: string | undefined): string | undefined {
+  const token = tokenForAddress(address);
+  return token && tokenSymbol(token.key);
+}
+
 function formatTokenAmount(value: bigint, tokenAddress?: string, fallback = 'raw units'): string {
   const token = tokenForAddress(tokenAddress);
   if (!token) return `${value.toString()} ${fallback}`;
-  return `${exactAmountText(trimDecimal(formatUnits(value, token.decimals)))} ${token.key}`;
+  return `${exactAmountText(trimDecimal(formatUnits(value, token.decimals)))} ${tokenSymbol(token.key)}`;
 }
 
 /** Preparation names the check that is actually running. */
@@ -110,7 +117,7 @@ function approvalSummary(transaction: PlannedTransaction, approval: NonNullable<
 
 function stepTitle(transaction: PlannedTransaction): string {
   if (transaction.kind !== 'approval') return 'Confirm';
-  return transaction.type === 'approvePosition' ? 'Approve position' : `Approve ${tokenForAddress(transaction.to)?.key ?? 'token'}`;
+  return transaction.type === 'approvePosition' ? 'Approve position' : `Approve ${tokenSymbolForAddress(transaction.to) ?? 'token'}`;
 }
 
 /** Say up front when the wallet will ask more than once, and in what order. */

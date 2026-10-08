@@ -1,6 +1,7 @@
 import { formatUnits } from 'viem';
 import { FX_TOKENS, formatRouteGasCost, type PlannedRoute } from '@/lib/fx';
 import { compactAddress } from '@/lib/addressPresentation';
+import { tokenSymbol } from '@/lib/fx/tokenPresentation';
 import { routeFinancialReviewFacts, type ReviewFact } from '@/lib/fx/reviewFormatting';
 import type { UseGasCostResult } from '@/lib/fx/useGasCost';
 import { formatNativeShortfall, nativeShortfallWei, routeNetworkFeeDisplay, type RouteGasCostEstimate } from '@/lib/fx/gasCost';
@@ -19,6 +20,12 @@ function trimDecimal(value: string): string {
 function tokenForAddress(address: string | undefined) {
   if (!address) return undefined;
   return Object.values(FX_TOKENS).find((token) => token.address.toLowerCase() === address.toLowerCase());
+}
+
+/** A known token's display symbol (fxSP for the base-pool share), never its SDK key. */
+function tokenSymbolForAddress(address: string | undefined): string | undefined {
+  const token = tokenForAddress(address);
+  return token && tokenSymbol(token.key);
 }
 
 function conciseDecimal(value: string, places = 6): string {
@@ -53,10 +60,13 @@ export function exactAmountText(decimal: string): string {
   return `${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}${fraction ? `.${fraction}` : ''}`;
 }
 
-/** Entered "0.50 ETH" reads exactly as its verified route will: "0.5 ETH". */
+/**
+ * Entered "0.50 ETH" (or an already grouped "1,234.50 ETH") reads exactly as
+ * its verified route will: "0.5 ETH", "1,234.5 ETH".
+ */
 export function exactAmountValue(value: string): string {
-  const match = /^(\d*\.?\d+)(\s+\S.*)$/.exec(value.trim());
-  return match ? `${exactAmountText(match[1])}${match[2]}` : value;
+  const match = /^(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d*\.?\d+)(\s+\S.*)$/.exec(value.trim());
+  return match ? `${exactAmountText(match[1].replace(/,/g, ''))}${match[2]}` : value;
 }
 
 function addTokenAmountFact(facts: ReviewFact[], label: string, value: bigint, tokenAddress?: string, fallback = 'raw units'): void {
@@ -66,7 +76,8 @@ function addTokenAmountFact(facts: ReviewFact[], label: string, value: bigint, t
     return;
   }
   const exact = trimDecimal(formatUnits(value, token.decimals));
-  facts.push({ label, value: `${exactAmountText(exact)} ${token.key}`, title: `${exact} ${token.key}` });
+  const symbol = tokenSymbol(token.key);
+  facts.push({ label, value: `${exactAmountText(exact)} ${symbol}`, title: `${exact} ${symbol}` });
 }
 
 function addWadAmountFact(facts: ReviewFact[], label: string, value: bigint, unit: string): void {
@@ -156,7 +167,7 @@ export function primaryReviewFacts(route: PlannedRoute): ReviewFact[] {
         break;
       case 'fxsave-withdraw':
         addTokenAmountFact(facts, 'fxSAVE', intent.amount, FX_TOKENS.fxSAVE.address);
-        addFact(facts, 'Receive', tokenForAddress(intent.tokenOutAddress)?.key ?? compactAddress(intent.tokenOutAddress));
+        addFact(facts, 'Receive', tokenSymbolForAddress(intent.tokenOutAddress) ?? compactAddress(intent.tokenOutAddress));
         addFact(facts, 'Mode', intent.directBasePool ? 'Direct' : intent.instant ? 'Instant' : 'Queued');
         if (intent.slippagePercent !== undefined) addFact(facts, 'Slippage', `${intent.slippagePercent}%`);
         break;
