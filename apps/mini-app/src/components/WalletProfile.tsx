@@ -5,7 +5,7 @@ import { createPortal, flushSync } from 'react-dom';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { Address } from 'viem';
-import { ArrowDownToLine, ArrowUpRight, History, Layers2, ExternalLink, LogOut, RefreshCw, Settings, X } from 'lucide-react';
+import { ArrowDownToLine, ArrowUpRight, ChevronRight, History, Layers2, ExternalLink, LogOut, RefreshCw, Settings, X } from 'lucide-react';
 import { AssetListSkeleton, AssetRowContent, networkLabel } from '@/components/AssetPresentation';
 import { ActionRow } from '@/components/ProductUI';
 import presentation from '@/components/WalletProfile.module.css';
@@ -43,6 +43,7 @@ import { usePendingActivity } from '@/lib/pendingActivity';
 import { TransactionNotices } from '@/components/TransactionNotices';
 
 const WALLET_PROFILE_DEMAND = { expandedAssets: true, chainPulse: true, positions: true } as const;
+const WALLET_SHEET_ASSET_LIMIT = 6;
 export default function WalletProfile() {
   const pathname = usePathname();
   const wallet = usePrivyWallet();
@@ -60,10 +61,12 @@ export default function WalletProfile() {
   const currentIdentity = useRef(walletIdentity);
   currentIdentity.current = walletIdentity;
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [assetsExpanded, setAssetsExpanded] = useState(false);
   const openedAtPathRef = useRef(pathname);
   // Hide immediately on account loss/change, then discard the old open state
   // so reconnecting that account cannot silently reopen a prior drawer.
   const open = Boolean(walletIdentity && openWallet === walletIdentity);
+  useEffect(() => { if (!open) setAssetsExpanded(false); }, [open]);
   const present = useExitPresence(open, `${walletIdentity}:${pathname}`);
   useEffect(() => {
     if (open && openedAtPathRef.current !== pathname) setOpenWallet(null);
@@ -111,6 +114,10 @@ export default function WalletProfile() {
   }, [open, refreshPositions, wallet.address, wallet.ready]);
 
   const nonZero = useMemo(() => displayAssets?.assets.filter((asset) => asset.balanceWei > 0n) ?? [], [displayAssets]);
+  // Like Portfolio, the sheet lists six holdings so its account rows stay within reach.
+  const visibleAssets = assetsExpanded ? nonZero : nonZero.slice(0, WALLET_SHEET_ASSET_LIMIT);
+  // On Portfolio (also the app's home) "View portfolio" would only close the sheet.
+  const onPortfolio = pathname === '/' || pathname === '/portfolio' || pathname.startsWith('/portfolio/');
   const selectedAsset = selectedAssetId ? nonZero.find((asset) => asset.id === selectedAssetId) ?? null : null;
   useEffect(() => {
     if (selectedAssetId && !loading && displayAssets && !nonZero.some((asset) => asset.id === selectedAssetId)) setSelectedAssetId(null);
@@ -183,7 +190,7 @@ export default function WalletProfile() {
                 <Link href="/qr" className={presentation.primaryAction}><ArrowDownToLine size={18} aria-hidden="true" />Receive</Link>
                 <Link href="/send" className={presentation.primaryAction}><ArrowUpRight size={18} aria-hidden="true" />Send</Link>
               </div>
-              <Link href="/portfolio" className={presentation.portfolioLink}>View portfolio<ArrowUpRight size={16} aria-hidden="true" /></Link>
+              {!onPortfolio && <Link href="/portfolio" className={presentation.portfolioLink}>View portfolio<ChevronRight size={16} aria-hidden="true" /></Link>}
             </section>
             <section className={presentation.assets} aria-labelledby="wallet-profile-balances-title">
               <div className={presentation.sectionHeading}><h3 id="wallet-profile-balances-title">Assets</h3><span>All networks</span></div>
@@ -195,11 +202,14 @@ export default function WalletProfile() {
                 </button>
               </div>}
               {!loading && displayAssets && walletSnapshotValuation.complete && nonZero.length === 0 && <p className={presentation.helper}>No token balances detected.</p>}
-              <ul className={presentation.assetList}>{nonZero.map((asset) => <li key={asset.id}>
+              <ul className={presentation.assetList}>{visibleAssets.map((asset) => <li key={asset.id}>
                 <button type="button" className={presentation.assetDetails} aria-label={`View ${tokenSymbol(asset.symbol)} details on ${networkLabel(asset.chainId)}`} onClick={() => setSelectedAssetId(asset.id)}>
                   <AssetRowContent asset={asset} loading={walletValueLoading} />
                 </button>
               </li>)}</ul>
+              {nonZero.length > WALLET_SHEET_ASSET_LIMIT && <button type="button" className={presentation.moreAssets} aria-expanded={assetsExpanded} onClick={() => setAssetsExpanded((value) => !value)}>
+                {assetsExpanded ? 'Show fewer assets' : `View all ${nonZero.length} assets`}
+              </button>}
             </section>
             <section className={presentation.positions} aria-labelledby="wallet-profile-positions-title">
               <ActionRow icon={Layers2} title="Positions" href="/positions" value={<ValueOrSkeleton value={positionState.status === 'ready' ? `${positionState.positions.length} open` : '—'} width="sm" status={positionState.status === 'loading' ? 'loading' : 'unavailable'} label="Open position count" />} />

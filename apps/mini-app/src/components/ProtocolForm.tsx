@@ -9,6 +9,8 @@ import TokenIcon from '@/components/TokenIcon';
 import { useUsdPrices } from '@/components/PriceProvider';
 import { useWalletBalances } from '@/components/WalletDataProvider';
 import { ValueOrSkeleton } from '@/components/MissingValue';
+import { LeverageSplitCaption } from '@/components/LeverageSplit';
+import type { LeverageSide } from '@/lib/leverageShare';
 import { haptic } from '@/lib/telegram';
 import { formatExactDecimal } from '@/lib/amount';
 import { formatUsdCents } from '@/lib/positionValuation';
@@ -528,6 +530,7 @@ export function LeverageField({
   max = 20,
   error,
   compact = false,
+  split,
 }: {
   value: number;
   onChange: (value: number) => void;
@@ -536,11 +539,15 @@ export function LeverageField({
   max?: number;
   error?: string | null;
   compact?: boolean;
+  /** Names the debt so the slider can say what the chosen leverage means. */
+  split?: { side: LeverageSide; debtLabel: string };
 }) {
   const inputId = useId();
   const sliderId = `${inputId}-slider`;
   const errorId = `${inputId}-error`;
+  const splitId = `${inputId}-split`;
   const invalid = Boolean(error);
+  const describedBy = [invalid ? errorId : null, split ? splitId : null].filter(Boolean).join(' ') || undefined;
   const sliderValue = Math.min(max, Math.max(min, Number.isFinite(value) && value > 0 ? value : min));
   const fill = max === min ? 0 : ((sliderValue - min) / (max - min)) * 100;
   const numberInput = (
@@ -568,7 +575,7 @@ export function LeverageField({
         if (Number.isFinite(value) && value > 0 && value < min) onChange(min);
       }}
       aria-invalid={invalid}
-      aria-describedby={invalid ? errorId : undefined}
+      aria-describedby={describedBy}
       className={`${styles.leverageInput} field-control min-h-[52px] min-w-0 flex-1 px-4 text-[20px] font-semibold outline-none`}
     />
   );
@@ -584,12 +591,15 @@ export function LeverageField({
         value={sliderValue}
         aria-label={`${label} slider`}
         aria-valuetext={`${sliderValue.toFixed(1)}×`}
+        aria-describedby={split ? splitId : undefined}
         onChange={(event) => onChange(Number(event.target.value))}
         onPointerUp={() => haptic('selection')}
         style={{ '--fill': `${fill}%` } as React.CSSProperties}
       />
-      <div className="flex justify-between px-1 text-[10px] font-medium text-mut" aria-hidden="true">
-        <span>{min.toFixed(1)}×</span><span>{max.toFixed(1)}×</span>
+      <div className="flex items-baseline justify-between gap-2 px-1 text-[11px] font-medium text-mut">
+        <span aria-hidden="true">{min.toFixed(1)}×</span>
+        {split && <LeverageSplitCaption id={splitId} side={split.side} debtLabel={split.debtLabel} leverage={value} min={min} max={max} />}
+        <span aria-hidden="true">{max.toFixed(1)}×</span>
       </div>
     </>
   );

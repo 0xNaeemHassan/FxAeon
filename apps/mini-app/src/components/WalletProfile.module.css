@@ -33,6 +33,10 @@
 .portfolioLink { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; margin-top: 8px; border: 0; border-radius: 999px; color: var(--mint); font-size: var(--fs-small); font-weight: 600; transition: background-color var(--dur-fast) ease; }
 .portfolioLink:hover { background: var(--mint-dim); }
 :root[data-theme='light'] .portfolioLink { color: var(--mint-bright); }
+/* Portfolio's own "View all" for the sheet's shortened asset list. */
+.moreAssets { display: flex; width: 100%; min-height: 44px; align-items: center; justify-content: center; border-radius: 12px; color: var(--mint); font-size: var(--fs-small); font-weight: 600; transition: background-color var(--dur-fast) ease; }
+.moreAssets:hover { background: var(--mint-dim); }
+:root[data-theme='light'] .moreAssets { color: var(--mint-bright); }
 /* Like Portfolio, the wallet total is the drawer's headline rather than a box:
  * the figure sits on the sheet with a soft light behind it, actions beneath. */
 .summary { position: relative; isolation: isolate; padding: 6px 0 2px; margin-top: 2px; }

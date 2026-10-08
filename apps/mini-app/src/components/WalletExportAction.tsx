@@ -32,5 +32,5 @@ export function WalletExportAction({ address, disabled, onStart, onComplete, onE
       onComplete();
     }
   };
-  return <ActionRow icon={KeyRound} title="Export wallet" disabled={disabled} onClick={() => void handleExport()} />;
+  return <ActionRow icon={KeyRound} title="Export wallet" description="Back up your private key" disabled={disabled} onClick={() => void handleExport()} />;
 }

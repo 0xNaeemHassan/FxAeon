@@ -285,7 +285,8 @@ test.describe("single-viewport route contract", () => {
     const required = [
       page.getByRole("link", { name: "Positions", exact: true }),
       page.getByText("ETH / USD", { exact: true }),
-      page.locator('.market-chart-header').getByText(/% 24h$/).or(page.locator('.market-chart-header [aria-label="24 hour change loading"]')).first(),
+      // The 24h slot shows its value, or a placeholder that says whether the feed is still connecting or has failed.
+      page.locator('.market-chart-header').getByText(/% 24h$/).or(page.locator('.market-chart-header :is([aria-label="24 hour change loading"], [aria-label="24 hour change unavailable"])')).first(),
       page.getByRole("radio", { name: "ETH", exact: true }),
       page.getByRole("radio", { name: "BTC", exact: true }),
       page.getByRole("button", { name: "Show chart", exact: true }),

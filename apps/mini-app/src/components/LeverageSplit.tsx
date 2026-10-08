@@ -1,20 +1,19 @@
 'use client';
 
 import { useEffect, useRef, type CSSProperties } from 'react';
+import { debtShare, splitPercents, type LeverageSide } from '@/lib/leverageShare';
 import styles from './LeverageSplit.module.css';
 
 /**
- * Debt as a share of collateral value, before fees. A displayed L× long has
- * collateral/equity = L, so debt/collateral = (L − 1) / L. A displayed L×
- * short has debt/equity = L, so debt/collateral = L / (L + 1). The remainder
- * is the trader's share. Both directions show the same 2× and 3× rows, so
- * comparing them never changes the layout; the pool's live range is Trade's
- * Leverage stat. These are educational examples, not position valuations or
- * SDK inputs. The bars fill once on screen.
+ * Leverage as a split of collateral (see debtShare): the debt beside the
+ * trader's share. Both directions show the same 2× and 3× rows, so comparing
+ * them never changes the layout; the pool's live range is Trade's Leverage
+ * stat. These are educational examples, not position valuations or SDK
+ * inputs. The bars fill once on screen.
  */
 const EXAMPLE_LEVERAGES = [2, 3] as const;
 
-export function LeverageSplit({ side, debtLabel }: { side: 'long' | 'short'; debtLabel: string }) {
+export function LeverageSplit({ side, debtLabel }: { side: LeverageSide; debtLabel: string }) {
   const ref = useRef<HTMLOListElement>(null);
   useEffect(() => {
     const node = ref.current;
@@ -30,13 +29,27 @@ export function LeverageSplit({ side, debtLabel }: { side: 'long' | 'short'; deb
   }, []);
   return <ol ref={ref} className={styles.rows} aria-label={`Share of a position that is ${debtLabel}, by leverage, before fees`}>
     {EXAMPLE_LEVERAGES.map((leverage) => {
-      const borrowed = side === 'short' ? leverage / (leverage + 1) : (leverage - 1) / leverage;
-      const borrowedPercent = Math.round(borrowed * 100);
-      return <li key={leverage} className={styles.row} style={{ '--borrowed': borrowed } as CSSProperties}>
+      const { debt, yours } = splitPercents(side, leverage);
+      return <li key={leverage} className={styles.row} style={{ '--borrowed': debtShare(side, leverage) } as CSSProperties}>
         <span className={styles.leverage}>{leverage}×</span>
         <span className={styles.bar} aria-hidden="true"><i className={styles.borrowed} /><i className={styles.share} /></span>
-        <span className={styles.figures}><b>{borrowedPercent}%</b> {debtLabel} · <b>{100 - borrowedPercent}%</b> yours</span>
+        <span className={styles.figures}><b>{debt}%</b> {debtLabel} · <b>{yours}%</b> yours</span>
       </li>;
     })}
   </ol>;
+}
+
+/**
+ * The same split at the leverage being chosen, for the ticket's slider. It
+ * answers every move of the thumb; outside the live range it stays empty so
+ * the row never changes height.
+ */
+export function LeverageSplitCaption({ id, side, debtLabel, leverage, min, max }: {
+  id: string; side: LeverageSide; debtLabel: string; leverage: number; min: number; max: number;
+}) {
+  const inRange = Number.isFinite(leverage) && leverage >= min && leverage <= max;
+  const { debt, yours } = splitPercents(side, leverage);
+  return <span id={id} className={styles.caption} data-empty={inRange ? undefined : true}>
+    {inRange && <><b>{debt}%</b> {debtLabel} · <b>{yours}%</b> yours<span className="sr-only"> at {leverage.toFixed(1)}×, before fees</span></>}
+  </span>;
 }

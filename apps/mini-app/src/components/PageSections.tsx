@@ -1,9 +1,18 @@
 'use client';
 
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import Link from 'next/link';
 import { ArrowUpRight, ChevronDown, ChevronRight, type LucideIcon } from 'lucide-react';
+import { openExternalLink } from '@/lib/telegram';
 import styles from './PageSections.module.css';
+
+/** Leaves FxAeon through Telegram's own browser in the Mini App, a new tab elsewhere. */
+function leaveApp(href: string) {
+  return (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (openExternalLink(href)) event.preventDefault();
+  };
+}
 
 /**
  * The part of a page after its main action: live facts, how the action works,
@@ -27,7 +36,7 @@ export function Section({ id, title, action, children }: {
           <h2 id={`${id}-title`}><LitWords text={title} /></h2>
         </div>
         {action && (action.external
-          ? <a className={styles.sectionAction} href={action.href} target="_blank" rel="noopener noreferrer">{action.label}<ArrowUpRight aria-hidden="true" /></a>
+          ? <a className={styles.sectionAction} href={action.href} target="_blank" rel="noopener noreferrer" onClick={leaveApp(action.href)}>{action.label}<ArrowUpRight aria-hidden="true" /></a>
           : <Link className={styles.sectionAction} href={action.href}>{action.label}<ChevronRight aria-hidden="true" /></Link>)}
       </header>
       {children}
@@ -50,13 +59,13 @@ export function StatGrid({ stats }: { stats: readonly Stat[] }) {
 
 export type Step = { icon: LucideIcon; title: string; body: ReactNode };
 
-/** How an action works, as a numbered path; a rule connects the steps on phones. */
+/** How an action works, as an ordered path: the list carries the order and a
+ * rule connects the steps, so no step needs an eyebrow label. */
 export function Steps({ steps }: { steps: readonly Step[] }) {
   return <ol className={styles.steps}>
     {steps.map(({ icon: Icon, title, body }, index) => <li key={title} className={styles.step} style={{ '--step': index } as CSSProperties}>
       <span className={styles.stepIcon} aria-hidden="true"><Icon /></span>
       <div>
-        <p className={styles.stepIndex}>Step {index + 1}</p>
         <h3>{title}</h3>
         <p>{body}</p>
       </div>
@@ -86,7 +95,7 @@ export function Callout({ icon: Icon, title, children, link }: { icon: LucideIco
     <div>
       <h3>{title}</h3>
       <p>{children}</p>
-      {link && <a href={link.href} target="_blank" rel="noopener noreferrer" className={styles.calloutLink}>{link.label}<ArrowUpRight aria-hidden="true" /></a>}
+      {link && <a href={link.href} target="_blank" rel="noopener noreferrer" onClick={leaveApp(link.href)} className={styles.calloutLink}>{link.label}<ArrowUpRight aria-hidden="true" /></a>}
     </div>
   </div>;
 }

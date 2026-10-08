@@ -18,3 +18,7 @@
   .rows[data-shown] .row:nth-child(3) .borrowed { transition-delay: 240ms; }
   .rows[data-shown] .row:nth-child(3) .share { transition-delay: 760ms; }
 }
+/* The ticket's live split, centred between the slider's range ends: figures
+   in text colour, words muted, tabular so the row holds still while dragging. */
+.caption { min-width: 0; color: var(--mut); text-align: center; font-variant-numeric: tabular-nums; }
+.caption b { color: var(--text); font-weight: 650; }

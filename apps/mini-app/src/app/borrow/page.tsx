@@ -576,17 +576,18 @@ export default function BorrowPage() {
     balanceStatus={wallet.address ? balanceStatus : 'disconnected'} />;
   const actionEditor = <div className={presentation.editor}>
     {!newPosition && <h2 className={presentation.formTitle}>{mode === 'mint' ? 'Add collateral or borrow' : 'Manage debt'}</h2>}
-    {showMint && <AmountField label={newPosition ? 'fxUSD to borrow' : 'Additional fxUSD to borrow'} symbol="fxUSD" value={mint}
-      onChange={setMint} allowZero maxDecimals={18} showPercentages={false} showMax={Boolean(capacity && capacity.maxAdditional > 0n)}
-      maxAmount={capacity && capacity.maxAdditional > 0n ? formatUnits(capacity.maxAdditional, 18) : null}
-      hint={capacity ? (capacity.maxAdditional > 0n ? `Up to ${fxUsdLimit(capacity.maxAdditional)} fxUSD with this collateral` : 'This collateral cannot borrow more')
-        : collateralEntered ? 'Your limit appears when current prices are available'
-        : newPosition ? 'Enter collateral to see how much you can borrow' : undefined} />}
+    {/* Collateral first: the borrowing limit below is computed from it. */}
     {showDeposit && <AmountField label={newPosition ? 'Starting collateral' : 'Collateral to add'} symbol={token} value={deposit}
       onChange={(value) => { setNativeMaxError(null); setDeposit(value); }} allowZero maxDecimals={tokenDecimals(token)}
       balanceState={balanceStateFor(token)} tokenSelector={picker}
       maxAmount={token === 'ETH' ? null : undefined} onMax={token === 'ETH' ? resolveNativeMax : undefined}
       maxPending={token === 'ETH' && nativeMaxPending} constraintError={token === 'ETH' ? nativeMaxError : undefined} />}
+    {showMint && <AmountField label={newPosition ? 'fxUSD to borrow' : 'Additional fxUSD to borrow'} symbol="fxUSD" value={mint}
+      onChange={setMint} allowZero maxDecimals={18} showPercentages={false} showMax={Boolean(capacity && capacity.maxAdditional > 0n)}
+      maxAmount={capacity && capacity.maxAdditional > 0n ? formatUnits(capacity.maxAdditional, 18) : null}
+      hint={capacity ? (capacity.maxAdditional > 0n ? `Up to ${fxUsdLimit(capacity.maxAdditional)} fxUSD with this collateral` : 'This collateral cannot borrow more')
+        : collateralEntered ? 'Your limit appears when current prices are available'
+        : newPosition ? 'Enter collateral above to see how much you can borrow' : undefined} />}
     {showRepay && <AmountField label="Repay amount" symbol="fxUSD" value={repay} onChange={setRepay} allowAll allowZero maxDecimals={18}
       balanceState={balanceStateFor('fxUSD')} hint={selected ? `Debt: ${formatPositionDebt(selected)}` : undefined} />}
     {showWithdraw && <AmountField label="Collateral to withdraw" symbol={token} value={withdraw} onChange={setWithdraw}
@@ -603,7 +604,7 @@ export default function BorrowPage() {
 
   return <AppShell>
     <ActionWorkspace className={presentation.workspace}>
-      <PageHeading title="Earn" />
+      <PageHeading title="Borrow" />
       {reviewStage === 'input' && <ProductNav current="borrow" />}
       <ConfirmedPositionCards />
       <ProductSurface className={presentation.card} data-testid="borrow-workspace-card">

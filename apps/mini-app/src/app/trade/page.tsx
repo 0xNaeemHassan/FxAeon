@@ -18,6 +18,7 @@ import { ConfirmedPositionCards } from '@/components/ConfirmedPositionCards';
 import { deriveConfirmedPositionHint } from '@/lib/confirmedPositions';
 import { confirmedPositionHintKey } from '@/lib/confirmedPositionStorage';
 import { AmountField, LeverageField, Segmented, TokenSelect, tokenBalanceFor, useWalletTokenBalances, type TokenBalanceView } from '@/components/ProtocolForm';
+import { leverageDebtLabel } from '@/lib/leverageShare';
 import { MAX_FX_SLIPPAGE_PERCENT, clampLeverage, estimatePlannedRouteCost, getEthereumClient, leverageBoundsFor, planIncreasePosition, prepareLeverageReview, readLeverageBounds, readSignatureRequiredDraft, restoreSignatureRequiredDraft, signatureDraftIdFromSearch, type LeverageBounds, type PlannedRoute, type TransactionExecutionResult } from '@/lib/fx';
 import { calculateNativeMax, nativeMaxErrorMessage } from '@/lib/fx/nativeMax';
 import { fetchGasTierQuotes, selectedGasTierQuote } from '@/lib/fx/gasFeePolicy';
@@ -593,7 +594,7 @@ export default function TradePage() {
 
                   <div className={styles.fieldStack}>
                     <AmountField compact label="Amount" symbol={token} value={amount} onChange={changeAmount} maxDecimals={tokenDecimals(token)} showMax showUnitPrice={false} constraintError={token === 'ETH' ? nativeMaxError : undefined} maxAmount={token === 'ETH' ? nativeMaxAmount : undefined} onMax={token === 'ETH' ? resolveNativeMax : undefined} maxPending={token === 'ETH' && nativeMaxPending} balanceState={selectedTokenBalance} tokenSelector={<TokenSelect compact label="Input asset" value={token} options={tokenOptions} onChange={changeToken} balances={wallet.address ? walletBalances.balances : undefined} balanceStatus={wallet.address ? (walletBalances.status !== 'idle' ? walletBalances.status : undefined) : 'disconnected'} />} />
-                    <LeverageField label="Target leverage" value={leverage} onChange={changeLeverage} min={leverageBounds.min} max={leverageBounds.max} error={leverageError} compact />
+                    <LeverageField label="Target leverage" value={leverage} onChange={changeLeverage} min={leverageBounds.min} max={leverageBounds.max} error={leverageError} compact split={{ side, debtLabel: leverageDebtLabel(side, market) }} />
                   </div>
                 </>
               }
