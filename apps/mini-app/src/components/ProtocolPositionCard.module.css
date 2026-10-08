@@ -132,16 +132,71 @@
 }
 
 /* The f(x) split of this position: debt (quiet) then the holder's share (the
-   accent), in proportion to collateral value. Draws in once on mount. */
-.split { display: flex; height: 6px; margin-top: 12px; overflow: hidden; border-radius: 999px; background: var(--surface-2); }
+   accent), in proportion to collateral value. Draws in once on mount. With a
+   current chain read the debt follows the market toward a line that marks
+   the pool's rebalance point, with liquidation fainter beyond it. */
+.split { position: relative; height: 6px; margin-top: 12px; }
+.splitTrack { display: flex; height: 100%; overflow: hidden; border-radius: 999px; background: var(--surface-2); }
 .splitDebt, .splitShare { display: block; height: 100%; transform-origin: left center; }
-.splitDebt { flex: 0 0 calc(var(--debt-share) * 100%); background: color-mix(in srgb, var(--text) 24%, transparent); }
+.splitDebt {
+  flex: 0 0 calc(var(--debt-share) * 100%);
+  background: color-mix(in srgb, var(--text) 24%, transparent);
+  transition: flex-basis var(--dur-slow) var(--ease-out), background-color var(--dur-base) var(--ease-out);
+}
 .splitShare { flex: 1 1 auto; background: linear-gradient(90deg, var(--mint), var(--brand-coral)); }
+.rebalanceMarker, .liquidationMarker {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--text);
+  box-shadow: 0 0 0 1.5px var(--surface);
+}
+.rebalanceMarker { left: calc(var(--rebalance-at) * 100%); }
+.liquidationMarker { left: calc(var(--liquidate-at) * 100%); opacity: .4; }
+.split:is([data-brake='rebalance'], [data-brake='liquidation']) .splitDebt { background: color-mix(in srgb, var(--warn) 72%, transparent); }
+.split:is([data-brake='rebalance'], [data-brake='liquidation']) .rebalanceMarker,
+.split[data-brake='liquidation'] .liquidationMarker { background: var(--warn); opacity: 1; }
 @media (prefers-reduced-motion: no-preference) {
   .splitDebt, .splitShare { animation: position-split-in 900ms var(--ease-out) both; }
   .splitShare { animation-delay: 240ms; }
+  .rebalanceMarker, .liquidationMarker { animation: position-marker-in var(--dur-base) var(--ease-out) both; }
 }
 @keyframes position-split-in { from { transform: scaleX(0); } }
+@keyframes position-marker-in { from { opacity: 0; } }
+
+/* One plain line under the split: how far the market can move before the
+   pool rebalances, or the state once it has. A whole-pixel line height lets
+   the placeholder reserve exactly this line. */
+.brake {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 8px 0 0;
+  color: var(--mut);
+  font-size: var(--fs-caption);
+  font-weight: 500;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.brake[data-tone='warn'] { color: var(--warn); }
+.brake > svg { flex: 0 0 13px; width: 13px; height: 13px; margin-top: 1.5px; }
+.brake a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 2px;
+  margin: -14px 0;
+  color: var(--mint);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.brake a svg { width: 12px; height: 12px; }
+.brakeSkeleton { display: block; width: min(76%, 280px); height: 10px; margin: 3px 0; border-radius: var(--radius-full); }
 
 .metrics {
   display: grid;
@@ -253,6 +308,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .card, .navigateIcon { transition: none; animation: none; }
+  .card, .navigateIcon, .splitDebt { transition: none; animation: none; }
   .interactive:hover, .interactive:hover .navigateIcon, .interactive:active { transform: none; }
 }

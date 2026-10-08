@@ -97,8 +97,16 @@ export { FX_TOKENS as __tokens };`,
   '@/components/ProtocolPositionProvider': `${shared}
 export function useProtocolPositions() {
   const status = !settled() ? 'loading' : stage() === 'unavailable' ? 'unavailable' : 'ready';
-  return { walletAddress: '${WALLET}', positions: [], pendingPositions: [], failedGroups: status === 'unavailable' ? [{ market: 'ETH', side: 'long', reason: new Error('read failed') }] : [],
+  const positions = stage() === 'positions' ? globalThis.__portfolioFixtures.positions : [];
+  return { walletAddress: '${WALLET}', positions, pendingPositions: [], failedGroups: status === 'unavailable' ? [{ market: 'ETH', side: 'long', reason: new Error('read failed') }] : [],
     status, refreshing: false, lastVerifiedAt: status === 'ready' ? Date.now() : null, refresh: async () => {}, checkingConfirmedPositions: false };
+}`,
+  // The brake provider reads the chain above this page; here each fixture
+  // position answers with a current read so the real card draws its brake.
+  '@/components/PositionBrakeContext': `export function usePositionBrake(position) {
+  if (position.info.rawDebts <= 0n) return { status: 'none' };
+  const reading = globalThis.__portfolioFixtures.brakes[position.market + ':' + position.side + ':' + position.info.positionId];
+  return reading ? { status: 'ready', reading, readAt: Date.now() } : { status: 'unavailable' };
 }`,
   '@/components/ConfirmedPositionCards': `export const ConfirmedPositionCards = () => null;`,
   // CommonJS behind a Proxy: the read facade is the only live export; every
@@ -160,8 +168,18 @@ const fixtures = `
   });
   const holdings = [asset(1, 'USDC', 'USDC', 4500, 1, 6, USDC), asset(1, 'ETH', 'ETH', 1.25, 2400), asset(8453, 'ETH', 'ETH', 0.5, 2400), asset(1, 'fxUSD', 'fxUSD', 1200, 1, 18, FXUSD)];
   const networks = { 1: { chainId: 1, status: 'ready', error: '' }, 8453: { chainId: 8453, status: 'ready', error: '' } };
+  const E18 = 10n ** 18n;
+  const position = (market, side, positionId, colls, debts, collsToken, debtsToken, leverage) => ({ market, side, info: {
+    positionId, rawColls: BigInt(Math.round(colls * 1e6)) * 10n ** 12n, rawDebts: BigInt(Math.round(debts * 1e6)) * 10n ** 12n,
+    currentLeverage: leverage, lsdLeverage: side === 'short' ? leverage - 1 : leverage, rawCollsToken: collsToken, rawDebtsToken: debtsToken, rawCollsDecimals: 18, rawDebtsDecimals: 18,
+  } });
   globalThis.__portfolioFixtures = {
     now,
+    positions: [position('ETH', 'long', 2033, 2.5, 3100, 'ETH', 'fxUSD', 2.07), position('BTC', 'short', 109, 15000, 0.11, 'fxUSD', 'WBTC', 3.24)],
+    brakes: {
+      'ETH:long:2033': { side: 'long', debtRatio: 507n * E18 / 1000n, rebalanceRatio: 880n * E18 / 1000n, liquidateRatio: 950n * E18 / 1000n, priceAtRead: 2400 },
+      'BTC:short:109': { side: 'short', debtRatio: 700n * E18 / 1000n, rebalanceRatio: 900n * E18 / 1000n, liquidateRatio: 950n * E18 / 1000n, priceAtRead: 104000 },
+    },
     assets: (stage) => {
       const assets = stage === 'empty' ? [] : holdings;
       return { walletAddress: WALLET, assets, networks, totalUsdValue: assets.reduce((sum, item) => sum + item.usdValue, 0), unpricedAssetCount: 0, updatedAt: now, source: 'canonical' };
@@ -207,6 +225,11 @@ export async function buildPortfolioStatesLab(): Promise<PortfolioStatesLab> {
   const script = result.outputFiles.find((file) => file.path.endsWith('.js'))?.text;
   const modules = result.outputFiles.find((file) => file.path.endsWith('.css'))?.text ?? '';
   if (!script) throw new Error('The Portfolio states bundle was not emitted.');
+  return { script, css: `${await buildLabGlobalCss()}\n${modules}` };
+}
+
+/** The app's real global and shell CSS (with Tailwind) and its Inter face, for harness pages. */
+export async function buildLabGlobalCss(): Promise<string> {
   const postcss = appRequire('postcss');
   const tailwindcss = appRequire('tailwindcss');
   const tailwindConfig = appRequire(resolve(appRoot, 'tailwind.config.js'));
@@ -218,5 +241,5 @@ export async function buildPortfolioStatesLab(): Promise<PortfolioStatesLab> {
   const globals = await postcss([tailwindcss(tailwindConfig)]).process(`${globalSource}\n${productSource}`, { from: resolve(appRoot, 'e2e/portfolio-states-global.css') });
   const font = await readFile(resolve(__dirname, 'assets/inter-latin.woff2'));
   const fontCss = `@font-face{font-family:Inter;src:url(data:font/woff2;base64,${font.toString('base64')}) format('woff2');font-style:normal;font-weight:100 900;font-display:block}:root{--font-sans:Inter}`;
-  return { script, css: `${fontCss}\n${globals.css}\n${modules}` };
+  return `${fontCss}\n${globals.css}`;
 }

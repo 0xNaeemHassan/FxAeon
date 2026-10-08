@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { AlertTriangle, ChevronRight, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ArrowUpRight, ChevronRight, RefreshCw } from 'lucide-react';
 import React from 'react';
 import {
   formatAmount,
@@ -12,16 +12,27 @@ import {
   type UiPosition,
 } from '@/app/trade/fxUi';
 import { useLiveMarketQuote, useUsdPrices } from '@/components/PriceProvider';
+import { usePositionBrake } from '@/components/PositionBrakeContext';
 import { MissingValue } from '@/components/MissingValue';
 import TokenIcon from '@/components/TokenIcon';
 import { formatUsdPrice, priceKeyForSymbol } from '@/lib/prices';
 import { freshDisplayPrices } from '@/lib/displayPrices';
+import { positionBrakeCopy, positionBrakeView } from '@/lib/positionBrake';
 import { calculatePositionUsdValuation, debtCollateralRatioPercent, formatUsdCents } from '@/lib/positionValuation';
 import { groupDigits } from '@/lib/amount';
+import { openExternalLink } from '@/lib/telegram';
 import styles from './ProtocolPositionCard.module.css';
 
 function Skeleton({ className = '' }: { className?: string }) {
   return <div aria-hidden="true" className={`skeleton ${className}`} />;
+}
+
+/** Leaves FxAeon through Telegram's own browser in the Mini App, a new tab elsewhere. */
+function openDocs(href: string) {
+  return (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (openExternalLink(href)) event.preventDefault();
+  };
 }
 
 function positionValuation(position: UiPosition, prices: ReturnType<typeof useUsdPrices>['prices']) {
@@ -95,6 +106,15 @@ function PositionBody({
     && valuation.collateralUsdCents > 0n && valuation.debtUsdCents >= 0n && valuation.debtUsdCents <= valuation.collateralUsdCents
     ? Number((valuation.debtUsdCents * 10_000n) / valuation.collateralUsdCents) / 10_000
     : null;
+  // The liquidation brake: this position's on-chain debt ratio against its
+  // pool's live thresholds, moved with the live quote between chain reads.
+  // Without a current read the bar keeps the split above and draws no marker.
+  const brake = usePositionBrake(position);
+  const brakeView = brake.status === 'ready'
+    ? positionBrakeView(brake.reading, hasFreshLiveQuote && liveQuote ? liveQuote.price : null)
+    : null;
+  const brakeCopy = brakeView ? positionBrakeCopy(brakeView, position.market, position.side) : null;
+  const splitFill = brakeView?.fill ?? debtShare;
 
   return (
     <div className={`${styles.content} ${compact ? styles.compactContent : ''}`}>
@@ -119,9 +139,37 @@ function PositionBody({
         </div>
         <span className={styles.positionValueNumber}>{netEquity}</span>
       </div>
-      {debtShare !== null && <div className={styles.split} aria-hidden="true" data-position-split style={{ '--debt-share': debtShare } as React.CSSProperties}>
-        <i className={styles.splitDebt} /><i className={styles.splitShare} />
+      {splitFill !== null && <div
+        className={styles.split}
+        aria-hidden="true"
+        data-position-split
+        data-brake={brakeView?.state}
+        title={brakeView ? 'Debt share of collateral, with the rebalance point marked (liquidation fainter)' : undefined}
+        style={{ '--debt-share': splitFill, '--rebalance-at': brakeView?.rebalanceAt ?? undefined, '--liquidate-at': brakeView?.liquidateAt ?? undefined } as React.CSSProperties}
+      >
+        <span className={styles.splitTrack}><i className={styles.splitDebt} /><i className={styles.splitShare} /></span>
+        {brakeView?.liquidateAt != null && <i className={styles.liquidationMarker} data-brake-marker="liquidation" />}
+        {brakeView?.rebalanceAt != null && <i className={styles.rebalanceMarker} data-brake-marker="rebalance" />}
       </div>}
+      {brake.status === 'loading' && <p className={styles.brake} role="status" aria-label="Loading rebalance point">
+        <span className={`skeleton ${styles.brakeSkeleton}`} aria-hidden="true" />
+      </p>}
+      {brakeView && brakeCopy && <p
+        className={styles.brake}
+        data-tone={brakeCopy.tone}
+        data-position-brake={brakeView.state}
+        title={brakeCopy.tone === 'warn' && interactive ? `${brakeCopy.docsLabel}: ${brakeCopy.docsUrl}` : undefined}
+      >
+        {brakeCopy.tone === 'warn' && <AlertTriangle aria-hidden="true" />}
+        <span>
+          {brakeCopy.line}
+          {brakeCopy.liquidation && <span className="sr-only"> {brakeCopy.liquidation}</span>}
+          {/* A link cannot sit inside a card that is itself a link or button. */}
+          {brakeCopy.tone === 'warn' && !interactive && <>
+            {' '}<a href={brakeCopy.docsUrl} target="_blank" rel="noopener noreferrer" onClick={openDocs(brakeCopy.docsUrl)}>{brakeCopy.docsLabel}<ArrowUpRight aria-hidden="true" /></a>
+          </>}
+        </span>
+      </p>}
       <div className={styles.metrics}>
         <div className={styles.metric}>
           <span className={styles.metricLabel}>Collateral</span>
@@ -235,6 +283,8 @@ export function ProtocolPositionSkeleton({ compact = false }: { compact?: boolea
           <Skeleton className={styles.skeletonFigure} />
         </div>
         <Skeleton className={styles.skeletonSplit} />
+        {/* The brake line under the split, reserved as the loaded card reserves it. */}
+        <p className={styles.brake}><span className={`skeleton ${styles.brakeSkeleton}`} /></p>
         <div className={styles.metrics}>
           {/* Collateral and debt carry a USD line beneath their amount; price and ratio do not. */}
           {[3, 3, 2, 2].map((lines, tile) => <div key={tile} className={`${styles.metric} ${styles.skeletonMetric}`}>
