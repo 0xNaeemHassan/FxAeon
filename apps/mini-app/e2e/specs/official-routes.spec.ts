@@ -713,7 +713,7 @@ test.describe("Move and More compact surfaces", () => {
     await page.goto("/move", { waitUntil: "domcontentloaded" });
     const amount = page.getByLabel("Amount in fxUSD");
     await amount.fill("not-a-number");
-    await expect(page.getByText("Enter a plain decimal number.", { exact: true })).toBeVisible();
+    await expect(page.getByText("Use digits and one decimal point, like 1.25.", { exact: true })).toBeVisible();
     await expect(page.getByText(/\b(?:Expected receive|ETA)\b/i)).toHaveCount(0);
     await amount.fill("1");
     await expect(page.getByText(/\b(?:Expected receive|ETA)\b/i)).toHaveCount(0);

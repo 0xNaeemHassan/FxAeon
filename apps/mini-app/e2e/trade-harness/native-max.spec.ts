@@ -16,7 +16,8 @@ const mocks: Record<string, string> = {
   '@/components/ui': `import React from 'react'; export const AppShell = ({children}) => <main>{children}</main>; export const Card = ({children,...props}) => <section {...props}>{children}</section>;`,
   '@/components/ProductUI': `import React from 'react'; export const Disclosure = ({children}) => <>{children}</>;`,
   '@/components/ProductLayout': `import React from 'react'; export const ActionWorkspace = ({children,...props}) => <section {...props}>{children}</section>;`,
-  '@/components/ActionReview': `import React from 'react'; export const ActionReview = ({editor, label}) => <>{editor}<button type="button">{label}</button></>;`,
+  // The real trigger wraps its primary action in .reviewTrigger; Enter in the amount looks for it there.
+  '@/components/ActionReview': `import React from 'react'; export const ActionReview = ({editor, label, blocker}) => <>{editor}<div className="reviewTrigger"><button type="button" disabled={Boolean(blocker)} onClick={() => { globalThis.__tradeMaxHarness.reviews = (globalThis.__tradeMaxHarness.reviews ?? 0) + 1; }}>{label}</button></div></>;`,
   '@/components/MarketChart': `import React from 'react'; export const TradeMarketChart = ({market,onMarketChange}) => <select aria-label="Market" value={market} onChange={e=>onMarketChange(e.target.value)}><option>ETH</option><option>BTC</option></select>;`,
   '@/components/PriceProvider': `export const useUsdPrices = () => ({status:'unavailable',prices:{}}); export const useLiveMarketQuote = () => ({ quote: null, status: 'unavailable', isFresh: false });`,
   '@/components/TokenIcon': `import React from 'react'; export default () => <span />;`,
@@ -32,7 +33,7 @@ const mocks: Record<string, string> = {
   '@/lib/fx/nativeMax': `export const nativeMaxErrorMessage=()=> 'Current gas fees are unavailable. Try again shortly.'; export const calculateNativeMax = (input) => new Promise((resolve,reject) => globalThis.__tradeMaxHarness.requests.push({balanceWei:input.balanceWei,resolve,reject}));`,
   '@/lib/fx/routePrefetch': `export class RoutePrefetchStore { invalidate(){} prime(){return Promise.resolve();} get(){return null;} }`,
   '@/lib/wallet': `export const usePrivyWallet = () => ({ready:true,authenticated:true,address:globalThis.__tradeMaxHarness.address,chainId:globalThis.__tradeMaxHarness.chainId,connectionVersion:1,isEmbedded:true,wallets:[],sendTransaction:async()=>({})});`,
-  '@/lib/amount': `export const positiveDecimal = (value) => /^\\d+(\\.\\d*)?$/.test(value); export const calculateFractionDecimal=(value,fraction)=>value; export const compareExactDecimals=(left,right)=>Number(left)-Number(right); export const decimalInputError=()=>null; export const formatExactDecimal=(value)=>String(value); export const normalizeAmountInput=(value)=>value;`,
+  '@/lib/amount': `export const positiveDecimal = (value) => /^\\d+(\\.\\d*)?$/.test(value); export const calculateFractionDecimal=(value,fraction)=>value; export const compareExactDecimals=(left,right)=>Number(left)-Number(right); export const decimalInputError=()=>null; export const formatExactDecimal=(value)=>String(value); export const formatBalanceDecimal=(value)=>String(value); export const normalizeAmountInput=(value)=>value;`,
   '@/lib/prices': `export const formatUsd=()=> '$0.00'; export const formatUsdPrice=()=> '$0.00'; export const priceKeyForSymbol=()=> null; export const usdValueForDecimal=()=> null;`,
   '@/lib/fx/tokenPresentation': `export const tokenSymbol=(value)=>value; export const tokenName=(value)=>value; export const tokenPresentation=(value)=>({symbol:value});`,
   '@/lib/telegram': `export const haptic=()=>{}; export const openExternalLink=()=>false;`,
@@ -100,6 +101,25 @@ test('StrictMode Max calculation resolves into the amount field', async ({ page 
   await resolveRequest(page, 0, '0.9');
   await expect(page.getByRole('textbox', { name: 'Amount in ETH' })).toHaveValue('0.9');
   await expect(max).toBeEnabled();
+});
+
+test('Enter in the amount asks for the review, as a form submit would, only once it is ready', async ({ page }) => {
+  await mount(page);
+  const amount = page.getByRole('textbox', { name: 'Amount in ETH' });
+  const review = page.getByRole('button', { name: 'Open ETH Long' });
+  const reviews = () => page.evaluate(() => (globalThis as typeof globalThis & { __tradeMaxHarness: { reviews?: number } }).__tradeMaxHarness.reviews ?? 0);
+  // Nothing to review yet: the action names what is missing, and Enter does nothing.
+  await expect(review).toBeDisabled();
+  await amount.press('Enter');
+  expect(await reviews()).toBe(0);
+  await amount.fill('0.5');
+  await expect(review).toBeEnabled();
+  await amount.press('Enter');
+  await expect.poll(reviews).toBe(1);
+  // A modified Enter is not a submit.
+  await amount.press('Shift+Enter');
+  await amount.press('Control+Enter');
+  expect(await reviews()).toBe(1);
 });
 
 test('balance changes discard an in-flight Max result and restore the button', async ({ page }) => {

@@ -40,13 +40,15 @@ export function decimalInputError(
   }
   if (!value || (options.allowAll && value.toLowerCase() === 'all')) return null;
   if (value.length > 100 || !/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(value)) {
-    return 'Enter a plain decimal number.';
+    return 'Use digits and one decimal point, like 1.25.';
   }
   const fraction = value.split('.')[1] ?? '';
   if (fraction.length > maxDecimals) {
-    return `${maxDecimals}-decimal precision maximum for this asset.`;
+    return maxDecimals === 0
+      ? 'This asset has no decimal places. Enter a whole number.'
+      : `This asset allows ${maxDecimals} decimal places. Remove the extra digits.`;
   }
-  if (value.endsWith('.')) return 'Finish the decimal amount.';
+  if (value.endsWith('.')) return 'Add a digit after the decimal point.';
   if (!options.allowZero && !/[1-9]/.test(value)) return 'Enter an amount greater than zero.';
   return null;
 }
@@ -119,6 +121,46 @@ export function formatSignificantDecimal(value: string, significant = 5): string
   const fractionDigits = Math.max(integer.length >= 4 ? 2 : 0, significant - integer.length);
   const kept = fraction.slice(0, fractionDigits).replace(/0+$/, '');
   return `${sign}${integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}${kept ? `.${kept}` : ''}`;
+}
+
+const group = (integer: string) => integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+/**
+ * A balance a user can spend, as display copy: grouped, at most
+ * `maxFractionDigits` decimals (eight, as Portfolio shows holdings), rounded
+ * down so it never reads as more than the wallet holds. A positive balance
+ * below the last place reads "<0.00000001", never zero.
+ */
+export function formatBalanceDecimal(value: string, maxFractionDigits = 8): string {
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(value.trim());
+  if (!match || !Number.isInteger(maxFractionDigits) || maxFractionDigits < 0 || maxFractionDigits > 35) return value;
+  const [, rawInteger, rawFraction = ''] = match;
+  const integer = rawInteger.replace(/^0+(?=\d)/, '');
+  const fraction = rawFraction.slice(0, maxFractionDigits).replace(/0+$/, '');
+  if (integer === '0' && !fraction && /[1-9]/.test(rawFraction)) {
+    return maxFractionDigits === 0 ? '<1' : `<0.${'0'.repeat(maxFractionDigits - 1)}1`;
+  }
+  return `${group(integer)}${fraction ? `.${fraction}` : ''}`;
+}
+
+/**
+ * A cost or a minimum, as display copy: at most `significant` significant
+ * digits (two decimals once it reaches 1,000, as formatSignificantDecimal),
+ * rounded up so the figure shown always covers the exact one.
+ */
+export function formatSignificantDecimalUp(value: string, significant = 3): string {
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(value.trim());
+  if (!match || !Number.isInteger(significant) || significant < 1 || significant > 30) return value;
+  const integer = match[1].replace(/^0+(?=\d)/, '');
+  const fraction = (match[2] ?? '').replace(/0+$/, '');
+  const kept = integer === '0'
+    ? /^0*/.exec(fraction)![0].length + significant
+    : Math.max(integer.length >= 4 ? 2 : 0, significant - integer.length);
+  if (fraction.length <= kept) return `${group(integer)}${fraction ? `.${fraction}` : ''}`;
+  const units = (BigInt(`${integer}${fraction.slice(0, kept)}`) + 1n).toString().padStart(kept + 1, '0');
+  const roundedInteger = kept === 0 ? units : units.slice(0, -kept);
+  const roundedFraction = kept === 0 ? '' : units.slice(-kept).replace(/0+$/, '');
+  return `${group(roundedInteger)}${roundedFraction ? `.${roundedFraction}` : ''}`;
 }
 
 /**
