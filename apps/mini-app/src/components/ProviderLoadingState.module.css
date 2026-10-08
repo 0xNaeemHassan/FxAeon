@@ -1,15 +1,37 @@
-.controls { display: flex; gap: 8px; }
-.controls span { width: 128px; height: 44px; border-radius: 24px; background: var(--surface-2); }
-.controls span:last-child { width: 44px; }
-.content { padding-top: 8px; }
-.heading { width: 120px; height: 32px; margin: 8px 0 24px; border-radius: 8px; background: var(--surface-2); }
+/* Top bar placeholders sit inside the real control classes: the chain mark,
+   the network label (shown from 431px), the wallet avatar and name, and the
+   theme button's icon. */
+.chainMark { flex: 0 0 17px; width: 17px; height: 17px; border-radius: 50%; }
+.networkLabel { width: 52px; height: 9px; border-radius: var(--radius-full); }
+.avatar { flex: 0 0 22px; width: 22px; height: 22px; border-radius: 50%; }
+.identity { flex: 0 1 auto; width: 82px; min-width: 28px; height: 10px; border-radius: var(--radius-full); }
+.themeMark { width: 18px; height: 18px; border-radius: 50%; }
+
+/* Portfolio's market cards (the frame MarketChart's mini card draws). */
+.marketCard {
+  display: block;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(120% 80% at 100% 0%, color-mix(in srgb, var(--mint) 6%, transparent), transparent 60%),
+    var(--surface);
+  box-shadow: var(--ring-inset);
+  padding: 16px;
+}
+
+/* A route title drawn before the live one: plain, so the live title's light
+   crosses it only once. */
+header.stillHeading h1 { animation: none; background: none; -webkit-text-fill-color: currentColor; }
+
+/* Other routes: a heading and two quiet blocks in the action layout. */
+.heading { width: 120px; height: 32px; margin: 0 0 14px; border-radius: var(--radius-xs); }
 .workspace { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 24px; }
-.overview, .form { padding: 24px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); }
+.overview, .form { padding: 24px; border: 1px solid var(--hairline); border-radius: var(--radius-lg); background: var(--surface); }
 .overview { display: flex; gap: 16px; align-items: flex-start; }
-.overview span { width: 28%; height: 24px; border-radius: 8px; background: var(--surface-2); }
+.overview > span { width: 28%; height: 24px; border-radius: var(--radius-xs); }
 .form { display: grid; gap: 16px; }
-.form span { height: 32px; border-radius: 8px; background: var(--surface-2); }
-.form div { height: 88px; border-radius: 16px; background: var(--surface-2); }
+.form > span { height: 32px; border-radius: var(--radius-xs); }
+.form > div { height: 88px; border-radius: var(--radius-md); }
 @media (max-width: 767px) {
   .workspace { grid-template-columns: 1fr; gap: 16px; }
   .overview { min-height: 100px; padding: 16px; }

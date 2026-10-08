@@ -11,16 +11,20 @@
 .worth .quantity { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .quantity { min-width: 0; color: var(--mut); font-size: var(--fs-caption); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .unavailable { color: var(--mut); font-size: 11px; font-weight: 400; }
+/* Loading rows match the ledger rows they stand in for: Portfolio's rows
+   (68px, 14px gap; 72px and 10px on phones) and the wallet sheet's (64px). */
 .loadingList { min-width: 0; }
-.loadingRow { display: flex; align-items: center; gap: 12px; min-height: 72px; padding-block: 10px; }
+.loadingRow { display: flex; align-items: center; gap: 14px; min-height: 68px; padding-block: 10px; }
+.loadingCompact .loadingRow { gap: 12px; min-height: 64px; padding-block: 8px; }
 
 .loadingIcon { width: 34px; height: 34px; flex: 0 0 34px; border-radius: 50%; }
-.loadingName, .loadingWorth { display: grid; gap: 8px; }
+.loadingName, .loadingWorth { display: grid; gap: 9px; }
 .loadingName { flex: 1; }
 .loadingWorth { justify-items: end; }
-.loadingName > span, .loadingWorth > span { display: block; height: 10px; border-radius: 4px; }
-.loadingName > span:first-child { width: 40px; }
-.loadingName > span:last-child { width: 62px; }
-.loadingWorth > span:first-child { width: 66px; }
-.loadingWorth > span:last-child { width: 92px; }
+.loadingName > span, .loadingWorth > span { display: block; height: 10px; border-radius: var(--radius-full); }
+.loadingName > span:first-child { width: 44px; height: 11px; }
+.loadingName > span:last-child { width: 62px; height: 9px; }
+.loadingWorth > span:first-child { width: 70px; height: 11px; }
+.loadingWorth > span:last-child { width: 58px; height: 9px; }
+@media (max-width: 600px) { .loadingRow { gap: 10px; min-height: 72px; } }
 @media (max-width: 350px) { .worth { max-width: 55%; } .quantity { font-size: 11px; } }

@@ -412,4 +412,5 @@ function Sparkline({ snapshot, rising }: { snapshot: MarketHistorySnapshot; risi
   return <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full" role="img" aria-label={`${snapshot.market} 24 hour trend`}><defs><linearGradient id={fillId} x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor={color} stopOpacity="0.2" /><stop offset="1" stopColor={color} stopOpacity="0" /></linearGradient></defs><polygon className="sparkline-fill" points={`0,100 ${coordinates} 100,100`} fill={`url(#${fillId})`} /><polyline className="sparkline-line" pathLength={1} points={coordinates} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" /><title>{snapshot.market} trend</title></svg>;
 }
 
-function ChartSkeleton() { return <div role="status" aria-label="Loading market chart" className="market-chart-skeleton h-[220px]" />; }
+/** Fills the chart frame at every breakpoint, so the loaded chart takes its exact place. */
+function ChartSkeleton() { return <div role="status" aria-label="Loading market chart" className="market-chart-skeleton" />; }

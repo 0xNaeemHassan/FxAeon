@@ -219,12 +219,34 @@
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
+  gap: 6px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  font-weight: 650;
   transition: background-color var(--dur-fast) ease;
 }
 .notice > button:hover:not(:disabled) { background: color-mix(in srgb, var(--warn) 14%, transparent); }
-.notice > button:disabled { opacity: .5; }
+.notice > button:disabled { opacity: .6; }
 .notice > button svg { width: 15px; height: 15px; }
+
+/* The loading card: each placeholder sits where the card's own line or tile
+   does (token mark, market and meta lines, value, split, four tiles). Bar
+   margins add up to the text line boxes they replace, so the loaded card
+   arrives at the same height. */
+.skeletonToken { flex: 0 0 40px; width: 40px; height: 40px; border-radius: 50%; }
+.compactContent .skeletonToken { flex-basis: 34px; width: 34px; height: 34px; }
+.skeletonLines { min-width: 0; flex: 1; }
+.skeletonLines > * { width: 42%; max-width: 132px; height: 13px; margin: 4px 0 5px; border-radius: var(--radius-full); }
+.skeletonLines > * + * { width: 58%; max-width: 168px; height: 10px; margin: 7px 0 3px; }
+.positionValue .skeletonLines > * { width: 64%; max-width: 104px; height: 11px; margin: 3px 0 3px; }
+.positionValue .skeletonLines > * + * { width: 48%; max-width: 80px; height: 9px; margin: 4px 0 3px; }
+.skeletonFigure { flex: 0 0 auto; width: clamp(96px, 30%, 132px); height: 24px; margin-bottom: 1px; border-radius: var(--radius-xs); }
+.skeletonSplit { height: 6px; margin-top: 12px; border-radius: var(--radius-full); }
+.skeletonMetric > * { width: 46%; height: 9px; margin: 3px 0 2px; border-radius: var(--radius-full); }
+.skeletonMetric > :nth-child(2) { width: 72%; height: 12px; margin: 7px 0 3px; }
+.compactContent .skeletonMetric > :nth-child(2) { margin: 6px 0 3px; }
+.skeletonMetric > :nth-child(3) { width: 40%; height: 10px; margin: 5px 0 3px; }
+.compactContent .skeletonMetric > :nth-child(3) { margin: 4px 0 2px; }
 
 @media (max-width: 359px) {
   .card { padding: 12px; }

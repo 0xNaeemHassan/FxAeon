@@ -16,6 +16,12 @@
 .identity > :global(.address-chip) { padding-left: 0; }
 .identityTitle :global(.address-chip) { flex: 0 0 44px; padding-inline: 0; }
 .handle { display: none; }
+/* The header control while the wallet provider starts: avatar and name in outline. */
+.triggerLoading { cursor: progress; }
+.triggerAvatar { flex: 0 0 22px; width: 22px; height: 22px; border-radius: 50%; }
+/* A definite width (about a short address) so the control measures like the
+   loaded name; it still yields on the narrowest headers. */
+.triggerName { flex: 0 1 auto; width: 82px; min-width: 28px; height: 10px; border-radius: var(--radius-full); }
 .iconButton { display: inline-grid; flex: 0 0 auto; min-width: 44px; min-height: 44px; place-items: center; border-radius: 50%; color: var(--mut); transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease, transform var(--dur-slow) var(--ease-spring); }
 .iconButton:hover:not(:disabled) { color: var(--text); background: var(--surface-2); }
 .iconButton:active:not(:disabled) { transform: scale(0.92); transition-duration: var(--dur-press); }
@@ -23,8 +29,17 @@
 .valueTop { display: flex; align-items: center; justify-content: flex-start; gap: 8px; color: var(--mut); font-size: var(--fs-small); font-weight: 500; }
 .valueTop > div { display: flex; align-items: center; gap: 6px; }
 .valueTop .iconButton { margin: -8px 0 -8px -6px; }
-.partial { padding: 4px 7px; border-radius: 7px; background: var(--warn-dim); color: var(--warn); font-size: var(--fs-micro); }
-.total { display: block; margin: 2px 0 4px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+/* As tall as the rolling digits (1.12em windows) while a placeholder waits in it. */
+.total { display: block; min-height: 1.125em; margin: 2px 0 4px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.total :global(.missing-value) { width: 4.8em; }
+.total :global(.missing-value-bar) { height: .66em; border-radius: var(--radius-sm); }
+/* An unreadable total says so at text size inside the figure's line, with its retry. */
+.totalUnavailable { display: inline-flex; min-height: 1.02em; max-width: 100%; flex-wrap: wrap; align-items: center; column-gap: 8px; vertical-align: top; color: var(--mut); }
+.totalUnavailable > svg { flex: 0 0 auto; }
+.totalUnavailable > :is(span, button) { font-size: var(--fs-body); font-weight: 500; letter-spacing: 0; line-height: 1.3; }
+.totalUnavailable button { display: inline-flex; min-height: 44px; align-items: center; padding: 0 4px; color: var(--mint); font-weight: 600; }
+.totalUnavailable button:disabled { opacity: .7; }
+:root[data-theme='light'] .totalUnavailable button { color: var(--mint-bright); }
 .actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 14px 0 0; }
 .actions > a { display: flex; min-width: 0; min-height: 52px; align-items: center; justify-content: center; gap: 8px; padding: 10px; border: 0; border-radius: var(--radius-md); background: var(--surface-2); color: var(--text); font-size: var(--fs-body); font-weight: 600; text-align: center; transition: background-color var(--dur-fast) ease, transform var(--dur-slow) var(--ease-spring); }
 .actions > a:hover { background: var(--surface-3); }

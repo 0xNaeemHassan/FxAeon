@@ -1421,19 +1421,18 @@ select.field-control option {
   flex: 0 0 auto;
 }
 
+/* Chart areas share the placeholder shimmer above; a full chart frame keeps
+   its tone lighter so the large area stays quiet. */
 .market-chart-skeleton {
   position: relative;
   overflow: hidden;
-  background: color-mix(in srgb, var(--text) 2.5%, transparent);
+  border-radius: var(--radius-sm);
 }
 
-.market-chart-skeleton::after {
-  content: '';
+.market-chart-frame > .market-chart-skeleton {
   position: absolute;
   inset: 0;
-  background: linear-gradient(100deg, transparent 32%, color-mix(in srgb, var(--text) 8%, transparent) 48%, transparent 64%);
-  background-size: 220% 100%;
-  animation: shimmer 1.45s linear infinite;
+  --skeleton-tone: color-mix(in srgb, var(--mut) 8%, transparent);
 }
 
 .portfolio-context-tabs {
@@ -1573,7 +1572,7 @@ select.field-control option {
   height: 2px;
   overflow: hidden;
   border-radius: 99px;
-  background: rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
 }
 
 .loading-line::after {
@@ -1582,8 +1581,14 @@ select.field-control option {
   width: 42%;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, transparent, var(--mint-bright), transparent);
+  background: linear-gradient(90deg, transparent, var(--mint), transparent);
   animation: loading-slide 1.1s ease-in-out infinite;
+}
+
+/* Reduced motion keeps the segment still and visible instead of letting it
+   finish its one shortened run off the track. */
+@media (prefers-reduced-motion: reduce) {
+  .loading-line::after { left: 29%; animation: none !important; }
 }
 
 /* Motion */
@@ -1653,14 +1658,28 @@ select.field-control option {
 .stagger > * { animation: none; }
 .wallet-profile-sheet { animation: surface-rise var(--dur-sheet) var(--ease-sheet) both; }
 
+/* One shimmer for every placeholder (blocks, inline values, chart areas): a
+   translucent tone that reads on the canvas and on cards alike, crossed by
+   the same soft glint on the same beat. Reduced motion leaves the plain tone. */
+.skeleton,
+.missing-value-bar,
+.market-chart-skeleton {
+  --skeleton-tone: color-mix(in srgb, var(--mut) 15%, transparent);
+  --skeleton-glint: color-mix(in srgb, var(--text) 9%, transparent);
+  background:
+    linear-gradient(100deg, transparent 30%, var(--skeleton-glint) 50%, transparent 70%) 0 0 / 220% 100%,
+    var(--skeleton-tone);
+  animation: shimmer 1.6s var(--ease-in-out) infinite;
+}
+:root[data-theme='light'] :is(.skeleton, .missing-value-bar, .market-chart-skeleton) {
+  --skeleton-tone: color-mix(in srgb, var(--mut) 14%, transparent);
+  --skeleton-glint: rgb(255 255 255 / 62%);
+}
+
 .skeleton {
   overflow: hidden;
   border: 0;
   border-radius: var(--radius-md);
-  background:
-    linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--text) 7%, transparent) 50%, transparent 70%) 0 0 / 220% 100%,
-    var(--surface-2);
-  animation: shimmer 1.6s var(--ease-in-out) infinite;
 }
 
 /* Inline numeric placeholders reserve their final width so verified reads can
@@ -1685,25 +1704,20 @@ select.field-control option {
   width: 100%;
   height: .62em;
   border-radius: var(--radius-full);
-  background:
-    linear-gradient(100deg, transparent 25%, color-mix(in srgb, var(--mint) 34%, transparent) 50%, transparent 75%) 0 0 / 220% 100%,
-    color-mix(in srgb, var(--mut) 16%, transparent);
-  animation: missing-value-shimmer 1.6s var(--ease-in-out) infinite;
 }
 
 .missing-value-unavailable {
   color: var(--mut);
 }
 
+/* The mark stays at text size even inside a hero figure, where an em-sized
+   icon would read as a warning sign instead of a missing value. */
 .missing-value-icon {
   width: .9em;
+  max-width: 18px;
   height: .9em;
+  max-height: 18px;
   flex: 0 0 auto;
-}
-
-@keyframes missing-value-shimmer {
-  from { background-position: 160% 0; }
-  to { background-position: -60% 0; }
 }
 
 /* Leverage slider: a precise track with a soft, physical thumb. */
@@ -2023,9 +2037,10 @@ input[type='range'].lever:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3p
     transform: none !important;
   }
   .missing-value-bar,
-  .skeleton {
+  .skeleton,
+  .market-chart-skeleton {
     animation: none;
-    background-position: 50% 0;
+    background: var(--skeleton-tone);
   }
 }
 

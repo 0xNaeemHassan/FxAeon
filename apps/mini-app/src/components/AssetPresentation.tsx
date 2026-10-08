@@ -52,9 +52,10 @@ export function AssetRowContent({ asset, loading = false }: { asset: WalletAsset
   </>;
 }
 
-/** Preserve the holdings ledger's shape during the first balance read. */
-export function AssetListSkeleton() {
-  return <div role="status" aria-label="Loading assets" className={styles.loadingList}>
+/** Preserve the holdings ledger's shape during the first balance read; the
+ * wallet sheet's rows are shorter than Portfolio's, so it asks for compact. */
+export function AssetListSkeleton({ compact = false }: { compact?: boolean }) {
+  return <div role="status" aria-label="Loading assets" className={`${styles.loadingList} ${compact ? styles.loadingCompact : ''}`}>
     {[0, 1, 2].map((row) => <div key={row} className={styles.loadingRow} aria-hidden="true">
       <span className={`${styles.loadingIcon} skeleton`} />
       <span className={styles.loadingName}><span className="skeleton" /><span className="skeleton" /></span>
