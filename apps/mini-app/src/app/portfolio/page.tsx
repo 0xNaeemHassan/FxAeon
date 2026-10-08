@@ -173,7 +173,9 @@ function PortfolioWallet() {
     void loadProtocol();
   }, [identity, loadProtocol, realtime.latestBlockNumber, realtime.status, walletAddress]);
 
-  if (!ready || !walletState.ready) return <PortfolioLoading timedOut={walletTimedOut} />;
+  // A view of this same tree, not a separate component: when the wallet settles,
+  // React keeps its controls (the actions, the network choice) instead of remounting them.
+  if (!ready || !walletState.ready) return portfolioLoadingView({ timedOut: walletTimedOut, network, onNetworkChange: setNetwork });
 
   if (!authenticated || !wallet) {
     return <DisconnectedPortfolio authenticated={authenticated} />;
@@ -307,10 +309,14 @@ function positionsSummary(status: 'idle' | 'loading' | 'ready' | 'partial' | 'un
 /**
  * Until the wallet provider is ready the page keeps its real layout: values
  * wait as placeholders in their final places while the actions, network tabs
- * and markets already work, so nothing moves when the wallet arrives.
+ * and markets already work, so nothing moves when the wallet arrives. It is a
+ * plain view, not a component, and its children sit in the same slots as the
+ * ready page's, so React updates them in place: a tapped action or a chosen
+ * network survives the handoff.
  */
-function PortfolioLoading({ timedOut }: { timedOut: boolean }) {
-  const [network, setNetwork] = useState<PortfolioNetwork>('all');
+function portfolioLoadingView({ timedOut, network, onNetworkChange }: {
+  timedOut: boolean; network: PortfolioNetwork; onNetworkChange: (network: PortfolioNetwork) => void;
+}) {
   if (timedOut) {
     return <div id="overview" className={presentation.dashboard}>
       <div className={presentation.primary}>
@@ -326,7 +332,9 @@ function PortfolioLoading({ timedOut }: { timedOut: boolean }) {
     <div className={presentation.primary}>
       <SupportedValueCard displayTotalUsd={null} loading refreshing={false}
         walletValue={null} positionEquity={null} walletComplete positionsComplete />
-      <PortfolioAssets snapshot={null} loading network={network} onNetworkChange={setNetwork} />
+      {/* The ready page's wallet notices take this slot. */}
+      {null}
+      <PortfolioAssets snapshot={null} loading network={network} onNetworkChange={onNetworkChange} />
       <PositionsSection summary={positionsSummary('loading', 0)}><ProtocolPositionSkeleton compact /></PositionsSection>
       <EarnPositionCard protocol={{ ...EMPTY_FX_SAVE, balances: null }} loading prices={{}} pricesLoading />
       <RecentActivitySkeleton />

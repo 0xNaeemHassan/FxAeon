@@ -31,6 +31,11 @@
   [data-product-ui='v2'] [data-trade-ticket] { flex: 0 0 auto !important; width: 100%; min-height: 0; height: auto; max-height: none; overflow: visible; position: static; }
   [data-product-ui='v2'] .trade-ticket { height: auto !important; max-height: none !important; overflow: visible; }
 }
+@media (max-width: 299px) {
+  /* Fold cover screens: the header draws its gaps in to stay one row. */
+  [data-product-ui='v2'] .app-topbar { gap: 4px; }
+  [data-product-ui='v2'] .app-topbar-actions { gap: 4px; }
+}
 @media (max-width: 420px) {
   /* The logo lockup on phones; globals.css steps it aside when space runs out. */
   [data-product-ui='v2'] .brand-wordmark { font-size: 20px; }

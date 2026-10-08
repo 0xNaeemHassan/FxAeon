@@ -4,7 +4,8 @@
      12px address text. The network control beside it never moves when the
      wallet settles, and the address always fits whole. */
   --chip-pad: 12px;
-  --identity-width: calc(var(--chip-pad) * 2 + 28px + 7.75 * var(--fs-caption));
+  --identity-font: var(--fs-caption);
+  --identity-width: calc(var(--chip-pad) * 2 + 28px + 7.75 * var(--identity-font));
   display: inline-flex;
   flex: 0 0 auto;
   min-width: 0;
@@ -71,7 +72,7 @@
   background: transparent;
   color: var(--text);
   padding: 0 var(--chip-pad);
-  font-size: var(--fs-caption);
+  font-size: var(--identity-font);
   font-weight: 650;
   white-space: nowrap;
 }
@@ -165,4 +166,10 @@
 @media (max-width: 359px) {
   .control { --chip-pad: 7px; }
   .control :global(.network-selector) { gap: 4px; padding-inline: 6px; }
+}
+
+/* Fold cover screens (about 280px): the address steps down a size and keeps
+   every character, so the header still holds one row. */
+@media (max-width: 299px) {
+  .control { --chip-pad: 6px; --identity-font: var(--fs-micro); }
 }
