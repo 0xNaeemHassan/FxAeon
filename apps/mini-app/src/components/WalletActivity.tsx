@@ -41,6 +41,47 @@ export default function WalletActivity({ walletAddress, compact = false, inDialo
   return <ActivityFeed key={walletAddress.toLowerCase()} walletAddress={walletAddress} compact={compact || inDialog} inDialog={inDialog} />;
 }
 
+/** Rows in the shape of the activity they stand in for: mark, title and place, amount. */
+function ActivityRowsSkeleton({ count, label }: { count: number; label: string }) {
+  return <div role="status" aria-label={label} className={styles.loading}>
+    <ul className={styles.list} aria-hidden="true">{Array.from({ length: count }, (_, index) => <li key={index}><span className={styles.skeletonRow}>
+      <span className={`skeleton ${styles.skeletonMark}`} />
+      <span className={styles.skeletonLines}><span className="skeleton" /><span className="skeleton" /></span>
+      <span className={`${styles.skeletonLines} ${styles.skeletonOutcome}`}><span className="skeleton" /><span className="skeleton" /></span>
+    </span></li>)}</ul>
+  </div>;
+}
+
+/**
+ * The History page before the wallet is known: the feed's filters and search
+ * in place (inactive), a day and five waiting rows, exactly as the live feed
+ * draws its first read, so the page does not change shape when it arrives.
+ */
+export function HistoryFeedSkeleton() {
+  return <section className={styles.section} aria-label="Transaction history" aria-busy="true">
+    <h2 className="sr-only">History</h2>
+    <div className={styles.filters} aria-hidden="true" inert>
+      <select tabIndex={-1} defaultValue="all"><option value="all">All activity</option></select>
+      <select tabIndex={-1} defaultValue="all"><option value="all">All networks</option></select>
+      <button type="button" tabIndex={-1} className={styles.refresh}><RefreshCw size={16} aria-hidden="true" /></button>
+      <label className={styles.search}><Search size={16} aria-hidden="true" /><input tabIndex={-1} placeholder="Search activity" readOnly /></label>
+    </div>
+    <span className={`skeleton ${styles.skeletonDay}`} aria-hidden="true" />
+    <ActivityRowsSkeleton count={5} label="Loading history" />
+  </section>;
+}
+
+/** Portfolio's history preview before the wallet is known: its heading, links and three waiting rows. */
+export function RecentActivitySkeleton() {
+  return <section className={styles.section} aria-label="Recent history" aria-busy="true">
+    <SectionTitle right={<div className={styles.toolbar}>
+      <Link href="/history" aria-label="View all history">View all<ChevronRight size={14} aria-hidden="true" /></Link>
+      <button type="button" className={styles.refresh} aria-label="Refresh history" title="Refresh history" disabled><RefreshCw size={16} aria-hidden="true" /></button>
+    </div>}>History</SectionTitle>
+    <ActivityRowsSkeleton count={3} label="Loading history" />
+  </section>;
+}
+
 function searchText(item: Activity): string {
   const { classification } = item;
   return [item.title, classification.summary, item.hash, classification.counterparty?.label, classification.counterparty?.address,
@@ -85,9 +126,9 @@ function ActivityFeed({ walletAddress, compact, inDialog }: { walletAddress: Add
   const visible = compact ? verified.slice(0, 3) : verified;
   const drafts = data.drafts ?? [];
   const unavailable = !activity.isPending && rows.length === 0 && data.partial;
-  // A verified-empty preview stays hidden; an unreadable one says so instead of looking empty.
+  const narrowed = Boolean(query) || filter !== 'all' || chain !== 'all';
   // The wallet dialog keeps its own History row, so it only previews rows that exist.
-  if (compact && !activity.isPending && verified.length === 0 && (!unavailable || inDialog)) return null;
+  if (inDialog && !activity.isPending && verified.length === 0) return null;
   const open = (item: Activity) => (event: React.MouseEvent<HTMLButtonElement>) => { triggerRef.current = event.currentTarget; setSelected(item); setDetailOpen(true); };
   const retry = () => void activity.refetch();
   const refresh = <button type="button" className={styles.refresh} aria-label="Refresh history" title="Refresh history" disabled={activity.isFetching} onClick={retry}>
@@ -118,16 +159,25 @@ function ActivityFeed({ walletAddress, compact, inDialog }: { walletAddress: Add
       <span>Some activity could not be loaded.</span>
       <button type="button" disabled={activity.isFetching} onClick={retry}>Retry</button>
     </p>}
-    {activity.isPending ? <div role="status" aria-label="Loading history" className={styles.loading}><div className="skeleton" /><div className="skeleton" /></div>
+    {activity.isPending ? <>{!compact && <span className={`skeleton ${styles.skeletonDay}`} aria-hidden="true" />}<ActivityRowsSkeleton count={compact ? 3 : 5} label="Loading history" /></>
       : unavailable ? <div role="status" className={styles.unavailable}><span>History couldn’t load. Your transactions are unaffected.</span>
         <button type="button" disabled={activity.isFetching} onClick={retry}>Retry</button></div>
-      : list(visible)}
-    {!compact && !activity.isPending && !unavailable && verified.length === 0 && <p className={styles.empty}>
-      {rows.length === 0 ? 'No activity yet' : unverified.length && !query && filter === 'all' && chain === 'all' ? 'Only unverified tokens so far' : 'No matching activity'}
-    </p>}
+      : verified.length > 0 ? list(visible)
+      : rows.length === 0 ? <div className={styles.empty} data-compact={compact || undefined}>
+        <strong>No activity yet</strong><span>Trades, deposits, moves and transfers from this wallet appear here.</span>
+        {!compact && <Link href="/qr">Receive assets</Link>}
+      </div>
+      : narrowed ? <div className={styles.empty}>
+        <strong>No matching activity</strong><span>Nothing in this wallet’s history matches these filters.</span>
+        <button type="button" onClick={() => { setSearch(''); setFilter('all'); setChain('all'); }}>Clear filters</button>
+      </div>
+      : <div className={styles.empty} data-compact={compact || undefined}>
+        <strong>Only unverified tokens so far</strong>
+        <span>{compact ? 'Tokens FxAeon doesn’t recognize stay in the full history.' : 'Tokens FxAeon doesn’t recognize are kept below and may be spam.'}</span>
+      </div>}
     {!compact && activity.hasMore && <button type="button" className={styles.more} disabled={loadingMore} onClick={() => {
       setLoadingMore(true); void activity.loadMore().catch(() => undefined).finally(() => setLoadingMore(false));
-    }}>{loadingMore ? <RefreshCw size={16} className="animate-spin" aria-label="Loading" /> : 'Load more'}</button>}
+    }} aria-busy={loadingMore}>{loadingMore ? <><RefreshCw size={16} className="animate-spin" aria-hidden="true" />Loading more…</> : 'Load more'}</button>}
     {!compact && unverified.length > 0 && <>
       <button type="button" className={styles.unverifiedToggle} aria-expanded={showUnverified} onClick={() => setShowUnverified((value) => !value)}>
         {showUnverified ? 'Hide' : 'Show'} unverified ({unverified.length})<ChevronDown size={16} aria-hidden="true" data-open={showUnverified || undefined} />

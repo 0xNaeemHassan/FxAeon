@@ -1553,7 +1553,7 @@ async function runProof(captureStage: string) {
     // here does not turn partial reads into a claim of an exhaustive empty
     // portfolio. Prefer the normal ready-empty presentation when it arrives.
     const readyEmpty = page.getByText('No open positions', { exact: true });
-    const partialEmpty = page.getByText(/Some position groups are unavailable|Position data is unavailable|Positions are temporarily unavailable/).first();
+    const partialEmpty = page.getByText(/Some position groups are unavailable|Position data is unavailable|Couldn’t load positions|Couldn’t check .+\. Showing the rest/).first();
     await expect.poll(async () => {
       if (await readyEmpty.isVisible().catch(() => false)) return 'ready-empty';
       if (await partialEmpty.isVisible().catch(() => false)) return 'partial-empty';

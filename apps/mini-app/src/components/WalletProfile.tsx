@@ -5,7 +5,7 @@ import { createPortal, flushSync } from 'react-dom';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { Address } from 'viem';
-import { ArrowDownToLine, ArrowUpRight, ChevronRight, History, Layers2, ExternalLink, LogOut, RefreshCw, Settings, X } from 'lucide-react';
+import { ArrowDownToLine, ArrowUpRight, ChevronRight, CircleAlert, History, Layers2, ExternalLink, LogOut, RefreshCw, Settings, X } from 'lucide-react';
 import { AssetListSkeleton, AssetRowContent, networkLabel } from '@/components/AssetPresentation';
 import { ActionRow } from '@/components/ProductUI';
 import presentation from '@/components/WalletProfile.module.css';
@@ -30,7 +30,7 @@ import { useOverlayDialog } from '@/lib/useOverlayDialog';
 import { useExitPresence } from '@/lib/useExitPresence';
 import styles from '@/app/AccountWorkspace.module.css';
 import ConnectWalletButton from '@/components/ConnectWalletButton';
-import { ValueOrSkeleton } from '@/components/MissingValue';
+import { MissingValue, ValueOrSkeleton } from '@/components/MissingValue';
 import RecentActivityPreview from '@/components/RecentActivityPreview';
 import { selectWalletTasks } from '@/lib/taskState';
 import { useVerifiedWalletName } from '@/components/AccountControls';
@@ -144,7 +144,11 @@ export default function WalletProfile() {
     }
   };
 
-  if (!wallet.ready) return <span role="status" className="h-11 w-11 animate-pulse rounded-xl bg-[var(--surface)]"><span className="sr-only">Loading wallet</span></span>;
+  // While the wallet provider starts, the control keeps the connected identity's
+  // shape (avatar and name) instead of an empty segment beside the network.
+  if (!wallet.ready) return <span role="status" aria-label="Loading wallet" className={`${headerWalletControl.trigger} ${headerWalletControl.identityTrigger} ${presentation.triggerLoading}`}>
+    <span className={`skeleton ${presentation.triggerAvatar}`} aria-hidden="true" /><span className={`skeleton ${presentation.triggerName}`} aria-hidden="true" />
+  </span>;
   if (!activeAddress) {
     return (
       <ConnectWalletButton aria-label="Connect wallet" loadingLabel="Opening…" className={`${styles.walletConnect} ${headerWalletControl.trigger} glass-press`}>
@@ -184,8 +188,13 @@ export default function WalletProfile() {
                   <RefreshCw size={18} className={manualRefresh.refreshing ? 'animate-spin' : ''} aria-hidden="true" />
                 </button>
               </div></div>
-              <strong className={`${presentation.total} ${balancePresentation.value}`}><ValueOrSkeleton value={walletSnapshotValuation.totalUsd === null ? '—' : <SplitFigure value={formatUsd(walletSnapshotValuation.totalUsd)} />} width="xl"
-                status={walletValueLoading ? 'loading' : 'unavailable'} label={walletValueLoading ? 'Loading wallet value' : 'Wallet value unavailable'} /></strong>
+              <strong className={`${presentation.total} ${balancePresentation.value}`}>{walletSnapshotValuation.totalUsd !== null
+                ? <SplitFigure value={formatUsd(walletSnapshotValuation.totalUsd)} />
+                : walletValueLoading ? <MissingValue width="xl" status="loading" label="Loading wallet value" />
+                  : <span className={presentation.totalUnavailable}>
+                    <span role="status" aria-label="Wallet value unavailable"><CircleAlert size={16} aria-hidden="true" />Value unavailable</span>
+                    <button type="button" onClick={refreshAll} disabled={manualRefresh.refreshing} aria-busy={manualRefresh.refreshing}>{manualRefresh.refreshing ? 'Trying…' : 'Try again'}</button>
+                  </span>}</strong>
               <div className={presentation.actions}>
                 <Link href="/qr" className={presentation.primaryAction}><ArrowDownToLine size={18} aria-hidden="true" />Receive</Link>
                 <Link href="/send" className={presentation.primaryAction}><ArrowUpRight size={18} aria-hidden="true" />Send</Link>
@@ -194,14 +203,14 @@ export default function WalletProfile() {
             </section>
             <section className={presentation.assets} aria-labelledby="wallet-profile-balances-title">
               <div className={presentation.sectionHeading}><h3 id="wallet-profile-balances-title">Assets</h3><span>All networks</span></div>
-              {loading && nonZero.length === 0 && <AssetListSkeleton />}
+              {loading && nonZero.length === 0 && <AssetListSkeleton compact />}
               {!loading && nonZero.length === 0 && !walletSnapshotValuation.complete && <div className={presentation.assetRetry}>
-                <span role="status">Couldn’t load assets.</span>
+                <span role="status">Couldn’t load assets. Your funds are unaffected.</span>
                 <button type="button" onClick={refreshAll} disabled={manualRefresh.refreshing} aria-busy={manualRefresh.refreshing}>
-                  <RefreshCw size={16} aria-hidden="true" />Retry
+                  <RefreshCw size={16} className={manualRefresh.refreshing ? 'animate-spin' : ''} aria-hidden="true" />Retry
                 </button>
               </div>}
-              {!loading && displayAssets && walletSnapshotValuation.complete && nonZero.length === 0 && <p className={presentation.helper}>No token balances detected.</p>}
+              {!loading && displayAssets && walletSnapshotValuation.complete && nonZero.length === 0 && <p className={presentation.helper}>No assets on Ethereum or Base yet. Use Receive to add some.</p>}
               <ul className={presentation.assetList}>{visibleAssets.map((asset) => <li key={asset.id}>
                 <button type="button" className={presentation.assetDetails} aria-label={`View ${tokenSymbol(asset.symbol)} details on ${networkLabel(asset.chainId)}`} onClick={() => setSelectedAssetId(asset.id)}>
                   <AssetRowContent asset={asset} loading={walletValueLoading} />
@@ -212,7 +221,7 @@ export default function WalletProfile() {
               </button>}
             </section>
             <section className={presentation.positions} aria-labelledby="wallet-profile-positions-title">
-              <ActionRow icon={Layers2} title="Positions" href="/positions" value={<ValueOrSkeleton value={positionState.status === 'ready' ? `${positionState.positions.length} open` : '—'} width="sm" status={positionState.status === 'loading' ? 'loading' : 'unavailable'} label="Open position count" />} />
+              <ActionRow icon={Layers2} title="Positions" href="/positions" value={<ValueOrSkeleton value={positionState.status === 'ready' ? `${positionState.positions.length} open` : '—'} width="sm" status={positionState.status === 'loading' || positionState.status === 'idle' ? 'loading' : 'unavailable'} label="Open position count" />} />
               <h3 id="wallet-profile-positions-title" className="sr-only">Open positions</h3>
               {claimTask && <ActionRow icon={ArrowDownToLine} title="Claim fxSAVE withdrawal" href={claimTask.href} />}
             </section>
