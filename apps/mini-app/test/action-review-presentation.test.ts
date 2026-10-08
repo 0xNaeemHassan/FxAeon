@@ -73,20 +73,28 @@ test('total cost is omitted only when zero native value makes it numerically equ
 });
 
 test('Base gas combines network components without duplicating a fee-only total', () => {
+  // The wallet must fund the 20%-buffered gas limit at the max fee (1.2 Gwei)
+  // plus the L1 data (0.2 Gwei) and operator (0.1 Gwei) fees: a 1.5 Gwei max.
   const baseEstimate = {
     ...estimate({ executionGasFeeWei: 1_000_000_000n, totalNativeCostWei: 1_300_000_000n }),
     chainId: 8453 as const,
     l1DataFeeWei: 200_000_000n,
     operatorFeeWei: 100_000_000n,
+    requiredNativeCostWei: 1_500_000_000n,
   };
   const baseRoute = { ...route(), chainId: 8453 as const };
   const facts = routeFacts(baseRoute, { estimate: baseEstimate, estimateIsCurrent: true });
-  assert.deepEqual(facts.map(({ label, value }) => ({ label, value })), [{ label: 'Gas fee', value: '1.3 Gwei max' }]);
-  const withValue = { ...baseEstimate, nativeValueWei: 500_000_000n, totalNativeCostWei: 1_800_000_000n };
+  assert.deepEqual(facts.map(({ label, value }) => ({ label, value })), [{ label: 'Gas fee', value: '1.5 Gwei max' }]);
+  const withValue = { ...baseEstimate, nativeValueWei: 500_000_000n, totalNativeCostWei: 1_800_000_000n, requiredNativeCostWei: 2_000_000_000n };
   const valueFacts = routeFacts({ ...baseRoute, transactions: route(500_000_000n).transactions }, { estimate: withValue, estimateIsCurrent: true });
   assert.deepEqual(valueFacts.map(({ label, value }) => ({ label, value })), [
-    { label: 'Gas fee', value: '1.3 Gwei max' },
-    { label: 'Total cost', value: '1.8 Gwei max' },
+    { label: 'Gas fee', value: '1.5 Gwei max' },
+    { label: 'Total cost', value: '2 Gwei max' },
+  ]);
+  // Without a funding figure the expected cost is shown, and never called a max.
+  const { requiredNativeCostWei: _omitted, ...expectedOnly } = baseEstimate;
+  assert.deepEqual(routeFacts(baseRoute, { estimate: expectedOnly, estimateIsCurrent: true }).map(({ label, value }) => ({ label, value })), [
+    { label: 'Gas fee', value: '1.3 Gwei' },
   ]);
 });
 

@@ -11,6 +11,7 @@ import {
   routeGasCostKey,
 } from '../src/lib/fx/gasCost';
 import type { FxPublicClient, PlannedRoute } from '../src/lib/fx/types';
+import { nativeFundsNotice, routeFacts } from '../src/components/review/actionReviewPresentation';
 
 const wallet = '0x1111111111111111111111111111111111111111' as Address;
 const token = '0x2222222222222222222222222222222222222222' as Address;
@@ -164,7 +165,8 @@ test('uses ordered simulation gas for approval routes when every call succeeds',
   assert.deepEqual(estimate.steps.map((step) => step.gas), [46_000n, 180_000n]);
   assert.equal(estimate.estimatedGasUnits, 226_000n);
   assert.equal(estimate.executionGasFeeWei, 678_000n);
-  assert.equal(formatRouteGasCost(estimate).gasFee, '0.000678 Gwei (max)');
+  // The max is what the wallet funds: (55,200 + 216,000) buffered gas × 3 wei.
+  assert.equal(formatRouteGasCost(estimate).gasFee, '0.0008136 Gwei (max)');
 });
 
 test('route key is scoped to account, chain, calldata, value, and operation', () => {
@@ -207,7 +209,9 @@ test('Base includes OP Stack fee components and counts the bridge native fee onc
   assert.equal(estimate.operatorFeeWei, 5n);
   assert.equal(estimate.totalNativeCostWei, 46n);
   assert.equal(estimate.totalNativeCostScope, 'execution-plus-l1-plus-operator-plus-value');
-  assert.equal(formatRouteGasCost(estimate).gasFee, '0.000000039 Gwei (max)', 'all network components, excluding the bridge native value');
+  // 12 buffered gas × 3 wei + 4 wei L1 + 5 wei operator: what the wallet funds.
+  assert.equal(formatRouteGasCost(estimate).gasFee, '0.000000045 Gwei (max)', 'all network components at the funded maximum, excluding the bridge native value');
+  assert.equal(formatRouteGasCost(estimate).totalCost, '0.000000052 Gwei (native value + max network fee including Base L1/operator fees)');
 });
 
 test('Base stays partial when L1/operator fee accounting is unavailable', async () => {
@@ -485,25 +489,93 @@ test('a partial estimate proves a shortfall without inventing its size', async (
   assert.equal(nativeShortfallWei({ insufficientNativeBalance: false, requiredNativeCostWei: 10n, nativeBalanceWei: 1n }), undefined);
 });
 
-test('the ETH to add is rounded up, never down, to three significant digits', () => {
+test('the ETH to add is rounded up, never down, to the 0.000001 ETH step reviews show', () => {
   // Tiny shortfalls name the smallest useful top-up instead of 18 decimals.
   assert.equal(formatNativeShortfall(1n), '0.000001');
   assert.equal(formatNativeShortfall(999_999_999_999n), '0.000001');
   // An exact boundary is not bumped.
   assert.equal(formatNativeShortfall(620_000_000_000_000n), '0.00062');
   assert.equal(formatNativeShortfall(1_000_000_000_000n), '0.000001');
+  assert.equal(formatNativeShortfall(1_008_000_000_000_000n), '0.001008');
   // One wei over a boundary rounds up to the next shown step.
   assert.equal(formatNativeShortfall(620_000_000_000_001n), '0.000621');
   assert.equal(formatNativeShortfall(618_123_456_789_012n), '0.000619');
-  assert.equal(formatNativeShortfall(1_008_000_000_000_000n), '0.00101');
   assert.equal(formatNativeShortfall(999_999_999_999_999_999n), '1');
-  // Large shortfalls keep three significant digits and group thousands.
-  assert.equal(formatNativeShortfall(12_345_678_900_000_000_000n), '12.4');
-  assert.equal(formatNativeShortfall(1_234_500_000_000_000_000_000n), '1,240');
+  // Large shortfalls keep the same step and group thousands.
+  assert.equal(formatNativeShortfall(12_345_678_900_000_000_000n), '12.345679');
+  assert.equal(formatNativeShortfall(1_234_500_000_000_000_000_000n), '1,234.5');
   for (const wei of [1n, 7n, 999_999n, 618_123_456_789_012n, 620_000_000_000_001n, 12_345_678_900_000_000_000n, 1_234_500_000_000_000_000_001n]) {
     const [whole, fraction = ''] = formatNativeShortfall(wei).replace(/,/g, '').split('.');
     const shown = BigInt(whole) * 10n ** 18n + BigInt(fraction.padEnd(18, '0'));
     assert.ok(shown >= wei, `${wei} wei must never be understated`);
+  }
+});
+
+/** Reads a review figure such as "≈ 0.001008 ETH max" back into wei. */
+function displayedWei(text: string): bigint {
+  const match = /^(?:≈ )?([\d,]+(?:\.\d+)?) (ETH|Gwei)\b/.exec(text);
+  assert.ok(match, `unreadable figure: ${text}`);
+  const [whole, fraction = ''] = match[1].replace(/,/g, '').split('.');
+  const decimals = match[2] === 'ETH' ? 18 : 9;
+  return BigInt(whole) * 10n ** BigInt(decimals) + BigInt(fraction.padEnd(decimals, '0'));
+}
+
+test('the max network fee shown is what the wallet funds, so an empty wallet is asked for exactly it', async () => {
+  const gwei = 1_000_000_000n;
+  const mainnetFees = { estimateFeesPerGas: async () => ({ maxFeePerGas: 30n * gwei, maxPriorityFeePerGas: gwei }) };
+  const withValue = (planned: PlannedRoute, value: bigint): PlannedRoute => ({ ...planned, transactions: planned.transactions.map((transaction) => ({ ...transaction, value: transaction.kind === 'action' ? value : 0n })) });
+  const base: PlannedRoute = {
+    ...route(),
+    chainId: 8453,
+    operation: 'buildBridgeTx',
+    transactions: [{ ...route().transactions[0], chainId: 8453, operation: 'buildBridgeTx', value: 0n }],
+  };
+  const cases: Array<{ name: string; planned: PlannedRoute; client: Record<string, unknown> }> = [
+    { name: 'one Ethereum step', planned: withValue(route(), 0n), client: { ...clientFor(async () => 210_000n), ...mainnetFees } },
+    {
+      name: 'approval, then action',
+      planned: withValue(route(true), 0n),
+      client: {
+        ...clientFor(async () => { throw new Error('ordered simulation supplies route gas'); }),
+        ...mainnetFees,
+        simulateCalls: async () => ({ results: [{ status: 'success', gasUsed: 46_123n }, { status: 'success', gasUsed: 180_457n }] }),
+      },
+    },
+    {
+      name: 'Base with L1 and operator fees',
+      planned: base,
+      client: {
+        ...clientFor(async () => 210_000n, 8453),
+        estimateFeesPerGas: async () => ({ maxFeePerGas: 10_000_000n, maxPriorityFeePerGas: 1_000_000n }),
+        estimateL1Fee: async () => 123_456_789_012n,
+        estimateOperatorFee: async () => 7n,
+      },
+    },
+  ];
+  for (const { name, planned, client } of cases) {
+    const estimate = await estimatePlannedRouteCost(planned, { client: { ...client, getBalance: async () => 0n } as unknown as FxPublicClient });
+    const feePart = estimate.requiredNativeCostWei! - estimate.nativeValueWei;
+    const shown = routeFacts(planned, { estimate, estimateIsCurrent: true }).find((fact) => fact.label === 'Gas fee')!.value;
+    assert.match(shown, / max$/, name);
+    assert.ok(displayedWei(shown) >= feePart, `${name}: the max shown (${shown}) covers the ${feePart} wei the wallet must fund`);
+    // Nothing else to send and nothing in the wallet: add exactly the max shown.
+    const asked = /^Add at least ([\d,.]+) ETH on /.exec(nativeFundsNotice(estimate, planned.chainId === 8453 ? 'Base' : 'Ethereum'))?.[1];
+    assert.equal(`${asked} ETH max`, shown.replace(/^≈ /, ''), name);
+  }
+
+  // In general the ETH to add is the value plus the max shown, less the balance, rounded up.
+  const value = 300_000_000_000_000n;
+  const step = 1_000_000_000_000n;
+  for (const balance of [500_000_000_000_000n, 512_345_678_901_234n]) {
+    const planned = withValue(route(), value);
+    const estimate = await estimatePlannedRouteCost(planned, { client: { ...clientFor(async () => 210_000n), ...mainnetFees, getBalance: async () => balance } as unknown as FxPublicClient });
+    const facts = routeFacts(planned, { estimate, estimateIsCurrent: true });
+    const shownMax = displayedWei(facts.find((fact) => fact.label === 'Gas fee')!.value);
+    const shownTotal = displayedWei(facts.find((fact) => fact.label === 'Total cost')!.value);
+    assert.equal(shownTotal, value + shownMax, 'the total is the value plus the max shown');
+    const asked = displayedWei(`${/^Add at least ([\d,.]+) ETH on /.exec(nativeFundsNotice(estimate, 'Ethereum'))![1]} ETH`);
+    const expected = value + shownMax - balance;
+    assert.equal(asked, ((expected + step - 1n) / step) * step);
   }
 });
 

@@ -47,7 +47,8 @@ const H = (globalThis as typeof globalThis & { __actionReviewHarness?: HarnessSt
   wallet: { ready: true, authenticated: true, isEmbedded: false, connectionVersion: 1, address: '0x00000000000000000000000000000000000000aa', chainId: 1 },
   version: 1, mode: initialOptions?.mode ?? 'auto', failNextPrepare: false, executeVersion: undefined, partialResult: false, deferRunner: false, failRunner: false, executionResolvers: [], deferWalletResponse: false, walletResolvers: [],
   multiStepExecution: false, nonzeroTransactionValues: false, approvalRequired: false, sentTransactions: [],
-  gasCost: { status: 'current', checking: false, estimate: { status: 'current', nativeValueWei: 0n, executionGasFeeWei: 840000000000000n, totalNativeCostWei: 840000000000000n }, estimateIsCurrent: true },
+  // 0.00084 ETH at the estimated gas; the wallet funds the 20%-buffered limit, a 0.001008 ETH max.
+  gasCost: { status: 'current', checking: false, estimate: { status: 'current', nativeValueWei: 0n, executionGasFeeWei: 840000000000000n, totalNativeCostWei: 840000000000000n, requiredNativeCostWei: 1008000000000000n }, estimateIsCurrent: true },
   prepareCount: 0, planCount: 0, runnerCount: 0, sendCount: 0, draftSaveCount: 0, draftCancelCount: 0, draftRemoveCount: 0, feeQuoteCount: 0,
   previewRequests: [], nextPreviewRequestId: 1,
   deferRefresh: false, refreshStarted: false, completeStarted: false, refreshResolvers: [],
@@ -156,9 +157,9 @@ function Harness() {
       <button type="button" onClick={() => { H.rejectActionSignature = true; }}>Reject action signature</button>
       <button type="button" onClick={() => { H.gasCost = { status: 'refreshing', checking: true, estimateIsCurrent: false }; H.rerender?.(); }}>Gas estimate loading</button>
       <button type="button" onClick={() => { H.gasCost = { status: 'unavailable', checking: false, estimateIsCurrent: false, error: 'RPC unavailable' }; H.rerender?.(); }}>Gas estimate unavailable</button>
-      <button type="button" onClick={() => { H.gasCost = { status: 'current', checking: false, estimate: { status: 'current', nativeValueWei: 0n, executionGasFeeWei: 840000000000000n, totalNativeCostWei: 840000000000000n }, estimateIsCurrent: true }; H.rerender?.(); }}>Gas estimate current</button>
+      <button type="button" onClick={() => { H.gasCost = { status: 'current', checking: false, estimate: { status: 'current', nativeValueWei: 0n, executionGasFeeWei: 840000000000000n, totalNativeCostWei: 840000000000000n, requiredNativeCostWei: 1008000000000000n }, estimateIsCurrent: true }; H.rerender?.(); }}>Gas estimate current</button>
       <button type="button" onClick={() => {
-        // 0.00084 ETH estimated; the wallet must fund the 20%-buffered limit, 0.001008 ETH.
+        // The same 0.001008 ETH max against an empty wallet.
         const estimate: HarnessGasEstimate = { status: 'current', nativeValueWei: 0n, executionGasFeeWei: 840000000000000n, totalNativeCostWei: 840000000000000n, requiredNativeCostWei: 1008000000000000n, nativeBalanceWei: 0n, insufficientNativeBalance: true };
         H.gasCost = { status: 'current', checking: false, current: estimate, estimate, estimateIsCurrent: true };
         H.rerender?.();

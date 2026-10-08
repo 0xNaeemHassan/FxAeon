@@ -3,7 +3,7 @@ import { FX_TOKENS, formatRouteGasCost, type PlannedRoute } from '@/lib/fx';
 import { compactAddress } from '@/lib/addressPresentation';
 import { routeFinancialReviewFacts, type ReviewFact } from '@/lib/fx/reviewFormatting';
 import type { UseGasCostResult } from '@/lib/fx/useGasCost';
-import { formatNativeShortfall, nativeShortfallWei, networkFeeWei, type RouteGasCostEstimate } from '@/lib/fx/gasCost';
+import { formatNativeShortfall, nativeShortfallWei, routeNetworkFeeDisplay, type RouteGasCostEstimate } from '@/lib/fx/gasCost';
 import { formatGasTierQuote, type GasTierQuote } from '@/lib/fx/gasFeePolicy';
 
 export interface ExecutionCost { estimatedGas?: string; gasFee?: string; protocolFee?: string; totalCost?: string }
@@ -98,7 +98,8 @@ function addNativeCostFact(facts: ReviewFact[], label: string, exactValue: strin
   facts.push({
     label,
     value: `${conciseCostDecimal(amount, 6)} ${unit}${shortQualifier}`,
-    title: exactValue,
+    // A maximum is what the wallet must hold, not what it will be charged.
+    title: isMax && label === 'Gas fee' ? `${exactValue}. The most the network fee can be; usually less is charged.` : exactValue,
   });
 }
 
@@ -210,9 +211,11 @@ export function routeFacts(route: PlannedRoute, gasCost: Pick<UseGasCostResult, 
     ? formatRouteGasCost(gasCost.estimate)
     : undefined;
   if (currentGasCost?.gasFee) addNativeCostFact(facts, 'Gas fee', currentGasCost.gasFee);
+  // With no native value the total is the network fee itself; one row says it.
+  const shownFees = currentEstimate ? routeNetworkFeeDisplay(currentEstimate) : undefined;
   const totalIsOnlyTheGasFee = currentEstimate?.nativeValueWei === 0n
-    && currentEstimate.totalNativeCostWei !== undefined
-    && currentEstimate.totalNativeCostWei === networkFeeWei(currentEstimate);
+    && shownFees?.totalWei !== undefined
+    && shownFees.totalWei === shownFees.feeWei;
   if (currentGasCost?.totalCost && !totalIsOnlyTheGasFee) addNativeCostFact(facts, 'Total cost', currentGasCost.totalCost);
   if (executionCost?.gasFee) addNativeCostFact(facts, 'Gas fee', executionCost.gasFee);
   if (executionCost?.protocolFee) addFact(facts, 'Protocol fee', executionCost.protocolFee);

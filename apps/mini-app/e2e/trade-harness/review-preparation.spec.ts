@@ -213,6 +213,17 @@ test('a Max-length exact amount stays inside the card at 320px while preparing a
   await insufficient(page);
   await expectInsideCard();
   await expect(page.locator('p', { hasText: 'Add at least' })).toHaveText(/^Add at least \d[\d,]*(?:\.\d+)? ETH on Ethereum to cover network fees\. Receive ETH$/);
+  // The fee is the max the wallet funds, so the ETH to add is exactly the
+  // total shown (amount plus that max) less the fixture's 0.0004 ETH balance.
+  const toWei = (text: string) => {
+    const [whole, fraction = ''] = /([\d,]+(?:\.\d+)?) ETH/.exec(text)![1].replace(/,/g, '').split('.');
+    return BigInt(whole) * 10n ** 18n + BigInt(fraction.padEnd(18, '0'));
+  };
+  await expect(page.locator('[data-review-fact="Gas fee"] > span').last()).toHaveText(/ ETH max$/);
+  const total = await page.locator('[data-review-fact="Total cost"] > span').last().innerText();
+  expect(total).toMatch(/ ETH max$/);
+  const asked = await page.locator('p', { hasText: 'Add at least' }).innerText();
+  expect(toWei(asked)).toBe(toWei(total) - 400000000000000n);
 });
 
 test('failed preparation stays in the same card and Retry performs a fresh check', async ({page}) => {

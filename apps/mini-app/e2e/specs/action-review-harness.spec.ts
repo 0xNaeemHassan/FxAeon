@@ -148,7 +148,8 @@ test.describe('ActionReview isolated orchestration', () => {
     await page.getByRole('button', { name: 'Gas estimate current', exact: true }).click();
     await page.getByRole('button', { name: 'Review position', exact: true }).click();
     const review = page.locator('.reviewInlineContent');
-    await expect(review).toContainText('0.00084 ETH');
+    // The most the network fee can take: the buffered gas limit the wallet funds.
+    await expect(review.locator('[data-review-fact="Gas fee"] > span').last()).toHaveText('0.001008 ETH max');
     await expect(page.locator('input[name="review-gas-tier"]')).toHaveCount(0);
     expect((await harnessMetrics(page)).feeQuoteCount).toBe(0);
     await page.getByRole('button', { name: 'Confirm', exact: true }).click();
@@ -190,7 +191,7 @@ test.describe('ActionReview isolated orchestration', () => {
     await expect(page.getByRole('heading', { name: 'Increase ETH Long', exact: true })).toBeVisible();
     await expect(page.getByText('0.25 fxUSD', { exact: true })).toBeVisible();
     await expect(page.getByText('3×', { exact: true })).toBeVisible();
-    await expect(page.getByText('0.00084 ETH', { exact: true })).toBeVisible();
+    await expect(page.getByText('0.001008 ETH max', { exact: true })).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Primary navigation', exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Trade', exact: true })).toHaveAttribute('aria-current', 'page');
     await expect(page.locator('[role="toolbar"]')).toBeHidden();
@@ -619,9 +620,11 @@ test.describe('ActionReview isolated orchestration', () => {
     };
     for (let refresh = 0; refresh < 2; refresh += 1) {
       await expect(page.getByRole('button', { name: 'Not enough ETH', exact: true })).toBeDisabled();
-      // The notice names the exact top-up (0.001008 ETH buffered cost, rounded
-      // up) on the network that pays it, and links to the wallet's Receive.
-      await expect(review.locator('p', { hasText: 'Add at least' })).toHaveText('Add at least 0.00101 ETH on Ethereum to cover network fees. Receive ETH');
+      // The notice names the exact top-up on the network that pays it, and
+      // links to the wallet's Receive. With nothing else to send and an empty
+      // wallet, that is exactly the max fee the card shows.
+      await expect(review.locator('p', { hasText: 'Add at least' })).toHaveText('Add at least 0.001008 ETH on Ethereum to cover network fees. Receive ETH');
+      await expect(review.locator('[data-review-fact="Gas fee"] > span').last()).toHaveText('0.001008 ETH max');
       await expect(review.getByRole('link', { name: 'Receive ETH', exact: true })).toHaveAttribute('href', '/qr');
       await expectCheckedRoute();
       // A TTL refresh removes current but retains its insufficient previous
@@ -648,8 +651,9 @@ test.describe('ActionReview isolated orchestration', () => {
     const action = page.getByRole('button', { name: 'Not enough ETH', exact: true });
     await expect(action).toBeDisabled();
     const note = review.locator('[role="status"]', { hasText: 'Add at least' });
-    // 0.001008 ETH buffered cost against an empty wallet, rounded up.
-    await expect(note).toHaveText('Add at least 0.00101 ETH on Ethereum to cover network fees. Receive ETH');
+    // An empty wallet with nothing else to send needs exactly the max fee shown.
+    await expect(note).toHaveText('Add at least 0.001008 ETH on Ethereum to cover network fees. Receive ETH');
+    await expect(review.locator('[data-review-fact="Gas fee"] > span').last()).toHaveText('0.001008 ETH max');
     await expect(note.getByRole('link', { name: 'Receive ETH', exact: true })).toHaveAttribute('href', '/qr');
     // The product Button also carries Tailwind's disabled:opacity-50. A
     // blocked action names what is missing, so it must stay full strength.

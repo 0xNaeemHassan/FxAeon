@@ -19,7 +19,8 @@ const mocks: Record<string, string> = {
   '@/lib/fx': `
     const H = () => globalThis.__actionReviewHarness;
     export const FX_TOKENS = { fxUSD: { key: 'fxUSD', address: '0x00000000000000000000000000000000000000c1', decimals: 18 }, fxSAVE: { key: 'fxSAVE', address: '0x00000000000000000000000000000000000000c2', decimals: 18 } };
-    export const formatRouteGasCost = () => ({ gasFee: '0.00084 ETH', totalCost: '0.00084 ETH' });
+    // The real fee copy, so the review's max and its shortfall notice are checked together.
+    export { formatRouteGasCost } from '@/lib/fx/gasCost';
     export const useRouteGasCost = () => H().gasCost;
     export async function prepareRoutesForReview(planned, walletAddress) {
       const h = H(); h.prepareCount += 1;
