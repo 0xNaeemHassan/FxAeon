@@ -142,6 +142,10 @@
 }
 @keyframes position-split-in { from { transform: scaleX(0); } }
 @keyframes position-marker-in { from { opacity: 0; } }
+/* A position just opened on Trade arrives already drawn: its split is the one
+   carried in from the confirmed result (see lib/positionBorn). */
+.split[data-born] .splitDebt,
+.split[data-born] .splitShare { animation: none; }
 
 /* One plain line under the split: how far the market can move before the
    pool rebalances, or the state once it has. A whole-pixel line height lets

@@ -8,7 +8,7 @@ const mocks={
   "@/components/ProtocolPositionCard": "export const ProtocolPositionCard = () => null; export const ProtocolPositionList = () => null; export const ProtocolPositionNotice = () => null;",
   "@/components/ProtocolPositionProvider": "export const useProtocolPositions = () => ({positions:[],pendingPositions:[],status:'ready',failedGroups:[],refresh:async()=>({positions:[],failedGroups:[],successfulGroups:[],status:'ready',newPositions:[]})});",
   "@/components/ConfirmedPositionCards": "export const ConfirmedPositionCards = () => null;",
-  "next/navigation": "export const useRouter=()=>({push:()=>{}});export const usePathname=()=>'/trade';export const useSearchParams=()=>new URLSearchParams();",
+  "next/navigation": "export const useRouter=()=>({push:()=>{},prefetch:()=>{}});export const usePathname=()=>'/trade';export const useSearchParams=()=>new URLSearchParams();",
   "@/components/WalletProfile": "export default function WalletProfile(){return null}",
   "@/components/NetworkSelector": "export default function NetworkSelector(){return null}",
   "@/components/ConnectWalletButton": "export default function ConnectWalletButton(){throw Error('No signing or connections permitted in fixture')}",

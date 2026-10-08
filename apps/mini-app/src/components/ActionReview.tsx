@@ -144,7 +144,7 @@ function statusPresentation(params: Parameters<typeof buildStatusPresentation>[0
 
 export function ActionReview(props: ActionReviewProps) {
   const lifecycle = useActionReviewLifecycle(props);
-  const { label = 'Review action', disabled = false, blocker = null, operationLabel, destructive = false, editor, decisionBefore, executionCost, surface = 'card', planBuilder } = props;
+  const { label = 'Review action', disabled = false, blocker = null, operationLabel, destructive = false, editor, decisionBefore, executionCost, surface = 'card', planBuilder, onViewNewPosition } = props;
   const { canSelectReviewedRoute, endConnectFlow, error, execute, feeSelection, gasCost, headingRef, loading, networkSwitching, quoteChanges, quoteExpired, refreshReviewedQuote, refreshing, reset, result, review, reviewTitle, route, routeSummaries, routes, selectedRoute, selectReviewedRoute, selectGasTier, startConnectFlow, stage, status, statusDetail, stepResults, triggerRef, wallet } = lifecycle;
   usePauseAutomaticPositionRefresh(stage === 'planning' || stage === 'review' || stage === 'executing' || refreshing);
   // This review shows its own progress and result; the header notice stays for steps settling elsewhere.
@@ -313,7 +313,12 @@ export function ActionReview(props: ActionReviewProps) {
           onNext={() => {
             if (approvalSubmittedWithoutAction) { reset(); return; }
             if (transactionTask) { window.location.assign(transactionTask.href); return; }
-            if (positionAction) { window.location.assign(positionHref ?? '/positions'); return; }
+            if (positionAction) {
+              // A position this review just opened can open in place, carrying its split.
+              if (newPosition && positionHref && onViewNewPosition) { onViewNewPosition({ key: newPosition.key, href: positionHref }); return; }
+              window.location.assign(positionHref ?? '/positions');
+              return;
+            }
             reset();
           }}
         />
