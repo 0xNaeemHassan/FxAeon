@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDownRight, ArrowUpRight, Gauge, Layers2, RefreshCw, X } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, ChevronRight, Gauge, Layers2, RefreshCw, X } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell, Card, EmptyState } from '@/components/ui';
 import { ActionReview, type ActionReviewStage } from '@/components/ActionReview';
@@ -484,7 +484,7 @@ export default function PositionsPage() {
             </section>
 
             <section ref={managerRef} className={styles.positionManageColumn} aria-label={reviewStage === 'input' ? undefined : `${operationLabel} review`} aria-labelledby={reviewStage === 'input' ? 'manage-position-heading' : undefined}>
-              {reviewStage === 'input' && selected && <div className={styles.manageHeading}><div><h2 id="manage-position-heading">{selected.market} {selected.side} · #{selected.info.positionId}</h2></div><div className="flex items-center gap-1">{selected.side === 'long' && <Link href={`/borrow?market=${selected.market}&position=${selected.info.positionId}`} className="glass-press inline-flex min-h-11 items-center gap-2 rounded-xl px-2 text-[12px] font-semibold text-mint">Borrow against <span aria-hidden="true">→</span></Link>}<TransactionSettings slippage /></div></div>}
+              {reviewStage === 'input' && selected && <div className={styles.manageHeading}><div><h2 id="manage-position-heading">{selected.market} {selected.side} · #{selected.info.positionId}</h2></div><div className="flex items-center gap-1">{selected.side === 'long' && <Link href={`/borrow?market=${selected.market}&position=${selected.info.positionId}`} className="glass-press inline-flex min-h-11 items-center gap-1 rounded-xl px-2 text-[13px] font-semibold text-mint">Borrow against <ChevronRight className="h-4 w-4" aria-hidden="true" /></Link>}<TransactionSettings slippage /></div></div>}
               {reviewStage === 'input' && selectedStale && <span role="status" aria-label="Refreshing selected position" className="skeleton block h-8 rounded-xl" />}
 
               <Card className={`${styles.actionPanel} ${styles.positionActionCard} ${reviewStage === 'input' ? '' : styles.positionActionCardReview}`}>
