@@ -36,6 +36,8 @@
   --long-dim: var(--success-dim);
   --short: var(--danger);
   --short-dim: var(--danger-dim);
+  /* Keyboard focus is intent: one accent ring for chrome and content alike. */
+  --focus-ring: var(--mint);
   --scrim: rgba(4, 3, 10, 0.64);
   --glass: color-mix(in srgb, var(--bg) 76%, transparent);
   --glass-strong: color-mix(in srgb, var(--surface) 84%, transparent);
@@ -558,9 +560,12 @@ details[open] > summary .disclosure-closed-only { display: none; }
   border-radius: var(--radius-sm);
   transition: opacity var(--dur-fast) var(--ease-out);
 }
-.app-topbar > a:first-child:hover { opacity: 0.86; }
 .app-topbar > a:first-child svg { transition: transform var(--dur-slow) var(--ease-spring); }
-.app-topbar > a:first-child:hover svg { transform: rotate(-8deg) scale(1.04); }
+/* Touch screens keep :hover after a tap, so the logo answers real pointers only. */
+@media (hover: hover) {
+  .app-topbar > a:first-child:hover { opacity: 0.86; }
+  .app-topbar > a:first-child:hover svg { transform: rotate(-8deg) scale(1.04); }
+}
 
 .brand-wordmark {
   color: var(--text);
@@ -594,6 +599,20 @@ details[open] > summary .disclosure-closed-only { display: none; }
 }
 
 .app-topbar-actions > button:active:not(:disabled) { transform: scale(0.96); }
+.app-topbar-actions { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+
+/* The theme control shows the theme in use. All three icons are rendered and
+   the root's pre-hydration data-theme picks one, so it is right on first
+   paint; after a tap the new one turns in. */
+.theme-toggle-icon { display: none; }
+:root:not([data-theme='dark']):not([data-theme='light']) .theme-toggle-icon[data-theme-icon='official'],
+:root[data-theme='dark'] .theme-toggle-icon[data-theme-icon='dark'],
+:root[data-theme='light'] .theme-toggle-icon[data-theme-icon='light'] { display: block; }
+.theme-toggle[data-switched] .theme-toggle-icon { animation: theme-icon-in var(--dur-slow) var(--ease-spring) both; }
+@keyframes theme-icon-in {
+  from { opacity: 0; transform: rotate(-60deg) scale(0.6); }
+  to { opacity: 1; transform: none; }
+}
 
 .wallet-profile-backdrop {
   position: fixed;
@@ -1822,16 +1841,27 @@ input[type='range'].lever:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3p
     --header-gap: 8px;
   }
 
-  .app-topbar {
+  /* One row at every phone width. When the wallet controls need the room, the
+     wordmark steps aside whole (it wraps onto a clipped second line of the
+     logo link) instead of the header breaking in two or the address being
+     cut; the mark stays, and Telegram's title bar already names the app. */
+  .app-topbar { flex-wrap: nowrap; }
+  .app-topbar > a:first-child {
+    flex: 0 1 auto;
     flex-wrap: wrap;
-    row-gap: 2px;
-    padding-bottom: 2px;
+    align-content: flex-start;
+    min-width: 34px;
+    height: 44px;
+    margin-inline-start: -3px;
+    padding-inline: 3px;
+    overflow: hidden;
+    overflow: clip;
+    gap: 0 8px;
   }
-  .app-topbar > a { min-width: 0; flex: 1 1 auto; }
   .app-topbar-actions { flex: 0 0 auto; }
-  .app-topbar > a { gap: 8px; }
-  .app-topbar > a > svg { width: 28px; height: 28px; }
-  .brand-wordmark { font-size: 20px; }
+  .app-topbar > a > svg { width: 28px; height: 28px; margin-block: 8px; }
+  /* The logo lockup keeps its own size; it is a mark, not running text. */
+  .brand-wordmark { font-size: 20px; line-height: 44px; }
   .page-header { margin-bottom: 8px; }
   .page-header h1 { font-size: 26px; line-height: 1.08; }
   .page-subtitle { margin-top: 2px; font-size: var(--fs-caption); line-height: 1.4; }
@@ -1899,7 +1929,6 @@ input[type='range'].lever:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3p
 }
 
 @media (max-width: 430px) {
-  .wallet-control-label { display: none; }
   /* Keep the 220px menu inside the viewport when the 44px selector sits at
      the right edge of a 320px shell. */
   .network-selector-menu { right: -16px; }
@@ -1949,20 +1978,6 @@ input[type='range'].lever:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3p
 
 @media (max-width: 359px) {
   .app-shell { padding-inline: 10px; }
-
-  .app-topbar { flex-wrap: nowrap; gap: 8px; }
-  .app-topbar > a { flex: 0 0 auto; }
-  .app-topbar-actions { flex: 0 0 auto; gap: 6px; }
-  .app-topbar .brand-wordmark {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
 
   .trade-page-actions > a { padding-inline: 9px; }
 

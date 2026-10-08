@@ -2,8 +2,7 @@
 [data-product-ui='v2'] { --product-radius: var(--radius-lg); --product-gap: 20px; }
 [data-product-ui='v2'] .app-topbar { min-height: 64px; padding-block: 10px; align-items: center; gap: 14px; }
 [data-product-ui='v2'] .app-topbar-actions { display: flex; align-items: center; gap: 8px; }
-[data-product-ui='v2'] .brand-wordmark { font-size: 22px; letter-spacing: -.045em; text-shadow: none; }
-[data-product-ui='v2'] .wallet-control-label { display: inline !important; font-size: var(--fs-caption); white-space: nowrap; }
+[data-product-ui='v2'] .brand-wordmark { font-size: var(--fs-heading); letter-spacing: -.045em; text-shadow: none; }
 [data-product-ui='v2'] .ui-card { border-radius: var(--product-radius); }
 [data-product-ui='v2'] .button { border-radius: var(--radius-md); min-height: 48px; }
 [data-product-ui='v2'] .page-header { margin-bottom: 12px; }
@@ -31,16 +30,9 @@
   [data-product-ui='v2'] .trade-ticket { height: auto !important; max-height: none !important; overflow: visible; }
 }
 @media (max-width: 420px) {
+  /* The logo lockup on phones; globals.css steps it aside when space runs out. */
   [data-product-ui='v2'] .brand-wordmark { font-size: 20px; }
-  [data-product-ui='v2'] .app-topbar > a { gap: 7px; }
-  [data-product-ui='v2'] .app-topbar > a > svg { width: 28px; height: 28px; }
   [data-product-ui='v2'] .app-topbar-actions > button { padding-inline: 8px; border-radius: 999px; }
-}
-@media (max-width: 350px) {
-  [data-product-ui='v2'] .brand-wordmark { font-size: 18px; }
-  [data-product-ui='v2'] .app-topbar > a > svg { width: 24px; }
-  [data-product-ui='v2'] .app-topbar-actions { gap: 4px; }
-  [data-product-ui='v2'] .wallet-control-label { font-size: var(--fs-micro); }
 }
 @media (prefers-reduced-motion: reduce) {
   [data-product-ui='v2'] :where(.glass-press, .button, .nav-item) { transition: none; }

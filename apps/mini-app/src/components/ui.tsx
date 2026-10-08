@@ -26,6 +26,7 @@ import NetworkSelector from '@/components/NetworkSelector';
 import { ValueOrSkeleton } from '@/components/MissingValue';
 import { compactAddress } from '@/lib/addressPresentation';
 import { copyText } from '@/lib/clipboard';
+import { usePrivyWallet, useWalletReadyTimeout } from '@/lib/wallet';
 import headerWalletControl from '@/components/HeaderWalletControl.module.css';
 
 /* ------------------------------------------------------------------ shell */
@@ -115,7 +116,7 @@ export function AppShell({
             <span className="app-topbar-actions">
               <span className={headerWalletControl.control} data-header-wallet-control="true" role="group" aria-label="Wallet and network controls">
                 <NetworkSelector />
-                <WalletProfile />
+                <HeaderWallet />
               </span>
               <ThemeToggle />
             </span>
@@ -141,6 +142,23 @@ export function AppShell({
       </div>
       {tabs && <TabBar />}
     </div>
+  );
+}
+
+/* Until the wallet provider is ready the identity slot holds a placeholder
+   with the footprint of a connected address, so the address (or Connect)
+   replaces it in place. It stops shimmering once the provider has timed out;
+   the page itself names the problem and offers a retry. */
+function HeaderWallet() {
+  const wallet = usePrivyWallet();
+  const timedOut = useWalletReadyTimeout(wallet.ready);
+  if (wallet.ready) return <WalletProfile />;
+  return (
+    <span role="status" className={headerWalletControl.identityPlaceholder} data-settled={timedOut || undefined}>
+      <span className={headerWalletControl.placeholderAvatar} aria-hidden="true" />
+      <span className={headerWalletControl.placeholderName} aria-hidden="true" />
+      <span className="sr-only">{timedOut ? 'Wallet unavailable' : 'Loading wallet'}</span>
+    </span>
   );
 }
 

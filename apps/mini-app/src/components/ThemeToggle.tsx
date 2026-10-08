@@ -2,12 +2,19 @@
 
 import { useEffect, useState } from 'react';
 import { Moon, Sparkles, Sun } from 'lucide-react';
-import { applyTheme, getSavedTheme, type ThemeId } from '@/lib/theme';
+import { applyTheme, getSavedTheme, THEMES, type ThemeId } from '@/lib/theme';
 import { haptic } from '@/lib/telegram';
 
+const ICONS = { official: Sparkles, dark: Moon, light: Sun } as const;
+const ORDER: readonly ThemeId[] = ['official', 'dark', 'light'];
+
+/** Shows the theme in use and cycles to the next one. All three icons render;
+ * the root's pre-hydration data-theme picks the visible one in CSS, so the
+ * icon is right from the first paint instead of flipping after hydration. */
 export default function ThemeToggle({ className = '' }: { className?: string }) {
   const [theme, setTheme] = useState<ThemeId>('official');
   const [mounted, setMounted] = useState(false);
+  const [switched, setSwitched] = useState(false);
 
   useEffect(() => {
     setTheme(getSavedTheme());
@@ -18,7 +25,7 @@ export default function ThemeToggle({ className = '' }: { className?: string }) 
   }, []);
 
   const next: ThemeId = theme === 'official' ? 'dark' : theme === 'dark' ? 'light' : 'official';
-  const Icon = next === 'official' ? Sparkles : next === 'dark' ? Moon : Sun;
+  const label = `${THEMES[theme].name} theme. Switch to ${next} theme`;
   return (
     <button
       type="button"
@@ -26,13 +33,18 @@ export default function ThemeToggle({ className = '' }: { className?: string }) 
       onClick={() => {
         applyTheme(next);
         setTheme(next);
+        setSwitched(true);
         haptic('selection');
       }}
-      aria-label={`Switch to ${next} theme`}
-      title={`Switch to ${next} theme`}
-      className={`glass-press flex min-h-11 min-w-11 items-center justify-center rounded-full bg-[var(--surface)] text-mut hover:text-mint ${className}`}
+      aria-label={label}
+      title={label}
+      data-switched={switched || undefined}
+      className={`theme-toggle glass-press flex min-h-11 min-w-11 items-center justify-center rounded-full bg-[var(--surface)] text-mut hover:text-mint ${className}`}
     >
-      <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
+      {ORDER.map((id) => {
+        const Icon = ICONS[id];
+        return <Icon key={id} data-theme-icon={id} className="theme-toggle-icon h-[18px] w-[18px]" aria-hidden="true" />;
+      })}
     </button>
   );
 }
