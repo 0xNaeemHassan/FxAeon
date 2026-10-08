@@ -37,3 +37,12 @@ test('missing verified terms never fall back to unverified current inputs', () =
   const facts = stableTradeReviewFacts(entered, [], { ...state, preparing: false, hasVerifiedRoute: true });
   for (const input of entered) assert.equal(facts.find(fact => fact.label === input.label)?.value, 'Unavailable');
 });
+test('the entered amount reads exactly as its verified route will, so verification changes nothing', () => {
+  const typed = [{ label: 'Amount', value: '1234.50 ETH' }, ...entered.slice(1)];
+  const preparing = stableTradeReviewFacts(typed, [], state);
+  assert.equal(preparing.find(f => f.label === 'Amount')?.value, '1,234.5 ETH');
+  const max = stableTradeReviewFacts([{ label: 'Amount', value: '0.00024443113696627 ETH' }], [], state);
+  assert.equal(max.find(f => f.label === 'Amount')?.value, '0.00024443113696627 ETH');
+  const verified = stableTradeReviewFacts(typed, [{ label: 'Amount', value: '1,234.5 ETH' }], { ...state, preparing: false, hasVerifiedRoute: true });
+  assert.equal(verified.find(f => f.label === 'Amount')?.value, preparing.find(f => f.label === 'Amount')?.value);
+});
