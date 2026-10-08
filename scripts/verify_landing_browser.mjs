@@ -15,11 +15,23 @@ const output = resolve(root, 'artifacts/landing');
 const CHAPTERS = ['trade', 'earn', 'borrow', 'move'];
 const CHAPTER_TABS = { trade: '1', earn: '2', borrow: '2', move: '3' };
 const WIDTHS = [320, 360, 390, 393, 430, 768, 1024, 1440];
+const TELEGRAM = 'https://t.me/FxAeonBot';
+const WEB = 'https://fxaeon.com/';
+/** Section buttons in page order: the four chapters, the pool scene, and the bridge. */
+const SECTION_ROUTES = [...CHAPTERS, 'earn', 'move'];
+/**
+ * A phone browser's own bars cover part of its screen. On a 375×812 iPhone,
+ * Safari's status, address, and tab bars leave 629 px (its innerHeight), and
+ * Telegram's in-app browser leaves about the same.
+ */
+const BROWSER_BARS = 183;
+/** How much of the hero's phone mockup must show above those bars. */
+const MOCKUP_PEEK = 40;
 
 /** Text whose contrast is measured against the pixels actually painted behind it. */
 const TEXT_SELECTORS = [
   '.site-header .brand span', '.site-header nav a', '.hero h1', '.hero .lede',
-  '.hero .web-link', '.proof li', '.section-head h2', '.trust-copy h2', '.chapter h3', '.chapter p',
+  '.hero .secondary', '.telegram-qr figcaption', '.proof li', '.section-head h2', '.trust-copy h2', '.chapter h3', '.chapter p',
   '.chapter .text-link', '.scene-title', '.scene-copy > p', '.scene-copy .text-link', '.split-readout dt',
   '.split-readout b', '.split-readout small', '.split-control label', '.range-scale', '.brake-picker-label',
   '.brake-options button', '.brake-figures dt', '.brake-figures dd', '.ruler-mark span', '.ruler-scale',
@@ -36,7 +48,7 @@ const TARGET_SELECTORS = [
 ].join(', ');
 
 const IN_BOUNDS_SELECTORS = [
-  '.site-header', '.hero-copy', '.hero h1', '.hero .lede', '.hero .actions', '.hero-stage', '.proof li',
+  '.site-header', '.hero-copy', '.hero h1', '.hero .lede', '.hero .actions', '.telegram-qr', '.hero-stage', '.proof li', '.route-links',
   '.section-head', '.chapter', '.chapter-phone .phone', '.scene', '.scene-copy', '.scene-art', '.vessel',
   '.split-readout', '.split-control', '.brake-options', '.brake-figures', '.ruler', '.ruler-mark span',
   '.peg-chart', '.defenses li', '.flow', '.duo-item', '.sdk-copy', '.sdk-picker', '.sdk-group li',
@@ -162,6 +174,41 @@ async function measureContrast(page) {
   }, { png: shot.toString('base64'), targets });
 }
 
+/**
+ * Installed before the page loads: records which hero actions, and whether the
+ * QR code, the first frame shows. Only the web font may still change later.
+ */
+function firstFrameProbe() {
+  document.addEventListener('DOMContentLoaded', () => requestAnimationFrame(() => {
+    const shown = (element) => Boolean(element) && getComputedStyle(element).display !== 'none';
+    window.__firstFrame = {
+      hero: [...document.querySelectorAll('.hero .actions a')].filter(shown).map((element) => element.getAttribute('href')),
+      qr: shown(document.querySelector('.telegram-qr')),
+    };
+  }));
+}
+
+/** The device-dependent parts of the page as a visitor sees them. */
+function deviceState() {
+  const visible = (element) => {
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0 && getComputedStyle(element).display !== 'none';
+  };
+  const hrefs = (selector) => [...document.querySelectorAll(selector)].filter(visible).map((element) => element.getAttribute('href'));
+  const qr = document.querySelector('.telegram-qr img');
+  return {
+    pointer: matchMedia('(pointer: coarse)').matches ? 'coarse' : 'fine',
+    header: hrefs('.site-header .pill'),
+    hero: hrefs('.hero .actions a'),
+    firstFrame: window.__firstFrame,
+    qr: visible(qr) ? { width: Math.round(qr.getBoundingClientRect().width), loaded: qr.complete && qr.naturalWidth > 0 } : null,
+    sections: hrefs('.route-links a'),
+    finale: hrefs('.finale .actions a'),
+    actionsBottom: document.querySelector('.hero .actions').getBoundingClientRect().bottom,
+    mockupTop: document.querySelector('.hero-stage .phone').getBoundingClientRect().top,
+  };
+}
+
 let browser;
 try {
   await new Promise((ready, reject) => {
@@ -239,7 +286,8 @@ try {
           const style = getComputedStyle(element);
           return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
         };
-        const primary = document.querySelector('.hero .actions a.pill.primary');
+        const primaries = [...document.querySelectorAll('.hero .actions a.pill.primary')].filter(visible);
+        const [primary] = primaries;
         primary.scrollIntoView({ block: 'center' });
         const ctaRect = primary.getBoundingClientRect();
         const hit = document.elementFromPoint(ctaRect.left + ctaRect.width / 2, ctaRect.top + ctaRect.height / 2);
@@ -248,7 +296,9 @@ try {
         return {
           width: viewportWidth,
           contentWidth: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
-          heroCtaHref: primary.getAttribute('href'),
+          heroPrimaries: primaries.map((element) => element.getAttribute('href')),
+          heroSecondaries: [...document.querySelectorAll('.hero .actions a.secondary')].filter(visible).map((element) => element.getAttribute('href')),
+          heroQr: [...document.querySelectorAll('.telegram-qr')].filter(visible).length,
           ctaHitTarget: hit?.closest('a')?.getAttribute('href') || null,
           outOfBounds: [...document.querySelectorAll(inBounds)].filter(visible).flatMap((element) => {
             const { left, right } = element.getBoundingClientRect();
@@ -262,7 +312,7 @@ try {
           }),
           images: [...document.images].filter(visible).map((image) => ({ src: image.currentSrc, loaded: image.complete && image.naturalWidth > 0 })),
           links: [...document.querySelectorAll('a')].map((link) => link.getAttribute('href')),
-          chapterLinks: [...document.querySelectorAll('.chapter .text-link')].map((link) => link.getAttribute('href')),
+          chapterLinks: [...document.querySelectorAll('.chapter .text-link')].filter(visible).map((link) => link.getAttribute('href')),
           revealHidden: [...document.querySelectorAll('[data-reveal]:not([data-shown])')].length,
           phones: [...document.querySelectorAll('.chapter-phone')].map((holder) => ({
             chapter: holder.closest('.chapter').dataset.chapter,
@@ -275,12 +325,15 @@ try {
 
       assert.ok(state.contentWidth <= state.width + 1, `Horizontal overflow at ${width}px (${theme}): scroll width ${state.contentWidth}`);
       assert.deepEqual(state.outOfBounds, [], `Visible content clipped at ${width}px (${theme})`);
-      assert.equal(state.heroCtaHref, 'https://t.me/FxAeonBot', 'Telegram should remain the primary hero action');
-      assert.equal(state.ctaHitTarget, 'https://t.me/FxAeonBot', `Primary Telegram CTA is blocked at ${width}px`);
-      assert.equal(await page.locator('.hero .web-link[href="https://fxaeon.com/"]').count(), 1, 'Web app should remain the secondary hero action');
+      // This context has a mouse: from 861px it is a desktop and leads with the web app.
+      const desktop = width >= 861;
+      assert.deepEqual(state.heroPrimaries, [desktop ? WEB : TELEGRAM], `One primary hero action at ${width}px`);
+      assert.deepEqual(state.heroSecondaries, [desktop ? TELEGRAM : WEB], `One secondary hero action at ${width}px`);
+      assert.equal(state.ctaHitTarget, desktop ? WEB : TELEGRAM, `Primary hero action is blocked at ${width}px`);
+      assert.equal(state.heroQr, desktop ? 1 : 0, `The QR code shows only on a wide screen with a mouse (${width}px)`);
       assert.deepEqual(state.undersizedTargets, [], `Interactive targets smaller than 44px at ${width}px`);
       assert.ok(state.images.every((image) => image.loaded), `Missing visible image at ${width}px: ${JSON.stringify(state.images.filter((image) => !image.loaded))}`);
-      assert.deepEqual(state.chapterLinks, CHAPTERS.map((route) => `https://fxaeon.com/${route}`));
+      assert.deepEqual(state.chapterLinks, CHAPTERS.flatMap((route) => desktop ? [`${WEB}${route}`] : [`${TELEGRAM}?startapp=${route}`, `${WEB}${route}`]));
       assert.equal(state.revealHidden, 0, 'Reduced motion must show every section in place');
       if (width < 960) {
         assert.equal(state.stageShown, false, 'Narrow screens stack a phone in each chapter instead of pinning one');
@@ -439,7 +492,59 @@ try {
   assert.deepEqual(await staticPage.evaluate(() => ['.split-control', '.brake-picker', '.sdk-picker', '.sdk-status']
     .map((selector) => getComputedStyle(document.querySelector(selector)).display)), ['none', 'none', 'none', 'none']);
   assert.equal(await staticPage.locator('.sdk-group li').count(), 15);
+  // The device-aware actions are CSS alone, so they need no script either.
+  assert.deepEqual(await staticPage.evaluate(deviceState).then(({ hero }) => hero), [TELEGRAM, WEB]);
   await staticContext.close();
+
+  // Device-aware actions, as phones, a touch tablet, and a desktop see them.
+  const openAs = async (options, waitForQr = false) => {
+    const deviceContext = await browser.newContext({ reducedMotion: 'reduce', ...options });
+    const devicePage = await deviceContext.newPage();
+    watch(devicePage);
+    const requested = [];
+    devicePage.on('request', (request) => requested.push(new URL(request.url()).pathname));
+    await devicePage.addInitScript(firstFrameProbe);
+    await devicePage.goto(origin, { waitUntil: 'load' });
+    await devicePage.evaluate(() => document.fonts.ready);
+    if (waitForQr) await devicePage.locator('.telegram-qr img').evaluate((image) => image.decode());
+    const shown = await devicePage.evaluate(deviceState);
+    await deviceContext.close();
+    return { ...shown, qrRequested: requested.some((path) => path.endsWith('/assets/telegram-qr.svg')) };
+  };
+
+  // Phones lead with Telegram, open each section's screen in the Mini App, and
+  // never show or download the QR code. The smaller hero leaves the mockup's
+  // top edge on the first screen, below the browser's own bars.
+  for (const [width, height] of [[360, 740], [375, 812], [390, 844], [393, 852], [430, 850]]) {
+    const shown = await openAs({ viewport: { width, height }, isMobile: true, hasTouch: true });
+    const firstScreen = height - BROWSER_BARS;
+    assert.equal(shown.pointer, 'coarse');
+    assert.deepEqual(shown.hero, [TELEGRAM, WEB], `Telegram leads the hero on a ${width}×${height} phone`);
+    assert.deepEqual(shown.firstFrame, { hero: shown.hero, qr: false }, 'The first frame already shows the phone actions');
+    assert.equal(shown.qr, null, 'Phones do not show the QR code');
+    assert.equal(shown.qrRequested, false, 'Phones do not download the QR code');
+    assert.deepEqual(shown.sections, SECTION_ROUTES.flatMap((route) => [`${TELEGRAM}?startapp=${route}`, `${WEB}${route}`]));
+    assert.deepEqual(shown.finale, [TELEGRAM, WEB]);
+    assert.ok(shown.actionsBottom <= firstScreen, `Both hero actions fit the first screen at ${width}×${height}`);
+    assert.ok(shown.mockupTop + MOCKUP_PEEK <= firstScreen,
+      `The phone mockup's top edge should show on the first screen at ${width}×${height}: it starts at ${Math.round(shown.mockupTop)}px of ${firstScreen}px`);
+  }
+
+  // A tablet is touch first: wide, but Telegram still leads, in the header too.
+  const tablet = await openAs({ viewport: { width: 1024, height: 1366 }, isMobile: true, hasTouch: true });
+  assert.deepEqual({ header: tablet.header, hero: tablet.hero, firstFrame: tablet.firstFrame, qr: tablet.qr, qrRequested: tablet.qrRequested },
+    { header: [TELEGRAM], hero: [TELEGRAM, WEB], firstFrame: { hero: [TELEGRAM, WEB], qr: false }, qr: null, qrRequested: false });
+
+  // A desktop leads with the web app, shows the QR code beside "Open in Telegram",
+  // and keeps the sections on the web.
+  const desktop = await openAs({ viewport: { width: 1440, height: 900 } }, true);
+  assert.equal(desktop.pointer, 'fine');
+  assert.deepEqual(desktop.header, [WEB]);
+  assert.deepEqual(desktop.hero, [WEB, TELEGRAM]);
+  assert.deepEqual(desktop.firstFrame, { hero: desktop.hero, qr: true }, 'The first frame already shows the desktop actions and QR code');
+  assert.deepEqual(desktop.qr, { width: 88, loaded: true });
+  assert.deepEqual(desktop.sections, SECTION_ROUTES.map((route) => `${WEB}${route}`));
+  assert.deepEqual(desktop.finale, [WEB, TELEGRAM]);
 
   for (const theme of ['dark', 'light']) {
     for (const width of [393, 1440]) {
@@ -458,21 +563,23 @@ try {
   const shortPage = await browser.newPage({ reducedMotion: 'reduce', viewport: { width: 1536, height: 647 } });
   watch(shortPage);
   await shortPage.goto(origin, { waitUntil: 'load' });
-  const [header, title, launch] = await Promise.all([
+  const [header, title, launch, code] = await Promise.all([
     shortPage.locator('.site-header').boundingBox(),
     shortPage.locator('.hero h1').boundingBox(),
-    shortPage.locator('.hero .actions a.pill.primary').boundingBox(),
+    shortPage.locator('.hero .actions a.pill.primary:visible').boundingBox(),
+    shortPage.locator('.telegram-qr').boundingBox(),
   ]);
-  assert.ok(header && title && launch, 'Short desktop header, title, and action must be measurable');
+  assert.ok(header && title && launch && code, 'Short desktop header, title, action, and QR code must be measurable');
   assert.ok(title.y >= header.y + header.height, 'Hero heading must follow the header at 1536x647');
-  assert.ok(launch.y + launch.height <= 647, 'Primary Telegram action should fit a short desktop viewport');
+  assert.ok(launch.y + launch.height <= 647, 'Primary action should fit a short desktop viewport');
+  assert.ok(code.y + code.height <= 647, 'The QR code should fit a short desktop viewport');
   await shortPage.close();
 
   assert.deepEqual(errors, [], 'Landing threw browser errors');
   assert.deepEqual(externalRequests, [], 'Landing loaded unneeded external services');
   assert.deepEqual([...new Set(fontContentTypes)], ['font/woff2'], 'Self-hosted Inter font must be served with its font MIME type');
 
-  console.log(`Landing browser checks passed: ${WIDTHS.length * 2} theme/viewport states, contrast over the painted backdrop, visible-content bounds, 44px targets, example semantics, stacked and pinned chapters, menu/theme keyboard and persistence, reduced motion, and zero external requests.`);
+  console.log(`Landing browser checks passed: ${WIDTHS.length * 2} theme/viewport states, contrast over the painted backdrop, visible-content bounds, 44px targets, example semantics, stacked and pinned chapters, menu/theme keyboard and persistence, reduced motion, device-aware actions on phones, a tablet, and a desktop, the hero fit on 360-430px phones, and zero external requests.`);
 } finally {
   await browser?.close();
   server.kill();

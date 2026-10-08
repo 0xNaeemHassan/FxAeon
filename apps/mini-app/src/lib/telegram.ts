@@ -28,6 +28,8 @@ interface TgButton {
 
 export interface TgWebApp {
   initData: string;
+  /** Unverified copy of the launch data: a routing hint, never an authentication input. */
+  initDataUnsafe?: { start_param?: string; auth_date?: number | string };
   /** Bot API version advertised by the Telegram client (for example `7.10`). */
   version?: string;
   isVersionAtLeast?: (version: string) => boolean;
@@ -96,6 +98,134 @@ export function hasTelegramLaunchSignal(): boolean {
 export function getWebApp(): TgWebApp | null {
   if (typeof window === 'undefined') return null;
   return (window as any).Telegram?.WebApp ?? null;
+}
+
+/**
+ * Screens a Telegram start parameter can open, as the landing page's section
+ * links do with `https://t.me/FxAeonBot?startapp=trade`. Only these exact
+ * values route anywhere, and only to these fixed paths, so a start parameter
+ * can never name another path or origin.
+ */
+const START_PARAM_ROUTES: ReadonlyMap<string, string> = new Map([
+  ['portfolio', '/'],
+  ['trade', '/trade'],
+  ['trade-eth', '/trade?market=ETH'],
+  ['trade-btc', '/trade?market=BTC'],
+  ['positions', '/positions'],
+  ['earn', '/earn'],
+  ['borrow', '/borrow'],
+  ['move', '/move'],
+  ['history', '/history'],
+]);
+
+/** The route a start parameter opens, or null for anything not on the list. */
+export function startParamRoute(startParam: unknown): string | null {
+  return typeof startParam === 'string' ? START_PARAM_ROUTES.get(startParam) ?? null : null;
+}
+
+export interface TelegramStartRequest {
+  startParam: string;
+  /** The launch's signed `auth_date`: kept across reloads, new for every launch. */
+  launchId: string;
+}
+
+function launchIdFrom(value: unknown): string {
+  const text = typeof value === 'number' ? String(value) : value;
+  return typeof text === 'string' && /^\d{1,12}$/.test(text) ? text : '';
+}
+
+/**
+ * The start parameter in a launch URL. Telegram puts it in the query as
+ * `tgWebAppStartParam`, so the app can open the right screen before the
+ * bridge loads, and repeats it as `start_param` in the launch data.
+ */
+export function readTelegramStartRequest(search: string, hash: string): TelegramStartRequest | null {
+  const launchData = new URLSearchParams(new URLSearchParams(hash.replace(/^#/, '')).get('tgWebAppData') ?? '');
+  const startParam = new URLSearchParams(search).get('tgWebAppStartParam') || launchData.get('start_param');
+  return startParam ? { startParam, launchId: launchIdFrom(launchData.get('auth_date')) } : null;
+}
+
+/** The start parameter the Telegram bridge reports for this launch. */
+export function webAppStartRequest(webApp: TgWebApp | null): TelegramStartRequest | null {
+  const data = webApp?.initDataUnsafe;
+  const startParam = typeof data?.start_param === 'string' ? data.start_param : '';
+  return startParam ? { startParam, launchId: launchIdFrom(data?.auth_date) } : null;
+}
+
+// Read with the launch signal above, before routing replaces the launch URL.
+const initialStartRequest = typeof window === 'undefined'
+  ? null
+  : readTelegramStartRequest(window.location.search, window.location.hash);
+
+/** The start parameter this document was launched with, if any. */
+export function launchStartRequest(): TelegramStartRequest | null {
+  return initialStartRequest;
+}
+
+const START_CLAIM_KEY = 'fxaeon:telegram-start';
+const documentStartClaim = { claimed: false };
+type StartClaimStorage = Pick<Storage, 'getItem' | 'setItem'>;
+
+function sessionStore(): StartClaimStorage | undefined {
+  try { return typeof window === 'undefined' ? undefined : window.sessionStorage; }
+  catch { return undefined; }
+}
+
+/**
+ * The route a launch's start parameter asks for, handed out once per launch:
+ * at most once in a document, and never again after a reload. Telegram keeps
+ * a launch's data, `auth_date` included, across reloads of the Mini App and
+ * sessionStorage keeps the claim, while every new launch has a new auth_date.
+ * The options are test hooks.
+ */
+export function claimTelegramStartRoute(
+  request: TelegramStartRequest | null,
+  { storage = sessionStore(), state = documentStartClaim }: { storage?: StartClaimStorage; state?: { claimed: boolean } } = {},
+): string | null {
+  const route = startParamRoute(request?.startParam);
+  if (!request || !route || state.claimed) return null;
+  state.claimed = true;
+  const claim = `${request.startParam}@${request.launchId}`;
+  try {
+    if (storage?.getItem(START_CLAIM_KEY) === claim) return null;
+    storage?.setItem(START_CLAIM_KEY, claim);
+  } catch {
+    // Without storage the claim still holds for this document.
+  }
+  return route;
+}
+
+/**
+ * Claim a launch's start parameter and return the in-app address to open, or
+ * null when nothing is due (no parameter, one not on the list, one already
+ * handled, or its screen already showing). The handled parameter leaves the
+ * current URL, and the address keeps Telegram's launch hash, which Privy's
+ * seamless sign-in may not have read yet.
+ */
+export function takeTelegramStartHref(
+  request: TelegramStartRequest | null,
+  options?: Parameters<typeof claimTelegramStartRoute>[1],
+): string | null {
+  const route = claimTelegramStartRoute(request, options);
+  if (!route || typeof window === 'undefined') return null;
+  const here = new URL(window.location.href);
+  if (here.searchParams.has('tgWebAppStartParam')) {
+    here.searchParams.delete('tgWebAppStartParam');
+    try {
+      window.history.replaceState(window.history.state, '', `${here.pathname}${here.search}${here.hash}`);
+    } catch {
+      // The claim already prevents a repeat in this session.
+    }
+  }
+  const target = new URL(route, here.origin);
+  if (here.pathname === target.pathname && [...target.searchParams].every(([key, value]) => here.searchParams.get(key) === value)) return null;
+  let hash = here.hash;
+  try {
+    decodeURIComponent(hash);
+  } catch {
+    hash = ''; // The router decodes the hash; launch data is always well formed.
+  }
+  return `${target.pathname}${target.search}${hash}`;
 }
 
 /**

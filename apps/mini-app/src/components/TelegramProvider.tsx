@@ -11,6 +11,8 @@
  *     · launched directly onto a sub-page (inline/menu button) → close()
  *   The old version keyed off initData, which is EMPTY for keyboard
  *   launches, so the back button silently did nothing.
+ * - opens the screen a start parameter names (`t.me/FxAeonBot?startapp=trade`)
+ *   once per launch, on top of the entry page so BackButton returns to it
  *
  * Everything is a no-op outside Telegram, so the app still works in a browser.
  */
@@ -23,8 +25,12 @@ import {
   hasTelegramLaunchSignal,
   initTelegram,
   isTMA,
+  launchStartRequest,
   showBackButton,
+  takeTelegramStartHref,
   waitForTelegramWebApp,
+  webAppStartRequest,
+  type TelegramStartRequest,
 } from '@/lib/telegram';
 import { applyTheme, getSavedTheme } from '@/lib/theme';
 
@@ -77,6 +83,8 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
   const [telegramReady, setTelegramReady] = useState(() => isTMA());
   // Visited-path stack for back-vs-close decisions.
   const stack = useRef<string[]>([]);
+  const routerRef = useRef(router);
+  useEffect(() => { routerRef.current = router; }, [router]);
 
   // One-time platform init + viewport binding + theme application.
   useEffect(() => {
@@ -90,6 +98,16 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
     markTelegramSafeArea();
     let unbindViewport = bindViewportHeight();
     let cleanupTheme = () => {};
+
+    // A start parameter opens its screen straight from the launch URL. The
+    // bridge's copy only counts while the visitor is still on the entry page.
+    const entryPath = window.location.pathname;
+    const openStartScreen = (request: TelegramStartRequest | null) => {
+      const href = takeTelegramStartHref(request);
+      if (href) routerRef.current.push(href);
+    };
+    const urlStartRequest = launchStartRequest();
+    if (urlStartRequest && (hasTelegramLaunchSignal() || isTMA())) openStartScreen(urlStartRequest);
 
     const bindTelegram = async () => {
       const tg = getWebApp() ?? (hasTelegramLaunchSignal() ? await waitForTelegramWebApp() : null);
@@ -107,6 +125,7 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
       };
       tg.onEvent('themeChanged', syncTheme);
       cleanupTheme = () => tg.offEvent('themeChanged', syncTheme);
+      if (!urlStartRequest && isTMA() && window.location.pathname === entryPath) openStartScreen(webAppStartRequest(tg));
       setTelegramReady(isTMA());
     };
     void bindTelegram();

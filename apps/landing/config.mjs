@@ -11,6 +11,18 @@ export function telegramLauncher(value = 'https://t.me/FxAeonBot') {
   return url.href;
 }
 
+/**
+ * The launcher with a start parameter, so Telegram opens the Mini App on one
+ * screen (`https://t.me/FxAeonBot?startapp=trade`). The app maps the value
+ * through its own whitelist of routes.
+ */
+export function telegramStartLink(launcher, startParam) {
+  if (!/^[a-z][a-z0-9-]{0,31}$/.test(startParam)) throw new Error(`Unsupported Telegram start parameter: ${startParam}`);
+  const url = new URL(telegramLauncher(launcher));
+  url.searchParams.set('startapp', startParam);
+  return url.href;
+}
+
 export function escapeAttribute(value) {
   return value.replaceAll('&', '&amp;').replaceAll('"', '&quot;')
     .replaceAll('<', '&lt;').replaceAll('>', '&gt;');
