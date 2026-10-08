@@ -1,6 +1,7 @@
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { escapeAttribute, telegramLauncher } from './config.mjs';
+import { qrSvg } from './qr.mjs';
 
 const root = resolve(import.meta.dirname);
 const telegramUrl = telegramLauncher(process.env.NEXT_PUBLIC_TELEGRAM_APP_URL || undefined);
@@ -17,4 +18,6 @@ for (const file of ['index.html', 'styles.css', 'script.js', 'aurora.js', '404.h
 await cp(resolve(root, '_headers'), resolve(dist, '_headers'));
 await cp(resolve(root, 'assets'), resolve(dist, 'assets'), { recursive: true });
 await cp(resolve(root, '../mini-app/public/brand/fx-official-mark.svg'), resolve(dist, 'assets/fx-protocol.svg'));
+// The desktop hero's code for opening the bot on a phone encodes the same launcher.
+await writeFile(resolve(dist, 'assets/telegram-qr.svg'), qrSvg(telegramUrl));
 console.log(`Built ${dist}`);
