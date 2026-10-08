@@ -190,7 +190,7 @@ function PortfolioSilhouette() {
               <span><Icon className="h-5 w-5" aria-hidden="true" /></span><strong>{label}</strong>
             </a>)}
           </div>
-          <details className={ui.disclosure}><summary><span>Value breakdown</span><ChevronDown size={17} aria-hidden="true" /></summary></details>
+          <details className={ui.disclosure}><summary tabIndex={-1}><span>Value breakdown</span><ChevronDown size={17} aria-hidden="true" /></summary></details>
         </section>
         <section className={`${assets.assets} ${assets.ledgerSurface}`}>
           <div className={assets.sectionHeading}>
@@ -208,7 +208,7 @@ function PortfolioSilhouette() {
           </div>
         </section>
         {['Positions', 'fxSAVE'].map((title) => <section key={title} className={title === 'fxSAVE' ? portfolio.earnSection : portfolio.positionsSection}>
-          <details className={ui.disclosure}><summary><span>{title}</span>
+          <details className={ui.disclosure}><summary tabIndex={-1}><span>{title}</span>
             <span className={ui.disclosureHint}><span className={`missing-value ${title === 'fxSAVE' ? 'missing-value-md' : 'missing-value-sm'}`}><span className="missing-value-bar" /></span></span>
             <ChevronDown size={17} aria-hidden="true" />
           </summary></details>

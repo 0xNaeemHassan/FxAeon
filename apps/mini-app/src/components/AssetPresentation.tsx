@@ -46,7 +46,7 @@ export function AssetRowContent({ asset, loading = false }: { asset: WalletAsset
     <AssetNetworkIcon asset={asset} size={34} />
     <span className={styles.name}><strong>{displayAssetSymbol(asset.symbol)}</strong><small>{networkLabel(asset.chainId)}</small></span>
     <span className={styles.worth}>
-      <strong><ValueOrSkeleton value={formatUsd(asset.usdValue)} width="sm" status={loading ? 'loading' : 'unavailable'} label="Holding value" /></strong>
+      <strong><ValueOrSkeleton value={formatUsd(asset.usdValue)} width="sm" status={loading ? 'loading' : 'unavailable'} label={loading ? 'Loading holding value' : 'Holding value unavailable'} /></strong>
       <AssetQuantity asset={asset} compact />
     </span>
   </>;
