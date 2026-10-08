@@ -50,8 +50,12 @@ export function LeverageSplitCaption({ id, side, debtLabel, leverage, min, max }
 }) {
   const inRange = Number.isFinite(leverage) && leverage >= min && leverage <= max;
   const { debt, yours } = splitPercents(side, leverage);
+  // "minted fxUSD" / "borrowed wstETH": on the narrowest rows the asset steps
+  // out of sight (still read aloud) so the caption keeps one line.
+  const [verb, ...assetWords] = debtLabel.split(' ');
+  const asset = assetWords.join(' ');
   return <span id={id} className={styles.caption} data-empty={inRange ? undefined : true}>
-    {inRange && <><b>{debt}%</b> {debtLabel} · <b>{yours}%</b> yours<span className="sr-only"> at {leverage.toFixed(1)}×, before fees</span></>}
+    {inRange && <><b>{debt}%</b> {verb}{asset && <span className={styles.captionAsset}> {asset}</span>} · <b>{yours}%</b> yours<span className="sr-only"> at {leverage.toFixed(1)}×, before fees</span></>}
   </span>;
 }
 

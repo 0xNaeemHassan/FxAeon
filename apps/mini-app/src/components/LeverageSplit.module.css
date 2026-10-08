@@ -156,3 +156,18 @@
 }
 .bounds > :first-child { justify-self: end; }
 .bounds > :last-child { justify-self: start; }
+/* The row measures itself: below about 310px the caption runs within a few
+   pixels of wrapping, and platforms whose glyphs set a little wider (Linux,
+   Android) wrap it. There the asset name steps out of sight, still read
+   aloud, and the slider's own value text names it in full. */
+.bounds { container-type: inline-size; }
+@container (max-width: 309px) {
+  .captionAsset {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}

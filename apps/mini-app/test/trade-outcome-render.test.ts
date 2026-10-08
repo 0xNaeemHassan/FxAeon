@@ -47,10 +47,22 @@ function opened(market: 'ETH' | 'BTC', side: 'long' | 'short', details: PlannedR
   };
 }
 
+/** The text of rendered markup: a character scan that never emits "<" or ">", so no tag survives. */
+function textOf(markup: string): string {
+  let text = '';
+  let inTag = false;
+  for (const character of markup) {
+    if (character === '<') inTag = true;
+    else if (character === '>') inTag = false;
+    else if (!inTag) text += character;
+  }
+  return text;
+}
+
 /** Rows as [label, visible text of the value], from rendered markup. */
 function rows(html: string) {
   return [...html.matchAll(/<div class="test-row" data-outcome-fact="([^"]+)"><dt>[^<]*<\/dt><dd>(.*?)<\/dd><\/div>/g)]
-    .map((match) => [match[1], match[2].replace(/<[^>]*>/g, '')]);
+    .map((match) => [match[1], textOf(match[2])]);
 }
 
 test('while the warm-up runs, the same rows hold their place with announced-off placeholders', async () => {
