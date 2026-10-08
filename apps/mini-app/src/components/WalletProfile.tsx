@@ -221,7 +221,7 @@ export default function WalletProfile() {
               </button>}
             </section>
             <section className={presentation.positions} aria-labelledby="wallet-profile-positions-title">
-              <ActionRow icon={Layers2} title="Positions" href="/positions" value={<ValueOrSkeleton value={positionState.status === 'ready' ? `${positionState.positions.length} open` : '—'} width="sm" status={positionState.status === 'loading' ? 'loading' : 'unavailable'} label="Open position count" />} />
+              <ActionRow icon={Layers2} title="Positions" href="/positions" value={<ValueOrSkeleton value={positionState.status === 'ready' ? `${positionState.positions.length} open` : '—'} width="sm" status={positionState.status === 'loading' || positionState.status === 'idle' ? 'loading' : 'unavailable'} label="Open position count" />} />
               <h3 id="wallet-profile-positions-title" className="sr-only">Open positions</h3>
               {claimTask && <ActionRow icon={ArrowDownToLine} title="Claim fxSAVE withdrawal" href={claimTask.href} />}
             </section>

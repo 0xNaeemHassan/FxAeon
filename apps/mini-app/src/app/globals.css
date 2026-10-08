@@ -1706,7 +1706,10 @@ select.field-control option {
   border-radius: var(--radius-full);
 }
 
+/* A settled "unavailable" needs no reserved width: the mark sits where the
+   value's edge would, so right-aligned columns keep their alignment. */
 .missing-value-unavailable {
+  width: auto;
   color: var(--mut);
 }
 
