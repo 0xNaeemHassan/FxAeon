@@ -169,6 +169,25 @@ async function thumbCentre(thumb: Locator) {
 }
 
 test.describe('the leverage slider is the debt/your-share split', () => {
+  test('keeps a full-width 44px target at phone and desktop widths, without overflow', async ({ page }) => {
+    await mount(page);
+    for (const [side, width] of [['Long', 320], ['Long', 390], ['Long', 480], ['Long', 1280], ['Short', 320], ['Short', 390]] as const) {
+      await page.getByRole('radio', { name: side, exact: true }).click();
+      await page.setViewportSize({ width, height: 900 });
+      await expect(slider(page)).toBeVisible();
+      const target = (await slider(page).boundingBox())!;
+      const ticket = (await page.locator('.trade-ticket').boundingBox())!;
+      expect(target.height, `${width}px`).toBeGreaterThanOrEqual(44);
+      expect(target.width, `${width}px`).toBeGreaterThan(ticket.width * 0.72);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth), `${width}px`).toBeLessThanOrEqual(0);
+      // The range ends and the split caption share one row, inside the ticket.
+      const bounds = (await page.locator('[data-leverage-bounds]').boundingBox())!;
+      expect(bounds.x).toBeGreaterThanOrEqual(ticket.x - 0.5);
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(ticket.x + ticket.width + 0.5);
+      expect(bounds.height, `${width}px caption stays on one line`).toBeLessThan(24);
+    }
+  });
+
   test('its thumb sits at the debt share, and the split it draws follows every move', async ({ page }) => {
     await mount(page);
     for (const leverage of ['2', '3.5', '1.5']) {
