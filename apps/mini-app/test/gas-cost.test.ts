@@ -5,7 +5,9 @@ import {
   MAX_FEE_PER_GAS_WEI,
   RouteGasCostCache,
   estimatePlannedRouteCost,
+  formatNativeShortfall,
   formatRouteGasCost,
+  nativeShortfallWei,
   routeGasCostKey,
 } from '../src/lib/fx/gasCost';
 import type { FxPublicClient, PlannedRoute } from '../src/lib/fx/types';
@@ -425,6 +427,84 @@ test('fundability compares the balance with the buffered route cost', async () =
   assert.equal(estimate.insufficientNativeBalance, false);
   const short = { ...clientFor(async () => 21_000n), getBalance: async () => 75_611n } as FxPublicClient;
   assert.equal((await estimatePlannedRouteCost(route(), { client: short })).insufficientNativeBalance, true);
+});
+
+test('the shortfall uses the same buffered basis that blocks signing, and adding it exactly unblocks', async () => {
+  // 12 wei value + 21,000 gas with 20% headroom (25,200) × 3 wei max fee = 75,612 wei required.
+  const balanceFor = (balance: bigint) => ({ ...clientFor(async () => 21_000n), getBalance: async () => balance } as FxPublicClient);
+  const short = await estimatePlannedRouteCost(route(), { client: balanceFor(75_000n) });
+  assert.equal(short.insufficientNativeBalance, true);
+  assert.equal(nativeShortfallWei(short), 612n);
+  const toppedUp = await estimatePlannedRouteCost(route(), { client: balanceFor(75_000n + nativeShortfallWei(short)!) });
+  assert.equal(toppedUp.insufficientNativeBalance, false);
+  assert.equal(nativeShortfallWei(toppedUp), undefined);
+});
+
+test('a two-step route and Base fee components are all part of the shortfall', async () => {
+  // Ordered simulation gives both steps 21,000 gas: 2 × 25,200 × 3 + 12 wei value.
+  const approvalRoute = {
+    ...clientFor(async () => 21_000n),
+    simulateCalls: async () => ({ results: [{ status: 'success', gasUsed: 21_000n }, { status: 'success', gasUsed: 21_000n }] }),
+    getBalance: async () => 100_000n,
+  } as unknown as FxPublicClient;
+  const twoSteps = await estimatePlannedRouteCost(route(true), { client: approvalRoute });
+  assert.equal(twoSteps.requiredNativeCostWei, 151_212n);
+  assert.equal(nativeShortfallWei(twoSteps), 51_212n);
+
+  // Base: 7 wei value + 12 gas limit × 3 wei + 4 wei L1 data fee + 5 wei operator fee = 52 wei.
+  const planned: PlannedRoute = {
+    ...route(),
+    chainId: 8453,
+    operation: 'buildBridgeTx',
+    transactions: [{ ...route().transactions[0], chainId: 8453, operation: 'buildBridgeTx', value: 7n }],
+    quote: { nativeFee: 7n, lzTokenFee: 3n },
+  };
+  const base = clientFor(async () => 10n, 8453) as FxPublicClient & {
+    estimateL1Fee: NonNullable<FxPublicClient['estimateL1Fee']>;
+    estimateOperatorFee: NonNullable<FxPublicClient['estimateOperatorFee']>;
+  };
+  base.estimateL1Fee = async () => 4n;
+  base.estimateOperatorFee = async () => 5n;
+  base.getBalance = async () => 40n;
+  const baseEstimate = await estimatePlannedRouteCost(planned, { client: base });
+  assert.equal(baseEstimate.requiredNativeCostWei, 52n);
+  assert.equal(nativeShortfallWei(baseEstimate), 12n);
+});
+
+test('a partial estimate proves a shortfall without inventing its size', async () => {
+  const client = {
+    ...clientFor(async (to) => {
+      if (to.toLowerCase() === actionTarget.toLowerCase()) throw new Error('execution reverted');
+      return 46_000n;
+    }),
+    getBalance: async () => 100_000n,
+  } as FxPublicClient;
+  const estimate = await estimatePlannedRouteCost(route(true), { client });
+  assert.equal(estimate.insufficientNativeBalance, true);
+  assert.equal(nativeShortfallWei(estimate), undefined);
+  assert.equal(nativeShortfallWei({ insufficientNativeBalance: false, requiredNativeCostWei: 10n, nativeBalanceWei: 1n }), undefined);
+});
+
+test('the ETH to add is rounded up, never down, to three significant digits', () => {
+  // Tiny shortfalls name the smallest useful top-up instead of 18 decimals.
+  assert.equal(formatNativeShortfall(1n), '0.000001');
+  assert.equal(formatNativeShortfall(999_999_999_999n), '0.000001');
+  // An exact boundary is not bumped.
+  assert.equal(formatNativeShortfall(620_000_000_000_000n), '0.00062');
+  assert.equal(formatNativeShortfall(1_000_000_000_000n), '0.000001');
+  // One wei over a boundary rounds up to the next shown step.
+  assert.equal(formatNativeShortfall(620_000_000_000_001n), '0.000621');
+  assert.equal(formatNativeShortfall(618_123_456_789_012n), '0.000619');
+  assert.equal(formatNativeShortfall(1_008_000_000_000_000n), '0.00101');
+  assert.equal(formatNativeShortfall(999_999_999_999_999_999n), '1');
+  // Large shortfalls keep three significant digits and group thousands.
+  assert.equal(formatNativeShortfall(12_345_678_900_000_000_000n), '12.4');
+  assert.equal(formatNativeShortfall(1_234_500_000_000_000_000_000n), '1,240');
+  for (const wei of [1n, 7n, 999_999n, 618_123_456_789_012n, 620_000_000_000_001n, 12_345_678_900_000_000_000n, 1_234_500_000_000_000_000_001n]) {
+    const [whole, fraction = ''] = formatNativeShortfall(wei).replace(/,/g, '').split('.');
+    const shown = BigInt(whole) * 10n ** 18n + BigInt(fraction.padEnd(18, '0'));
+    assert.ok(shown >= wei, `${wei} wei must never be understated`);
+  }
 });
 
 test('an unreadable balance never blocks the review', async () => {

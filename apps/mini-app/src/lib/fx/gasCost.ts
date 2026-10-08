@@ -572,6 +572,41 @@ export async function estimatePlannedRouteCost(
   };
 }
 
+/**
+ * How much more native balance the wallet needs to pass the same check that
+ * sets `insufficientNativeBalance`: the native value plus every step's gas
+ * limit at the maximum fee (and Base's L1 and operator fees), less the
+ * balance. A partial estimate can prove a shortfall without knowing its size,
+ * so it has none.
+ */
+export function nativeShortfallWei(
+  estimate: Pick<RouteGasCostEstimate, 'insufficientNativeBalance' | 'requiredNativeCostWei' | 'nativeBalanceWei'>,
+): bigint | undefined {
+  if (!estimate.insufficientNativeBalance) return undefined;
+  if (estimate.requiredNativeCostWei === undefined || estimate.nativeBalanceWei === undefined) return undefined;
+  const shortfall = estimate.requiredNativeCostWei - estimate.nativeBalanceWei;
+  return shortfall > 0n ? shortfall : undefined;
+}
+
+/** The smallest top-up worth naming: 0.000001 ETH. */
+const SHORTFALL_STEP_FLOOR_WEI = 1_000_000_000_000n;
+
+/**
+ * ETH to add, in plain ETH with three significant digits. It rounds up, never
+ * down, so adding exactly the amount shown covers the shortfall.
+ */
+export function formatNativeShortfall(shortfallWei: bigint): string {
+  if (shortfallWei <= 0n) return '0';
+  const digits = shortfallWei.toString().length;
+  const significantStep = 10n ** BigInt(Math.max(0, digits - 3));
+  const step = significantStep > SHORTFALL_STEP_FLOOR_WEI ? significantStep : SHORTFALL_STEP_FLOOR_WEI;
+  const rounded = ((shortfallWei + step - 1n) / step) * step;
+  const [whole, fraction] = formatEther(rounded).split('.');
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const trimmed = fraction?.replace(/0+$/, '');
+  return trimmed ? `${grouped}.${trimmed}` : grouped;
+}
+
 /** Network fees exclude native value sent, including bridge protocol fees. */
 export function networkFeeWei(estimate: RouteGasCostEstimate): bigint | undefined {
   if (estimate.executionGasFeeWei === undefined) return undefined;
