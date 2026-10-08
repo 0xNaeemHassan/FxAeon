@@ -78,7 +78,8 @@ test.describe('the ticket’s outcome preview', () => {
       debt: await figure(page, 'Estimated debt'),
       fee: await figure(page, 'Protocol fee rate'),
     };
-    expect(preview.collateral).toMatch(/^≈ [\d,]+(?:\.\d+)? wstETH$/);
+    // An ETH long's collateral is the pool's stETH accounting: the quote's wstETH at the rate read with it.
+    expect(preview.collateral).toMatch(/^≈ [\d,]+(?:\.\d+)? stETH$/);
     expect(preview.debt).toMatch(/^≈ [\d,]+(?:\.\d+)? fxUSD$/);
     expect(preview.fee).toMatch(/%/);
     const plansBeforeReview = await planCount(page);
