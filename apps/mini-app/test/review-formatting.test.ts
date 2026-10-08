@@ -234,6 +234,143 @@ test('existing ETH increases and adjustments do not mislabel ambiguous collatera
   }
 });
 
+// wstETH.stEthPerToken() on mainnet at block 26,150,567 (9 October 2026).
+const RATE = '1245861716930919999';
+const LONG_OPEN = '0xef9e1aa7';
+const LONG_CLOSE = '0xe8e9fc2a';
+const collateralFact = (planned: PlannedRoute) => routeFinancialReviewFacts(planned).find((fact) => fact.label === 'Estimated collateral');
+/** A route's one protocol action, so a leverage change's branch reads from its selector. */
+function withAction(planned: PlannedRoute, selector: string): PlannedRoute {
+  return { ...planned, transactions: [{ chainId: 1, from: WALLET, to: UNKNOWN, data: `${selector}00` as `0x${string}`, value: 0n, kind: 'action', operation: planned.operation }] };
+}
+
+test('a new ETH long states its wstETH quote in stETH at the rate read with it, with the quote in the title', () => {
+  // 0.670412512785242112 wstETH × 1.245861716930919999 stETH per wstETH, rounded down to the wei.
+  assert.deepEqual(collateralFact(route(opening(), { colls: '670412512785242112', debts: '1', stEthPerWstEth: RATE })), {
+    label: 'Estimated collateral',
+    value: '≈ 0.83524128 stETH',
+    title: '0.835241284230594092 stETH (0.670412512785242112 wstETH at 1.245861716930919999 stETH per wstETH)',
+  });
+  // A converted figure is an estimate even when every digit fits.
+  assert.equal(collateralFact(route(opening(), { colls: '1000000000000000000', debts: '1', stEthPerWstEth: '1250000000000000000' }))?.value, '≈ 1.25 stETH');
+  // Rounded down, never up: one wei of wstETH is one wei of stETH at 1.2458.
+  const tiny = collateralFact(route(opening(), { colls: '1', debts: '1', stEthPerWstEth: RATE }));
+  assert.equal(tiny?.value, '<0.00000001 stETH');
+  assert.match(tiny?.title ?? '', /^0\.000000000000000001 stETH \(/);
+});
+
+test('without a usable rate a new ETH long keeps its native wstETH figure, never a guessed or 1:1 rate', () => {
+  for (const stEthPerWstEth of [undefined, '', '0', '1000000000000000000', '10000000000000000000', '1.25', '-1245861716930919999', 'NaN']) {
+    assert.deepEqual(collateralFact(route(opening(), { colls: '670412512785242112', debts: '1', stEthPerWstEth })), {
+      label: 'Estimated collateral', value: '≈ 0.67041251 wstETH', title: '0.670412512785242112 wstETH',
+    }, String(stEthPerWstEth));
+  }
+});
+
+test('an existing ETH long adds its new wstETH, converted, to the stETH it holds, or shows no estimate', () => {
+  // The SDK's open/add quote is the held stETH plus the new collateral in wstETH.
+  const details = { colls: '9847412175152768908', debts: '1', stEthPerWstEth: RATE, currentColls: '9176999662367526796' };
+  const increase = opening('ETH', 'long', 4);
+  const adjust: ReviewedActionIntent = { ...increase, kind: 'position-adjust', requestedLeverage: 3 };
+  const expected = {
+    label: 'Estimated collateral',
+    value: '≈ 10.01224094 stETH',
+    title: '10.012240946598120888 stETH (9.176999662367526796 stETH held plus 0.670412512785242112 wstETH at 1.245861716930919999 stETH per wstETH)',
+  };
+  assert.deepEqual(collateralFact(route(increase, details)), expected);
+  assert.deepEqual(collateralFact(withAction(route(adjust, details), LONG_OPEN)), expected);
+  // Without the rate or the held collateral, with a held figure above the
+  // quote, or for a leverage change whose branch is unknown: no estimate.
+  for (const planned of [
+    route(increase, { ...details, stEthPerWstEth: undefined }),
+    route(increase, { ...details, currentColls: undefined }),
+    route(increase, { ...details, currentColls: '9847412175152768909' }),
+    route(adjust, details),
+    withAction(route(adjust, details), '0x12345678'),
+  ]) assert.equal(collateralFact(planned), undefined);
+});
+
+test('ETH long leverage decreases, reductions, borrowing and repayment are quoted in stETH already', () => {
+  // These SDK quotes add or subtract collateral × the pool's rate, so a rate changes nothing.
+  const stEth = { label: 'Estimated collateral', value: '8.5 stETH', title: '8.5 stETH' };
+  const details = { colls: '8500000000000000000', debts: '1', stEthPerWstEth: RATE };
+  const position = opening('ETH', 'long', 4);
+  assert.deepEqual(collateralFact(withAction(route({ ...position, kind: 'position-adjust', requestedLeverage: 2 }, details), LONG_CLOSE)), stEth);
+  assert.deepEqual(collateralFact(route({ ...position, kind: 'position-reduce', outputTokenAddress: FX_TOKENS.ETH.address, isClosePosition: false }, details)), stEth);
+  assert.deepEqual(collateralFact(route({
+    kind: 'deposit-and-mint', poolAddress: positionPoolAddress('ETH', 'long'), positionId: 4,
+    depositTokenAddress: FX_TOKENS.stETH.address, depositAmount: 1n, nativeInput: false, mintAmount: 1n,
+  }, details)), stEth);
+  assert.deepEqual(collateralFact(route({
+    kind: 'repay-and-withdraw', poolAddress: positionPoolAddress('ETH', 'long'), positionId: 4,
+    minimumRepayAmount: 1n, repayTokenAddress: FX_TOKENS.fxUSD.address, withdrawTokenAddress: FX_TOKENS.wstETH.address,
+    withdrawAmount: 1n, collateralTokenAddress: FX_TOKENS.wstETH.address,
+  }, details)), stEth);
+});
+
+test('ETH short and BTC quotes keep their own units, with or without a wstETH rate', () => {
+  for (const [market, side, positionId, collateral, debt] of [
+    ['ETH', 'short', 0, '0.12345678 fxUSD', '1,234.5 wstETH'],
+    ['ETH', 'short', 9, '0.12345678 fxUSD', '1,234.5 wstETH'],
+    ['BTC', 'short', 0, '0.12345678 fxUSD', '1,234.5 WBTC'],
+    ['BTC', 'long', 0, '0.12345678 WBTC', '1,234.5 fxUSD'],
+    ['BTC', 'long', 9, '0.12345678 WBTC', '1,234.5 fxUSD'],
+  ] as const) {
+    for (const stEthPerWstEth of [undefined, RATE]) {
+      const facts = routeFinancialReviewFacts(route(opening(market, side, positionId), {
+        colls: '123456780000000000', debts: '1234500000000000000000', stEthPerWstEth,
+        economicLimits: [{ label: 'position input conversion minimum output', value: market === 'BTC' && side === 'long' ? '12345678' : '1000000000000000000' }],
+      }));
+      const label = `${market} ${side} #${positionId} ${stEthPerWstEth ? 'with' : 'without'} a rate`;
+      assert.equal(facts.find((fact) => fact.label === 'Estimated collateral')?.value, collateral, label);
+      assert.equal(facts.find((fact) => fact.label === 'Estimated debt')?.value, debt, label);
+      // Their converted-input floors are not wstETH and gain no stETH equivalent.
+      assert.equal(facts.find((fact) => fact.label === 'Minimum converted input')?.equivalent, undefined, label);
+    }
+  }
+});
+
+test('a wstETH floor stays exact in the unit it is signed in, with its stETH equivalent beside it', () => {
+  const minimum = (planned: PlannedRoute, label: string) => routeFinancialReviewFacts(planned).find((fact) => fact.label === label);
+  const input = (stEthPerWstEth?: string, value = '699300699300699300') => route(opening(), {
+    colls: '1', debts: '1', stEthPerWstEth,
+    economicLimits: [{ label: 'position input conversion minimum output', value }],
+  });
+  // Trade: the converted input, rounded down in stETH like the pool.
+  assert.deepEqual(minimum(input(RATE), 'Minimum converted input'), {
+    label: 'Minimum converted input', value: '0.6993006993006993 wstETH', title: '0.6993006993006993 wstETH', equivalent: '≈ 0.87123196 stETH',
+  });
+  // Borrow: the converted deposit beside a quote already in stETH.
+  const deposit = route({
+    kind: 'deposit-and-mint', poolAddress: positionPoolAddress('ETH', 'long'), positionId: 0,
+    depositTokenAddress: FX_TOKENS.ETH.address, depositAmount: 244431136966270n, nativeInput: true, mintAmount: 100000000000000000n,
+  }, {
+    colls: '244431136966270000', debts: '100000000000000000', stEthPerWstEth: RATE,
+    economicLimits: [{ label: 'deposit conversion minimum output', value: '195994373861452' }],
+  });
+  assert.equal(minimum(deposit, 'Estimated collateral')?.value, '≈ 0.24443113 stETH');
+  assert.deepEqual(minimum(deposit, 'Minimum converted deposit'), {
+    label: 'Minimum converted deposit', value: '0.000195994373861452 wstETH', title: '0.000195994373861452 wstETH', equivalent: '≈ 0.00024418 stETH',
+  });
+  // No rate or a zero floor: the exact floor alone.
+  assert.equal(minimum(input(), 'Minimum converted input')?.equivalent, undefined);
+  assert.deepEqual(minimum(input(RATE, '0'), 'Minimum converted input'), { label: 'Minimum converted input', value: '0 wstETH', title: '0 wstETH' });
+  // What a reduction pays out is a received amount, not collateral entering the position.
+  const reduce = route({ ...opening('ETH', 'long', 4), kind: 'position-reduce', outputTokenAddress: FX_TOKENS.wstETH.address, isClosePosition: false }, {
+    colls: '1', debts: '1', minOut: '500000000000000000', stEthPerWstEth: RATE,
+    economicLimits: [{ label: 'position output conversion minimum output', value: '500000000000000000' }],
+  });
+  assert.deepEqual(minimum(reduce, 'Minimum received'), { label: 'Minimum received', value: '0.5 wstETH', title: '0.5 wstETH' });
+});
+
+test('the reads behind a converted figure stay inspectable in advanced details', () => {
+  const planned = route(opening('ETH', 'long', 4), { colls: '9847412175152768908', debts: '1', stEthPerWstEth: RATE, currentColls: '9176999662367526796' });
+  assert.deepEqual(rawQuoteReviewFacts(planned).slice(-2), [
+    { label: 'Collateral held (raw units)', value: '9176999662367526796' },
+    { label: 'stETH per wstETH (1e18 units)', value: RATE },
+  ]);
+});
+
 test('borrow quotes use pool accounting, not the deposit input units', () => {
   const intent: ReviewedActionIntent = {
     kind: 'deposit-and-mint', poolAddress: positionPoolAddress('ETH', 'long'), positionId: 0,

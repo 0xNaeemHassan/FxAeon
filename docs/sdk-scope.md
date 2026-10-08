@@ -85,6 +85,45 @@ Source references at contracts commit `5e198e93657db008a57129e7eea21a996618f17f`
 [short fee arithmetic](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/core/short/ShortPoolManager.sol#L710),
 and [mint amount forwarding](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/periphery/facets/PositionOperateFacet.sol#L128).
 
+## Collateral units
+
+An ETH long's collateral is shown in one unit everywhere, stETH: position
+details, review figures, and Trade's outcome preview. The PoolManager
+multiplies supplied wstETH by its token's rate provider before the pool records
+it ([`operate`](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/core/PoolManager.sol#L371-L395),
+[scaling factor](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/core/PoolManager.sol#L1053-L1063)),
+and the pool's oracle prices stETH. On mainnet at block 26,150,567,
+`tokenRates(wstETH)` was scalar 1 with rate provider `0x81A7…Cc7f`, whose
+`getRate()` equalled `wstETH.stEthPerToken()` (1.245861716930919999). WBTC has
+scalar 1e10 and no provider, so BTC long figures are WBTC in 18-decimal
+accounting. The ShortPoolManager scales wstETH by 1e18 alone, so an ETH short's
+debt is wstETH. Those pools' SDK symbols (fxUSD, WBTC, wstETH) already name
+their units.
+
+fx-sdk 1.0.5 labels the wstETH long pool's collateral `ETH` (its config notes
+stETH), so the app relabels that figure without changing it; the SDK symbol
+still prices its USD value. The SDK's reduce, borrow, repay and leverage-down
+quotes are stETH. Its open/add quote is the position's held stETH plus the new
+collateral in wstETH (net of the supply fee). An ETH long's increase, leverage
+and borrow planners read `wstETH.stEthPerToken()`, plus an existing position's
+`getPosition` for an increase or leverage change, read-only and alongside the
+SDK call (each read bounded at 4 seconds, never failing the plan), and attach
+them to the route as decimal strings (`stEthPerWstEth`, `currentColls`). The review shows held stETH plus the
+wstETH × rate, rounded down to the wei, marked "≈", with the wstETH amount and
+the rate in its title. Without a usable rate (a failed read, or anything
+outside 1–10 stETH per wstETH, so never 1:1) a new position shows its wstETH
+figure labelled wstETH, and an existing position's mixed quote shows no
+estimate. Signed converter floors ("Minimum converted input", "Minimum
+converted deposit") stay exact in wstETH, the unit the converter enforces, with
+a muted stETH equivalent beneath them, also rounded down. USD values keep their
+price basis: a position's SDK symbol, and the ticket preview's wstETH quote at
+the wstETH price.
+
+The SDK's BTC reduce and leverage-down quotes scale the withdrawn collateral
+by 1e10 too many (`withdraw / precision × rateRes` with an 8-decimal precision
+and a 1e18 rate), which makes them negative; the review omits a collateral
+figure it cannot read as a non-negative integer.
+
 ## Position brake
 
 Position rows show how far the market can move before a position reaches its

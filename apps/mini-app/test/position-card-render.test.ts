@@ -52,6 +52,8 @@ test.after(() => {
 });
 
 const E18 = 10n ** 18n;
+// The SDK's own symbols: fx-sdk 1.0.5 names the wstETH long pool's
+// collateral "ETH", though the pool accounts it in stETH.
 const ethLong: UiPosition = {
   market: 'ETH',
   side: 'long',
@@ -61,7 +63,7 @@ const ethLong: UiPosition = {
     rawDebts: 5n * 10n ** 17n,
     currentLeverage: 2,
     lsdLeverage: 2,
-    rawCollsToken: 'wstETH',
+    rawCollsToken: 'ETH',
     rawDebtsToken: 'fxUSD',
     rawCollsDecimals: 18,
     rawDebtsDecimals: 18,
@@ -100,7 +102,7 @@ test('a position row leads with identity and value; its details keep every figur
     assert.match(html, /<strong>2×<\/strong> leverage<span aria-hidden="true">·<\/span>#42/);
     assert.doesNotMatch(html, /title="—"|Value loading|Price delayed|USD unavailable/);
     // The row is compact: its four figures live in the position's details.
-    assert.doesNotMatch(html, /Market price|Debt \/ collateral|wstETH/);
+    assert.doesNotMatch(html, /Market price|Debt \/ collateral|stETH/);
     // The side is a word in its own color, not a pill.
     assert.match(html, /<span class="test-side test-long">Long<\/span>/);
     assert.match(renderToStaticMarkup(React.createElement(ProtocolPositionCard, { position: btcShort })), /<span class="test-side test-short">Short<\/span>/);
@@ -110,7 +112,8 @@ test('a position row leads with identity and value; its details keep every figur
     const details = renderToStaticMarkup(React.createElement(ProtocolPositionDetails, { position: ethLong, headingId: 'manage-position-heading' }));
     assert.match(details, /<section class="test-details " data-position-details="ETH:long:42" aria-labelledby="manage-position-heading">/);
     assert.match(details, /<h2 id="manage-position-heading" class="sr-only">ETH Long · #42<\/h2>/);
-    for (const [label, value] of [['Collateral', '1 wstETH'], ['Debt', '0.5 fxUSD'], ['Market price', ''], ['Debt / collateral', '']]) {
+    // An ETH long's collateral is the pool's stETH accounting, named as such.
+    for (const [label, value] of [['Collateral', '1 stETH<small>'], ['Debt', '0.5 fxUSD<small>'], ['Market price', ''], ['Debt / collateral', '']]) {
       assert.match(details, new RegExp(`<dt>${label.replace('/', '\\/')}</dt><dd>${value}`), `${label} is listed`);
     }
     assert.equal((details.match(/<div class="test-fact"/g) ?? []).length, 4);
@@ -120,6 +123,25 @@ test('a position row leads with identity and value; its details keep every figur
       position: { ...ethLong, info: { ...ethLong.info, positionId: 43, rawColls: 0n, rawDebts: 0n } },
     }));
     assert.ok((zeroHtml.match(/\$0\.00/g) ?? []).length >= 3, 'known zero balances stay visible as $0.00');
+  });
+});
+
+test('every pool names its collateral and debt units in the details the way its review does', async () => {
+  await withCardModule(({ card: { ProtocolPositionDetails } }) => {
+    const symbols = { ETH: { long: ['ETH', 'fxUSD'], short: ['fxUSD', 'wstETH'] }, BTC: { long: ['WBTC', 'fxUSD'], short: ['fxUSD', 'WBTC'] } } as const;
+    for (const [market, side, collateral, debt] of [
+      ['ETH', 'long', '1 stETH', '0.5 fxUSD'],
+      ['ETH', 'short', '1 fxUSD', '0.5 wstETH'],
+      ['BTC', 'long', '1 WBTC', '0.5 fxUSD'],
+      ['BTC', 'short', '1 fxUSD', '0.5 WBTC'],
+    ] as const) {
+      const [rawCollsToken, rawDebtsToken] = symbols[market][side];
+      const details = renderToStaticMarkup(React.createElement(ProtocolPositionDetails, {
+        position: { market, side, info: { ...ethLong.info, rawCollsToken, rawDebtsToken } },
+      }));
+      assert.match(details, new RegExp(`<dt>Collateral</dt><dd>${collateral}<small>`), `${market} ${side} collateral`);
+      assert.match(details, new RegExp(`<dt>Debt</dt><dd>${debt}<small>`), `${market} ${side} debt`);
+    }
   });
 });
 

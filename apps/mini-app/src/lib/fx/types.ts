@@ -64,6 +64,15 @@ export interface RouteDetails {
   minOut?: string;
   colls?: string;
   debts?: string;
+  /** stETH per wstETH (1e18 fixed point, as decimal digits) read with
+   * `wstETH.stEthPerToken()` while this ETH long route was planned. Display
+   * only: it states wstETH quote figures in the pool's stETH accounting.
+   * Absent when the read failed, so the review keeps the native unit. */
+  stEthPerWstEth?: string;
+  /** The position's raw collateral (stETH accounting, 1e18) read while an
+   * existing ETH long's increase or leverage route was planned. Display only:
+   * the SDK's open/add quote adds new wstETH to this stETH figure. */
+  currentColls?: string;
   /** User-entered values retained beside the immutable SDK route for review. */
   requestedAmount?: string;
   requestedLeverage?: number;

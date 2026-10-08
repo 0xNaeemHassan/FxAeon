@@ -34,7 +34,9 @@ function createFixture(options = {}) {
       if(!routes.has(key)) routes.set(key,{src,dst,isV3,srcDecimals:decimals.get(srcAddress.toLowerCase()),dstDecimals:decimals.get(dstAddress.toLowerCase())});
     } catch {}
   }
-  const abis=[viem.multicall3Abi,...Object.entries(sdk).filter(([k])=>k.endsWith('_default')).map(([,v])=>v)];
+  // The planner reads wstETH.stEthPerToken() beside an ETH long quote; the SDK bundles no wstETH ABI.
+  const wstEthRateAbi=[{type:'function',name:'stEthPerToken',stateMutability:'view',inputs:[],outputs:[{type:'uint256'}]}];
+  const abis=[viem.multicall3Abi,wstEthRateAbi,...Object.entries(sdk).filter(([k])=>k.endsWith('_default')).map(([,v])=>v)];
   const bySelector=new Map();
   for(const abi of abis) for(const fn of abi) if(fn.type==='function') { const selector=viem.toFunctionSelector(fn); if(!bySelector.has(selector)) bySelector.set(selector,[]); bySelector.get(selector).push([fn]); }
   const events=[]; const logical=[]; const t0=performance.now();
@@ -52,7 +54,7 @@ function createFixture(options = {}) {
       else if(name==='paused') result=false;
       else if(name==='getDebtRatioRange') result=[100000000000000000n,950000000000000000n];
       else if(name==='getPoolFeeRatio') result=[1000000n,2000000n,3000000n,4000000n];
-      else if(name==='getRate') result=1200000000000000000n;
+      else if(name==='getRate'||name==='stEthPerToken') result=1200000000000000000n;
       else if(name==='getPrice') {const p=(target.toLowerCase()===sdk.pools.WBTC.oracle.toLowerCase()?60000n:2000n)*10n**18n;result=[p,p*995n/1000n,p*1005n/1000n];}
       else if(name==='queryConvert') {
         const r=routes.get(routeKey(args[1],args[2]));

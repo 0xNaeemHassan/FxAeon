@@ -66,17 +66,18 @@ test('quote refresh change summary lists only changed supported consequences', (
 });
 
 test('current and expected position values pair only when the quote provides the expected metric', () => {
+  // An ETH long's collateral reads in stETH on both sides of the arrow.
   assert.deepEqual(pairVerifiedPositionFacts(
-    [{ label: 'Collateral', value: '4 ETH' }, { label: 'Debt', value: '100 fxUSD' }],
-    [{ label: 'Estimated collateral', value: '5 ETH' }, { label: 'Estimated debt', value: '120 fxUSD' }],
+    [{ label: 'Collateral', value: '4 stETH' }, { label: 'Debt', value: '100 fxUSD' }],
+    [{ label: 'Estimated collateral', value: '≈ 5 stETH' }, { label: 'Estimated debt', value: '120 fxUSD' }],
   ), {
     paired: [
-      { label: 'Collateral', before: '4 ETH', after: '5 ETH' },
+      { label: 'Collateral', before: '4 stETH', after: '≈ 5 stETH' },
       { label: 'Debt', before: '100 fxUSD', after: '120 fxUSD' },
     ],
     remainingBefore: [],
   });
-  assert.deepEqual(pairVerifiedPositionFacts([{ label: 'Collateral', value: '4 ETH' }], []), {
-    paired: [], remainingBefore: [{ label: 'Collateral', value: '4 ETH' }],
+  assert.deepEqual(pairVerifiedPositionFacts([{ label: 'Collateral', value: '4 stETH' }], []), {
+    paired: [], remainingBefore: [{ label: 'Collateral', value: '4 stETH' }],
   });
 });

@@ -21,6 +21,7 @@ import { positionBrakeCopy, positionBrakeView } from '@/lib/positionBrake';
 import { calculatePositionUsdValuation, debtCollateralRatioPercent, formatUsdCents } from '@/lib/positionValuation';
 import { groupDigits } from '@/lib/amount';
 import { positionName, positionSideLabel } from '@/lib/positionNaming';
+import { positionCollateralSymbol } from '@/lib/positionUnits';
 import { openExternalLink } from '@/lib/telegram';
 import styles from './ProtocolPositionCard.module.css';
 
@@ -182,7 +183,7 @@ function PositionFacts({ position, prices, valuation, missingStatus, liveQuote }
     <dl className={styles.facts}>
       <div className={styles.fact}>
         <dt>Collateral</dt>
-        <dd>{groupDigits(formatAmount(position.info.rawColls, positionTokenDecimals(position, 'collateral')))} {position.info.rawCollsToken}<small>{usd(valuation.collateralUsdCents)}</small></dd>
+        <dd>{groupDigits(formatAmount(position.info.rawColls, positionTokenDecimals(position, 'collateral')))} {positionCollateralSymbol(position)}<small>{usd(valuation.collateralUsdCents)}</small></dd>
       </div>
       <div className={styles.fact}>
         <dt>Debt</dt>
