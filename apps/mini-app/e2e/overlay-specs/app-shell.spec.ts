@@ -135,3 +135,26 @@ test('the theme icon follows the pre-hydration theme, so a saved theme never fla
   expect(await visibleIcons()).toEqual(['light']);
 });
 
+test('the dock names Portfolio, matching its page, and every label fits a 320px dock in each theme', async ({ page }) => {
+  await open(page, { width: 320, height: 700 });
+  await setLab(page, { wallet: STATES[2][1] });
+  const nav = page.locator('nav.mobile-tabbar');
+  await expect(nav.getByRole('link', { name: 'Portfolio', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('heading', { level: 1, name: 'Portfolio' })).toBeVisible();
+  for (const theme of ['official', 'dark', 'light']) {
+    await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+    const fits = await nav.locator('.nav-item-mobile').evaluateAll((items) => items.map((item) => {
+      const label = item.querySelector<HTMLElement>('.nav-label')!;
+      const range = document.createRange();
+      range.selectNodeContents(label);
+      const text = range.getBoundingClientRect();
+      const box = item.getBoundingClientRect();
+      return { label: label.textContent, spare: box.width - text.width, height: box.height, width: box.width, lines: range.getClientRects().length };
+    }));
+    for (const item of fits) {
+      expect(item.spare, `${item.label} needs breathing room in the ${theme} dock`).toBeGreaterThanOrEqual(8);
+      expect(item.lines, `${item.label} stays on one line`).toBe(1);
+      expect(Math.min(item.width, item.height)).toBeGreaterThanOrEqual(44);
+    }
+  }
+});

@@ -1001,6 +1001,10 @@ details[open] > summary .disclosure-closed-only { display: none; }
   align-items: stretch;
   justify-content: space-between;
   padding: var(--tab-inset);
+  /* App chrome: a long press neither selects a label nor opens a link preview. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .tabbar::before {
@@ -1056,6 +1060,7 @@ details[open] > summary .disclosure-closed-only { display: none; }
   align-items: center;
   justify-content: center;
 }
+.nav-item-mobile .nav-label { white-space: nowrap; }
 .nav-item-mobile .nav-icon svg { transition: transform var(--dur-slow) var(--ease-spring); }
 .nav-item-mobile.nav-item-active .nav-icon svg { transform: translateY(-1px) scale(1.06); }
 
@@ -1778,7 +1783,8 @@ input[type='range'].lever:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 
 input[type='range'].lever:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--mint-bright); }
 
 .tabbar-safe {
-  padding: 0 12px var(--tabbar-edge-gap);
+  /* Landscape notches and rounded corners keep clear of the dock's ends too. */
+  padding: 0 max(12px, env(safe-area-inset-right, 0px)) var(--tabbar-edge-gap) max(12px, env(safe-area-inset-left, 0px));
   background: transparent;
 }
 
