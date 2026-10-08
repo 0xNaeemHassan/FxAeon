@@ -12,6 +12,8 @@
 .rangeField {
   transition: border-color var(--dur-fast) ease, box-shadow var(--dur-fast) ease, background-color var(--dur-base) ease;
 }
+/* The full leverage field is one input-toned surface; the split slider cuts its ticks to match. */
+.rangeField { --lever-ground: var(--input); }
 
 .amountInput {
   font-family: var(--font-sans, Inter), ui-sans-serif, system-ui, sans-serif;
@@ -583,7 +585,7 @@
   .tradeRoot .tradeTicket :global(.amount-control) { padding-block: 10px; }
   .tradeCompactLeverage { padding: 8px 14px 4px; }
   /* The bounds sit in the slider's empty lower band; taps pass through to it. */
-  .tradeCompactLeverageSlider > div { position: relative; margin-top: -8px; pointer-events: none; }
+  .tradeCompactLeverageSlider > [data-leverage-bounds] { position: relative; margin-top: -8px; pointer-events: none; }
 
   /* The market panel is a compact two-row strip while the ticket owns the
    * phone viewport. The header remains the single price authority. */

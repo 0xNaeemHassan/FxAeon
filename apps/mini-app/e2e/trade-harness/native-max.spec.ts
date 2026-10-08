@@ -25,6 +25,8 @@ const mocks: Record<string, string> = {
   '@/components/ProtocolPositionCard': `export const ProtocolPositionCard = () => null; export const ProtocolPositionNotice = () => null;`,
   '@/components/ProtocolPositionProvider': `export const useProtocolPositions = () => ({positions:[],pendingPositions:[],status:'ready',failedGroups:[],refresh:async()=>({positions:[],failedGroups:[],successfulGroups:[],status:'ready',newPositions:[]})});`,
   '@/components/ConfirmedPositionCards': `export const ConfirmedPositionCards = () => null;`,
+  // The ticket's outcome preview reads the warmed route, which this harness never plans.
+  '@/components/TradeOutcomePreview': `export const TradeOutcomePreview = () => null;`,
   '@/lib/confirmedPositions': `export const deriveConfirmedPositionHint = () => null;`,
   '@/lib/confirmedPositionStorage': `export const confirmedPositionHintKey = () => '';`,
   '@/components/WalletDataProvider': `export const useWalletBalances = () => ({status:'ready',data:null});`,

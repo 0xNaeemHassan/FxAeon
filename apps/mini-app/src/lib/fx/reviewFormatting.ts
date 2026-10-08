@@ -194,6 +194,36 @@ export function routeFinancialReviewFacts(route: PlannedRoute): ReviewFact[] {
   return facts;
 }
 
+export type PositionOutcomeFacts = {
+  /** The review's "Estimated collateral" fact, with the exact amount and its token for a display-only USD value. */
+  collateral: ReviewFact & { exact: string; symbol: string };
+  debt: ReviewFact;
+  fee?: ReviewFact;
+};
+
+/**
+ * What a new position's route will hold, for the Trade ticket's preview: the
+ * review's own collateral, debt and fee facts for this exact route (the same
+ * labels, units and rounding the review shows), plus the collateral's exact
+ * decimal. Null for any other route, or when either amount has no known unit.
+ */
+export function positionOutcomeFacts(route: PlannedRoute): PositionOutcomeFacts | null {
+  const intent = route.policy?.reviewedAction;
+  if (intent?.kind !== 'position-increase' || intent.positionId !== 0) return null;
+  const pool = knownPool(intent);
+  const facts = routeFinancialReviewFacts(route);
+  const collateral = facts.find((fact) => fact.label === 'Estimated collateral');
+  const debt = facts.find((fact) => fact.label === 'Estimated debt');
+  const unit = pool ? quoteUnits(intent, pool).collateral : undefined;
+  const colls = route.details?.colls;
+  if (!collateral || !debt || !unit || colls === undefined || !/^\d+$/.test(colls)) return null;
+  return {
+    collateral: { ...collateral, exact: formatUnits(BigInt(colls), unit.decimals), symbol: unit.symbol },
+    debt,
+    fee: facts.find((fact) => fact.label === 'Protocol fee rate' || fact.label === 'Protocol fee'),
+  };
+}
+
 /** Fee rates come from the same SDK pool read as the quote, never a static fee table. */
 function protocolFeeReviewFact(route: PlannedRoute, intent: ReviewedActionIntent): ReviewFact | undefined {
   const quote = route.details?.protocolFeeQuote;
