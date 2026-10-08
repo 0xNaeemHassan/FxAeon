@@ -38,23 +38,26 @@
 .moreAssets:hover { background: var(--mint-dim); }
 :root[data-theme='light'] .moreAssets { color: var(--mint-bright); }
 /* Like Portfolio, the wallet total is the drawer's headline rather than a box:
- * the figure sits on the sheet with a soft light behind it, actions beneath. */
+ * the figure sits on the sheet with a soft light behind it, actions beneath.
+ * The light stays inside the summary (the sheet's scrolling body clips at its
+ * top and sides): it fades to nothing at its box edge, and the drift never
+ * lifts that box above its start or past the summary's width. */
 .summary { position: relative; isolation: isolate; padding: 6px 0 2px; margin-top: 2px; }
 .summary::before {
   content: '';
   position: absolute;
   z-index: -1;
-  top: -36px;
-  left: -18%;
-  width: 90%;
+  top: 0;
+  left: 0;
+  width: 86%;
   height: 180px;
-  background: radial-gradient(closest-side, color-mix(in srgb, var(--mint) 15%, transparent), transparent);
+  background: radial-gradient(closest-side at 38% 42%, color-mix(in srgb, var(--mint) 15%, transparent), transparent);
   pointer-events: none;
   animation: profile-light 11s var(--ease-in-out) infinite alternate;
 }
 @keyframes profile-light {
   from { transform: translate3d(0, 0, 0) scale(1); opacity: 0.7; }
-  to { transform: translate3d(10%, 8px, 0) scale(1.1); opacity: 1; }
+  to { transform: translate3d(8%, 8px, 0) scale(1.1); opacity: 1; }
 }
 .summary .actions > a { background: var(--surface-2); }
 .summary .actions > a:hover { background: var(--surface-3); }

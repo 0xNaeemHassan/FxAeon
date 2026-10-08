@@ -11,13 +11,18 @@
   isolation: isolate;
   padding: 2px 0 0;
 }
+/* The light lives inside the card at every width: each gradient fades to
+ * nothing at its own box edge, and the drift (6% across, 12px down, 10%
+ * larger) keeps that box between the card's edges and no higher than it
+ * starts. A clipping ancestor (the scrolling content edge in Telegram) can
+ * therefore never cut it into a seam. */
 .valueCard::before {
   content: '';
   position: absolute;
   z-index: -1;
   top: -46px;
-  left: -14%;
-  width: min(560px, 96%);
+  left: 0;
+  width: min(560px, 86%);
   height: 230px;
   background:
     radial-gradient(closest-side at 38% 50%, color-mix(in srgb, var(--mint) 16%, transparent), transparent),
@@ -28,7 +33,7 @@
 :root[data-theme='light'] .valueCard::before { background: radial-gradient(closest-side, color-mix(in srgb, var(--mint) 11%, transparent), transparent); }
 @keyframes hero-light {
   from { transform: translate3d(0, 0, 0) scale(1); opacity: 0.75; }
-  to { transform: translate3d(8%, 10px, 0) scale(1.12); opacity: 1; }
+  to { transform: translate3d(6%, 12px, 0) scale(1.1); opacity: 1; }
 }
 .valueTop { display: flex; min-width: 0; align-items: center; justify-content: flex-start; gap: 12px; color: var(--mut); font-size: var(--fs-small); }
 .valueTop > div { display: flex; align-items: center; gap: 8px; }
@@ -120,12 +125,6 @@
 .positionsSection :global(details), .earnSection :global(details) { border-top: 0; }
 .positionsSection :global(details > summary), .earnSection :global(details > summary) { min-height: 56px; color: var(--text); font-size: var(--fs-body); font-weight: 600; }
 .positionsSection :global(details > summary > span:nth-child(2)), .earnSection :global(details > summary > span:nth-child(2)) { color: var(--mut); font-weight: 500; }
-/* Once the content column stops short of the viewport, its horizontal clip
- * would cut the light off in a visible seam; start the light inside the column,
- * where it fades to nothing at the edge. */
-@media (min-width: 840px) {
-  .valueCard::before { left: 0; }
-}
 @media (min-width: 1000px) {
   .dashboard { grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); gap: 28px; align-items: start; }
   .primary, .secondary { gap: 20px; }
