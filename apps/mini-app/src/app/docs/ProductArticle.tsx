@@ -43,6 +43,17 @@ export const productSections: { id: string; title: string; aliases?: string[]; c
   { id: 'trade', title: 'Trade & leverage', content: <>
 <p>Trade supports ETH and BTC long and short positions on Ethereum. Choose an input asset, amount, side, and leverage. The market panel shows current price and 1H, 1D, 7D, and 30D charts.</p>
               <p>Action details show the transaction steps, minimum output, approvals, and slippage. Before opening your wallet, the app checks and simulates the displayed action. If the preview expires or signing-relevant details change, review the updated details and choose the action again.</p>
+              <h3 id="trade-steps">Trade in three steps</h3>
+              <ol>
+                <li><strong>Pick a direction.</strong> Long gains when the price rises; short gains when it falls. Positions settle on f(x) Protocol on Ethereum.</li>
+                <li><strong>Choose leverage.</strong> Leverage multiplies exposure within the pool’s live range. More leverage moves a position closer to the protocol’s thresholds.</li>
+                <li><strong>Review, then sign.</strong> FxAeon simulates the exact route and shows each step, fee, and minimum output before your wallet opens.</li>
+              </ol>
+              <h3 id="trade-questions">Before you trade</h3>
+              <p><strong>What can I trade here?</strong><br />ETH and BTC, long or short, on Ethereum through f(x) Protocol. Pay with the input asset you choose in the amount field.</p>
+              <p><strong>How do I close or adjust a position?</strong><br />Open Positions to increase, reduce, close, or adjust leverage. Every change gets its own review before your wallet opens.</p>
+              <p><strong>What do position values mean?</strong><br />Collateral, debt, and value are display estimates read from Ethereum. They are not liquidation levels or execution quotes.</p>
+              <p><strong>Why can a review change before I sign?</strong><br />Prices and pool limits move. If the preview expires or signing details change, FxAeon shows the updated details and asks you to choose the action again.</p>
   </> },
   { id: 'positions', title: 'Position management', content: <>
 <p>Positions are read from Ethereum and show market, side, collateral, debt, and leverage. Increase, reduce, close, or adjust leverage when the selected action supports it.</p>
@@ -52,18 +63,49 @@ export const productSections: { id: string; title: string; aliases?: string[]; c
   </> },
   { id: 'earn', title: 'Earn with fxSAVE', content: <>
 <p>Earn reads fxSAVE balances, vault value, redemption status, and claimable amounts from Ethereum. Its actions are deposit, withdraw, and claim.</p>
-              <p>Deposit supports fxUSD and USDC. Forms show the selected wallet’s verified balance, and token pickers pair quantity with estimated USD worth. Unavailable balances remain unknown, never zero; fxSAVE remains the withdrawal limit.</p>
-              <p>Withdrawals may be instant or queued. Queued redemptions remain pending through cooldown and expose Claim when ready. Action details show the transaction steps and, for instant withdrawals, the slippage and instant-redemption fee. Deposits use the SDK’s fixed base-pool share minimum, shown in review.</p>
+              <p>Deposit supports fxUSD, USDC, and fxUSD base-pool shares. Forms show the selected wallet’s verified balance, and token pickers pair quantity with estimated USD worth. Unavailable balances remain unknown, never zero; fxSAVE remains the withdrawal limit.</p>
+              <p>Withdrawals may be instant or queued. Queued redemptions remain pending through cooldown and expose Claim when ready. Action details show the transaction steps and, for instant withdrawals, the slippage and instant withdrawal fee. Deposits use the SDK’s fixed base-pool share minimum, shown in review.</p>
+              <h3 id="earn-steps">Earn in three steps</h3>
+              <ol>
+                <li><strong>Deposit fxUSD or USDC.</strong> You receive fxSAVE, a share of f(x) Protocol’s savings vault.</li>
+                <li><strong>Hold fxSAVE.</strong> The vault holds stability pool shares and compounds what they earn from position fees, wstETH staking, and USDC lending, so its value per share follows the vault. The APY is variable and comes from f(x) Protocol’s official feed.</li>
+                <li><strong>Withdraw your way.</strong> Withdraw instantly for a fee, or queue it and claim once the cooldown ends.</li>
+              </ol>
+              <h3 id="earn-questions">Before you deposit</h3>
+              <p><strong>Is the APY guaranteed?</strong><br />No. It is variable and shown for information from f(x) Protocol’s feed. It never changes what you sign.</p>
+              <p><strong>What does the stability pool do?</strong><br />It holds fxUSD and USDC, keeps fxUSD near a dollar by buying it below the peg and selling it above, and supplies the funds that rebalance leveraged positions. Its depositors earn from position fees, wstETH staking, and USDC lending; fxSAVE compounds those rewards.</p>
+              <p><strong>How does a queued withdrawal work?</strong><br />It stays pending through the cooldown. When it is ready, Claim appears on Earn and on your Portfolio.</p>
+              <p><strong>Can I use fxSAVE on Base?</strong><br />Yes. Move bridges fxUSD and fxSAVE between Ethereum and Base.</p>
   </> },
   { id: 'borrow', title: 'Borrow fxUSD', content: <>
 <p>Borrow manages a long ETH or BTC collateral position. Deposit collateral and mint fxUSD, or repay fxUSD and withdraw collateral. The position selector keeps collateral and debt context visible.</p>
               <p>Fields show the selected wallet’s verified Ethereum balance when available. Pending reads stay distinct from zero. Withdrawable collateral is limited by the selected position and contract rules.</p>
               <p>Review the action details before signing. Withdrawing collateral can reduce the safety margin and increase liquidation risk.</p>
+              <h3 id="borrow-steps">Borrow in three steps</h3>
+              <ol>
+                <li><strong>Deposit collateral.</strong> ETH, WETH, stETH, wstETH, or WBTC opens a collateral position on Ethereum.</li>
+                <li><strong>Borrow up to the limit.</strong> The form shows how much fxUSD your collateral can support as you type, and names anything missing before review.</li>
+                <li><strong>Repay to withdraw.</strong> Repay fxUSD at any time and withdraw collateral within the position’s limits.</li>
+              </ol>
+              <h3 id="borrow-questions">Before you borrow</h3>
+              <p><strong>What does the loan-to-value limit mean?</strong><br />Debt as a share of collateral value. Each pool sets a range, and FxAeon keeps a small margin under the top so a quote still fits when you sign.</p>
+              <p><strong>Can I add collateral or borrow more later?</strong><br />Yes. On Borrow, under Your positions, add collateral, borrow more, repay, or withdraw. Each change gets its own review.</p>
+              <p><strong>What happens if prices fall?</strong><br />Your loan-to-value rises. Automatic rebalancing can reduce leverage at protocol thresholds, and liquidation remains possible. Repaying or adding collateral lowers it.</p>
   </> },
   { id: 'move', title: 'Move between chains', content: <>
 <p>Move bridges supported fxUSD and fxSAVE between Ethereum and Base through the f(x) bridge. Choose direction, asset, amount, and recipient. The connected wallet signs the transfer and pays its required fees; the recipient defaults to that wallet.</p>
-              <p>Supported actions are checked against the selected chain, asset, balance, bridge connection, fee quote, and recipient. Advanced bridge mode exposes token and deployment fields for expert users. Ethereum may require one approval before the send.</p>
+              <p>Supported actions are checked against the selected chain, asset, balance, bridge connection, fee quote, and recipient. Expert mode takes custom token contracts for other LayerZero routes. Ethereum may require one approval before the send.</p>
               <div className={styles.callout}><p><strong>Before approval:</strong> check both networks, token identity, recipient, amount, and fee. Source confirmation and destination delivery are separate states; FxAeon verifies matching LayerZero events.</p></div>
+              <h3 id="move-steps">Move in three steps</h3>
+              <ol>
+                <li><strong>Choose route and amount.</strong> Pick the direction, the asset, and how much. The recipient defaults to your wallet.</li>
+                <li><strong>Approve and send.</strong> Ethereum may need one approval first. Your wallet pays the LayerZero fee shown in the review.</li>
+                <li><strong>Delivery.</strong> Source confirmation and destination delivery are tracked separately; FxAeon verifies the matching LayerZero events.</li>
+              </ol>
+              <h3 id="move-questions">Before you move</h3>
+              <p><strong>How long does a move take?</strong><br />It depends on both networks and LayerZero. History tracks the source confirmation and the delivery separately.</p>
+              <p><strong>Can I send to another wallet?</strong><br />Yes. Choose Use another wallet and enter the recipient’s address on the destination network.</p>
+              <p><strong>When would I use expert mode?</strong><br />To bridge a LayerZero token other than fxUSD or fxSAVE. Expert mode, at the end of the Move form, asks for the token’s contract on each network. Check every address and network before you approve.</p>
   </> },
   { id: 'fees', title: 'Fees & slippage', content: <>
 <p>Move shows the current LayerZero fee quote. Other actions show estimated gas and network cost when data is available; Base may add network and operator fees. Unavailable estimates stay labelled.</p>

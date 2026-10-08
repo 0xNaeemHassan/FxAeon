@@ -78,7 +78,7 @@ test('both directions show the same leverages, so comparing them never changes t
   assert.deepEqual(leverages('short'), leverages('long'));
 });
 
-test('Trade education passes the selected direction and keeps its copy consistent with the bars', async () => {
+test('Trade education follows the ticket side and keeps its copy consistent with the bars', async () => {
   const { TradeSections } = await import('../src/components/ProductSections');
   for (const market of ['ETH', 'BTC'] as const) {
     for (const side of ['long', 'short', 'long'] as const) {
@@ -87,9 +87,12 @@ test('Trade education passes the selected direction and keeps its copy consisten
         openPositions: null, positionsStatus: 'disconnected',
       }));
       const rows = splitRows(html);
-      assert.match(html, /role="radiogroup" aria-label="Leverage example"/);
-      assert.match(html, new RegExp(`role="radio" aria-label="${side === 'long' ? 'Long' : 'Short'} example" aria-checked="true"`));
-      assert.match(html, />Example</, 'the switch is visibly an example, not a second side control');
+      // The ticket's slider explains the chosen leverage live, so the examples
+      // offer no Long/Short switch of their own: they show the ticket's side.
+      assert.doesNotMatch(html, /role="radiogroup"|role="radio"/);
+      assert.doesNotMatch(html, />Example</);
+      assert.match(html, new RegExp(`aria-label="Share of a position that is ${side === 'long' ? 'minted fxUSD' : `borrowed ${market === 'ETH' ? 'wstETH' : 'WBTC'}`}, by leverage, before fees"`));
+      assert.equal(rows.length, 2);
       assert.equal(rows[1].borrowed, side === 'long' ? 2 / 3 : 3 / 4);
       if (side === 'long') {
         assert.match(html, /a 3× long is two thirds minted fxUSD and one third yours/);
@@ -99,6 +102,29 @@ test('Trade education passes the selected direction and keeps its copy consisten
         assert.equal(rows[1].text, `3×75% borrowed ${market === 'ETH' ? 'wstETH' : 'WBTC'} · 25% yours`);
       }
     }
+  }
+});
+
+test('each action page keeps its live facts and f(x) explainer, and leaves steps and questions to one Docs link', async () => {
+  const { BorrowSections, EarnSections, MoveSections, TradeSections } = await import('../src/components/ProductSections');
+  const pages = [
+    { docs: 'trade', html: renderToStaticMarkup(React.createElement(TradeSections, { market: 'ETH', side: 'long', leverage: { min: 1.1, max: 6.1 }, openPositions: 2, positionsStatus: 'ready' })),
+      keeps: ['ETH at a glance', '24h low', 'Live market feed', 'Where leverage comes from', 'Share of a position', 'A brake before liquidation'] },
+    { docs: 'earn', html: renderToStaticMarkup(React.createElement(EarnSections, { apy: '6.29%', apyStatus: 'unavailable', cooldown: '1h', instantFee: '1%', vaultStatus: 'unavailable' })),
+      keeps: ['The vault at a glance', '6.29%', 'Instant withdrawal fee', 'Where the yield comes from', 'Sources of stability pool rewards'] },
+    { docs: 'borrow', html: renderToStaticMarkup(React.createElement(BorrowSections, { ltvLimit: '85.4%' })),
+      keeps: ['Terms at a glance', '85.4%', 'ETH, WETH, stETH, wstETH, or WBTC', 'A brake before liquidation'] },
+    { docs: 'move', html: renderToStaticMarkup(React.createElement(MoveSections)), keeps: ['Routes at a glance', 'LayerZero'] },
+  ];
+  for (const { docs, html, keeps } of pages) {
+    // Visible copy, or an accessible name such as the split's list label.
+    for (const copy of keeps) assert.ok(textOf(html).includes(copy) || html.includes(copy), `${docs} keeps "${copy}"`);
+    // The generic step lists and question accordions now live in Docs.
+    assert.doesNotMatch(html, /<details|<ol(?![^>]*aria-label="Share of a position)/, `${docs} has no steps or questions`);
+    assert.doesNotMatch(textOf(html), /in three steps|Before you (?:trade|deposit|move)\b/);
+    const docsLinks = [...html.matchAll(/href="\/docs[^"]*"/g)].map((match) => match[0]);
+    assert.deepEqual(docsLinks, [`href="/docs#${docs}"`], `${docs} has one in-app link to its Docs section`);
+    assert.match(html, new RegExp(`href="/docs#${docs}">How it works<svg[^>]*lucide-chevron-right`), 'an in-app link uses a chevron');
   }
 });
 

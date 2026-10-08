@@ -633,7 +633,7 @@ export default function TradePage() {
           </section>
         )}
         {reviewStage === 'input' && <TradeSections market={market} side={side} leverage={leverageBounds}
-          openPositions={wallet.address && positionState.status === 'ready' ? positionState.positions.length : null}
+          openPositions={wallet.address && positionState.status === 'ready' ? marketPositions.length : null}
           positionsStatus={!wallet.address ? 'disconnected' : positionState.status === 'ready' ? 'ready' : positionState.status === 'idle' || positionState.status === 'loading' ? 'loading' : 'unavailable'} />}
       </ActionWorkspace>
       </div>

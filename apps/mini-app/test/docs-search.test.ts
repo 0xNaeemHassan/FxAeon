@@ -68,6 +68,26 @@ test('all existing product-guide fragments, including recovery, remain addressab
 });
 
 
+test('each action guide carries the steps and questions its page links to', () => {
+  const article = readFileSync(new URL('../src/app/docs/ProductArticle.tsx', import.meta.url), 'utf8');
+  const section = (id: string) => article.slice(article.indexOf(`{ id: '${id}'`), article.indexOf('</> },', article.indexOf(`{ id: '${id}'`)));
+  const guides = {
+    trade: ['Pick a direction.', 'Choose leverage.', 'Review, then sign.', 'What can I trade here?', 'How do I close or adjust a position?', 'What do position values mean?', 'Why can a review change before I sign?'],
+    earn: ['Deposit fxUSD or USDC.', 'Hold fxSAVE.', 'Withdraw your way.', 'Is the APY guaranteed?', 'What does the stability pool do?', 'How does a queued withdrawal work?', 'Can I use fxSAVE on Base?'],
+    borrow: ['Deposit collateral.', 'Borrow up to the limit.', 'Repay to withdraw.', 'What does the loan-to-value limit mean?', 'Can I add collateral or borrow more later?', 'What happens if prices fall?'],
+    move: ['Choose route and amount.', 'Approve and send.', 'Delivery.', 'How long does a move take?', 'Can I send to another wallet?', 'When would I use expert mode?'],
+  };
+  for (const [id, copy] of Object.entries(guides)) {
+    const text = section(id);
+    // Each page's "How it works" link lands on its section; the parts below have their own anchors.
+    assert.match(text, new RegExp(`<h3 id="${id}-steps">[^<]+</h3>\\s*<ol>`));
+    assert.match(text, new RegExp(`<h3 id="${id}-questions">Before you `));
+    for (const phrase of copy) assert.ok(text.includes(phrase), `/docs#${id} explains: ${phrase}`);
+    // Copy written for the action page must not point back at it from Docs.
+    assert.doesNotMatch(text, /\bhere on (?:Earn|Borrow|Trade|Move)\b/);
+  }
+});
+
 test('visible topic-card descriptions participate in overview search', () => {
   const article = readFileSync(new URL('../src/app/docs/ProductArticle.tsx', import.meta.url), 'utf8');
   // Components without children are intentionally opaque to the index. Keep
