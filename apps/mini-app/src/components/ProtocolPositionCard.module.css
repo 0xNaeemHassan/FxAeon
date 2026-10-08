@@ -1,141 +1,117 @@
-/* Position card: identity and side first, the position's value as the hero,
- * then four calm facts. Long and short are the only colors in the card. */
-.card {
+/* A position as a compact row: identity and value, then the f(x) split with
+ * its brake. Rows have no box: a list rules them apart with hairlines, and a
+ * selected row takes a tint with an accent edge. Long and short are the only
+ * colors in a row. */
+.row {
   display: block;
   width: 100%;
   min-width: 0;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-lg);
-  padding: 16px;
-  background: var(--surface);
+  border: 0;
+  border-radius: 0;
+  padding: 14px 10px;
+  background: transparent;
   color: var(--text);
   font: inherit;
   text-align: left;
-  box-shadow: var(--ring-inset);
-  transition: border-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out), transform var(--dur-slow) var(--ease-spring), background-color var(--dur-base) var(--ease-out);
-  animation: position-card-enter var(--dur-slow) var(--ease-out) both;
+  transition: background-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
+  animation: position-row-enter var(--dur-slow) var(--ease-out) both;
 }
 
-@keyframes position-card-enter {
+@keyframes position-row-enter {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
-.compact { padding: 14px; border-radius: var(--radius-lg); }
-
 .interactive { cursor: pointer; }
-.interactive:hover {
-  border-color: color-mix(in srgb, var(--mint) 34%, var(--line));
-  box-shadow: var(--ring-inset), var(--elevation-1);
+@media (hover: hover) {
+  .interactive:hover { background: color-mix(in srgb, var(--text) 4%, transparent); }
 }
-.interactive:active { transform: scale(0.99); transition-duration: var(--dur-press); }
+.interactive:active { background: color-mix(in srgb, var(--text) 7%, transparent); transition-duration: var(--dur-press); }
 .interactive:focus-visible {
   outline: 2px solid var(--mint-bright);
-  outline-offset: 3px;
+  outline-offset: -2px;
 }
-.selected {
-  border-color: color-mix(in srgb, var(--mint) 64%, var(--line));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mint) 12%, transparent);
-}
-.highlighted {
-  outline: 2px solid color-mix(in srgb, var(--success) 68%, transparent);
-  outline-offset: 3px;
-}
+.selected,
+.selected:hover { background: color-mix(in srgb, var(--mint) 9%, transparent); box-shadow: inset 3px 0 0 var(--mint); }
+.highlighted { background: color-mix(in srgb, var(--success) 9%, transparent); box-shadow: inset 3px 0 0 var(--success); }
 
-.content { min-width: 0; }
-.compactContent .identity { gap: 10px; }
-.compactContent .positionValue { margin-top: 12px; }
-.compactContent .metrics { gap: 6px; margin-top: 10px; }
-.compactContent .metric { padding: 9px 10px; }
-.compactContent .metricValue { font-size: var(--fs-small); }
-.compactContent .metricDetail { font-size: var(--fs-micro); }
-.identity {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 12px;
-}
+/* One position in full: the same lines, then its figures. It sits in the
+   page's own column, so it adds no padding of its own. */
+.details { min-width: 0; color: var(--text); }
+
+.content { display: block; min-width: 0; }
+/* Two lines beside the token: market and side with the value, then leverage
+   and ID with the value's label. Each line shares out its own width, and
+   whole-pixel line heights give every row, and its placeholder, one height. */
+.identity { display: flex; min-width: 0; align-items: center; gap: 10px; }
 .tokenIcon {
   display: flex;
   flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
   border-radius: 50%;
   box-shadow: 0 0 0 3px var(--surface-2);
 }
-.identityText { min-width: 0; flex: 1; }
-.marketLine { display: flex; min-width: 0; align-items: baseline; gap: 8px; }
-.market { color: var(--text); font-size: var(--fs-title); font-weight: 650; letter-spacing: -.02em; line-height: 1.15; }
+.identityText { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; }
+.identityLine { display: flex; min-width: 0; min-height: 16px; align-items: center; justify-content: space-between; gap: 8px; }
+.identityLine:first-child { min-height: 24px; }
+.marketLine { display: flex; min-width: 0; flex: 1 1 auto; align-items: baseline; gap: 8px; line-height: 24px; }
+.market { color: var(--text); font-size: var(--fs-title); font-weight: 650; letter-spacing: -.02em; }
 /* The side is a word in its own color beside the market, not a badge. */
-.side { font-size: var(--fs-small); font-weight: 650; line-height: 1.15; }
+.side { font-size: var(--fs-small); font-weight: 650; line-height: 16px; }
 .long { color: var(--long); }
 .short { color: var(--short); }
 .positionMeta {
   display: flex;
   min-width: 0;
+  flex: 1 1 auto;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin: 4px 0 0;
+  align-items: baseline;
+  column-gap: 5px;
   color: var(--mut);
   font-size: var(--fs-caption);
-  line-height: 1.3;
+  line-height: 16px;
   font-variant-numeric: tabular-nums;
 }
 .positionMeta strong { color: var(--text); font-weight: 650; }
-.navigateIcon {
-  display: flex;
-  flex: 0 0 32px;
-  width: 32px;
-  height: 32px;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 50%;
-  background: var(--surface-2);
-  color: var(--mut);
-  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), transform var(--dur-slow) var(--ease-spring);
-}
-.navigateIcon svg { width: 16px; height: 16px; }
-.interactive:hover .navigateIcon { background: var(--mint-dim); color: var(--mint); transform: translateX(2px); }
-
-.positionValue {
-  display: flex;
-  min-width: 0;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 16px;
-  border: 0;
-  border-radius: 0;
-  padding: 0;
-  background: transparent;
-}
-.positionValueLabel { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
-.positionValueLabel > span:first-child {
-  color: var(--mut);
-  font-size: var(--fs-small);
-  font-weight: 500;
-  line-height: 1.3;
-}
-.valueBasis { color: var(--mut-2); font-size: var(--fs-micro); line-height: 1.25; }
 .positionValueNumber {
-  min-width: 0;
+  flex: 0 0 auto;
   color: var(--text);
-  font-size: clamp(22px, 6vw, 28px);
+  font-size: clamp(18px, 5.2vw, 21px);
   font-weight: 600;
   letter-spacing: var(--tracking-figure);
-  line-height: 1.1;
+  line-height: 24px;
   text-align: right;
   font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+}
+.valueBasis { flex: 0 0 auto; color: var(--mut-2); font-size: var(--fs-micro); line-height: 16px; white-space: nowrap; }
+/* In a narrow column the value's label gives its line to leverage and ID;
+   screen readers still hear it. */
+.row { container-type: inline-size; }
+@container (max-width: 265px) {
+  .valueBasis {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+}
+/* The chevron follows the value; the label's line keeps its width free so
+   the label ends where the value does. */
+.navigateIcon, .navigateSpace { flex: 0 0 16px; width: 16px; height: 16px; margin-left: -4px; }
+.navigateIcon {
+  color: var(--mut-2);
+  transition: color var(--dur-fast) var(--ease-out), transform var(--dur-slow) var(--ease-spring);
+}
+@media (hover: hover) {
+  .interactive:hover .navigateIcon { color: var(--mint); transform: translateX(2px); }
 }
 
 /* The f(x) split of this position: debt (quiet) then the holder's share (the
    accent), in proportion to collateral value. Draws in once on mount. With a
    current chain read the debt follows the market toward a line that marks
    the pool's rebalance point, with liquidation fainter beyond it. */
-.split { position: relative; height: 6px; margin-top: 12px; }
+.split { display: block; position: relative; height: 6px; margin-top: 12px; }
 .splitTrack { display: flex; height: 100%; overflow: hidden; border-radius: 999px; background: var(--surface-2); }
 .splitDebt, .splitShare { display: block; height: 100%; transform-origin: left center; }
 .splitDebt {
@@ -152,7 +128,7 @@
   margin-left: -1px;
   border-radius: 1px;
   background: var(--text);
-  box-shadow: 0 0 0 1.5px var(--surface);
+  box-shadow: 0 0 0 1.5px var(--bg);
 }
 .rebalanceMarker { left: calc(var(--rebalance-at) * 100%); }
 .liquidationMarker { left: calc(var(--liquidate-at) * 100%); opacity: .4; }
@@ -198,49 +174,36 @@
 .brake a svg { width: 12px; height: 12px; }
 .brakeSkeleton { display: block; width: min(76%, 280px); height: 10px; margin: 3px 0; border-radius: var(--radius-full); }
 
-.metrics {
-  display: grid;
+/* The figures behind the row, one quiet line each between hairlines. */
+.facts { margin: 14px 0 0; border-bottom: 1px solid var(--line); }
+.fact {
+  display: flex;
   min-width: 0;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 14px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
 }
-.metric {
+.fact dt { flex: 0 0 auto; color: var(--mut); font-size: var(--fs-small); line-height: 1.35; }
+.fact dd {
   min-width: 0;
-  border: 0;
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  background: var(--surface-2);
-}
-.metricLabel {
-  display: block;
-  overflow: hidden;
-  color: var(--mut);
-  font-size: var(--fs-micro);
-  font-weight: 500;
-  line-height: 1.3;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.metricValue {
-  min-width: 0;
-  margin: 4px 0 0;
+  margin: 0;
   color: var(--text);
-  font-size: 14px;
+  font-size: var(--fs-small);
   font-weight: 600;
-  line-height: 1.3;
+  line-height: 1.35;
+  text-align: right;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
-.metricDetail {
-  min-width: 0;
-  margin: 2px 0 0;
-  color: var(--mut);
-  font-size: var(--fs-caption);
-  line-height: 1.3;
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
+.fact dd small { display: block; margin-top: 1px; color: var(--mut); font-size: var(--fs-caption); font-weight: 500; }
+
+/* A list is a ruled stack: full-width hairlines between rows, whitespace for
+   the grouping. */
+.list { display: flex; min-width: 0; flex-direction: column; }
+.listItem { min-width: 0; }
+.listItem + .listItem { border-top: 1px solid var(--line); }
 
 /* Discovery notices say what happened and offer the retry beside it. */
 .notice {
@@ -274,40 +237,22 @@
 .notice > button:disabled { opacity: .6; }
 .notice > button svg { width: 15px; height: 15px; }
 
-/* The loading card: each placeholder sits where the card's own line or tile
-   does (token mark, market and meta lines, value, split, brake line, four
-   tiles). Each bar is centred in the line box it replaces (--line, from the
-   same type tokens), and flex columns keep those margins from collapsing, so
-   the loaded card arrives at the same height. */
-.skeletonToken { flex: 0 0 40px; width: 40px; height: 40px; border-radius: 50%; }
-.compactContent .skeletonToken { flex-basis: 34px; width: 34px; height: 34px; }
-.skeletonLines, .skeletonMetric { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; }
-.skeletonLines { flex: 1; }
-.skeletonLines > *, .skeletonMetric > * { border-radius: var(--radius-full); }
-.skeletonLines > * { --line: calc(var(--fs-title) * 1.15); width: 42%; max-width: 132px; height: 13px; margin: calc((var(--line) - 13px) / 2) 0; }
-.skeletonLines > * + * { --line: calc(var(--fs-caption) * 1.3); width: 58%; max-width: 168px; height: 10px; margin: calc(4px + (var(--line) - 10px) / 2) 0 calc((var(--line) - 10px) / 2); }
-.positionValue .skeletonLines > * { --line: calc(var(--fs-small) * 1.3); width: 64%; max-width: 104px; height: 11px; margin: calc((var(--line) - 11px) / 2) 0; }
-.positionValue .skeletonLines > * + * { --line: calc(var(--fs-micro) * 1.25); width: 48%; max-width: 80px; height: 9px; margin: calc(2px + (var(--line) - 9px) / 2) 0 calc((var(--line) - 9px) / 2); }
-.skeletonFigure { flex: 0 0 auto; width: clamp(96px, 30%, 132px); height: 24px; margin-bottom: 1px; border-radius: var(--radius-xs); }
-.skeletonSplit { height: 6px; margin-top: 12px; border-radius: var(--radius-full); }
-.skeletonMetric > * { --line: calc(var(--fs-micro) * 1.3); width: 46%; height: 9px; margin: calc((var(--line) - 9px) / 2) 0; }
-.skeletonMetric > :nth-child(2) { --line: calc(14px * 1.3); width: 72%; height: 12px; margin: calc(4px + (var(--line) - 12px) / 2) 0 calc((var(--line) - 12px) / 2); }
-.compactContent .skeletonMetric > :nth-child(2) { --line: calc(var(--fs-small) * 1.3); }
-.skeletonMetric > :nth-child(3) { --line: calc(var(--fs-caption) * 1.3); width: 40%; height: 10px; margin: calc(2px + (var(--line) - 10px) / 2) 0 calc((var(--line) - 10px) / 2); }
-.compactContent .skeletonMetric > :nth-child(3) { --line: calc(var(--fs-micro) * 1.3); }
+/* The loading row: each placeholder sits in the line it stands in for, inside
+   the same fixed line heights, so the row arrives at the same height. */
+.skeletonToken { flex: 0 0 32px; width: 32px; height: 32px; border-radius: 50%; }
+.skeletonMarket, .skeletonMeta, .skeletonValue, .skeletonBasis { display: block; flex: 0 1 auto; border-radius: var(--radius-full); }
+.skeletonMarket { width: 88px; height: 13px; }
+.skeletonMeta { width: 116px; height: 10px; }
+.skeletonValue { width: clamp(80px, 24vw, 108px); height: 15px; }
+.skeletonBasis { width: 64px; height: 9px; }
+.skeletonSplit { display: block; height: 6px; margin-top: 12px; border-radius: var(--radius-full); }
 
 @media (max-width: 359px) {
-  .card { padding: 12px; }
-  .compact { padding: 12px; }
+  .row { padding-inline: 8px; }
   .identity { gap: 9px; }
-  .positionValue { gap: 8px; margin-top: 12px; }
-  .metrics { gap: 6px; }
-  .metric { padding: 8px; }
-  .metricValue { font-size: var(--fs-caption); }
-  .skeletonMetric > :nth-child(2) { --line: calc(var(--fs-caption) * 1.3); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .card, .navigateIcon, .splitDebt { transition: none; animation: none; }
-  .interactive:hover, .interactive:hover .navigateIcon, .interactive:active { transform: none; }
+  .row, .navigateIcon, .splitDebt { transition: none; animation: none; }
+  .interactive:hover .navigateIcon { transform: none; }
 }

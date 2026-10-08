@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDownRight, ArrowUpRight, ChevronRight, Gauge, Layers2, RefreshCw, X } from 'lucide-react';
+import { flushSync } from 'react-dom';
+import { ArrowDownRight, ArrowLeft, ArrowUpRight, ChevronRight, Gauge, Layers2, RefreshCw, X } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell, Card, EmptyState } from '@/components/ui';
 import { ActionReview, type ActionReviewStage } from '@/components/ActionReview';
@@ -9,6 +10,8 @@ import WalletConnectCTA from '@/components/WalletConnectCTA';
 import {
   positionIsStale,
   ProtocolPositionCard,
+  ProtocolPositionDetails,
+  ProtocolPositionList,
   ProtocolPositionNotice,
   ProtocolPositionSkeleton,
 } from '@/components/ProtocolPositionCard';
@@ -50,6 +53,64 @@ function tokenForPositionAction(position: UiPosition | undefined, action: Positi
   return options[0] ?? 'ETH';
 }
 
+/** Marks a history entry this page pushed to open one position over the list. */
+const POSITION_VIEW_STATE = 'fxaeonPositionView';
+/** Wide screens keep the list beside the selected position (see the grid's breakpoint). */
+const WIDE_LAYOUT_QUERY = '(min-width: 840px)';
+
+function historyState(): Record<string, unknown> {
+  const state: unknown = window.history.state;
+  return state && typeof state === 'object' ? { ...state as Record<string, unknown> } : {};
+}
+
+function withoutPositionView(): Record<string, unknown> {
+  const state = historyState();
+  delete state[POSITION_VIEW_STATE];
+  return state;
+}
+
+/** Write the view to history; a document without a real URL keeps it in memory only. */
+function writeHistory(mode: 'push' | 'replace', state: Record<string, unknown>, href: string): void {
+  try {
+    if (mode === 'push') window.history.pushState(state, '', href);
+    else window.history.replaceState(state, '', href);
+  } catch {
+    // The view still changes; only its history entry is skipped.
+  }
+}
+
+function positionViewHref(key?: string, action?: PositionAction): string {
+  const query = key ? `?position=${encodeURIComponent(key)}${action && action !== 'increase' ? `&action=${encodeURIComponent(action)}` : ''}` : '';
+  return `${window.location.pathname}${query}${window.location.hash}`;
+}
+
+/** The element that scrolls the page: the app shell's content area, or the document. */
+function scrollRoot(): HTMLElement | null {
+  const content = document.querySelector<HTMLElement>('[data-shell-content]');
+  if (content && /(auto|scroll)/.test(getComputedStyle(content).overflowY)) return content;
+  return document.scrollingElement as HTMLElement | null;
+}
+
+/**
+ * Swap between the list and one position. A view transition carries the
+ * tapped row into the position's details where supported and motion is
+ * welcome; otherwise the views simply swap.
+ */
+function swapPositionView(update: () => void, finish?: () => void): void {
+  const doc = document as Document & { startViewTransition?: (callback: () => void) => { finished: Promise<void> } };
+  if (!doc.startViewTransition || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    update();
+    finish?.();
+    return;
+  }
+  const transition = doc.startViewTransition(() => { flushSync(update); });
+  void transition.finished.catch(() => undefined).finally(() => finish?.());
+}
+
+function positionRow(key: string): HTMLElement | null {
+  return document.querySelector<HTMLElement>(`[data-position-key="${CSS.escape(key)}"]`);
+}
+
 export default function PositionsPage() {
   const wallet = usePrivyWallet();
   const positionState = useProtocolPositions();
@@ -66,6 +127,12 @@ export default function PositionsPage() {
   const [resumeReview, setResumeReview] = useState(0);
   const [reviewStage, setReviewStage] = useState<ActionReviewStage>('input');
   const [reviewPosition, setReviewPosition] = useState<UiPosition | null>(null);
+  // On phones the page shows the list or one position. `?position=` names the
+  // open one, so links, refreshes, browser Back and Telegram Back agree.
+  const [positionViewOpen, setPositionViewOpen] = useState(false);
+  const positionViewOpenRef = useRef(false);
+  positionViewOpenRef.current = positionViewOpen;
+  const listScrollRef = useRef(0);
   const managerRef = useRef<HTMLElement>(null);
   const handledDeepLinkRef = useRef('');
   const previousWalletContextRef = useRef<string | null>(null);
@@ -107,13 +174,61 @@ export default function PositionsPage() {
     setReviewRevision((revision) => revision + 1);
   }, []);
 
-  const selectPosition = useCallback((key: string) => {
+  const deepLinkKeyFor = useCallback((key: string, nextAction: PositionAction) => (
+    `${wallet.address?.toLowerCase() ?? ''}:${wallet.chainId ?? ''}:${key}:${nextAction}`
+  ), [wallet.address, wallet.chainId]);
+
+  /** Tap a row: on phones the position replaces the list (one history step); wide screens select it in place. */
+  const openPosition = useCallback((key: string) => {
     const position = positions.find((item) => positionKey(item) === key);
-    setSelectedKey(key);
-    resetTransactionContext('increase', tokenForPositionAction(position, 'increase'));
+    if (!position) return;
     haptic('selection');
-    window.requestAnimationFrame(() => managerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-  }, [positions, resetTransactionContext]);
+    // The URL now names this position; its query must not reset the form again.
+    handledDeepLinkRef.current = deepLinkKeyFor(key, 'increase');
+    const select = () => {
+      setSelectedKey(key);
+      resetTransactionContext('increase', tokenForPositionAction(position, 'increase'));
+      setPositionViewOpen(true);
+    };
+    if (window.matchMedia(WIDE_LAYOUT_QUERY).matches) {
+      writeHistory('replace', withoutPositionView(), positionViewHref(key));
+      select();
+      return;
+    }
+    const root = scrollRoot();
+    listScrollRef.current = root?.scrollTop ?? 0;
+    const row = positionRow(key);
+    if (row) row.style.viewTransitionName = 'position-focus';
+    swapPositionView(() => {
+      writeHistory('push', { ...historyState(), [POSITION_VIEW_STATE]: key }, positionViewHref(key));
+      select();
+      if (row) row.style.viewTransitionName = '';
+      root?.scrollTo({ top: 0 });
+    });
+  }, [deepLinkKeyFor, positions, resetTransactionContext]);
+
+  /** Back to the list, where the list was left. */
+  const showPositionList = useCallback((fromKey?: string) => {
+    const restore = listScrollRef.current;
+    let row: HTMLElement | null = null;
+    swapPositionView(() => {
+      setPositionViewOpen(false);
+      row = fromKey ? positionRow(fromKey) : null;
+      if (row) row.style.viewTransitionName = 'position-focus';
+      scrollRoot()?.scrollTo({ top: restore });
+    }, () => { if (row) row.style.viewTransitionName = ''; });
+  }, []);
+
+  const closePosition = useCallback(() => {
+    // A position opened from the list goes back one step; one reached by a
+    // link replaces its entry, so Back still leaves for the page before.
+    if (historyState()[POSITION_VIEW_STATE]) {
+      window.history.back();
+      return;
+    }
+    writeHistory('replace', withoutPositionView(), positionViewHref());
+    showPositionList(selectedKey);
+  }, [selectedKey, showPositionList]);
 
   const changeAction = useCallback((nextAction: PositionAction) => {
     const position = positions.find((item) => positionKey(item) === selectedKey);
@@ -139,6 +254,11 @@ export default function PositionsPage() {
     if (previous !== null && previous !== context && (walletChanged || chainChanged) && !preserveSubmittedResult) {
       setSelectedKey('');
       resetTransactionContext();
+      // Another wallet's positions start from their list.
+      if (new URLSearchParams(window.location.search).has('position')) {
+        writeHistory('replace', withoutPositionView(), positionViewHref());
+      }
+      setPositionViewOpen(false);
     }
     if (previous !== null && previous !== context && (walletChanged || chainChanged) && preserveSubmittedResult) return;
     previousWalletContextRef.current = context;
@@ -165,9 +285,8 @@ export default function PositionsPage() {
       : positions[0] ? positionKey(positions[0]) : '');
   }, [positions]);
 
-  // Trade and portfolio action links land directly on the matching position
-  // manager. Keep this query-driven so browser refreshes and shared links have
-  // the same behavior as an in-app selection.
+  // Trade and portfolio rows open their position here. Keep this query-driven
+  // so browser refreshes and shared links behave like an in-app selection.
   useEffect(() => {
     if (reviewStage === 'executing' || reviewStage === 'result') return;
     if (typeof window === 'undefined' || !positions.length) return;
@@ -179,13 +298,70 @@ export default function PositionsPage() {
     const nextAction: PositionAction = requestedAction === 'close' || requestedAction === 'reduce' || requestedAction === 'leverage'
       ? requestedAction
       : 'increase';
-    const deepLinkKey = `${wallet.address?.toLowerCase() ?? ''}:${wallet.chainId ?? ''}:${key}:${nextAction}`;
+    const deepLinkKey = deepLinkKeyFor(key, nextAction);
     if (handledDeepLinkRef.current === deepLinkKey) return;
     handledDeepLinkRef.current = deepLinkKey;
     setSelectedKey(key);
     resetTransactionContext(nextAction, tokenForPositionAction(linkedPosition, nextAction));
-    window.requestAnimationFrame(() => managerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-  }, [positions, resetTransactionContext, reviewStage, wallet.address, wallet.chainId]);
+    setPositionViewOpen(true);
+  }, [deepLinkKeyFor, positions, resetTransactionContext, reviewStage]);
+
+  // Browser Back and Forward move between the list and a position.
+  const positionsRef = useRef(positions);
+  positionsRef.current = positions;
+  const selectedKeyRef = useRef(selectedKey);
+  selectedKeyRef.current = selectedKey;
+  const reviewStageRef = useRef(reviewStage);
+  reviewStageRef.current = reviewStage;
+  useEffect(() => {
+    const onPopState = () => {
+      // A submitted transaction keeps its status in place whatever the history does.
+      if (reviewStageRef.current === 'executing' || reviewStageRef.current === 'result') return;
+      const key = new URLSearchParams(window.location.search).get('position');
+      const position = key ? positionsRef.current.find((item) => positionKey(item) === key) : undefined;
+      if (key && position) {
+        if (positionViewOpenRef.current && selectedKeyRef.current === key) return;
+        const root = scrollRoot();
+        listScrollRef.current = root?.scrollTop ?? listScrollRef.current;
+        swapPositionView(() => {
+          if (selectedKeyRef.current !== key) {
+            setSelectedKey(key);
+            resetTransactionContext('increase', tokenForPositionAction(position, 'increase'));
+          }
+          setPositionViewOpen(true);
+          root?.scrollTo({ top: 0 });
+        });
+      } else if (positionViewOpenRef.current) {
+        showPositionList(selectedKeyRef.current);
+      }
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [resetTransactionContext, showPositionList]);
+
+  // A position that is gone (closed, or not this wallet's) gives way to the list.
+  useEffect(() => {
+    if (!positionViewOpen || reviewStage !== 'input') return;
+    if (positionState.status === 'idle' || positionState.status === 'loading') return;
+    const key = new URLSearchParams(window.location.search).get('position');
+    if (key && positions.some((position) => positionKey(position) === key)) return;
+    if (key) writeHistory('replace', withoutPositionView(), positionViewHref());
+    setPositionViewOpen(false);
+  }, [positionState.status, positionViewOpen, positions, reviewStage]);
+
+  // Telegram's Back returns from a position to the list before leaving the page.
+  useEffect(() => {
+    if (!positionViewOpen || reviewStage !== 'input') return undefined;
+    const onTelegramBack = (event: Event) => {
+      const detail = (event as CustomEvent<{ consume?: () => void; isConsumed?: () => boolean }>).detail;
+      // An open sheet or popover closes first; wide screens already show the list.
+      if (detail?.isConsumed?.() || document.querySelector('[aria-modal="true"]') || window.matchMedia(WIDE_LAYOUT_QUERY).matches) return;
+      detail?.consume?.();
+      closePosition();
+    };
+    window.addEventListener('fxaeon:telegram-back', onTelegramBack);
+    return () => window.removeEventListener('fxaeon:telegram-back', onTelegramBack);
+  }, [closePosition, positionViewOpen, reviewStage]);
 
   const selected = positions.find((position) => positionKey(position) === selectedKey);
   const managerPosition = reviewStage === 'input' ? selected : reviewPosition ?? selected;
@@ -318,11 +494,15 @@ export default function PositionsPage() {
     setSlippage(nextSlippage);
     setReviewRevision((revision) => revision + 1);
     setResumeReview((revision) => revision + 1);
+    setPositionViewOpen(true);
     // Remove the opaque local id after successful validation so a refresh
     // cannot re-consume an already restored draft. The saved draft itself
     // remains available in History until the fresh route is signed/cancelled.
-    window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.hash}`);
-  }, [positions, reviewStage, slippage, wallet.address, wallet.chainId]);
+    // The URL keeps naming the restored position and action, which this page
+    // has now applied, so its query does not reset the restored inputs.
+    handledDeepLinkRef.current = deepLinkKeyFor(draftPositionKey, nextAction);
+    window.history.replaceState(window.history.state, '', positionViewHref(draftPositionKey, nextAction));
+  }, [deepLinkKeyFor, positions, reviewStage, slippage, wallet.address, wallet.chainId]);
 
   const leverageError = leverage > 0 && leverage < leverageBounds.min
     ? `Minimum pool leverage is ${leverageBounds.min.toFixed(1)}×.`
@@ -399,14 +579,6 @@ export default function PositionsPage() {
     };
   }, [action, fraction, leverage, leverageBounds, selected, selectedStale, slippage, token, validAmount, wallet.address]);
 
-  const openManager = (key: string, nextAction: PositionAction) => {
-    const position = positions.find((item) => positionKey(item) === key);
-    setSelectedKey(key);
-    resetTransactionContext(nextAction, tokenForPositionAction(position, nextAction));
-    haptic(nextAction === 'close' ? 'warning' : 'selection');
-    window.requestAnimationFrame(() => managerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-  };
-
   const reviewLabel = action === 'close' ? 'Close position' : action === 'increase' ? 'Add to position' : action === 'reduce' ? 'Reduce position' : 'Adjust position leverage';
   const selectedLabel = managerPosition ? `${managerPosition.market} ${managerPosition.side} position` : 'position';
   const operationLabel = action === 'close'
@@ -422,10 +594,13 @@ export default function PositionsPage() {
   const draftResumePath = selected
     ? `/positions?position=${encodeURIComponent(positionKey(selected))}&action=${encodeURIComponent(action)}`
     : undefined;
+  // Phones show the list or one position while editing; a review takes the
+  // page whichever view it started from. Wide screens show both columns.
+  const positionView = reviewStage !== 'input' ? 'review' : positionViewOpen && selected ? 'position' : 'list';
 
   return (
     <AppShell>
-      <div className={`${styles.positionsRoot} ${styles.positionsCompactRoot} ${!wallet.address ? styles.positionsDisconnectedRoot : ''}`} data-position-stage={reviewStage}>
+      <div className={`${styles.positionsRoot} ${styles.positionsCompactRoot} ${!wallet.address ? styles.positionsDisconnectedRoot : ''}`} data-position-stage={reviewStage} data-position-view={positionView}>
       <div className={styles.positionsWorkspace}>
         <h1 className={styles.positionsHeading}>Positions</h1>
         {reviewStage === 'input' && <nav className={styles.positionsViews} aria-label="Trade views">
@@ -445,7 +620,7 @@ export default function PositionsPage() {
         ) : null}
         {reviewStage === 'input' && <ConfirmedPositionCards />}
         {wallet.address && positionState.status === 'loading' && !positions.length && !positionState.pendingPositions.length && reviewStage === 'input' ? (
-          <div className="flex flex-col gap-3"><ProtocolPositionSkeleton compact /><ProtocolPositionSkeleton compact /></div>
+          <ProtocolPositionList label="Loading positions"><ProtocolPositionSkeleton /><ProtocolPositionSkeleton /></ProtocolPositionList>
         ) : wallet.address && positionState.status === 'unavailable' && !positions.length && !positionState.pendingPositions.length && reviewStage === 'input' ? (
           <div role="status" aria-live="polite" className="flex items-center gap-3 rounded-2xl bg-[var(--warn-dim)] py-2 pl-4 pr-2"><span className="text-[13px] text-warn">Position data is unavailable.</span><button type="button" aria-label="Retry positions" onClick={() => void positionState.refresh()} className="glass-press ml-auto flex min-h-11 min-w-11 items-center justify-center rounded-xl text-mut"><RefreshCw className="h-4 w-4" aria-hidden="true" /></button></div>
         ) : wallet.address && positionState.status === 'partial' && !positions.length && !positionState.pendingPositions.length && reviewStage === 'input' ? (
@@ -459,36 +634,26 @@ export default function PositionsPage() {
                 <div><h2 id="open-positions-heading">Open positions</h2></div>
                 <span>{positions.length} open</span>
               </div>
-              <div className={styles.positionList} aria-label="Open positions">
+              {/* A tap opens the position: its figures, actions and form together. */}
+              <ProtocolPositionList label="Open positions">
                 {positions.map((position) => {
                   const key = positionKey(position);
-                  const isSelected = key === selectedKey;
-                  return (
-                    <div key={key} className={styles.positionListItem} data-selected={isSelected || undefined}>
-                      <ProtocolPositionCard
-                        position={position}
-                        compact
-                        selected={isSelected}
-                        onSelect={() => selectPosition(key)}
-                      />
-                      <div role="group" className={`${styles.positionQuickActions} ${position.side === 'long' ? styles.positionQuickActionsWithBorrow : ''}`} aria-label={`Actions for ${position.market} ${position.side} position ${position.info.positionId}`}>
-                        <button type="button" onClick={() => openManager(key, isSelected ? action : 'increase')} className="glass-press">Manage</button>
-                        {position.side === 'long' && <Link href={`/borrow?market=${position.market}&position=${position.info.positionId}`} className="glass-press">Borrow</Link>}
-                        <button type="button" onClick={() => openManager(key, 'leverage')} className="glass-press">Leverage</button>
-                        <button type="button" onClick={() => openManager(key, 'close')} className="glass-press"><X aria-hidden="true" /> Close</button>
-                      </div>
-                    </div>
-                  );
+                  return <ProtocolPositionCard key={key} position={position} selected={key === selectedKey} onSelect={() => openPosition(key)} />;
                 })}
-              </div>
+              </ProtocolPositionList>
             </section>
 
             <section ref={managerRef} className={styles.positionManageColumn} aria-label={reviewStage === 'input' ? undefined : `${operationLabel} review`} aria-labelledby={reviewStage === 'input' ? 'manage-position-heading' : undefined}>
-              {reviewStage === 'input' && selected && <div className={styles.manageHeading}><div><h2 id="manage-position-heading">{selected.market} {selected.side} · #{selected.info.positionId}</h2></div><div className="flex items-center gap-1">{selected.side === 'long' && <Link href={`/borrow?market=${selected.market}&position=${selected.info.positionId}`} className="glass-press inline-flex min-h-11 items-center gap-1 rounded-xl px-2 text-[13px] font-semibold text-mint">Borrow against <ChevronRight className="h-4 w-4" aria-hidden="true" /></Link>}<TransactionSettings slippage /></div></div>}
+              {reviewStage === 'input' && <div className={styles.positionViewBar}>
+                <button type="button" onClick={closePosition} className={`${styles.positionBack} glass-press`}><ArrowLeft aria-hidden="true" />All positions</button>
+                <TransactionSettings slippage />
+              </div>}
+              {reviewStage === 'input' && selected && <ProtocolPositionDetails position={selected} headingId="manage-position-heading" className={styles.positionFocus} />}
+              {reviewStage === 'input' && selected?.side === 'long' && <Link href={`/borrow?market=${selected.market}&position=${selected.info.positionId}`} className={`${styles.borrowAgainst} glass-press`}>Borrow against this position<ChevronRight aria-hidden="true" /></Link>}
               {reviewStage === 'input' && selectedStale && <span role="status" aria-label="Refreshing selected position" className="skeleton block h-8 rounded-xl" />}
 
               <Card className={`${styles.actionPanel} ${styles.positionActionCard} ${reviewStage === 'input' ? '' : styles.positionActionCardReview}`}>
-                {reviewStage === 'input' && <div className={styles.positionActions}><Segmented value={action} onChange={changeAction} ariaLabel="Position action" options={[{ value: 'increase', label: 'Add' }, { value: 'reduce', label: 'Reduce' }, { value: 'close', label: 'Close' }, { value: 'leverage', label: 'Leverage' }]} /></div>}
+                {reviewStage === 'input' && <div className={styles.positionActions}><Segmented value={action} onChange={changeAction} ariaLabel="Position action" options={[{ value: 'increase', label: 'Add' }, { value: 'reduce', label: 'Reduce' }, { value: 'leverage', label: 'Leverage' }, { value: 'close', label: 'Close' }]} /></div>}
                 <ActionReview
                   key={reviewRevision}
                   surface="content"

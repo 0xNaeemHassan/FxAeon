@@ -734,16 +734,30 @@ async function runProof(captureStage: string) {
       if (!open) await summary.click();
       await expect(summary).toBeVisible();
     };
-    const assertCanonicalCard = async (group: { market: 'ETH' | 'BTC'; side: 'long' | 'short' }, positionId: number, card: Locator): Promise<void> => {
-      const info = await readCanonicalPositionInfo({
-        client: client as unknown as FxPublicClient,
-        group,
-        positionId,
-      });
-      await expect(card).toContainText(`${groupDigits(formatAmount(info.rawColls, info.rawCollsDecimals))} ${info.rawCollsToken}`);
-      await expect(card).toContainText(`${groupDigits(formatAmount(info.rawDebts, info.rawDebtsDecimals))} ${info.rawDebtsToken}`);
-      const leverage = (group.side === 'short' ? info.lsdLeverage : info.currentLeverage).toFixed(2).replace(/\.00$/, '');
-      await expect(card).toContainText(`${leverage}× leverage`);
+    // A position row shows its leverage; the position's details, one tap
+    // away, show its exact collateral and debt beside the same leverage.
+    const canonicalLeverage = async (group: { market: 'ETH' | 'BTC'; side: 'long' | 'short' }, positionId: number) => {
+      const info = await readCanonicalPositionInfo({ client: client as unknown as FxPublicClient, group, positionId });
+      return { info, leverage: (group.side === 'short' ? info.lsdLeverage : info.currentLeverage).toFixed(2).replace(/\.00$/, '') };
+    };
+    const assertCanonicalRow = async (group: { market: 'ETH' | 'BTC'; side: 'long' | 'short' }, positionId: number, row: Locator): Promise<void> => {
+      const { leverage } = await canonicalLeverage(group, positionId);
+      await expect(row).toContainText(`${leverage}× leverage`);
+    };
+    const assertCanonicalDetails = async (group: { market: 'ETH' | 'BTC'; side: 'long' | 'short' }, positionId: number, details: Locator): Promise<void> => {
+      const { info, leverage } = await canonicalLeverage(group, positionId);
+      for (const label of ['Collateral', 'Debt', 'Market price', 'Debt / collateral']) await expect(details.getByText(label, { exact: true })).toBeVisible();
+      await expect(details).toContainText(`${groupDigits(formatAmount(info.rawColls, info.rawCollsDecimals))} ${info.rawCollsToken}`);
+      await expect(details).toContainText(`${groupDigits(formatAmount(info.rawDebts, info.rawDebtsDecimals))} ${info.rawDebtsToken}`);
+      await expect(details).toContainText(`${leverage}× leverage`);
+    };
+    /** Open a position from its row on Positions and check its details. */
+    const openCanonicalPosition = async (group: { market: 'ETH' | 'BTC'; side: 'long' | 'short' }, positionId: number, row: Locator): Promise<void> => {
+      const key = `${group.market}:${group.side}:${positionId}`;
+      await row.click();
+      const details = activePage.locator(`[data-position-details="${key}"]`);
+      await expect(details).toBeVisible({ timeout: 180_000 });
+      await assertCanonicalDetails(group, positionId, details);
     };
     const runBrowserProof = async () => {
       const page = activePage;
@@ -904,11 +918,11 @@ async function runProof(captureStage: string) {
       await expect(positionCard).toBeVisible({ timeout: 180_000 });
       await expect(positionCard).toContainText(`${scenario.market} ${scenario.side === 'long' ? 'Long' : 'Short'}`);
       await expect(positionCard).toContainText(`#${positionId}`);
-      await expect(positionCard.getByText('Collateral', { exact: true })).toBeVisible();
-      await expect(positionCard.getByText('Debt', { exact: true })).toBeVisible();
+      // The row opens its position, where its collateral and debt are shown.
+      await expect(positionCard).toHaveAttribute('href', `/positions?position=${encodeURIComponent(key)}`);
       await expect.poll(() => proofValue(delayedDiscoveries.get(key) ?? 0)).toBeGreaterThan(0);
       assert.equal(emittedDiscoveries.has(key), false, 'GraphQL index response must remain withheld during direct discovery');
-      await assertCanonicalCard(scenario, positionId, positionCard);
+      await assertCanonicalRow(scenario, positionId, positionCard);
       confirmedBeforeIndexer.add(key);
       await expect(page.getByRole('button', { name: 'View position', exact: true })).toBeVisible({ timeout: 180_000 });
       await expect(page.getByRole('heading', { name: 'Confirmed', exact: true })).toBeVisible();
@@ -919,6 +933,10 @@ async function runProof(captureStage: string) {
       assert.equal(Number(await client.readContract({ address: scenario.pool, abi: poolAbi, functionName: 'getNextPositionId' })), positionId + 1);
       await page.getByRole('button', { name: 'View position', exact: true }).click();
       await expect(page).toHaveURL(/\/positions\?/);
+      // The position opens with its exact collateral and debt.
+      const viewedDetails = page.locator(`[data-position-details="${key}"]`);
+      await expect(viewedDetails).toBeVisible({ timeout: 180_000 });
+      await assertCanonicalDetails(scenario, positionId, viewedDetails);
       await page.goto(`${baseUrl}/trade`);
       await page.getByRole('radiogroup', { name: 'Market', exact: true }).getByRole('radio', { name: scenario.market, exact: true }).click();
       await page.getByRole('radiogroup', { name: 'Position side' }).getByRole('radio', { name: scenario.side === 'long' ? 'Long' : 'Short', exact: true }).click();
@@ -953,10 +971,15 @@ async function runProof(captureStage: string) {
       await expect(reloadedCard).toContainText(`#${positionId}`);
       await expect.poll(() => proofValue(delayedDiscoveries.get(key) ?? 0)).toBeGreaterThanOrEqual(2);
       assert.equal(emittedDiscoveries.has(key), false, 'reload must recover from canonical wallet discovery while GraphQL remains withheld');
-      await assertCanonicalCard(scenario, positionId, reloadedCard);
+      await assertCanonicalRow(scenario, positionId, reloadedCard);
       restoredConfirmed.add(key);
       await page.screenshot({ path: resolve(artifactRoot, `${scenario.market}-${scenario.side}-restored-from-wallet.png`), fullPage: true });
       await page.screenshot({ path: resolve(artifactRoot, `${scenario.market}-${scenario.side}-confirmed.png`), fullPage: true });
+      // The restored row opens the position with its exact collateral and debt.
+      await reloadedCard.click();
+      const restoredDetails = page.locator(`[data-position-details="${key}"]`);
+      await expect(restoredDetails).toBeVisible({ timeout: 180_000 });
+      await assertCanonicalDetails(scenario, positionId, restoredDetails);
       console.log(`Browser opened and rendered ${scenario.market} ${scenario.side} #${positionId}`);
     }
 
@@ -1029,7 +1052,9 @@ async function runProof(captureStage: string) {
       try { return (JSON.parse(raw) as Array<{ hint?: { positionId?: number } }>).find((item) => item.hint?.positionId === positionId) ?? null; } catch { return null; }
     }, { walletAddress: wallet, positionId: externalPositionId });
     assert.equal(externalJournalRecord, null, 'externally-created position must not depend on an FxAeon journal hint');
-    await assertCanonicalCard(externalScenario, externalPositionId, externalCard);
+    await assertCanonicalRow(externalScenario, externalPositionId, externalCard);
+    await openCanonicalPosition(externalScenario, externalPositionId, externalCard);
+    await page.goto(`${baseUrl}/positions`);
     externalPositionProof = {
       market: 'ETH', side: 'long', pool: externalPool, positionId: externalPositionId,
       createdBy: wallet, transferredTo: alternateWallet, transferredBackTo: wallet, finalOwner: alternateWallet,
@@ -1142,10 +1167,7 @@ async function runProof(captureStage: string) {
         const key = `${position.market}:${position.side}:${position.positionId}`;
         const card = page.locator(`[data-position-key="${key}"]`).first();
         await expect(card).toBeVisible();
-        await expect(card.getByText('Position value', { exact: true })).toBeVisible();
-        await expect(card.getByText('Market price', { exact: true })).toBeVisible();
-        await expect(card.getByText('Debt / collateral', { exact: true })).toBeVisible();
-        await expect(card.locator('xpath=..').getByRole('button', { name: 'Leverage', exact: true })).toBeVisible();
+        await expect(card).toContainText('Position value');
         await card.evaluate((element) => element.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' }));
         const cardBox = await card.boundingBox();
         const cardMetrics = await card.evaluate((element) => {
@@ -1160,6 +1182,16 @@ async function runProof(captureStage: string) {
           `${key} card must not overflow horizontally at ${viewport.width}x${viewport.height}`);
         assert.ok(cardMetrics.left >= -1 && cardMetrics.right <= viewport.width + 1,
           `${key} card must fit the viewport at ${viewport.width}x${viewport.height}`);
+        // Its other figures and its actions are one tap away: beside the list
+        // on wide screens, in place of it on phones.
+        await card.click();
+        const details = page.locator(`[data-position-details="${key}"]`);
+        await expect(details).toBeVisible();
+        await expect(details.getByText('Market price', { exact: true })).toBeVisible();
+        await expect(details.getByText('Debt / collateral', { exact: true })).toBeVisible();
+        await expect(page.getByRole('radiogroup', { name: 'Position action', exact: true }).getByRole('radio', { name: 'Leverage', exact: true })).toBeVisible();
+        if (viewport.width < 840) await page.getByRole('button', { name: 'All positions', exact: true }).click();
+        await expect(card).toBeVisible();
       }
       console.log(`Responsive four-position cards verified at ${viewport.width}x${viewport.height}`);
     }
@@ -1181,10 +1213,11 @@ async function runProof(captureStage: string) {
     });
     const leverageDisplay = leverageMetricText.match(/([0-9]+(?:\.[0-9]+)?)\s*×/);
     assert.ok(leverageDisplay, `${leverageKey} card must expose its displayed leverage beside the leverage label`);
-    await expect(leverageCard.locator('xpath=..').getByRole('button', { name: 'Leverage', exact: true })).toHaveCount(1);
-    await leverageCard.locator('xpath=..').getByRole('button', { name: 'Leverage', exact: true }).click();
+    // The row opens its position; Leverage is one of its actions.
+    await leverageCard.click();
     const positionAction = page.getByRole('radiogroup', { name: 'Position action', exact: true });
     await expect(positionAction).toBeVisible();
+    await positionAction.getByRole('radio', { name: 'Leverage', exact: true }).click();
     await expect(positionAction.getByRole('radio', { name: 'Leverage', exact: true })).toHaveAttribute('aria-checked', 'true');
     const targetLeverage = page.getByRole('spinbutton', { name: 'Target leverage', exact: true });
     await expect(targetLeverage).toBeVisible();
@@ -1194,7 +1227,7 @@ async function runProof(captureStage: string) {
     assert.ok(borrowTarget, 'browser proof requires an ETH long borrow target');
     const borrowTargetKey = `${borrowTarget.market}:${borrowTarget.side}:${borrowTarget.positionId}`;
     await page.locator(`[data-position-key="${borrowTargetKey}"]`).first().click();
-    const borrowCta = page.getByRole('link', { name: 'Borrow against', exact: true });
+    const borrowCta = page.getByRole('link', { name: 'Borrow against this position', exact: true });
     await expect(borrowCta).toHaveAttribute('href', `/borrow?market=ETH&position=${borrowTarget.positionId}`);
     await borrowCta.click();
     await expect(page).toHaveURL(new RegExp(`/borrow\\?market=ETH&position=${borrowTarget.positionId}$`));
@@ -1476,8 +1509,10 @@ async function runProof(captureStage: string) {
       const usdcBeforeClose = await client.readContract({ address: usdc, abi: tokenAbi, functionName: 'balanceOf', args: [wallet] });
       await page.goto(`${baseUrl}/positions`);
       await expect(page.locator(`[data-position-key="${key}"]`).first()).toBeVisible();
-      const quickActions = page.getByLabel(`Actions for ${position.market} ${position.side} position ${position.positionId}`, { exact: true });
-      await quickActions.getByRole('button', { name: 'Close', exact: true }).click();
+      // Open the position from its row, then choose Close among its actions.
+      await page.locator(`[data-position-key="${key}"]`).first().click();
+      await expect(page.locator(`[data-position-details="${key}"]`)).toBeVisible();
+      await page.getByRole('radiogroup', { name: 'Position action', exact: true }).getByRole('radio', { name: 'Close', exact: true }).click();
       await expect(page.getByRole('radiogroup', { name: 'Position action', exact: true }).getByRole('radio', { name: 'Close', exact: true })).toBeChecked();
       await expect(page.getByRole('heading', { name: 'Close the full position', exact: true })).toBeVisible();
       await expect(page.getByText('All remaining collateral and debt', { exact: true })).toBeVisible();

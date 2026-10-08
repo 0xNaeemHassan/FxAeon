@@ -22,6 +22,7 @@ import { useWalletAssets, useRealtimeChainState } from '@/components/WalletDataP
 import {
   positionIsStale,
   ProtocolPositionCard,
+  ProtocolPositionList,
   ProtocolPositionNotice,
   ProtocolPositionSkeleton,
 } from '@/components/ProtocolPositionCard';
@@ -255,17 +256,12 @@ function PortfolioWallet() {
             hasPositions={positionState.positions.length + positionState.pendingPositions.length > 0} refreshing={positionState.refreshing}
             onRefresh={() => void positionState.refresh()} compact />
           <ConfirmedPositionCards />
-          {(positionState.status === 'loading' || positionState.status === 'idle') && !positionState.positions.length && !positionState.pendingPositions.length ? <ProtocolPositionSkeleton compact />
-            : positionState.positions.length > 0 ? <div className={presentation.positionList}>{positionState.positions.slice(0, 2).map((position) => {
+          {(positionState.status === 'loading' || positionState.status === 'idle') && !positionState.positions.length && !positionState.pendingPositions.length ? <ProtocolPositionSkeleton />
+            // Each row opens its position, where its actions and figures are.
+            : positionState.positions.length > 0 ? <ProtocolPositionList label="Open positions">{positionState.positions.slice(0, 2).map((position) => {
             const key = encodeURIComponent(`${position.market}:${position.side}:${position.info.positionId}`);
-            return <div key={key} className={presentation.positionItem}><ProtocolPositionCard position={position} compact />
-              <div className={presentation.positionActions} role="group" aria-label={`Actions for ${position.market} ${position.side} position ${position.info.positionId}`}>
-                <Link href={`/positions?position=${key}`}>Manage</Link>
-                {position.side === 'long' && <Link href={`/borrow?market=${position.market}&position=${position.info.positionId}`}>Borrow</Link>}
-                <Link href={`/positions?position=${key}&action=close`}>Close</Link>
-              </div>
-            </div>;
-            })}</div> : positionState.status === 'ready' && !positionState.pendingPositions.length ? <div className={presentation.emptyState}><span className={presentation.emptyIcon}><Layers2 size={22} aria-hidden="true" /></span><p><span>No open positions</span><small>Your leveraged ETH and BTC positions appear here.</small></p><Link href="/trade">Open trade <ChevronRight size={14} aria-hidden="true" /></Link></div> : null}
+            return <ProtocolPositionCard key={key} position={position} href={`/positions?position=${key}`} />;
+            })}</ProtocolPositionList> : positionState.status === 'ready' && !positionState.pendingPositions.length ? <div className={presentation.emptyState}><span className={presentation.emptyIcon}><Layers2 size={22} aria-hidden="true" /></span><p><span>No open positions</span><small>Your leveraged ETH and BTC positions appear here.</small></p><Link href="/trade">Open trade <ChevronRight size={14} aria-hidden="true" /></Link></div> : null}
       </PositionsSection>
       <EarnPositionCard protocol={protocol} loading={fxSaveLoading} prices={displayPrices}
         pricesLoading={priceSnapshot.status === 'loading'} onRetry={() => void loadProtocol()} />
@@ -327,7 +323,7 @@ function PortfolioLoading({ timedOut }: { timedOut: boolean }) {
       <SupportedValueCard displayTotalUsd={null} loading refreshing={false}
         walletValue={null} positionEquity={null} walletComplete positionsComplete />
       <PortfolioAssets snapshot={null} loading network={network} onNetworkChange={setNetwork} />
-      <PositionsSection summary={positionsSummary('loading', 0)}><ProtocolPositionSkeleton compact /></PositionsSection>
+      <PositionsSection summary={positionsSummary('loading', 0)}><ProtocolPositionSkeleton /></PositionsSection>
       <EarnPositionCard protocol={{ ...EMPTY_FX_SAVE, balances: null }} loading prices={{}} pricesLoading />
       <RecentActivitySkeleton />
     </div>

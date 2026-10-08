@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { extname, resolve } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { buildPortfolioStatesLab, type PortfolioStatesLab } from '../harness/portfolio-states-build';
@@ -119,6 +119,23 @@ test('a position card lands at its placeholder’s height, with its brake line a
     await expect(short.getByText('Short', { exact: true })).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
+  }
+});
+
+test('screenshots of Portfolio’s positions in every theme', async ({ page }) => {
+  const directory = process.env.PORTFOLIO_SCREENS_DIR;
+  test.skip(!directory, 'set PORTFOLIO_SCREENS_DIR to keep the screenshots');
+  mkdirSync(directory!, { recursive: true });
+  for (const theme of ['official', 'dark', 'light'] as const) {
+    for (const width of [320, 390]) {
+      await page.setViewportSize({ width, height: 1600 });
+      await open(page, 'positions', { theme });
+      const positions = page.getByRole('region', { name: 'Positions' });
+      await positions.locator('summary').click();
+      await page.waitForTimeout(1_100);
+      await positions.screenshot({ path: resolve(directory!, `portfolio-${theme}-${width}-positions.png`), animations: 'disabled' });
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+    }
   }
 });
 

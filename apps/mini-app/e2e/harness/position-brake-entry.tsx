@@ -1,7 +1,7 @@
 import React, { useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { UiPosition } from '../../src/app/trade/fxUi';
-import { ProtocolPositionCard, ProtocolPositionSkeleton } from '../../src/components/ProtocolPositionCard';
+import { ProtocolPositionCard, ProtocolPositionDetails, ProtocolPositionList, ProtocolPositionSkeleton } from '../../src/components/ProtocolPositionCard';
 import { PositionBrakeContext, type PositionBrakeStore } from '../../src/components/PositionBrakeContext';
 import PositionBrakeProvider from '../../src/components/PositionBrakeProvider';
 import { liveMarketStore } from '../../src/lib/liveMarketStore';
@@ -14,7 +14,7 @@ import { liveMarketStore } from '../../src/lib/liveMarketStore';
  * position's read revert. Values come from mainnet at block 26,149,707.
  */
 type Variant = 'article' | 'link' | 'button';
-type Config = { theme?: 'official' | 'dark' | 'light'; scenarios?: string[]; variant?: Variant; quotes?: { ETH?: number; BTC?: number }; loading?: boolean; skeleton?: boolean };
+type Config = { theme?: 'official' | 'dark' | 'light'; scenarios?: string[]; variant?: Variant; quotes?: { ETH?: number; BTC?: number }; loading?: boolean; skeleton?: boolean; details?: string };
 type Call = { address: string; functionName: string; args?: readonly unknown[] };
 
 const config = ((globalThis as { __brakeConfig?: Config }).__brakeConfig ?? {}) as Config;
@@ -123,12 +123,16 @@ function Cards() {
   const shown = useSyncExternalStore(harness.subscribe, () => showCards, () => showCards);
   const variant = config.variant ?? 'article';
   return <main style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 16, maxWidth: 680, margin: '0 auto' }}>
-    {config.skeleton && <section data-scenario="skeleton"><ProtocolPositionSkeleton compact /></section>}
-    {config.skeleton && <section data-scenario="loading"><PositionBrakeContext.Provider value={loadingStore}><ProtocolPositionCard position={SCENARIOS[scenarioKeys[0]].position} compact /></PositionBrakeContext.Provider></section>}
-    {shown && scenarioKeys.map((key) => <section key={key} data-scenario={key}>
-      <ProtocolPositionCard position={SCENARIOS[key].position} compact
-        {...(variant === 'link' ? { href: `/positions?position=${key}` } : variant === 'button' ? { onSelect: () => undefined } : {})} />
-    </section>)}
+    {config.skeleton && <section data-scenario="skeleton"><ProtocolPositionSkeleton /></section>}
+    {config.skeleton && <section data-scenario="loading"><PositionBrakeContext.Provider value={loadingStore}><ProtocolPositionCard position={SCENARIOS[scenarioKeys[0]].position} /></PositionBrakeContext.Provider></section>}
+    {config.details && <section data-scenario="details"><ProtocolPositionDetails position={SCENARIOS[config.details].position} headingId="details-heading" /></section>}
+    {/* Rows sit in a ruled list, as every page lists them. */}
+    {shown && <ProtocolPositionList label="Positions">
+      {scenarioKeys.map((key) => <section key={key} data-scenario={key}>
+        <ProtocolPositionCard position={SCENARIOS[key].position}
+          {...(variant === 'link' ? { href: `/positions?position=${key}` } : variant === 'button' ? { onSelect: () => undefined } : {})} />
+      </section>)}
+    </ProtocolPositionList>}
   </main>;
 }
 

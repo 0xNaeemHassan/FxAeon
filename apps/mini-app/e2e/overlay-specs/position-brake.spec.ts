@@ -15,7 +15,7 @@ let lab: PositionBrakeLab;
 
 test.beforeAll(async () => { lab = await buildPositionBrakeLab(); });
 
-type BrakeConfig = { theme?: 'official' | 'dark' | 'light'; scenarios?: string[]; variant?: 'article' | 'link' | 'button'; quotes?: { ETH?: number; BTC?: number }; loading?: boolean; skeleton?: boolean };
+type BrakeConfig = { theme?: 'official' | 'dark' | 'light'; scenarios?: string[]; variant?: 'article' | 'link' | 'button'; quotes?: { ETH?: number; BTC?: number }; loading?: boolean; skeleton?: boolean; details?: string };
 type HarnessWindow = Window & { __brakeHarness: { calls: Array<Array<{ functionName: string }>>; refresh(): void; setQuote(market: 'ETH' | 'BTC', price: number): void; setRatio(key: string, ratio: string): void; release(): void; setCardsShown(shown: boolean): void } };
 
 async function open(page: Page, config: BrakeConfig) {
@@ -212,8 +212,16 @@ test('the side is plain text in its colour, with AA contrast in every theme', as
         return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
       };
       const contrast = (a: string, b: string) => { const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
+      // Rows have no box of their own: measure against what they sit on.
+      const backdrop = (element: Element | null): string => {
+        for (let node = element; node; node = node.parentElement) {
+          const color = getComputedStyle(node).backgroundColor;
+          if (color !== 'rgba(0, 0, 0, 0)' && color !== 'transparent') return color;
+        }
+        return 'rgb(255, 255, 255)';
+      };
       return [...document.querySelectorAll('[data-position-key]')].flatMap((element) => {
-        const surface = getComputedStyle(element).backgroundColor;
+        const surface = backdrop(element);
         const side = element.querySelector('[class*="marketLine"] > span:last-child')!;
         const brake = element.querySelector('[data-position-brake]');
         const style = getComputedStyle(side);
@@ -253,9 +261,9 @@ test('screenshots of each state at phone widths in every theme', async ({ page }
   for (const theme of ['official', 'dark', 'light'] as const) {
     for (const width of [320, 390]) {
       await page.setViewportSize({ width, height: 2200 });
-      await open(page, { quotes: QUOTES, theme, scenarios: ['long', 'short', 'near', 'rebalance', 'failed'], skeleton: true });
+      await open(page, { quotes: QUOTES, theme, scenarios: ['long', 'short', 'near', 'rebalance', 'failed'], skeleton: true, details: 'rebalance' });
       await page.waitForTimeout(1_300);
-      for (const scenario of ['skeleton', 'loading', 'long', 'short', 'near', 'rebalance', 'failed']) {
+      for (const scenario of ['skeleton', 'loading', 'details', 'long', 'short', 'near', 'rebalance', 'failed']) {
         await page.locator(`section[data-scenario="${scenario}"]`).screenshot({ path: resolve(screenshotDir!, `brake-${theme}-${width}-${scenario}.png`), animations: 'disabled' });
       }
     }

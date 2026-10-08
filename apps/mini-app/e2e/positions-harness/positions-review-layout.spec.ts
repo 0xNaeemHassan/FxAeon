@@ -42,7 +42,12 @@ const mocks: Record<string, string> = {
   '@/components/review/executionResult': `export const resultPresentation=()=>({title:'Confirmed',body:'Fixture result',tone:'success',icon:()=>null}); export const resultBodyDuringRefresh=({body})=>body;`,
   '@/components/review/actionReviewStatusModel': `export const buildStatusPresentation=()=>({icon:'clock',label:'Ready',body:'Reviewed terms'});`,
   '@/components/WalletConnectCTA': `import React from 'react'; export default ({body}) => <section>{body}</section>;`,
-  '@/components/ProtocolPositionCard': `import React from 'react'; export const positionIsStale = () => false; export const ProtocolPositionCard = ({position,selected}) => <article data-position-key={position.market+':'+position.side+':'+position.info.positionId} aria-current={selected?'true':undefined}><strong>{position.market} {position.side} #{position.info.positionId}</strong></article>; export const ProtocolPositionNotice = () => null; export const ProtocolPositionSkeleton = () => <div />;`,
+  '@/components/ProtocolPositionCard': `import React from 'react'; export const positionIsStale = () => false;
+    const keyOf = position => position.market+':'+position.side+':'+position.info.positionId;
+    export const ProtocolPositionCard = ({position,selected,onSelect,href}) => { const body = <strong>{position.market} {position.side} #{position.info.positionId}</strong>; return onSelect ? <button type="button" onClick={onSelect} data-position-key={keyOf(position)} aria-current={selected?'true':undefined}>{body}</button> : href ? <a href={href} data-position-key={keyOf(position)}>{body}</a> : <article data-position-key={keyOf(position)}>{body}</article>; };
+    export const ProtocolPositionDetails = ({position,headingId,className}) => <section className={className} data-position-details={keyOf(position)}><h2 id={headingId}>{position.market} {position.side} · #{position.info.positionId}</h2><dl><dt>Collateral</dt><dd>{String(position.info.rawColls)}</dd></dl></section>;
+    export const ProtocolPositionList = ({label,children}) => <div role="list" aria-label={label}>{React.Children.map(children, child => child ? <div role="listitem">{child}</div> : null)}</div>;
+    export const ProtocolPositionNotice = () => null; export const ProtocolPositionSkeleton = () => <div />;`,
   '@/components/ProtocolPositionProvider': `export const useProtocolPositions = () => globalThis.__positionsReviewHarness.shared;`,
   '@/components/ConfirmedPositionCards': `export const ConfirmedPositionCards = () => null;`,
   '@/components/ProtocolForm': `import React from 'react'; export const AmountField = ({label,value,onChange}) => <label>{label}<input aria-label={label} value={value} onChange={e=>onChange(e.target.value)}/></label>; export const LeverageField = ({label,value,onChange}) => <label>{label}<input aria-label={label} value={value} onChange={e=>onChange(Number(e.target.value))}/></label>; export const RangeField = ({label,value,onChange}) => <label>{label}<input aria-label={label} value={value} onChange={e=>onChange(Number(e.target.value))}/></label>; export const Segmented = ({options,value,onChange,ariaLabel}) => <div role="radiogroup" aria-label={ariaLabel}>{options.map(o => <button type="button" role="radio" aria-checked={value===o.value} key={o.value} onClick={() => onChange(o.value)}>{o.label}</button>)}</div>; export const SlippageField = () => <label>Slippage</label>; export const TokenSelect = ({label,options,value,onChange}) => <label>{label}<select aria-label={label} value={value} onChange={e=>onChange(e.target.value)}>{options.map(o=><option key={o} value={o}>{o}</option>)}</select></label>; export const tokenBalanceFor = () => undefined; export const useWalletTokenBalances = () => ({balances:{},status:'ready',refresh:async()=>{}});`,
@@ -85,7 +90,9 @@ async function buildHarness(): Promise<{ script: string; css: string }> {
 let harness: { script: string; css: string };
 test.beforeAll(async () => { harness = await buildHarness(); });
 
-test('four-position Close review hides siblings, keeps its action above navigation, and Edit restores the list', async ({ page }) => {
+test('four-position Close review hides siblings, keeps its action above navigation, and Edit returns to the position', async ({ page }) => {
+  await page.route('http://positions.test/**', route => route.fulfill({ contentType: 'text/html', body: '<html></html>' }));
+  await page.goto('http://positions.test/positions');
   await page.setViewportSize({ width: 393, height: 852 });
   await page.setContent('<meta name="viewport" content="width=device-width, initial-scale=1"><div id="root"></div>');
   if (harness.css) await page.addStyleTag({ content: harness.css });
@@ -95,7 +102,16 @@ test('four-position Close review hides siblings, keeps its action above navigati
   const cards = page.locator('[data-position-key]');
   await expect(cards).toHaveCount(4);
   const openPositions = page.locator('section[aria-labelledby="open-positions-heading"]');
-  await page.getByRole('group', { name: 'Actions for ETH long position 11', exact: true }).getByRole('button', { name: 'Close', exact: true }).click();
+  const actions = page.getByRole('radiogroup', { name: 'Position action', exact: true });
+  // The list carries no per-row buttons: a row opens its position, whose
+  // actions and form sit directly beneath it.
+  await expect(page.getByRole('group', { name: /^Actions for / })).toHaveCount(0);
+  await expect(actions).toBeHidden();
+  await page.locator('[data-position-key="ETH:long:11"]').click();
+  await expect(openPositions).toBeHidden();
+  await expect(page.locator('[data-position-details="ETH:long:11"]')).toBeVisible();
+  await expect(page).toHaveURL(/\/positions\?position=ETH%3Along%3A11$/);
+  await actions.getByRole('radio', { name: 'Close', exact: true }).click();
   const reviewAction = page.getByRole('button', { name: 'Review Close ETH long position', exact: true });
   await expect(reviewAction).toBeVisible();
   await reviewAction.scrollIntoViewIfNeeded();
@@ -122,10 +138,17 @@ test('four-position Close review hides siblings, keeps its action above navigati
   expect(await page.evaluate(() => (globalThis as typeof globalThis & { __positionsReviewHarness: { walletRequests: number } }).__positionsReviewHarness.walletRequests)).toBe(0);
 
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  // Edit returns to the position the review came from, with its actions.
+  await expect(page.locator('[data-position-details="ETH:long:11"]')).toBeVisible();
+  await expect(actions).toBeVisible();
+  await expect(reviewAction).toBeVisible();
+  await expect(openPositions).toBeHidden();
+  // "All positions" goes back one step, to the list and its view switch.
+  await page.getByRole('button', { name: 'All positions', exact: true }).click();
   await expect(openPositions).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Trade views', exact: true })).toBeVisible();
-  await expect(page.getByRole('radiogroup', { name: 'Position action', exact: true })).toBeVisible();
-  await expect(reviewAction).toBeVisible();
+  await expect(actions).toBeHidden();
+  await expect(page).toHaveURL(/\/positions$/);
   await page.evaluate(() => { document.querySelector<HTMLElement>('[data-shell-content]')!.scrollTop = 0; });
   expect(await page.evaluate(() => (globalThis as typeof globalThis & { __positionsReviewHarness: { walletRequests: number } }).__positionsReviewHarness.walletRequests)).toBe(0);
 
@@ -135,7 +158,8 @@ test('four-position Close review hides siblings, keeps its action above navigati
     harness.wallet.connectionVersion += 1;
     harness.rerender?.();
   });
-  await page.getByRole('group', { name: 'Actions for ETH long position 11', exact: true }).getByRole('button', { name: 'Close', exact: true }).click();
+  await page.locator('[data-position-key="ETH:long:11"]').click();
+  await actions.getByRole('radio', { name: 'Close', exact: true }).click();
   await reviewAction.scrollIntoViewIfNeeded();
   await reviewAction.click();
   const embeddedConfirm = page.getByRole('button', { name: 'Approve position', exact: true });
@@ -202,7 +226,9 @@ test('Add, Reduce, Close, and Leverage use one review column; context changes re
     await expect(page.getByRole('navigation', { name: 'Trade views', exact: true })).toHaveCount(0);
     await expect(actions).toHaveCount(0);
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
-    await expect(page.locator('section[aria-labelledby="open-positions-heading"]')).toBeVisible();
+    // The linked position stays open with its actions; the list waits behind it.
+    await expect(page.locator('[data-position-details="ETH:long:11"]')).toBeVisible();
+    await expect(page.locator('section[aria-labelledby="open-positions-heading"]')).toBeHidden();
     await expect(actions).toBeVisible();
   }
 
@@ -214,12 +240,14 @@ test('Add, Reduce, Close, and Leverage use one review column; context changes re
     h.rerender?.();
   });
   await expect(page.getByRole('button', { name: 'Approve position', exact: true })).toHaveCount(0);
+  // Another wallet starts from its list, not from the previous wallet's position.
   await expect(page.locator('section[aria-labelledby="open-positions-heading"]')).toBeVisible();
-  await expect(actions).toBeVisible();
+  await expect(actions).toBeHidden();
+  await expect(page).toHaveURL(/\/positions$/);
 
-  const currentPositionActions = page.getByRole('group', { name: 'Actions for ETH long position 11', exact: true });
-  await expect(currentPositionActions).toBeVisible();
-  await currentPositionActions.getByRole('button', { name: 'Manage', exact: true }).click();
+  const currentPosition = page.locator('[data-position-key="ETH:long:11"]');
+  await expect(currentPosition).toBeVisible();
+  await currentPosition.click();
   await actions.getByRole('radio', { name: 'Add', exact: true }).click();
   await page.getByRole('textbox', { name: 'Amount to add', exact: true }).fill('1');
   const closeReview = page.getByRole('button', { name: 'Review Add to ETH long position', exact: true });

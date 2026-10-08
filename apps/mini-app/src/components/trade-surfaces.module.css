@@ -350,43 +350,6 @@
   font-size: var(--fs-small);
 }
 
-.tradePositionItem {
-  overflow: hidden;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  box-shadow: var(--ring-inset);
-}
-
-.tradePositionItem :global([data-position-key]) { border: 0; border-radius: 0; background: transparent; }
-
-.tradePositionActions {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-  padding: 0 10px 10px;
-}
-
-.tradePositionActions a {
-  display: flex;
-  min-width: 0;
-  min-height: 44px;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  color: var(--text);
-  font-size: var(--fs-small);
-  font-weight: 600;
-  transition: background-color var(--dur-fast) ease, transform var(--dur-slow) var(--ease-spring);
-}
-
-.tradePositionActions a:hover { background: var(--surface-3); }
-.tradePositionActions a:active { transform: scale(0.97); transition-duration: var(--dur-press); }
-.tradePositionActions a:last-child { color: var(--danger); }
-.tradePositionActions svg { width: 15px; height: 15px; }
-
 .tradeLayout {
   display: grid;
   min-width: 0;
@@ -435,7 +398,6 @@
 .sideControl :global(.segmented-option > span:first-child) { font-size: var(--fs-body); }
 
 .fieldStack { display: flex; flex-direction: column; gap: 10px; }
-.positionList { display: grid; gap: 10px; }
 .tradeRoot .rangeField,
 .tradeRoot .rangeField:focus-within { border-color: transparent; box-shadow: none; }
 .tradeRoot .rangeField .leverageInput,
@@ -497,25 +459,62 @@
 .positionSectionHeader h2,
 .manageHeading h2 { margin-top: 3px; font-size: var(--fs-title); font-weight: 650; letter-spacing: -.02em; }
 .positionSectionHeader > span { color: var(--mut); font-size: var(--fs-small); font-weight: 500; font-variant-numeric: tabular-nums; }
-.positionListItem { overflow: hidden; border: 1px solid var(--hairline); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--ring-inset); transition: border-color var(--dur-base) ease, box-shadow var(--dur-base) ease; }
-.positionListItem:hover { border-color: color-mix(in srgb, var(--mint) 30%, var(--line)); }
-.positionListItem :global([data-position-key]) { border: 0; border-radius: 0; }
-/* The selected position takes the same ring as every other selected card. */
-.positionListItem[data-selected], .positionListItem[data-selected]:hover { border-color: color-mix(in srgb, var(--mint) 64%, var(--line)); box-shadow: var(--ring-inset), 0 0 0 3px color-mix(in srgb, var(--mint) 12%, transparent); }
-.positionQuickActions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 0 10px 10px; background: transparent; }
-.positionQuickActionsWithBorrow { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.positionQuickActions button,
-.positionQuickActions a { display: flex; min-width: 0; min-height: 44px; align-items: center; justify-content: center; gap: 5px; border: 0; border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); font-size: var(--fs-caption); font-weight: 650; transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease, transform var(--dur-slow) var(--ease-spring); }
-.positionQuickActions button:hover,
-.positionQuickActions a:hover { background: var(--surface-3); }
-.positionQuickActions button:focus-visible,
-.positionQuickActions a:focus-visible { outline: 2px solid var(--mint-bright); outline-offset: 2px; }
-.positionQuickActions button:active,
-.positionQuickActions a:active { transform: scale(0.97); transition-duration: var(--dur-press); }
-.positionQuickActions button:last-child { color: var(--danger); }
-.positionQuickActions button:last-child:hover { background: var(--danger-dim); }
-.positionQuickActions svg { width: 14px; height: 14px; }
 .positionManageColumn { display: flex; flex-direction: column; gap: 12px; scroll-margin-top: 16px; }
+/* One position's view: back to the list and its settings, then the position
+   in full, then what can be done with it. */
+.positionViewBar { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: -4px; }
+.positionBack {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 6px;
+  margin-left: -6px;
+  border-radius: var(--radius-sm);
+  padding: 0 10px 0 6px;
+  color: var(--mint);
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+.positionBack svg { width: 16px; height: 16px; }
+.positionBack:focus-visible { outline: 2px solid var(--mint-bright); outline-offset: 0; }
+/* The opened row and the position's details share one name, so a view
+   transition carries the row into the details. */
+.positionFocus { view-transition-name: position-focus; }
+.borrowAgainst {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: -12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--mint);
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+.borrowAgainst svg { width: 16px; height: 16px; }
+.borrowAgainst:focus-visible { outline: 2px solid var(--mint-bright); outline-offset: -2px; }
+
+/* Phones show one view at a time while editing: the list, or one position with
+   its actions and form directly beneath. Wide screens keep both columns. */
+@media (max-width: 839px) {
+  .positionsRoot[data-position-view='list'] .positionManageColumn,
+  .positionsRoot[data-position-view='position'] :is(.positionsColumn, .positionsViews) { display: none; }
+  .positionsRoot[data-position-view='position'] .positionsHeading {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  /* A row is only shown as selected beside the position it selects. */
+  .positionsColumn [aria-current='true'] { background: transparent; box-shadow: none; }
+}
+@media (min-width: 840px) {
+  .positionBack { display: none; }
+  .positionViewBar { justify-content: flex-end; margin-bottom: -8px; }
+}
 .positionActionCardReview { overflow: hidden; padding: 0; }
 .positionActionCardReview :global(.reviewInlineContent) { padding: 12px; }
 .positionActions :global([data-value='close'].segmented-option-active) { color: var(--danger); }
@@ -659,12 +658,8 @@
 @media (max-width: 640px) {
   .positionsCompactRoot .positionsWorkspace { gap: 8px; }
   .positionsCompactRoot .positionManagerGrid { gap: 10px; }
-  .positionsCompactRoot .positionSectionHeader { margin-bottom: 8px; }
-  .positionsCompactRoot .positionList { gap: 10px; }
-  .positionsCompactRoot .positionQuickActions { gap: 6px; padding: 0 8px 8px; }
-  .positionsCompactRoot .positionQuickActions button,
-  .positionsCompactRoot .positionQuickActions a { min-height: 44px; font-size: var(--fs-caption); }
-  .positionsCompactRoot .positionManageColumn { gap: 8px; }
+  .positionsCompactRoot .positionSectionHeader { margin-bottom: 4px; }
+  .positionsCompactRoot .positionManageColumn { gap: 12px; }
   .positionsCompactRoot .actionPanel { padding: 0 !important; }
   .positionsCompactRoot .fieldStack { gap: 8px; }
   .positionsCompactRoot :global(.field-control) { min-height: 48px; padding-inline: 10px; }
@@ -683,13 +678,6 @@
 @media (prefers-reduced-motion: reduce) {
   .formSegmented :global(.segmented-option), .tradeRoot :global(.field-control), .tradeRoot :global(.range-control) { transition: none; }
   .formSegmented :global(.segmented-option:active) { transform: none; }
-  .positionListItem,
-  .positionQuickActions button,
-  .positionQuickActions a,
-  .tradePositionActions a { transition: none; }
-  .positionQuickActions button:active,
-  .positionQuickActions a:active,
-  .tradePositionActions a:active { transform: none; }
   .slippageHelpPopup, .slippageHelpInline { animation: none; }
 }
 
