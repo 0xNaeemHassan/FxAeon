@@ -20,7 +20,7 @@ const mocks: Record<string, string> = {
   '@/components/WalletDemandProvider': `export const useWalletDemand=()=>{};`,
   '@/lib/walletAssets': `export const canonicalAsset=()=>({key:'ETH',decimals:18});`,
   '@/components/WalletConnectCTA': `import React from 'react'; export default ()=> <button>Connect wallet</button>;`,
-  '@/lib/walletSend': `export async function prepareWalletSend(input) { window.H.prepares++; await new Promise(r=>setTimeout(r,30)); return {input,symbol:'ETH',decimals:18,amountRaw:100000000000000000n,to:input.recipient,data:'0x',value:100000000000000000n,gas:25200n,nonce:7,estimatedFee:252000000000000n,requiredNative:100600000000000000n,maxFeePerGas:20000000000n,maxPriorityFeePerGas:1000000000n,validUntil:Date.now()+30000}; }`,
+  '@/lib/walletSend': `export async function prepareWalletSend(input) { window.H.prepares++; await new Promise(r=>setTimeout(r,30)); return {input,symbol:'ETH',decimals:18,amountRaw:100000000000000000n,to:input.recipient,data:'0x',value:100000000000000000n,gas:25200n,nonce:7,estimatedFee:window.H.fee??252000000000000n,requiredNative:100600000000000000n,maxFeePerGas:20000000000n,maxPriorityFeePerGas:1000000000n,validUntil:Date.now()+30000}; }`,
   '@/lib/fx/journal': `export const recordPendingHash=(record)=>{window.H.records.push(record);};`,
   './fx/tokens': `export const FX_TOKENS={ ETH:{key:'ETH',address:'0x0000000000000000000000000000000000000000',decimals:18,native:true}, fxUSD:{key:'fxUSD',address:'0x3333333333333333333333333333333333333333',decimals:18,native:false}};`,
 };
@@ -88,4 +88,30 @@ test('send reviews recipient first, submits once, and applies gas tiers only to 
   await page.getByRole('button',{name:'Test send'}).click(); await expect(page.getByRole('group',{name:'Network speed'})).toHaveCount(0);
   await page.getByLabel('Amount',{exact:true}).fill('0.1'); await page.getByLabel('Recipient address').fill('0x2222222222222222222222222222222222222222'); await page.getByRole('button',{name:'Review',exact:true}).click(); await page.getByRole('button',{name:'Confirm',exact:true}).click(); await expect(page.getByRole('heading',{name:'Submitted'})).toBeVisible();
   expect(await page.evaluate(()=>Object.keys((window as unknown as {H:{sends:object[]}}).H.sends[0]))).not.toContain('maxFeePerGas');
+});
+test('send reviews the exact amount it signs, rounds its cost up, and opens on Enter',async({page})=>{
+  await mount(page); await page.setViewportSize({width:320,height:640});
+  await page.evaluate(()=>{(window as unknown as {H:{fee:bigint}}).H.fee=252000000000001n;});
+  await page.getByRole('button',{name:'Test send'}).click();
+  await expect(page.getByText('Available: 1 ETH')).toBeVisible();
+  const amount=page.getByLabel('Amount',{exact:true});
+  await amount.fill('0.123456789012345678');
+  // The recipient is still missing: Enter does nothing and the action names what is needed.
+  await amount.press('Enter');
+  await expect(page.getByRole('button',{name:'Enter a recipient',exact:true})).toBeDisabled();
+  expect(await page.evaluate(()=>(window as unknown as {H:{prepares:number}}).H.prepares)).toBe(0);
+  const recipient=page.getByLabel('Recipient address');
+  await recipient.fill('0x2222222222222222222222222222222222222222');
+  await recipient.press('Shift+Enter');
+  await expect(recipient).toHaveValue('0x2222222222222222222222222222222222222222');
+  expect(await page.evaluate(()=>(window as unknown as {H:{prepares:number}}).H.prepares)).toBe(0);
+  await recipient.press('Enter');
+  await expect(page.getByRole('heading',{name:'Review send'})).toBeVisible();
+  // Every digit that will be signed, stepped down to fit the narrowest card instead of overflowing it.
+  const signed=page.getByText('0.123456789012345678 ETH',{exact:true});
+  await expect(signed).toBeVisible();
+  const fit=await signed.evaluate((element)=>{const card=element.closest('section')!.getBoundingClientRect();const box=element.getBoundingClientRect();return {inside:box.left>=card.left-1&&box.right<=card.right+1,overflow:element.scrollWidth-element.clientWidth};});
+  expect(fit).toEqual({inside:true,overflow:0});
+  // 0.000252000000000001 ETH is an estimate: rounded up to three significant digits, never down.
+  await expect(page.getByText('≈ 0.000253 ETH',{exact:true})).toBeVisible();
 });
