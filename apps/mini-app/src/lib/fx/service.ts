@@ -16,6 +16,7 @@ import { normalizeRouteResult, normalizeTxResult } from "./normalize";
 import { planBridge } from "./bridge";
 import { assertConfiguredPublicClientChain } from "./clients";
 import { validateReviewedAction } from "./actionValidation";
+import { readEthLongAccounting, type EthLongAccounting } from "./ethLongAccounting";
 import { capabilityPolicy, positionCollateralTokenAddress, positionDebtTokenAddress, positionPoolAddress } from "./policy";
 import { FX_TOKENS } from "./tokens";
 import {
@@ -149,6 +150,15 @@ function withRequestDetails(
   return { ...route, details: { ...route.details, ...extra } };
 }
 
+/**
+ * An ETH long's quote is reviewed in the pool's stETH accounting, so its
+ * planner reads the live wstETH rate (and, for an existing position, the
+ * collateral it holds) alongside the SDK call. The read never rejects.
+ */
+function ethLongAccounting(market: unknown, type: unknown, heldPositionId?: number): Promise<EthLongAccounting> | undefined {
+  return market === "ETH" && type === "long" ? readEthLongAccounting({ heldPositionId }) : undefined;
+}
+
 function assertRequestedLeverage(route: PlannedRoute, requested: number): void {
   const planned = route.details?.leverage;
   if (planned === undefined || Math.abs(planned - requested) > 1e-9) {
@@ -238,12 +248,14 @@ export async function planIncreasePosition(request: IncreasePositionRequest): Pr
   assertPositiveAmount(request.amount, "position input amount");
   const inputTokenAddress = positionInputToken(request.inputTokenAddress, request.market);
   await assertConfiguredPublicClientChain(1);
+  const accounting = ethLongAccounting(request.market, request.type, request.positionId);
   const result = await getFxSdk().increasePosition({
     ...request,
     userAddress: assertAddress(request.userAddress, "wallet address"),
     inputTokenAddress: toSdkTokenAddress(inputTokenAddress, "position input token"),
     targets: auditedTargets(request.targets),
   });
+  const accountingDetails = accounting ? await accounting : {};
   return normalizeRouteResult("increasePosition", result, assertAddress(request.userAddress)).map((route) => {
     assertRequestedLeverage(route, request.leverage);
     assertSdkSlippage(route, request.slippage);
@@ -271,6 +283,7 @@ export async function planIncreasePosition(request: IncreasePositionRequest): Pr
         slippagePercent: request.slippage,
       },
     }), {
+      ...accountingDetails,
       requestedAmount: request.amount.toString(),
       requestedLeverage: request.leverage,
       slippagePercent: request.slippage,
@@ -321,11 +334,13 @@ export async function planAdjustPositionLeverage(
 ): Promise<PlannedRoute[]> {
   validateCommonPositionRequest(request);
   await assertConfiguredPublicClientChain(1);
+  const accounting = ethLongAccounting(request.market, request.type, request.positionId);
   const result = await getFxSdk().adjustPositionLeverage({
     ...request,
     userAddress: assertAddress(request.userAddress, "wallet address"),
     targets: auditedTargets(request.targets),
   });
+  const accountingDetails = accounting ? await accounting : {};
   return normalizeRouteResult("adjustPositionLeverage", result, assertAddress(request.userAddress)).map((route) => {
     assertRequestedLeverage(route, request.leverage);
     assertSdkSlippage(route, request.slippage);
@@ -346,6 +361,7 @@ export async function planAdjustPositionLeverage(
         slippagePercent: request.slippage,
       },
     }), {
+      ...accountingDetails,
       requestedLeverage: request.leverage,
       slippagePercent: request.slippage,
     });
@@ -367,12 +383,15 @@ export async function planDepositAndMint(request: DepositAndMintRequest): Promis
   }
   const depositTokenAddress = longCollateralToken(request.depositTokenAddress, request.market, "deposit token");
   await assertConfiguredPublicClientChain(1);
+  // Its quote is already stETH; the rate states the wstETH deposit floor in stETH too.
+  const accounting = ethLongAccounting(request.market, "long");
   const result = await getFxSdk().depositAndMint({
     ...request,
     userAddress: assertAddress(request.userAddress, "wallet address"),
     depositTokenAddress: toSdkTokenAddress(depositTokenAddress, "deposit token"),
   });
-  return withReviewedPolicy(
+  const accountingDetails = accounting ? await accounting : {};
+  return withRequestDetails(withReviewedPolicy(
     normalizeTxResult("depositAndMint", result, assertAddress(request.userAddress)),
     {
       maxValueWei: isNativeToken(depositTokenAddress) ? request.depositAmount : 0n,
@@ -394,7 +413,7 @@ export async function planDepositAndMint(request: DepositAndMintRequest): Promis
         mintAmount: request.mintAmount,
       },
     },
-  );
+  ), accountingDetails);
 }
 
 export async function planRepayAndWithdraw(request: RepayAndWithdrawRequest): Promise<PlannedRoute> {
