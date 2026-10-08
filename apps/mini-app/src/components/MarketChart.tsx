@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import Link from 'next/link';
-import { BarChart3, ChartCandlestick, ChartLine, ChevronDown, RefreshCw } from 'lucide-react';
+import { BarChart3, ChartCandlestick, ChartLine, ChevronDown, CircleAlert, RefreshCw } from 'lucide-react';
 import type { DeepPartial, IChartApi, ISeriesApi, TimeChartOptions, UTCTimestamp } from 'lightweight-charts';
 import TokenIcon from '@/components/TokenIcon';
 import { useLiveMarketQuote, useUsdPrices } from '@/components/PriceProvider';
@@ -14,7 +14,7 @@ import { subscribeToForegroundResume } from '@/lib/foreground';
 import { createCoalescedReadCache } from '@/lib/coalescedRead';
 import { formatScrubTime, localTimeShiftSeconds, scrubChangePercent, type ChartScrubReading } from '@/lib/chartTime';
 import { Segmented } from '@/components/ProtocolForm';
-import { MissingValue, ValueOrSkeleton } from '@/components/MissingValue';
+import { ValueOrSkeleton } from '@/components/MissingValue';
 import { RollingFigure } from '@/components/RollingFigure';
 import styles from '@/components/trade-surfaces.module.css';
 
@@ -148,13 +148,15 @@ export function TradeMarketChart({ market, onMarketChange }: { market: MarketSym
   const chartId = useId();
   const expanded = isMobile === false || (isMobile === true && mobileExpanded);
   const history = useLiveCandles(market, range, expanded);
-  const { prices } = useUsdPrices();
+  const { prices, status: priceStatus } = useUsdPrices();
   const live = useLiveMarketQuote(market);
   const fallbackPrice = prices[market === 'ETH' ? 'ETH' : 'WBTC'];
   const price = live.isFresh ? live.quote?.price : fallbackPrice ?? history.snapshot?.currentPrice;
   const change = live.isFresh ? live.quote?.percentChange24h : history.snapshot?.percentChange;
   // History loads only while the chart is open, so a closed chart never waits on it.
   const changeStatus = liveQuotePending(live.status) || (expanded && history.status === 'loading') ? 'loading' : 'unavailable';
+  // The price can also come from the first price read; the range only from the feed or open history.
+  const priceValueStatus = changeStatus === 'loading' || priceStatus === 'loading' ? 'loading' : 'unavailable';
   const high = live.isFresh ? live.quote?.high24h : history.snapshot?.high;
   const low = live.isFresh ? live.quote?.low24h : history.snapshot?.low;
   const positive = change !== undefined && change >= 0;
@@ -192,16 +194,16 @@ export function TradeMarketChart({ market, onMarketChange }: { market: MarketSym
           {scrub.changePercent !== null && <><span aria-hidden="true">{scrubRising ? '↗' : '↘'}</span>{scrubRising ? '+' : ''}{scrub.changePercent.toFixed(2)}% · </>}
           <time dateTime={new Date(scrub.unixSeconds * 1_000).toISOString()} className="text-mut">{formatScrubTime(scrub.unixSeconds, range)}</time>
         </p>
-      </> : <><p className="text-display text-[24px] font-semibold tabular-nums"><ValueOrSkeleton value={formatUsdPrice(price) === '—' ? '—' : <RollingFigure value={formatUsdPrice(price)} />} width="lg" label="Market price loading" /></p><p className={`mt-1 inline-flex items-center gap-1 text-[11px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}><ValueOrSkeleton value={change === undefined ? '—' : <><span aria-hidden="true">{positive ? '↗' : '↘'}</span>{positive ? '+' : ''}{change.toFixed(2)}% 24h</>} width="md" status={changeStatus} label={changeStatus === 'loading' ? '24 hour change loading' : '24 hour change unavailable'} /></p></>}</div>
+      </> : <><p className="text-display text-[24px] font-semibold tabular-nums"><ValueOrSkeleton value={formatUsdPrice(price) === '—' ? '—' : <RollingFigure value={formatUsdPrice(price)} />} width="lg" status={priceValueStatus} label={priceValueStatus === 'loading' ? 'Market price loading' : 'Market price unavailable'} /></p><p className={`mt-1 inline-flex items-center gap-1 text-[11px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}><ValueOrSkeleton value={change === undefined ? '—' : <><span aria-hidden="true">{positive ? '↗' : '↘'}</span>{positive ? '+' : ''}{change.toFixed(2)}% 24h</>} width="md" status={changeStatus} label={changeStatus === 'loading' ? '24 hour change loading' : '24 hour change unavailable'} /></p></>}</div>
     </header>
     <div className="market-chart-instrument-meta">
-      <dl className="market-chart-stats"><div><dt>24h high</dt><dd><ValueOrSkeleton value={formatUsdPrice(high)} width="lg" label="24 hour high loading" /></dd></div><div><dt>24h low</dt><dd><ValueOrSkeleton value={formatUsdPrice(low)} width="lg" label="24 hour low loading" /></dd></div></dl>
+      <dl className="market-chart-stats"><div><dt>24h high</dt><dd><ValueOrSkeleton value={formatUsdPrice(high)} width="lg" status={changeStatus} label={changeStatus === 'loading' ? '24 hour high loading' : '24 hour high unavailable'} /></dd></div><div><dt>24h low</dt><dd><ValueOrSkeleton value={formatUsdPrice(low)} width="lg" status={changeStatus} label={changeStatus === 'loading' ? '24 hour low loading' : '24 hour low unavailable'} /></dd></div></dl>
     </div>
     {onMarketChange && <div className="market-chart-market-switch"><Segmented value={market} onChange={onMarketChange} ariaLabel="Market" options={[{ value: 'ETH', label: 'ETH', sub: 'Ethereum', ariaLabel: 'ETH', icon: <TokenIcon symbol="ETH" size={20} /> }, { value: 'BTC', label: 'BTC', sub: 'Wrapped BTC', ariaLabel: 'BTC', icon: <TokenIcon symbol="WBTC" size={20} /> }]} /></div>}
     <button type="button" className="market-chart-toggle" aria-expanded={expanded} aria-controls={chartId} aria-disabled={isMobile === null || undefined} disabled={isMobile === null} onClick={() => { setMobileExpanded((value) => !value); haptic('selection'); }}><BarChart3 className="h-4 w-4" aria-hidden="true" /><span>{expanded ? 'Hide chart' : 'Show chart'}</span><ChevronDown className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`} aria-hidden="true" /></button>
     <div id={chartId} className="market-chart-content" hidden={!expanded}><div className="market-chart-frame">
       {history.status === 'loading' && <ChartSkeleton />}
-      {history.status === 'unavailable' && <div className="market-chart-empty" role="status" aria-live="polite"><span className="text-[12px] text-mut">Market history is unavailable.</span><button type="button" aria-label="Retry market chart" onClick={history.retry} className="glass-press flex min-h-11 min-w-11 items-center justify-center rounded-lg text-mut"><RefreshCw className="h-4 w-4" aria-hidden="true" /></button></div>}
+      {history.status === 'unavailable' && <div className="market-chart-empty" role="status" aria-live="polite"><BarChart3 className="h-5 w-5 shrink-0 text-mut" aria-hidden="true" /><span><strong>Chart couldn’t load</strong><small>Price history for this range is unavailable right now.</small></span><button type="button" onClick={history.retry} className="glass-press flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg px-3 text-[12px] font-semibold text-mint"><RefreshCw className="h-4 w-4" aria-hidden="true" />Retry</button></div>}
       {history.status === 'ready' && history.snapshot && <LazyPriceChart snapshot={history.snapshot} chartStyle={chartStyle} onScrub={setScrub} />}
     </div><footer className="market-chart-footer">
       <div role="radiogroup" aria-label="Chart range" className="chart-range-tabs" data-thumb="" style={{ '--seg-index': RANGE_OPTIONS.indexOf(range), '--seg-count': RANGE_OPTIONS.length } as CSSProperties}>{RANGE_OPTIONS.map((option) => <button key={option} type="button" role="radio" aria-checked={range === option} tabIndex={range === option ? 0 : -1} onClick={() => { setRange(option); haptic('selection'); }} onKeyDown={(event) => moveRadio(event, RANGE_OPTIONS, option, setRange)} className={range === option ? 'chart-range-active' : ''}>{option}</button>)}</div>
@@ -212,15 +214,18 @@ export function TradeMarketChart({ market, onMarketChange }: { market: MarketSym
 
 export function MarketMiniCard({ market }: { market: MarketSymbol }) {
   const history = useMarketHistory(market, '1D');
-  const { prices } = useUsdPrices();
+  const { prices, status: priceStatus } = useUsdPrices();
   const live = useLiveMarketQuote(market);
   const price = live.isFresh ? live.quote?.price : prices[market === 'ETH' ? 'ETH' : 'WBTC'] ?? history.snapshot?.currentPrice;
   const change = live.isFresh ? live.quote?.percentChange24h : history.snapshot?.percentChange;
   const positive = change !== undefined && change >= 0;
   const changeStatus = liveQuotePending(live.status) || history.status === 'loading' ? 'loading' : 'unavailable';
+  const priceValueStatus = changeStatus === 'loading' || priceStatus === 'loading' ? 'loading' : 'unavailable';
   const id = useId();
   // The whole card opens its market in Trade: named for where it goes, described by its price and change.
-  return <Link href={`/trade?market=${market}`} aria-label={`Trade ${market}`} aria-describedby={`${id}-price ${id}-change`} className={`${styles.marketMiniCard} portfolio-market-card`}><div className="flex items-center justify-between gap-2"><span className="flex items-center gap-2"><TokenIcon symbol={market === 'BTC' ? 'WBTC' : 'ETH'} size={28} /><strong className="text-[13px]">{market}</strong></span><span id={`${id}-change`} className={`text-[11px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}><ValueOrSkeleton value={change === undefined ? '—' : `${positive ? '+' : ''}${change.toFixed(2)}%`} width="md" status={changeStatus} label={changeStatus === 'loading' ? '24 hour change loading' : '24 hour change unavailable'} /></span></div><p id={`${id}-price`} className="mt-3 text-display text-[20px] font-semibold tabular-nums"><ValueOrSkeleton value={formatUsdPrice(price) === '—' ? '—' : <RollingFigure value={formatUsdPrice(price)} />} width="lg" label="Market price loading" /></p><div className="market-chart-compact mt-2 h-[54px]">{history.status === 'ready' && history.snapshot ? <Sparkline snapshot={history.snapshot} rising={change === undefined ? undefined : positive} /> : history.status === 'loading' ? <div role="status" aria-label="Loading market history" className="market-chart-skeleton h-full rounded-md" /> : <div role="status" aria-label="Market history unavailable" className="flex h-full items-center justify-center"><MissingValue width="xl" status="unavailable" label="Market history unavailable" /></div>}</div></Link>;
+  return <Link href={`/trade?market=${market}`} aria-label={`Trade ${market}`} aria-describedby={`${id}-price ${id}-change`} className={`${styles.marketMiniCard} portfolio-market-card`}><div className="flex items-center justify-between gap-2"><span className="flex items-center gap-2"><TokenIcon symbol={market === 'BTC' ? 'WBTC' : 'ETH'} size={28} /><strong className="text-[13px]">{market}</strong></span><span id={`${id}-change`} className={`text-[11px] font-semibold ${change === undefined ? 'text-mut' : positive ? 'text-success' : 'text-danger'}`}><ValueOrSkeleton value={change === undefined ? '—' : `${positive ? '+' : ''}${change.toFixed(2)}%`} width="md" status={changeStatus} label={changeStatus === 'loading' ? '24 hour change loading' : '24 hour change unavailable'} /></span></div><p id={`${id}-price`} className="mt-3 text-display text-[20px] font-semibold tabular-nums"><ValueOrSkeleton value={formatUsdPrice(price) === '—' ? '—' : <RollingFigure value={formatUsdPrice(price)} />} width="lg" status={priceValueStatus} label={priceValueStatus === 'loading' ? 'Market price loading' : 'Market price unavailable'} /></p><div className="market-chart-compact mt-2 h-[54px]">{history.status === 'ready' && history.snapshot ? <Sparkline snapshot={history.snapshot} rising={change === undefined ? undefined : positive} /> : history.status === 'loading' ? <div role="status" aria-label="Loading market history" className="market-chart-skeleton h-full" />
+    // The whole card is a link into Trade, where the full chart retries; the card itself retries when the app returns to the foreground.
+    : <div role="status" className="market-chart-empty-mini"><CircleAlert aria-hidden="true" />Chart unavailable</div>}</div></Link>;
 }
 
 type Candles = MarketCandleSnapshot['candles'];

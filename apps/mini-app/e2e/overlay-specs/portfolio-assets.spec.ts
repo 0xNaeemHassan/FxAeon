@@ -69,25 +69,25 @@ test('a pending filtered network keeps loading copy instead of reporting a balan
   await mount(page);
   await page.getByRole('button', { name: 'Base pending', exact: true }).click();
   await expect(page.getByRole('status', { name: 'Loading assets', exact: true })).toBeVisible();
-  await expect(page.getByText('Balances unavailable.', { exact: true })).toHaveCount(0);
-  await expect(page.getByText('No assets on this network yet.', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Couldn’t load balances', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('No assets on Base yet', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Balances loading.', { exact: true })).toBeAttached();
 });
 
 test('a completed empty network is shown as empty only after its read is ready', async ({ page }) => {
   await mount(page);
   await page.getByRole('button', { name: 'Base zero', exact: true }).click();
-  await expect(page.getByText('No assets on this network yet.', { exact: true })).toBeVisible();
+  await expect(page.getByText('No assets on Base yet', { exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Receive assets', exact: true })).toHaveAttribute('href', '/qr');
   await expect(page.getByRole('status', { name: 'Loading assets', exact: true })).toHaveCount(0);
-  await expect(page.getByText('Balances unavailable.', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Couldn’t load balances', { exact: true })).toHaveCount(0);
 });
 
 test('a failed network exposes Retry and invokes the supplied refresh callback', async ({ page }) => {
   await mount(page);
   await page.getByRole('button', { name: 'Base unavailable', exact: true }).click();
-  await expect(page.getByText('Balances unavailable.', { exact: true })).toBeVisible();
-  const retry = page.getByRole('button', { name: 'Retry portfolio', exact: true });
+  await expect(page.getByText('Couldn’t load balances', { exact: true })).toBeVisible();
+  const retry = page.getByRole('button', { name: 'Try again', exact: true });
   await retry.click();
   await expect(page.getByTestId('retry-count')).toHaveText('1');
   const pending = page.getByRole('button', { name: 'Refreshing…', exact: true });

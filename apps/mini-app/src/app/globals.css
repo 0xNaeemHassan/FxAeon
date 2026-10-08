@@ -1393,13 +1393,32 @@ select.field-control option {
 
 .market-chart-empty strong {
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--fs-small);
+  font-weight: 600;
 }
 
 .market-chart-empty small {
   margin-top: 3px;
-  font-size: 10px;
+  font-size: var(--fs-caption);
   line-height: 1.4;
+}
+
+/* A market card whose 24h history failed: the sparkline's place says so. */
+.market-chart-empty-mini {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--mut);
+  font-size: var(--fs-micro);
+  font-weight: 500;
+}
+
+.market-chart-empty-mini svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
 }
 
 .market-chart-skeleton {
