@@ -426,8 +426,8 @@ function SupportedValueCard({ displayTotalUsd, loading, refreshing, onRefresh,
     <p className={`${presentation.valueNumber} ${balancePresentation.value}`} data-portfolio-value>{displayTotalUsd !== null
       ? <SplitFigure value={formatUsd(displayTotalUsd)} />
       : loading ? <MissingValue width="xl" status="loading" label="Loading portfolio value" />
-        : <span className={presentation.valueUnavailable} role="status">
-          <CircleAlert size={16} aria-hidden="true" /><span>Total unavailable</span>
+        : <span className={presentation.valueUnavailable}>
+          <span role="status" aria-label="Portfolio value unavailable"><CircleAlert size={16} aria-hidden="true" />Total unavailable</span>
           {onRefresh && <button type="button" onClick={onRefresh} disabled={refreshing} aria-busy={refreshing}>{refreshing ? 'Trying…' : 'Try again'}</button>}
         </span>}</p>
     <QuickActions />

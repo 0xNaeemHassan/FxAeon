@@ -191,8 +191,8 @@ export default function WalletProfile() {
               <strong className={`${presentation.total} ${balancePresentation.value}`}>{walletSnapshotValuation.totalUsd !== null
                 ? <SplitFigure value={formatUsd(walletSnapshotValuation.totalUsd)} />
                 : walletValueLoading ? <MissingValue width="xl" status="loading" label="Loading wallet value" />
-                  : <span className={presentation.totalUnavailable} role="status">
-                    <CircleAlert size={16} aria-hidden="true" /><span>Value unavailable</span>
+                  : <span className={presentation.totalUnavailable}>
+                    <span role="status" aria-label="Wallet value unavailable"><CircleAlert size={16} aria-hidden="true" />Value unavailable</span>
                     <button type="button" onClick={refreshAll} disabled={manualRefresh.refreshing} aria-busy={manualRefresh.refreshing}>{manualRefresh.refreshing ? 'Trying…' : 'Try again'}</button>
                   </span>}</strong>
               <div className={presentation.actions}>

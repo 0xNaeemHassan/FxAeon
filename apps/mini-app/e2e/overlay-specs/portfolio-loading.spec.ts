@@ -120,6 +120,7 @@ test('reads that fail end every placeholder: each section says so with a retry',
   await page.setViewportSize({ width: 393, height: 1500 });
   await open(page, 'unavailable');
   await expect(page.getByText('Total unavailable', { exact: true })).toBeVisible();
+  await expect(page.getByRole('status', { name: 'Portfolio value unavailable', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Try again' })).toHaveCount(2);
   await expect(page.getByText('Couldn’t load balances', { exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Positions' }).getByText('Unavailable', { exact: true })).toBeVisible();
