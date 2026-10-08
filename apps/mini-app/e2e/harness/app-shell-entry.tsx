@@ -11,6 +11,7 @@ import RouteError from '@/app/error';
 import LoginPage from '@/app/login/page';
 import HistoryPage from '@/app/history/page';
 import { ProviderLoadingState } from '@/components/ProviderLoadingState';
+import connectNotice from '@/components/ConnectWalletButton.module.css';
 
 /** The shell lab state lives on globalThis so the mocked wallet and router
  * modules (see e2e/overlay-specs/app-shell.spec.ts) read the same store. */
@@ -50,6 +51,11 @@ function Page({ path }: { path: string }) {
         <ChoiceCards label="Withdraw" value="instant" onChange={() => undefined}
           options={[{ value: 'instant', label: 'Instant' }, { value: 'queued', label: 'Queued', description: 'Not available yet', disabled: true }]} />
       </ProductSurface>
+      {/* ConnectWalletButton's notice when the wallet provider never became ready. */}
+      <span role="alert" className={`wallet-connect-toast ${connectNotice.notice}`}>
+        <span>Wallet provider is unavailable.</span>
+        <button type="button" className={connectNotice.noticeAction} aria-label="Retry wallet provider">Retry</button>
+      </span>
     </AppShell>;
   }
   return <AppShell>

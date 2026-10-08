@@ -502,6 +502,19 @@ test('History first loads in its own feed layout, and names a wallet provider th
   await expect(page.locator('main').getByRole('button', { name: 'Connect wallet' })).toBeVisible();
 });
 
+test('the wallet notice offers Retry as a full 44px target without growing past its text', async ({ page }) => {
+  await open(page);
+  await setLab(page, { path: '/controls', wallet: STATES[1][1] });
+  const notice = page.getByRole('alert').filter({ hasText: 'Wallet provider is unavailable.' });
+  const retry = notice.getByRole('button', { name: 'Retry wallet provider' });
+  await expect(retry).toBeVisible();
+  const [button, toast] = [(await retry.boundingBox())!, (await notice.boundingBox())!];
+  expect(Math.min(button.width, button.height)).toBeGreaterThanOrEqual(44);
+  expect(button.y).toBeGreaterThanOrEqual(toast.y);
+  expect(button.y + button.height).toBeLessThanOrEqual(toast.y + toast.height);
+  expect(toast.height, 'one line of notice stays compact').toBeLessThanOrEqual(52);
+});
+
 /** The shell parts both the first-paint outline and the live shell draw. */
 async function shellLayout(page: Page) {
   return page.evaluate(() => {
