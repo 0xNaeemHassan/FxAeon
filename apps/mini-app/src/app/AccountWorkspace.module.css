@@ -156,11 +156,6 @@
 .walletLink { min-height: 68px !important; border-bottom-color: var(--line) !important; border-radius: 13px; padding-inline: 8px !important; transition: background-color 160ms ease, color 160ms ease; }
 .walletLink:hover { background: color-mix(in srgb, var(--surface-2) 74%, transparent); }
 
-.loadingCard { min-height: 260px; border: 1px solid var(--line); border-radius: 24px; background: linear-gradient(110deg, var(--surface), var(--surface-2), var(--surface)); background-size: 220% 100%; animation: shimmer 1.45s linear infinite; }
-.loadingActions { display: flex; gap: 8px; }
-.loadingActions span { height: 68px; flex: 1; border-radius: 16px; background: var(--surface-2); }
-@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -20% 0; } }
-
 @media (min-width: 900px) {
   .overview { grid-template-columns: minmax(0, 1.12fr) minmax(320px, .88fr); align-items: start; }
   .secondaryColumn { position: sticky; top: 24px; }
@@ -194,7 +189,6 @@
   .action:hover, .protocolCard:hover,
   .workspace:global(.portfolio-dashboard) .market > :global(.portfolio-market-card:hover),
   .workspace:global(.portfolio-dashboard) .disconnectedOverview > .primaryColumn > :global(button:hover) { transform: none; }
-  .loadingCard { animation: none; }
 }
 
 /* History is intentionally terse: the recovery card and its next action
@@ -245,7 +239,6 @@
 .workspace:global(.portfolio-dashboard) .protocolCard { background: linear-gradient(145deg, color-mix(in srgb, var(--surface) 78%, var(--surface-2) 22%), var(--surface)); }
 .workspace:global(.portfolio-dashboard) .market > * { position: relative; overflow: hidden; border-color: color-mix(in srgb, var(--line) 82%, var(--mint) 18%); background: radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--mint) 9%, transparent), transparent 46%), linear-gradient(145deg, color-mix(in srgb, var(--surface) 68%, var(--surface-2) 32%), var(--surface)); box-shadow: var(--elevation-1), inset 0 1px color-mix(in srgb, var(--text) 4%, transparent); transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease; }
 .workspace:global(.portfolio-dashboard) .market > *:hover { border-color: color-mix(in srgb, var(--mint) 42%, var(--line)); box-shadow: var(--elevation-1), 0 10px 28px color-mix(in srgb, var(--mint) 8%, transparent); transform: translateY(-2px); }
-.workspace:global(.portfolio-dashboard) .market > * > div:first-child > span:last-child { border-radius: 999px; background: color-mix(in srgb, var(--surface-3) 80%, transparent); padding: 5px 8px; }
 .workspace:global(.portfolio-dashboard) .market > * > p { margin-top: 12px; letter-spacing: -.035em; }
 .workspace:global(.portfolio-dashboard) .market :global(.market-chart-compact) { height: 54px; margin-top: 10px; border-radius: 10px; background: linear-gradient(180deg, color-mix(in srgb, var(--mint) 5%, transparent), transparent); }
 .workspace:global(.portfolio-dashboard) .protocolCard > span:first-child { border: 1px solid color-mix(in srgb, var(--mint) 18%, transparent); background: linear-gradient(145deg, color-mix(in srgb, var(--mint) 20%, var(--surface)), var(--mint-dim)); }
@@ -386,8 +379,6 @@
   .workspace:global(.portfolio-dashboard) .overview { gap: 8px; }
   .workspace:global(.portfolio-dashboard) .primaryColumn,
   .workspace:global(.portfolio-dashboard) .secondaryColumn { gap: 6px; }
-  .workspace:global(.portfolio-dashboard) .loadingCard { min-height: 208px; }
-  .workspace:global(.portfolio-dashboard) .loadingActions span { height: 52px; }
   .workspace:global(.portfolio-dashboard) .valueCard { padding: 10px !important; }
   .workspace:global(.portfolio-dashboard) .valueAmount { font-size: 32px !important; }
   .workspace:global(.portfolio-dashboard) .valueHint { margin-top: 4px; font-size: 10px; line-height: 1.25; }

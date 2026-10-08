@@ -34,6 +34,8 @@
 .status { margin: 0; padding: 0 0 8px; color: var(--mut); font-size: 12px; line-height: 1.45; }
 .empty { display: grid; justify-items: center; gap: 10px; padding: 20px 16px; text-align: center; color: var(--mut); font-size: 13px; }
 .empty > svg { box-sizing: content-box; padding: 14px; border: 0; border-radius: 50%; background: var(--mint-dim); color: var(--mint); }
+.empty p { display: grid; max-width: 34ch; gap: 3px; margin: 0; line-height: 1.45; overflow-wrap: anywhere; }
+.empty p strong { color: var(--text); font-size: var(--fs-body); font-weight: 600; }
 .empty a, .empty button { display: inline-flex; align-items: center; min-height: 44px; color: var(--mint); font-weight: 600; }
 .changedValue { animation: value-change 500ms ease-out; }
 @keyframes value-change { from { color: var(--mint); } to { color: var(--text); } }
