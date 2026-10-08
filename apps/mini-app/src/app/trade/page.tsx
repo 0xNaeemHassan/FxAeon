@@ -26,7 +26,7 @@ import { readGasTier } from '@/lib/settings';
 import { RoutePrefetchStore, type RoutePrefetchDescriptor } from '@/lib/fx/routePrefetch';
 import { usePrivyWallet } from '@/lib/wallet';
 import styles from '@/components/trade-surfaces.module.css';
-import { positiveDecimal } from '@/lib/amount';
+import { groupDigits, positiveDecimal } from '@/lib/amount';
 import { amountBlocker } from '@/lib/formBlockers';
 import { tokenSymbol } from '@/lib/fx/tokenPresentation';
 import { formatUnits } from 'viem';
@@ -514,7 +514,7 @@ export default function TradePage() {
         : prepared.bounds);
       if (prepared.adjusted) {
         setLeverage(prepared.leverage);
-        throw new RangeError(`Pool leverage limits changed to ${prepared.bounds.min.toFixed(1)}x-${prepared.bounds.max.toFixed(1)}x. The target was updated; review it again.`);
+        throw new RangeError(`Pool leverage limits changed to ${prepared.bounds.min.toFixed(1)}×–${prepared.bounds.max.toFixed(1)}×. The target was updated; review it again.`);
       }
       return prepared.plan;
     };
@@ -578,7 +578,7 @@ export default function TradePage() {
               operationLabel={`Open ${market} ${sideLabel}`}
               onStageChange={handleReviewStageChange}
               preparationFacts={[
-                { label: 'Amount', value: `${validAmount ?? amount} ${tokenSymbol(token)}` },
+                { label: 'Amount', value: `${groupDigits(validAmount ?? amount)} ${tokenSymbol(token)}` },
                 { label: 'Target leverage', value: `${leverage}×` },
                 { label: 'Position', value: 'New position' },
                 { label: 'Slippage', value: `${slippageValue}%` },
@@ -608,7 +608,7 @@ export default function TradePage() {
           <section aria-labelledby="trade-open-positions-title" className="flex flex-col gap-2.5">
             <div className="flex items-center justify-between gap-3">
               <h2 id="trade-open-positions-title" className="text-[15px] font-semibold">Your positions</h2>
-              <Link href="/positions" className="glass-press inline-flex min-h-11 items-center gap-1 px-1 text-[12px] font-semibold text-mint">Manage all <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" /></Link>
+              <Link href="/positions" className="glass-press inline-flex min-h-11 items-center gap-1 px-1 text-[13px] font-semibold text-mint">Manage all <ChevronRight className="h-4 w-4" aria-hidden="true" /></Link>
             </div>
             <ProtocolPositionNotice status={positionState.status} failedGroups={positionState.failedGroups} hasPositions={positionState.positions.length + positionState.pendingPositions.length > 0} refreshing={positionState.refreshing} onRefresh={() => void positionState.refresh()} compact />
             <ConfirmedPositionCards market={market} />
@@ -633,7 +633,7 @@ export default function TradePage() {
           </section>
         )}
         {reviewStage === 'input' && <TradeSections market={market} side={side} leverage={leverageBounds}
-          openPositions={wallet.address && positionState.status === 'ready' ? positionState.positions.length : null}
+          openPositions={wallet.address && positionState.status === 'ready' ? marketPositions.length : null}
           positionsStatus={!wallet.address ? 'disconnected' : positionState.status === 'ready' ? 'ready' : positionState.status === 'idle' || positionState.status === 'loading' ? 'loading' : 'unavailable'} />}
       </ActionWorkspace>
       </div>

@@ -1,9 +1,10 @@
 import { formatUnits } from 'viem';
 import { FX_TOKENS, formatRouteGasCost, type PlannedRoute } from '@/lib/fx';
 import { compactAddress } from '@/lib/addressPresentation';
+import { tokenSymbol } from '@/lib/fx/tokenPresentation';
 import { routeFinancialReviewFacts, type ReviewFact } from '@/lib/fx/reviewFormatting';
 import type { UseGasCostResult } from '@/lib/fx/useGasCost';
-import { networkFeeWei } from '@/lib/fx/gasCost';
+import { formatNativeShortfall, nativeShortfallWei, routeNetworkFeeDisplay, type RouteGasCostEstimate } from '@/lib/fx/gasCost';
 import { formatGasTierQuote, type GasTierQuote } from '@/lib/fx/gasFeePolicy';
 
 export interface ExecutionCost { estimatedGas?: string; gasFee?: string; protocolFee?: string; totalCost?: string }
@@ -21,6 +22,12 @@ function tokenForAddress(address: string | undefined) {
   return Object.values(FX_TOKENS).find((token) => token.address.toLowerCase() === address.toLowerCase());
 }
 
+/** A known token's display symbol (fxSP for the base-pool share), never its SDK key. */
+function tokenSymbolForAddress(address: string | undefined): string | undefined {
+  const token = tokenForAddress(address);
+  return token && tokenSymbol(token.key);
+}
+
 function conciseDecimal(value: string, places = 6): string {
   const [whole, fraction = ''] = value.split('.');
   const shown = fraction.slice(0, places).replace(/0+$/, '');
@@ -30,6 +37,38 @@ function conciseDecimal(value: string, places = 6): string {
   return `${omitted ? '≈ ' : ''}${groupedWhole}${shown ? `.${shown}` : ''}`;
 }
 
+/** A cost estimate rounds up, so the figure shown is never less than the quote. */
+function conciseCostDecimal(value: string, places = 6): string {
+  const plain = value.replace(/,/g, '');
+  const [whole, fraction = ''] = plain.split('.');
+  const omitted = /[1-9]/.test(fraction.slice(places));
+  if (!omitted) return conciseDecimal(plain, places);
+  const scaled = BigInt(`${whole}${fraction.slice(0, places).padEnd(places, '0')}`) + 1n;
+  const digits = scaled.toString().padStart(places + 1, '0');
+  return `≈ ${exactAmountText(`${digits.slice(0, -places)}.${digits.slice(-places)}`)}`;
+}
+
+/**
+ * An exact decimal with thousands separators. Inputs and signed values read
+ * this way: never rounded and never marked "≈".
+ */
+export function exactAmountText(decimal: string): string {
+  const match = /^(\d*)(?:\.(\d*))?$/.exec(decimal.trim());
+  if (!match || (!match[1] && !match[2])) return decimal;
+  const whole = (match[1] || '0').replace(/^0+(?=\d)/, '');
+  const fraction = (match[2] ?? '').replace(/0+$/, '');
+  return `${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}${fraction ? `.${fraction}` : ''}`;
+}
+
+/**
+ * Entered "0.50 ETH" (or an already grouped "1,234.50 ETH") reads exactly as
+ * its verified route will: "0.5 ETH", "1,234.5 ETH".
+ */
+export function exactAmountValue(value: string): string {
+  const match = /^(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d*\.?\d+)(\s+\S.*)$/.exec(value.trim());
+  return match ? `${exactAmountText(match[1].replace(/,/g, ''))}${match[2]}` : value;
+}
+
 function addTokenAmountFact(facts: ReviewFact[], label: string, value: bigint, tokenAddress?: string, fallback = 'raw units'): void {
   const token = tokenForAddress(tokenAddress);
   if (!token) {
@@ -37,12 +76,13 @@ function addTokenAmountFact(facts: ReviewFact[], label: string, value: bigint, t
     return;
   }
   const exact = trimDecimal(formatUnits(value, token.decimals));
-  facts.push({ label, value: `${conciseDecimal(exact)} ${token.key}`, title: `${exact} ${token.key}` });
+  const symbol = tokenSymbol(token.key);
+  facts.push({ label, value: `${exactAmountText(exact)} ${symbol}`, title: `${exact} ${symbol}` });
 }
 
 function addWadAmountFact(facts: ReviewFact[], label: string, value: bigint, unit: string): void {
   const exact = trimDecimal(formatUnits(value, 18));
-  facts.push({ label, value: `${conciseDecimal(exact)} ${unit}`, title: `${exact} ${unit}` });
+  facts.push({ label, value: `${exactAmountText(exact)} ${unit}`, title: `${exact} ${unit}` });
 }
 
 function addFact(facts: ReviewFact[], label: string, value: string | undefined): void {
@@ -68,9 +108,25 @@ function addNativeCostFact(facts: ReviewFact[], label: string, exactValue: strin
   const shortQualifier = isMax ? ' max' : label === 'Total cost' ? ' total' : '';
   facts.push({
     label,
-    value: `${conciseDecimal(amount, 6)} ${unit}${shortQualifier}`,
-    title: exactValue,
+    value: `${conciseCostDecimal(amount, 6)} ${unit}${shortQualifier}`,
+    // A maximum is what the wallet must hold, not what it will be charged.
+    title: isMax && label === 'Gas fee' ? `${exactValue}. The most the network fee can be; usually less is charged.` : exactValue,
   });
+}
+
+/**
+ * Borrow reasons in loan-to-value against its limit, so its reviews do too.
+ * The quote's own leverage gives it: debt / collateral = 1 − 1 / leverage,
+ * rounded up so the review never shows a safer position than the quote.
+ */
+function loanToValueFact(leverage: number): ReviewFact | undefined {
+  if (!Number.isFinite(leverage) || leverage < 1) return undefined;
+  const percent = Math.ceil((1 - 1 / leverage) * 1000 - 1e-6) / 10;
+  return {
+    label: 'Loan-to-value',
+    value: percent <= 0 ? '0%' : `≈ ${percent.toFixed(1)}%`,
+    title: `From the quoted leverage of ${leverage}×`,
+  };
 }
 
 export function primaryReviewFacts(route: PlannedRoute): ReviewFact[] {
@@ -111,7 +167,7 @@ export function primaryReviewFacts(route: PlannedRoute): ReviewFact[] {
         break;
       case 'fxsave-withdraw':
         addTokenAmountFact(facts, 'fxSAVE', intent.amount, FX_TOKENS.fxSAVE.address);
-        addFact(facts, 'Receive', tokenForAddress(intent.tokenOutAddress)?.key ?? compactAddress(intent.tokenOutAddress));
+        addFact(facts, 'Receive', tokenSymbolForAddress(intent.tokenOutAddress) ?? compactAddress(intent.tokenOutAddress));
         addFact(facts, 'Mode', intent.directBasePool ? 'Direct' : intent.instant ? 'Instant' : 'Queued');
         if (intent.slippagePercent !== undefined) addFact(facts, 'Slippage', `${intent.slippagePercent}%`);
         break;
@@ -124,11 +180,15 @@ export function primaryReviewFacts(route: PlannedRoute): ReviewFact[] {
   if (route.details?.routeType) addFact(facts, 'Route', route.details.routeType);
   if (route.details?.requestedLeverage !== undefined) addFact(facts, 'Target leverage', `${route.details.requestedLeverage}×`);
   if (route.details?.slippagePercent !== undefined) addFact(facts, 'Slippage', `${route.details.slippagePercent}%`);
-  if (route.details?.leverage !== undefined) facts.push({
-    label: 'Leverage',
-    value: `${conciseDecimal(String(route.details.leverage), 2)}×`,
-    title: `${route.details.leverage}×`,
-  });
+  const leverage = route.details?.leverage;
+  if (leverage !== undefined) {
+    const leverageFact = { value: `${conciseDecimal(String(leverage), 2)}×`, title: `${leverage}×` };
+    const loanToValue = intent?.kind === 'deposit-and-mint' || intent?.kind === 'repay-and-withdraw'
+      ? loanToValueFact(leverage)
+      : undefined;
+    if (loanToValue) facts.push(loanToValue, { label: 'Quoted leverage', ...leverageFact });
+    else facts.push({ label: 'Leverage', ...leverageFact });
+  }
   facts.push(...routeFinancialReviewFacts(route));
 
   if (isBridgeQuote(route.quote)) {
@@ -162,9 +222,11 @@ export function routeFacts(route: PlannedRoute, gasCost: Pick<UseGasCostResult, 
     ? formatRouteGasCost(gasCost.estimate)
     : undefined;
   if (currentGasCost?.gasFee) addNativeCostFact(facts, 'Gas fee', currentGasCost.gasFee);
+  // With no native value the total is the network fee itself; one row says it.
+  const shownFees = currentEstimate ? routeNetworkFeeDisplay(currentEstimate) : undefined;
   const totalIsOnlyTheGasFee = currentEstimate?.nativeValueWei === 0n
-    && currentEstimate.totalNativeCostWei !== undefined
-    && currentEstimate.totalNativeCostWei === networkFeeWei(currentEstimate);
+    && shownFees?.totalWei !== undefined
+    && shownFees.totalWei === shownFees.feeWei;
   if (currentGasCost?.totalCost && !totalIsOnlyTheGasFee) addNativeCostFact(facts, 'Total cost', currentGasCost.totalCost);
   if (executionCost?.gasFee) addNativeCostFact(facts, 'Gas fee', executionCost.gasFee);
   if (executionCost?.protocolFee) addFact(facts, 'Protocol fee', executionCost.protocolFee);
@@ -184,6 +246,22 @@ export function missingGasFeeFact(gasCost: Pick<UseGasCostResult, 'estimate' | '
       ? 'Partial estimate'
       : 'Unavailable',
   };
+}
+
+type FundsEstimate = Pick<RouteGasCostEstimate, 'insufficientNativeBalance' | 'requiredNativeCostWei' | 'nativeBalanceWei' | 'nativeValueWei'>;
+
+/**
+ * Names the ETH a wallet must add before it can sign, on the same basis that
+ * blocks signing, and the network that needs it. Without a complete fee
+ * estimate the size is unknown, so the notice never invents a figure.
+ */
+export function nativeFundsNotice(estimate: FundsEstimate | undefined, network: string): string {
+  const shortfall = estimate ? nativeShortfallWei(estimate) : undefined;
+  if (!estimate || shortfall === undefined) return `This wallet needs more ETH on ${network} for network fees.`;
+  // The form keeps the amount within the balance, so the gap is usually fees
+  // alone; a balance below the amount itself needs both.
+  const coversAmount = estimate.nativeBalanceWei !== undefined && estimate.nativeBalanceWei < estimate.nativeValueWei;
+  return `Add at least ${formatNativeShortfall(shortfall)} ETH on ${network} to cover ${coversAmount ? 'the amount and network fees' : 'network fees'}.`;
 }
 
 /** Reserve a total-cost row only when the reviewed transactions send native value. */

@@ -309,6 +309,9 @@
   align-items: center;
   margin-bottom: 0;
 }
+/* The title never gives way: its lit text is painted only inside its own box,
+   so a squeezed "Trade" lost its last letter. The settings chip yields instead. */
+.tradePageHeading > :first-child { flex-shrink: 0; }
 
 .tradePageHeading h1 {
   font-size: var(--fs-display);

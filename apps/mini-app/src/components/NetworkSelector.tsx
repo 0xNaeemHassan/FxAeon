@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState } from 'react';
-import { AlertTriangle, Check, Globe2, LoaderCircle, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Check, LoaderCircle, RefreshCw } from 'lucide-react';
 import { usePrivyWallet, type FxChainId } from '@/lib/wallet';
 import { usePathname } from 'next/navigation';
 import ConnectWalletButton from '@/components/ConnectWalletButton';
@@ -186,6 +186,12 @@ export default function NetworkSelector() {
 
   const label = !connected ? 'Networks' : pending ? `Switching to ${chainLabel(pending)}` : supportedChain ? chainLabel(wallet.chainId) : 'Unsupported network';
   const currentChainIcon = pending ?? (supportedChain ? wallet.chainId : undefined);
+  // Until the wallet provider is ready the network is unknown: a quiet
+  // placeholder holds the icon's place. Without a wallet, the two supported
+  // networks stand in for "which network".
+  const idleIcon = !wallet.ready
+    ? <span className="network-selector-placeholder skeleton" aria-hidden="true" />
+    : <span className="network-selector-chains" aria-hidden="true">{CHAINS.map((chain) => <ChainIcon key={chain.id} chainId={chain.id} size={15} />)}</span>;
   const switchError = failedTarget === null
     ? 'Switch failed.'
     : `Switch failed. Couldn't switch to ${chainLabel(failedTarget)}. Try again.`;
@@ -200,11 +206,11 @@ export default function NetworkSelector() {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={menuId}
-        aria-busy={Boolean(pending)}
+        aria-busy={Boolean(pending) || !wallet.ready}
         onClick={() => { setError(false); setOpen((value) => !value); }}
         disabled={Boolean(pending)}
       >
-        {pending ? <LoaderCircle className="network-selector-spinner" size={15} aria-hidden="true" /> : currentChainIcon ? <ChainIcon chainId={currentChainIcon} size={17} /> : <Globe2 size={16} aria-hidden="true" />}
+        {pending ? <LoaderCircle className="network-selector-spinner" size={15} aria-hidden="true" /> : currentChainIcon ? <ChainIcon chainId={currentChainIcon} size={17} /> : idleIcon}
         <span className="sr-only network-selector-label">{label}</span>
         <span className="network-selector-visual-label" aria-hidden="true">{visibleLabel}</span>
       </button>

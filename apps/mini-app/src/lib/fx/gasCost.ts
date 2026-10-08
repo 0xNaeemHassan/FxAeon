@@ -572,12 +572,68 @@ export async function estimatePlannedRouteCost(
   };
 }
 
+/**
+ * How much more native balance the wallet needs to pass the same check that
+ * sets `insufficientNativeBalance`: the native value plus every step's gas
+ * limit at the maximum fee (and Base's L1 and operator fees), less the
+ * balance. A partial estimate can prove a shortfall without knowing its size,
+ * so it has none.
+ */
+export function nativeShortfallWei(
+  estimate: Pick<RouteGasCostEstimate, 'insufficientNativeBalance' | 'requiredNativeCostWei' | 'nativeBalanceWei'>,
+): bigint | undefined {
+  if (!estimate.insufficientNativeBalance) return undefined;
+  if (estimate.requiredNativeCostWei === undefined || estimate.nativeBalanceWei === undefined) return undefined;
+  const shortfall = estimate.requiredNativeCostWei - estimate.nativeBalanceWei;
+  return shortfall > 0n ? shortfall : undefined;
+}
+
+/**
+ * Reviews name ETH to six decimal places: the smallest top-up worth naming and
+ * the step a maximum network fee rounds up to, 0.000001 ETH.
+ */
+const ETH_DISPLAY_STEP_WEI = 1_000_000_000_000n;
+
+/**
+ * ETH to add, rounded up to the review's 0.000001 ETH step, never down, so
+ * adding exactly the amount shown covers the shortfall. A maximum network fee
+ * rounds up to the same step, so an empty wallet with nothing else to send is
+ * asked for exactly the maximum fee the review shows.
+ */
+export function formatNativeShortfall(shortfallWei: bigint): string {
+  if (shortfallWei <= 0n) return '0';
+  const rounded = ((shortfallWei + ETH_DISPLAY_STEP_WEI - 1n) / ETH_DISPLAY_STEP_WEI) * ETH_DISPLAY_STEP_WEI;
+  const [whole, fraction] = formatEther(rounded).split('.');
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const trimmed = fraction?.replace(/0+$/, '');
+  return trimmed ? `${grouped}.${trimmed}` : grouped;
+}
+
 /** Network fees exclude native value sent, including bridge protocol fees. */
 export function networkFeeWei(estimate: RouteGasCostEstimate): bigint | undefined {
   if (estimate.executionGasFeeWei === undefined) return undefined;
   if (estimate.chainId !== 8453) return estimate.executionGasFeeWei;
   if (estimate.l1DataFeeWei === undefined || estimate.operatorFeeWei === undefined) return undefined;
   return estimate.executionGasFeeWei + estimate.l1DataFeeWei + estimate.operatorFeeWei;
+}
+
+/**
+ * The network fee a review shows, and the total with any native value. Once
+ * the estimate knows what the wallet must fund, the fee is that maximum: every
+ * step's gas limit (its estimate plus 20% headroom) at the fee per gas, plus
+ * Base's L1 and operator fees. That is exactly the fee part of
+ * requiredNativeCostWei, the figure that blocks signing, so a shortfall is
+ * always the value plus this maximum, less the balance. An estimate without a
+ * funding figure shows its expected cost instead, which is never called a max.
+ */
+export function routeNetworkFeeDisplay(estimate: RouteGasCostEstimate): { feeWei: bigint; totalWei?: bigint; max: boolean } | undefined {
+  if (estimate.status === 'unavailable') return undefined;
+  const required = estimate.requiredNativeCostWei;
+  if (required !== undefined && required >= estimate.nativeValueWei) {
+    return { feeWei: required - estimate.nativeValueWei, totalWei: required, max: true };
+  }
+  const expected = networkFeeWei(estimate);
+  return expected === undefined ? undefined : { feeWei: expected, totalWei: estimate.totalNativeCostWei, max: false };
 }
 
 /** UI-facing strings are produced only for values proven by the snapshot. */
@@ -588,24 +644,22 @@ export function formatRouteGasCost(estimate: RouteGasCostEstimate): {
   totalCost?: string;
 } {
   if (estimate.status === 'unavailable') return {};
-  const networkFee = networkFeeWei(estimate);
-  const gasAmount = networkFee === undefined ? undefined : formatNativeCost(networkFee);
-  const totalAmount = estimate.totalNativeCostWei === undefined ? undefined : formatNativeCost(estimate.totalNativeCostWei);
-  const isMaxFee = estimate.fee?.mode !== 'legacy';
+  const fees = routeNetworkFeeDisplay(estimate);
+  const gasAmount = fees === undefined ? undefined : formatNativeCost(fees.feeWei);
+  const totalAmount = fees?.totalWei === undefined ? undefined : formatNativeCost(fees.totalWei);
   const displayRate = estimate.fee?.displayFeePerGasWei;
   const displayRateGwei = displayRate === undefined ? undefined : formatGasPriceGwei(displayRate);
-  const gasFeeLabel = gasAmount === undefined ? undefined : `${gasAmount.unit}${isMaxFee ? ' (max)' : ''}`;
-  const executionLabel = isMaxFee ? 'max execution' : 'execution fee';
-  const totalLabel = totalAmount === undefined ? undefined : estimate.totalNativeCostScope === 'execution-plus-l1-plus-operator-plus-value'
-    ? `${totalAmount.unit} (native value + ${executionLabel} + Base L1/operator fees)`
-    : `${totalAmount.unit} (native value + ${executionLabel})`;
+  const baseComponents = estimate.chainId === 8453;
+  const totalScope = fees?.max
+    ? `native value + max network fee${baseComponents ? ' including Base L1/operator fees' : ''}`
+    : `native value + execution fee${baseComponents ? ' + Base L1/operator fees' : ''}`;
   return {
     ...(estimate.estimatedGasUnits === undefined ? {} : { estimatedGas: `${formatGasUnits(estimate.estimatedGasUnits)} gas` }),
     ...(estimate.fee?.tier === undefined || displayRateGwei === undefined
       ? {}
       : { gasTier: `${estimate.fee.tier[0].toUpperCase()}${estimate.fee.tier.slice(1)} · ${displayRateGwei} Gwei` }),
-    ...(gasAmount === undefined || gasFeeLabel === undefined ? {} : { gasFee: `${gasAmount.amount} ${gasFeeLabel}` }),
-    ...(totalAmount === undefined || totalLabel === undefined ? {} : { totalCost: `${totalAmount.amount} ${totalLabel}` }),
+    ...(gasAmount === undefined || fees === undefined ? {} : { gasFee: `${gasAmount.amount} ${gasAmount.unit}${fees.max ? ' (max)' : ''}` }),
+    ...(totalAmount === undefined ? {} : { totalCost: `${totalAmount.amount} ${totalAmount.unit} (${totalScope})` }),
   };
 }
 

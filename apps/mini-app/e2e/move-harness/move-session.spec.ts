@@ -78,3 +78,23 @@ test('the Move page preserves execution through its destination-chain switch and
   await expect(amount).toHaveValue('');
   await expect(page.getByRole('button', { name: 'Review transfer' })).toBeVisible();
 });
+
+test('the recipient row is a status, and the developer disclosure reads as expert mode', async ({ page }) => {
+  await page.setContent('<div id="root"></div>');
+  await page.addScriptTag({ content: bundle });
+  await expect(page.locator('html[data-harness-ready="true"]')).toHaveCount(1);
+  const recipient = page.getByText('Recipient on Base', { exact: true }).locator('xpath=../..');
+  await expect(recipient.getByText('Your wallet', { exact: true })).toBeVisible();
+  await expect(recipient.getByText('0xaaaa…aaaa', { exact: true })).toBeVisible();
+  // Signed out, the row says so instead of looking like a second connect control.
+  await page.evaluate(() => {
+    const harness = (window as Window & { __moveSessionHarness: { wallet: { address?: string; authenticated: boolean }; rerender?: () => void } }).__moveSessionHarness;
+    harness.wallet = { ...harness.wallet, address: undefined, authenticated: false };
+    harness.rerender?.();
+  });
+  await expect(recipient.getByText('Not connected', { exact: true })).toBeVisible();
+  await expect(recipient.getByText('Connect wallet', { exact: true })).toHaveCount(0);
+  const disclosure = page.locator('details').filter({ has: page.locator('summary', { hasText: 'Expert mode' }) });
+  await expect(disclosure.locator('summary').first()).toHaveText('Expert mode · custom contracts');
+  await expect(disclosure).not.toHaveAttribute('open');
+});

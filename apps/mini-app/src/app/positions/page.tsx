@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDownRight, ArrowUpRight, Gauge, Layers2, RefreshCw, X } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, ChevronRight, Gauge, Layers2, RefreshCw, X } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell, Card, EmptyState } from '@/components/ui';
 import { ActionReview, type ActionReviewStage } from '@/components/ActionReview';
@@ -20,7 +20,7 @@ import { TransactionSettings } from '@/components/TransactionSettings';
 import { MAX_FX_SLIPPAGE_PERCENT, clampLeverage, leverageBoundsFor, planAdjustPositionLeverage, planIncreasePosition, planReducePosition, prepareLeverageReview, readLeverageBounds, readSignatureRequiredDraft, restoreSignatureRequiredDraftFromSearch, signatureDraftIdFromSearch, type LeverageBounds, type SignatureDraftState } from '@/lib/fx';
 import { usePrivyWallet } from '@/lib/wallet';
 import styles from '@/components/trade-surfaces.module.css';
-import { positiveDecimal } from '@/lib/amount';
+import { groupDigits, positiveDecimal } from '@/lib/amount';
 import { DEFAULT_SLIPPAGE_PERCENT, readSlippagePercent, SETTINGS_KEY, SETTINGS_UPDATED_EVENT } from '@/lib/settings';
 import { haptic } from '@/lib/telegram';
 import { resetTransactionAmounts } from '@/lib/transactionState';
@@ -198,8 +198,8 @@ export default function PositionsPage() {
   const selectedStale = selected ? positionIsStale(selected, positionState.failedGroups) : false;
   const selectedSplit = selected ? { side: selected.side, debtLabel: leverageDebtLabel(selected.side, selected.market) } : undefined;
   const decisionBefore = useMemo(() => managerPosition ? [
-    { label: 'Collateral', value: `${formatAmount(managerPosition.info.rawColls, positionCollateralDecimals(managerPosition))} ${managerPosition.info.rawCollsToken}` },
-    { label: 'Debt', value: `${formatAmount(managerPosition.info.rawDebts, positionDebtDecimals(managerPosition))} ${managerPosition.info.rawDebtsToken}` },
+    { label: 'Collateral', value: `${groupDigits(formatAmount(managerPosition.info.rawColls, positionCollateralDecimals(managerPosition)))} ${managerPosition.info.rawCollsToken}` },
+    { label: 'Debt', value: `${groupDigits(formatAmount(managerPosition.info.rawDebts, positionDebtDecimals(managerPosition)))} ${managerPosition.info.rawDebtsToken}` },
   ] : undefined, [managerPosition]);
   const marketTokens = selected
     ? action === 'reduce' || action === 'close'
@@ -360,7 +360,7 @@ export default function PositionsPage() {
           : prepared.bounds);
         if (prepared.adjusted) {
           setLeverage(prepared.leverage);
-          throw new RangeError(`Pool leverage limits changed to ${prepared.bounds.min.toFixed(1)}x-${prepared.bounds.max.toFixed(1)}x. The target was updated; review it again.`);
+          throw new RangeError(`Pool leverage limits changed to ${prepared.bounds.min.toFixed(1)}×–${prepared.bounds.max.toFixed(1)}×. The target was updated; review it again.`);
         }
         return prepared.plan;
       };
@@ -393,7 +393,7 @@ export default function PositionsPage() {
         : prepared.bounds);
       if (prepared.adjusted) {
         setLeverage(prepared.leverage);
-        throw new RangeError(`Pool leverage limits changed to ${prepared.bounds.min.toFixed(1)}x-${prepared.bounds.max.toFixed(1)}x. The target was updated; review it again.`);
+        throw new RangeError(`Pool leverage limits changed to ${prepared.bounds.min.toFixed(1)}×–${prepared.bounds.max.toFixed(1)}×. The target was updated; review it again.`);
       }
       return prepared.plan;
     };
@@ -484,7 +484,7 @@ export default function PositionsPage() {
             </section>
 
             <section ref={managerRef} className={styles.positionManageColumn} aria-label={reviewStage === 'input' ? undefined : `${operationLabel} review`} aria-labelledby={reviewStage === 'input' ? 'manage-position-heading' : undefined}>
-              {reviewStage === 'input' && selected && <div className={styles.manageHeading}><div><h2 id="manage-position-heading">{selected.market} {selected.side} · #{selected.info.positionId}</h2></div><div className="flex items-center gap-1">{selected.side === 'long' && <Link href={`/borrow?market=${selected.market}&position=${selected.info.positionId}`} className="glass-press inline-flex min-h-11 items-center gap-2 rounded-xl px-2 text-[12px] font-semibold text-mint">Borrow against <span aria-hidden="true">→</span></Link>}<TransactionSettings slippage /></div></div>}
+              {reviewStage === 'input' && selected && <div className={styles.manageHeading}><div><h2 id="manage-position-heading">{selected.market} {selected.side} · #{selected.info.positionId}</h2></div><div className="flex items-center gap-1">{selected.side === 'long' && <Link href={`/borrow?market=${selected.market}&position=${selected.info.positionId}`} className="glass-press inline-flex min-h-11 items-center gap-1 rounded-xl px-2 text-[13px] font-semibold text-mint">Borrow against <ChevronRight className="h-4 w-4" aria-hidden="true" /></Link>}<TransactionSettings slippage /></div></div>}
               {reviewStage === 'input' && selectedStale && <span role="status" aria-label="Refreshing selected position" className="skeleton block h-8 rounded-xl" />}
 
               <Card className={`${styles.actionPanel} ${styles.positionActionCard} ${reviewStage === 'input' ? '' : styles.positionActionCardReview}`}>
@@ -505,7 +505,7 @@ export default function PositionsPage() {
                   editor={(
                     <div className={styles.positionEditor}>
                       {action === 'increase' && <div className={styles.fieldStack}><Header icon={ArrowUpRight} title="Increase exposure" body="Add collateral and choose the target leverage for this position." /><AmountField label="Amount to add" symbol={token} value={amount} onChange={setAmount} maxDecimals={tokenDecimals(token)} balanceState={selectedTokenBalance} tokenSelector={<TokenSelect compact label="Input asset" value={token} options={marketTokens} onChange={changeToken} {...tokenBalanceProps} />} /><LeverageField label="Target leverage" value={leverage} onChange={setLeverage} min={leverageBounds.min} max={leverageBounds.max} error={leverageError} split={selectedSplit} /></div>}
-                      {action === 'reduce' && <div className={styles.fieldStack}><Header icon={ArrowDownRight} title="Reduce exposure" body="Choose how much of this position to reduce and what asset to receive." /><RangeField label="Position reduction" value={fraction} onChange={setFraction} min={1} max={99} step={1} suffix="%" /><div className="grid grid-cols-3 gap-2">{[25, 50, 75].map((value) => <button key={value} type="button" aria-pressed={fraction === value} onClick={() => setFraction(value)} className={`min-h-11 rounded-xl text-[11px] font-semibold ${fraction === value ? 'bg-[var(--mint-dim)] text-mint' : 'bg-[rgba(255,255,255,.035)] text-mut'}`}>{value}%</button>)}</div><TokenSelect label="Receive asset" value={token} options={marketTokens} onChange={changeToken} {...tokenBalanceProps} /></div>}
+                      {action === 'reduce' && <div className={styles.fieldStack}><Header icon={ArrowDownRight} title="Reduce exposure" body="Choose how much of this position to reduce and what asset to receive." /><RangeField label="Position reduction" value={fraction} onChange={setFraction} min={1} max={99} step={1} suffix="%" /><div className="grid grid-cols-3 gap-2">{[25, 50, 75].map((value) => <button key={value} type="button" aria-pressed={fraction === value} onClick={() => setFraction(value)} className={`glass-press min-h-11 rounded-xl text-[12px] font-semibold tabular-nums transition-colors ${fraction === value ? 'bg-[var(--mint-dim)] text-mint' : 'bg-[var(--surface-2)] text-mut hover:text-[var(--text)]'}`}>{value}%</button>)}</div><TokenSelect label="Receive asset" value={token} options={marketTokens} onChange={changeToken} {...tokenBalanceProps} /></div>}
                       {action === 'close' && <div className={styles.fieldStack}><Header icon={X} title="Close the full position" body="Close 100% of this position and choose the asset returned to your wallet." /><div className={styles.closeNotice}><strong>Full close</strong><span>All remaining collateral and debt</span><small>Review the route, limits, approvals, and transaction count before signing.</small></div><TokenSelect label="Receive asset" value={token} options={marketTokens} onChange={changeToken} {...tokenBalanceProps} /></div>}
                       {action === 'leverage' && <div className={styles.fieldStack}><Header icon={Gauge} title="Adjust leverage" body="Set the target leverage for this position." /><LeverageField label="Target leverage" value={leverage} onChange={setLeverage} min={leverageBounds.min} max={leverageBounds.max} error={leverageError} split={selectedSplit} /></div>}
                     </div>

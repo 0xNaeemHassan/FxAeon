@@ -19,7 +19,8 @@ const mocks: Record<string, string> = {
   '@/lib/fx': `
     const H = () => globalThis.__actionReviewHarness;
     export const FX_TOKENS = { fxUSD: { key: 'fxUSD', address: '0x00000000000000000000000000000000000000c1', decimals: 18 }, fxSAVE: { key: 'fxSAVE', address: '0x00000000000000000000000000000000000000c2', decimals: 18 } };
-    export const formatRouteGasCost = () => ({ gasFee: '0.00084 ETH', totalCost: '0.00084 ETH' });
+    // The real fee copy, so the review's max and its shortfall notice are checked together.
+    export { formatRouteGasCost } from '@/lib/fx/gasCost';
     export const useRouteGasCost = () => H().gasCost;
     export async function prepareRoutesForReview(planned, walletAddress) {
       const h = H(); h.prepareCount += 1;
@@ -189,6 +190,8 @@ export const useInvalidateWalletData = () => async () => {
     export const tokenAmountReviewFact = (label, value) => ({ label, value: String(value), title: String(value) });
   `,
   '@/lib/fx/policy': `export const positionPoolAddress = () => '0x00000000000000000000000000000000000000bb';`,
+  // The funds notice links to Receive; the isolated harness has no Next router.
+  'next/link': `import React from 'react'; export default ({ href, children, ...props }) => <a href={href} {...props}>{children}</a>;`,
   '@/lib/fx/tokens': `export const FX_TOKENS = { fxUSD: { key: 'fxUSD', address: '0x00000000000000000000000000000000000000c1', decimals: 18 }, fxSAVE: { key: 'fxSAVE', address: '0x00000000000000000000000000000000000000c2', decimals: 18 } };`,
   'lucide-react': `
     import React from 'react';
@@ -218,6 +221,7 @@ export async function buildHarness(): Promise<{ script: string; css: string }> {
           return { path: candidate };
         });
         build.onResolve({ filter: /^lucide-react$/ }, () => ({ path: 'lucide-react', namespace: 'mock' }));
+        build.onResolve({ filter: /^next\/link$/ }, () => ({ path: 'next/link', namespace: 'mock' }));
         build.onLoad({ filter: /.*/, namespace: 'mock' }, (args: { path: string }) => ({ contents: mocks[args.path], loader: 'tsx', resolveDir: resolve(root, 'apps/mini-app') }));
       },
     }],

@@ -55,7 +55,7 @@ import { ValueOrSkeleton } from '@/components/MissingValue';
 import { TransactionSettings } from '@/components/TransactionSettings';
 import { BorrowSections } from '@/components/ProductSections';
 import { borrowCapacity, BORROW_LIMIT_GUARD_BPS, collateralUsdWad, loanToValueBps, tokenAmountForUsdWad, withdrawableCollateralUsd } from '@/lib/fx/borrowLimits';
-import { formatSignificantDecimal } from '@/lib/amount';
+import { formatSignificantDecimal, formatSignificantDecimalUp, groupDigits } from '@/lib/amount';
 import { amountBlocker } from '@/lib/formBlockers';
 import { tokenSymbol } from '@/lib/fx/tokenPresentation';
 
@@ -528,8 +528,21 @@ export default function BorrowPage() {
   const capacity = collateralAfterUsd !== null && collateralAfterUsd > 0n ? borrowCapacity({ collateralUsd: collateralAfterUsd, existingDebt, range: debtRange }) : null;
   const collateralEntered = Boolean(depositWei && depositWei > 0n) || Boolean(selected && selected.info.rawColls > 0n);
   const limitBps = debtRange.max * (10_000n - BORROW_LIMIT_GUARD_BPS) / 10n ** 18n;
-  const ltvBps = capacity && collateralAfterUsd !== null ? loanToValueBps(existingDebt + (mintWei ?? 0n), collateralAfterUsd) : null;
+  const debtAfter = existingDebt + (mintWei ?? 0n);
+  const ltvBps = capacity && collateralAfterUsd !== null ? loanToValueBps(debtAfter, collateralAfterUsd) : null;
+  // The position's loan-to-value now, against the live limit, stated as the
+  // meter states them, so the review can show before → after. Verified figures
+  // only: a current position, a fresh price and the pool's live range.
+  const currentLtv = selected && !selectedStale && debtRange.source === 'live' && existingCollateralUsd !== null && existingCollateralUsd > 0n && limitBps > 0n
+    ? `${formatTenths(loanToValueTenthsUp(existingDebt, existingCollateralUsd))} of ${formatTenths(limitBps / 10n)} limit`
+    : null;
+  const reviewBefore = useMemo(() => decisionBefore && currentLtv
+    ? [...decisionBefore, { label: 'Loan-to-value', value: currentLtv }]
+    : decisionBefore, [currentLtv, decisionBefore]);
+  // A ceiling rounds down (what may still be borrowed) and a floor rounds up
+  // (what must be borrowed), so a figure shown is always safe to type.
   const fxUsdLimit = (value: bigint) => formatSignificantDecimal(formatUnits(value, 18), 4);
+  const fxUsdMinimum = (value: bigint) => formatSignificantDecimalUp(formatUnits(value, 18), 4);
   const symbol = tokenSymbol(token);
   const mintBlocker = (): string | null => {
     if (showDeposit) {
@@ -542,8 +555,7 @@ export default function BorrowPage() {
     if (!mintWei && !depositWei) return 'Enter an amount';
     if (capacity && mintWei) {
       if (mintWei > capacity.maxAdditional) return capacity.maxAdditional > 0n ? `Borrow at most ${fxUsdLimit(capacity.maxAdditional)} fxUSD` : 'Add collateral to borrow';
-      // Rounded up a tenth of a percent, so the figure shown is always enough.
-      if (mintWei < capacity.minAdditional) return `Borrow at least ${fxUsdLimit(capacity.minAdditional * 1001n / 1000n)} fxUSD`;
+      if (mintWei < capacity.minAdditional) return `Borrow at least ${fxUsdMinimum(capacity.minAdditional)} fxUSD`;
     }
     return null;
   };
@@ -571,13 +583,22 @@ export default function BorrowPage() {
     }
     return null;
   };
-  const picker = <TokenSelect compact label={mode === 'manage' ? 'Receive collateral as' : 'Collateral asset'} value={token}
+  // The collateral that can leave at current prices, after any repayment entered
+  // beside it: the withdrawal hint and its blocker name the same figure.
+  const withdrawLimitWei = (() => {
+    if (!selected || existingCollateralUsd === null) return null;
+    const repaid = repay.trim().toLowerCase() === 'all' ? selected.info.rawDebts : parseZeroAmount(repay, 'fxUSD') ?? 0n;
+    const remainingDebt = selected.info.rawDebts > repaid ? selected.info.rawDebts - repaid : 0n;
+    return tokenAmountForUsdWad(withdrawableCollateralUsd(existingCollateralUsd, remainingDebt, debtRange), tokenDecimals(token), limitPrice(token));
+  })();
+  // A BTC position has one collateral asset: the field then names it rather than offering a one-row picker.
+  const picker = activeTokenOptions.length > 1 ? <TokenSelect compact label={mode === 'manage' ? 'Receive collateral as' : 'Collateral asset'} value={token}
     options={activeTokenOptions} onChange={changeToken} balances={wallet.address ? balanceSnapshot.balances : undefined}
-    balanceStatus={wallet.address ? balanceStatus : 'disconnected'} />;
+    balanceStatus={wallet.address ? balanceStatus : 'disconnected'} /> : undefined;
   const actionEditor = <div className={presentation.editor}>
-    {!newPosition && <h2 className={presentation.formTitle}>{mode === 'mint' ? 'Add collateral or borrow' : 'Manage debt'}</h2>}
+    {!newPosition && <h2 className={presentation.formTitle}>{mode === 'mint' ? 'Add collateral or borrow' : 'Repay or withdraw'}</h2>}
     {/* Collateral first: the borrowing limit below is computed from it. */}
-    {showDeposit && <AmountField label={newPosition ? 'Starting collateral' : 'Collateral to add'} symbol={token} value={deposit}
+    {showDeposit && <AmountField label={newPosition ? 'Collateral' : 'Collateral to add'} symbol={token} value={deposit}
       onChange={(value) => { setNativeMaxError(null); setDeposit(value); }} allowZero maxDecimals={tokenDecimals(token)}
       balanceState={balanceStateFor(token)} tokenSelector={picker}
       maxAmount={token === 'ETH' ? null : undefined} onMax={token === 'ETH' ? resolveNativeMax : undefined}
@@ -586,13 +607,16 @@ export default function BorrowPage() {
       onChange={setMint} allowZero maxDecimals={18} showPercentages={false} showMax={Boolean(capacity && capacity.maxAdditional > 0n)}
       maxAmount={capacity && capacity.maxAdditional > 0n ? formatUnits(capacity.maxAdditional, 18) : null}
       hint={capacity ? (capacity.maxAdditional > 0n ? `Up to ${fxUsdLimit(capacity.maxAdditional)} fxUSD with this collateral` : 'This collateral cannot borrow more')
-        : collateralEntered ? 'Your limit appears when current prices are available'
-        : newPosition ? 'Enter collateral above to see how much you can borrow' : undefined} />}
+        : collateralEntered ? 'Your limit shows once prices are available'
+        : newPosition ? 'Enter collateral above to see your limit' : undefined} />}
     {showRepay && <AmountField label="Repay amount" symbol="fxUSD" value={repay} onChange={setRepay} allowAll allowZero maxDecimals={18}
       balanceState={balanceStateFor('fxUSD')} hint={selected ? `Debt: ${formatPositionDebt(selected)}` : undefined} />}
     {showWithdraw && <AmountField label="Collateral to withdraw" symbol={token} value={withdraw} onChange={setWithdraw}
-      allowZero maxDecimals={tokenDecimals(token)} showMax={false} showPercentages={false} tokenSelector={picker} />}
-    {mode === 'mint' && ltvBps !== null && limitBps > 0n && <BorrowLimitMeter ltvBps={ltvBps} limitBps={limitBps} />}
+      allowZero maxDecimals={tokenDecimals(token)} showMax={false} showPercentages={false} tokenSelector={picker}
+      hint={withdrawLimitWei === null ? 'Your limit shows once prices are available'
+        : withdrawLimitWei > 0n ? `Up to ${formatSignificantDecimal(formatUnits(withdrawLimitWei, tokenDecimals(token)), 4)} ${symbol} at current prices`
+        : 'Repay debt to withdraw collateral'} />}
+    {mode === 'mint' && ltvBps !== null && collateralAfterUsd !== null && limitBps > 0n && <BorrowLimitMeter debt={debtAfter} collateralUsd={collateralAfterUsd} limitBps={limitBps} />}
     {withdrawalRequested && <p className={presentation.helper}>Withdrawing collateral can increase liquidation risk.</p>}
     {!newPosition && managementAction !== 'combined' && <button type="button" className={presentation.combined} onClick={() => setManagementAction('combined')}>
       {mode === 'mint' ? 'Add collateral and borrow together' : 'Repay and withdraw together'}
@@ -639,26 +663,36 @@ export default function BorrowPage() {
         <ActionReview key={reviewRevision} surface="content" planBuilder={newPosition || !initialRead && !positionReadUnavailable ? planBuilder : null}
           blocker={reviewBlocker} label={reviewLabel} operationLabel={mode === 'mint' ? selected ? 'Update collateral position' : 'Open collateral position' : manageOperationLabel}
           draftActionKey={draftActionKey} draftResumePath="/borrow" draftState={draftState} resumeReview={resumeReview}
-          decisionBefore={decisionBefore} editor={actionEditor} onStageChange={setReviewStage} onComplete={refreshAfterAction} />
+          decisionBefore={reviewBefore} editor={actionEditor} onStageChange={setReviewStage} onComplete={refreshAfterAction} />
       </div>}
       </ProductSurface>
-      {reviewStage === 'input' && <BorrowSections ltvLimit={`${(Number(debtRange.max) / 1e16).toFixed(1)}%`} />}
+      {/* A limit, so rounded down to the tenth of a percent. */}
+      {reviewStage === 'input' && <BorrowSections ltvLimit={`${(Number(debtRange.max / 10n ** 15n) / 10).toFixed(1)}%`} />}
     </ActionWorkspace>
   </AppShell>;
 }
 
+/** Loan-to-value in tenths of a percent, rounded up: a risk figure never reads lower than it is. */
+function loanToValueTenthsUp(debt: bigint, collateralUsd: bigint): bigint { return (debt * 1000n + collateralUsd - 1n) / collateralUsd; }
+function formatTenths(tenths: bigint): string { return `${(Number(tenths) / 10).toFixed(1)}%`; }
+
 /** Loan-to-value against the borrowing limit, filling toward it as the borrow grows. */
-function BorrowLimitMeter({ ltvBps, limitBps }: { ltvBps: bigint; limitBps: bigint }) {
+function BorrowLimitMeter({ debt, collateralUsd, limitBps }: { debt: bigint; collateralUsd: bigint; limitBps: bigint }) {
+  const ltvBps = debt * 10_000n / collateralUsd;
   const used = Number(ltvBps * 1000n / limitBps) / 10;
   const tone = used > 100 ? 'over' : used >= 85 ? 'near' : 'ok';
-  const percent = (bps: bigint) => `${(Number(bps) / 100).toFixed(1)}%`;
+  // In tenths of a percent: the loan-to-value rounds up and the limit down, so
+  // the room the meter shows is never more than the room there is.
+  const ltvTenths = loanToValueTenthsUp(debt, collateralUsd);
+  const limitTenths = limitBps / 10n;
+  const percent = formatTenths;
   return <div className={presentation.limitMeter} data-tone={tone}>
     <div className={presentation.limitMeterRow}>
       <span>Loan-to-value</span>
-      <strong>{percent(ltvBps)}<small> of {percent(limitBps)} limit</small></strong>
+      <strong>{percent(ltvTenths)}<small> of {percent(limitTenths)} limit</small></strong>
     </div>
     <div className={presentation.limitTrack} role="meter" aria-label="Loan-to-value against the borrowing limit"
-      aria-valuemin={0} aria-valuemax={Number(limitBps) / 100} aria-valuenow={Math.min(Number(ltvBps), Number(limitBps)) / 100} aria-valuetext={`${percent(ltvBps)} of a ${percent(limitBps)} limit`}>
+      aria-valuemin={0} aria-valuemax={Number(limitBps) / 100} aria-valuenow={Math.min(Number(ltvBps), Number(limitBps)) / 100} aria-valuetext={`${percent(ltvTenths)} of a ${percent(limitTenths)} limit`}>
       <span style={{ '--fill': `${Math.min(used, 100)}%` } as CSSProperties} />
     </div>
   </div>;
@@ -681,8 +715,9 @@ function PositionSummary({ position }: { position: UiPosition }) {
   const debtKey = priceKeyForSymbol(position.info.rawDebtsToken);
   const valuation = calculatePositionUsdValuation({ collateralRaw: position.info.rawColls, collateralDecimals: positionCollateralDecimals(position),
     collateralPrice: collateralKey ? prices[collateralKey] : undefined, debtRaw: position.info.rawDebts, debtDecimals: positionDebtDecimals(position), debtPrice: debtKey ? prices[debtKey] : undefined });
+  // Rounded up to the tenth, like the form's meter: a risk figure never reads lower than it is.
   const ltv = valuation.collateralUsdCents !== null && valuation.collateralUsdCents > 0n && valuation.debtUsdCents !== null
-    ? `${(Number(valuation.debtUsdCents * 1000n / valuation.collateralUsdCents) / 10).toFixed(1)}%` : '—';
+    ? formatTenths(loanToValueTenthsUp(valuation.debtUsdCents, valuation.collateralUsdCents)) : '—';
   return <div className={presentation.positionSummary}>
     <div className={presentation.positionIdentity}><TokenIcon symbol={position.market === 'BTC' ? 'WBTC' : 'ETH'} size={34} />
       <div><h2>{position.market} position #{position.info.positionId}</h2><p>Ethereum</p></div></div>
@@ -694,5 +729,5 @@ function PositionSummary({ position }: { position: UiPosition }) {
     ]} />
   </div>;
 }
-function formatPositionCollateral(position: UiPosition): string { return `${formatAmount(position.info.rawColls, positionCollateralDecimals(position))} ${position.info.rawCollsToken}`; }
-function formatPositionDebt(position: UiPosition): string { return `${formatAmount(position.info.rawDebts, positionDebtDecimals(position))} ${position.info.rawDebtsToken}`; }
+function formatPositionCollateral(position: UiPosition): string { return `${groupDigits(formatAmount(position.info.rawColls, positionCollateralDecimals(position)))} ${position.info.rawCollsToken}`; }
+function formatPositionDebt(position: UiPosition): string { return `${groupDigits(formatAmount(position.info.rawDebts, positionDebtDecimals(position)))} ${position.info.rawDebtsToken}`; }

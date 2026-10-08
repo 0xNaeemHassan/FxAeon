@@ -34,19 +34,73 @@
 
     <header class="site-header">
       <a class="brand" href="/" aria-label="FxAeon home"><img src="assets/fxaeon-mark.svg" width="36" height="36" alt="" /><span>FxAeon</span></a>
-      <nav id="main-navigation" aria-label="Main navigation">
-        <a href="#moves">Features</a>
-        <a href="#protocol">f(x) Protocol</a>
-        <a href="#telegram">Telegram</a>
-        <a href="#faq">FAQ</a>
-        <a href="https://fxaeon.com/docs" target="_blank" rel="noreferrer">Docs <span aria-hidden="true">↗</span></a>
-      </nav>
       <div class="header-actions">
         <button class="theme-toggle" type="button" aria-label="Switch to light theme"><svg class="theme-icon theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="currentColor"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><svg class="theme-icon theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.5 8.5 0 0 1 8.8 4 8.5 8.5 0 1 0 20 15.2Z" fill="currentColor"/></svg></button>
-        <a class="pill small" href="https://t.me/FxAeonBot" target="_blank" rel="noreferrer">Open in Telegram <span aria-hidden="true">↗</span></a>
-        <button class="menu" type="button" aria-label="Open menu" aria-controls="main-navigation" aria-expanded="false"><span aria-hidden="true"></span><span aria-hidden="true"></span></button>
+        <a class="pill small" href="https://t.me/FxAeonBot" target="_blank" rel="noreferrer" data-device="mobile">Open in Telegram <span aria-hidden="true">↗</span></a>
+        <a class="pill small" href="https://fxaeon.com/" data-device="desktop">Open web app <span aria-hidden="true">→</span></a>
+        <button class="menu-toggle" type="button" aria-label="Open menu" aria-controls="site-menu" aria-expanded="false" aria-haspopup="dialog"><span class="menu-words" aria-hidden="true"><span>Menu</span><span>Close</span></span><span class="menu-lines" aria-hidden="true"><i></i><i></i></span></button>
       </div>
     </header>
+
+    <dialog class="site-menu" id="site-menu" aria-label="Menu">
+      <div class="menu-bar">
+        <a class="brand" href="/" aria-label="FxAeon home"><img src="assets/fxaeon-mark.svg" width="36" height="36" alt="" /><span>FxAeon</span></a>
+        <div class="header-actions">
+          <button class="theme-toggle" type="button" aria-label="Switch to light theme"><svg class="theme-icon theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="currentColor"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><svg class="theme-icon theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.5 8.5 0 0 1 8.8 4 8.5 8.5 0 1 0 20 15.2Z" fill="currentColor"/></svg></button>
+          <a class="pill small" href="https://t.me/FxAeonBot" target="_blank" rel="noreferrer" data-device="mobile">Open in Telegram <span aria-hidden="true">↗</span></a>
+          <a class="pill small" href="https://fxaeon.com/" data-device="desktop">Open web app <span aria-hidden="true">→</span></a>
+          <button class="menu-toggle menu-close" type="button" aria-label="Close menu" autofocus><span class="menu-words" aria-hidden="true"><span>Menu</span><span>Close</span></span><span class="menu-lines" aria-hidden="true"><i></i><i></i></span></button>
+        </div>
+      </div>
+      <div class="menu-body">
+        <div class="menu-grid">
+          <nav class="menu-nav" id="main-navigation" aria-label="Main navigation">
+            <span class="menu-glow" aria-hidden="true"></span>
+            <ol class="menu-list">
+              <li>
+                <button class="menu-row" type="button" aria-expanded="false" aria-controls="menu-features"><span class="menu-label"><span class="menu-text">Features<svg class="menu-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></span></button>
+                <div class="menu-sub" id="menu-features">
+                  <ul class="menu-sublist">
+                    <li><a href="#moves">Overview</a></li>
+                    <li><a href="https://t.me/FxAeonBot?startapp=trade" target="_blank" rel="noreferrer" data-device="mobile">Open Trade in Telegram <span aria-hidden="true">↗</span></a><a href="https://fxaeon.com/trade" data-device="desktop">Open Trade <span aria-hidden="true">→</span></a></li>
+                    <li><a href="https://t.me/FxAeonBot?startapp=earn" target="_blank" rel="noreferrer" data-device="mobile">Open Earn in Telegram <span aria-hidden="true">↗</span></a><a href="https://fxaeon.com/earn" data-device="desktop">Open Earn <span aria-hidden="true">→</span></a></li>
+                    <li><a href="https://t.me/FxAeonBot?startapp=borrow" target="_blank" rel="noreferrer" data-device="mobile">Open Borrow in Telegram <span aria-hidden="true">↗</span></a><a href="https://fxaeon.com/borrow" data-device="desktop">Open Borrow <span aria-hidden="true">→</span></a></li>
+                    <li><a href="https://t.me/FxAeonBot?startapp=move" target="_blank" rel="noreferrer" data-device="mobile">Open Move in Telegram <span aria-hidden="true">↗</span></a><a href="https://fxaeon.com/move" data-device="desktop">Open Move <span aria-hidden="true">→</span></a></li>
+                  </ul>
+                </div>
+              </li>
+              <li><a class="menu-row" href="#protocol"><span class="menu-label"><span class="menu-text">f(x) Protocol<svg class="menu-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span></span></a></li>
+              <li><a class="menu-row" href="#telegram"><span class="menu-label"><span class="menu-text">Telegram<svg class="menu-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span></span></a></li>
+              <li><a class="menu-row" href="#faq"><span class="menu-label"><span class="menu-text">FAQ<svg class="menu-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span></span></a></li>
+              <li><a class="menu-row" href="https://fxaeon.com/docs" target="_blank" rel="noreferrer"><span class="menu-label"><span class="menu-text">Docs<svg class="menu-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M7 7h10v10"/></svg></span></span></a></li>
+              <li><a class="menu-row" href="https://github.com/fxaeon/FxAeon" target="_blank" rel="noreferrer"><span class="menu-label"><span class="menu-text">Source code<svg class="menu-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M7 7h10v10"/></svg></span></span></a></li>
+            </ol>
+          </nav>
+          <div class="menu-side">
+            <div class="menu-group">
+              <h2 class="menu-kicker">Open FxAeon</h2>
+              <div class="menu-card" data-device="desktop">
+                <figure class="menu-qr">
+                  <img src="assets/telegram-qr.svg" width="104" height="104" alt="QR code" loading="lazy" decoding="async" />
+                  <figcaption>Scan to open in Telegram</figcaption>
+                </figure>
+                <a class="text-link" href="https://fxaeon.com/">Open web app <span aria-hidden="true">→</span></a>
+              </div>
+              <a class="pill primary" href="https://t.me/FxAeonBot" target="_blank" rel="noreferrer" data-device="mobile">Open in Telegram <span aria-hidden="true">↗</span></a>
+            </div>
+            <div class="menu-group">
+              <h2 class="menu-kicker">Connect</h2>
+              <ul class="menu-chips">
+                <li><a class="menu-chip" href="https://t.me/FxAeonBot" target="_blank" rel="noreferrer">Telegram <span aria-hidden="true">↗</span></a></li>
+                <li><a class="menu-chip" href="https://github.com/fxaeon/FxAeon" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a></li>
+                <li><a class="menu-chip" href="https://fxaeon.com/docs" target="_blank" rel="noreferrer">Docs <span aria-hidden="true">↗</span></a></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <p class="menu-foot">FxAeon · Built on f(x) Protocol</p>
+      </div>
+    </dialog>
 
     <main id="main">
       <section class="hero" aria-labelledby="hero-title">
@@ -54,8 +108,14 @@
           <h1 id="hero-title">Leverage, savings, and credit. <em class="hero-accent">Inside Telegram.</em></h1>
           <p class="lede">FxAeon brings f(x) Protocol to a Telegram mini app: trade ETH and BTC with leverage, earn with fxSAVE, borrow fxUSD, and move between Ethereum and Base.</p>
           <div class="actions">
-            <a class="pill primary" href="https://t.me/FxAeonBot" target="_blank" rel="noreferrer">Open in Telegram <span aria-hidden="true">↗</span></a>
-            <a class="web-link" href="https://fxaeon.com/">Open web app <span aria-hidden="true">→</span></a>
+            <a class="pill primary" href="https://t.me/FxAeonBot" target="_blank" rel="noreferrer" data-device="mobile">Open in Telegram <span aria-hidden="true">↗</span></a>
+            <a class="pill primary" href="https://fxaeon.com/" data-device="desktop">Open web app <span aria-hidden="true">→</span></a>
+            <a class="secondary" href="https://fxaeon.com/" data-device="mobile">Open web app <span aria-hidden="true">→</span></a>
+            <a class="secondary" href="https://t.me/FxAeonBot" target="_blank" rel="noreferrer" data-device="desktop">Open in Telegram <span aria-hidden="true">↗</span></a>
+            <figure class="telegram-qr" data-device="desktop">
+              <img src="assets/telegram-qr.svg" width="88" height="88" alt="QR code" loading="lazy" decoding="async" />
+              <figcaption>Scan with your phone to open FxAeon in Telegram.</figcaption>
+            </figure>
           </div>
         </div>
 
@@ -110,28 +170,44 @@
               <span class="chapter-index" aria-hidden="true">01</span>
               <h3>Trade</h3>
               <p>Go long or short on ETH and BTC with leverage, within each pool’s live range. The app checks and simulates every action, then shows its steps, minimum output, and slippage before your wallet opens.</p>
-              <a class="text-link" href="https://fxaeon.com/trade">Open Trade <span aria-hidden="true">→</span></a>
+              <div class="route-links">
+                <a class="text-link" href="https://t.me/FxAeonBot?startapp=trade" target="_blank" rel="noreferrer" data-device="mobile">Open Trade in Telegram <span aria-hidden="true">↗</span></a>
+                <a class="text-link quiet" href="https://fxaeon.com/trade" data-device="mobile">Open Trade on the web <span aria-hidden="true">→</span></a>
+                <a class="text-link" href="https://fxaeon.com/trade" data-device="desktop">Open Trade <span aria-hidden="true">→</span></a>
+              </div>
               <div class="chapter-phone" aria-hidden="true"></div>
             </li>
             <li class="chapter" data-chapter="earn">
               <span class="chapter-index" aria-hidden="true">02</span>
               <h3>Earn</h3>
               <p>Deposit fxUSD or USDC into fxSAVE, f(x) Protocol’s savings vault. Its APY is variable. Withdraw instantly for a fee, or queue a redemption and claim it after the cooldown.</p>
-              <a class="text-link" href="https://fxaeon.com/earn">Open Earn <span aria-hidden="true">→</span></a>
+              <div class="route-links">
+                <a class="text-link" href="https://t.me/FxAeonBot?startapp=earn" target="_blank" rel="noreferrer" data-device="mobile">Open Earn in Telegram <span aria-hidden="true">↗</span></a>
+                <a class="text-link quiet" href="https://fxaeon.com/earn" data-device="mobile">Open Earn on the web <span aria-hidden="true">→</span></a>
+                <a class="text-link" href="https://fxaeon.com/earn" data-device="desktop">Open Earn <span aria-hidden="true">→</span></a>
+              </div>
               <div class="chapter-phone" aria-hidden="true"></div>
             </li>
             <li class="chapter" data-chapter="borrow">
               <span class="chapter-index" aria-hidden="true">03</span>
               <h3>Borrow</h3>
               <p>Borrow fxUSD against ETH or BTC. As you type, the form shows how much your collateral can support and names anything missing before review.</p>
-              <a class="text-link" href="https://fxaeon.com/borrow">Open Borrow <span aria-hidden="true">→</span></a>
+              <div class="route-links">
+                <a class="text-link" href="https://t.me/FxAeonBot?startapp=borrow" target="_blank" rel="noreferrer" data-device="mobile">Open Borrow in Telegram <span aria-hidden="true">↗</span></a>
+                <a class="text-link quiet" href="https://fxaeon.com/borrow" data-device="mobile">Open Borrow on the web <span aria-hidden="true">→</span></a>
+                <a class="text-link" href="https://fxaeon.com/borrow" data-device="desktop">Open Borrow <span aria-hidden="true">→</span></a>
+              </div>
               <div class="chapter-phone" aria-hidden="true"></div>
             </li>
             <li class="chapter" data-chapter="move">
               <span class="chapter-index" aria-hidden="true">04</span>
               <h3>Move</h3>
               <p>Bridge fxUSD and fxSAVE between Ethereum and Base through the f(x) bridge. The LayerZero fee is quoted before you sign, and delivery is verified separately when it lands.</p>
-              <a class="text-link" href="https://fxaeon.com/move">Open Move <span aria-hidden="true">→</span></a>
+              <div class="route-links">
+                <a class="text-link" href="https://t.me/FxAeonBot?startapp=move" target="_blank" rel="noreferrer" data-device="mobile">Open Move in Telegram <span aria-hidden="true">↗</span></a>
+                <a class="text-link quiet" href="https://fxaeon.com/move" data-device="mobile">Open Move on the web <span aria-hidden="true">→</span></a>
+                <a class="text-link" href="https://fxaeon.com/move" data-device="desktop">Open Move <span aria-hidden="true">→</span></a>
+              </div>
               <div class="chapter-phone" aria-hidden="true"></div>
             </li>
           </ol>
@@ -303,7 +379,11 @@
             <h3 class="scene-title" id="pool-title">Where fxSAVE’s yield comes from.</h3>
             <p>Stability pool deposits earn from position opening and closing fees, staking yield on the wstETH collateral, and USDC lending. fxSAVE holds pool shares and compounds those rewards into more fxUSD and USDC. Its APY is variable.</p>
             <p>In FxAeon, deposit fxUSD or USDC. Withdraw instantly for a fee, or queue a redemption and claim it after the cooldown.</p>
-            <a class="text-link" href="https://fxaeon.com/earn">Open Earn <span aria-hidden="true">→</span></a>
+            <div class="route-links">
+              <a class="text-link" href="https://t.me/FxAeonBot?startapp=earn" target="_blank" rel="noreferrer" data-device="mobile">Open Earn in Telegram <span aria-hidden="true">↗</span></a>
+              <a class="text-link quiet" href="https://fxaeon.com/earn" data-device="mobile">Open Earn on the web <span aria-hidden="true">→</span></a>
+              <a class="text-link" href="https://fxaeon.com/earn" data-device="desktop">Open Earn <span aria-hidden="true">→</span></a>
+            </div>
           </div>
           <figure class="scene-art pool-art" role="img" aria-label="Illustration: position fees, wstETH staking yield, and USDC lending flow into the stability pool, which fxSAVE compounds">
             <svg class="flow flow-wide" viewBox="52 20 578 312" aria-hidden="true" data-ambient>
@@ -399,7 +479,11 @@
             </svg>
             <h3 id="bridge-title">One asset, two networks.</h3>
             <p>fxUSD and fxSAVE move between Ethereum and Base over LayerZero V2. FxAeon quotes the fee before you sign and tracks source confirmation and destination delivery as separate states.</p>
-            <a class="text-link" href="https://fxaeon.com/move">Open Move <span aria-hidden="true">→</span></a>
+            <div class="route-links">
+              <a class="text-link" href="https://t.me/FxAeonBot?startapp=move" target="_blank" rel="noreferrer" data-device="mobile">Open Move in Telegram <span aria-hidden="true">↗</span></a>
+              <a class="text-link quiet" href="https://fxaeon.com/move" data-device="mobile">Open Move on the web <span aria-hidden="true">→</span></a>
+              <a class="text-link" href="https://fxaeon.com/move" data-device="desktop">Open Move <span aria-hidden="true">→</span></a>
+            </div>
           </article>
         </div>
       </section>
@@ -520,8 +604,10 @@
         <h2 id="finale-title">Open FxAeon.</h2>
         <p>Leverage, savings, and credit on f(x) Protocol, in the app you already use.</p>
         <div class="actions">
-          <a class="pill primary" href="https://t.me/FxAeonBot" target="_blank" rel="noreferrer">Open in Telegram <span aria-hidden="true">↗</span></a>
-          <a class="web-link" href="https://fxaeon.com/">Open web app <span aria-hidden="true">→</span></a>
+          <a class="pill primary" href="https://t.me/FxAeonBot" target="_blank" rel="noreferrer" data-device="mobile">Open in Telegram <span aria-hidden="true">↗</span></a>
+          <a class="pill primary" href="https://fxaeon.com/" data-device="desktop">Open web app <span aria-hidden="true">→</span></a>
+          <a class="secondary" href="https://fxaeon.com/" data-device="mobile">Open web app <span aria-hidden="true">→</span></a>
+          <a class="secondary" href="https://t.me/FxAeonBot" target="_blank" rel="noreferrer" data-device="desktop">Open in Telegram <span aria-hidden="true">↗</span></a>
         </div>
       </section>
     </main>

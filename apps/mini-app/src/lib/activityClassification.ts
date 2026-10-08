@@ -3,6 +3,7 @@ import { formatSignificantDecimal } from './amount';
 import { callSelector, decodeActivityCall, type DecodedActivityCall } from './activityCalldata';
 import { compactAddress } from './addressPresentation';
 import { FX_TOKENS } from '@/lib/fx/tokens';
+import { tokenSymbol } from '@/lib/fx/tokenPresentation';
 import { APPROVE, FX_MINT_ROUTER_ADDRESS, FX_ROUTER_ADDRESS, OFT_SEND, canonicalBridgeTarget, operationActionDestinations, positionPoolAddress } from '@/lib/fx/policy';
 
 /**
@@ -224,10 +225,13 @@ export function netActivityFlows(transfers: readonly ActivityTransferInput[]): {
   return { flowsIn: flowsIn.sort(order), flowsOut: flowsOut.sort(order) };
 }
 
+/** A verified token's display symbol (fxSP for the base-pool share); an unverified symbol as the chain reports it. */
+export const flowSymbolText = (flow: Pick<ActivityFlow, 'symbol' | 'verified'>): string => flow.verified ? tokenSymbol(flow.symbol) : flow.symbol;
+
 /** "0.5 wstETH", or "12 XYZ (unverified)" so an unverified symbol never stands alone. */
 export function flowPhrase(flow: ActivityFlow): string {
   const amount = flow.amount ? `${flow.amount} ` : '';
-  return flow.verified ? `${amount}${flow.symbol}` : `${amount}${flow.symbol} (unverified)`;
+  return flow.verified ? `${amount}${flowSymbolText(flow)}` : `${amount}${flow.symbol} (unverified)`;
 }
 
 function joinWords(parts: readonly string[]): string {
@@ -239,7 +243,7 @@ const phrases = (flows: readonly ActivityFlow[]) => joinWords(flows.map(flowPhra
 
 /** Title symbols: verified symbols, unverified tokens grouped, capped at two then "+ N more". */
 function symbolList(flows: readonly ActivityFlow[]): string {
-  const verified = [...new Set(flows.filter((flow) => flow.verified).map((flow) => flow.symbol))];
+  const verified = [...new Set(flows.filter((flow) => flow.verified).map(flowSymbolText))];
   const unverified = flows.filter((flow) => !flow.verified).length;
   const names = [...verified, ...(unverified === 1 ? ['unverified token'] : unverified > 1 ? [`${unverified} unverified tokens`] : [])];
   if (names.length <= 2) return names.join(' + ');
@@ -469,7 +473,7 @@ function titleFor({ action, kind, done, flowsIn, flowsOut }: Context): string {
     case 'approve': {
       const approval = action.approval;
       if (approval?.positionApproval) return pick(`Approved ${position} position`, `Approve ${position} position`);
-      const token = approval?.verified ? approval.token : 'token';
+      const token = approval?.verified ? tokenSymbol(approval.token) : 'token';
       if (approval?.amount === 0n) return pick(`Revoked ${token} approval`, `Revoke ${token} approval`);
       return pick(`Approved ${token}`, `Approve ${token}`);
     }
@@ -557,7 +561,7 @@ function summaryFor(context: Context): string {
       const approval = action.approval;
       const spender = name ?? 'a contract';
       if (approval?.positionApproval) return `You allowed ${spender} to manage your ${position} position.`;
-      const token = approval?.verified ? approval.token : 'token';
+      const token = approval?.verified ? tokenSymbol(approval.token) : 'token';
       if (approval?.amount === undefined) return `You allowed ${spender} to spend your ${token}.`;
       if (approval.amount === 0n) return `You removed ${spender}'s permission to spend your ${token}.`;
       if (approval.amount >= UNLIMITED_APPROVAL) return `You allowed ${spender} to spend unlimited ${token}.`;
@@ -631,7 +635,7 @@ export function activityLegs(classification: Pick<ActivityClassification, 'kind'
 /** Signed display amount with a true minus sign, e.g. "−0.5 wstETH" or "+12 XYZ". */
 export function signedLegText(leg: ActivityLeg): string {
   const sign = leg.direction === 'in' ? '+' : '−';
-  return `${sign}${leg.flow.amount ?? '?'} ${leg.flow.symbol}`;
+  return `${sign}${leg.flow.amount ?? '?'} ${flowSymbolText(leg.flow)}`;
 }
 
 /**
@@ -702,7 +706,7 @@ export function classifyActivity(input: ActivityClassificationInput): ActivityCl
   const spamSuspect = !journal && !input.protocol?.length && input.transfers.length > 0
     && input.transfers.every((transfer) => !transfer.verified) && walletInitiated !== true;
   const approval = action.approval && !action.approval.positionApproval ? {
-    token: action.approval.token,
+    token: action.approval.verified ? tokenSymbol(action.approval.token) : action.approval.token,
     verified: action.approval.verified,
     unlimited: action.approval.amount !== undefined && action.approval.amount >= UNLIMITED_APPROVAL,
     revoke: action.approval.amount === 0n,

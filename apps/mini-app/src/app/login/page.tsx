@@ -49,18 +49,18 @@ function TelegramUnavailableFlow() {
     }
   };
   return (
-    <main className={`${styles.loginPanel} ${styles.authStage} mx-auto w-full`}>
+    <main className={`${styles.loginPanel} ${styles.authStage} utility-stage mx-auto w-full`}>
       <span className={styles.authHalo} aria-hidden="true"><FxLogo size={44} /></span>
       <h1 className={styles.authTitle}>Connect in your browser</h1>
       <p className={styles.authLead}>
         Wallet sign-in isn’t available here. Open FxAeon in your browser to connect a wallet.
       </p>
       <div className={styles.authActions}>
-        <a href={browserUrl} target="_blank" rel="noopener noreferrer" onClick={openBrowser} className="button button-primary glass-press flex min-h-12 w-full items-center justify-center gap-2 px-4 py-3 text-[15px] font-semibold">
+        <a href={browserUrl} target="_blank" rel="noopener noreferrer" onClick={openBrowser} className="button button-primary glass-press flex min-h-12 w-full items-center justify-center gap-2 px-4 py-3 font-semibold">
           Continue in browser <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </a>
       </div>
-      <Link href="/" className={styles.authBack}><ArrowLeft aria-hidden="true" />Back to home</Link>
+      <Link href="/" className={styles.authBack}><ArrowLeft aria-hidden="true" />Back to Portfolio</Link>
     </main>
   );
 }
@@ -86,7 +86,7 @@ function BrowserWalletFlow() {
 
   const connected = Boolean(wallet.authenticated && wallet.address);
   return (
-    <main className={`${styles.loginPanel} ${styles.authStage} mx-auto w-full`}>
+    <main className={`${styles.loginPanel} ${styles.authStage} utility-stage mx-auto w-full`}>
       <span className={styles.authHalo} aria-hidden="true"><FxLogo size={44} /></span>
       <h1 className={styles.authTitle}>{connected ? 'Wallet connected' : 'Connect your wallet'}</h1>
       <p className={styles.authLead}>{connected
@@ -100,7 +100,7 @@ function BrowserWalletFlow() {
             <GroupedAddress address={wallet.address} />
           </div>
           <div className={styles.authActions}>
-            <Link href="/" onClick={() => haptic('medium')} className="button button-primary glass-press flex min-h-12 w-full items-center justify-center gap-2 px-4 py-3 text-[15px] font-semibold">Continue to FxAeon <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
+            <Link href="/" onClick={() => haptic('medium')} className="button button-primary glass-press flex min-h-12 w-full items-center justify-center gap-2 px-4 py-3 font-semibold">Continue to FxAeon <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
           </div>
         </>
       ) : (
@@ -111,7 +111,7 @@ function BrowserWalletFlow() {
           {error && <p role="alert" className={styles.authNotice} data-tone="danger">{error}</p>}
         </>
       )}
-      <Link href="/" className={styles.authBack}><ArrowLeft aria-hidden="true" />Back to home</Link>
+      <Link href="/" className={styles.authBack}><ArrowLeft aria-hidden="true" />Back to Portfolio</Link>
     </main>
   );
 }

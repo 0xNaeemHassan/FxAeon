@@ -17,6 +17,7 @@ import { announceSettingsUpdated, readGasTier, readSlippagePercent, SETTINGS_KEY
 import { changedConsequenceFacts, reviewGenerationIsCurrent, updatedRouteTermsRequired, type ChangedReviewFact, type ReviewTransition } from '@/components/review/actionReviewModel';
 import { useActionReviewController } from '@/components/review/useActionReviewController';
 import type { ActionReviewProps } from './actionReviewTypes';
+import { tokenSymbol } from '@/lib/fx/tokenPresentation';
 
 const REVIEW_FRESHNESS_MS = 30_000;
 
@@ -151,10 +152,18 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
     return () => window.clearTimeout(timer);
   }, [expireQuote, preparedAt, stage]);
 
+  const previousStageRef = useRef(stage);
   useEffect(() => {
     const stableTrade = Boolean(props.preparationFacts?.length);
-    if (stage === 'result' || (stableTrade ? stage === 'planning' : stage === 'review')) {
+    const previous = previousStageRef.current;
+    previousStageRef.current = stage;
+    // Each view that replaces the editor takes focus at its heading, so focus
+    // never falls back to the page when the Review button unmounts. A failed
+    // preparation returns focus to the action that tries again.
+    if (stage === 'result' || stage === 'planning' || (!stableTrade && stage === 'review')) {
       headingRef.current?.focus({ preventScroll: true });
+    } else if (stage === 'input' && previous === 'planning') {
+      triggerRef.current?.focus({ preventScroll: true });
     }
   }, [props.preparationFacts?.length, stage]);
 
@@ -648,7 +657,7 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
             setStatus('awaiting-user');
             const approvalToken = Object.values(FX_TOKENS).find((token) => token.address.toLowerCase() === transaction.to.toLowerCase());
             const signingLabel = transaction.kind === 'approval'
-              ? transaction.type === 'approvePosition' ? 'Approve position' : `Approve ${approvalToken?.key ?? 'token'}`
+              ? transaction.type === 'approvePosition' ? 'Approve position' : `Approve ${approvalToken ? tokenSymbol(approvalToken.key) : 'token'}`
               : 'Confirm';
             // Name the exact request the wallet is showing; the status model
             // appends the instruction to review it there.
@@ -803,7 +812,11 @@ export function useActionReviewLifecycle(props: ActionReviewProps) {
       } else {
         // A declined signature or stale quote is not an explicit draft
         // cancellation. History can restore the same primitive form state.
+        // The route cannot be signed as it stands, so its action becomes the
+        // explicit fresh review ("Review updated quote") rather than a
+        // silently disabled Confirm.
         setError(message);
+        expireQuote();
         transition('signing-failed');
       }
       setStatus('failed');

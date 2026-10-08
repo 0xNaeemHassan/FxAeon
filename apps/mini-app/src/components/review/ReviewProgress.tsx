@@ -90,13 +90,13 @@ export function CalldataDisclosure({ data }: { data: string }) {
   return (
     <div className="mt-2 border-t border-[var(--line)] pt-2">
       <div className="mb-1 flex items-center justify-between gap-2">
-        <span className="text-[10px] font-semibold text-mut">Calldata</span>
-        <button type="button" className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-[10px] font-semibold text-mut hover:text-[var(--text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--mint)]" onClick={() => void copy()}>
+        <span className="text-[11px] font-semibold text-mut">Calldata</span>
+        <button type="button" className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-[12px] font-semibold text-mut hover:text-[var(--text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--mint)]" onClick={() => void copy()}>
           {copied ? <Check aria-hidden="true" className="h-3.5 w-3.5" /> : <Copy aria-hidden="true" className="h-3.5 w-3.5" />}
-          {copied ? 'Copied' : 'Copy'}
+          {copied ? 'Copied' : 'Copy calldata'}
         </button>
       </div>
-      <pre className="max-h-28 overflow-auto rounded-lg bg-[rgba(0,0,0,.18)] p-2 font-mono text-[9px] leading-relaxed text-[var(--mut-2)] [overflow-wrap:anywhere]" tabIndex={0} aria-label="Transaction calldata">{data}</pre>
+      <pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-lg bg-[var(--surface-2)] p-2 font-mono text-[11px] leading-relaxed text-[var(--mut)] [overflow-wrap:anywhere]" tabIndex={0} aria-label="Transaction calldata">{data}</pre>
       <span role="status" className="sr-only">{copied ? 'Calldata copied' : ''}</span>
     </div>
   );

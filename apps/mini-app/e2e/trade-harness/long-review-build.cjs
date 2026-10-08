@@ -13,7 +13,7 @@ const mocks={
   "@/components/NetworkSelector": "export default function NetworkSelector(){return null}",
   "@/components/ConnectWalletButton": "export default function ConnectWalletButton(){throw Error('No signing or connections permitted in fixture')}",
   "@/components/WalletDataProvider": "const balances={balances:[{key:'ETH',decimals:18,amountWei:400000000000000n},{key:'WBTC',decimals:8,amountWei:100000000n},{key:'wstETH',decimals:18,amountWei:1000000000000000000n}],failedTokens:[]};export const useWalletBalances=()=>({data:balances,status:'ready',refresh:async()=>{}});export const useInvalidateWalletData=()=>async()=>{};",
-  "@/lib/wallet": "export const usePrivyWallet=()=>({...globalThis.__longReview.wallet,wallets:[],sendTransaction:async()=>{throw Error('Wallet sending forbidden')},connect:async()=>{throw Error('Wallet connect forbidden')}});",
+  "@/lib/wallet": "export const usePrivyWallet=()=>({...globalThis.__longReview.wallet,wallets:[],sendTransaction:async()=>{throw Error('Wallet sending forbidden')},connect:async()=>{throw Error('Wallet connect forbidden')}});export const useWalletReadyTimeout=()=>false;",
   "@/lib/telegram": "export const haptic=()=>{};export const openExternalLink=()=>false;export const telegramExplorerUrl=()=>null;"
 };
 const instrument={

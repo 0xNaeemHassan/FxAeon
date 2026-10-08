@@ -200,32 +200,48 @@ export function ProtocolPositionNotice({
 }) {
   if (status === 'idle' || status === 'loading' || status === 'ready') return null;
   const groups = failedGroups.map((group) => `${group.market} ${group.side}`).join(', ');
+  // Each notice names what failed, what is still shown, and offers the retry beside it.
   const label = status === 'partial' && hasPositions
-    ? `Refreshing ${groups || 'position details'}`
+    ? `Couldn’t check ${groups || 'some positions'}. Showing the rest.`
     : hasPositions
-      ? `Could not refresh ${groups || 'positions'}; showing last verified details`
-      : 'Positions are temporarily unavailable';
+      ? `Couldn’t refresh ${groups || 'positions'}. Showing the last verified details.`
+      : 'Couldn’t load positions. Your funds are unaffected.';
 
   return (
-    <div role="status" aria-label={label} className={styles.notice} data-compact={compact || undefined}>
+    <div role="status" aria-label={refreshing ? 'Checking positions' : label} className={styles.notice} data-compact={compact || undefined}>
       <AlertTriangle aria-hidden="true" />
       {/* Sighted users see the same state the label announces. */}
-      <span>{refreshing ? 'Refreshing positions…' : label}</span>
+      <span>{refreshing ? 'Checking positions…' : label}</span>
       {onRefresh && (
-        <button type="button" onClick={onRefresh} disabled={refreshing} aria-label="Retry position verification">
-          <RefreshCw className={refreshing ? 'animate-spin' : ''} aria-hidden="true" />
+        <button type="button" onClick={onRefresh} disabled={refreshing} aria-busy={refreshing}>
+          <RefreshCw className={refreshing ? 'animate-spin' : ''} aria-hidden="true" />Retry
         </button>
       )}
     </div>
   );
 }
 
+/** A position card in outline: the same padding, rows and tiles as the card it stands in for. */
 export function ProtocolPositionSkeleton({ compact = false }: { compact?: boolean }) {
   return (
     <div role="status" aria-label="Loading positions" className={`${styles.card} ${compact ? styles.compact : ''}`}>
-      <div className="flex items-center gap-3"><Skeleton className="h-10 w-10 rounded-full" /><div className="flex-1"><Skeleton className="h-4 w-32 rounded-md" /><Skeleton className="mt-2 h-3 w-24 rounded-md" /></div></div>
-      <Skeleton className="mt-4 h-7 w-40 rounded-lg" />
-      {!compact && <div className="mt-3 grid grid-cols-2 gap-2"><Skeleton className="h-16 rounded-xl" /><Skeleton className="h-16 rounded-xl" /></div>}
+      <div className={`${styles.content} ${compact ? styles.compactContent : ''}`} aria-hidden="true">
+        <div className={styles.identity}>
+          <Skeleton className={styles.skeletonToken} />
+          <div className={styles.skeletonLines}><Skeleton /><Skeleton /></div>
+        </div>
+        <div className={styles.positionValue}>
+          <div className={styles.skeletonLines}><Skeleton /><Skeleton /></div>
+          <Skeleton className={styles.skeletonFigure} />
+        </div>
+        <Skeleton className={styles.skeletonSplit} />
+        <div className={styles.metrics}>
+          {/* Collateral and debt carry a USD line beneath their amount; price and ratio do not. */}
+          {[3, 3, 2, 2].map((lines, tile) => <div key={tile} className={`${styles.metric} ${styles.skeletonMetric}`}>
+            {Array.from({ length: lines }, (_, line) => <Skeleton key={line} />)}
+          </div>)}
+        </div>
+      </div>
     </div>
   );
 }

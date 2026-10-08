@@ -3,9 +3,9 @@ import type { ReviewFact } from '@/lib/fx/reviewFormatting';
 const ALWAYS_VISIBLE = new Set([
   'Amount', 'Deposit', 'Borrow', 'Repay', 'Withdraw', 'fxSAVE', 'Receive', 'Asset',
   'Action', 'Position', 'Mode', 'Slippage', 'Minimum received', 'Quoted minimum received',
-  'Minimum base-pool shares', 'Final fxSAVE minimum', 'Minimum converted input', 'Minimum converted deposit',
+  'Minimum fxSP', 'Final fxSAVE minimum', 'Minimum converted input', 'Minimum converted deposit',
   'Minimum debt repaid', 'Minimum received (fxUSD leg)', 'Minimum received (USDC leg)',
-  'Gas tier', 'Gas fee', 'Protocol fee', 'Protocol fee rate', 'Total cost', 'Bridge fee',
+  'Gas tier', 'Gas fee', 'Protocol fee', 'Protocol fee rate', 'Total cost', 'Bridge fee', 'Loan-to-value',
 ]);
 
 /** Separate concise decision facts from exact quote and route metadata. */

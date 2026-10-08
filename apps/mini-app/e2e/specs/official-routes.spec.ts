@@ -610,7 +610,9 @@ test.describe("browser wallet connection", () => {
   test("Move keeps recipient editable and centralizes wallet connection in review", async ({ page, requests }) => {
     await page.goto("/move", { waitUntil: "domcontentloaded" });
     const recipient = page.getByText(/^Recipient on (Ethereum|Base)$/).locator("xpath=../..");
-    await expect(recipient.getByText("Connect wallet", { exact: true })).toBeVisible();
+    // The recipient row is a status, not a second connect control.
+    await expect(recipient.getByText("Not connected", { exact: true })).toBeVisible();
+    await expect(recipient.getByText("Connect wallet", { exact: true })).toHaveCount(0);
     await expect(page.locator(".reviewTrigger").getByRole("button", { name: "Connect wallet", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Connect wallet for recipient", exact: true })).toHaveCount(0);
     // The shortest phone layout keeps derived route metadata out of the first
@@ -713,7 +715,7 @@ test.describe("Move and More compact surfaces", () => {
     await page.goto("/move", { waitUntil: "domcontentloaded" });
     const amount = page.getByLabel("Amount in fxUSD");
     await amount.fill("not-a-number");
-    await expect(page.getByText("Enter a plain decimal number.", { exact: true })).toBeVisible();
+    await expect(page.getByText("Use digits and one decimal point, like 1.25.", { exact: true })).toBeVisible();
     await expect(page.getByText(/\b(?:Expected receive|ETA)\b/i)).toHaveCount(0);
     await amount.fill("1");
     await expect(page.getByText(/\b(?:Expected receive|ETA)\b/i)).toHaveCount(0);

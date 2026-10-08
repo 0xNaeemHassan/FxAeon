@@ -13,7 +13,7 @@ const mocks: Record<string, string> = {
   'next/link': `export default ({href,children,...props}) => <a href={href} {...props}>{children}</a>;`,
   'next/navigation': `export const useRouter = () => ({push:(href) => {history.pushState({},'',href);globalThis.__earnHarness.navigate();}});`,
   '@/components/ui': `export const AppShell = ({children}) => <main style={{padding:16}}>{children}</main>;`,
-  '@/components/ProductUI': `export const PageHeading = ({title}) => <h1>{title}</h1>; export const ProductNav = () => <nav>Products</nav>; export const ProductSurface = ({children,...props}) => <section {...props}>{children}</section>; export const Disclosure = () => null; export const MetricRows = () => null; export const StatusNotice = ({title}) => <p>{title}</p>; export { ChoiceCards } from 'real:components/ProductUI';`,
+  '@/components/ProductUI': `export const PageHeading = ({title}) => <h1>{title}</h1>; export const ProductNav = () => <nav>Products</nav>; export const ProductSurface = ({children,...props}) => <section {...props}>{children}</section>; export const Disclosure = ({title,children}) => <section aria-label={title}>{children}</section>; export const MetricRows = ({rows}) => <dl>{rows.map(row => <div key={row.label}><dt>{row.label}</dt><dd>{row.value}</dd></div>)}</dl>; export const StatusNotice = ({title}) => <p>{title}</p>; export { ChoiceCards } from 'real:components/ProductUI';`,
   '@/components/ProductSections': `export const EarnSections = () => null;`,
   '@/components/TokenIcon': `export default () => <span />;`,
   '@/components/MissingValue': `export const MissingValue = () => <span>Unavailable</span>; export const ValueOrSkeleton = ({value}) => <span>{value}</span>;`,
@@ -24,7 +24,7 @@ const mocks: Record<string, string> = {
   '@/lib/fx/gasFeePolicy': `export const fetchGasTierQuotes = async () => ({tiers:{standard:{gasPriceWei:1n},fast:{gasPriceWei:2n},rapid:{gasPriceWei:3n}}});`,
   '@/lib/wallet': `export const usePrivyWallet = () => ({address:'0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',chainId:1,isEmbedded:true});`,
   '@/components/WalletDataProvider': `const refresh = async () => {}; export const useFxSaveClaimable = () => ({status:'ready',data:{hasPendingRedeem:false},refresh});`,
-  '@/components/ProtocolForm': `export const AmountField = ({label,value,onChange,tokenSelector}) => <>{tokenSelector}<label>{label}<input aria-label={label} value={value} onChange={event => onChange(event.target.value)} /></label></>; export const TokenSelect = ({value,onChange,options}) => <select aria-label="Earn asset" value={value} onChange={event => onChange(event.target.value)}>{options.map(token => <option key={token} value={token}>{token}</option>)}</select>; export const Segmented = ({options,onChange}) => <div>{options.map(option => <button key={option.value} onClick={() => onChange(option.value)}>{option.label}</button>)}</div>; const refresh = async () => {}; const balances = {fxUSD:{status:'ready',amount:'1000'},usdc:{status:'ready',amount:'1000'},fxUSDBasePool:{status:'ready',amount:'1000'}}; export const useWalletTokenBalances = () => ({status:'ready',balances,refresh});`,
+  '@/components/ProtocolForm': `export const AmountField = ({label,value,onChange,tokenSelector,balanceState}) => <>{tokenSelector}<label>{label}<input aria-label={label} data-available={balanceState?.amount} value={value} onChange={event => onChange(event.target.value)} /></label></>; export const TokenSelect = ({value,onChange,options}) => <select aria-label="Earn asset" value={value} onChange={event => onChange(event.target.value)}>{options.map(token => <option key={token} value={token}>{token}</option>)}</select>; export const Segmented = ({options,onChange}) => <div>{options.map(option => <button key={option.value} onClick={() => onChange(option.value)}>{option.label}</button>)}</div>; const refresh = async () => {}; const balances = {fxUSD:{status:'ready',amount:'1000'},usdc:{status:'ready',amount:'1000'},fxUSDBasePool:{status:'ready',amount:'1000'}}; export const useWalletTokenBalances = () => ({status:'ready',balances,refresh});`,
   '@/components/ActionReview': `import React from 'react'; export const ActionReview = ({editor,planBuilder,resumeReview,onStageChange,label,blocker}) => {
     const [review,setReview] = React.useState(false); const resumed = React.useRef(false);
     const open = async () => {if (!planBuilder || blocker) return; await planBuilder();setReview(true);onStageChange('review');};
@@ -32,7 +32,7 @@ const mocks: Record<string, string> = {
     return review ? <section aria-label="Earn review"><p>Review slippage: {globalThis.__earnHarness.plans.at(-1)?.slippage}%</p><button onClick={() => {setReview(false);onStageChange('input');}}>Edit</button></section> : <>{editor}<button disabled={!planBuilder || Boolean(blocker)} onClick={open}>{label}</button></>;
   };`,
   '@/lib/fx': `export const assertPublicClientChain = async () => {}; export const getEthereumClient = () => ({}); export const MAX_FX_SLIPPAGE_PERCENT = 2; export const assertConfiguredPublicClientChain = async () => {}; export const withReadDeadline = promise => promise;
-    export const getFxReadFacade = () => ({getFxSaveConfig:async () => ({cooldownPeriodSeconds:3600n,instantRedeemFeeRatio:1000000000000000n,expenseRatio:0n,harvesterRatio:0n,threshold:0n,totalAssetsWei:1000n*10n**18n,totalSupplyWei:1000n*10n**18n}),getFxSaveBalance:async () => ({balanceWei:600n*10n**18n,assetsWei:62045n*10n**16n}),getFxSaveRedeemStatus:async () => ({hasPendingRedeem:false})});
+    export const getFxReadFacade = () => ({getFxSaveConfig:async () => ({cooldownPeriodSeconds:3600n,instantRedeemFeeRatio:1000000000000000n,expenseRatio:0n,harvesterRatio:100000n,threshold:100n*10n**18n,totalAssetsWei:1000n*10n**18n,totalSupplyWei:1000n*10n**18n}),getFxSaveBalance:async () => ({balanceWei:BigInt(new URLSearchParams(location.search).get('fixtureShares') ?? 600n*10n**18n),assetsWei:62045n*10n**16n}),getFxSaveRedeemStatus:async () => ({hasPendingRedeem:false})});
     export const signatureDraftIdFromSearch = search => new URLSearchParams(search).get('fxDraft');
     export const restoreSignatureRequiredDraftFromSearch = (search,scope) => new URLSearchParams(search).has('fxDraft') && scope.actionKey === (new URLSearchParams(search).get('fixtureMode') === 'deposit' ? 'earn:deposit' : 'earn:withdraw') ? ({draft:{resumePath:'/earn'},formState:{mode:new URLSearchParams(search).get('fixtureMode') === 'deposit' ? 'deposit' : 'withdraw',token:new URLSearchParams(search).get('fixtureToken') ?? 'fxUSD',amount:'10',shares:'10',instant:new URLSearchParams(search).get('fixtureInstant') !== 'false',slippage:new URLSearchParams(search).get('fixtureSlippage') ?? '2'}}) : undefined;
     export const planDepositFxSave = async input => {globalThis.__earnHarness.plans.push(input);return {};}; export const planWithdrawFxSave = planDepositFxSave; export const planRedeem = planDepositFxSave;`,
@@ -69,14 +69,15 @@ test.beforeAll(async () => {
   css=result.outputFiles.find(file => file.path.endsWith('.css'))!.text;
 });
 
-async function mount(page:Page,resume=true,slippage='2',mode:'withdraw'|'deposit'='withdraw',fixture:{token?:string;instant?:boolean}={}) {
+async function mount(page:Page,resume=true,slippage='2',mode:'withdraw'|'deposit'='withdraw',fixture:{token?:string;instant?:boolean;shares?:string}={}) {
   await page.route('http://earn.test/**',route => route.fulfill({body:'<!doctype html><html><head></head><body><div id="root"></div></body></html>',contentType:'text/html'}));
-  await page.goto(`http://earn.test/earn${resume ? `?fxDraft=fixture${mode === 'deposit' ? '&fixtureMode=deposit' : ''}${slippage === '2' ? '' : `&fixtureSlippage=${slippage}`}${fixture.token ? `&fixtureToken=${fixture.token}` : ''}${fixture.instant === false ? '&fixtureInstant=false' : ''}` : ''}`);
+  const shares = fixture.shares ? `fixtureShares=${fixture.shares}` : '';
+  await page.goto(`http://earn.test/earn${resume ? `?fxDraft=fixture${mode === 'deposit' ? '&fixtureMode=deposit' : ''}${slippage === '2' ? '' : `&fixtureSlippage=${slippage}`}${fixture.token ? `&fixtureToken=${fixture.token}` : ''}${fixture.instant === false ? '&fixtureInstant=false' : ''}${shares ? `&${shares}` : ''}` : shares ? `?${shares}` : ''}`);
   await page.evaluate(() => localStorage.setItem('fxaeon.settings.v1',JSON.stringify({slippageBps:50,gasTier:'standard'})));
   await page.addStyleTag({content:`*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;--fs-small:14px;--fs-caption:12px;--text:#111;--mut:#555;--surface:#fff;--surface-2:#eee;--line:#ccc;--success:#16803b;--radius-sm:8px;--dur-fast:0ms}button{font:inherit;border:0;padding:0;cursor:pointer;background:none}${css}`});
   await page.addScriptTag({content:script});
   if(resume) await expect(page.getByRole('region',{name:'Earn review'})).toContainText(`Review slippage: ${mode === 'deposit' || fixture.token === 'fxUSDBasePool' || fixture.instant === false ? '' : slippage}%`);
-  else await expect(page.getByText('600 fxSAVE',{exact:true})).toBeVisible();
+  else await expect(page.getByText(fixture.shares ? /^[\d,.]+ fxSAVE$/ : '600 fxSAVE',{exact:true}).first()).toBeVisible();
 }
 async function openSettings(page:Page,percent:string) {
   await page.getByRole('button',{name:`Transaction settings, ${percent}% slippage`,exact:true}).click();
@@ -98,7 +99,7 @@ test('deposits never offer or forward an unused slippage setting', async ({ page
     const dialog = page.getByRole('dialog', { name: 'Transaction settings', exact: true });
     await expect(dialog.getByRole('textbox', { name: 'Slippage tolerance percentage' })).toHaveCount(0);
     await dialog.getByRole('button', { name: 'Close transaction settings' }).click();
-    await page.getByLabel('Deposit amount', { exact: true }).fill('10');
+    await page.getByLabel('Amount', { exact: true }).fill('10');
     await page.getByRole('button', { name: 'Review deposit', exact: true }).click();
     const plan = await page.evaluate(() => {
       const harness = globalThis as typeof globalThis & { __earnHarness: { plans: Array<{ slippage?: number; tokenIn: string }> } };
@@ -165,6 +166,37 @@ test('navigation does not save a restored draft; explicit custom edits persist',
   await page.getByLabel('Amount',{exact:true}).fill('10');
   await page.getByRole('button',{name:'Review withdrawal',exact:true}).click();
   await expect(page.getByRole('region',{name:'Earn review'})).toContainText('Review slippage: 0.75%');
+});
+
+test('withdrawals compare the exact fxSAVE balance, and vault details read in their own units',async ({page}) => {
+  await mount(page,false,'2','withdraw',{shares:'600123456789000000000'});
+  await page.getByRole('button',{name:'Withdraw',exact:true}).click();
+  // The field gets the exact share balance: it rounds its own figure down, and
+  // its over-balance check must agree with the review's exact limit.
+  const amount=page.getByLabel('Amount',{exact:true});
+  await expect(amount).toHaveAttribute('data-available','600.123456789');
+  await amount.fill('600.123456789');
+  await expect(page.getByRole('button',{name:'Review withdrawal',exact:true})).toBeEnabled();
+  await amount.fill('600.12345679');
+  await expect(page.getByRole('button',{name:'Review withdrawal',exact:true})).toBeDisabled();
+  const vault=page.getByRole('region',{name:'Vault details'});
+  // fxSAVE's harvester ratio has 1e9 precision: 100000 is 0.01%, not 0%.
+  await expect(vault).toContainText('Harvester ratio0.01%');
+  await expect(vault).toContainText('Batch deposit threshold100 fxSP');
+  await expect(vault).not.toContainText(/raw units|Instant-redemption fee|Cooldown/);
+});
+
+test('the settings popover fits a 320px phone without clipping a row',async ({page}) => {
+  await page.setViewportSize({width:320,height:640});
+  await mount(page,false);
+  await page.getByRole('button',{name:'Withdraw',exact:true}).click();
+  const dialog=await openSettings(page,'0.5');
+  await expect(dialog.getByRole('radiogroup',{name:'Network speed'})).toBeVisible();
+  const clipped=await dialog.evaluate((panel) => {
+    const edge=panel.getBoundingClientRect().right;
+    return [...panel.querySelectorAll('h3,p,button,input,label')].filter((element) => element.getBoundingClientRect().right > edge + 1).map((element) => element.textContent || element.tagName);
+  });
+  expect(clipped).toEqual([]);
 });
 
 test('fxSAVE units wrap as a row at narrow widths and enlarged text',async ({page}) => {

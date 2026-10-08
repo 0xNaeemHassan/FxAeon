@@ -30,7 +30,10 @@ export function AccountSummary() {
   const timedOut = useWalletReadyTimeout(wallet.ready);
   if (!wallet.ready) return timedOut ? <div className={styles.account} role="status">
     <span>Wallet provider is unavailable.</span><button className={styles.iconButton} type="button" aria-label="Retry wallet provider" onClick={() => window.location.reload()}><RefreshCw size={18} aria-hidden="true" /></button>
-  </div> : <div className={`${styles.account} ${styles.loading}`} role="status" aria-label="Loading account"><span className="skeleton h-10 w-10 rounded-xl" /><span className="skeleton h-5 w-32 rounded" /></div>;
+  </div> : <div className={`${styles.account} ${styles.loading}`} role="status" aria-label="Loading account">
+    {/* The connected card's shape: a round avatar beside a name and an address. */}
+    <span className={`skeleton ${styles.skeletonAvatar}`} /><span className={styles.copy}><span className={`skeleton ${styles.skeletonName}`} /><span className={`skeleton ${styles.skeletonAddress}`} /></span>
+  </div>;
   if (!activeAddress) return <div className={styles.account}>
     <span className={styles.accountIcon}><Wallet size={22} aria-hidden="true" /></span>
     <span className={styles.copy}><strong>{wallet.authenticated ? 'Choose a wallet' : 'No wallet connected'}</strong><small>Connect to view your account</small></span>

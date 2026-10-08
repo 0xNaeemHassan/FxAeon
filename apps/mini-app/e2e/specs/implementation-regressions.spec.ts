@@ -73,7 +73,7 @@ test.describe('implementation regressions', () => {
     test('never presents duplicate collateral inputs', async ({ page, requests }) => {
       await page.goto('/borrow', { waitUntil: 'domcontentloaded' });
       await expect(page.getByRole('main')).toBeVisible();
-      const input = page.locator('input[aria-label^="Starting collateral in "], input[aria-label^="Collateral to add in "]');
+      const input = page.locator('input[aria-label^="Collateral in "], input[aria-label^="Collateral to add in "]');
       await expect(input).toHaveCount(1);
       await expect(input).toBeVisible();
       await expect(page.getByRole('radio', { name: 'New position', exact: true })).toHaveAttribute('aria-checked', 'true');
@@ -85,7 +85,7 @@ test.describe('implementation regressions', () => {
     test.use({ browserWallet: { address: WALLET, initiallyConnected: true } });
     test('exposes protocol resources and disconnects through the account drawer', async ({ page, requests }) => {
       await page.goto('/more', { waitUntil: 'domcontentloaded' });
-      const resource = page.getByRole('link', { name: /f\(x\) Protocol docs/i });
+      const resource = page.getByRole('link', { name: /^Protocol docs/ });
       await expect(resource).toBeVisible();
       await expect(resource).toHaveAttribute('href', 'https://fxprotocol.gitbook.io/fx-docs');
       await expect(resource).toHaveAttribute('target', '_blank');

@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useId, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useId, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import TokenIcon from '@/components/TokenIcon';
 import { useUsdPrices } from '@/components/PriceProvider';
 import { ValueOrSkeleton } from '@/components/MissingValue';
 import type { TokenBalanceView } from '@/components/wallet-balance-cache';
-import { calculateFractionDecimal, compareExactDecimals, decimalInputError, formatExactDecimal, normalizeAmountInput, positiveDecimal } from '@/lib/amount';
+import { calculateFractionDecimal, compareExactDecimals, decimalInputError, formatBalanceDecimal, normalizeAmountInput, positiveDecimal } from '@/lib/amount';
 import { formatUsd, formatUsdPrice, priceKeyForSymbol, usdValueForDecimal } from '@/lib/prices';
 import { ASSET_PRICE_MAX_AGE_MS } from '@/lib/walletAssets';
 import { tokenSymbol } from '@/lib/fx/tokenPresentation';
@@ -41,6 +41,24 @@ export function AmountField(props: AmountFieldProps) {
   return <AmountFieldView {...props} unitPrice={unitPrice} priceStatus={quote.status === 'loading' ? 'loading' : unitPrice ? 'ready' : 'unavailable'} />;
 }
 
+/**
+ * No form element wraps an action editor, so Enter in its amount asks for the
+ * form's own primary action (Review, or Connect wallet), as a submit would. A
+ * disabled action already names what is missing; Enter then does nothing.
+ */
+function submitNearestAction(event: KeyboardEvent<HTMLInputElement>) {
+  if (event.key !== 'Enter' || event.nativeEvent.isComposing || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+  for (let scope = event.currentTarget.parentElement; scope; scope = scope.parentElement) {
+    const action = scope.querySelector<HTMLButtonElement>('.reviewTrigger button');
+    if (!action) continue;
+    if (!action.disabled) {
+      event.preventDefault();
+      action.click();
+    }
+    return;
+  }
+}
+
 /** Provider-independent field view for isolated use and component testing. */
 export function AmountFieldView({ value, onChange, symbol, label, hint, balance, balanceState,
   allowAll = false, allowZero = false, showPercentages = true, showMax = true,
@@ -49,22 +67,28 @@ export function AmountFieldView({ value, onChange, symbol, label, hint, balance,
   maxPending = false, tokenSelector, inputPolicy = 'dot-decimal', unitPrice: price, priceStatus = 'unavailable',
 }: AmountFieldViewProps) {
   const id = useId();
-  const [touched, setTouched] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [maxError, setMaxError] = useState('');
   useEffect(() => { setHydrated(true); }, []);
-  useEffect(() => { setTouched(false); setMaxError(''); }, [symbol]);
-  const worth = value.trim() && !decimalInputError(value, maxDecimals, { allowAll, allowZero })
-    ? usdValueForDecimal(value, price) : null;
+  useEffect(() => { setMaxError(''); }, [symbol]);
   // An explicit unavailable state always wins over a legacy balance prop.
   const available = balanceState ? balanceState.status === 'ready' ? balanceState.amount ?? null : null : balance;
+  const entered = value.trim();
+  // "all" spends the whole balance, so it is worth what the balance is worth.
+  const worthOf = allowAll && entered.toLowerCase() === 'all' ? available ?? '' : entered;
+  const worth = worthOf && !decimalInputError(worthOf, maxDecimals, { allowZero: true }) ? usdValueForDecimal(worthOf, price) : null;
+  // Nothing entered is exactly $0.00; "≈" marks only a priced estimate, and "<$0.01" already says it is approximate.
+  const usd = /^[0.]*$/.test(entered) ? '$0.00' : worth === null ? null : worth > 0 && worth < 0.01 ? formatUsd(worth) : `≈ ${formatUsd(worth)}`;
   const hasBalance = Boolean(available && positiveDecimal(available, maxDecimals));
   const maximum = maxAmount === null ? null : maxAmount ?? available;
   const hasMaximum = Boolean(maximum && positiveDecimal(maximum, maxDecimals));
   const exceedsBalance = Boolean(available && value && compareExactDecimals(value, available, maxDecimals) === 1);
+  // An empty field is not an error: the form's action already says "Enter an amount",
+  // so leaving the field (to pick an asset, say) never paints it red.
   const error = decimalInputError(value, maxDecimals, { allowAll, allowZero }) ?? constraintError
-    ?? (exceedsBalance ? 'Amount exceeds your available balance.' : null)
-    ?? (touched && !value && !allowZero ? 'Enter an amount.' : null);
+    ?? (!exceedsBalance ? null : hasBalance
+      ? `Amount exceeds your available ${formatBalanceDecimal(available!, 8)} ${tokenSymbol(symbol)}. Enter less${showMax ? ' or use Max' : ''}.`
+      : `This wallet has no ${tokenSymbol(symbol)}. Add some${tokenSelector ? ' or choose another asset' : ''} to continue.`);
   const showBalance = balanceState?.status !== 'disconnected' && (balance !== undefined || balanceState !== undefined);
   const canUseMax = allowAll ? hasBalance : hasMaximum || (maxAmount === null && hasBalance);
   const hasShortcuts = showPercentages || showMax;
@@ -108,15 +132,15 @@ export function AmountFieldView({ value, onChange, symbol, label, hint, balance,
           // leaving a previous valid amount silently executable.
           change(normalized ?? raw.slice(0, 100));
         }}
-          onBlur={() => setTouched(true)} disabled={inactive} inputMode="decimal" autoComplete="off" spellCheck={false} placeholder={placeholder}
-          aria-label={`${label} in ${symbol}`} aria-describedby={describedBy} aria-invalid={Boolean(error)} aria-errormessage={error ? `${id}-error` : undefined} required={!allowZero} />
+          onKeyDown={submitNearestAction} disabled={inactive} inputMode="decimal" autoComplete="off" spellCheck={false} placeholder={placeholder}
+          aria-label={`${label} in ${tokenSymbol(symbol)}`} aria-describedby={describedBy} aria-invalid={Boolean(error)} aria-errormessage={error ? `${id}-error` : undefined} required={!allowZero} />
         </span>
         <div className={styles.token}>{tokenSelector ?? <span className={styles.tokenLabel} title={tokenSymbol(symbol)}><TokenIcon symbol={symbol} size={24} /><span>{tokenSymbol(symbol)}</span></span>}</div>
       </div>
       {(showUsdValue || showBalance) && <div className={styles.usd} data-amount-usd>
-        {showUsdValue && <span>{!value.trim() ? '≈ $0.00' : worth !== null ? `≈ ${formatUsd(worth)}` : <ValueOrSkeleton value="—" width="sm" status={priceStatus === 'loading' ? 'loading' : 'unavailable'} label={priceStatus === 'loading' ? 'Loading USD value' : 'USD value unavailable'} />}</span>}
+        {showUsdValue && <span>{usd ?? <ValueOrSkeleton value="—" width="sm" status={priceStatus === 'loading' ? 'loading' : 'unavailable'} label={priceStatus === 'loading' ? 'Loading USD value' : 'USD value unavailable'} />}</span>}
         {showBalance && <span className={styles.balance} id={`${id}-balance`} title={balanceState?.reason ?? (available ? `${available} ${tokenSymbol(symbol)}` : 'Balance unavailable')}>
-          Available: <strong><ValueOrSkeleton value={available != null ? `${formatExactDecimal(available, 8)} ${tokenSymbol(symbol)}` : '—'} width="sm"
+          Available: <strong><ValueOrSkeleton value={available != null ? `${formatBalanceDecimal(available, 8)} ${tokenSymbol(symbol)}` : '—'} width="sm"
             status={balanceState?.status === 'loading' || !balanceState && available == null ? 'loading' : 'unavailable'} label="Available balance" /></strong>
         </span>}
         {showUnitPrice && price && <span>{formatUsdPrice(price)} / {tokenSymbol(symbol)}</span>}

@@ -543,12 +543,13 @@ export default function MovePage() {
               ) : (
                 <div className="flex min-h-[56px] items-center justify-between gap-3 rounded-2xl bg-[var(--surface-2)] px-3">
                   <span className={moveStyles.recipientMark}><UserRound className="h-4 w-4" aria-hidden="true" /></span>
-                  <span className={`${moveStyles.recipientLabel} mr-auto text-[13px] font-medium text-[var(--text)]`}>{wallet.address ? 'Your wallet' : 'Connect wallet'}</span>
+                  {/* A status, not a control: the form's own action connects a wallet. */}
+                  <span className={`${moveStyles.recipientLabel} mr-auto text-[13px] font-medium text-[var(--text)]`}>Your wallet</span>
                   {wallet.address ? (
                     <span className={`${moveStyles.recipientAddress} font-mono text-[12px] font-semibold`}>
                       {`${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)}`}
                     </span>
-                  ) : null}
+                  ) : <span className={`${moveStyles.recipientAddress} text-[12px] text-mut`}>Not connected</span>}
                 </div>
               )}
             </div>
@@ -559,7 +560,8 @@ export default function MovePage() {
               className={`${styles.advancedPanel} ${moveStyles.expertDisclosure}`}
             >
               <summary className={`${moveStyles.expertSummary} group flex cursor-pointer list-none items-center justify-between gap-3 px-3 text-[12px] font-semibold text-mut [&::-webkit-details-marker]:hidden`}>
-                <span className="flex min-w-0 items-center gap-2"><Code2 aria-hidden="true" className="h-4 w-4 shrink-0 text-[var(--mut-2)]" />Custom contracts</span>
+                {/* Named as the expert path it is (the questions below call it expert mode): fxUSD and fxSAVE never need it. */}
+                <span className="flex min-w-0 items-center gap-2"><Code2 aria-hidden="true" className="h-4 w-4 shrink-0 text-[var(--mut-2)]" /><span className="min-w-0">Expert mode<span className="font-medium text-[var(--mut-2)]"> · custom contracts</span></span></span>
                 <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 text-[var(--mut-2)] disclosure-chevron" />
               </summary>
               <div className="border-t border-[var(--line)] p-3">
@@ -669,7 +671,8 @@ function AddressField({ label, hint, value, onChange, placeholder }: { label: st
         <span>{label}</span>
         {hint && <span className="text-[11px] text-[var(--mut-2)]">{hint}</span>}
       </span>
-      <input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} autoComplete="off" spellCheck={false} inputMode="text" className="min-h-[56px] w-full rounded-2xl border border-[var(--line)] bg-[var(--input)] px-3 font-mono text-[16px] outline-none focus:border-mint" />
+      {/* Phones must not capitalise or correct a hex address while it is typed or pasted. */}
+      <input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false} inputMode="text" className="min-h-[56px] w-full rounded-2xl border border-[var(--line)] bg-[var(--input)] px-3 font-mono text-[16px] outline-none focus:border-mint" />
     </label>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { ArrowRight, ArrowUpRight, BookOpen, ChevronDown, Search } from 'lucide-react';
+import { ArrowRight, BookOpen, ChevronDown, Search } from 'lucide-react';
 import { ExternalLink } from './ExternalLink';
 import { AppShell } from '@/components/ui';
 import { searchDocs, searchExcerpt, type DocsEntry } from './docsSearch';
@@ -129,7 +129,7 @@ export default function DocsShell({ page, entries, children }: { page: Page; ent
                   <p className={styles.navGroupLabel}>Search all documentation</p>
                   {results.map((entry) => <Link key={entry.href} href={entry.page === page ? `#${entry.id}` : entry.href}
                     className={styles.searchResult} onClick={() => { setQuery(''); if (entry.page === page) followSection(entry.id); }}>
-                    <span className={styles.resultTitle}>{entry.title}<ArrowUpRight size={13} aria-hidden="true" /></span>
+                    <span className={styles.resultTitle}>{entry.title}<ArrowRight size={13} aria-hidden="true" /></span>
                     <span className={styles.resultPage}>{entry.page}</span>
                     <span className={styles.resultExcerpt}>{searchExcerpt(entry.text, query)}</span>
                   </Link>)}
@@ -171,8 +171,8 @@ export default function DocsShell({ page, entries, children }: { page: Page; ent
             <footer className={styles.docsFooter}>
               <p>FxAeon is an independent interface. These docs describe its supported integration, not the full f(x) Protocol.</p>
               <div className={styles.footerLinks}>
-                <ExternalLink href="https://fxprotocol.gitbook.io/fx-docs">f(x) protocol docs <ArrowUpRight size={13} aria-hidden="true" /></ExternalLink>
-                <ExternalLink href="https://github.com/fxaeon/FxAeon">View source <ArrowUpRight size={13} aria-hidden="true" /></ExternalLink>
+                <ExternalLink href="https://fxprotocol.gitbook.io/fx-docs">f(x) Protocol docs</ExternalLink>
+                <ExternalLink href="https://github.com/fxaeon/FxAeon">View source</ExternalLink>
                 <Link href="/">Open FxAeon <ArrowRight size={13} aria-hidden="true" /></Link>
               </div>
             </footer>

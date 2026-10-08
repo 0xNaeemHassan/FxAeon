@@ -12,7 +12,7 @@ import { ValueOrSkeleton } from '@/components/MissingValue';
 import { LeverageSplitCaption } from '@/components/LeverageSplit';
 import type { LeverageSide } from '@/lib/leverageShare';
 import { haptic } from '@/lib/telegram';
-import { formatExactDecimal } from '@/lib/amount';
+import { formatBalanceDecimal } from '@/lib/amount';
 import { formatUsdCents } from '@/lib/positionValuation';
 import { priceKeyForSymbol, type UsdPriceMap } from '@/lib/prices';
 import styles from '@/components/trade-surfaces.module.css';
@@ -443,7 +443,7 @@ export function TokenSelect<T extends string>({
                     {showBalanceColumn && (
                       <span className={styles.tokenPickerValue}>
                         <span id={balanceId} className={styles.tokenPickerBalance} title={balance?.amount ? `${balance.amount} ${displayTokenSymbol(option)}` : balance?.reason}>
-                          {balance?.status === 'ready' && <span className="sr-only">Available: </span>}{optionBalanceLabel(balance, option)}
+                          {balance?.status === 'ready' && <span className="sr-only">Available: </span>}{optionBalanceLabel(balance, option, pickerStatus)}
                         </span>
                         <span id={balanceUsdId} className={styles.tokenPickerBalanceUsd}>{optionBalanceUsdContent(balance, option, prices)}</span>
                       </span>
@@ -457,7 +457,8 @@ export function TokenSelect<T extends string>({
               {filteredOptions.length === 0 && (
                 <div role="status" className="px-4 py-8 text-center">
                   <p className="text-[13px] font-semibold">No matching assets</p>
-                  <p className="mt-1 text-[11px] text-mut">Try a symbol such as ETH, BTC, or USDC.</p>
+                  {/* Suggest only what this picker offers: a symbol it does not list would fail too. */}
+                  <p className="mt-1 text-[12px] text-mut">Try {listOfSymbols(options.slice(0, 3).map(displayTokenSymbol))}.</p>
                 </div>
               )}
             </div>
@@ -465,7 +466,7 @@ export function TokenSelect<T extends string>({
         </div>,
         document.body,
       )}
-      <span className="sr-only" aria-live="polite">{label}: {value}</span>
+      <span className="sr-only" aria-live="polite">{label}: {displayTokenSymbol(value)}</span>
     </div>
   );
 }
@@ -491,11 +492,10 @@ export function RangeField({
   const fill = max === min ? 0 : ((value - min) / (max - min)) * 100;
   return (
     <div>
-      <FieldLabel htmlFor={rangeId} hint={`${min}${suffix} – ${max}${suffix}`}>{label}</FieldLabel>
+      <FieldLabel htmlFor={rangeId} hint={`${min}${suffix}–${max}${suffix}`}>{label}</FieldLabel>
       <div className="range-control p-4">
         <div className="mb-3 flex items-end justify-between">
           <span className="text-display text-[26px] font-semibold text-mint">{value.toFixed(value % 1 ? 1 : 0)}{suffix}</span>
-          <span className="text-[11px] text-mut">{min}{suffix} to {max}{suffix}</span>
         </div>
         <input
           id={rangeId}
@@ -620,7 +620,8 @@ export function LeverageField({
         </>
       ) : (
         <>
-          <FieldLabel htmlFor={inputId} hint={`${min}× – ${max}×`}>{label}</FieldLabel>
+          {/* The live range is stated once, at the slider's ends, as on Trade. */}
+          <FieldLabel htmlFor={inputId}>{label}</FieldLabel>
           <div className={`${styles.rangeField} range-control p-3 ${invalid ? 'field-error' : ''}`}>
             <div className="flex items-center gap-3">
               {numberInput}
@@ -639,15 +640,24 @@ export function LeverageField({
 
 function displayTokenSymbol(symbol: string): string { return tokenSymbol(symbol); }
 function displayTokenName(symbol: string): string { return tokenName(symbol); }
+/** "ETH", "ETH or WETH", "ETH, WETH, or stETH". */
+function listOfSymbols(symbols: readonly string[]): string {
+  if (symbols.length < 3) return symbols.join(' or ');
+  return `${symbols.slice(0, -1).join(', ')}, or ${symbols[symbols.length - 1]}`;
+}
 
-function optionBalanceLabel(balance: TokenBalanceView | undefined, symbol: string): ReactNode {
+function optionBalanceLabel(balance: TokenBalanceView | undefined, symbol: string, listStatus?: string): ReactNode {
   const display = displayTokenSymbol(symbol);
   if (balance?.status === 'disconnected') return <ValueOrSkeleton value="—" width="sm" status="unavailable" label={balance.reason ?? 'Balance unavailable'} />;
-  if (!balance) return <ValueOrSkeleton value="—" width="sm" label="Loading balance" />;
+  // A settled balance list without this token never fills in later: say so instead of loading forever.
+  if (!balance) return listStatus === 'ready' || listStatus === 'unavailable'
+    ? <ValueOrSkeleton value="—" width="sm" status="unavailable" label="Balance unavailable" />
+    : <ValueOrSkeleton value="—" width="sm" label="Loading balance" />;
   if (balance.status === 'unavailable') return <ValueOrSkeleton value="—" width="sm" status="unavailable" label={balance.reason ?? 'Balance unavailable'} />;
   if (balance.status === 'loading') return <ValueOrSkeleton value="—" width="sm" label="Loading balance" />;
   if (balance.amount === undefined) return <ValueOrSkeleton value="—" width="sm" label="Loading balance" />;
-  return `${formatExactDecimal(balance.amount, 4)} ${display}`;
+  // Rounded down, like the field's own Available figure, so a row never shows more than the wallet holds.
+  return `${formatBalanceDecimal(balance.amount, 4)} ${display}`;
 }
 
 function optionBalanceUsdContent(balance: TokenBalanceView | undefined, symbol: string, prices: UsdPriceMap): ReactNode {
@@ -658,7 +668,8 @@ function optionBalanceUsdContent(balance: TokenBalanceView | undefined, symbol: 
     return <span className="text-warn" aria-label="Price unavailable">Price unavailable</span>;
   }
   if (cents === null) return null;
-  if (cents === 0n && /[1-9]/.test(balance?.amount ?? '')) return '≈ <$0.01';
+  // An empty balance is exactly $0.00, and "<$0.01" already says it is approximate: "≈" marks only a priced estimate.
+  if (cents === 0n) return /[1-9]/.test(balance?.amount ?? '') ? '<$0.01' : formatUsdCents(0n);
   return `≈ ${formatUsdCents(cents)}`;
 }
 

@@ -105,7 +105,10 @@ export function useWalletActivity(address: Address) {
         client.setQueryData<WalletTransferHistoryResult>([...key, 'transfers'], (latest) => mergeTransferPages(latest, next));
       }));
     }
-    await Promise.allSettled(jobs);
+    // Pages that did load are kept; a source that failed is reported so the
+    // feed can say so instead of silently looking complete.
+    const results = await Promise.allSettled(jobs);
+    if (results.some((result) => result.status === 'rejected')) throw new Error('Older activity could not be loaded.');
   };
   return {
     data: { views: journal.data ?? NO_VIEWS, protocol: protocol.data, transfers: transfers.data?.items ?? NO_TRANSFERS,

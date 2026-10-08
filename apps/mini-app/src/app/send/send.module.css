@@ -137,11 +137,13 @@
 }
 .back:hover:not(:disabled) { background: var(--surface-2); }
 .back svg { width: 20px; height: 20px; }
-.reviewHero { display: flex; min-width: 0; align-items: center; gap: 14px; padding: 6px 2px 4px; }
+/* The hero is the type's container: an exact amount of any length steps the
+ * figure down to fit beside the 48px token mark (62px with its gap). */
+.reviewHero { display: flex; min-width: 0; align-items: center; gap: 14px; padding: 6px 2px 4px; container-type: inline-size; }
 .reviewAmount {
   min-width: 0;
   color: var(--text);
-  font-size: var(--fs-display);
+  font-size: clamp(16px, calc((100cqi - 66px) / (var(--amount-length, 8) * 0.6 + 0.4)), var(--fs-display));
   font-weight: 600;
   letter-spacing: var(--tracking-figure);
   line-height: 1.1;

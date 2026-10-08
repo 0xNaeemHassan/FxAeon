@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { calculateFractionDecimal, decimalInputError, decimalToUnits, formatExactDecimal, formatSignificantDecimal, groupDigits, normalizeAmountInput } from '../src/lib/amount';
+import { calculateFractionDecimal, decimalInputError, decimalToUnits, formatBalanceDecimal, formatExactDecimal, formatSignificantDecimal, formatSignificantDecimalUp, groupDigits, normalizeAmountInput } from '../src/lib/amount';
 
 test('percentage sizing calculates exact token units without floating point drift', () => {
   const balance = '9007199254740993.123456789012345678';
@@ -13,9 +13,57 @@ test('percentage sizing calculates exact token units without floating point drif
 test('decimal controls preserve 2.1 drafts and reject excess precision', () => {
   assert.equal(decimalToUnits('2.1', 18), 2100000000000000000n);
   assert.equal(decimalInputError('2.1', 18), null);
-  assert.equal(decimalInputError('2.1234567890123456789', 18), '18-decimal precision maximum for this asset.');
-  assert.equal(decimalInputError('2.1e3', 18), 'Enter a plain decimal number.');
   assert.equal(formatExactDecimal('9007199254740993.123456789012345678', 6), '9,007,199,254,740,993.123457');
+});
+
+test('amount errors name the problem and the fix', () => {
+  assert.equal(decimalInputError('2.1234567890123456789', 18), 'This asset allows 18 decimal places. Remove the extra digits.');
+  assert.equal(decimalInputError('1.0000001', 6), 'This asset allows 6 decimal places. Remove the extra digits.');
+  assert.equal(decimalInputError('1.5', 0), 'This asset has no decimal places. Enter a whole number.');
+  for (const malformed of ['2.1e3', '1,5', '-1', 'abc', '1.2.3']) assert.equal(decimalInputError(malformed, 18), 'Use digits and one decimal point, like 1.25.');
+  assert.equal(decimalInputError('1.', 18), 'Add a digit after the decimal point.');
+  assert.equal(decimalInputError('0', 18), 'Enter an amount greater than zero.');
+  assert.equal(decimalInputError('0', 18, { allowZero: true }), null);
+  assert.equal(decimalInputError('all', 18, { allowAll: true }), null);
+});
+
+test('spendable balances round down, group, and never read as zero', () => {
+  // Rounded half-up, 0.123456789 would read 0.12345679: more than the wallet holds.
+  assert.equal(formatBalanceDecimal('0.123456789'), '0.12345678');
+  assert.equal(formatBalanceDecimal('1.999999999999999999'), '1.99999999');
+  assert.equal(formatBalanceDecimal('1234567.5'), '1,234,567.5');
+  assert.equal(formatBalanceDecimal('1.25'), '1.25');
+  assert.equal(formatBalanceDecimal('1.000000000'), '1');
+  assert.equal(formatBalanceDecimal('0'), '0');
+  assert.equal(formatBalanceDecimal('0.000'), '0');
+  assert.equal(formatBalanceDecimal('007.5'), '7.5');
+  // Dust below the last place is named, not shown as zero.
+  assert.equal(formatBalanceDecimal('0.000000001'), '<0.00000001');
+  assert.equal(formatBalanceDecimal('0.00001', 4), '<0.0001');
+  assert.equal(formatBalanceDecimal('1.00001', 4), '1');
+  assert.equal(formatBalanceDecimal('0.5', 0), '<1');
+  assert.equal(formatBalanceDecimal('12.98765', 4), '12.9876');
+  for (const untouched of ['-1', '1e21', '', 'abc', '1,000']) assert.equal(formatBalanceDecimal(untouched), untouched);
+});
+
+test('costs and minimums round up so the figure shown always covers the exact one', () => {
+  assert.equal(formatSignificantDecimalUp('0.000825123456789'), '0.000826');
+  assert.equal(formatSignificantDecimalUp('0.000825'), '0.000825');
+  assert.equal(formatSignificantDecimalUp('0.0009995'), '0.001');
+  assert.equal(formatSignificantDecimalUp('9.9995'), '10');
+  assert.equal(formatSignificantDecimalUp('999.95'), '1,000');
+  assert.equal(formatSignificantDecimalUp('1234.561', 4), '1,234.57');
+  assert.equal(formatSignificantDecimalUp('12.3401', 4), '12.35');
+  assert.equal(formatSignificantDecimalUp('2'), '2');
+  assert.equal(formatSignificantDecimalUp('0'), '0');
+  assert.equal(formatSignificantDecimalUp('0.000000000000000001'), '0.000000000000000001');
+  for (const untouched of ['-1', '1e21', '', 'abc']) assert.equal(formatSignificantDecimalUp(untouched), untouched);
+  // Never below the exact value, and never more than one step above it.
+  for (const value of ['0.1234567', '45.678901', '7.0000001', '0.00000123456', '98765.4321']) {
+    const shown = formatSignificantDecimalUp(value, 4).replace(/,/g, '');
+    assert.ok(Number(shown) >= Number(value), `${shown} covers ${value}`);
+    assert.ok(Number(shown) - Number(value) < Number(value) * 1e-3 + 0.01, `${shown} stays close to ${value}`);
+  }
 });
 
 test('amount input normalization follows an explicit separator policy', () => {

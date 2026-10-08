@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import Link from 'next/link';
-import { ArrowUpRight, ChevronDown, ChevronRight, type LucideIcon } from 'lucide-react';
+import { ArrowUpRight, ChevronRight, type LucideIcon } from 'lucide-react';
 import { openExternalLink } from '@/lib/telegram';
 import styles from './PageSections.module.css';
 
@@ -15,9 +15,10 @@ function leaveApp(href: string) {
 }
 
 /**
- * The part of a page after its main action: live facts, how the action works,
- * and the questions people ask. Sections rise into view once as they are
- * scrolled to; reduced motion shows them in place.
+ * The part of a page after its main action: live facts, the f(x) mechanics
+ * behind the action, and the notes that matter. The general steps and
+ * questions live in Docs. Sections rise into view once as they are scrolled
+ * to; reduced motion shows them in place.
  */
 export function PageSections({ label, children }: { label: string; children: ReactNode }) {
   return <div className={styles.sections} aria-label={label} role="region">{children}</div>;
@@ -55,37 +56,6 @@ export function StatGrid({ stats }: { stats: readonly Stat[] }) {
       {stat.hint && <dd className={styles.statHint}>{stat.hint}</dd>}
     </div>)}
   </dl>;
-}
-
-export type Step = { icon: LucideIcon; title: string; body: ReactNode };
-
-/** How an action works, as an ordered path: the list carries the order and a
- * rule connects the steps, so no step needs an eyebrow label. */
-export function Steps({ steps }: { steps: readonly Step[] }) {
-  return <ol className={styles.steps}>
-    {steps.map(({ icon: Icon, title, body }, index) => <li key={title} className={styles.step} style={{ '--step': index } as CSSProperties}>
-      <span className={styles.stepIcon} aria-hidden="true"><Icon /></span>
-      <div>
-        <h3>{title}</h3>
-        <p>{body}</p>
-      </div>
-    </li>)}
-  </ol>;
-}
-
-export type Question = { question: string; answer: ReactNode };
-
-/** The questions people ask before acting, each opening in place. */
-export function Questions({ items }: { items: readonly Question[] }) {
-  return <div className={styles.questions}>
-    {items.map((item) => <details key={item.question} className={styles.question}>
-      <summary>
-        <span>{item.question}</span>
-        <ChevronDown className="disclosure-chevron" aria-hidden="true" />
-      </summary>
-      <div className={styles.answer}>{item.answer}</div>
-    </details>)}
-  </div>;
 }
 
 /** A note that matters (risk, limits) set apart from the facts. */

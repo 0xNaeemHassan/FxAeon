@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import Link from 'next/link';
 import { formatEther, formatUnits, isAddress, type Address } from 'viem';
 import { ArrowLeft, ArrowUpRight, ChevronRight, Clock3, Wallet } from 'lucide-react';
@@ -18,7 +18,7 @@ import { withWalletChainLock } from '@/lib/fx/lock';
 import { readGasTier, SETTINGS_KEY, SETTINGS_UPDATED_EVENT, type GasTier } from '@/lib/settings';
 import { userSafeError } from '@/lib/errors';
 import { canonicalAsset } from '@/lib/walletAssets';
-import { decimalInputError, decimalToUnits, formatSignificantDecimal } from '@/lib/amount';
+import { decimalInputError, decimalToUnits, formatBalanceDecimal, formatSignificantDecimalUp, groupDigits } from '@/lib/amount';
 import { formatUsd } from '@/lib/prices';
 import { displayAssetSymbol } from '@/components/AssetPresentation';
 import { WalletAssetPicker } from '@/components/WalletAssetPicker';
@@ -108,6 +108,12 @@ function SendForm() {
     const result = await prepareWalletSend(input());
     if (current()) setQuote(result);
   });
+  // No form element wraps the card, so Enter in either field asks for the review, as a submit would.
+  const reviewOnEnter = (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter' || event.nativeEvent.isComposing || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    event.preventDefault();
+    if (!busy && blocker === null) review();
+  };
   const confirm = () => void run(async () => {
     if (!quote || !current()) return;
     await withWalletChainLock({ walletAddress: quote.input.walletAddress, chainId: quote.input.chainId, requireWebLocks: true, run: async (assertOwned) => {
@@ -132,7 +138,7 @@ function SendForm() {
   if (hash && quote) return <section className={`${styles.card} ${styles.done}`} aria-label="Send submitted">
     <span className={styles.doneMark} aria-hidden="true"><Clock3 /></span>
     <h2>Submitted</h2>
-    <p className={styles.doneAmount}><strong title={`${quote.input.amount} ${quote.symbol}`}>{formatSignificantDecimal(quote.input.amount, 8)} {quote.symbol}</strong> to {shortAddress(quote.input.recipient)}</p>
+    <p className={styles.doneAmount}><strong>{groupDigits(quote.input.amount)} {quote.symbol}</strong> to {shortAddress(quote.input.recipient)}</p>
     <p className={styles.doneNote}>Not confirmed by the network yet. History shows its status.</p>
     <Link className={`button button-primary ${styles.action}`} href="/history">View history</Link>
     <a className={`button button-ghost ${styles.action}`} href={`https://${quote.input.chainId === 1 ? 'etherscan.io' : 'basescan.org'}/tx/${hash}`} target="_blank" rel="noopener noreferrer">View transaction<ArrowUpRight aria-hidden="true" /></a>
@@ -145,7 +151,8 @@ function SendForm() {
       </header>
       <div className={styles.reviewHero}>
         <TokenIcon symbol={quote.symbol} size={48} />
-        <p className={styles.reviewAmount} title={`${quote.input.amount} ${quote.symbol}`}>{formatSignificantDecimal(quote.input.amount, 8)} <span>{quote.symbol}</span></p>
+        {/* The exact amount that will be signed; long amounts step the type down to fit, as in the amount field. */}
+        <p className={styles.reviewAmount} style={{ '--amount-length': groupDigits(quote.input.amount).length + quote.symbol.length + 1 } as CSSProperties}>{groupDigits(quote.input.amount)} <span>{quote.symbol}</span></p>
       </div>
       <div className={styles.recipientReview}>
         <span className={styles.fieldLabel}>To</span>
@@ -156,7 +163,8 @@ function SendForm() {
       </div>
       <dl className={styles.facts}>
         <div><dt>Network</dt><dd><ChainIcon chainId={quote.input.chainId} size={18} />{networkName(quote.input.chainId)}</dd></div>
-        <div><dt>Network cost</dt><dd>≈ {formatEther(quote.estimatedFee)} ETH</dd></div>
+        {/* An estimate, rounded up so the figure shown always covers it. */}
+        <div><dt>Network cost</dt><dd>≈ {formatSignificantDecimalUp(formatEther(quote.estimatedFee), 3)} ETH</dd></div>
       </dl>
     </> : <>
       <div className={styles.cardHead}><h2>Send to a wallet</h2><TransactionSettings /></div>
@@ -166,18 +174,18 @@ function SendForm() {
           <button type="button" className={styles.max} disabled={busy || !asset} onClick={maximum}><span>Max</span></button>
         </div>
         <div className={styles.amountRow}>
-          <span className={styles.amountFit}><input id="send-amount" className={styles.amountInput} style={{ '--amount-length': Math.max(trimmedAmount.length, 1) } as CSSProperties} inputMode="decimal" autoComplete="off" placeholder="0" value={amount} disabled={busy} aria-invalid={Boolean(amountProblem) || undefined} onChange={(event) => { setAmount(event.target.value); setError(''); }} /></span>
+          <span className={styles.amountFit}><input id="send-amount" className={styles.amountInput} style={{ '--amount-length': Math.max(trimmedAmount.length, 4) } as CSSProperties} inputMode="decimal" autoComplete="off" spellCheck={false} placeholder="0.00" value={amount} disabled={busy} aria-invalid={Boolean(amountProblem) || undefined} onKeyDown={reviewOnEnter} onChange={(event) => { setAmount(event.target.value); setError(''); }} /></span>
           <WalletAssetPicker label="Asset to send" assets={tokens} value={asset} disabled={busy} loading={assets.status === 'loading' || assets.status === 'idle'} onChange={(next) => { setAssetId(next.id); setAmount(''); setError(''); }} />
         </div>
         {amountProblem && trimmedAmount !== '.' ? <p className={styles.hint}>{amountProblem}</p>
-          : asset && <p className={styles.balance}>Balance <span title={`${asset.balance} ${symbol}`}>{formatSignificantDecimal(asset.balance)} {symbol}</span>{asset.usdValue !== null && <span className={styles.balanceUsd}>{formatUsd(asset.usdValue)}</span>}</p>}
+          : asset && <p className={styles.balance}>Available: <span title={`${asset.balance} ${symbol}`}>{formatBalanceDecimal(asset.balance, 8)} {symbol}</span>{asset.usdValue !== null && <span className={styles.balanceUsd}>{formatUsd(asset.usdValue)}</span>}</p>}
       </div>
       <div className={styles.recipientPanel}>
         <label htmlFor="send-recipient" className={styles.fieldLabel}>To</label>
         <div className={styles.recipientRow}>
           {recipientValid ? <WalletAvatar address={trimmedRecipient} size={28} /> : <span className={styles.recipientEmpty} aria-hidden="true"><Wallet /></span>}
           {/* Two lines show the whole address while it is entered; Enter never adds a line break. */}
-          <textarea id="send-recipient" rows={2} aria-label="Recipient address" aria-invalid={trimmedRecipient !== '' && !recipientValid} aria-describedby={trimmedRecipient && !recipientValid ? recipientHintId : undefined} placeholder="0x… wallet address" autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={recipient} disabled={busy} onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); }} onChange={(event) => { setRecipient(event.target.value); setError(''); }} />
+          <textarea id="send-recipient" rows={2} aria-label="Recipient address" aria-invalid={trimmedRecipient !== '' && !recipientValid} aria-describedby={trimmedRecipient && !recipientValid ? recipientHintId : undefined} placeholder="0x… wallet address" autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={recipient} disabled={busy} onKeyDown={(event) => { if (event.key !== 'Enter') return; event.preventDefault(); reviewOnEnter(event); }} onChange={(event) => { setRecipient(event.target.value); setError(''); }} />
         </div>
         {trimmedRecipient && !recipientValid && <p id={recipientHintId} className={styles.hint}>Enter a complete 0x wallet address.</p>}
       </div>

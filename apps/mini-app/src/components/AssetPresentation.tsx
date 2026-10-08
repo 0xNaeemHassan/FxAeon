@@ -46,15 +46,16 @@ export function AssetRowContent({ asset, loading = false }: { asset: WalletAsset
     <AssetNetworkIcon asset={asset} size={34} />
     <span className={styles.name}><strong>{displayAssetSymbol(asset.symbol)}</strong><small>{networkLabel(asset.chainId)}</small></span>
     <span className={styles.worth}>
-      <strong><ValueOrSkeleton value={formatUsd(asset.usdValue)} width="sm" status={loading ? 'loading' : 'unavailable'} label="Holding value" /></strong>
+      <strong><ValueOrSkeleton value={formatUsd(asset.usdValue)} width="sm" status={loading ? 'loading' : 'unavailable'} label={loading ? 'Loading holding value' : 'Holding value unavailable'} /></strong>
       <AssetQuantity asset={asset} compact />
     </span>
   </>;
 }
 
-/** Preserve the holdings ledger's shape during the first balance read. */
-export function AssetListSkeleton() {
-  return <div role="status" aria-label="Loading assets" className={styles.loadingList}>
+/** Preserve the holdings ledger's shape during the first balance read; the
+ * wallet sheet's rows are shorter than Portfolio's, so it asks for compact. */
+export function AssetListSkeleton({ compact = false }: { compact?: boolean }) {
+  return <div role="status" aria-label="Loading assets" className={`${styles.loadingList} ${compact ? styles.loadingCompact : ''}`}>
     {[0, 1, 2].map((row) => <div key={row} className={styles.loadingRow} aria-hidden="true">
       <span className={`${styles.loadingIcon} skeleton`} />
       <span className={styles.loadingName}><span className="skeleton" /><span className="skeleton" /></span>

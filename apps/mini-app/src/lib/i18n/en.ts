@@ -1,7 +1,7 @@
 import type { Messages } from './config';
 
 const en: Messages = {
-  'nav.home': 'Home',
+  'nav.home': 'Portfolio',
   'nav.trade': 'Trade',
   'nav.earn': 'Earn',
   'nav.move': 'Move',

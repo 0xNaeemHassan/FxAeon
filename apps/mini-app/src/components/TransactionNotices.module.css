@@ -56,7 +56,7 @@
 }
 .dismiss { color: var(--mut); }
 .link:focus-visible,
-.dismiss:focus-visible { outline: 2px solid var(--mint-bright, var(--mint)); outline-offset: 2px; }
+.dismiss:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
 @media (hover: hover) {
   .link:hover,

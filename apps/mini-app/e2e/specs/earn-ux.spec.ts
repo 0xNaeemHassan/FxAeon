@@ -40,7 +40,7 @@ test.describe('Earn entry and honest unavailable state', () => {
     await page.goto('/earn', { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: 'Earn', exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Borrow fxUSD' })).toBeVisible();
-    const amount = page.getByLabel('Deposit amount in fxUSD');
+    const amount = page.getByLabel('Amount in fxUSD', { exact: true });
     await expect(amount).toBeVisible();
     await expect(amount).toBeEnabled();
     await amount.fill('112');

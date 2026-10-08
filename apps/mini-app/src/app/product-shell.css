@@ -2,16 +2,17 @@
 [data-product-ui='v2'] { --product-radius: var(--radius-lg); --product-gap: 20px; }
 [data-product-ui='v2'] .app-topbar { min-height: 64px; padding-block: 10px; align-items: center; gap: 14px; }
 [data-product-ui='v2'] .app-topbar-actions { display: flex; align-items: center; gap: 8px; }
-[data-product-ui='v2'] .brand-wordmark { font-size: 22px; letter-spacing: -.045em; text-shadow: none; }
-[data-product-ui='v2'] .wallet-control-label { display: inline !important; font-size: var(--fs-caption); white-space: nowrap; }
+[data-product-ui='v2'] .brand-wordmark { font-size: var(--fs-heading); letter-spacing: -.045em; text-shadow: none; }
 [data-product-ui='v2'] .ui-card { border-radius: var(--product-radius); }
 [data-product-ui='v2'] .button { border-radius: var(--radius-md); min-height: 48px; }
 [data-product-ui='v2'] .page-header { margin-bottom: 12px; }
-[data-product-ui='v2'] .page-header h1 { font-size: 30px; font-weight: 680; letter-spacing: -0.045em; line-height: 1.12; }
+/* Every route title takes the display size, as Trade's does, at every width;
+   section titles below it stay smaller (PageSections, SectionTitle, RowGroup). */
+[data-product-ui='v2'] .page-header h1 { font-size: var(--fs-display); font-weight: 680; letter-spacing: -0.045em; line-height: 1.12; }
 /* Weight and tracking only: the Trade heading keeps its own responsive size. */
 [data-product-ui='v2'] .trade-page-heading h1 { font-weight: 680; letter-spacing: -0.045em; }
 [data-product-ui='v2'] .app-content { scroll-padding-bottom: 140px; }
-[data-product-ui='v2'] .app-content :where(button, a, input, select, summary):focus-visible { outline: 2px solid var(--mint); outline-offset: 3px; }
+[data-product-ui='v2'] .app-content :where(button, a, input, select, summary):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
 /* The amount surface already supplies a visible focus-within ring. */
 [data-product-ui='v2'] .app-content .amount-control input:focus-visible { outline: none; }
 [data-product-ui='v2'] .segmented { box-shadow: none; }
@@ -30,17 +31,15 @@
   [data-product-ui='v2'] [data-trade-ticket] { flex: 0 0 auto !important; width: 100%; min-height: 0; height: auto; max-height: none; overflow: visible; position: static; }
   [data-product-ui='v2'] .trade-ticket { height: auto !important; max-height: none !important; overflow: visible; }
 }
-@media (max-width: 420px) {
-  [data-product-ui='v2'] .brand-wordmark { font-size: 20px; }
-  [data-product-ui='v2'] .app-topbar > a { gap: 7px; }
-  [data-product-ui='v2'] .app-topbar > a > svg { width: 28px; height: 28px; }
-  [data-product-ui='v2'] .app-topbar-actions > button { padding-inline: 8px; border-radius: 999px; }
-}
-@media (max-width: 350px) {
-  [data-product-ui='v2'] .brand-wordmark { font-size: 18px; }
-  [data-product-ui='v2'] .app-topbar > a > svg { width: 24px; }
+@media (max-width: 299px) {
+  /* Fold cover screens: the header draws its gaps in to stay one row. */
+  [data-product-ui='v2'] .app-topbar { gap: 4px; }
   [data-product-ui='v2'] .app-topbar-actions { gap: 4px; }
-  [data-product-ui='v2'] .wallet-control-label { font-size: var(--fs-micro); }
+}
+@media (max-width: 420px) {
+  /* The logo lockup on phones; globals.css steps it aside when space runs out. */
+  [data-product-ui='v2'] .brand-wordmark { font-size: 20px; }
+  [data-product-ui='v2'] .app-topbar-actions > button { padding-inline: 8px; border-radius: 999px; }
 }
 @media (prefers-reduced-motion: reduce) {
   [data-product-ui='v2'] :where(.glass-press, .button, .nav-item) { transition: none; }

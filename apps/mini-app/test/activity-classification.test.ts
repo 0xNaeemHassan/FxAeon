@@ -183,7 +183,7 @@ test('fxSAVE deposits, withdrawals, queued withdrawals, and claims', () => {
   const withdraw = classify({ call: { from: WALLET, to: token('fxSAVE'), input: encodeFunctionData({ abi: ABI, functionName: 'redeem', args: [95n * E18, WALLET, WALLET] }) },
     transfers: [tokenTransfer('fxSAVE', 'out', 95n * E18, ZERO), tokenTransfer('fxUSDBasePool', 'in', 99n * E18, token('fxSAVE'))] });
   assert.equal(withdraw.title, 'Withdrew from fxSAVE');
-  assert.equal(withdraw.summary, 'You withdrew 99 fxUSDBasePool from fxSAVE by redeeming 95 fxSAVE.');
+  assert.equal(withdraw.summary, 'You withdrew 99 fxSP from fxSAVE by redeeming 95 fxSAVE.');
   assert.equal(withdraw.counterparty?.label, 'fxSAVE vault');
 
   const queued = classify({ call: { from: WALLET, to: token('fxSAVE'), input: encodeFunctionData({ abi: ABI, functionName: 'requestRedeem', args: [10n * E18] }) },

@@ -3,7 +3,7 @@
 :where(.surface) { min-width: 0; border: 1px solid var(--hairline); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--ring-inset); padding: 16px; }
 .heading { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .heading > div { display: flex; min-width: 0; align-items: center; gap: 8px; }
-.heading h1 { margin: 0; font-size: 30px; font-weight: 680; line-height: 1.12; letter-spacing: -0.045em; }
+.heading h1 { margin: 0; font-size: var(--fs-display); font-weight: 680; line-height: 1.12; letter-spacing: -0.045em; }
 .iconButton { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; flex: 0 0 44px; margin-left: -10px; border-radius: 50%; color: var(--mut); transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease; }
 .iconButton:hover { background: var(--surface-2); color: var(--text); }
 
@@ -19,7 +19,7 @@
 .metrics dt { color: var(--mut); }
 .metrics dd { min-width: 0; margin: 0; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: break-word; }
 .metrics dd small { display: block; margin-top: 3px; color: var(--mut); font-size: var(--fs-caption); font-weight: 400; }
-.metrics .emphasizedMetric dd { font-size: 16px; font-weight: 650; }
+.metrics .emphasizedMetric dd { font-size: var(--fs-body); font-weight: 650; }
 
 .notice { display: flex; min-width: 0; align-items: flex-start; gap: 10px; border-radius: var(--radius-md); background: var(--surface-2); padding: 12px 14px; color: var(--mut); font-size: var(--fs-small); line-height: 1.5; animation: notice-in var(--dur-base) var(--ease-out) both; }
 @keyframes notice-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
@@ -63,8 +63,14 @@
 .choice strong { display: block; font-size: var(--fs-small); font-weight: 650; }
 .choice small { display: block; margin-top: 3px; font-size: var(--fs-caption); line-height: 1.45; color: var(--mut); }
 .choice[data-selected='true'] { border-color: color-mix(in srgb, var(--mint) 70%, transparent); background: var(--mint-dim); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mint) 10%, transparent); }
-.choice:focus-within { outline: 2px solid var(--mint); outline-offset: 3px; }
-.choice[data-disabled='true'] { opacity: .5; cursor: not-allowed; }
+/* The ring is for keyboard focus; a tap already shows the selection ring. */
+.choice:has(> input:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+@supports not selector(:has(*)) { .choice:focus-within { outline: 2px solid var(--focus-ring); outline-offset: 3px; } }
+/* Unavailable options stay readable: quieter text, an empty mark, no hover. */
+.choice[data-disabled='true'] { cursor: not-allowed; }
+.choice[data-disabled='true'], .choice[data-disabled='true']:hover { background: var(--surface-2); }
+.choice[data-disabled='true'] strong { color: var(--mut); }
+.choice[data-disabled='true'] .radioMark { border-color: var(--line-strong); }
 .radioMark { display: grid; flex: 0 0 20px; width: 20px; height: 20px; place-items: center; border: 1.5px solid var(--mut-2); border-radius: 50%; color: var(--on-accent); transition: background-color var(--dur-base) ease, border-color var(--dur-base) ease, transform var(--dur-slow) var(--ease-spring); }
 .choice[data-selected='true'] .radioMark { border-color: var(--mint); background: var(--mint); transform: scale(1.06); }
 
@@ -73,9 +79,10 @@
 .rowGroup { overflow: hidden; border: 1px solid var(--hairline); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--ring-inset); }
 .actionRow { display: flex; min-width: 0; min-height: 60px; width: 100%; align-items: center; gap: 14px; padding: 12px 16px; text-align: left; color: var(--text); background: transparent; border: 0; transition: background-color var(--dur-fast) ease; }
 .actionRow + .actionRow { border-top: 1px solid var(--line); }
-.actionRow:hover { background: var(--surface-2); }
-.actionRow:active { background: var(--surface-3); }
-.actionRow:disabled { opacity: .5; cursor: not-allowed; }
+.actionRow:hover:not(:disabled) { background: var(--surface-2); }
+.actionRow:active:not(:disabled) { background: var(--surface-3); }
+.actionRow:disabled { cursor: not-allowed; color: var(--mut); }
+.actionRow:disabled .rowIcon { background: var(--surface-2); color: var(--mut-2); }
 .rowIcon { display: block; box-sizing: content-box; flex: 0 0 18px; width: 18px; height: 18px; padding: 9px; border-radius: 12px; background: var(--mint-dim); color: var(--mint); }
 .rowCopy { min-width: 0; flex: 1; }
 .rowCopy strong { display: block; font-size: var(--fs-body); font-weight: 600; line-height: 1.4; }

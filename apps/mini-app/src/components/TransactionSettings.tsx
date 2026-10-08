@@ -125,7 +125,7 @@ function TransactionSettingsPanel({ slippage, percent, tier, controlledSlippage,
       </div>
       <label className={styles.custom} data-active={presetIndex < 0 || undefined} data-invalid={Boolean(error) || undefined}>
         <span>Custom</span>
-        <input inputMode="decimal" autoComplete="off" value={draft ?? percent} aria-label="Slippage tolerance percentage"
+        <input inputMode="decimal" enterKeyHint="done" autoComplete="off" value={draft ?? percent} aria-label="Slippage tolerance percentage"
           aria-describedby={`${id}-slippage-help`} aria-invalid={Boolean(error)}
           onFocus={() => setDraft(percent)} onChange={(event) => { setDraft(event.target.value.slice(0, 6)); setError(''); }}
           onBlur={commit} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); (event.target as HTMLInputElement).blur(); } }} />

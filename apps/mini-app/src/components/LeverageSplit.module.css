@@ -11,7 +11,8 @@
 .share { flex: 1 1 auto; background: linear-gradient(90deg, var(--mint), var(--brand-coral)); }
 @media (prefers-reduced-motion: no-preference) {
   .rows:not([data-shown]) .borrowed, .rows:not([data-shown]) .share { transform: scaleX(0); }
-  .rows[data-shown] .borrowed { transform: none; transition: transform 900ms var(--ease-out); }
+  /* The examples follow the ticket's side: switching Long and Short slides each split to its new share. */
+  .rows[data-shown] .borrowed { transform: none; transition: transform 900ms var(--ease-out), flex-basis 520ms var(--ease-out); }
   .rows[data-shown] .share { transform: none; transition: transform 700ms var(--ease-out) 520ms; }
   .rows[data-shown] .row:nth-child(2) .borrowed { transition-delay: 120ms; }
   .rows[data-shown] .row:nth-child(2) .share { transition-delay: 640ms; }

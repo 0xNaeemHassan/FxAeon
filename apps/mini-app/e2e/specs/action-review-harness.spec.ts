@@ -23,6 +23,30 @@ async function previewRequests(page: import('@playwright/test').Page): Promise<P
   });
 }
 
+/** How far the review spills sideways: the page, the card's scroll body, and any label or value cell. */
+async function reviewOverflow(review: import('@playwright/test').Locator) {
+  return review.evaluate((node) => {
+    const body = node.querySelector<HTMLElement>('[aria-label="Review information"]')!;
+    const bounds = body.getBoundingClientRect();
+    const rows = Array.from(node.querySelectorAll<HTMLElement>('[data-review-fact]')).filter((row) => row.getBoundingClientRect().height > 0);
+    return {
+      pageOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      bodyOverflow: body.scrollWidth - body.clientWidth,
+      escaped: rows.flatMap((row) => Array.from(row.children).map((cell) => {
+        const box = cell.getBoundingClientRect();
+        return box.left < bounds.left - 0.5 || box.right > bounds.right + 0.5 ? row.dataset.reviewFact : null;
+      })).filter(Boolean),
+    };
+  });
+}
+
+async function expectReviewInside(review: import('@playwright/test').Locator) {
+  const fit = await reviewOverflow(review);
+  expect(fit.pageOverflow, 'no horizontal page overflow').toBeLessThanOrEqual(0);
+  expect(fit.bodyOverflow, 'no hidden horizontal overflow inside the card').toBeLessThanOrEqual(0);
+  expect(fit.escaped, 'every label and value stays inside the card').toEqual([]);
+}
+
 async function resolvePreviewRequest(page: import('@playwright/test').Page, requestId: number): Promise<void> {
   const resolved = await page.evaluate((id) => {
     const harness = (window as typeof window & {
@@ -124,7 +148,8 @@ test.describe('ActionReview isolated orchestration', () => {
     await page.getByRole('button', { name: 'Gas estimate current', exact: true }).click();
     await page.getByRole('button', { name: 'Review position', exact: true }).click();
     const review = page.locator('.reviewInlineContent');
-    await expect(review).toContainText('0.00084 ETH');
+    // The most the network fee can take: the buffered gas limit the wallet funds.
+    await expect(review.locator('[data-review-fact="Gas fee"] > span').last()).toHaveText('0.001008 ETH max');
     await expect(page.locator('input[name="review-gas-tier"]')).toHaveCount(0);
     expect((await harnessMetrics(page)).feeQuoteCount).toBe(0);
     await page.getByRole('button', { name: 'Confirm', exact: true }).click();
@@ -166,7 +191,7 @@ test.describe('ActionReview isolated orchestration', () => {
     await expect(page.getByRole('heading', { name: 'Increase ETH Long', exact: true })).toBeVisible();
     await expect(page.getByText('0.25 fxUSD', { exact: true })).toBeVisible();
     await expect(page.getByText('3×', { exact: true })).toBeVisible();
-    await expect(page.getByText('0.00084 ETH', { exact: true })).toBeVisible();
+    await expect(page.getByText('0.001008 ETH max', { exact: true })).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Primary navigation', exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Trade', exact: true })).toHaveAttribute('aria-current', 'page');
     await expect(page.locator('[role="toolbar"]')).toBeHidden();
@@ -595,7 +620,12 @@ test.describe('ActionReview isolated orchestration', () => {
     };
     for (let refresh = 0; refresh < 2; refresh += 1) {
       await expect(page.getByRole('button', { name: 'Not enough ETH', exact: true })).toBeDisabled();
-      await expect(review.getByText('Ethereum network fees are paid in ETH. Add ETH to cover this transaction.', { exact: true })).toBeVisible();
+      // The notice names the exact top-up on the network that pays it, and
+      // links to the wallet's Receive. With nothing else to send and an empty
+      // wallet, that is exactly the max fee the card shows.
+      await expect(review.locator('p', { hasText: 'Add at least' })).toHaveText('Add at least 0.001008 ETH on Ethereum to cover network fees. Receive ETH');
+      await expect(review.locator('[data-review-fact="Gas fee"] > span').last()).toHaveText('0.001008 ETH max');
+      await expect(review.getByRole('link', { name: 'Receive ETH', exact: true })).toHaveAttribute('href', '/qr');
       await expectCheckedRoute();
       // A TTL refresh removes current but retains its insufficient previous
       // estimate; the shortfall remains blocked by the active fee check.
@@ -610,6 +640,120 @@ test.describe('ActionReview isolated orchestration', () => {
     expect(await metric(page, 'plan')).toBe(1);
     expect(await metric(page, 'prepare')).toBe(1);
     expect(await metric(page, 'runner')).toBe(0);
+    expect(await metric(page, 'send')).toBe(0);
+  });
+
+  test('every review names the exact ETH shortfall on the network that pays it', async ({ page }) => {
+    await openHarness(page);
+    await page.getByRole('button', { name: 'Gas balance insufficient', exact: true }).click();
+    await page.getByRole('button', { name: 'Review position', exact: true }).click();
+    const review = page.locator('[data-review-viewport]');
+    const action = page.getByRole('button', { name: 'Not enough ETH', exact: true });
+    await expect(action).toBeDisabled();
+    const note = review.locator('[role="status"]', { hasText: 'Add at least' });
+    // An empty wallet with nothing else to send needs exactly the max fee shown.
+    await expect(note).toHaveText('Add at least 0.001008 ETH on Ethereum to cover network fees. Receive ETH');
+    await expect(review.locator('[data-review-fact="Gas fee"] > span').last()).toHaveText('0.001008 ETH max');
+    await expect(note.getByRole('link', { name: 'Receive ETH', exact: true })).toHaveAttribute('href', '/qr');
+    // The product Button also carries Tailwind's disabled:opacity-50. A
+    // blocked action names what is missing, so it must stay full strength.
+    await action.evaluate((node) => node.classList.add('disabled:opacity-50'));
+    expect(await action.evaluate((node) => getComputedStyle(node).opacity)).toBe('1');
+
+    // Base names Base; a partial estimate proves the gap but never invents its size.
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.getByRole('button', { name: 'Use Base route', exact: true }).click();
+    await page.getByRole('button', { name: 'Gas balance insufficient by an unknown amount', exact: true }).click();
+    await page.getByRole('button', { name: 'Review position', exact: true }).click();
+    await expect(review.locator('header').getByText('Base', { exact: true })).toBeVisible();
+    await expect(review.locator('[role="status"]', { hasText: 'needs more ETH' })).toHaveText('This wallet needs more ETH on Base for network fees. Receive ETH');
+    await expect(action).toBeDisabled();
+    expect(await metric(page, 'send')).toBe(0);
+  });
+
+  test('a long exact amount fits the stable Trade card at 320px while preparing and once verified', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.setContent('<meta name="viewport" content="width=device-width, initial-scale=1"><div id="root"></div>');
+    await openHarness(page, { initialPreviewMode: 'deferred' });
+    // The owner's report (9.jpg) was the light theme while preparing.
+    await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
+    await page.getByRole('button', { name: 'Use stable Trade review', exact: true }).click();
+    await page.getByRole('button', { name: 'Use long amount', exact: true }).click();
+    await page.getByRole('button', { name: 'Review position', exact: true }).click();
+    await page.locator('[role="toolbar"]').evaluate((node) => { (node as HTMLElement).style.display = 'none'; });
+    const review = page.locator('[data-review-viewport]');
+    const amount = review.locator('[data-review-fact="Amount"] > span').last();
+    const expectFits = async () => {
+      await expectReviewInside(review);
+      await expect(amount).toHaveText('0.00024443113696627 fxUSD');
+      for (const [label, value] of [['Target leverage', '3×'], ['Position', '#42'], ['Slippage', '0.5%']]) {
+        await expect(review.locator(`[data-review-fact="${label}"] > span`).last()).toHaveText(value);
+        await expect(review.locator(`[data-review-fact="${label}"] > span`).last()).toBeInViewport();
+      }
+    };
+    await expect(page.getByRole('button', { name: 'Checking transaction…', exact: true })).toBeDisabled();
+    await expectFits();
+    await expect.poll(() => metric(page, 'prepare')).toBe(1);
+    await resolvePreviewRequest(page, (await previewRequests(page))[0]!.id);
+    await expect(page.getByRole('button', { name: 'Confirm', exact: true })).toBeEnabled();
+    // Verification keeps the exact figure the user entered: no "≈", no rounding.
+    await expectFits();
+    expect(await metric(page, 'send')).toBe(0);
+  });
+
+  test('a whole recipient address wraps inside the review at 320px instead of widening the card', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.setContent('<meta name="viewport" content="width=device-width, initial-scale=1"><div id="root"></div>');
+    await openHarness(page);
+    await page.getByRole('button', { name: 'Use bridge recipient', exact: true }).click();
+    // The review bounds its height where it opens; open it where the card will be.
+    await page.locator('[role="toolbar"]').evaluate((node) => { (node as HTMLElement).style.display = 'none'; });
+    await page.getByRole('button', { name: 'Review position', exact: true }).click();
+    const review = page.locator('[data-review-viewport]');
+    // The summary row; Quote details repeats it, collapsed.
+    const recipient = review.locator('[data-review-fact="Recipient"]').first().locator(':scope > span').last();
+    await expect(recipient).toHaveText('0x00000000000000000000000000000000000000aa');
+    await recipient.scrollIntoViewIfNeeded();
+    await expect(recipient).toBeInViewport({ ratio: 1 });
+    await expectReviewInside(review);
+    expect(await metric(page, 'send')).toBe(0);
+  });
+
+  test('preparation takes focus, names the check that is running, and a failure returns focus to Review', async ({ page }) => {
+    await openHarness(page, { initialPreviewMode: 'deferred' });
+    await page.getByRole('button', { name: 'Review position', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Preparing review', exact: true })).toBeFocused();
+    await expect(page.getByRole('status').filter({ hasText: 'Simulating each step and checking network fees.' })).toBeVisible();
+    await resolvePreviewRequest(page, (await previewRequests(page))[0]!.id);
+    await expect(page.getByRole('heading', { name: 'Open position v1', exact: true })).toBeFocused();
+
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.getByRole('button', { name: 'Fail next preview', exact: true }).click();
+    await page.getByRole('button', { name: 'Review position', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText('mock preview failure');
+    await expect(page.getByRole('button', { name: 'Review position', exact: true })).toBeFocused();
+    expect(await metric(page, 'send')).toBe(0);
+  });
+
+  test('a check that fails before signing is told once and offers a fresh review instead of a dead Confirm', async ({ page }) => {
+    await openHarness(page);
+    await page.getByRole('button', { name: 'Use approval route', exact: true }).click();
+    await page.getByRole('button', { name: 'Review position', exact: true }).click();
+    const approve = page.getByRole('button', { name: 'Approve fxUSD', exact: true });
+    await expect(approve).toBeEnabled();
+    // The wallet will ask twice; the review says so before the first prompt.
+    await expect(page.getByText('Two wallet requests: approve fxUSD, then confirm.', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Fail before wallet request', exact: true }).click();
+    await approve.click();
+    await expect(page.getByRole('alert')).toHaveText('mock execution failure');
+    await expect(page.getByText('Action stopped', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('This reviewed quote expired.', { exact: false })).toHaveCount(0);
+    const refresh = page.getByRole('button', { name: 'Review updated quote', exact: true });
+    await expect(refresh).toBeEnabled();
+    await refresh.click();
+    await expect(approve).toBeEnabled();
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    expect(await metric(page, 'prepare')).toBe(2);
     expect(await metric(page, 'send')).toBe(0);
   });
 

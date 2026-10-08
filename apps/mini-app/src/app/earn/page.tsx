@@ -464,6 +464,9 @@ export default function EarnPage() {
       <ActionWorkspace className={presentation.workspace} density="compact">
         <PageHeading title="Earn" />
         {reviewStage === 'input' && <ProductNav current="save" />}
+        {/* The value is a hero figure on the page, as on Portfolio; the form keeps its card below. */}
+        {reviewStage === 'input' && mode !== 'claim' && <SavingsSummary data={walletData} loading={loading || refreshAction.refreshing} connected={Boolean(wallet.address)} onRefresh={refreshEarn}
+          readWarnings={activeReadWarnings} fxSaveApy={fxSaveApy} fxSaveApyStatus={fxSaveApyStatus} onClaim={() => changeMode('claim')} />}
         <ProductSurface className={presentation.panel} data-flow-stage={reviewStage}>
           <ActionReview
             key={reviewRevision}
@@ -480,16 +483,12 @@ export default function EarnPage() {
             onStageChange={setReviewStage}
             onComplete={refreshEarn}
             editor={<>
-              {mode !== 'claim' ? <>
-                <SavingsSummary data={walletData} loading={loading || refreshAction.refreshing} connected={Boolean(wallet.address)} onRefresh={refreshEarn}
-                  readWarnings={activeReadWarnings} fxSaveApy={fxSaveApy} fxSaveApyStatus={fxSaveApyStatus} onClaim={() => changeMode('claim')} />
-                <div className={presentation.actionTabs}>
-                  <Segmented value={mode} onChange={changeMode} ariaLabel="fxSAVE action" options={[
-                    { value: 'deposit', label: 'Deposit' }, { value: 'withdraw', label: 'Withdraw' },
-                  ]} />
-                  <TransactionSettings slippage={mode === 'withdraw' && instant && token !== 'fxUSDBasePool'} slippagePercent={slippage} onSlippageChange={setSlippage} />
-                </div>
-              </> : <div className={presentation.claimHeading}>
+              {mode !== 'claim' ? <div className={presentation.actionTabs}>
+                <Segmented value={mode} onChange={changeMode} ariaLabel="fxSAVE action" options={[
+                  { value: 'deposit', label: 'Deposit' }, { value: 'withdraw', label: 'Withdraw' },
+                ]} />
+                <TransactionSettings slippage={mode === 'withdraw' && instant && token !== 'fxUSDBasePool'} slippagePercent={slippage} onSlippageChange={setSlippage} />
+              </div> : <div className={presentation.claimHeading}>
                 <button type="button" onClick={() => changeMode('withdraw')} className={presentation.back}><ArrowLeft size={17} aria-hidden="true" />Back to fxSAVE</button>
                 <h2>Withdrawal</h2>
               </div>}
@@ -588,13 +587,16 @@ function EarnActionEditor({ mode, token, onTokenChange, amount, onAmountChange, 
 }) {
   const disconnected = { status: 'disconnected' as const };
   const amountBalance = walletData ? balances?.[token] ?? { status: balanceStatus ?? 'loading' as const } : disconnected;
+  // The exact share balance: the field rounds its own figure down, and its
+  // presets and over-balance check must agree with the review's exact limit.
   const shareBalance = !walletData ? disconnected : balanceUnavailable ? { status: 'unavailable' as const }
-    : walletData.balance ? { status: 'ready' as const, amount: formatAmount(walletData.balance.balanceWei) } : { status: 'loading' as const };
+    : walletData.balance ? { status: 'ready' as const, amount: formatUnits(walletData.balance.balanceWei, 18) } : { status: 'loading' as const };
   const picker = <TokenSelect compact label={mode === 'deposit' ? 'Asset' : 'Receive'} value={token}
     options={['fxUSD', 'usdc', 'fxUSDBasePool'] as const} onChange={onTokenChange} balances={balances} balanceStatus={walletData ? balanceStatus : 'disconnected'} />;
   return <div className={presentation.editor}>
     {mode === 'deposit' && <>
-      <AmountField label="Deposit amount" symbol={labelToken(token)} value={amount} onChange={onAmountChange}
+      {/* "Amount", as on Withdraw, Trade and Move: the Deposit tab above already names the action. */}
+      <AmountField label="Amount" symbol={labelToken(token)} value={amount} onChange={onAmountChange}
         maxDecimals={token === 'usdc' ? 6 : 18} balanceState={amountBalance} tokenSelector={picker} />
     </>}
     {mode === 'withdraw' && <>
@@ -604,13 +606,14 @@ function EarnActionEditor({ mode, token, onTokenChange, amount, onAmountChange, 
         <ChoiceCards value={!instant ? 'cooldown' : 'instant'}
           onChange={(value) => onInstantChange(value === 'instant')} label="Withdrawal method" options={[
             { value: 'cooldown', label: 'After cooldown', description: config ? `${formatCooldown(config.cooldownPeriodSeconds)} wait · no instant fee` : 'Claim later · cooldown unavailable' },
-            { value: 'instant', label: 'Instant', description: config ? `${formatRatio(config.instantRedeemFeeRatio)} instant fee` : 'Instant-redemption fee applies' },
+            { value: 'instant', label: 'Instant', description: config ? `${formatRatio(config.instantRedeemFeeRatio)} instant fee` : 'Instant fee applies' },
           ]} />
       </div>}
       <div className={presentation.receiveRow}><span>{instant && token !== 'fxUSDBasePool' ? 'Receive asset' : 'Withdrawal route'}</span>{picker}</div>
       {token === 'fxUSDBasePool'
-        ? <p className={presentation.helper}>Redeems fxSAVE directly for base-pool shares, with no queued claim.</p>
-        : !instant && <p className={presentation.helper}>A queued withdrawal is claimed later. The claim preview shows the assets available to receive.</p>}
+        ? <p className={presentation.helper}>Redeems fxSAVE directly for fxSP, the Stability Pool share it holds, with no queued claim.</p>
+        // The SDK queues fxUSD and USDC requests alike (requestRedeem); the claim pays both, so say so here.
+        : !instant && <p className={presentation.helper}>A queued withdrawal is claimed later and pays out in fxUSD and USDC, as the claim preview shows. Choose fxSP here to redeem directly instead.</p>}
     </>}
     {mode === 'claim' && (walletData ? <ClaimState data={walletData} /> : <p className={presentation.helper}>Connect the requesting wallet to view its withdrawal.</p>)}
   </div>;
@@ -624,11 +627,12 @@ function ClaimState({ data }: { data: SaveData }) {
   return <div className={presentation.editor}>
     <p className={presentation.helper}>{state.status === 'ready' ? 'Review the current receipt amounts before confirming.' : state.message}</p>
     <MetricRows rows={[
-      ...(pending !== undefined && pending > 0n ? [{ label: 'Queued base-pool shares', value: formatDisplayAmount(pending) }] : []),
+      ...(pending !== undefined && pending > 0n ? [{ label: 'Queued fxSP', value: formatDisplayAmount(pending) }] : []),
       ...(state.status === 'cooldown' && data.claimable?.redeemableAt ? [{ label: 'Available to claim', value: formatTimestamp(data.claimable.redeemableAt) }] : []),
+      // A preview of today's claim, so an estimate: marked "≈" like every other estimate.
       ...(preview ? [
-        { label: 'fxUSD received (est.)', value: `${formatDisplayAmount(preview.amountYieldOutWei)} fxUSD`, emphasis: true },
-        { label: 'USDC received (est.)', value: `${formatDisplayAmount(preview.amountStableOutWei, 6)} USDC`, emphasis: true },
+        { label: 'fxUSD to receive', value: `≈ ${formatDisplayAmount(preview.amountYieldOutWei)} fxUSD`, emphasis: true },
+        { label: 'USDC to receive', value: `≈ ${formatDisplayAmount(preview.amountStableOutWei, 6)} USDC`, emphasis: true },
       ] : []),
     ]} />
   </div>;
@@ -636,15 +640,15 @@ function ClaimState({ data }: { data: SaveData }) {
 
 function VaultDetails({ config }: { config: SaveConfig | null }) {
   return <Disclosure title="Vault details">
-    <p className={presentation.helper}>The displayed APY is variable. fxSAVE and its underlying base-pool shares are different units.</p>
+    <p className={presentation.helper}>The displayed APY is variable. fxSAVE and the fxSP it holds are different units.</p>
+    {/* The cooldown and instant fee are figures in "The vault at a glance" just below, so they are not repeated here. */}
     {config ? <MetricRows rows={[
-      { label: 'Vault holdings', value: `${formatDisplayAmount(config.totalAssetsWei)} fxUSD base-pool shares` },
+      { label: 'Vault holdings', value: `${formatDisplayAmount(config.totalAssetsWei)} fxSP` },
       { label: 'fxSAVE supply', value: `${formatDisplayAmount(config.totalSupplyWei)} fxSAVE` },
-      { label: 'Cooldown', value: formatCooldown(config.cooldownPeriodSeconds) },
-      { label: 'Instant-redemption fee', value: formatRatio(config.instantRedeemFeeRatio) },
-      { label: 'Expense ratio', value: formatRatio(config.expenseRatio) },
-      { label: 'Harvester ratio', value: formatRatio(config.harvesterRatio) },
-      { label: 'Threshold (raw units)', value: config.threshold.toString() },
+      { label: 'Expense ratio', value: formatVaultRatio(config.expenseRatio) },
+      { label: 'Harvester ratio', value: formatVaultRatio(config.harvesterRatio) },
+      // The vault stakes idle fxSP in batches once it reaches this amount.
+      { label: 'Batch deposit threshold', value: `${formatDisplayAmount(config.threshold)} fxSP` },
     ]} /> : <p className={presentation.helper}>Vault details unavailable. Retry to load them.</p>}
   </Disclosure>;
 }
@@ -656,7 +660,10 @@ function formatDisplayAmount(value: bigint | undefined, decimals = 18, digits = 
   const grouped = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   return fraction ? `${grouped}.${fraction}` : grouped;
 }
+/** The base pool's instant fee ratio has 1e18 precision. */
 function formatRatio(value: bigint): string { return `${formatDisplayAmount(value, 16)}%`; }
+/** fxSAVE's own expense and harvester ratios have 1e9 precision (a 0.01% bounty reads 100000). */
+function formatVaultRatio(value: bigint): string { return `${formatDisplayAmount(value, 7)}%`; }
 function formatCooldown(seconds: bigint): string {
   if (seconds % 3600n === 0n) return `${seconds / 3600n}h`;
   if (seconds % 60n === 0n) return `${seconds / 60n}m`;

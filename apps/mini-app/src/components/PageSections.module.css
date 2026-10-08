@@ -1,5 +1,5 @@
 /* What a page offers after its main action: centered to the action's measure,
- * borderless facts, a numbered path, questions, and the notes that matter. */
+ * borderless facts, the f(x) explainer, and the notes that matter. */
 .sections {
   display: grid;
   width: min(100%, var(--page-sections-width, 760px));
@@ -16,14 +16,10 @@
 .sectionHead > div { min-width: 0; }
 /* Section titles carry the landing's confidence: large, tight, and read into
    light word by word as they scroll up (LitWords). */
-.sectionHead h2 { color: var(--text); font-size: clamp(26px, 6.8vw, 34px); font-weight: 680; letter-spacing: -0.045em; line-height: 1.05; text-wrap: balance; }
+.sectionHead h2 { color: var(--text); font-size: clamp(22px, 6vw, 26px); font-weight: 680; letter-spacing: -0.045em; line-height: 1.05; text-wrap: balance; }
 .word { transition: color 520ms var(--ease-out); }
 /* A section's one-line premise, above its diagram. */
 .lede { max-width: 56ch; margin: -6px 0 0; color: var(--mut); font-size: var(--fs-small); line-height: 1.6; }
-/* An inline caption marks the switch as an example, beside rather than above it. */
-.exampleSwitch { display: flex; width: min(100%, 300px); align-items: center; gap: 10px; }
-.exampleSwitch > :last-child { min-width: 0; flex: 1 1 auto; }
-.exampleCaption { flex: 0 0 auto; color: var(--mut); font-size: var(--fs-caption); font-weight: 600; }
 /* Unlit words still read: about 3.5:1 on the dark canvases and 3.4:1 on light,
    above the 3:1 floor for large bold text, so lighting never hides a title. */
 .litLine[data-lighting] .word:not([data-lit]) { color: color-mix(in srgb, var(--text) 40%, transparent); }
@@ -49,36 +45,6 @@
 .stat dd { min-width: 0; color: var(--text); font-size: clamp(22px, 6vw, 28px); font-weight: 650; letter-spacing: -0.04em; line-height: 1.1; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .stat .statHint { color: var(--mut-2); font-size: var(--fs-micro); font-weight: 500; letter-spacing: 0; line-height: 1.4; }
 
-/* Steps: a vertical path with a connecting rule on phones, three across on wide screens. */
-.steps { position: relative; display: grid; gap: 22px; padding: 0; list-style: none; }
-.step { position: relative; display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 14px; align-items: start; }
-.step:not(:last-child)::after { content: ''; position: absolute; top: 50px; bottom: -18px; left: 21px; width: 2px; border-radius: 2px; background: linear-gradient(var(--line-strong), transparent); }
-.stepIcon { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 14px; background: var(--mint-dim); color: var(--mint-bright); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mint) 22%, transparent); }
-:root[data-theme='light'] .stepIcon { color: var(--mint); }
-.stepIcon svg { width: 20px; height: 20px; }
-.step h3 { margin-top: 10px; color: var(--text); font-size: var(--fs-body); font-weight: 650; letter-spacing: -0.01em; }
-.step p:last-child { margin-top: 4px; color: var(--mut); font-size: var(--fs-small); line-height: 1.55; }
-.reveal[data-shown] .step { animation: step-in 560ms var(--ease-out) both; animation-delay: calc(var(--step, 0) * 90ms); }
-@keyframes step-in { from { opacity: 0; transform: translate3d(0, 10px, 0); } to { opacity: 1; transform: none; } }
-@media (min-width: 720px) {
-  .steps { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-  .step { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 18px; border-radius: var(--radius-lg); background: color-mix(in srgb, var(--surface) 72%, transparent); box-shadow: var(--ring-inset); }
-  .step:not(:last-child)::after { top: 40px; right: -16px; bottom: auto; left: auto; width: 16px; height: 2px; background: linear-gradient(90deg, var(--line-strong), transparent); }
-}
-
-/* Questions: rows that open in place. */
-.questions { display: grid; border-top: 1px solid var(--hairline); }
-.question { border-bottom: 1px solid var(--hairline); }
-.question summary { display: flex; min-height: 56px; align-items: center; justify-content: space-between; gap: 16px; cursor: pointer; color: var(--text); font-size: var(--fs-body); font-weight: 600; list-style: none; transition: color var(--dur-fast) ease; }
-.question summary::-webkit-details-marker { display: none; }
-.question summary:hover { color: var(--mint-bright); }
-:root[data-theme='light'] .question summary:hover { color: var(--mint); }
-.question summary svg { width: 18px; height: 18px; flex: 0 0 auto; color: var(--mut); }
-.question summary:focus-visible { outline: 2px solid var(--mint-bright); outline-offset: 2px; border-radius: 8px; }
-.answer { padding: 0 32px 18px 0; color: var(--mut); font-size: var(--fs-small); line-height: 1.65; animation: answer-in var(--dur-base) var(--ease-out) both; }
-.answer a { color: var(--mint); font-weight: 600; }
-@keyframes answer-in { from { opacity: 0; transform: translate3d(0, -4px, 0); } to { opacity: 1; transform: none; } }
-
 /* Callout: a risk or limit worth reading, set apart from facts. */
 .callout { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 14px; padding: 18px; border-radius: var(--radius-lg); background: color-mix(in srgb, var(--warn) 7%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 18%, transparent); }
 .calloutIcon { display: grid; width: 40px; height: 40px; place-items: center; border-radius: 12px; background: var(--warn-dim); color: var(--warn); }
@@ -90,7 +56,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .reveal, .reveal[data-shown] { opacity: 1; transform: none; transition: none; }
-  .reveal[data-shown] .step, .answer { animation: none; }
   .sectionAction svg, .word { transition: none; }
   .litLine[data-lighting] .word:not([data-lit]) { color: inherit; }
 }

@@ -67,6 +67,12 @@
   .management > button { padding: 8px 6px; }
 }
 
+/* Beside the settings gear, "Your positions" keeps one line on the narrowest phones. */
+@media (max-width: 359px) {
+  .viewTabs :global(.segmented-option) { padding-inline: 4px; }
+  .viewTabs :global(.segmented-option > span) { font-size: 13px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .management > button { transition: none; }
   .management > button:active:not(:disabled) { transform: none; }
