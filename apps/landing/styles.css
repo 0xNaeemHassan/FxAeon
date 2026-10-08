@@ -1458,8 +1458,11 @@ footer {
      first screen, below the browser's own bars. */
   .hero { gap: 4px; padding-top: clamp(12px, 3vh, 32px); }
   .hero-copy { gap: clamp(16px, 4.8vw, 22px); }
-  .hero h1 { font-size: clamp(40px, 10.6vw, 54px); }
-  .lede { font-size: clamp(16px, 4.2vw, 17px); line-height: 1.5; }
+  /* The type keeps scaling below 380px instead of stopping at a floor: at a
+     floor its lines run within a few pixels of the edge, and a platform whose
+     glyphs set a little wider (Linux) wraps them, pushing the phone down. */
+  .hero h1 { font-size: clamp(36px, 10.6vw, 54px); }
+  .lede { font-size: clamp(15px, 4.2vw, 17px); line-height: 1.5; }
   .actions { width: 100%; gap: 10px; }
   .actions .pill.primary, .actions .secondary { flex: 1 1 100%; min-height: clamp(48px, 13.4vw, 58px); font-size: 16px; }
   .hero-stage { padding-top: 16px; }
