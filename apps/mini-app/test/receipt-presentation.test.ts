@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { FX_TOKENS } from '../src/lib/fx/tokens';
-import { buildReceiptPresentation, receiptTransfersFromLogs, shouldShowReceiptMovementFallback, verifiedReceiptPositionIdentity } from '../src/lib/receiptPresentation';
+import { buildReceiptPresentation, receiptMovementLines, receiptTransfersFromLogs, shouldShowReceiptMovementFallback, verifiedReceiptPositionIdentity } from '../src/lib/receiptPresentation';
 
 const WALLET = '0x1111111111111111111111111111111111111111';
 const OTHER = '0x2222222222222222222222222222222222222222';
@@ -95,4 +95,26 @@ test('position identity is shown only for the matching confirmed verified receip
   assert.equal(verifiedReceiptPositionIdentity({ status: 'pending', verification: 'receipt', transactionHash: hint.transactionHash, hint }), null);
   assert.equal(verifiedReceiptPositionIdentity({ status: 'confirmed', verification: 'rpc-error', transactionHash: hint.transactionHash, hint }), null);
   assert.equal(verifiedReceiptPositionIdentity({ status: 'confirmed', verification: 'receipt', transactionHash: `0x${'b'.repeat(64)}`, hint }), null);
+});
+
+test('an ETH-paid action with no token log states the ETH it sent as its movement', () => {
+  const ethPaid = buildReceiptPresentation({ chainId: 1, walletAddress: WALLET, status: 'success', transactionKind: 'action',
+    transfers: [], executionCostWei: 372_000_000_000_000n, nativeValueWei: 500_000_000_000_000_000n,
+  });
+  assert.deepEqual(receiptMovementLines([ethPaid]), { movements: ['sent 0.5 ETH'], nativeValueIsMovement: true });
+
+  // A token movement is stated as it is, and the native value stays its own line.
+  const tokenPaid = buildReceiptPresentation({ chainId: 1, walletAddress: WALLET, status: 'success', transactionKind: 'action',
+    transfers: [{ token: FX_TOKENS.USDC.address, from: WALLET, to: OTHER, amountRaw: 2_000_000n }],
+    executionCostWei: 1n, nativeValueWei: 500_000_000_000_000_000n,
+  });
+  assert.deepEqual(receiptMovementLines([tokenPaid]), { movements: ['sent 2 USDC'], nativeValueIsMovement: false });
+
+  // A bridge fee is a fee, not a movement, and nothing at all leaves the list empty for the fallback.
+  const bridge = buildReceiptPresentation({ chainId: 1, walletAddress: WALLET, status: 'success', transactionKind: 'action',
+    transfers: [], executionCostWei: 1n, nativeValueWei: 1_000_000_000_000_000n, bridgeFee: true,
+  });
+  assert.deepEqual(receiptMovementLines([bridge]), { movements: [], nativeValueIsMovement: false });
+  const nothing = buildReceiptPresentation({ chainId: 1, walletAddress: WALLET, status: 'success', transactionKind: 'action', transfers: [], executionCostWei: 1n });
+  assert.deepEqual(receiptMovementLines([nothing]), { movements: [], nativeValueIsMovement: false });
 });
