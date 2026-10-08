@@ -26,6 +26,7 @@ import NetworkSelector from '@/components/NetworkSelector';
 import { ValueOrSkeleton } from '@/components/MissingValue';
 import { compactAddress } from '@/lib/addressPresentation';
 import { copyText } from '@/lib/clipboard';
+import { usePrivyWallet, useWalletReadyTimeout } from '@/lib/wallet';
 import headerWalletControl from '@/components/HeaderWalletControl.module.css';
 
 /* ------------------------------------------------------------------ shell */
@@ -115,7 +116,7 @@ export function AppShell({
             <span className="app-topbar-actions">
               <span className={headerWalletControl.control} data-header-wallet-control="true" role="group" aria-label="Wallet and network controls">
                 <NetworkSelector />
-                <WalletProfile />
+                <HeaderWallet />
               </span>
               <ThemeToggle />
             </span>
@@ -144,6 +145,23 @@ export function AppShell({
   );
 }
 
+/* Until the wallet provider is ready the identity slot holds a placeholder
+   with the footprint of a connected address, so the address (or Connect)
+   replaces it in place. It stops shimmering once the provider has timed out;
+   the page itself names the problem and offers a retry. */
+function HeaderWallet() {
+  const wallet = usePrivyWallet();
+  const timedOut = useWalletReadyTimeout(wallet.ready);
+  if (wallet.ready) return <WalletProfile />;
+  return (
+    <span role="status" className={headerWalletControl.identityPlaceholder} data-settled={timedOut || undefined}>
+      <span className={`skeleton ${headerWalletControl.placeholderAvatar}`} aria-hidden="true" />
+      <span className={`skeleton ${headerWalletControl.placeholderName}`} aria-hidden="true" />
+      <span className="sr-only">{timedOut ? 'Wallet unavailable' : 'Loading wallet'}</span>
+    </span>
+  );
+}
+
 const TABS: { href: string; labelKey: string; icon: LucideIcon; also?: string[] }[] = [
   { href: '/', labelKey: 'nav.home', icon: Home, also: ['/portfolio'] },
   { href: '/trade', labelKey: 'nav.trade', icon: CandlestickChart, also: ['/positions'] },
@@ -154,6 +172,11 @@ const TABS: { href: string; labelKey: string; icon: LucideIcon; also?: string[] 
 
 function isTabActive(pathname: string | null, href: string, also?: string[]) {
   return pathname === href || Boolean(also?.some((prefix) => pathname?.startsWith(prefix)));
+}
+
+/* The first tab opens Portfolio, so it carries the page's own title. */
+function tabLabel(t: ReturnType<typeof useT>, href: string, labelKey: string) {
+  return href === '/' ? PAGE_TITLES['/'] : t(labelKey);
 }
 
 /* Routes remount the shell, so the dock remembers where its highlight was and
@@ -191,7 +214,7 @@ export function TabBar() {
         <span className="nav-icon">
           <Icon aria-hidden="true" className="h-5 w-5" strokeWidth={active ? 2.2 : 1.8} />
         </span>
-        <span>{t(labelKey)}</span>
+        <span className="nav-label">{tabLabel(t, href, labelKey)}</span>
       </Link>
     );
   });
@@ -220,7 +243,7 @@ function DesktopNavigation() {
       {TABS.map(({ href, labelKey, also }) => {
         const active = isTabActive(pathname, href, also);
         return <Link key={href} href={href} aria-current={active ? 'page' : undefined} onClick={() => haptic('selection')}>
-          {href === '/' ? 'Portfolio' : t(labelKey)}
+          {tabLabel(t, href, labelKey)}
         </Link>;
       })}
     </nav>
@@ -245,7 +268,10 @@ function buttonClasses(variant: 'primary' | 'ghost' | 'danger' | 'outline' | 'gl
           : variant === 'glass'
             ? 'astryx-card text-[var(--text)] hover:border-[var(--astryx-border-strong)]'
             : 'button-ghost text-[var(--text)]';
-  return `button glass-press astryx-interactive flex min-h-12 w-full items-center justify-center gap-2 px-5 py-3 text-[14px] disabled:cursor-not-allowed disabled:opacity-50 ${styles} ${className}`;
+  // `.button` sets the body size and the disabled look (globals.css). No
+  // disabled: utility here: Tailwind appends variants after every custom rule,
+  // so one would override that look, and fading a label breaks its contrast.
+  return `button glass-press astryx-interactive flex min-h-12 w-full items-center justify-center gap-2 px-5 py-3 ${styles} ${className}`;
 }
 
 export const Button = forwardRef<HTMLButtonElement, Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'onClick' | 'disabled' | 'className'> & {
@@ -301,11 +327,11 @@ export function Stat({
     <div className="stat-card glass flex flex-col gap-1.5 p-4">
       <span className="micro-label">{label}</span>
       <span
-        className={`text-display text-[20px] font-semibold leading-none ${accent ? 'text-mint' : ''}`}
+        className={`text-display text-[length:var(--fs-heading)] font-semibold leading-none ${accent ? 'text-mint' : ''}`}
       >
         <ValueOrSkeleton value={value} width="md" />
       </span>
-      {sub && <span className="text-[11px] text-mut">{sub}</span>}
+      {sub && <span className="text-[length:var(--fs-micro)] text-mut">{sub}</span>}
     </div>
   );
 }
@@ -329,7 +355,7 @@ export function AddressChip({ address, iconOnly = false }: { address: string; ic
           haptic('error');
         }
       }}
-      className={`address-chip glass glass-press inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-1.5 font-mono text-[12px] text-mut${iconOnly ? ' min-w-11' : ''}`}
+      className={`address-chip glass glass-press inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-1.5 font-mono text-[length:var(--fs-caption)] text-mut${iconOnly ? ' min-w-11' : ''}`}
     >
       {!iconOnly && short}
       {copied ? (
@@ -357,8 +383,8 @@ export function EmptyState({
       <span className="empty-icon flex h-14 w-14 items-center justify-center rounded-lg bg-[var(--mint-dim)]">
         <Icon aria-hidden="true" className="h-6 w-6 text-mint" strokeWidth={1.8} />
       </span>
-      <p className="mt-1 text-[17px] font-semibold tracking-tight">{title}</p>
-      {body && <p className="max-w-[340px] text-[14px] leading-relaxed text-mut">{body}</p>}
+      <p className="mt-1 text-[length:var(--fs-title)] font-semibold tracking-tight">{title}</p>
+      {body && <p className="max-w-[340px] text-[length:var(--fs-small)] leading-relaxed text-mut">{body}</p>}
       {action && <div className="mt-3 w-full">{action}</div>}
     </div>
   );
@@ -369,7 +395,7 @@ export function SectionTitle({ children, right, level = 2 }: { children: ReactNo
   const Heading = level === 3 ? 'h3' : 'h2';
   return (
     <div className="section-heading mb-2 flex items-center justify-between">
-      <Heading className="text-[16px] font-semibold tracking-tight text-[var(--text)]">
+      <Heading className="text-[length:var(--fs-title)] font-semibold tracking-tight text-[var(--text)]">
         {children}
       </Heading>
       {right}
@@ -410,10 +436,10 @@ export function FullScreenSpinner({ asMain = false }: { asMain?: boolean } = {})
         <FxLogo size={56} />
       </div>
       <div>
-        <h1 className="text-display text-2xl font-semibold">
+        <h1 className="text-display text-[length:var(--fs-heading)] font-semibold">
           Fx<span className="text-gradient">Aeon</span>
         </h1>
-        <p className="mt-1.5 text-[12.5px] text-mut">{t('common.loading')}</p>
+        <p className="mt-1.5 text-[length:var(--fs-small)] text-mut">{t('common.loading')}</p>
       </div>
       <span className="loading-line" aria-hidden="true" />
     </Element>

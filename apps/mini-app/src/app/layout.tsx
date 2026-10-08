@@ -8,9 +8,9 @@ import { TelegramProvider } from '@/components/TelegramProvider';
 import WalletProviderBoundary from '@/components/WalletProviderBoundary';
 import RoutePriceProvider from '@/components/RoutePriceProvider';
 import { LocaleProvider } from '@/lib/i18n';
+import { SHELL_INITIALIZER } from './shellInitializer';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
-const themeInitializer = `(()=>{try{const v=localStorage.getItem('fxaeon_theme_id_v2');const t=v==='official'||v==='dark'||v==='light'?v:localStorage.getItem('fxaeon_theme_id')==='light'?'light':'official';const r=document.documentElement;r.dataset.theme=t;r.style.colorScheme=t==='light'?'light':'dark';}catch{}})();`;
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://fxaeon.com'),
@@ -61,7 +61,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeInitializer }} />
+        <script dangerouslySetInnerHTML={{ __html: SHELL_INITIALIZER }} />
         {/* Telegram requires its host bridge in <head> before application
             scripts. It remains a progressive enhancement: a failed request
             never blocks FxAeon's browser-compatible routes or login. */}

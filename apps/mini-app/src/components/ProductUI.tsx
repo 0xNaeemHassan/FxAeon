@@ -89,8 +89,9 @@ export function ActionRow(props: ActionRowLink | ActionRowButton) {
   const external = 'external' in props ? props.external ?? false : false;
   const onClick = props.onClick;
   const disabled = 'disabled' in props ? props.disabled ?? false : false;
-  const content = <>{Icon && <Icon className={styles.rowIcon} size={20} aria-hidden="true" />}<span className={styles.rowCopy}><strong>{title}</strong>{description && <small>{description}</small>}</span>{value && <span className={styles.rowValue}>{value}</span>}{external ? <ExternalLink size={17} aria-hidden="true" /> : <ChevronRight size={18} aria-hidden="true" />}</>;
-  if (href && external) return <a className={styles.actionRow} href={href} target="_blank" rel="noopener noreferrer" aria-label={`${title} (opens in a new tab)`} onClick={(event) => {
+  // An external row says so in its name, after its title and description.
+  const content = <>{Icon && <Icon className={styles.rowIcon} size={20} aria-hidden="true" />}<span className={styles.rowCopy}><strong>{title}</strong>{description && <small>{description}</small>}{external && <span className="sr-only"> (opens in a new tab)</span>}</span>{value && <span className={styles.rowValue}>{value}</span>}{external ? <ExternalLink size={17} aria-hidden="true" /> : <ChevronRight size={18} aria-hidden="true" />}</>;
+  if (href && external) return <a className={styles.actionRow} href={href} target="_blank" rel="noopener noreferrer" onClick={(event) => {
     haptic('light'); onClick?.();
     if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && openExternalLink(href)) event.preventDefault();
   }}>{content}</a>;

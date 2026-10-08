@@ -111,7 +111,7 @@ export default function SettingsPage() {
           <div className={styles.preferenceHeading}><h3 id={`${id}-slippage`}>Slippage tolerance</h3>
             <span className={saved ? styles.saved : undefined} role="status" aria-live="polite">{saved ? <><Check size={14} aria-hidden="true" />Saved</> : dirty ? 'Unsaved changes' : ''}</span>
           </div>
-          <p id={`${id}-help`} className={styles.help}>Max adverse change from the quote.</p>
+          <p id={`${id}-help`} className={styles.help}>If the price moves more than this before your transaction confirms, it fails rather than complete at a worse price.</p>
           <div className={styles.choices} role="radiogroup" aria-label={t('settings.maxSlippage')} aria-describedby={`${id}-help`}>
             {PRESETS.map((bps, index) => <button type="button" key={bps} role="radio" aria-checked={slippageBps === bps} disabled={!ready} tabIndex={slippageBps === bps || (!PRESETS.includes(slippageBps) && index === 0) ? 0 : -1}
               onClick={() => select(bps)} onKeyDown={(event) => {
@@ -122,7 +122,7 @@ export default function SettingsPage() {
               }}>{bps / 100}%</button>)}
           </div>
           {!PRESETS.includes(slippageBps) && <p className={styles.scope}>Custom {slippageBps / 100}% is set from a form’s settings. Choose a preset to replace it.</p>}
-          <p className={styles.scope}>Trade, Positions, and eligible fxSAVE; saved on this device.</p>
+          <p className={styles.scope}>Applies to Trade, Positions and eligible fxSAVE actions, on this device.</p>
           {showGasSettings && <div className={styles.gasPreference}>
             <div className={styles.preferenceHeading}>
               <h3 id={`${id}-gas`}>Gas speed</h3>

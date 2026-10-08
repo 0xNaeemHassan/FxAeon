@@ -36,6 +36,8 @@
   --long-dim: var(--success-dim);
   --short: var(--danger);
   --short-dim: var(--danger-dim);
+  /* Keyboard focus is intent: one accent ring for chrome and content alike. */
+  --focus-ring: var(--mint);
   --scrim: rgba(4, 3, 10, 0.64);
   --glass: color-mix(in srgb, var(--bg) 76%, transparent);
   --glass-strong: color-mix(in srgb, var(--surface) 84%, transparent);
@@ -257,6 +259,8 @@ body {
   line-height: 1.45;
   font-feature-settings: 'ss01' on, 'cv05' on, 'cv11' on;
   font-variant-numeric: tabular-nums;
+  /* Every field's caret takes the accent, as the amount field's does. */
+  caret-color: var(--mint);
   overscroll-behavior-y: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -310,6 +314,19 @@ body {
   animation: toast-in var(--dur-slow) var(--ease-spring) both;
 }
 
+/* Sign-in, not-found and error screens: centred when they fit, scrollable
+   from their top when they do not (landscape phones, enlarged text), and
+   painted above the canvas lights like the app shell. */
+main.utility-stage {
+  position: relative;
+  z-index: 1;
+  height: var(--tg-viewport-height, 100dvh);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  justify-content: safe center;
+}
+
 .wallet-provider-chooser-backdrop {
   position: fixed;
   inset: 0;
@@ -359,11 +376,15 @@ body::after {
   animation: canvas-drift-b 56s var(--ease-in-out, ease-in-out) infinite alternate;
 }
 
-/* A route's heading arrives lit, as the landing's headline does: one band of
-   accent light crosses the word and leaves it in plain text. */
+/* The first route heading of a session arrives lit, as the landing's headline
+   does: one band of accent light crosses the word and leaves it in plain text.
+   The band starts and ends beyond the word, so the first and last frames read
+   as plain text; the tile repeats down so descenders below the line box stay
+   painted. When it ends, the shell initializer (src/app/shellInitializer.ts)
+   marks the session lit and every later heading is plain text at once. */
 @media (prefers-reduced-motion: no-preference) {
-  :is(.page-header, .trade-page-heading, [data-page-heading]) h1 {
-    background: linear-gradient(100deg, var(--text) 0 36%, var(--mint-bright) 46%, var(--brand-coral) 52%, var(--text) 60% 100%) 0 0 / 260% 100% no-repeat;
+  :root:not([data-heading-lit]) :is(.page-header, .trade-page-heading, [data-page-heading]) h1 {
+    background: linear-gradient(100deg, var(--text) 0 42%, var(--mint-bright) 48%, var(--brand-coral) 53%, var(--text) 58% 100%) 0 0 / 260% 100% repeat-y;
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -388,6 +409,20 @@ body::after {
 @media (prefers-reduced-motion: reduce) {
   body::before, body::after { animation: none; }
 }
+/* The canvas rests when nobody is looking at it. With data saver on it stays
+   still from the first paint; while the page is hidden it holds its frame. */
+:root[data-save-data] body::before,
+:root[data-save-data] body::after { animation: none; will-change: auto; }
+:root[data-page-hidden] body::before,
+:root[data-page-hidden] body::after { animation-play-state: paused; }
+/* It also holds its frame under a sheet, dialog or transaction review, where
+   attention (and a backdrop blur) sits above it. Markers: overlays are
+   aria-modal; reviews render ActionReview's viewport, or mark their form with
+   data-review (Trade, Positions) or a data-flow-stage past input. */
+body:has([aria-modal='true'], [data-review-viewport], [data-review], [data-flow-stage]:not([data-flow-stage='input']))::before,
+body:has([aria-modal='true'], [data-review-viewport], [data-review], [data-flow-stage]:not([data-flow-stage='input']))::after {
+  animation-play-state: paused;
+}
 
 button,
 a,
@@ -408,7 +443,7 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 summary:focus-visible {
-  outline: 2px solid var(--mint-bright);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 3px;
 }
 
@@ -521,8 +556,13 @@ details[open] > summary .disclosure-closed-only { display: none; }
 
 /* Route content fades in once on mount. Opacity only: geometry stays exact
    and no fixed-position descendant gains a new containing block. Refreshed
-   values inside a mounted route never replay it. */
-.app-content > * {
+   values inside a mounted route never replay it. A route heading is never
+   inside the fade: the title is readable from its first frame, even when a
+   busy phone stalls the fade mid-way, so a workspace that holds the heading
+   appears at once (its heading brings its own light). Content marked
+   data-continued replaces the first-paint outline (ProviderLoadingState),
+   which already drew it, so it does not fade in a second time. */
+.app-content > :not(.page-header):not([data-continued]):not(:has(:is([data-page-heading], .trade-page-heading))) {
   animation: route-in var(--dur-slow) var(--ease-out) both;
 }
 .app-content > *:nth-child(2) { animation-delay: 40ms; }
@@ -558,9 +598,12 @@ details[open] > summary .disclosure-closed-only { display: none; }
   border-radius: var(--radius-sm);
   transition: opacity var(--dur-fast) var(--ease-out);
 }
-.app-topbar > a:first-child:hover { opacity: 0.86; }
 .app-topbar > a:first-child svg { transition: transform var(--dur-slow) var(--ease-spring); }
-.app-topbar > a:first-child:hover svg { transform: rotate(-8deg) scale(1.04); }
+/* Touch screens keep :hover after a tap, so the logo answers real pointers only. */
+@media (hover: hover) {
+  .app-topbar > a:first-child:hover { opacity: 0.86; }
+  .app-topbar > a:first-child:hover svg { transform: rotate(-8deg) scale(1.04); }
+}
 
 .brand-wordmark {
   color: var(--text);
@@ -594,6 +637,20 @@ details[open] > summary .disclosure-closed-only { display: none; }
 }
 
 .app-topbar-actions > button:active:not(:disabled) { transform: scale(0.96); }
+.app-topbar-actions { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+
+/* The theme control shows the theme in use. All three icons are rendered and
+   the root's pre-hydration data-theme picks one, so it is right on first
+   paint; after a tap the new one turns in. */
+.theme-toggle-icon { display: none; }
+:root:not([data-theme='dark']):not([data-theme='light']) .theme-toggle-icon[data-theme-icon='official'],
+:root[data-theme='dark'] .theme-toggle-icon[data-theme-icon='dark'],
+:root[data-theme='light'] .theme-toggle-icon[data-theme-icon='light'] { display: block; }
+.theme-toggle[data-switched] .theme-toggle-icon { animation: theme-icon-in var(--dur-slow) var(--ease-spring) both; }
+@keyframes theme-icon-in {
+  from { opacity: 0; transform: rotate(-60deg) scale(0.6); }
+  to { opacity: 1; transform: none; }
+}
 
 .wallet-profile-backdrop {
   position: fixed;
@@ -720,7 +777,9 @@ details[open] > summary .disclosure-closed-only { display: none; }
 .network-selector-menu button { display: flex; width: 100%; min-height: 48px; align-items: center; justify-content: space-between; gap: 12px; border-radius: var(--radius-sm); padding: 6px 10px; color: var(--text); text-align: left; transition: background-color var(--dur-fast) ease; }
 .network-selector-menu button:hover:not(:disabled), .network-selector-menu button[aria-checked='true'] { background: var(--surface-3); }
 .network-selector-menu button[aria-checked='true'] svg:last-child { color: var(--mint); }
-.network-selector-menu button:disabled { cursor: default; opacity: .48; }
+/* Networks wait for a wallet: the names stay readable, only the marks dim. */
+.network-selector-menu button:disabled { cursor: not-allowed; color: var(--mut); }
+.network-selector-menu button:disabled img { opacity: .5; }
 .network-selector-menu strong, .network-selector-menu small { display: block; }
 .network-selector-menu strong { font-size: var(--fs-small); font-weight: 600; }
 .network-selector-menu small { margin-top: 2px; color: var(--mut-2); font-size: var(--fs-micro); }
@@ -964,6 +1023,19 @@ details[open] > summary .disclosure-closed-only { display: none; }
   background: color-mix(in srgb, var(--danger) 18%, transparent);
 }
 
+/* A disabled action stays legible: never faded, its label takes the secondary
+   text tone on a neutral surface (AA in every theme) and the cursor says it is
+   unavailable. :where() keeps these at the weight of one class, after the
+   variants above, so a component that styles its own disabled state wins. */
+.button:where(:disabled, [aria-disabled='true']) {
+  color: var(--mut);
+  cursor: not-allowed;
+}
+.button:where(.button-ghost, .button-danger):where(:disabled, [aria-disabled='true']) {
+  border-color: transparent;
+  background: var(--surface-2);
+}
+
 /* Navigation: a floating dock. The highlight travels between tabs on a
    spring; its index is set by TabBar and survives route remounts. */
 .tabbar {
@@ -982,6 +1054,10 @@ details[open] > summary .disclosure-closed-only { display: none; }
   align-items: stretch;
   justify-content: space-between;
   padding: var(--tab-inset);
+  /* App chrome: a long press neither selects a label nor opens a link preview. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .tabbar::before {
@@ -1037,6 +1113,7 @@ details[open] > summary .disclosure-closed-only { display: none; }
   align-items: center;
   justify-content: center;
 }
+.nav-item-mobile .nav-label { white-space: nowrap; }
 .nav-item-mobile .nav-icon svg { transition: transform var(--dur-slow) var(--ease-spring); }
 .nav-item-mobile.nav-item-active .nav-icon svg { transform: translateY(-1px) scale(1.06); }
 
@@ -1233,8 +1310,8 @@ select.field-control option {
 }
 
 .market-chart-stats > div { display: flex; align-items: baseline; gap: 7px; }
-.market-chart-stats dt { color: var(--mut); font-size: 10px; }
-.market-chart-stats dd { margin: 0; color: var(--text); font-size: 12px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.market-chart-stats dt { color: var(--mut); font-size: var(--fs-micro); }
+.market-chart-stats dd { margin: 0; color: var(--text); font-size: var(--fs-caption); font-weight: 650; font-variant-numeric: tabular-nums; }
 
 .market-chart-market-switch { min-width: 0; }
 
@@ -1250,7 +1327,7 @@ select.field-control option {
   padding: 0 14px;
   border-radius: 999px;
   color: var(--mint);
-  font-size: 12px;
+  font-size: var(--fs-caption);
   font-weight: 600;
   text-align: left;
 }
@@ -1791,11 +1868,12 @@ input[type='range'].lever:active::-moz-range-thumb {
   cursor: grabbing;
   box-shadow: 0 0 0 2px var(--lever-fill), 0 1px 2px rgba(10, 6, 24, 0.3), 0 6px 16px rgba(10, 6, 24, 0.3), 0 0 0 9px color-mix(in srgb, var(--lever-fill) 18%, transparent);
 }
-input[type='range'].lever:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--mint-bright); }
-input[type='range'].lever:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--mint-bright); }
+input[type='range'].lever:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--focus-ring); }
+input[type='range'].lever:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--focus-ring); }
 
 .tabbar-safe {
-  padding: 0 12px var(--tabbar-edge-gap);
+  /* Landscape notches and rounded corners keep clear of the dock's ends too. */
+  padding: 0 max(12px, env(safe-area-inset-right, 0px)) var(--tabbar-edge-gap) max(12px, env(safe-area-inset-left, 0px));
   background: transparent;
 }
 
@@ -1833,7 +1911,6 @@ input[type='range'].lever:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3p
   .desktop-navigation a[aria-current='page'] { color: var(--text); background: var(--surface-3); box-shadow: var(--ring-inset); }
   :root[data-theme='light'] .desktop-navigation a[aria-current='page'] { background: var(--surface); box-shadow: 0 1px 2px rgba(54, 34, 79, 0.1), 0 2px 8px rgba(54, 34, 79, 0.06); }
   .page-header { max-width: 1120px; margin: 0 auto 20px; }
-  .page-header h1 { font-size: 34px; }
   .mobile-tabbar { display: none; }
   .app-content-tabs { padding-bottom: 0; scroll-padding-bottom: 0; }
 
@@ -1858,18 +1935,28 @@ input[type='range'].lever:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3p
     --header-gap: 8px;
   }
 
-  .app-topbar {
+  /* One row at every phone width. When the wallet controls need the room, the
+     wordmark steps aside whole (it wraps onto a clipped second line of the
+     logo link) instead of the header breaking in two or the address being
+     cut; the mark stays, and Telegram's title bar already names the app. */
+  .app-topbar { flex-wrap: nowrap; }
+  .app-topbar > a:first-child {
+    flex: 0 1 auto;
     flex-wrap: wrap;
-    row-gap: 2px;
-    padding-bottom: 2px;
+    align-content: flex-start;
+    min-width: 34px;
+    height: 44px;
+    margin-inline-start: -3px;
+    padding-inline: 3px;
+    overflow: hidden;
+    overflow: clip;
+    gap: 0 8px;
   }
-  .app-topbar > a { min-width: 0; flex: 1 1 auto; }
   .app-topbar-actions { flex: 0 0 auto; }
-  .app-topbar > a { gap: 8px; }
-  .app-topbar > a > svg { width: 28px; height: 28px; }
-  .brand-wordmark { font-size: 20px; }
+  .app-topbar > a > svg { width: 28px; height: 28px; margin-block: 8px; }
+  /* The logo lockup keeps its own size; it is a mark, not running text. */
+  .brand-wordmark { font-size: 20px; line-height: 44px; }
   .page-header { margin-bottom: 8px; }
-  .page-header h1 { font-size: 26px; line-height: 1.08; }
   .page-subtitle { margin-top: 2px; font-size: var(--fs-caption); line-height: 1.4; }
   /* Trade keeps its compact route heading and Positions shortcut. Portfolio
      tabs carry the same context, so its standalone heading can disappear. */
@@ -1935,7 +2022,6 @@ input[type='range'].lever:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3p
 }
 
 @media (max-width: 430px) {
-  .wallet-control-label { display: none; }
   /* Keep the 220px menu inside the viewport when the 44px selector sits at
      the right edge of a 320px shell. */
   .network-selector-menu { right: -16px; }
@@ -1945,9 +2031,6 @@ input[type='range'].lever:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3p
     align-items: center;
     gap: 10px;
   }
-
-  .trade-page-heading h1,
-  .portfolio-page-heading h1 { font-size: 25px; }
 
   .market-chart-header {
     align-items: flex-start;
@@ -1985,20 +2068,6 @@ input[type='range'].lever:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3p
 
 @media (max-width: 359px) {
   .app-shell { padding-inline: 10px; }
-
-  .app-topbar { flex-wrap: nowrap; gap: 8px; }
-  .app-topbar > a { flex: 0 0 auto; }
-  .app-topbar-actions { flex: 0 0 auto; gap: 6px; }
-  .app-topbar .brand-wordmark {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
 
   .trade-page-actions > a { padding-inline: 9px; }
 

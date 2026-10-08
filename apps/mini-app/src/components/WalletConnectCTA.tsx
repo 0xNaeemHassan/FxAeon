@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { WalletCards } from 'lucide-react';
 import ConnectWalletButton from '@/components/ConnectWalletButton';
 import { Card } from '@/components/ui';
@@ -17,11 +18,15 @@ export default function WalletConnectCTA({
   authenticated,
   body,
   compact = false,
+  placeholder,
 }: {
   ready: boolean;
   authenticated: boolean;
   body: string;
   compact?: boolean;
+  /** The screen's own loading layout while the wallet provider starts; the
+   * provider timeout still replaces it with the reload alert. */
+  placeholder?: ReactNode;
 }) {
   const timedOut = useWalletReadyTimeout(ready);
 
@@ -35,6 +40,7 @@ export default function WalletConnectCTA({
         </Card></div>
       );
     }
+    if (placeholder) return <>{placeholder}</>;
     return (
       <div role="status" aria-live="polite">
         <Card className={`${compact ? 'h-16' : 'h-24'} animate-pulse`}>
