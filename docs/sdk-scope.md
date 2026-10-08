@@ -87,14 +87,14 @@ and [mint amount forwarding](https://github.com/AladdinDAO/fx-protocol-contracts
 
 ## Position brake
 
-Position cards show how far the market can move before a position reaches its
+Position rows show how far the market can move before a position reaches its
 pool's rebalance point, the f(x) "liquidation brake". This is app-owned
 read-only code (`apps/mini-app/src/app/trade/positionBrakeReader.ts`), not a
 sixteenth SDK method: it signs nothing and adds no transaction primitive. The
 fx-sdk 1.0.5 bundle contains these pool views without exporting them, so the
 app keeps a minimal ABI that a unit test compares with the bundle.
 
-While a card is shown, each verified position refresh (each Ethereum block
+While a position row is shown, each verified position refresh (each Ethereum block
 while realtime updates run, and on focus) makes one multicall of every
 position's `getPositionDebtRatio(id)` and each pool oracle's `getPrice()`, so
 ratios and prices come from the same block. Each pool's `getRebalanceRatios()`,
