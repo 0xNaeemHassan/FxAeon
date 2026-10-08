@@ -186,6 +186,19 @@ test('withdrawals compare the exact fxSAVE balance, and vault details read in th
   await expect(vault).not.toContainText(/raw units|Instant-redemption fee|Cooldown/);
 });
 
+test('the settings popover fits a 320px phone without clipping a row',async ({page}) => {
+  await page.setViewportSize({width:320,height:640});
+  await mount(page,false);
+  await page.getByRole('button',{name:'Withdraw',exact:true}).click();
+  const dialog=await openSettings(page,'0.5');
+  await expect(dialog.getByRole('radiogroup',{name:'Network speed'})).toBeVisible();
+  const clipped=await dialog.evaluate((panel) => {
+    const edge=panel.getBoundingClientRect().right;
+    return [...panel.querySelectorAll('h3,p,button,input,label')].filter((element) => element.getBoundingClientRect().right > edge + 1).map((element) => element.textContent || element.tagName);
+  });
+  expect(clipped).toEqual([]);
+});
+
 test('fxSAVE units wrap as a row at narrow widths and enlarged text',async ({page}) => {
   await mount(page,false);
   for(const width of [320,390,768]) {
