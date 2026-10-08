@@ -135,6 +135,99 @@ test('the theme icon follows the pre-hydration theme, so a saved theme never fla
   expect(await visibleIcons()).toEqual(['light']);
 });
 
+/** How violet the heading's ink is: the largest blue-over-green excess among
+ * bright pixels. Plain text in the dark themes stays under ~12; the band of
+ * light (mint-bright, coral) pushes it far higher. */
+async function headingTint(page: Page, heading: ReturnType<Page['locator']>) {
+  const shot = (await heading.screenshot()).toString('base64');
+  return page.evaluate(async (png) => {
+    const image = new Image();
+    image.src = `data:image/png;base64,${png}`;
+    await image.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const context = canvas.getContext('2d')!;
+    context.drawImage(image, 0, 0);
+    const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+    let tint = 0;
+    for (let index = 0; index < data.length; index += 4) {
+      const [red, green, blue] = [data[index], data[index + 1], data[index + 2]];
+      if (red + green + blue > 360) tint = Math.max(tint, blue - green);
+    }
+    return tint;
+  }, shot);
+}
+
+async function sweep(heading: ReturnType<Page['locator']>, at: number | 'finish') {
+  await heading.evaluate((element, time) => {
+    const animation = element.getAnimations().find((item) => (item as CSSAnimation).animationName === 'heading-light')!;
+    animation.pause();
+    if (time === 'finish') animation.finish();
+    else animation.currentTime = time;
+  }, at);
+}
+
+test('the first route heading arrives lit, and its first and last frames are plain text', async ({ page }) => {
+  // Hold the sweep at its start from the first paint, so a slow run cannot let
+  // it finish (and mark the session lit) before its frames are inspected.
+  await open(page, { initScript: "document.head.append(Object.assign(document.createElement('style'),{textContent:'h1{animation-play-state:paused!important}'}))" });
+  const heading = page.locator('[data-page-heading] h1');
+  await expect(heading).toHaveText('Portfolio');
+  await sweep(heading, 0);
+  expect(await headingTint(page, heading), 'first frame is plain text').toBeLessThanOrEqual(14);
+  // The eased band reaches the middle of the word about 250ms into the sweep.
+  await sweep(heading, 120 + 250);
+  expect(await headingTint(page, heading), 'the band of light crosses the word').toBeGreaterThanOrEqual(30);
+  await sweep(heading, 120 + 1499);
+  expect(await headingTint(page, heading), 'last frame is plain text').toBeLessThanOrEqual(14);
+  await sweep(heading, 'finish');
+  await expect(page.locator('html')).toHaveAttribute('data-heading-lit', '');
+  await expect.poll(() => heading.evaluate((element) => getComputedStyle(element).webkitTextFillColor === getComputedStyle(element).color)).toBe(true);
+});
+
+test('after the first sweep, later routes and reloads show plain titles at once', async ({ page }) => {
+  await open(page);
+  await sweep(page.locator('[data-page-heading] h1'), 'finish');
+  await expect(page.locator('html')).toHaveAttribute('data-heading-lit', '');
+  for (const path of ['/more', '/history', '/trade']) {
+    await setLab(page, { path });
+    const heading = page.getByRole('heading', { level: 1 });
+    await expect(heading).toBeVisible();
+    expect(await heading.evaluate((element) => element.getAnimations().length), `${path} heading is still`).toBe(0);
+    expect(await headingTint(page, heading)).toBeLessThanOrEqual(14);
+  }
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-heading-lit', '');
+  expect(await page.locator('[data-page-heading] h1').evaluate((element) => element.getAnimations().length)).toBe(0);
+});
+
+test('a route heading is never inside the route fade; heading-less content still fades in', async ({ page }) => {
+  await open(page);
+  const fadingAncestors = (selector: string) => page.locator(selector).evaluate((element) => {
+    const names: string[] = [];
+    for (let node: Element | null = element; node && !node.classList.contains('app-content'); node = node.parentElement) {
+      for (const animation of node.getAnimations()) names.push((animation as CSSAnimation).animationName);
+    }
+    return names.filter((name) => name === 'route-in');
+  });
+  expect(await fadingAncestors('[data-page-heading] h1')).toEqual([]);
+  await setLab(page, { path: '/trade' });
+  expect(await fadingAncestors('.trade-page-heading h1')).toEqual([]);
+  await setLab(page, { path: '/history' });
+  expect(await fadingAncestors('.page-header h1')).toEqual([]);
+  expect(await page.locator('.app-content > p').evaluate((element) => element.getAnimations().map((animation) => (animation as CSSAnimation).animationName))).toContain('route-in');
+});
+
+test('reduced motion shows plain headings with no sweep', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await open(page);
+  const heading = page.locator('[data-page-heading] h1');
+  await expect(heading).toBeVisible();
+  expect(await heading.evaluate((element) => element.getAnimations().length)).toBe(0);
+  expect(await heading.evaluate((element) => getComputedStyle(element).webkitTextFillColor === getComputedStyle(element).color)).toBe(true);
+});
+
 test('the dock names Portfolio, matching its page, and every label fits a 320px dock in each theme', async ({ page }) => {
   await open(page, { width: 320, height: 700 });
   await setLab(page, { wallet: STATES[2][1] });
