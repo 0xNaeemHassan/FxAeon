@@ -174,11 +174,6 @@ function isTabActive(pathname: string | null, href: string, also?: string[]) {
   return pathname === href || Boolean(also?.some((prefix) => pathname?.startsWith(prefix)));
 }
 
-/* The first tab opens Portfolio, so it carries the page's own title. */
-function tabLabel(t: ReturnType<typeof useT>, href: string, labelKey: string) {
-  return href === '/' ? PAGE_TITLES['/'] : t(labelKey);
-}
-
 /* Routes remount the shell, so the dock remembers where its highlight was and
    travels from there instead of reappearing in place. */
 let lastActiveTabIndex: number | null = null;
@@ -214,7 +209,7 @@ export function TabBar() {
         <span className="nav-icon">
           <Icon aria-hidden="true" className="h-5 w-5" strokeWidth={active ? 2.2 : 1.8} />
         </span>
-        <span className="nav-label">{tabLabel(t, href, labelKey)}</span>
+        <span className="nav-label">{t(labelKey)}</span>
       </Link>
     );
   });
@@ -243,7 +238,7 @@ function DesktopNavigation() {
       {TABS.map(({ href, labelKey, also }) => {
         const active = isTabActive(pathname, href, also);
         return <Link key={href} href={href} aria-current={active ? 'page' : undefined} onClick={() => haptic('selection')}>
-          {tabLabel(t, href, labelKey)}
+          {t(labelKey)}
         </Link>;
       })}
     </nav>

@@ -126,7 +126,7 @@ function ShellTopBar({ pathname }: { pathname: string }) {
   return <div className="app-topbar">
     <a className="flex items-center gap-2.5"><FxLogo size={32} /><span className="brand-wordmark">FxAeon</span></a>
     <nav className="desktop-navigation">
-      {TABS.map(({ href, labelKey, also }) => <a key={href} aria-current={isActive(pathname, href, also) ? 'page' : undefined}>{href === '/' ? 'Portfolio' : t(labelKey)}</a>)}
+      {TABS.map(({ href, labelKey, also }) => <a key={href} aria-current={isActive(pathname, href, also) ? 'page' : undefined}>{t(labelKey)}</a>)}
     </nav>
     <span className="app-topbar-actions">
       <span className={control.control}>
@@ -155,7 +155,7 @@ function ShellDock({ pathname }: { pathname: string }) {
         {TABS.map(({ href, labelKey, icon: Icon }, index) => <span key={href}
           className={`nav-item nav-item-mobile ${index === activeIndex ? 'nav-item-active text-mint' : 'text-mut'}`}>
           <span className="nav-icon"><Icon aria-hidden="true" className="h-5 w-5" strokeWidth={index === activeIndex ? 2.2 : 1.8} /></span>
-          <span className="nav-label">{href === '/' ? 'Portfolio' : t(labelKey)}</span>
+          <span className="nav-label">{t(labelKey)}</span>
         </span>)}
       </div>
     </div>

@@ -16,7 +16,7 @@
 .sectionHead > div { min-width: 0; }
 /* Section titles carry the landing's confidence: large, tight, and read into
    light word by word as they scroll up (LitWords). */
-.sectionHead h2 { color: var(--text); font-size: clamp(26px, 6.8vw, 34px); font-weight: 680; letter-spacing: -0.045em; line-height: 1.05; text-wrap: balance; }
+.sectionHead h2 { color: var(--text); font-size: clamp(22px, 6vw, 26px); font-weight: 680; letter-spacing: -0.045em; line-height: 1.05; text-wrap: balance; }
 .word { transition: color 520ms var(--ease-out); }
 /* A section's one-line premise, above its diagram. */
 .lede { max-width: 56ch; margin: -6px 0 0; color: var(--mut); font-size: var(--fs-small); line-height: 1.6; }
