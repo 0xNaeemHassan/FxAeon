@@ -85,11 +85,74 @@ Source references at contracts commit `5e198e93657db008a57129e7eea21a996618f17f`
 [short fee arithmetic](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/core/short/ShortPoolManager.sol#L710),
 and [mint amount forwarding](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/periphery/facets/PositionOperateFacet.sol#L128).
 
-Rebalance/liquidation prices are not yet integrated. They require the pool's
-live thresholds, oracle denomination, funding and band accounting; the documented
-global LTV values must not be hardcoded. Neither the pinned SDK nor inspected
-contracts exposes a per-position rebalancing opt-out. Extending read-only review
-calculations is separate from introducing new transaction primitives.
+## Position brake
+
+Position rows show how far the market can move before a position reaches its
+pool's rebalance point, the f(x) "liquidation brake". This is app-owned
+read-only code (`apps/mini-app/src/app/trade/positionBrakeReader.ts`), not a
+sixteenth SDK method: it signs nothing and adds no transaction primitive. The
+fx-sdk 1.0.5 bundle contains these pool views without exporting them, so the
+app keeps a minimal ABI that a unit test compares with the bundle.
+
+While a position row is shown, each verified position refresh (each Ethereum block
+while realtime updates run, and on focus) makes one multicall of every
+position's `getPositionDebtRatio(id)` and each pool oracle's `getPrice()`, so
+ratios and prices come from the same block. Each pool's `getRebalanceRatios()`,
+`getLiquidateRatios()` and `priceOracle()` are read from the pool and cached
+for 60 seconds. No threshold, oracle address or documented LTV is hardcoded.
+Facts at contracts commit `5e198e93657db008a57129e7eea21a996618f17f`:
+
+- `getPositionDebtRatio` returns rawDebts / (anchor price × rawColls) with 1e18
+  precision, and 0 without collateral
+  ([PositionLogic.sol](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/core/pool/PositionLogic.sol#L45-L52)).
+  Its `getPosition` applies the tick tree's rebalance and redeem ratios and the
+  debt and collateral indexes
+  ([#L27-L43](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/core/pool/PositionLogic.sol#L27-L43)).
+  Funding is folded into the collateral index only when the pool next updates
+  it ([long](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/core/pool/AaveFundingPool.sol#L96-L118),
+  [short](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/core/short/ShortPool.sol#L104-L127)).
+- The thresholds are the first values of `getRebalanceRatios()` and
+  `getLiquidateRatios()` (1e18); the second values are bonus ratios (1e9)
+  ([PoolStorage.sol](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/core/pool/PoolStorage.sol#L360-L390)).
+- Rebalancing and liquidation compare a tick's debt ratio at the oracle's
+  minimum price and act once it is at or above the threshold
+  ([rebalance](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/core/pool/BasePool.sol#L203-L226),
+  [batch rebalance](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/core/pool/BasePool.sol#L267-L302),
+  [liquidate](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/core/pool/BasePool.sol#L335-L367)).
+  A rebalance brings the tick back to the rebalance ratio
+  ([#L539-L556](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/core/pool/BasePool.sol#L539-L556)).
+  The card rescales the anchor-priced ratio by anchor / minimum price, rounded
+  up, which is never looser. Mainnet reads on 9 October 2026 put that factor
+  between 1.000003 and 1.0022 across the four pools.
+- Oracle prices use the pool's own units (1e18). ETH long collateral is
+  accounted in stETH, scaled from wstETH by the PoolManager's rate provider
+  ([PoolManager.sol](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/core/PoolManager.sol#L1053-L1063)),
+  and priced as Curve's stETH/ETH EMA × Chainlink ETH/USD
+  ([StETHPriceOracle.sol](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/price-oracle/StETHPriceOracle.sol#L34-L42)).
+  Short pools hold fxUSD and owe the volatile asset, so their inverse oracles
+  quote debt per dollar and their minimum is the inverse of the maximum USD
+  price ([InverseWstETHPriceOracle.sol](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/price-oracle/InverseWstETHPriceOracle.sol#L22-L32)).
+
+With r the rescaled ratio and R and L the pool's rebalance and liquidation
+ratios, a long reaches the rebalance point after a fall of 1 − r/R and a short
+after a rise of R/r − 1; liquidation uses L. The live market quote taken when r
+is read anchors the price at that point (P × r/R for a long, P × R/r for a
+short), and the distance is recomputed from the current live quote, so the bar
+fill and line move between chain reads. Percentages round down to whole
+percent, showing the smaller distance, and prices round toward today's price.
+A position without debt shows no brake. Reaching R, on chain or by the live
+estimate, shows "At the rebalance point"; reaching L, "At the liquidation
+point". A failed first read shows no line or marker; a later failed refresh
+keeps the last read for at most two minutes. Without a fresh live quote the
+line keeps the distance measured at the read and names no price.
+
+Every figure is an estimate (≈). The oracle (Chainlink and on-chain spot
+sources, the stETH/ETH and WBTC/BTC pegs, the wstETH rate) and the Coinbase
+quote differ; a pool acts on a tick's combined ratio, which can differ slightly
+from the position's own (ticks are 0.15% apart); and funding accrues between
+pool updates. Neither the pinned SDK nor inspected contracts exposes a
+per-position rebalancing opt-out. Extending read-only review calculations is
+separate from introducing new transaction primitives.
 
 ## Locked public surface
 

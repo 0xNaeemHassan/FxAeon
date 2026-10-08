@@ -5,7 +5,7 @@ const mocks={
   "next/link": "import React from 'react'; export default ({children,...props}) => <a {...props}>{children}</a>;",
   "@/components/MarketChart": "import React from 'react'; export const TradeMarketChart = ({market,onMarketChange}) => <div role='radiogroup' aria-label='Market'>{['ETH','BTC'].map(item=><button type='button' role='radio' aria-checked={market===item} key={item} onClick={()=>onMarketChange(item)}>{item}</button>)}</div>;",
   "@/components/PriceProvider": "export const useUsdPrices = () => ({status:'unavailable',prices:{}}); export const useLiveMarketQuote = () => ({ quote: null, status: 'unavailable', isFresh: false });",
-  "@/components/ProtocolPositionCard": "export const ProtocolPositionCard = () => null; export const ProtocolPositionNotice = () => null;",
+  "@/components/ProtocolPositionCard": "export const ProtocolPositionCard = () => null; export const ProtocolPositionList = () => null; export const ProtocolPositionNotice = () => null;",
   "@/components/ProtocolPositionProvider": "export const useProtocolPositions = () => ({positions:[],pendingPositions:[],status:'ready',failedGroups:[],refresh:async()=>({positions:[],failedGroups:[],successfulGroups:[],status:'ready',newPositions:[]})});",
   "@/components/ConfirmedPositionCards": "export const ConfirmedPositionCards = () => null;",
   "next/navigation": "export const useRouter=()=>({push:()=>{}});export const usePathname=()=>'/trade';export const useSearchParams=()=>new URLSearchParams();",

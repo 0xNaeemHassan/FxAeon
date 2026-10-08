@@ -11,6 +11,7 @@ import { ActionReview, type ActionReviewStage } from '@/components/ActionReview'
 import { TradeMarketChart } from '@/components/MarketChart';
 import {
   ProtocolPositionCard,
+  ProtocolPositionList,
   ProtocolPositionNotice,
 } from '@/components/ProtocolPositionCard';
 import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
@@ -657,22 +658,13 @@ export default function TradePage() {
             <ProtocolPositionNotice status={positionState.status} failedGroups={positionState.failedGroups} hasPositions={positionState.positions.length + positionState.pendingPositions.length > 0} refreshing={positionState.refreshing} onRefresh={() => void positionState.refresh()} compact />
             <ConfirmedPositionCards market={market} />
             {marketPositions.length > 0 && (
-              <div className="flex flex-col gap-2">
+              // Each row opens its position, where every action and figure is.
+              <ProtocolPositionList label="Your positions">
                 {previewPositions.map((position) => {
                   const key = positionKey(position);
-                  const encodedPosition = positionHref(position.market, position.side, position.info.positionId);
-                  return (
-                    <div key={key} className={styles.tradePositionItem}>
-                      <ProtocolPositionCard position={position} compact href={encodedPosition} highlighted={key === highlightedPositionKey} />
-                      <div role="group" className={styles.tradePositionActions} aria-label={`Actions for ${position.market} ${position.side} position ${position.info.positionId}`}>
-                        <Link href={encodedPosition} className="glass-press"><ArrowUpRight aria-hidden="true" />Manage</Link>
-                        {position.side === 'long' && <Link href={`/borrow?market=${position.market}&position=${position.info.positionId}`} className="glass-press"><Layers2 aria-hidden="true" />Borrow</Link>}
-                        <Link href={positionHref(position.market, position.side, position.info.positionId, 'close')} className="glass-press"><ArrowDownRight aria-hidden="true" />Close</Link>
-                      </div>
-                    </div>
-                  );
+                  return <ProtocolPositionCard key={key} position={position} href={positionHref(position.market, position.side, position.info.positionId)} highlighted={key === highlightedPositionKey} />;
                 })}
-              </div>
+              </ProtocolPositionList>
             )}
           </section>
         )}
