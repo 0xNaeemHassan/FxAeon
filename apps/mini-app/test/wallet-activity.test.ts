@@ -14,7 +14,7 @@ const view = (stepKind = 'action', bridge = false): RecoveryViewModel => ({ reco
 const position: ProtocolPositionActivity = { hash, chainId: 1, timestamp: 1, blockNumber: 123n, kind: 'close', market: 'ETH', side: 'long', positionId: 4, poolAddress: transfer.to };
 test('journal, indexed transfer and position event produce one row per chain/hash', () => {
   const rows = mergeWalletActivity([view()], [position], [transfer, transfer], wallet);
-  assert.equal(rows.length, 1); assert.equal(rows[0].title, 'Closed ETH long'); assert.equal(rows[0].transfers.length, 1);
+  assert.equal(rows.length, 1); assert.equal(rows[0].title, 'Closed ETH Long'); assert.equal(rows[0].transfers.length, 1);
 });
 // Intended change: an approval is a step of the action after it, so History leaves it out
 // (it used to be listed as "Approved token"). It still never becomes a position or a transfer.
@@ -93,7 +93,7 @@ test('indexed calldata and position NFTs explain rows; NFTs alone never create o
     calls: { [`1:${swapHash}`]: { from: wallet, to: FX_ROUTER_ADDRESS, input: '0xef9e1aa7', value: 0n } },
   });
   assert.equal(rows.length, 1);
-  assert.equal(rows[0].title, 'Opened ETH long');
+  assert.equal(rows[0].title, 'Opened ETH Long');
   assert.equal(rows[0].positionTransfers.length, 1);
   assert.equal(rows[0].classification.counterparty?.label, 'f(x) Router');
 });

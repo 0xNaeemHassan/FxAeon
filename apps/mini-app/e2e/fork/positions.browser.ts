@@ -1560,7 +1560,7 @@ async function runProof(captureStage: string) {
     assert.equal(closedPositions.length, scenarios.length, 'every supported position must close through the browser');
     await page.goto(`${baseUrl}/history`);
     for (const position of closedPositions) {
-      const row = page.getByRole('listitem').filter({ hasText: `Closed ${position.market} ${position.side} #${position.positionId}` });
+      const row = page.getByRole('listitem').filter({ hasText: `Closed ${position.market} ${position.side === 'long' ? 'Long' : 'Short'} #${position.positionId}` });
       await expect(row).toBeVisible({ timeout: 180_000 });
       let closeHash: Hex | undefined;
       for (const transaction of position.transactions) {
