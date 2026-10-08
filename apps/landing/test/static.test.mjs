@@ -21,8 +21,25 @@ const DESKTOP = '(hover: hover) and (pointer: fine) and (min-width: 861px)';
 /** `value` as a literal inside a RegExp: every metacharacter, backslash included, escaped. */
 const literal = (value) => value.replace(/[.*+?^${}()|[\]\\/-]/g, '\\$&');
 
-/** The text of a markup fragment: tags removed, then any stray angle bracket, so no tag can survive. */
-const textOf = (markup, separator = '') => markup.replace(/<[^>]*>/g, separator).replace(/[<>]/g, '');
+/**
+ * The text of a markup fragment, each tag replaced by `separator`. A scan
+ * rather than a pattern: it never emits "<" or ">", so no tag can survive.
+ */
+function textOf(markup, separator = '') {
+  let text = '';
+  let inTag = false;
+  for (const character of markup) {
+    if (character === '<') {
+      if (!inTag) text += separator;
+      inTag = true;
+    } else if (character === '>') {
+      inTag = false;
+    } else if (!inTag) {
+      text += character;
+    }
+  }
+  return text;
+}
 
 /** The markup between an element's opening tag (matched by `open`) and its closing tag. */
 function elementSource(source, open, tag) {
