@@ -119,7 +119,7 @@ function ActivityFeed({ walletAddress, compact, inDialog }: { walletAddress: Add
       <button type="button" disabled={activity.isFetching} onClick={retry}>Retry</button>
     </p>}
     {activity.isPending ? <div role="status" aria-label="Loading history" className={styles.loading}><div className="skeleton" /><div className="skeleton" /></div>
-      : unavailable ? <div role="status" className={styles.unavailable}><span>History couldn’t load. Nothing was marked complete or failed.</span>
+      : unavailable ? <div role="status" className={styles.unavailable}><span>History couldn’t load. Your transactions are unaffected.</span>
         <button type="button" disabled={activity.isFetching} onClick={retry}>Retry</button></div>
       : list(visible)}
     {!compact && !activity.isPending && !unavailable && verified.length === 0 && <p className={styles.empty}>

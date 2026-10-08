@@ -281,7 +281,7 @@ function PortfolioWallet() {
     </div>
     <aside className={presentation.secondary}>
       <MarketOverview />
-      <RowGroup title="Protocol tools"><ActionRow icon={CircleDollarSign} title="Borrow fxUSD" description="Manage collateral and debt" href="/borrow" /></RowGroup>
+      <RowGroup title="Borrow"><ActionRow icon={CircleDollarSign} title="Borrow fxUSD" description="Manage collateral and debt" href="/borrow" /></RowGroup>
     </aside>
   </div>;
 }
@@ -382,7 +382,7 @@ function QuickActions() {
 function MarketOverview() {
   return (
     <section aria-labelledby="market-overview-title">
-      <SectionTitle right={<Link href="/trade" className="glass-press flex min-h-11 items-center gap-1 px-1 text-[11px] font-semibold text-mint">Open trade <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" /></Link>}>
+      <SectionTitle right={<Link href="/trade" className="glass-press flex min-h-11 items-center gap-0.5 px-1.5 text-[13px] font-semibold text-mint">Open trade<ChevronRight className="h-3.5 w-3.5" aria-hidden="true" /></Link>}>
         <span id="market-overview-title">Markets</span>
       </SectionTitle>
       <div className={`${styles.market} grid grid-cols-2 gap-2.5`}>

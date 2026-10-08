@@ -664,6 +664,11 @@ export class RouteGasCostCache {
     return { status: 'unavailable', previous };
   }
 
+  /** Pending transport work is independent of a still-current cached value. */
+  isRefreshing(route: PlannedRoute, feeTierQuote?: GasTierQuote): boolean {
+    return this.inFlight.has(routeGasCostKey(route, feeTierQuote));
+  }
+
   async refresh(route: PlannedRoute, options: Omit<EstimatePlannedRouteCostOptions, 'ttlMs' | 'now'> = {}): Promise<RouteGasCostEstimate> {
     const key = routeGasCostKey(route, options.feeTierQuote);
     const existing = this.inFlight.get(key)?.promise;

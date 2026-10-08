@@ -3,16 +3,18 @@
 import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
-import { ArrowDownToLine, ArrowLeft, Check, Copy, ExternalLink, ArrowLeftRight, CandlestickChart, PiggyBank } from 'lucide-react';
+import { ArrowDownToLine, ArrowLeft, Check, Copy, ExternalLink, ArrowLeftRight, CandlestickChart, PiggyBank, X } from 'lucide-react';
 import { AssetNetworkIcon, networkLabel } from '@/components/AssetPresentation';
 import { ValueOrSkeleton } from '@/components/MissingValue';
+import { GroupedAddress } from '@/components/GroupedAddress';
 import type { WalletAsset } from '@/lib/walletAssets';
-import { formatUsd } from '@/lib/prices';
+import { formatUsd, formatUsdPrice } from '@/lib/prices';
+import { formatExactDecimal } from '@/lib/amount';
 import { compactAddress } from '@/lib/addressPresentation';
 import { tokenSymbol } from '@/lib/fx/tokenPresentation';
 import { haptic, openExternalLink } from '@/lib/telegram';
 import { ChainIcon } from '@/components/TokenIcon';
-import { copyText } from '@/components/ui';
+import { copyText } from '@/lib/clipboard';
 import { useOverlayDialog } from '@/lib/useOverlayDialog';
 import styles from './WalletAssetDetails.module.css';
 
@@ -55,6 +57,8 @@ export default function WalletAssetDetails({ asset, walletAddress, onNavigate }:
       <div className={styles.heroValue}>
         <span className={styles.holdingLabel}>Holding value</span>
         <strong className={styles.holdingValue}><ValueOrSkeleton value={formatUsd(asset.usdValue)} width="md" status="unavailable" label="Holding value unavailable" /></strong>
+        {/* The exact balance: every decimal the token reports, never rounded. */}
+        <span className={styles.holdingQuantity} translate="no">{formatExactDecimal(asset.balance, Math.min(Math.max(asset.decimals, 0), 35))} {symbol}</span>
       </div>
     </div>
 
@@ -65,13 +69,14 @@ export default function WalletAssetDetails({ asset, walletAddress, onNavigate }:
         {copied ? 'Address copied' : 'Copy address'}
         </button>
       </div>
-      <p className={styles.address}>{walletAddress}</p>
+      <p className={styles.address}><GroupedAddress address={walletAddress} /></p>
       <p className={styles.copyStatus} role="status" aria-live="polite">
         {copyFailed ? 'Copy was blocked. Select the address to copy it manually.' : copied ? 'Address copied.' : ''}
       </p>
     </section>}
 
     <dl className={styles.facts}>
+      <div><dt>Price</dt><dd><ValueOrSkeleton value={formatUsdPrice(asset.priceStatus === 'fresh' ? asset.priceUsd : null)} width="sm" status="unavailable" label="Price unavailable" /></dd></div>
       <div><dt>Network</dt><dd><span className={styles.chain}><ChainIcon chainId={asset.chainId} size={18} />{network}</span></dd></div>
       {asset.tokenAddress && <div><dt>Contract</dt><dd title={asset.tokenAddress}>{compactAddress(asset.tokenAddress)}</dd></div>}
     </dl>
@@ -113,7 +118,7 @@ export function WalletAssetModal({ asset, walletAddress, onClose, onBack }: {
         <header className={styles.modalHeader}>
           {onBack && <button ref={backRef} type="button" aria-label="Back to wallet assets" onClick={onBack}><ArrowLeft size={19} aria-hidden="true" /></button>}
           <h2>{title}</h2>
-          <button ref={closeRef} type="button" aria-label="Close asset details" onClick={onClose}><span aria-hidden="true">×</span></button>
+          <button ref={closeRef} type="button" aria-label="Close asset details" onClick={onClose}><X size={20} aria-hidden="true" /></button>
         </header>
         <div className={styles.modalBody}>
           <WalletAssetDetails asset={asset} walletAddress={walletAddress} />

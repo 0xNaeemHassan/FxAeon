@@ -249,6 +249,8 @@
 /* Market panel */
 .marketChart { min-width: 0; }
 .marketMiniCard {
+  display: block;
+  color: inherit;
   border: 1px solid var(--hairline);
   border-radius: var(--radius-lg);
   background:
@@ -258,6 +260,8 @@
   padding: 16px;
   transition: border-color var(--dur-base) ease, transform var(--dur-slow) var(--ease-spring);
 }
+/* The card is a link into its market: it presses like the other links. */
+.marketMiniCard:active { transform: scale(0.985); transition-duration: var(--dur-press); }
 
 .tradeRoot,
 .positionsRoot { display: block; color: var(--text); }
@@ -489,11 +493,12 @@
 .positionSectionHeader { margin-bottom: 12px; }
 .positionSectionHeader h2,
 .manageHeading h2 { margin-top: 3px; font-size: var(--fs-title); font-weight: 650; letter-spacing: -.02em; }
-.positionSectionHeader > span { border-radius: 999px; background: var(--mint-dim); padding: 6px 10px; color: var(--mint); font-size: var(--fs-caption); font-weight: 650; }
-.positionListItem { overflow: hidden; border: 1px solid var(--hairline); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--ring-inset); transition: border-color var(--dur-base) ease; }
+.positionSectionHeader > span { color: var(--mut); font-size: var(--fs-small); font-weight: 500; font-variant-numeric: tabular-nums; }
+.positionListItem { overflow: hidden; border: 1px solid var(--hairline); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--ring-inset); transition: border-color var(--dur-base) ease, box-shadow var(--dur-base) ease; }
 .positionListItem:hover { border-color: color-mix(in srgb, var(--mint) 30%, var(--line)); }
 .positionListItem :global([data-position-key]) { border: 0; border-radius: 0; }
-.positionListItem :global([data-position-key][aria-pressed='true']) { box-shadow: inset 3px 0 0 var(--mint); }
+/* The selected position takes the same ring as every other selected card. */
+.positionListItem[data-selected], .positionListItem[data-selected]:hover { border-color: color-mix(in srgb, var(--mint) 64%, var(--line)); box-shadow: var(--ring-inset), 0 0 0 3px color-mix(in srgb, var(--mint) 12%, transparent); }
 .positionQuickActions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 0 10px 10px; background: transparent; }
 .positionQuickActionsWithBorrow { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .positionQuickActions button,
@@ -686,3 +691,14 @@
 }
 
 .tradeLayout[data-review='true'] { display: block; width: 100%; max-width: 640px; margin-inline: auto; }
+
+/* Short viewports (a Telegram Mini App under its own header): the same parts
+   in the same order, a little tighter, so the leverage slider clears the
+   riding action on the first screen. Every target keeps 44px. */
+@media (max-width: 640px) and (max-height: 720px) {
+  .tradeRoot :global([data-product-layout='action']).tradeWorkspace, .tradeLayout { gap: 8px; }
+  .tradeRoot .sideControl :global(.segmented) { padding: 2px; }
+  .tradeRoot .sideControl :global(.segmented-option) { min-height: 44px; padding-block: 2px; }
+  .tradeRoot .marketColumn :global(.market-chart-market-switch) { padding: 0 6px 4px 12px; }
+  .tradeRoot .marketColumn :global(.market-chart-market-switch .segmented) { padding: 2px; }
+}

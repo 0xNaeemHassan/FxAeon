@@ -4,12 +4,14 @@ import { ArrowLeftRight, BadgeCheck, CircleDollarSign, Clock3, Coins, Gauge, Lay
 import { useState } from 'react';
 import { Segmented } from '@/components/ProtocolForm';
 import { useLiveMarketQuote } from '@/components/PriceProvider';
+import { liveQuotePending } from '@/lib/liveMarket';
 import { ValueOrSkeleton } from '@/components/MissingValue';
 import { formatUsdPrice } from '@/lib/prices';
 import type { MarketSymbol } from '@/lib/marketData';
 import { Callout, PageSections, Questions, Section, StatGrid, Steps } from '@/components/PageSections';
 import { YieldFlow } from '@/components/YieldFlow';
 import { LeverageSplit } from '@/components/LeverageSplit';
+import { leverageDebtLabel } from '@/lib/leverageShare';
 import styles from '@/components/PageSections.module.css';
 
 // Reviewed f(x) Protocol references, the same ones the landing page links.
@@ -32,7 +34,7 @@ function TradeLeverageExample({ market, side }: { market: MarketSymbol; side: 'l
     <p className={styles.lede}>{exampleSide === 'long'
       ? 'On f(x) Protocol, a long’s leverage is fxUSD minted against its collateral. Before fees, a 3× long is two thirds minted fxUSD and one third yours.'
       : `A short deposits fxUSD and borrows ${market === 'ETH' ? 'wstETH' : 'WBTC'} from f(x) Protocol’s long-side reserve. Before fees, a 3× short is three quarters borrowed and one quarter yours.`}</p>
-    <LeverageSplit side={exampleSide} debtLabel={exampleSide === 'long' ? 'minted fxUSD' : `borrowed ${market === 'ETH' ? 'wstETH' : 'WBTC'}`} />
+    <LeverageSplit side={exampleSide} debtLabel={leverageDebtLabel(exampleSide, market)} />
   </>;
 }
 
@@ -49,7 +51,7 @@ export function TradeSections({ market, side, leverage, openPositions, positions
   // chart itself is opened, so a stale ticker shows the range as unavailable.
   const low = live.isFresh ? live.quote?.low24h : undefined;
   const high = live.isFresh ? live.quote?.high24h : undefined;
-  const rangeStatus = live.status === 'connecting' || live.status === 'reconnecting' ? 'loading' : 'unavailable';
+  const rangeStatus = liveQuotePending(live.status) ? 'loading' : 'unavailable';
   return <PageSections label={`${market} market details`}>
     <Section id="trade-market" title={`${market} at a glance`} action={{ label: 'Manage positions', href: '/positions' }}>
       <StatGrid stats={[

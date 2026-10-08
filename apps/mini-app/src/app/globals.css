@@ -973,10 +973,11 @@ details[open] > summary .disclosure-closed-only { display: none; }
   min-height: var(--tabbar-panel-height);
   border: 1px solid var(--hairline);
   border-radius: 24px;
-  background: var(--glass-strong);
+  /* No backdrop blur: the canvas behind the dock drifts continuously, so a
+     blur would be recomputed every frame on mid-range phones. A near-opaque
+     tone reads the same and keeps scrolling smooth. */
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
   box-shadow: var(--elevation-1), var(--ring-inset);
-  backdrop-filter: blur(22px) saturate(1.5);
-  -webkit-backdrop-filter: blur(22px) saturate(1.5);
   display: flex;
   align-items: stretch;
   justify-content: space-between;
