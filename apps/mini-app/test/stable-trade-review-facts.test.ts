@@ -5,11 +5,15 @@ const entered = [{ label: 'Amount', value: '0.0003 ETH' }, { label: 'Target leve
 const state = { preparing: true, failed: false, checkingGas: false };
 test('known trade inputs retain their slots and exact values while unknown values fill in', () => {
   const before = stableTradeReviewFacts(entered, [], state);
-  const after = stableTradeReviewFacts(entered, [...entered, { label: 'Estimated collateral', value: '0.0007 wstETH' }, { label: 'Gas fee', value: '0.001 ETH' }], { ...state, preparing: false });
+  const floor = { label: 'Minimum converted input', value: '0.000239606214612345 wstETH', title: '0.000239606214612345 wstETH', equivalent: '≈ 0.00029851 stETH' };
+  const after = stableTradeReviewFacts(entered, [...entered, { label: 'Estimated collateral', value: '≈ 0.00087123 stETH' }, floor, { label: 'Gas fee', value: '0.001 ETH' }], { ...state, preparing: false });
   assert.deepEqual(before.map(f => f.label), after.map(f => f.label));
   for (const input of entered) { assert.deepEqual(before.find(f => f.label === input.label), input); assert.deepEqual(after.find(f => f.label === input.label), input); }
   assert.equal(before.find(f => f.label === 'Estimated collateral')?.value, '—');
-  assert.equal(after.find(f => f.label === 'Estimated collateral')?.value, '0.0007 wstETH');
+  assert.equal(after.find(f => f.label === 'Estimated collateral')?.value, '≈ 0.00087123 stETH');
+  // A signed wstETH floor keeps its exact value and carries its stETH equivalent into the row.
+  assert.deepEqual(after.find(f => f.label === 'Minimum converted input'), floor);
+  assert.equal(before.find(f => f.label === 'Minimum converted input')?.equivalent, undefined);
 });
 test('failed preparation stops loading placeholders without inventing quote values', () => {
   const failed = stableTradeReviewFacts(entered, [], { ...state, failed: true });

@@ -319,12 +319,48 @@ test('ETH short and BTC quotes keep their own units, with or without a wstETH ra
     for (const stEthPerWstEth of [undefined, RATE]) {
       const facts = routeFinancialReviewFacts(route(opening(market, side, positionId), {
         colls: '123456780000000000', debts: '1234500000000000000000', stEthPerWstEth,
+        economicLimits: [{ label: 'position input conversion minimum output', value: market === 'BTC' && side === 'long' ? '12345678' : '1000000000000000000' }],
       }));
       const label = `${market} ${side} #${positionId} ${stEthPerWstEth ? 'with' : 'without'} a rate`;
       assert.equal(facts.find((fact) => fact.label === 'Estimated collateral')?.value, collateral, label);
       assert.equal(facts.find((fact) => fact.label === 'Estimated debt')?.value, debt, label);
+      // Their converted-input floors are not wstETH and gain no stETH equivalent.
+      assert.equal(facts.find((fact) => fact.label === 'Minimum converted input')?.equivalent, undefined, label);
     }
   }
+});
+
+test('a wstETH floor stays exact in the unit it is signed in, with its stETH equivalent beside it', () => {
+  const minimum = (planned: PlannedRoute, label: string) => routeFinancialReviewFacts(planned).find((fact) => fact.label === label);
+  const input = (stEthPerWstEth?: string, value = '699300699300699300') => route(opening(), {
+    colls: '1', debts: '1', stEthPerWstEth,
+    economicLimits: [{ label: 'position input conversion minimum output', value }],
+  });
+  // Trade: the converted input, rounded down in stETH like the pool.
+  assert.deepEqual(minimum(input(RATE), 'Minimum converted input'), {
+    label: 'Minimum converted input', value: '0.6993006993006993 wstETH', title: '0.6993006993006993 wstETH', equivalent: '≈ 0.87123196 stETH',
+  });
+  // Borrow: the converted deposit beside a quote already in stETH.
+  const deposit = route({
+    kind: 'deposit-and-mint', poolAddress: positionPoolAddress('ETH', 'long'), positionId: 0,
+    depositTokenAddress: FX_TOKENS.ETH.address, depositAmount: 244431136966270n, nativeInput: true, mintAmount: 100000000000000000n,
+  }, {
+    colls: '244431136966270000', debts: '100000000000000000', stEthPerWstEth: RATE,
+    economicLimits: [{ label: 'deposit conversion minimum output', value: '195994373861452' }],
+  });
+  assert.equal(minimum(deposit, 'Estimated collateral')?.value, '≈ 0.24443113 stETH');
+  assert.deepEqual(minimum(deposit, 'Minimum converted deposit'), {
+    label: 'Minimum converted deposit', value: '0.000195994373861452 wstETH', title: '0.000195994373861452 wstETH', equivalent: '≈ 0.00024418 stETH',
+  });
+  // No rate or a zero floor: the exact floor alone.
+  assert.equal(minimum(input(), 'Minimum converted input')?.equivalent, undefined);
+  assert.deepEqual(minimum(input(RATE, '0'), 'Minimum converted input'), { label: 'Minimum converted input', value: '0 wstETH', title: '0 wstETH' });
+  // What a reduction pays out is a received amount, not collateral entering the position.
+  const reduce = route({ ...opening('ETH', 'long', 4), kind: 'position-reduce', outputTokenAddress: FX_TOKENS.wstETH.address, isClosePosition: false }, {
+    colls: '1', debts: '1', minOut: '500000000000000000', stEthPerWstEth: RATE,
+    economicLimits: [{ label: 'position output conversion minimum output', value: '500000000000000000' }],
+  });
+  assert.deepEqual(minimum(reduce, 'Minimum received'), { label: 'Minimum received', value: '0.5 wstETH', title: '0.5 wstETH' });
 });
 
 test('the reads behind a converted figure stay inspectable in advanced details', () => {

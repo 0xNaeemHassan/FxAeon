@@ -6,7 +6,12 @@ import type { OfficialFxMethod, PlannedRoute, ReviewedActionIntent } from './typ
 import { calculateProtocolFee } from './protocolFee';
 import { parseStEthPerWstEth, stEthForWstEth } from './wstEthRate';
 
-export type ReviewFact = { label: string; value: string; title?: string };
+/**
+ * `equivalent` is the same amount in another unit, shown muted beside the
+ * value (for example a wstETH minimum's stETH equivalent); the value itself
+ * stays exact in the unit it is signed in.
+ */
+export type ReviewFact = { label: string; value: string; title?: string; equivalent?: string };
 type Unit = { symbol: string; decimals: number };
 type Pool = { market: 'ETH' | 'BTC'; side: 'long' | 'short' };
 
@@ -150,6 +155,19 @@ function collateralQuote(route: PlannedRoute, intent: ReviewedActionIntent, pool
   };
 }
 
+/**
+ * Converted wstETH enters an ETH long position as stETH. Its signed minimum
+ * stays exact in wstETH; the stETH equivalent (rounded down, like the pool)
+ * lets it be read against the estimated collateral.
+ */
+function withStEthEquivalent(fact: ReviewFact, raw: string, route: PlannedRoute, pool: Pool | undefined): ReviewFact {
+  if (pool?.market !== 'ETH' || pool.side !== 'long' || !/^\d+$/.test(raw) || BigInt(raw) === 0n) return fact;
+  const rate = parseStEthPerWstEth(route.details?.stEthPerWstEth);
+  if (rate === undefined) return fact;
+  const stEth = formatUnits(stEthForWstEth(BigInt(raw), rate), 18);
+  return { ...fact, equivalent: `${estimated(compactDecimal(stEth, 8))} stETH` };
+}
+
 function limitUnit(label: string, intent: ReviewedActionIntent, pool: Pool | undefined): { label: string; unit: Unit | undefined } | undefined {
   switch (label) {
     case 'position input conversion minimum output':
@@ -240,8 +258,14 @@ export function routeFinancialReviewFacts(route: PlannedRoute): ReviewFact[] {
     if (identityDepositNoOp) continue;
     const known = limitUnit(limit.label, intent, pool);
     const fact = known && amountFact(known.label, limit.value, known.unit, 'exact');
-    if (fact) add(fact);
-    else unsupportedLimits += 1;
+    if (!known || !fact) {
+      unsupportedLimits += 1;
+      continue;
+    }
+    // The floor on wstETH entering the position, comparable with its collateral.
+    const collateralFloor = known.unit?.symbol === 'wstETH'
+      && (known.label === 'Minimum converted input' || known.label === 'Minimum converted deposit');
+    add(collateralFloor ? withStEthEquivalent(fact, limit.value, route, pool) : fact);
   }
   if (pool && intent.kind === 'position-reduce') {
     const minimum = amountFact('Minimum received', details?.minOut, unitForAddress(intent.outputTokenAddress), 'exact');

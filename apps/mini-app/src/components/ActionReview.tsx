@@ -412,7 +412,7 @@ export function ActionReview(props: ActionReviewProps) {
       <div className={`${styles.reviewFacts} ${stablePreparation ? `${presentationStyles.stableFacts} ${preparing && status !== 'failed' ? presentationStyles.preparingFacts : ''}` : ''}`}>
         {summaryFacts.map((fact) => fact === primaryAmount
           ? <ReviewAmount key={stablePreparation ? fact.label : `${fact.label}-${fact.value}`} fact={fact} stable={stablePreparation} />
-          : <ReviewRow key={stablePreparation ? fact.label : `${fact.label}-${fact.value}`} label={fact.label} value={fact.value} title={fact.title} quiet={stablePreparation} />)}
+          : <ReviewRow key={stablePreparation ? fact.label : `${fact.label}-${fact.value}`} label={fact.label} value={fact.value} title={fact.title} equivalent={fact.equivalent} quiet={stablePreparation} />)}
         {approvals.map((approval, index) => <ReviewRow key={`${approval.label}-${index}`} label={approval.label} value={approval.value} title={approval.title} />)}
      </div>
 
@@ -514,9 +514,10 @@ function ReviewSurface({ surface, className, children, stable = false }: { surfa
   return <Card className={`${className} ${stable ? '' : presentationStyles.surfaceEnter}`}>{children}</Card>;
 }
 
-function ReviewRow({ label, value, title, className, quiet = false }: { label: string; value: ReactNode; title?: string; className?: string; quiet?: boolean }) {
+/** `equivalent` reads muted beneath the value: the same amount in another unit, never the signed figure. */
+function ReviewRow({ label, value, title, equivalent, className, quiet = false }: { label: string; value: ReactNode; title?: string; equivalent?: string; className?: string; quiet?: boolean }) {
   const valueTitle = title ?? (typeof value === 'string' ? value : undefined);
-  return <div data-review-fact={label} className={`flex min-w-0 items-start justify-between gap-4 text-[13px] ${className ?? ''}`}><span className="text-mut">{label}</span><span title={valueTitle} className="max-w-[62%] break-words text-right font-semibold tabular-nums"><ValueOrSkeleton value={value} width="md" announce={!quiet} label={`Loading ${label.toLowerCase()}`} /></span></div>;
+  return <div data-review-fact={label} className={`flex min-w-0 items-start justify-between gap-4 text-[13px] ${className ?? ''}`}><span className="text-mut">{label}</span><span title={valueTitle} className="max-w-[62%] break-words text-right font-semibold tabular-nums"><ValueOrSkeleton value={value} width="md" announce={!quiet} label={`Loading ${label.toLowerCase()}`} />{equivalent && <span className={presentationStyles.factEquivalent}>{equivalent}</span>}</span></div>;
 }
 
 /**

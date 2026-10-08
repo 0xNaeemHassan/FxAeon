@@ -91,6 +91,10 @@ test.describe('the ticket’s outcome preview', () => {
     await expect(reviewFact(page, 'Estimated collateral')).toHaveText(sameFigure(preview.collateral));
     await expect(reviewFact(page, 'Estimated debt')).toHaveText(sameFigure(preview.debt));
     await expect(reviewFact(page, 'Protocol fee rate')).toHaveText(preview.fee);
+    // The signed floor stays exact in wstETH, with its stETH equivalent muted beneath it.
+    const floor = reviewFact(page, 'Minimum converted input');
+    await expect(floor).toHaveText(/^[\d,]+(?:\.\d+)? wstETH≈ [\d,]+(?:\.\d+)? stETH$/);
+    await expect(floor.locator('span').last()).toHaveText(/^≈ [\d,]+(?:\.\d+)? stETH$/);
     // The review reused the warm route it validated: the preview cost no plan of its own.
     expect(await planCount(page)).toBe(plansBeforeReview);
   });
