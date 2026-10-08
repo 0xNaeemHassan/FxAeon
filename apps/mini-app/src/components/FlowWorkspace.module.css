@@ -257,7 +257,6 @@
 @media (max-width: 640px) {
   .workspace { max-width: 100%; }
   .moveCard.moveCard { padding: 14px; border-radius: var(--radius-md); }
-  .moveCard > :first-child h2 { font-size: 21px; }
   .moveNetworkFlow { margin-top: 10px; }
   .networkNode { min-height: 54px; padding: 7px 2px; border-radius: 0; }
   .networkArrow { min-height: 44px; min-width: 44px; }
