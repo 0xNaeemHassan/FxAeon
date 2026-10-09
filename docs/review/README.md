@@ -8,6 +8,8 @@ The local Anvil suite passed 4/4 protocol, Earn, and stress tests without skips.
 
 ## Latest deployed release
 
+This was the latest release when recorded. Merges to `main` since then deploy through the same workflow and are not recorded here.
+
 The later release merged as `d66a7f7cd658b32fc947bd70ddefa06bc1bf3a96`, including PR [#215](https://github.com/fxaeon/FxAeon/pull/215) for the compact mobile header and PR [#216](https://github.com/fxaeon/FxAeon/pull/216) for idempotent Telegram metadata synchronization. [Deployment run 36720447137](https://github.com/fxaeon/FxAeon/actions/runs/36720447137) succeeded and its job logs record a valid public gas snapshot, expected public wallet configuration, and successful Telegram metadata and Mini App menu synchronization. A separate connected-browser check verified the compact production header. This deployment record does not extend the PR #208 test or visual-gallery evidence. See [release validation](../release-validation.md) for the evidence boundary.
 
 ## Product gallery
