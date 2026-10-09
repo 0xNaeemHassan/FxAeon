@@ -31,6 +31,20 @@ flowchart LR
 - `portfolioValuation.ts` reconciles fresh canonical balances with expanded
   discovery and calculates a nonduplicated known-priced subtotal;
   `addressPresentation.ts` keeps compact wallet-address display consistent.
+- Position presentation is display-only. `positionNaming.ts` gives a position
+  one name in its row, Trade's result and History ("Opened ETH Long");
+  `positionUnits.ts` names an ETH long's collateral stETH; `tradeOutcome.ts`
+  keys Trade's outcome preview to the exact ticket, so its figures never
+  describe a different ticket; `positionBorn.ts` carries the chosen split from
+  Trade's result into the new position with a view transition, or a plain
+  page change.
+- The position brake is read-only. `app/trade/positionBrakeReader.ts` reads
+  each position's debt ratio and its pool's rebalance and liquidation
+  thresholds and oracle price; `PositionBrakeProvider` runs those reads while
+  a position row is shown; `lib/positionBrake.ts` turns them into the row's
+  marker and line. `lib/fx/ethLongAccounting.ts` reads the live wstETH rate
+  (and an existing position's collateral) beside ETH long plans, so reviews
+  can state collateral in stETH. None of these plans or signs a transaction.
 - `apps/mini-app/src/lib/` price and chart modules validate third-party display
   data. USD estimates and charts are never transaction inputs.
 - `apps/landing/` builds independently to a static `dist/` directory.
@@ -64,6 +78,7 @@ matching LayerZero messages.
 | Data | Authority |
 | --- | --- |
 | Positions, collateral, debt, and leverage | Ethereum through the official SDK and required canonical reads |
+| Distance to a position's rebalance point | Live, read-only pool views (debt ratio, thresholds, oracle price) and the live market quote; a display estimate, never a planning input |
 | fxSAVE balance, vault state, cooldown, and claimability | Ethereum through the official SDK |
 | Bridge source and destination status | Ethereum/Base receipts and matching LayerZero events |
 | Sender and signing permission | The currently selected wallet |
