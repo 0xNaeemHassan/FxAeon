@@ -55,7 +55,7 @@ validator requires the Privy ID, both Alchemy RPCs, Data API key, Telegram URL,
 and bot token. Configure Privy for the exact production and preview origins and
 Ethereum/Base networks. Do not reuse the local Privy application in production.
 For each chain, HTTP reads and SDK planning prefer primary Alchemy, then
-Alchemy2, then Infura. WebSockets start with primary Alchemy and rotate to
+Infura, then Alchemy2. WebSockets start with primary Alchemy and rotate to
 Alchemy2 on reconnect. A provider plan upgrade changes its capacity and billing;
 it does not change this endpoint order or move healthy primary traffic to a
 paid fallback.
