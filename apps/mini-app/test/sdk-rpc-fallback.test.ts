@@ -35,8 +35,9 @@ function configuredFixtureUrls(chainId: FxChainId): string[] {
 
 type Provider = 'primary' | 'infura' | 'alchemy2';
 function provider(url: string): Provider {
-  if (url.includes('.infura.io/')) return 'infura';
-  return url.endsWith('/alchemy2') ? 'alchemy2' : 'primary';
+  const endpoint = new URL(url);
+  if (endpoint.hostname === 'mainnet.infura.io' || endpoint.hostname === 'base-mainnet.infura.io') return 'infura';
+  return endpoint.pathname === '/v2/alchemy2' ? 'alchemy2' : 'primary';
 }
 
 function rpcFetch(chainId: FxChainId, failed: readonly Provider[] = [], reverted?: Provider) {
