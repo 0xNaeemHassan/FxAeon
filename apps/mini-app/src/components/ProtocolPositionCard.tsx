@@ -20,6 +20,8 @@ import { freshDisplayPrices } from '@/lib/displayPrices';
 import { positionBrakeCopy, positionBrakeView } from '@/lib/positionBrake';
 import { calculatePositionUsdValuation, debtCollateralRatioPercent, formatUsdCents } from '@/lib/positionValuation';
 import { groupDigits } from '@/lib/amount';
+import { positionName, positionSideLabel } from '@/lib/positionNaming';
+import { positionCollateralSymbol } from '@/lib/positionUnits';
 import { openExternalLink } from '@/lib/telegram';
 import styles from './ProtocolPositionCard.module.css';
 
@@ -80,7 +82,7 @@ function PositionBody({
   const positionValueTitle = valuation.netEquityUsdCents === null
     ? missingStatus === 'loading' ? 'Loading position value' : 'Position value unavailable until prices refresh'
     : 'Collateral value minus debt';
-  const sideLabel = position.side === 'long' ? 'Long' : 'Short';
+  const sideLabel = positionSideLabel(position.side);
   // The f(x) split on this position: its collateral value is debt plus the
   // holder's share. Drawn only from the same validated values as the figures.
   const debtShare = valuation.collateralUsdCents !== null && valuation.debtUsdCents !== null
@@ -100,7 +102,7 @@ function PositionBody({
 
   return (
     <Block className={styles.content}>
-      {headingId && <h2 id={headingId} className="sr-only">{position.market} {position.side} · #{position.info.positionId}</h2>}
+      {headingId && <h2 id={headingId} className="sr-only">{positionName(position.market, position.side)} · #{position.info.positionId}</h2>}
       <span className={styles.identity}>
         <span className={styles.tokenIcon}><TokenIcon symbol={position.market === 'ETH' ? 'ETH' : 'WBTC'} size={32} /></span>
         {/* Two lines that each share out their own width: market and value, then leverage, ID and the value's label. */}
@@ -181,7 +183,7 @@ function PositionFacts({ position, prices, valuation, missingStatus, liveQuote }
     <dl className={styles.facts}>
       <div className={styles.fact}>
         <dt>Collateral</dt>
-        <dd>{groupDigits(formatAmount(position.info.rawColls, positionTokenDecimals(position, 'collateral')))} {position.info.rawCollsToken}<small>{usd(valuation.collateralUsdCents)}</small></dd>
+        <dd>{groupDigits(formatAmount(position.info.rawColls, positionTokenDecimals(position, 'collateral')))} {positionCollateralSymbol(position)}<small>{usd(valuation.collateralUsdCents)}</small></dd>
       </div>
       <div className={styles.fact}>
         <dt>Debt</dt>

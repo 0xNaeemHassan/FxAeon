@@ -131,7 +131,7 @@ export const useInvalidateWalletData = () => async () => {
   `,
   '@/lib/walletDataRefresh': `export const createRouteWalletRefresh = (invalidate) => async (route) => invalidate(route.walletAddress, route.chainId);`,
   '@/lib/taskState': `export const selectExecutionTask = () => null;`,
-  '@/lib/receiptPresentation': `export const buildReceiptPresentation = () => ({ movements: [], technicalMovements: [], executionFee: null, feeLabel: 'Network fee', feeCaveat: null, nativeValue: null }); export const receiptTransfersFromLogs = () => []; export const shouldShowReceiptMovementFallback = (receipts) => receipts.length > 0 && receipts.some((receipt) => receipt.transactionKind !== 'approval');`,
+  '@/lib/receiptPresentation': `export const buildReceiptPresentation = () => ({ movements: [], technicalMovements: [], executionFee: null, feeLabel: 'Network fee', feeCaveat: null, nativeValue: null }); export const receiptTransfersFromLogs = () => []; export const shouldShowReceiptMovementFallback = (receipts) => receipts.length > 0 && receipts.some((receipt) => receipt.transactionKind !== 'approval'); export const receiptMovementLines = (receipts) => { const tokenMovements = receipts.flatMap((receipt) => receipt.movements); if (tokenMovements.length) return { movements: tokenMovements, nativeValueIsMovement: false }; const nativeSends = receipts.flatMap((receipt) => receipt.nativeValue && receipt.nativeValueLabel === 'Native value sent' ? ['sent ' + receipt.nativeValue] : []); return { movements: nativeSends, nativeValueIsMovement: nativeSends.length > 0 }; };`,
   '@/lib/telegram': `export const haptic = () => {}; export const openExternalLink = () => false;`,
   '@/components/ui': `
     import React, { forwardRef } from 'react';

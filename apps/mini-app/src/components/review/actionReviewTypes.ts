@@ -17,6 +17,12 @@ export interface ActionReviewProps {
   blocker?: string | null;
   /** Runs after verified receipts and confirmation; reads may still be settling. */
   onComplete?: (result: TransactionExecutionResult, confirmedRoute: PlannedRoute) => void | Promise<void>;
+  /**
+   * Opens a position this review just opened, in place of a page load (Trade
+   * carries the split chosen on its ticket into it). Gets the position's key,
+   * "ETH:long:42", and its page.
+   */
+  onViewNewPosition?: (position: { key: string; href: string }) => void;
   operationLabel?: string;
   destructive?: boolean;
   onStageChange?: (stage: ActionReviewStage) => void;

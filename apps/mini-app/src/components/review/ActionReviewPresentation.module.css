@@ -269,15 +269,30 @@
 @keyframes mark-ripple { 0% { opacity: 0.45; transform: scale(0.92); } 100% { opacity: 0; transform: scale(1.45); } }
 /* Context reads as a plain caption, not a pill. */
 .resultMeta { max-width: 100%; margin: 8px 0 0; color: var(--mut); font-size: var(--fs-caption); font-weight: 500; line-height: 1.4; overflow-wrap: anywhere; }
+/* A position just opened, as a borderless row: token, name and number, its
+   target, then the split chosen on the ticket in the row's own bar. */
+.newPosition { width: 100%; min-width: 0; margin-top: 16px; text-align: left; }
+.newPositionLine { display: flex; min-width: 0; align-items: center; gap: 8px; margin: 0; font-size: var(--fs-small); line-height: 20px; }
+.newPositionToken { display: flex; flex: 0 0 auto; }
+.newPositionName { min-width: 0; flex: 1 1 auto; color: var(--text); font-weight: 650; overflow-wrap: anywhere; }
+.newPositionId { color: var(--mut); font-weight: 500; font-variant-numeric: tabular-nums; }
+.newPositionTarget { flex: 0 0 auto; color: var(--mut); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.newPositionTarget b { color: var(--text); font-weight: 650; }
+.newPosition > [data-position-born-source] { margin-top: 10px; }
 @media (prefers-reduced-motion: reduce) {
   .resultMark, .resultMark::after { animation: none !important; }
   .resultMark circle, .resultMark path { animation: none !important; stroke-dashoffset: 0; }
 }
 
+/* The same amount in another unit, beneath a value that stays exact in its own. */
+.factEquivalent { display: block; margin-top: 1px; color: var(--mut); font-size: var(--fs-caption); font-weight: 500; }
+
 /* Keep one Trade card and reserve unknown values only during preparation. */
 /* Fit the verified content; the shared max-height keeps the action in view. */
 .stableFacts > [data-review-fact] { min-height: 20px; }
 .preparingFacts > [data-review-fact="Protocol fee rate"] { min-height: 38px; }
+/* An ETH long's wstETH floor lands with its stETH equivalent beneath it. */
+.preparingFacts > [data-review-fact="Minimum converted input"] { min-height: 38px; }
 .stableReviewStatus { margin: 0 0 8px; font-size: var(--fs-small); line-height: 1.45; }
 
 .preparingReviewStatus { min-height: 2.9em; }
@@ -287,5 +302,6 @@
 @media (max-width: 380px) {
   .preparingFacts > [data-review-fact="Estimated collateral"],
   .preparingFacts > [data-review-fact="Estimated debt"] { min-height: 40px; }
-  .preparingFacts > [data-review-fact="Protocol fee rate"] { min-height: 60px; }
+  .preparingFacts > [data-review-fact="Protocol fee rate"],
+  .preparingFacts > [data-review-fact="Minimum converted input"] { min-height: 60px; }
 }

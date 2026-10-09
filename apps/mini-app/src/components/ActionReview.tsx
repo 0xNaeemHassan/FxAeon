@@ -39,6 +39,7 @@ import { useActionReviewLifecycle } from '@/components/review/useActionReviewLif
 import { selectExecutionTask } from '@/lib/taskState';
 import { buildReceiptPresentation, receiptTransfersFromLogs } from '@/lib/receiptPresentation';
 import { receiptMintedPositionIdentity } from '@/lib/confirmedPositions';
+import { openedPositionTitle, positionSideLabel } from '@/lib/positionNaming';
 import { rawQuoteReviewFacts, tokenAmountReviewFact, type ReviewFact } from '@/lib/fx/reviewFormatting';
 import { buildStatusPresentation } from '@/components/review/actionReviewStatusModel';
 import { PositionOutcomeSummary, TransactionProgressPresentation, UpdatedQuoteSummary } from '@/components/review/ActionReviewSummary';
@@ -143,7 +144,7 @@ function statusPresentation(params: Parameters<typeof buildStatusPresentation>[0
 
 export function ActionReview(props: ActionReviewProps) {
   const lifecycle = useActionReviewLifecycle(props);
-  const { label = 'Review action', disabled = false, blocker = null, operationLabel, destructive = false, editor, decisionBefore, executionCost, surface = 'card', planBuilder } = props;
+  const { label = 'Review action', disabled = false, blocker = null, operationLabel, destructive = false, editor, decisionBefore, executionCost, surface = 'card', planBuilder, onViewNewPosition } = props;
   const { canSelectReviewedRoute, endConnectFlow, error, execute, feeSelection, gasCost, headingRef, loading, networkSwitching, quoteChanges, quoteExpired, refreshReviewedQuote, refreshing, reset, result, review, reviewTitle, route, routeSummaries, routes, selectedRoute, selectReviewedRoute, selectGasTier, startConnectFlow, stage, status, statusDetail, stepResults, triggerRef, wallet } = lifecycle;
   usePauseAutomaticPositionRefresh(stage === 'planning' || stage === 'review' || stage === 'executing' || refreshing);
   // This review shows its own progress and result; the header notice stays for steps settling elsewhere.
@@ -206,7 +207,6 @@ export function ActionReview(props: ActionReviewProps) {
     const transactionTask = selectExecutionTask(result);
     const bridgeQuote = route?.operation === 'buildBridgeTx' && isBridgeQuote(route.quote) ? route.quote : null;
     const bridge = Boolean(bridgeQuote);
-    const presentation = resultPresentation(result, bridge);
     const bridgeStep = bridge
       ? [...result.steps].reverse().find((step) => step.transaction.kind === 'action' && step.hash)
       : undefined;
@@ -236,10 +236,28 @@ export function ActionReview(props: ActionReviewProps) {
       ? positionIntent.positionId
       : receiptPositionIdentity?.positionId;
     const positionLabel = positionAction && result.status === 'confirmed' && positionId !== undefined
-      ? `${positionMarket ?? 'Protocol'}${positionSide ? ` ${positionSide}` : ''} · #${positionId}`
+      ? `${positionMarket ?? 'Protocol'}${positionSide ? ` ${positionSideLabel(positionSide)}` : ''} · #${positionId}`
       : undefined;
     const positionHref = positionId !== undefined && positionMarket && positionSide
       ? `/positions?position=${encodeURIComponent(`${positionMarket}:${positionSide}:${positionId}`)}&action=${positionIntent?.kind === 'position-reduce' && positionIntent.isClosePosition ? 'close' : positionIntent?.kind === 'position-reduce' || positionIntent?.kind === 'repay-and-withdraw' ? 'reduce' : positionIntent?.kind === 'position-adjust' ? 'leverage' : 'increase'}`
+      : undefined;
+    // A position Trade just opened is named as History names this transaction,
+    // and drawn as its row with the split chosen on the ticket.
+    const opened = result.status === 'confirmed' && route?.operation === 'increasePosition'
+      && positionIntent?.kind === 'position-increase' && positionIntent.positionId === 0 && poolLocation
+      ? { ...poolLocation, targetLeverage: positionIntent.requestedLeverage }
+      : undefined;
+    const presentation = resultPresentation(result, bridge, opened ? openedPositionTitle(opened.market, opened.side) : undefined);
+    const newPosition = opened && receiptPositionIdentity
+      && receiptPositionIdentity.market === opened.market && receiptPositionIdentity.side === opened.side
+      && opened.targetLeverage !== undefined && Number.isFinite(opened.targetLeverage) && opened.targetLeverage > 0
+      ? {
+        key: `${opened.market}:${opened.side}:${receiptPositionIdentity.positionId}`,
+        market: opened.market,
+        side: opened.side,
+        positionId: receiptPositionIdentity.positionId,
+        targetLeverage: opened.targetLeverage,
+      }
       : undefined;
     const approvalSubmittedWithoutAction = result.status === 'partial'
       && result.steps.some((step) => step.transaction.kind === 'approval' && hasTransactionHash(step))
@@ -270,6 +288,7 @@ export function ActionReview(props: ActionReviewProps) {
           refreshing={refreshing}
           positionAction={positionAction}
           positionLabel={positionLabel}
+          newPosition={newPosition}
           receipts={receiptFacts}
           headingRef={headingRef}
           bridgeTracker={bridgeQuote && bridgeStep?.hash ? (
@@ -294,7 +313,12 @@ export function ActionReview(props: ActionReviewProps) {
           onNext={() => {
             if (approvalSubmittedWithoutAction) { reset(); return; }
             if (transactionTask) { window.location.assign(transactionTask.href); return; }
-            if (positionAction) { window.location.assign(positionHref ?? '/positions'); return; }
+            if (positionAction) {
+              // A position this review just opened can open in place, carrying its split.
+              if (newPosition && positionHref && onViewNewPosition) { onViewNewPosition({ key: newPosition.key, href: positionHref }); return; }
+              window.location.assign(positionHref ?? '/positions');
+              return;
+            }
             reset();
           }}
         />
@@ -412,7 +436,7 @@ export function ActionReview(props: ActionReviewProps) {
       <div className={`${styles.reviewFacts} ${stablePreparation ? `${presentationStyles.stableFacts} ${preparing && status !== 'failed' ? presentationStyles.preparingFacts : ''}` : ''}`}>
         {summaryFacts.map((fact) => fact === primaryAmount
           ? <ReviewAmount key={stablePreparation ? fact.label : `${fact.label}-${fact.value}`} fact={fact} stable={stablePreparation} />
-          : <ReviewRow key={stablePreparation ? fact.label : `${fact.label}-${fact.value}`} label={fact.label} value={fact.value} title={fact.title} quiet={stablePreparation} />)}
+          : <ReviewRow key={stablePreparation ? fact.label : `${fact.label}-${fact.value}`} label={fact.label} value={fact.value} title={fact.title} equivalent={fact.equivalent} quiet={stablePreparation} />)}
         {approvals.map((approval, index) => <ReviewRow key={`${approval.label}-${index}`} label={approval.label} value={approval.value} title={approval.title} />)}
      </div>
 
@@ -514,9 +538,10 @@ function ReviewSurface({ surface, className, children, stable = false }: { surfa
   return <Card className={`${className} ${stable ? '' : presentationStyles.surfaceEnter}`}>{children}</Card>;
 }
 
-function ReviewRow({ label, value, title, className, quiet = false }: { label: string; value: ReactNode; title?: string; className?: string; quiet?: boolean }) {
+/** `equivalent` reads muted beneath the value: the same amount in another unit, never the signed figure. */
+function ReviewRow({ label, value, title, equivalent, className, quiet = false }: { label: string; value: ReactNode; title?: string; equivalent?: string; className?: string; quiet?: boolean }) {
   const valueTitle = title ?? (typeof value === 'string' ? value : undefined);
-  return <div data-review-fact={label} className={`flex min-w-0 items-start justify-between gap-4 text-[13px] ${className ?? ''}`}><span className="text-mut">{label}</span><span title={valueTitle} className="max-w-[62%] break-words text-right font-semibold tabular-nums"><ValueOrSkeleton value={value} width="md" announce={!quiet} label={`Loading ${label.toLowerCase()}`} /></span></div>;
+  return <div data-review-fact={label} className={`flex min-w-0 items-start justify-between gap-4 text-[13px] ${className ?? ''}`}><span className="text-mut">{label}</span><span title={valueTitle} className="max-w-[62%] break-words text-right font-semibold tabular-nums"><ValueOrSkeleton value={value} width="md" announce={!quiet} label={`Loading ${label.toLowerCase()}`} />{equivalent && <span className={presentationStyles.factEquivalent}>{equivalent}</span>}</span></div>;
 }
 
 /**

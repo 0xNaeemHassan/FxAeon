@@ -84,6 +84,20 @@ test('the preview reads the review’s own collateral, debt and fee facts for th
   }
 });
 
+test('an ETH long preview states its collateral in stETH, while its USD value still prices the wstETH quote', () => {
+  // wstETH.stEthPerToken() on mainnet at block 26,150,567, read with the quote.
+  const planned = route(opening('ETH', 'long'), { colls: '670412512785242112', debts: '1010218412345678901234', stEthPerWstEth: '1245861716930919999' });
+  const facts = positionOutcomeFacts(planned)!;
+  const review = routeFinancialReviewFacts(planned).find((fact) => fact.label === 'Estimated collateral');
+  assert.deepEqual({ label: facts.collateral.label, value: facts.collateral.value, title: facts.collateral.title }, review);
+  assert.equal(facts.collateral.value, '≈ 0.83524128 stETH');
+  assert.equal(facts.collateral.title, '0.835241284230594092 stETH (0.670412512785242112 wstETH at 1.245861716930919999 stETH per wstETH)');
+  // "USD values stay as they are": the same wstETH amount at the wstETH price.
+  assert.equal(facts.collateral.exact, '0.670412512785242112');
+  assert.equal(facts.collateral.symbol, 'wstETH');
+  assert.equal(collateralUsdEstimate(facts.collateral, { wstETH: 2880 }), '≈ $1,930.79');
+});
+
 test('only a new position’s quoted route is previewed', () => {
   const details = { colls: '670412512785242112', debts: '1010218412345678901234' };
   assert.equal(positionOutcomeFacts(route(opening('ETH', 'long', 7), details)), null);

@@ -1,18 +1,62 @@
 'use client';
 
-import type { ReactNode, Ref } from 'react';
+import type { CSSProperties, ReactNode, Ref } from 'react';
 import type { TransactionExecutionResult, TransactionStepResult } from '@/lib/fx';
 import type { ReceiptPresentation } from '@/lib/receiptPresentation';
 import { compactAddress } from '@/lib/addressPresentation';
 import { hasTransactionHash } from '@/lib/transactionProgress';
+import { debtShare } from '@/lib/leverageShare';
+import { positionSideLabel } from '@/lib/positionNaming';
 import { Button } from '@/components/ui';
+import TokenIcon from '@/components/TokenIcon';
 import { ReceiptSummary } from '@/components/review/ActionReviewSummary';
 import { chainName, TransactionHashLink } from '@/components/review/ReviewProgress';
 import styles from './ActionReviewPresentation.module.css';
 import flowStyles from '../FlowWorkspace.module.css';
+import rowStyles from '../ProtocolPositionCard.module.css';
 import { resultBodyDuringRefresh, type resultPresentation } from '@/components/review/executionResult';
 
 type ResultPresentation = ReturnType<typeof resultPresentation>;
+
+/** A position the confirmed transaction just opened, from its receipt and its review. */
+export type NewPositionView = {
+  /** "ETH:long:42", the key its row and page use. */
+  key: string;
+  market: 'ETH' | 'BTC';
+  side: 'long' | 'short';
+  positionId: number;
+  /** The reviewed target leverage, whose split the ticket showed. */
+  targetLeverage: number;
+};
+
+/**
+ * The new position as its row will show it: token, name and number, the
+ * target it was opened at, and the split chosen on the ticket in the row's own
+ * colours. The bar is that choice, labelled by its target; the row it becomes
+ * on the position's page is drawn from the confirmed read (see lib/positionBorn).
+ */
+function NewPositionRow({ position }: { position: NewPositionView }) {
+  return (
+    <div className={styles.newPosition}>
+      <p className={styles.newPositionLine}>
+        <span className={styles.newPositionToken} aria-hidden="true"><TokenIcon symbol={position.market === 'ETH' ? 'ETH' : 'WBTC'} size={24} /></span>
+        <span className={styles.newPositionName}>
+          {position.market} <span className={position.side === 'long' ? rowStyles.long : rowStyles.short}>{positionSideLabel(position.side)}</span>
+          <span className={styles.newPositionId}> · #{position.positionId}</span>
+        </span>
+        <span className={styles.newPositionTarget} title="Target leverage"><b>{position.targetLeverage}×</b> target</span>
+      </p>
+      <span
+        className={rowStyles.split}
+        aria-hidden="true"
+        data-position-born-source={position.key}
+        style={{ '--debt-share': debtShare(position.side, position.targetLeverage) } as CSSProperties}
+      >
+        <span className={rowStyles.splitTrack}><i className={rowStyles.splitDebt} /><i className={rowStyles.splitShare} /></span>
+      </span>
+    </div>
+  );
+}
 
 export function TransactionResultView({
   result,
@@ -20,6 +64,7 @@ export function TransactionResultView({
   refreshing,
   positionAction,
   positionLabel,
+  newPosition,
   receipts,
   bridgeTracker,
   nextLabel,
@@ -31,6 +76,8 @@ export function TransactionResultView({
   refreshing: boolean;
   positionAction: boolean;
   positionLabel?: string;
+  /** Drawn as its row in place of the position caption. */
+  newPosition?: NewPositionView;
   receipts: readonly ReceiptPresentation[];
   bridgeTracker?: ReactNode;
   /** Also the accessible name, so speech and sight name the same action. */
@@ -62,7 +109,9 @@ export function TransactionResultView({
         </div>
       )}
       <ReceiptSummary receipts={receipts} />
-      {positionLabel && <p className={styles.resultMeta}>Position: {positionLabel}</p>}
+      {newPosition
+        ? <NewPositionRow position={newPosition} />
+        : positionLabel && <p className={styles.resultMeta}>Position: {positionLabel}</p>}
       {bridgeTracker}
       <Button variant={presentation.tone === 'danger' ? 'ghost' : 'primary'} className={`mt-5 ${flowStyles.primaryAction}`} onClick={onNext}>{nextLabel}</Button>
     </div>

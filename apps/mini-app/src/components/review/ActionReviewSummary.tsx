@@ -1,7 +1,7 @@
 import { ChevronDown } from 'lucide-react';
 import type { ChangedReviewFact } from './actionReviewModel';
 import type { ReviewFact } from '@/lib/fx/reviewFormatting';
-import { shouldShowReceiptMovementFallback, type ReceiptPresentation } from '@/lib/receiptPresentation';
+import { receiptMovementLines, shouldShowReceiptMovementFallback, type ReceiptPresentation } from '@/lib/receiptPresentation';
 import { StatusNotice, TransactionHashLink } from '@/components/review/ReviewProgress';
 import presentationStyles from './ActionReviewPresentation.module.css';
 import { ValueOrSkeleton } from '@/components/MissingValue';
@@ -85,7 +85,7 @@ export function PositionOutcomeSummary({ facts }: { facts: readonly { label: str
 
 export function ReceiptSummary({ receipts }: { receipts: readonly ReceiptPresentation[] }) {
   if (!receipts.length) return null;
-  const movements = receipts.flatMap((receipt) => receipt.movements);
+  const { movements, nativeValueIsMovement } = receiptMovementLines(receipts);
   const technicalMovements = receipts.flatMap((receipt) => receipt.technicalMovements);
   const showMovementFallback = shouldShowReceiptMovementFallback(receipts);
   return (
@@ -101,7 +101,8 @@ export function ReceiptSummary({ receipts }: { receipts: readonly ReceiptPresent
         {receipt.totalExecutionFee && receipt.totalFeeLabel && <p>{receipt.totalFeeLabel}: {receipt.totalExecutionFee}</p>}
         {receipt.feeCaveat && <p>{receipt.feeCaveat}</p>}
       </div>)}
-      {receipts.map((receipt, index) => receipt.nativeValue && <p key={`native-${index}`} className="mt-1 text-[12px] text-mut">{receipt.nativeValueLabel}: {receipt.nativeValue}</p>)}
+      {receipts.map((receipt, index) => receipt.nativeValue && !(nativeValueIsMovement && receipt.nativeValueLabel === 'Native value sent')
+        && <p key={`native-${index}`} className="mt-1 text-[12px] text-mut">{receipt.nativeValueLabel}: {receipt.nativeValue}</p>)}
     </section>
   );
 }

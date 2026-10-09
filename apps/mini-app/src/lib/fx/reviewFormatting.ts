@@ -4,10 +4,20 @@ import { FX_TOKENS, type FxTokenDefinition } from './tokens';
 import { tokenSymbol } from './tokenPresentation';
 import type { OfficialFxMethod, PlannedRoute, ReviewedActionIntent } from './types';
 import { calculateProtocolFee } from './protocolFee';
+import { parseStEthPerWstEth, stEthForWstEth } from './wstEthRate';
 
-export type ReviewFact = { label: string; value: string; title?: string };
+/**
+ * `equivalent` is the same amount in another unit, shown muted beside the
+ * value (for example a wstETH minimum's stETH equivalent); the value itself
+ * stays exact in the unit it is signed in.
+ */
+export type ReviewFact = { label: string; value: string; title?: string; equivalent?: string };
 type Unit = { symbol: string; decimals: number };
 type Pool = { market: 'ETH' | 'BTC'; side: 'long' | 'short' };
+
+/** The unit an ETH long's collateral is accounted in, everywhere FxAeon shows it. */
+const STETH: Unit = { symbol: 'stETH', decimals: 18 };
+const WSTETH: Unit = { symbol: 'wstETH', decimals: 18 };
 
 const sameAddress = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const tokenUnit = (token: FxTokenDefinition): Unit => ({ symbol: tokenSymbol(token.key), decimals: token.decimals });
@@ -71,22 +81,91 @@ export function tokenAmountReviewFact(label: string, value: bigint, address: str
     ?? { label, value: `${value} raw units`, title: `${value} raw units` };
 }
 
-function quoteUnits(intent: ReviewedActionIntent, pool: Pool): { collateral?: Unit; debt: Unit } {
-  // Pinned fx-sdk 1.0.5 quote/accounting amounts are WAD (18 decimals),
-  // including WBTC. Converter minimums below use ERC-20 decimals instead.
-  const derivative = pool.market === 'ETH' ? 'wstETH' : 'WBTC';
-  if (pool.side === 'short') return { collateral: { symbol: 'fxUSD', decimals: 18 }, debt: { symbol: derivative, decimals: 18 } };
-  const debt = { symbol: 'fxUSD', decimals: 18 };
-  if (pool.market === 'BTC') return { collateral: { symbol: 'WBTC', decimals: 18 }, debt };
+/** A converted figure is an estimate however many digits it shows. */
+function estimated(shown: string): string {
+  return /^[≈<]/.test(shown) ? shown : `≈ ${shown}`;
+}
 
-  // The ETH long opening quote normalizes delta wstETH; reduce/borrow quotes
-  // use stETH accounting. Existing increases add unlike units in this SDK,
-  // and adjustments may choose either branch. Do not invent a conversion.
-  if (intent.kind === 'position-increase') {
-    return { collateral: intent.positionId === 0 ? { symbol: 'wstETH', decimals: 18 } : undefined, debt };
+/** Pinned fx-sdk 1.0.5 quote/accounting amounts are WAD (18 decimals), including WBTC. */
+function debtUnit(pool: Pool): Unit {
+  if (pool.side === 'short') return { symbol: pool.market === 'ETH' ? 'wstETH' : 'WBTC', decimals: 18 };
+  return { symbol: 'fxUSD', decimals: 18 };
+}
+
+/** openOrAddPositionFlashLoanV2 / closeOrRemovePositionFlashLoanV2: the two branches of a long's leverage change. */
+const LONG_OPEN_SELECTOR = '0xef9e1aa7';
+const LONG_CLOSE_SELECTOR = '0xe8e9fc2a';
+
+function actionSelector(route: PlannedRoute): string | undefined {
+  const actions = route.transactions.filter((transaction) => transaction.kind !== 'approval');
+  return actions.length === 1 ? actions[0].data.slice(0, 10).toLowerCase() : undefined;
+}
+
+type CollateralQuote = {
+  fact: ReviewFact;
+  /** The quote's own amount and token, which price its display-only USD value. */
+  native: { exact: string; symbol: string };
+};
+
+/**
+ * The route's collateral quote (`colls`) as one honestly named figure.
+ *
+ * The wstETH long pool accounts collateral in stETH: its PoolManager scales
+ * wstETH by its rate provider (stETH per wstETH). The SDK's reduce, borrow,
+ * repay and leverage-down quotes say so. Its open/add quote does not: it adds
+ * the new collateral in wstETH to the stETH a position already holds. That
+ * wstETH converts at the live rate read with the quote; without a rate a new
+ * position keeps its native wstETH figure, and a mixed quote is not shown.
+ */
+function collateralQuote(route: PlannedRoute, intent: ReviewedActionIntent, pool: Pool): CollateralQuote | undefined {
+  const raw = route.details?.colls;
+  if (raw === undefined || !/^\d+$/.test(raw)) return undefined;
+  const colls = BigInt(raw);
+  const plain = (unit: Unit): CollateralQuote => ({
+    fact: amountFact('Estimated collateral', raw, unit)!,
+    native: { exact: formatUnits(colls, unit.decimals), symbol: unit.symbol },
+  });
+  if (pool.side === 'short') return plain({ symbol: 'fxUSD', decimals: 18 });
+  if (pool.market === 'BTC') return plain({ symbol: 'WBTC', decimals: 18 });
+
+  const openBranch = intent.kind === 'position-increase'
+    || (intent.kind === 'position-adjust' && actionSelector(route) === LONG_OPEN_SELECTOR);
+  if (!openBranch) {
+    // An adjustment whose branch cannot be told apart is not interpreted.
+    if (intent.kind === 'position-adjust' && actionSelector(route) !== LONG_CLOSE_SELECTOR) return undefined;
+    return plain(STETH);
   }
-  if (intent.kind === 'position-adjust') return { debt };
-  return { collateral: { symbol: 'stETH', decimals: 18 }, debt };
+  const rate = parseStEthPerWstEth(route.details?.stEthPerWstEth);
+  const newPosition = intent.kind === 'position-increase' && intent.positionId === 0;
+  if (newPosition && rate === undefined) return plain(WSTETH);
+  const heldRaw = newPosition ? '0' : route.details?.currentColls;
+  if (rate === undefined || heldRaw === undefined || !/^\d+$/.test(heldRaw)) return undefined;
+  const held = BigInt(heldRaw);
+  if (held > colls) return undefined;
+  const added = colls - held;
+  const exact = formatUnits(held + stEthForWstEth(added, rate), 18);
+  const conversion = `${formatUnits(added, 18)} wstETH at ${formatUnits(rate, 18)} stETH per wstETH`;
+  return {
+    fact: {
+      label: 'Estimated collateral',
+      value: `${estimated(compactDecimal(exact, 8))} stETH`,
+      title: `${exact} stETH (${held > 0n ? `${formatUnits(held, 18)} stETH held plus ` : ''}${conversion})`,
+    },
+    native: newPosition ? { exact: formatUnits(colls, 18), symbol: 'wstETH' } : { exact, symbol: 'stETH' },
+  };
+}
+
+/**
+ * Converted wstETH enters an ETH long position as stETH. Its signed minimum
+ * stays exact in wstETH; the stETH equivalent (rounded down, like the pool)
+ * lets it be read against the estimated collateral.
+ */
+function withStEthEquivalent(fact: ReviewFact, raw: string, route: PlannedRoute, pool: Pool | undefined): ReviewFact {
+  if (pool?.market !== 'ETH' || pool.side !== 'long' || !/^\d+$/.test(raw) || BigInt(raw) === 0n) return fact;
+  const rate = parseStEthPerWstEth(route.details?.stEthPerWstEth);
+  if (rate === undefined) return fact;
+  const stEth = formatUnits(stEthForWstEth(BigInt(raw), rate), 18);
+  return { ...fact, equivalent: `${estimated(compactDecimal(stEth, 8))} stETH` };
 }
 
 function limitUnit(label: string, intent: ReviewedActionIntent, pool: Pool | undefined): { label: string; unit: Unit | undefined } | undefined {
@@ -162,9 +241,8 @@ export function routeFinancialReviewFacts(route: PlannedRoute): ReviewFact[] {
     }
     // Borrow/repay expose an oracle price under the same SDK field name,
     // not a swap execution price. Keep that value in advanced details.
-    const units = quoteUnits(intent, pool);
-    add(amountFact('Estimated collateral', details?.colls, units.collateral));
-    add(amountFact('Estimated debt', details?.debts, units.debt));
+    add(collateralQuote(route, intent, pool)?.fact);
+    add(amountFact('Estimated debt', details?.debts, debtUnit(pool)));
   }
 
   let unsupportedLimits = 0;
@@ -180,8 +258,14 @@ export function routeFinancialReviewFacts(route: PlannedRoute): ReviewFact[] {
     if (identityDepositNoOp) continue;
     const known = limitUnit(limit.label, intent, pool);
     const fact = known && amountFact(known.label, limit.value, known.unit, 'exact');
-    if (fact) add(fact);
-    else unsupportedLimits += 1;
+    if (!known || !fact) {
+      unsupportedLimits += 1;
+      continue;
+    }
+    // The floor on wstETH entering the position, comparable with its collateral.
+    const collateralFloor = known.unit?.symbol === 'wstETH'
+      && (known.label === 'Minimum converted input' || known.label === 'Minimum converted deposit');
+    add(collateralFloor ? withStEthEquivalent(fact, limit.value, route, pool) : fact);
   }
   if (pool && intent.kind === 'position-reduce') {
     const minimum = amountFact('Minimum received', details?.minOut, unitForAddress(intent.outputTokenAddress), 'exact');
@@ -195,7 +279,11 @@ export function routeFinancialReviewFacts(route: PlannedRoute): ReviewFact[] {
 }
 
 export type PositionOutcomeFacts = {
-  /** The review's "Estimated collateral" fact, with the exact amount and its token for a display-only USD value. */
+  /**
+   * The review's "Estimated collateral" fact, plus the quote's own exact
+   * amount and token, which price its display-only USD value (an ETH long's
+   * wstETH quote at the wstETH price, whichever unit the fact shows).
+   */
   collateral: ReviewFact & { exact: string; symbol: string };
   debt: ReviewFact;
   fee?: ReviewFact;
@@ -204,8 +292,8 @@ export type PositionOutcomeFacts = {
 /**
  * What a new position's route will hold, for the Trade ticket's preview: the
  * review's own collateral, debt and fee facts for this exact route (the same
- * labels, units and rounding the review shows), plus the collateral's exact
- * decimal. Null for any other route, or when either amount has no known unit.
+ * labels, units and rounding the review shows), plus the collateral quote's
+ * exact decimal. Null for any other route, or when either amount has no known unit.
  */
 export function positionOutcomeFacts(route: PlannedRoute): PositionOutcomeFacts | null {
   const intent = route.policy?.reviewedAction;
@@ -214,11 +302,10 @@ export function positionOutcomeFacts(route: PlannedRoute): PositionOutcomeFacts 
   const facts = routeFinancialReviewFacts(route);
   const collateral = facts.find((fact) => fact.label === 'Estimated collateral');
   const debt = facts.find((fact) => fact.label === 'Estimated debt');
-  const unit = pool ? quoteUnits(intent, pool).collateral : undefined;
-  const colls = route.details?.colls;
-  if (!collateral || !debt || !unit || colls === undefined || !/^\d+$/.test(colls)) return null;
+  const quote = pool ? collateralQuote(route, intent, pool) : undefined;
+  if (!collateral || !debt || !quote) return null;
   return {
-    collateral: { ...collateral, exact: formatUnits(BigInt(colls), unit.decimals), symbol: unit.symbol },
+    collateral: { ...collateral, ...quote.native },
     debt,
     fee: facts.find((fact) => fact.label === 'Protocol fee rate' || fact.label === 'Protocol fee'),
   };
@@ -277,6 +364,8 @@ export function rawQuoteReviewFacts(route: PlannedRoute): ReviewFact[] {
     ['minOut', 'Minimum output quote (raw units)'],
     ['colls', 'Collateral quote (raw units)'],
     ['debts', 'Debt quote (raw units)'],
+    ['currentColls', 'Collateral held (raw units)'],
+    ['stEthPerWstEth', 'stETH per wstETH (1e18 units)'],
   ] as const;
   return fields.flatMap(([key, label]) => {
     const value = route.details?.[key];

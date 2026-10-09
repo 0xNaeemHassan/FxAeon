@@ -87,12 +87,19 @@ test('a settled route shows the review’s figures, each marked as an estimate, 
   assert.match(html, /data-trade-outcome="ready"/);
   assert.doesNotMatch(html, /aria-busy/);
   // "1.5 wstETH" is exact in the review; the ticket still marks it as an estimate. The rate is the pool's quoted rate.
+  // Without a wstETH rate read beside the quote, the collateral keeps its native unit.
   assert.deepEqual(rows(html), [
     ['Estimated collateral', '≈ 1.5 wstETH'],
     ['Estimated debt', '≈ 1,010.21841234 fxUSD'],
     ['Protocol fee rate', '0.3%'],
   ]);
   assert.match(html, /title="1010\.218412345678901234 fxUSD"/);
+  // With it (as every planned ETH long carries), the position's own stETH accounting.
+  const converted = renderToStaticMarkup(React.createElement(TradeOutcomePreview, {
+    market: 'ETH', side: 'long', route: { ...route, details: { ...route.details, stEthPerWstEth: '1200000000000000000' } },
+  }));
+  assert.deepEqual(rows(converted)[0], ['Estimated collateral', '≈ 1.8 stETH']);
+  assert.match(converted, /title="1\.8 stETH \(1\.5 wstETH at 1\.2 stETH per wstETH\)"/);
 });
 
 test('a short previews fxUSD collateral and the borrowed derivative, and an unreadable fee says so as the review does', async () => {

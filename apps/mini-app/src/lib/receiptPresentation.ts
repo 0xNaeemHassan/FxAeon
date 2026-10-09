@@ -23,6 +23,19 @@ export type ReceiptPositionIdentity = Pick<ConfirmedPositionHint, 'market' | 'si
 export function shouldShowReceiptMovementFallback(receipts: readonly ReceiptPresentation[]): boolean {
   return receipts.length > 0 && receipts.some((receipt) => receipt.transactionKind !== 'approval');
 }
+
+/**
+ * The movements a receipt summary states. ETH paid into an action leaves no
+ * token log, so when no token moved the verified transaction's own value is
+ * the movement ("sent 0.5 ETH"), stated once instead of "not established".
+ */
+export function receiptMovementLines(receipts: readonly ReceiptPresentation[]): { movements: string[]; nativeValueIsMovement: boolean } {
+  const tokenMovements = receipts.flatMap((receipt) => receipt.movements);
+  if (tokenMovements.length > 0) return { movements: tokenMovements, nativeValueIsMovement: false };
+  const nativeSends = receipts.flatMap((receipt) => receipt.nativeValue && receipt.nativeValueLabel === 'Native value sent'
+    ? [`sent ${receipt.nativeValue}`] : []);
+  return { movements: nativeSends, nativeValueIsMovement: nativeSends.length > 0 };
+}
 /** Hints are supplied by ProtocolPositionProvider only after receipt and current-owner verification. */
 export function verifiedReceiptPositionIdentity(input: {
   status: 'pending' | 'confirmed' | 'failed';
