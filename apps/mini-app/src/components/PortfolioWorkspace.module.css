@@ -64,7 +64,6 @@
 .sectionTitle { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
 .sectionTitle h2 { font-size: var(--fs-title); font-weight: 650; letter-spacing: -.02em; margin: 0; }
 .sectionTitle a { display: flex; min-height: 44px; align-items: center; gap: 3px; font-size: var(--fs-small); color: var(--mint); }
-.positionList { display: flex; flex-direction: column; gap: 12px; }
 /* Empty and unavailable rows inside the Positions and fxSAVE cards: a mark, a
  * plain sentence with one line of context, and the next step as a button
  * shaped like the cards' other actions. */
@@ -85,12 +84,6 @@
 .earnLoading > span:nth-child(2) > span { display: block; width: 52%; height: 11px; border-radius: var(--radius-full); }
 .earnLoading > span:nth-child(2) > span + span { width: 34%; height: 9px; }
 .earnLoading > span:last-child { flex: 0 0 72px; height: 32px; border-radius: var(--radius-sm); }
-.positionItem { min-width: 0; }
-.positionActions { display: flex; gap: 6px; padding: 8px 0 0; }
-.positionActions a { display: grid; flex: 1; place-items: center; min-height: 44px; border: 0; border-radius: var(--radius-sm); background: var(--surface-2); font-size: var(--fs-small); font-weight: 600; color: var(--text); transition: background-color var(--dur-fast) ease, transform var(--dur-slow) var(--ease-spring); }
-.positionActions a:hover { background: var(--surface-3); }
-.positionActions a:active { transform: scale(0.97); transition-duration: var(--dur-press); }
-.positionActions a:last-child { color: var(--danger); }
 .disclosureActions { display: flex; justify-content: flex-end; min-height: 0; }
 .disclosureActions a { display: inline-flex; min-height: 44px; align-items: center; gap: 3px; color: var(--mint); font-size: var(--fs-small); font-weight: 600; }
 .earnCard { padding: 4px 0 4px; }
@@ -173,6 +166,6 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .valueCard::before { animation: none; }
-  .quickAction, .quickAction > span, .valueTop button, .positionActions a, .earnActions a { transition: none; }
+  .quickAction, .quickAction > span, .valueTop button, .earnActions a { transition: none; }
   .quickAction:hover > span, .quickAction:active > span, .valueTop button:active:not(:disabled) { transform: none; }
 }

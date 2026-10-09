@@ -222,7 +222,12 @@ export function useOverlayDialog<T extends HTMLElement = HTMLElement>({ open, on
       closeRef.current();
       detail?.consume?.();
     };
-    const raf = window.requestAnimationFrame(focusInitial);
+    // Initial focus waits a frame for the dialog to paint. By then the person
+    // may already have tapped a field inside it; never pull focus (and the
+    // keystrokes that follow) away from there.
+    const raf = window.requestAnimationFrame(() => {
+      if (!dialog.contains(document.activeElement)) focusInitial();
+    });
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('focusin', onFocusIn);
     window.addEventListener('popstate', onPopState);

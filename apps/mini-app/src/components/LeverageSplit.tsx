@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useRef, type CSSProperties } from 'react';
-import { debtShare, splitPercents, type LeverageSide } from '@/lib/leverageShare';
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { debtShare, leverageAtShare, splitPercents, splitTicksOnTrack, stepLeverage, type LeverageSide } from '@/lib/leverageShare';
+import { haptic } from '@/lib/telegram';
 import styles from './LeverageSplit.module.css';
 
 /**
@@ -49,7 +50,239 @@ export function LeverageSplitCaption({ id, side, debtLabel, leverage, min, max }
 }) {
   const inRange = Number.isFinite(leverage) && leverage >= min && leverage <= max;
   const { debt, yours } = splitPercents(side, leverage);
+  // "minted fxUSD" / "borrowed wstETH": on the narrowest rows the asset steps
+  // out of sight (still read aloud) so the caption keeps one line.
+  const [verb, ...assetWords] = debtLabel.split(' ');
+  const asset = assetWords.join(' ');
   return <span id={id} className={styles.caption} data-empty={inRange ? undefined : true}>
-    {inRange && <><b>{debt}%</b> {debtLabel} · <b>{yours}%</b> yours<span className="sr-only"> at {leverage.toFixed(1)}×, before fees</span></>}
+    {inRange && <><b>{debt}%</b> {verb}{asset && <span className={styles.captionAsset}> {asset}</span>} · <b>{yours}%</b> yours<span className="sr-only"> at {leverage.toFixed(1)}×, before fees</span></>}
   </span>;
+}
+
+/** A press this close to the thumb holds it where it is instead of jumping it. */
+const THUMB_GRAB_SLOP_PX = 6;
+/** A touch becomes a drag once it travels this far along the track; until then it may still be a scroll or a tap. */
+const TOUCH_DRAG_SLOP_PX = 4;
+/** A touch that ends within this distance of where it began is a tap. */
+const TAP_SLOP_PX = 10;
+/** The release tick is skipped right after a whole-leverage tick, so a drag never clicks twice. */
+const DETENT_QUIET_MS = 120;
+
+type SliderGesture = {
+  pointerId: number;
+  touch: boolean;
+  startX: number;
+  startY: number;
+  /** Offset from the thumb's centre when the press began on it; null makes the thumb jump to the pointer. */
+  grab: number | null;
+  dragging: boolean;
+  lastDetentAt: number;
+};
+
+/** Moving from `from` to `to` lands on or passes a whole leverage: the drag's detents. */
+function crossesWholeLeverage(from: number, to: number): boolean {
+  return to > from ? Math.floor(to) > Math.floor(from) : to < from && Math.ceil(to) < Math.ceil(from);
+}
+
+/**
+ * The ticket's leverage slider is the split itself: the track's full width is
+ * the position's value, the debt (quiet) left of the thumb and the trader's
+ * share (the accent) right of it, so the thumb sits where the debt ends, at
+ * debtShare(side, L). Leverage outside the live range lies on thinned, dimmed
+ * ends the thumb cannot enter. Faint hairline ticks stand on the bar's upper
+ * edge at each whole × (never cutting the split), showing why every extra ×
+ * moves the boundary less: they keep at least 14px apart on the measured track
+ * and step aside near the thumb. The range ends are labelled where they sit.
+ *
+ * Semantics and keys come from a native range input in leverage units, laid
+ * transparently over the drawing. Assistive technology gets a real slider
+ * whose value, minimum and maximum are leverage (iOS VoiceOver and TalkBack
+ * adjust a native slider reliably, a custom role="slider" far less so; a native
+ * input in share space would announce shares, not leverage). Arrow keys step
+ * 0.1× and Home/End reach the bounds natively; only PageUp/PageDown are taken
+ * over, to move a whole ×. The input ignores the pointer, because its own
+ * mapping is linear in leverage and would leave the thumb away from the finger:
+ * pointer input is mapped here instead, x to share to the nearest 0.1× step. A
+ * touch waits to see whether it is a drag along the track or a scroll of the
+ * page (touch-action keeps vertical panning native), so scrolling past the
+ * ticket never changes the leverage.
+ */
+export function LeverageSplitRange({ id, label, side, debtLabel, value, leverage, min, max, describedBy, captionId, onChange }: {
+  id: string;
+  label: string;
+  side: LeverageSide;
+  debtLabel: string;
+  /** The leverage the slider shows, already inside [min, max]. */
+  value: number;
+  /** The field's own leverage, which the caption states; outside the live range the caption stays empty. */
+  leverage: number;
+  min: number;
+  max: number;
+  describedBy?: string;
+  captionId: string;
+  onChange: (value: number) => void;
+}) {
+  const sliderRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
+  const thumbRef = useRef<HTMLSpanElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const gestureRef = useRef<SliderGesture | null>(null);
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  const [dragging, setDragging] = useState(false);
+  // Tick spacing and the thumb's clearance are in pixels, so the drawn track
+  // is measured (layout sizes, unaffected by any press transform). Until it
+  // is, no ticks are drawn.
+  const [track, setTrack] = useState<{ width: number; thumbRadius: number } | null>(null);
+  useEffect(() => {
+    const bar = barRef.current;
+    if (!bar) return undefined;
+    const measure = () => {
+      const width = bar.offsetWidth;
+      const thumbRadius = (thumbRef.current?.offsetWidth ?? 0) / 2;
+      setTrack((current) => current?.width === width && current.thumbRadius === thumbRadius ? current : { width, thumbRadius });
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(bar);
+    return () => observer.disconnect();
+  }, []);
+  const ticks = track ? splitTicksOnTrack(side, min, max, value, track.width, track.thumbRadius) : [];
+  const { debt } = splitPercents(side, value);
+  const shares = {
+    '--share': debtShare(side, value),
+    '--min-share': debtShare(side, min),
+    '--max-share': debtShare(side, max),
+  } as CSSProperties;
+
+  const choose = (clientX: number, grab: number) => {
+    const bar = barRef.current?.getBoundingClientRect();
+    if (!bar || bar.width <= 0) return;
+    const previous = valueRef.current;
+    const next = leverageAtShare(side, (clientX - grab - bar.left) / bar.width, min, max);
+    if (next === previous) return;
+    valueRef.current = next;
+    onChange(next);
+    const gesture = gestureRef.current;
+    if (gesture && crossesWholeLeverage(previous, next)) {
+      haptic('selection');
+      gesture.lastDetentAt = performance.now();
+    }
+  };
+  // Like a native slider, a press focuses it (closing the amount keyboard).
+  // Focus moved by script after typing would still match :focus-visible, so
+  // the keyboard ring waits for an actual key.
+  const focusFromPointer = () => {
+    sliderRef.current?.setAttribute('data-pointer-focus', '');
+    if (document.activeElement !== inputRef.current) inputRef.current?.focus({ preventScroll: true });
+  };
+  const beginDrag = (gesture: SliderGesture) => {
+    gesture.dragging = true;
+    setDragging(true);
+    focusFromPointer();
+  };
+  const endGesture = () => {
+    gestureRef.current = null;
+    setDragging(false);
+  };
+
+  const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
+    const bar = barRef.current?.getBoundingClientRect();
+    if (!bar || bar.width <= 0) return;
+    const thumbX = bar.left + debtShare(side, valueRef.current) * bar.width;
+    const thumbRadius = (thumbRef.current?.getBoundingClientRect().width ?? 0) / 2;
+    const gesture: SliderGesture = {
+      pointerId: event.pointerId,
+      touch: event.pointerType === 'touch',
+      startX: event.clientX,
+      startY: event.clientY,
+      grab: Math.abs(event.clientX - thumbX) <= thumbRadius + THUMB_GRAB_SLOP_PX ? event.clientX - thumbX : null,
+      dragging: false,
+      lastDetentAt: 0,
+    };
+    gestureRef.current = gesture;
+    try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* The pointer has already gone. */ }
+    if (gesture.touch) return;
+    // A mouse or pen press is already a decision: hold the thumb, or jump it here.
+    event.preventDefault();
+    beginDrag(gesture);
+    choose(event.clientX, gesture.grab ?? 0);
+  };
+  const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const gesture = gestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    if (!gesture.dragging) {
+      const travel = event.clientX - gesture.startX;
+      if (Math.abs(travel) < TOUCH_DRAG_SLOP_PX || Math.abs(travel) <= Math.abs(event.clientY - gesture.startY)) return;
+      beginDrag(gesture);
+    }
+    choose(event.clientX, gesture.grab ?? 0);
+  };
+  const onPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const gesture = gestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    const tapped = !gesture.dragging
+      && Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY) < TAP_SLOP_PX;
+    // A tap on the track moves the thumb there, as on a native slider; a tap on the thumb leaves it.
+    if (tapped && gesture.grab === null) {
+      focusFromPointer();
+      choose(event.clientX, 0);
+    }
+    if ((gesture.dragging || tapped) && performance.now() - gesture.lastDetentAt > DETENT_QUIET_MS) haptic('selection');
+    endGesture();
+  };
+
+  return <>
+    <div
+      ref={sliderRef}
+      className={styles.slider}
+      data-dragging={dragging || undefined}
+      style={shares}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      // A page scroll took the touch, or the press was interrupted: nothing changes.
+      onPointerCancel={endGesture}
+      onLostPointerCapture={(event) => { if (gestureRef.current?.pointerId === event.pointerId) endGesture(); }}
+    >
+      <div ref={barRef} className={styles.sliderBar} aria-hidden="true">
+        <i className={styles.sliderDebt} /><i className={styles.sliderYours} />
+        <i className={styles.sliderOff} data-end="min" /><i className={styles.sliderOff} data-end="max" />
+      </div>
+      <div className={styles.sliderTicks} aria-hidden="true">
+        {ticks.map((tick) => <i key={tick.leverage} className={styles.sliderTick} data-near-thumb={tick.nearThumb || undefined} style={{ '--at': tick.share } as CSSProperties} />)}
+      </div>
+      <input
+        ref={inputRef}
+        id={id}
+        type="range"
+        className={styles.sliderInput}
+        min={min}
+        max={max}
+        step="0.1"
+        value={value}
+        aria-label={label}
+        aria-valuetext={`${value.toFixed(1)}×, ${debt}% ${debtLabel}`}
+        aria-describedby={describedBy}
+        onChange={(event) => onChange(Number(event.target.value))}
+        onBlur={() => sliderRef.current?.removeAttribute('data-pointer-focus')}
+        onKeyDown={(event) => {
+          sliderRef.current?.removeAttribute('data-pointer-focus');
+          if (event.key !== 'PageUp' && event.key !== 'PageDown') return;
+          event.preventDefault();
+          const next = stepLeverage(valueRef.current, event.key === 'PageUp' ? 1 : -1, min, max);
+          if (next !== valueRef.current) onChange(next);
+        }}
+      />
+      <span ref={thumbRef} className={styles.sliderThumb} aria-hidden="true" />
+    </div>
+    {/* Each range end is labelled where it sits on the track, the split stated between them. */}
+    <div className={styles.bounds} style={shares} data-leverage-bounds>
+      <span aria-hidden="true">{min.toFixed(1)}×</span>
+      <LeverageSplitCaption id={captionId} side={side} debtLabel={debtLabel} leverage={leverage} min={min} max={max} />
+      <span aria-hidden="true">{max.toFixed(1)}×</span>
+    </div>
+  </>;
 }

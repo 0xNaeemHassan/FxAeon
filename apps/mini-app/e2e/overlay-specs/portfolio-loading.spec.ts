@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { extname, resolve } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { buildPortfolioStatesLab, type PortfolioStatesLab } from '../harness/portfolio-states-build';
@@ -98,6 +98,45 @@ test('placeholders hold the loaded figure line, so the page does not move when v
   const unavailable = await measure('unavailable');
   expect(loaded).toEqual(reads);
   expect(unavailable).toEqual(reads);
+});
+
+test('a position card lands at its placeholder’s height, with its brake line and side in words', async ({ page }) => {
+  const openPositions = async (stage: string) => {
+    await open(page, stage);
+    await page.getByRole('region', { name: 'Positions' }).locator('summary').click();
+    const positions = page.getByRole('region', { name: 'Positions' });
+    return positions.locator(stage === 'reads' ? '[aria-label="Loading positions"]' : '[data-position-key]').first();
+  };
+  for (const width of [320, 393, 480]) {
+    await page.setViewportSize({ width, height: 1600 });
+    const placeholder = (await (await openPositions('reads')).boundingBox())!.height;
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    const first = await openPositions('positions');
+    await expect(first.locator('[data-position-brake]')).toContainText('Rebalances if ETH falls ≈ 42% (≈ $1,383)');
+    expect(Math.abs((await first.boundingBox())!.height - placeholder), `card vs placeholder at ${width}px`).toBeLessThanOrEqual(0.5);
+    const short = page.getByRole('region', { name: 'Positions' }).locator('[data-position-key="BTC:short:109"]');
+    await expect(short.locator('[data-position-brake]')).toContainText('Rebalances if BTC rises ≈ 28% (≈ $133,714)');
+    await expect(short.getByText('Short', { exact: true })).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+  }
+});
+
+test('screenshots of Portfolio’s positions in every theme', async ({ page }) => {
+  const directory = process.env.PORTFOLIO_SCREENS_DIR;
+  test.skip(!directory, 'set PORTFOLIO_SCREENS_DIR to keep the screenshots');
+  mkdirSync(directory!, { recursive: true });
+  for (const theme of ['official', 'dark', 'light'] as const) {
+    for (const width of [320, 390]) {
+      await page.setViewportSize({ width, height: 1600 });
+      await open(page, 'positions', { theme });
+      const positions = page.getByRole('region', { name: 'Positions' });
+      await positions.locator('summary').click();
+      await page.waitForTimeout(1_100);
+      await positions.screenshot({ path: resolve(directory!, `portfolio-${theme}-${width}-positions.png`), animations: 'disabled' });
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+    }
+  }
 });
 
 test('the live page takes over the first paint without fading in a second time', async ({ page }) => {

@@ -9,7 +9,7 @@ import TokenIcon from '@/components/TokenIcon';
 import { useUsdPrices } from '@/components/PriceProvider';
 import { useWalletBalances } from '@/components/WalletDataProvider';
 import { ValueOrSkeleton } from '@/components/MissingValue';
-import { LeverageSplitCaption } from '@/components/LeverageSplit';
+import { LeverageSplitRange } from '@/components/LeverageSplit';
 import type { LeverageSide } from '@/lib/leverageShare';
 import { haptic } from '@/lib/telegram';
 import { formatBalanceDecimal } from '@/lib/amount';
@@ -579,7 +579,22 @@ export function LeverageField({
       className={`${styles.leverageInput} field-control min-h-[52px] min-w-0 flex-1 px-4 text-[20px] font-semibold outline-none`}
     />
   );
-  const slider = (
+  // With a split to draw, the slider's track is that split (see LeverageSplitRange).
+  const slider = split ? (
+    <LeverageSplitRange
+      id={sliderId}
+      label={`${label} slider`}
+      side={split.side}
+      debtLabel={split.debtLabel}
+      value={sliderValue}
+      leverage={value}
+      min={min}
+      max={max}
+      describedBy={splitId}
+      captionId={splitId}
+      onChange={onChange}
+    />
+  ) : (
     <>
       <input
         id={sliderId}
@@ -591,14 +606,12 @@ export function LeverageField({
         value={sliderValue}
         aria-label={`${label} slider`}
         aria-valuetext={`${sliderValue.toFixed(1)}×`}
-        aria-describedby={split ? splitId : undefined}
         onChange={(event) => onChange(Number(event.target.value))}
         onPointerUp={() => haptic('selection')}
         style={{ '--fill': `${fill}%` } as React.CSSProperties}
       />
-      <div className="flex items-baseline justify-between gap-2 px-1 text-[11px] font-medium text-mut">
+      <div className="flex items-baseline justify-between gap-2 px-1 text-[11px] font-medium text-mut" data-leverage-bounds>
         <span aria-hidden="true">{min.toFixed(1)}×</span>
-        {split && <LeverageSplitCaption id={splitId} side={split.side} debtLabel={split.debtLabel} leverage={value} min={min} max={max} />}
         <span aria-hidden="true">{max.toFixed(1)}×</span>
       </div>
     </>

@@ -1,0 +1,48 @@
+/* The ticket's outcome: what the warmed route would hold, as borderless rows
+   on the canvas under the leverage field, lined up with the fields' contents.
+   Labels muted, figures in text colour and tabular, so a new estimate lands
+   in place. It opens once, when there is first something to estimate. */
+.outcome {
+  display: grid;
+  grid-template-rows: 1fr;
+  min-width: 0;
+  padding: 0 16px;
+}
+.facts {
+  display: grid;
+  min-height: 0;
+  gap: 4px;
+  margin: 0;
+  overflow: hidden;
+}
+.row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: 12px;
+  font-size: var(--fs-caption);
+  line-height: 16px;
+}
+.row dt { color: var(--mut); font-weight: 500; white-space: nowrap; }
+.row dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+/* The collateral's dollar value sits under its amount, as on a position card. */
+.usd { display: block; color: var(--mut); font-weight: 500; }
+
+@media (max-width: 640px) {
+  .outcome { padding-inline: 14px; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .outcome { animation: trade-outcome-open var(--dur-base) var(--ease-out) both; }
+  .figure { animation: trade-outcome-figure var(--dur-base) var(--ease-out) both; }
+}
+@keyframes trade-outcome-open { from { grid-template-rows: 0fr; opacity: 0; } }
+@keyframes trade-outcome-figure { from { opacity: 0; } }

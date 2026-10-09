@@ -22,9 +22,11 @@ const mocks: Record<string, string> = {
   '@/components/PriceProvider': `export const useUsdPrices = () => ({status:'unavailable',prices:{}}); export const useLiveMarketQuote = () => ({ quote: null, status: 'unavailable', isFresh: false });`,
   '@/components/TokenIcon': `import React from 'react'; export default () => <span />;`,
   '@/components/MissingValue': `import React from 'react'; export const ValueOrSkeleton = ({value}) => <span>{value}</span>;`,
-  '@/components/ProtocolPositionCard': `export const ProtocolPositionCard = () => null; export const ProtocolPositionNotice = () => null;`,
+  '@/components/ProtocolPositionCard': `export const ProtocolPositionCard = () => null; export const ProtocolPositionList = () => null; export const ProtocolPositionNotice = () => null;`,
   '@/components/ProtocolPositionProvider': `export const useProtocolPositions = () => ({positions:[],pendingPositions:[],status:'ready',failedGroups:[],refresh:async()=>({positions:[],failedGroups:[],successfulGroups:[],status:'ready',newPositions:[]})});`,
   '@/components/ConfirmedPositionCards': `export const ConfirmedPositionCards = () => null;`,
+  // The ticket's outcome preview reads the warmed route, which this harness never plans.
+  '@/components/TradeOutcomePreview': `export const TradeOutcomePreview = () => null;`,
   '@/lib/confirmedPositions': `export const deriveConfirmedPositionHint = () => null;`,
   '@/lib/confirmedPositionStorage': `export const confirmedPositionHintKey = () => '';`,
   '@/components/WalletDataProvider': `export const useWalletBalances = () => ({status:'ready',data:null});`,

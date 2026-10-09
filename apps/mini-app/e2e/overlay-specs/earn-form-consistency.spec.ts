@@ -83,6 +83,9 @@ async function openSettings(page:Page,percent:string) {
   await page.getByRole('button',{name:`Transaction settings, ${percent}% slippage`,exact:true}).click();
   const dialog=page.getByRole('dialog',{name:'Transaction settings',exact:true});
   await expect(dialog.getByRole('textbox',{name:'Slippage tolerance percentage'})).toHaveValue(percent);
+  // The dialog places its initial focus a frame after it paints; let that land
+  // before typing, as a person would, so every run starts from the same state.
+  await expect(dialog.getByRole('button',{name:'Close transaction settings',exact:true})).toBeFocused();
   return dialog;
 }
 async function storedSlippage(page:Page) {

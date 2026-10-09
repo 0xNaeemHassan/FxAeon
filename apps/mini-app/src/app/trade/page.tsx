@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowDownRight, ArrowUpRight, ChevronRight, Layers2 } from 'lucide-react';
+import { ChevronRight, Layers2 } from 'lucide-react';
 import { AppShell, Card } from '@/components/ui';
 import { TransactionSettings } from '@/components/TransactionSettings';
 import { TradeSections } from '@/components/ProductSections';
@@ -11,6 +11,7 @@ import { ActionReview, type ActionReviewStage } from '@/components/ActionReview'
 import { TradeMarketChart } from '@/components/MarketChart';
 import {
   ProtocolPositionCard,
+  ProtocolPositionList,
   ProtocolPositionNotice,
 } from '@/components/ProtocolPositionCard';
 import { useProtocolPositions } from '@/components/ProtocolPositionProvider';
@@ -24,6 +25,8 @@ import { calculateNativeMax, nativeMaxErrorMessage } from '@/lib/fx/nativeMax';
 import { fetchGasTierQuotes, selectedGasTierQuote } from '@/lib/fx/gasFeePolicy';
 import { readGasTier } from '@/lib/settings';
 import { RoutePrefetchStore, type RoutePrefetchDescriptor } from '@/lib/fx/routePrefetch';
+import { TradeOutcomePreview } from '@/components/TradeOutcomePreview';
+import { currentTradeOutcome, settledTradeOutcome, tradeOutcomeKey, type TradeOutcomeState } from '@/lib/tradeOutcome';
 import { usePrivyWallet } from '@/lib/wallet';
 import styles from '@/components/trade-surfaces.module.css';
 import { groupDigits, positiveDecimal } from '@/lib/amount';
@@ -79,10 +82,15 @@ export default function TradePage() {
   const [nativeMaxError, setNativeMaxError] = useState<string | null>(null);
   const [reviewStage, setReviewStage] = useState<ActionReviewStage>('input');
   const reviewStageRef = useRef<ActionReviewStage>('input');
+  // Counts returns to the editor, so the route is warmed again from the
+  // current chain once a review has planned its own (see the warm-up below).
+  const [editorEpoch, setEditorEpoch] = useState(0);
   const handleReviewStageChange = useCallback((stage: ActionReviewStage) => {
+    if (stage === 'input' && reviewStageRef.current !== 'input') setEditorEpoch((epoch) => epoch + 1);
     reviewStageRef.current = stage;
     setReviewStage(stage);
   }, []);
+  const [outcome, setOutcome] = useState<TradeOutcomeState | null>(null);
   const prefetchStoreRef = useRef<RoutePrefetchStore | null>(null);
   const prefetchSessionRef = useRef(createPrefetchSessionId());
   const prefetchDescriptorRef = useRef<RoutePrefetchDescriptor | null>(null);
@@ -406,9 +414,23 @@ export default function TradePage() {
     setNativeMaxError(null);
   }, []);
 
+  // The ticket previews the route warmed for exactly its current inputs; any
+  // change gives a new key, so earlier figures can never describe this ticket.
+  const warmAmountWei = validAmount ? parseAmount(validAmount, token) : null;
+  const outcomeKey = wallet.address && warmAmountWei && Number.isFinite(leverage)
+    && leverage >= leverageBounds.min && leverage <= leverageBounds.max
+    && Number.isFinite(slippageValue) && slippageValue > 0 && slippageValue <= MAX_FX_SLIPPAGE_PERCENT
+    ? tradeOutcomeKey({
+      walletAddress: wallet.address, walletChainId: wallet.chainId ?? null, market, side, token,
+      amountWei: warmAmountWei, leverage, slippagePercent: slippageValue,
+      leverageMin: leverageBounds.min, leverageMax: leverageBounds.max,
+    })
+    : null;
+
   // Keep one short-lived route warm while the ticket is valid. This is a
   // display/review optimization only: ActionReview still rebuilds, simulates,
   // and validates the route immediately before opening the wallet prompt.
+  // The ticket's outcome preview reads the same warm-up; it never plans its own.
   useEffect(() => {
     const store = prefetchStoreRef.current ?? (prefetchStoreRef.current = new RoutePrefetchStore());
     store.invalidate();
@@ -416,18 +438,33 @@ export default function TradePage() {
     const amountWei = validAmount ? parseAmount(validAmount, token) : null;
     if (!foreground || !wallet.address || !amountWei || !Number.isFinite(leverage)
       || leverage < leverageBounds.min || leverage > leverageBounds.max
-      || !Number.isFinite(slippageValue) || slippageValue <= 0 || slippageValue > MAX_FX_SLIPPAGE_PERCENT) {
+      || !Number.isFinite(slippageValue) || slippageValue <= 0 || slippageValue > MAX_FX_SLIPPAGE_PERCENT
+      || !outcomeKey) {
       return;
     }
 
     let active = true;
     const ticket = currentTicketRef.current;
+    const key = outcomeKey;
+    // A preview settles only for the warm-up still current: a newer input
+    // runs this effect again and deactivates the old one first.
+    const settle = (state: TradeOutcomeState) => { if (active) setOutcome(state); };
+    // Warming the same ticket again (after a review, or back from the
+    // background) keeps its figures in place until the new ones land; a
+    // ticket whose last warm-up failed shows its placeholder while it retries.
+    setOutcome((current) => current?.key === key && current.status === 'failed' ? { key, status: 'pending' } : current);
     const timer = window.setTimeout(() => {
-      if (reviewStageRef.current !== 'input' || document.visibilityState !== 'visible' || !navigator.onLine) return;
+      if (reviewStageRef.current !== 'input' || document.visibilityState !== 'visible' || !navigator.onLine) {
+        settle({ key, status: 'failed' });
+        return;
+      }
       void (async () => {
         try {
           const blockNumber = await getEthereumClient().getBlockNumber();
-          if (!active || reviewStageRef.current !== 'input' || currentTicketRef.current !== ticket || document.visibilityState !== 'visible' || !navigator.onLine) return;
+          if (!active || reviewStageRef.current !== 'input' || currentTicketRef.current !== ticket || document.visibilityState !== 'visible' || !navigator.onLine) {
+            settle({ key, status: 'failed' });
+            return;
+          }
           const descriptor: RoutePrefetchDescriptor = {
             sessionId: prefetchSessionRef.current,
             walletAddress: wallet.address!,
@@ -454,10 +491,15 @@ export default function TradePage() {
             inputTokenAddress: tokenAddress(token),
             amount: amountWei,
             slippage: slippageValue,
-          })).catch(() => undefined);
+          })).then(
+            (routes) => settle(settledTradeOutcome(key, routes)),
+            // A failed warm-up shows no preview; the review plans afresh.
+            () => settle({ key, status: 'failed' }),
+          );
         } catch {
           // Prefetch is best-effort. The normal plan builder remains available
           // whenever the RPC or SDK is unavailable during the warm-up.
+          settle({ key, status: 'failed' });
         }
       })();
     }, 220);
@@ -467,7 +509,8 @@ export default function TradePage() {
       store.invalidate();
       prefetchDescriptorRef.current = null;
     };
-  }, [foreground, leverage, leverageBounds.max, leverageBounds.min, market, side, slippageValue, token, validAmount, wallet.address, wallet.chainId]);
+  }, [editorEpoch, foreground, leverage, leverageBounds.max, leverageBounds.min, market, outcomeKey, side, slippageValue, token, validAmount, wallet.address, wallet.chainId]);
+  const shownOutcome = foreground ? currentTradeOutcome(outcome, outcomeKey) : null;
 
   const prefetchedPlan = useCallback(async (): Promise<PlannedRoute | readonly PlannedRoute[] | null> => {
     // Latch at the click boundary, before a pending warm-up timer or block read
@@ -595,6 +638,8 @@ export default function TradePage() {
                   <div className={styles.fieldStack}>
                     <AmountField compact label="Amount" symbol={token} value={amount} onChange={changeAmount} maxDecimals={tokenDecimals(token)} showMax showUnitPrice={false} constraintError={token === 'ETH' ? nativeMaxError : undefined} maxAmount={token === 'ETH' ? nativeMaxAmount : undefined} onMax={token === 'ETH' ? resolveNativeMax : undefined} maxPending={token === 'ETH' && nativeMaxPending} balanceState={selectedTokenBalance} tokenSelector={<TokenSelect compact label="Input asset" value={token} options={tokenOptions} onChange={changeToken} balances={wallet.address ? walletBalances.balances : undefined} balanceStatus={wallet.address ? (walletBalances.status !== 'idle' ? walletBalances.status : undefined) : 'disconnected'} />} />
                     <LeverageField label="Target leverage" value={leverage} onChange={changeLeverage} min={leverageBounds.min} max={leverageBounds.max} error={leverageError} compact split={{ side, debtLabel: leverageDebtLabel(side, market) }} />
+                    {/* Only a connected, complete ticket is warmed; a failed warm-up shows nothing. */}
+                    {shownOutcome && shownOutcome.status !== 'failed' && <TradeOutcomePreview market={market} side={side} route={shownOutcome.status === 'ready' ? shownOutcome.route : null} />}
                   </div>
                 </>
               }
@@ -613,22 +658,13 @@ export default function TradePage() {
             <ProtocolPositionNotice status={positionState.status} failedGroups={positionState.failedGroups} hasPositions={positionState.positions.length + positionState.pendingPositions.length > 0} refreshing={positionState.refreshing} onRefresh={() => void positionState.refresh()} compact />
             <ConfirmedPositionCards market={market} />
             {marketPositions.length > 0 && (
-              <div className="flex flex-col gap-2">
+              // Each row opens its position, where every action and figure is.
+              <ProtocolPositionList label="Your positions">
                 {previewPositions.map((position) => {
                   const key = positionKey(position);
-                  const encodedPosition = positionHref(position.market, position.side, position.info.positionId);
-                  return (
-                    <div key={key} className={styles.tradePositionItem}>
-                      <ProtocolPositionCard position={position} compact href={encodedPosition} highlighted={key === highlightedPositionKey} />
-                      <div role="group" className={styles.tradePositionActions} aria-label={`Actions for ${position.market} ${position.side} position ${position.info.positionId}`}>
-                        <Link href={encodedPosition} className="glass-press"><ArrowUpRight aria-hidden="true" />Manage</Link>
-                        {position.side === 'long' && <Link href={`/borrow?market=${position.market}&position=${position.info.positionId}`} className="glass-press"><Layers2 aria-hidden="true" />Borrow</Link>}
-                        <Link href={positionHref(position.market, position.side, position.info.positionId, 'close')} className="glass-press"><ArrowDownRight aria-hidden="true" />Close</Link>
-                      </div>
-                    </div>
-                  );
+                  return <ProtocolPositionCard key={key} position={position} href={positionHref(position.market, position.side, position.info.positionId)} highlighted={key === highlightedPositionKey} />;
                 })}
-              </div>
+              </ProtocolPositionList>
             )}
           </section>
         )}

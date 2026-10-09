@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { AlertTriangle, ChevronRight, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ArrowUpRight, ChevronRight, RefreshCw } from 'lucide-react';
 import React from 'react';
 import {
   formatAmount,
@@ -12,16 +12,27 @@ import {
   type UiPosition,
 } from '@/app/trade/fxUi';
 import { useLiveMarketQuote, useUsdPrices } from '@/components/PriceProvider';
+import { usePositionBrake } from '@/components/PositionBrakeContext';
 import { MissingValue } from '@/components/MissingValue';
 import TokenIcon from '@/components/TokenIcon';
 import { formatUsdPrice, priceKeyForSymbol } from '@/lib/prices';
 import { freshDisplayPrices } from '@/lib/displayPrices';
+import { positionBrakeCopy, positionBrakeView } from '@/lib/positionBrake';
 import { calculatePositionUsdValuation, debtCollateralRatioPercent, formatUsdCents } from '@/lib/positionValuation';
 import { groupDigits } from '@/lib/amount';
+import { openExternalLink } from '@/lib/telegram';
 import styles from './ProtocolPositionCard.module.css';
 
 function Skeleton({ className = '' }: { className?: string }) {
-  return <div aria-hidden="true" className={`skeleton ${className}`} />;
+  return <span aria-hidden="true" className={`skeleton ${className}`} />;
+}
+
+/** Leaves FxAeon through Telegram's own browser in the Mini App, a new tab elsewhere. */
+function openDocs(href: string) {
+  return (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (openExternalLink(href)) event.preventDefault();
+  };
 }
 
 function positionValuation(position: UiPosition, prices: ReturnType<typeof useUsdPrices>['prices']) {
@@ -37,42 +48,128 @@ function positionValuation(position: UiPosition, prices: ReturnType<typeof useUs
   });
 }
 
+/**
+ * One position: identity and value, the f(x) split with its brake, and (in
+ * full) the four figures behind them. Rows sit inside links and buttons, so
+ * their parts are phrasing elements styled as blocks.
+ */
 function PositionBody({
   position,
-  compact,
   interactive,
+  details = false,
+  headingId,
 }: {
   position: UiPosition;
-  compact: boolean;
   interactive: boolean;
+  details?: boolean;
+  headingId?: string;
 }) {
   const priceSnapshot = useUsdPrices();
   const prices = freshDisplayPrices(priceSnapshot);
   const { quote: liveQuote, isFresh: hasFreshLiveQuote } = useLiveMarketQuote(position.market);
-  const collateral = groupDigits(formatAmount(position.info.rawColls, positionTokenDecimals(position, 'collateral')));
-  const debt = groupDigits(formatAmount(position.info.rawDebts, positionTokenDecimals(position, 'debt')));
-  const collateralKey = priceKeyForSymbol(position.info.rawCollsToken);
-  const debtKey = priceKeyForSymbol(position.info.rawDebtsToken);
   // Validate each display quote independently, including retained quotes.
   const valuation = positionValuation(position, prices);
   const missingStatus = priceSnapshot.status === 'loading' ? 'loading' as const : 'unavailable' as const;
   const netEquity = valuation.netEquityUsdCents === null
     ? <MissingValue width="lg" status={missingStatus} />
     : `≈ ${formatUsdCents(valuation.netEquityUsdCents)}`;
-  const collateralUsd = valuation.collateralUsdCents === null
-    ? <MissingValue width="md" status={missingStatus} />
-    : `≈ ${formatUsdCents(valuation.collateralUsdCents)}`;
-  const debtUsd = valuation.debtUsdCents === null
-    ? <MissingValue width="md" status={missingStatus} />
-    : `≈ ${formatUsdCents(valuation.debtUsdCents)}`;
-  const marketKey = position.market === 'ETH' ? 'ETH' : 'WBTC';
-  const marketPrice = hasFreshLiveQuote
-    ? liveQuote?.price
-    : prices[marketKey];
-  const marketPriceDisplay = marketPrice === undefined || !Number.isFinite(marketPrice)
-    ? <MissingValue width="lg" status={missingStatus} />
-    : formatUsdPrice(marketPrice);
-  const debtCollateralRatio = debtCollateralRatioPercent({
+  const leverageInfo = positionDisplayLeverage(position);
+  const leverage = leverageInfo.value !== null
+    ? `${leverageInfo.value.toFixed(2).replace(/\.00$/, '')}×`
+    : <MissingValue width="sm" status="loading" />;
+  const positionValueTitle = valuation.netEquityUsdCents === null
+    ? missingStatus === 'loading' ? 'Loading position value' : 'Position value unavailable until prices refresh'
+    : 'Collateral value minus debt';
+  const sideLabel = position.side === 'long' ? 'Long' : 'Short';
+  // The f(x) split on this position: its collateral value is debt plus the
+  // holder's share. Drawn only from the same validated values as the figures.
+  const debtShare = valuation.collateralUsdCents !== null && valuation.debtUsdCents !== null
+    && valuation.collateralUsdCents > 0n && valuation.debtUsdCents >= 0n && valuation.debtUsdCents <= valuation.collateralUsdCents
+    ? Number((valuation.debtUsdCents * 10_000n) / valuation.collateralUsdCents) / 10_000
+    : null;
+  // The liquidation brake: this position's on-chain debt ratio against its
+  // pool's live thresholds, moved with the live quote between chain reads.
+  // Without a current read the bar keeps the split above and draws no marker.
+  const brake = usePositionBrake(position);
+  const brakeView = brake.status === 'ready'
+    ? positionBrakeView(brake.reading, hasFreshLiveQuote && liveQuote ? liveQuote.price : null)
+    : null;
+  const brakeCopy = brakeView ? positionBrakeCopy(brakeView, position.market, position.side) : null;
+  const splitFill = brakeView?.fill ?? debtShare;
+  const Block = details ? 'div' : 'span';
+
+  return (
+    <Block className={styles.content}>
+      {headingId && <h2 id={headingId} className="sr-only">{position.market} {position.side} · #{position.info.positionId}</h2>}
+      <span className={styles.identity}>
+        <span className={styles.tokenIcon}><TokenIcon symbol={position.market === 'ETH' ? 'ETH' : 'WBTC'} size={32} /></span>
+        {/* Two lines that each share out their own width: market and value, then leverage, ID and the value's label. */}
+        <span className={styles.identityText}>
+          <span className={styles.identityLine}>
+            <span className={styles.marketLine}>
+              <span className={styles.market}>{position.market}</span>
+              {' '}
+              <span className={`${styles.side} ${position.side === 'long' ? styles.long : styles.short}`}>{sideLabel}</span>
+            </span>
+            <span className={styles.positionValueNumber} title={positionValueTitle}>{netEquity}</span>
+            {interactive && <ChevronRight className={styles.navigateIcon} aria-hidden="true" />}
+          </span>
+          <span className={styles.identityLine}>
+            <span className={styles.positionMeta}><strong>{leverage}</strong> {leverageInfo.label}<span aria-hidden="true">·</span>#{position.info.positionId}</span>
+            <span className={styles.valueBasis}>Position value</span>
+            {interactive && <span className={styles.navigateSpace} aria-hidden="true" />}
+          </span>
+        </span>
+      </span>
+      {splitFill !== null && <span
+        className={styles.split}
+        aria-hidden="true"
+        data-position-split
+        data-brake={brakeView?.state}
+        title={brakeView ? 'Debt share of collateral, with the rebalance point marked (liquidation fainter)' : undefined}
+        style={{ '--debt-share': splitFill, '--rebalance-at': brakeView?.rebalanceAt ?? undefined, '--liquidate-at': brakeView?.liquidateAt ?? undefined } as React.CSSProperties}
+      >
+        <span className={styles.splitTrack}><i className={styles.splitDebt} /><i className={styles.splitShare} /></span>
+        {brakeView?.liquidateAt != null && <i className={styles.liquidationMarker} data-brake-marker="liquidation" />}
+        {brakeView?.rebalanceAt != null && <i className={styles.rebalanceMarker} data-brake-marker="rebalance" />}
+      </span>}
+      {brake.status === 'loading' && <span className={styles.brake} role="status" aria-label="Loading rebalance point">
+        <Skeleton className={styles.brakeSkeleton} />
+      </span>}
+      {brakeView && brakeCopy && <span
+        className={styles.brake}
+        data-tone={brakeCopy.tone}
+        data-position-brake={brakeView.state}
+        title={brakeCopy.tone === 'warn' && interactive ? `${brakeCopy.docsLabel}: ${brakeCopy.docsUrl}` : undefined}
+      >
+        {brakeCopy.tone === 'warn' && <AlertTriangle aria-hidden="true" />}
+        <span>
+          {brakeCopy.line}
+          {brakeCopy.liquidation && <span className="sr-only"> {brakeCopy.liquidation}</span>}
+          {/* A link cannot sit inside a row that is itself a link or button. */}
+          {brakeCopy.tone === 'warn' && !interactive && <>
+            {' '}<a href={brakeCopy.docsUrl} target="_blank" rel="noopener noreferrer" onClick={openDocs(brakeCopy.docsUrl)}>{brakeCopy.docsLabel}<ArrowUpRight aria-hidden="true" /></a>
+          </>}
+        </span>
+      </span>}
+      {details && <PositionFacts position={position} prices={prices} valuation={valuation} missingStatus={missingStatus} liveQuote={hasFreshLiveQuote ? liveQuote?.price : undefined} />}
+    </Block>
+  );
+}
+
+/** Collateral, debt, market price and debt / collateral as a plain two-column list. */
+function PositionFacts({ position, prices, valuation, missingStatus, liveQuote }: {
+  position: UiPosition;
+  prices: ReturnType<typeof freshDisplayPrices>;
+  valuation: ReturnType<typeof positionValuation>;
+  missingStatus: 'loading' | 'unavailable';
+  liveQuote: number | undefined;
+}) {
+  const collateralKey = priceKeyForSymbol(position.info.rawCollsToken);
+  const debtKey = priceKeyForSymbol(position.info.rawDebtsToken);
+  const usd = (cents: bigint | null) => cents === null ? <MissingValue width="md" status={missingStatus} /> : `≈ ${formatUsdCents(cents)}`;
+  const marketPrice = liveQuote ?? prices[position.market === 'ETH' ? 'ETH' : 'WBTC'];
+  const ratio = debtCollateralRatioPercent({
     collateralRaw: position.info.rawColls,
     collateralDecimals: positionTokenDecimals(position, 'collateral'),
     collateralPrice: !collateralKey ? undefined : prices[collateralKey],
@@ -80,75 +177,34 @@ function PositionBody({
     debtDecimals: positionTokenDecimals(position, 'debt'),
     debtPrice: !debtKey ? undefined : prices[debtKey],
   });
-  const leverageInfo = positionDisplayLeverage(position);
-  const leverage = leverageInfo.value !== null
-    ? `${leverageInfo.value.toFixed(2).replace(/\.00$/, '')}×`
-    : <MissingValue width="sm" status="loading" />;
-  const debtCollateralDisplay = debtCollateralRatio ?? <MissingValue width="md" status={missingStatus} />;
-  const positionValueTitle = valuation.netEquityUsdCents === null
-    ? missingStatus === 'loading' ? 'Loading position value' : 'Position value unavailable until prices refresh'
-    : 'Collateral value minus debt';
-  const sideLabel = position.side === 'long' ? 'Long' : 'Short';
-  // The f(x) split on this position: its collateral value is debt plus the
-  // holder's share. Drawn only from the same validated values shown below.
-  const debtShare = valuation.collateralUsdCents !== null && valuation.debtUsdCents !== null
-    && valuation.collateralUsdCents > 0n && valuation.debtUsdCents >= 0n && valuation.debtUsdCents <= valuation.collateralUsdCents
-    ? Number((valuation.debtUsdCents * 10_000n) / valuation.collateralUsdCents) / 10_000
-    : null;
-
   return (
-    <div className={`${styles.content} ${compact ? styles.compactContent : ''}`}>
-      <div className={styles.identity}>
-        <div className={styles.tokenIcon}>
-        <TokenIcon symbol={position.market === 'ETH' ? 'ETH' : 'WBTC'} size={compact ? 34 : 40} />
-        </div>
-        <div className={styles.identityText}>
-          <div className={styles.marketLine}>
-            <span className={styles.market}>{position.market}</span>
-            {' '}
-            <span className={`${styles.side} ${position.side === 'long' ? styles.long : styles.short}`}>{sideLabel}</span>
-          </div>
-          <p className={styles.positionMeta}>Position #{position.info.positionId}<span aria-hidden="true">·</span><strong>{leverage}</strong> {leverageInfo.label}</p>
-        </div>
-        {interactive && <span className={styles.navigateIcon} aria-hidden="true"><ChevronRight /></span>}
+    <dl className={styles.facts}>
+      <div className={styles.fact}>
+        <dt>Collateral</dt>
+        <dd>{groupDigits(formatAmount(position.info.rawColls, positionTokenDecimals(position, 'collateral')))} {position.info.rawCollsToken}<small>{usd(valuation.collateralUsdCents)}</small></dd>
       </div>
-      <div className={styles.positionValue} title={positionValueTitle}>
-        <div className={styles.positionValueLabel}>
-          <span>Position value</span>
-          <span className={styles.valueBasis}>Collateral − debt</span>
-        </div>
-        <span className={styles.positionValueNumber}>{netEquity}</span>
+      <div className={styles.fact}>
+        <dt>Debt</dt>
+        <dd>{groupDigits(formatAmount(position.info.rawDebts, positionTokenDecimals(position, 'debt')))} {position.info.rawDebtsToken}<small>{usd(valuation.debtUsdCents)}</small></dd>
       </div>
-      {debtShare !== null && <div className={styles.split} aria-hidden="true" data-position-split style={{ '--debt-share': debtShare } as React.CSSProperties}>
-        <i className={styles.splitDebt} /><i className={styles.splitShare} />
-      </div>}
-      <div className={styles.metrics}>
-        <div className={styles.metric}>
-          <span className={styles.metricLabel}>Collateral</span>
-          <p className={styles.metricValue}>{collateral} {position.info.rawCollsToken}</p>
-          <p className={styles.metricDetail}>{collateralUsd}</p>
-        </div>
-        <div className={styles.metric}>
-          <span className={styles.metricLabel}>Debt</span>
-          <p className={styles.metricValue}>{debt} {position.info.rawDebtsToken}</p>
-          <p className={styles.metricDetail}>{debtUsd}</p>
-        </div>
-        <div className={styles.metric}>
-          <span className={styles.metricLabel}>Market price</span>
-          <p className={styles.metricValue}>{marketPriceDisplay}</p>
-        </div>
-        <div className={styles.metric} title="Debt value divided by collateral value">
-          <span className={styles.metricLabel}>Debt / collateral</span>
-          <p className={styles.metricValue}>{debtCollateralDisplay}</p>
-        </div>
+      <div className={styles.fact}>
+        <dt>Market price</dt>
+        <dd>{marketPrice === undefined || !Number.isFinite(marketPrice) ? <MissingValue width="lg" status={missingStatus} /> : formatUsdPrice(marketPrice)}</dd>
       </div>
-    </div>
+      <div className={styles.fact} title="Debt value divided by collateral value">
+        <dt>Debt / collateral</dt>
+        <dd>{ratio ?? <MissingValue width="md" status={missingStatus} />}</dd>
+      </div>
+    </dl>
   );
 }
 
+/**
+ * A position as a compact row: a link or button when it opens the position,
+ * an article otherwise. Rows have no box; a list rules them apart.
+ */
 export function ProtocolPositionCard({
   position,
-  compact = false,
   highlighted = false,
   selected = false,
   href,
@@ -157,7 +213,6 @@ export function ProtocolPositionCard({
   className = '',
 }: {
   position: UiPosition;
-  compact?: boolean;
   highlighted?: boolean;
   selected?: boolean;
   href?: string;
@@ -165,20 +220,39 @@ export function ProtocolPositionCard({
   onNavigate?: () => void;
   className?: string;
 }) {
-  const classes = `${styles.card} ${compact ? styles.compact : ''} ${href || onSelect ? styles.interactive : ''} ${selected ? styles.selected : ''} ${highlighted ? styles.highlighted : ''} ${className}`;
-  const body = <PositionBody position={position} compact={compact} interactive={Boolean(href || onSelect)} />;
+  const interactive = Boolean(href || onSelect);
+  const classes = [styles.row, interactive && styles.interactive, selected && styles.selected, highlighted && styles.highlighted, className].filter(Boolean).join(' ');
+  const body = <PositionBody position={position} interactive={interactive} />;
 
   if (href) {
     return <Link href={href} onClick={onNavigate} className={classes} data-position-key={positionKey(position)}>{body}</Link>;
   }
   if (onSelect) {
     return (
-      <button type="button" onClick={onSelect} className={classes} aria-pressed={selected} data-position-key={positionKey(position)}>
+      <button type="button" onClick={onSelect} className={classes} aria-current={selected ? 'true' : undefined} data-position-key={positionKey(position)}>
         {body}
       </button>
     );
   }
   return <article className={classes} data-position-key={positionKey(position)}>{body}</article>;
+}
+
+/** One position in full, as its manager shows it: the row, then its four figures. */
+export function ProtocolPositionDetails({ position, headingId, className = '' }: { position: UiPosition; headingId?: string; className?: string }) {
+  return (
+    <section className={`${styles.details} ${className}`} data-position-details={positionKey(position)} aria-labelledby={headingId}>
+      <PositionBody position={position} interactive={false} details headingId={headingId} />
+    </section>
+  );
+}
+
+/** Positions as a ruled stack: full-width hairlines between rows, no boxes. */
+export function ProtocolPositionList({ label, children, className = '' }: { label?: string; children?: React.ReactNode; className?: string }) {
+  return (
+    <div role="list" aria-label={label} className={`${styles.list} ${className}`}>
+      {React.Children.map(children, (child) => child ? <div role="listitem" className={styles.listItem}>{child}</div> : null)}
+    </div>
+  );
 }
 
 export { positionIsStale } from '@/app/trade/fxUi';
@@ -221,27 +295,21 @@ export function ProtocolPositionNotice({
   );
 }
 
-/** A position card in outline: the same padding, rows and tiles as the card it stands in for. */
-export function ProtocolPositionSkeleton({ compact = false }: { compact?: boolean }) {
+/** A position row in outline: the same padding, lines, split and brake line as the row it stands in for. */
+export function ProtocolPositionSkeleton() {
   return (
-    <div role="status" aria-label="Loading positions" className={`${styles.card} ${compact ? styles.compact : ''}`}>
-      <div className={`${styles.content} ${compact ? styles.compactContent : ''}`} aria-hidden="true">
-        <div className={styles.identity}>
+    <div role="status" aria-label="Loading positions" className={styles.row}>
+      <span className={styles.content} aria-hidden="true">
+        <span className={styles.identity}>
           <Skeleton className={styles.skeletonToken} />
-          <div className={styles.skeletonLines}><Skeleton /><Skeleton /></div>
-        </div>
-        <div className={styles.positionValue}>
-          <div className={styles.skeletonLines}><Skeleton /><Skeleton /></div>
-          <Skeleton className={styles.skeletonFigure} />
-        </div>
+          <span className={styles.identityText}>
+            <span className={styles.identityLine}><Skeleton className={styles.skeletonMarket} /><Skeleton className={styles.skeletonValue} /></span>
+            <span className={styles.identityLine}><Skeleton className={styles.skeletonMeta} /><Skeleton className={styles.skeletonBasis} /></span>
+          </span>
+        </span>
         <Skeleton className={styles.skeletonSplit} />
-        <div className={styles.metrics}>
-          {/* Collateral and debt carry a USD line beneath their amount; price and ratio do not. */}
-          {[3, 3, 2, 2].map((lines, tile) => <div key={tile} className={`${styles.metric} ${styles.skeletonMetric}`}>
-            {Array.from({ length: lines }, (_, line) => <Skeleton key={line} />)}
-          </div>)}
-        </div>
-      </div>
+        <span className={styles.brake}><Skeleton className={styles.brakeSkeleton} /></span>
+      </span>
     </div>
   );
 }

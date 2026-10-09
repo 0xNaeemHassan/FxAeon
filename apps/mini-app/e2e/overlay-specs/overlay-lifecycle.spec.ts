@@ -85,6 +85,25 @@ test('contains keyboard focus and restores focus through nested dialogs', async 
   await expect(page.locator('body')).toHaveCSS('overflow', 'auto');
 });
 
+test('a control focused inside a dialog before its first frame keeps focus', async ({ page }) => {
+  // Open the dialog and focus a control inside it in one task, before the
+  // frame that places initial focus: someone who already tapped a field
+  // inside must not have focus, or their typing, pulled to Close.
+  const outcome = await page.evaluate(async () => {
+    const buttonNamed = (scope: ParentNode, name: string) => [...scope.querySelectorAll('button')].find((button) => button.textContent?.trim() === name);
+    buttonNamed(document, 'Open wallet profile')!.click();
+    await Promise.resolve();
+    const dialog = document.querySelector('[data-testid="parent-dialog"]');
+    const inside = dialog && buttonNamed(dialog, 'Open asset picker');
+    inside?.focus();
+    const focusedEarly = document.activeElement === inside;
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    return { focusedEarly, active: document.activeElement?.textContent?.trim() ?? null };
+  });
+  expect(outcome.focusedEarly, 'The harness must focus inside the dialog before its first frame').toBe(true);
+  expect(outcome.active).toBe('Open asset picker');
+});
+
 test('route focus during opening does not replace the dialog return target', async ({ page }) => {
   await page.evaluate(() => { (window as Window & { __overlayRouteFocusRace?: boolean }).__overlayRouteFocusRace = true; });
   const trigger = page.getByRole('button', { name: 'Open wallet profile', exact: true });

@@ -24,6 +24,7 @@ import { TelegramReconnectContext } from '@/lib/wallet/telegramReconnect';
 import './privy-theme.css';
 import WalletRecoveryCoordinator from '@/components/WalletRecoveryCoordinator';
 import ProtocolPositionProvider from '@/components/ProtocolPositionProvider';
+import PositionBrakeProvider from '@/components/PositionBrakeProvider';
 import WalletDataProvider from '@/components/WalletDataProvider';
 import { walletDemandForPathname } from '@/lib/walletDemand';
 import WalletDemandProvider, { useEffectiveWalletDemand } from '@/components/WalletDemandProvider';
@@ -151,7 +152,7 @@ function RouteDataProviders({ children }: { children: React.ReactNode }) {
   return <WalletDataProvider enabled={demand.enabled} expandedAssets={demand.expandedAssets} chainPulse={demand.chainPulse}>
     <ProtocolPositionProvider enabled={demand.positions}>
       <WalletRecoveryCoordinator />
-      {children}
+      <PositionBrakeProvider>{children}</PositionBrakeProvider>
     </ProtocolPositionProvider>
   </WalletDataProvider>;
 }

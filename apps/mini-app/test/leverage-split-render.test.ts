@@ -146,6 +146,41 @@ test('the ticket caption states the split at the chosen leverage, with the same 
   }
 });
 
+test('the leverage slider is a native slider in leverage units whose track draws the split', async () => {
+  const { LeverageSplitRange } = await import('../src/components/LeverageSplit');
+  const { debtShare } = await import('../src/lib/leverageShare');
+  const render = (side: 'long' | 'short', value: number, min: number, max: number, debtLabel: string) => renderToStaticMarkup(React.createElement(LeverageSplitRange, {
+    id: 'lever', label: 'Target leverage slider', side, debtLabel, value, leverage: value, min, max, describedBy: 'split', captionId: 'split', onChange: () => undefined,
+  }));
+  const long = render('long', 2.8, 1.1, 6.1, 'minted fxUSD');
+  // Value, bounds and step are leverage; the spoken value adds the split it draws.
+  const input = /<input[^>]*>/.exec(long)![0];
+  for (const attribute of ['type="range"', 'id="lever"', 'min="1.1"', 'max="6.1"', 'step="0.1"', 'value="2.8"', 'aria-label="Target leverage slider"', 'aria-valuetext="2.8×, 64% minted fxUSD"', 'aria-describedby="split"']) {
+    assert.ok(input.includes(attribute), `${attribute} in ${input}`);
+  }
+  assert.match(render('short', 2.8, 0.1, 6, 'borrowed wstETH'), /aria-valuetext="2\.8×, 74% borrowed wstETH"/);
+  // The thumb sits at the debt share, and the range's ends where their leverages fall on the split.
+  const style = /class="test-slider"[^>]*style="([^"]+)"/.exec(long)![1];
+  assert.equal(style, `--share:${debtShare('long', 2.8)};--min-share:${debtShare('long', 1.1)};--max-share:${debtShare('long', 6.1)}`);
+  // The bar is the split alone: nothing is ever cut into it. Ticks live on their own layer, drawing
+  // only, and need the measured track for their spacing, so none is drawn before layout.
+  assert.match(long, /<div class="test-sliderBar" aria-hidden="true"><i class="test-sliderDebt"><\/i><i class="test-sliderYours"><\/i><i class="test-sliderOff" data-end="min"><\/i><i class="test-sliderOff" data-end="max"><\/i><\/div>/);
+  assert.match(long, /<div class="test-sliderTicks" aria-hidden="true"><\/div>/);
+  assert.doesNotMatch(long, /class="test-sliderTick"/);
+  assert.match(long, /<span class="test-sliderThumb" aria-hidden="true"><\/span>/);
+  // The range ends and the caption keep their row under the track.
+  assert.equal(textOf(/<div class="test-bounds"[^>]*>(.*)<\/div>/.exec(long)![1]), '1.1×64% minted fxUSD · 36% yours at 2.8×, before fees6.1×');
+});
+
+test('the slider keeps its value inside the range while the caption follows the typed leverage', async () => {
+  const { LeverageSplitRange } = await import('../src/components/LeverageSplit');
+  const html = renderToStaticMarkup(React.createElement(LeverageSplitRange, {
+    id: 'lever', label: 'Target leverage slider', side: 'long', debtLabel: 'minted fxUSD', value: 1.1, leverage: 0.5, min: 1.1, max: 6.1, captionId: 'split', onChange: () => undefined,
+  }));
+  assert.match(html, /value="1\.1"/);
+  assert.match(html, /<span id="split" class="test-caption" data-empty="true"><\/span>/);
+});
+
 test('outside the live range, while typing, the caption keeps its slot but says nothing', async () => {
   const { LeverageSplitCaption } = await import('../src/components/LeverageSplit');
   for (const leverage of [0, 0.5, 1, 6.2, Number.NaN]) {
