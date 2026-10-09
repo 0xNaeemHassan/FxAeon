@@ -192,6 +192,7 @@ export function BrowserWalletProvider({ children, allowTelegramHost = false }: {
       const preferred = window.localStorage.getItem('fxaeon:wallet-provider-rdns');
       if (selectedProvider && (explicitProviderSelectionRef.current || !shouldPromptEip6963Provider(preferred))) return;
       if (shouldPromptEip6963Provider(preferred)) {
+        identityEventVersionRef.current += 1;
         // A late second announcement invalidates any legacy auto-bind that may
         // have occurred during the single-provider discovery window.
         setAddress(undefined);

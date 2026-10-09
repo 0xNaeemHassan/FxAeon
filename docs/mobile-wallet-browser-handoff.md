@@ -20,7 +20,8 @@ parameters, fragments, Telegram launch data, or transaction form values. Users
 connect again in the wallet browser and may need to re-enter unsaved form input.
 
 Every transaction still requires wallet approval. The selected injected provider
-is pinned for the session; late extensions cannot replace it. Account, chain,
+is pinned for the session; late extensions cannot replace it. An ambiguous
+automatic restore clears back to an explicit wallet choice. Account, chain,
 provider, or disconnect changes during transaction preflight stop submission.
 
 Automated tests cover provider selection, cancellation, focus, signing guards and

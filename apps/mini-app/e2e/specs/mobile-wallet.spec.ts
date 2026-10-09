@@ -273,3 +273,17 @@ for (const event of ['accountsChanged', 'disconnect']) {
     expect((await snapshot(page)).calls[0].filter((call) => call.method === 'eth_sendTransaction')).toEqual([]);
   });
 }
+
+test('a second wallet announcement invalidates an in-flight ambiguous automatic restore', async ({ page }) => {
+  await page.goto(`${origin}/?wallets=single&authorized=1&holdAuto=1`);
+  await expect.poll(() => page.evaluate(() => globalThis.__mobileWalletHarness.wallets[0].accountReadsWaiting)).toBe(1);
+  await page.evaluate(() => {
+    globalThis.__mobileWalletHarness.announce(1);
+    globalThis.__mobileWalletHarness.wallets[0].settleAccounts();
+  });
+  await expect(page.locator('[data-harness-ready="true"]')).toBeVisible();
+  await expect(page.locator('main')).toHaveAttribute('data-address', '');
+  await page.getByRole('button', { name: 'Connect wallet', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Test wallet 2' })).toBeVisible();
+  expect((await snapshot(page)).calls[0].filter((call) => call.method === 'eth_sendTransaction')).toEqual([]);
+});
