@@ -76,7 +76,7 @@ FxAeon is a self-custodial Telegram Mini App and web app for [f(x) Protocol](htt
 ## Built to be trusted
 
 - **Self-custodial.** Your Privy or browser wallet is the only signer. There are no private keys, no server-side signing and no background executor.
-- **Checked before signing.** Each route is policy-checked and simulated before a wallet prompt opens. A step that cannot be paid for, or that changed since review, stops first. Signed amounts read exactly, and a wallet short of gas is told how much ETH to add.
+- **Checked before signing.** Each route is policy-checked and simulated before a wallet prompt opens. A step that cannot be paid for, or that changed since review, stops first. Signed amounts read exactly, and a wallet short of gas is told so, with the ETH to add once the fee is known.
 - **A locked protocol surface.** The app uses exactly 15 f(x) Protocol SDK methods, pinned in [`fx-scope.lock.json`](fx-scope.lock.json) and [the SDK scope](docs/sdk-scope.md).
 - **Honest numbers.** Prices are display context only and never feed planning or signing. Missing data reads as unavailable, never as a guess.
 

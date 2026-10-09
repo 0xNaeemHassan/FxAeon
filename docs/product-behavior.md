@@ -52,8 +52,9 @@ are display context only and do not determine transaction amounts.
 Reviews show what is signed exactly: entered amounts, approvals and enforced
 minimums. Estimates carry "≈", and cost estimates round up. The gas fee
 maximum is the fee the wallet must fund for every step; when the wallet holds
-less, the review says how much ETH to add on which network before anything is
-signed. A route with several wallet requests says so before the first one.
+less, the review says so before anything is signed, naming the network and,
+once the fee is fully estimated, the ETH to add. A route with several wallet
+requests says so before the first one.
 
 At the compact 393×852 viewport, Trade, Borrow, Earn, and Move keep their
 primary review action visible above the mobile navigation without starting in

@@ -10,7 +10,7 @@ All notable changes to FxAeon are documented here. The project currently maintai
 - An outcome preview on the Trade ticket: the estimated collateral, estimated debt and protocol fee rate of the route its review would open.
 - A rebalance marker on each position row, read live from the position's debt ratio and its pool's rebalance and liquidation thresholds, with one line saying how far the price can move first.
 - A confirmed open on Trade titled after the action, such as "Opened ETH Long", with the new position shown as its row; viewing it carries the chosen split into the position.
-- Reviews that say how much ETH to add when the wallet cannot cover network fees, with a Receive ETH link.
+- Reviews that say how much ETH to add, once the fee is known, when the wallet cannot cover network fees, with a Receive ETH link.
 - Telegram start parameters that open a fixed list of app screens, used by the landing's section links on phones.
 - A fullscreen landing menu, with the bot's QR code on desktop and Open in Telegram on phones.
 - First-class browser launch and authentication alongside the Telegram Mini App experience.
