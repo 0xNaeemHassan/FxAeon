@@ -4,7 +4,7 @@ FxAeon exposes a deliberately narrow, reviewable surface from the official f(x) 
 
 - `AladdinDAO/fx-sdk-skill` — commit `e2c4a6085950a40f238bda1c9159305f6c8acf1f`
 - `AladdinDAO/fx-sdk` — commit `53c0b9805a169e75ad375c92c241e1292b66405f`
-- Installed package `@aladdindao/fx-sdk@1.0.5`, plus the reviewed short-pool correction, diagnostic-log removal, exact debt-ratio packing fix, chain-bound shared RPC transport support, and independent pool-view read scheduling in `patches/@aladdindao__fx-sdk@1.0.5.patch`
+- Installed package `@aladdindao/fx-sdk@1.0.5`, plus the reviewed short-pool correction, diagnostic-log removal, exact debt-ratio packing fix, chain-bound shared RPC transport support, multicall pacing, independent pool-view read scheduling, and protocol-fee review metadata in `patches/@aladdindao__fx-sdk@1.0.5.patch`
 
 The debt-ratio packing fix is a local correction, not a claim that the pinned
 upstream commit contains it. The SDK combines two 60-bit integer limits into
@@ -21,6 +21,24 @@ maximum from bits 60–119 and enforce an inclusive range:
 and [60-bit decoder](https://github.com/AladdinDAO/fx-protocol-contracts/blob/5e198e93657db008a57129e7eea21a996618f17f/contracts/common/codec/WordCodec.sol#L31-L41).
 Zero and equal limits remain representable; this patch does not change the
 contracts' separate full-close handling.
+
+## Upstream pull requests
+
+Three open pull requests to `AladdinDAO/fx-sdk` propose parts of the local
+patch upstream. Each part of the patch stands as follows:
+
+| Patch part | Upstream |
+| --- | --- |
+| Short-pool `getPoolData` field mapping | Already on fx-sdk `main` at the pinned commit (`53c0b98`, "fix: getPoolData"); not yet in an npm release |
+| Exact debt-ratio packing in `getEncodeMiscData` | [#15](https://github.com/AladdinDAO/fx-sdk/pull/15) packs the same value with `BigInt`. The patch's input checks (unsigned integer strings, each below 2^60, minimum not above maximum) stay FxAeon-only |
+| Pool data, rate and oracle reads started together in `Pool.getPoolInfo` | [#16](https://github.com/AladdinDAO/fx-sdk/pull/16): the same reads, awaited in the same order, with the same prompt pool-data failure |
+| No wait after the last `batchedMulticall` batch | [#17](https://github.com/AladdinDAO/fx-sdk/pull/17) drops the trailing 500 ms and keeps a quote search's spacing with one sequence per quote. The patch paces instead from when any previous batch ended, so its spacing also holds between separate callers |
+| Diagnostic `console.log` removal | FxAeon-only; the logs remain upstream |
+| Chain-bound RPC transport (`rpcUrls`, `rpcTransport`, the bridge's `sourceRpcUrls` and `sourceRpcTransport`, a 5-second default timeout without retries) | FxAeon-only |
+| Protocol fee quote (`protocolFeeQuote`, from fee ratios the SDK already read) | FxAeon-only |
+
+Until an npm release includes these changes, the patch remains what the app
+installs.
 
 ## Review preparation timing
 
