@@ -17,6 +17,12 @@ current status of a deployment.
 - [ ] Test browser connection and transaction review. Separately verify native
   Telegram authentication, wallet handoff, and actual bridge delivery before
   claiming those flows have been tested end to end.
+- [ ] In Telegram, open a `startapp` link, such as a landing section link on a
+  phone, and confirm it opens the named screen. These links need the bot's
+  Main Mini App configured in BotFather.
+- [ ] If Portfolio, Trade, Earn, Borrow or the landing hero changed visibly,
+  recapture the README images as [`brand-assets.md`](brand-assets.md#screenshots)
+  describes.
 - [ ] Confirm the privacy disclosures and product risk wording match current
   data handling. The in-app privacy page is operational disclosure; it is not a
   complete legal policy or terms of service.

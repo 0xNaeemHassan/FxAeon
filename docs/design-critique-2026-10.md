@@ -4,6 +4,8 @@
 
 **Scope.** This complements [frontend-research-uniswap-balancer.md](frontend-research-uniswap-balancer.md) and [frontend-research-jumper-curve.md](frontend-research-jumper-curve.md). Those documents cover data and transaction-engineering patterns. This one covers interaction and visual craft.
 
+**Since then.** The pull request that recorded this critique (#261) also shipped both fixes below: the market header reads the scrubbed bar, and the wallet chip rings while a step is pending, with a short notice when it settles.
+
 ## What the benchmarks do well
 
 | Pattern | Uniswap | Jumper | FxAeon today |

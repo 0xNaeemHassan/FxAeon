@@ -29,6 +29,8 @@ The source evidence and manifests are in the ignored local `artifacts/anvil/brow
 
 ## Latest deployed release
 
+This was the latest release when recorded. Merges to `main` since then deploy through the same workflow and are not recorded here.
+
 The later release merged as `d66a7f7cd658b32fc947bd70ddefa06bc1bf3a96` after PR [#215](https://github.com/fxaeon/FxAeon/pull/215) compacted the mobile header while preserving 44px control targets, and PR [#216](https://github.com/fxaeon/FxAeon/pull/216) made Telegram bot metadata synchronization idempotent. Production [deployment run 36720447137](https://github.com/fxaeon/FxAeon/actions/runs/36720447137) succeeded: the gas oracle returned a valid public snapshot, expected public wallet configuration was present, and Telegram bot metadata and Mini App menu synchronization succeeded. A separate connected-browser check verified the compact production header. The local release record is `artifacts/refinement/header-compact-20260930/release-verified.json`.
 
 This later deployment evidence does not rerun or extend the PR #208 unit, browser, Anvil, or visual-gallery results. Those remain evidence for commit `ae59fe1`. Neither record establishes live cross-chain delivery on Base, native Telegram wallet handoff, or production performance.

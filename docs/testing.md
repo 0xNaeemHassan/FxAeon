@@ -33,14 +33,22 @@ so `pnpm verify`, which Client CI runs, includes it; browser execution remains a
 separate check.
 
 Browser checks have separate gates. `pnpm test:e2e` runs the production-export
-routes and interactions. Borrow eligibility, overlay lifecycle, and the
-deterministic UI state lab each use an isolated Playwright config and focused
-commands: `pnpm test:e2e:borrow-harness`, `pnpm test:e2e:overlay`, and
-`pnpm test:e2e:state-lab`. `pnpm verify` runs those harness suites
-sequentially. The state-lab gate compares its approved screenshots on Windows;
-the current reference set contains 17 images. The overlay harness includes
+routes and interactions. Seven isolated harnesses each use their own
+Playwright config and focused command: Borrow selection
+(`pnpm test:e2e:borrow-harness`), Move review layout
+(`pnpm test:e2e:move-harness`), Positions (`pnpm test:e2e:positions-harness`),
+the Privy send adapter (`pnpm test:e2e:privy-send-harness`), Trade
+(`pnpm test:e2e:trade-harness`), overlays and page states
+(`pnpm test:e2e:overlay`), and the UI state lab (`pnpm test:e2e:state-lab`).
+`pnpm verify` runs them sequentially. The Trade harness covers the ticket's
+split slider and outcome preview, native Max, and review preparation. The
+Positions harness covers position rows, the list-to-position flow, and a new
+position carried from Trade's result to its page. The overlay harness covers
+the app shell, Portfolio's first load, position rows' rebalance markers, and
 portfolio asset loading/empty/error/refresh states and wallet refresh fan-out,
-including recovery after a synchronous reader failure. Production E2E checks
+including recovery after a synchronous reader failure. The state-lab gate
+compares its approved screenshots on Windows; the current reference set
+contains 17 images. Production E2E checks
 server-rendered route metadata and form reachability with 200% text across all
 three appearance themes. See
 [`browser-test-gates.md`](browser-test-gates.md) for the exact suite map and

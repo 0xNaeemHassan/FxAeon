@@ -64,8 +64,9 @@ export const sdkSections: { id: string; title: string; content: ReactNode }[] = 
           <p>
             FxAeon uses version 1.0.5 with local patches for short-pool accounting,
             exact debt-ratio packing, diagnostic-log removal, chain-bound RPC
-            transport, and protocol-fee review metadata. Installing the vanilla
-            package alone does not reproduce this integration.
+            transport, multicall pacing, concurrent pool reads, and protocol-fee
+            review metadata. Installing the vanilla package alone does not
+            reproduce this integration.
           </p>
         </Callout>
         <p>
@@ -74,6 +75,15 @@ export const sdkSections: { id: string; title: string; content: ReactNode }[] = 
           <ExternalLink href={`${source}patches/@aladdindao__fx-sdk@1.0.5.patch`}>local patch</ExternalLink>,
           and <ExternalLink href={`${source}fx-scope.lock.json`}>15-method scope lock</ExternalLink>.
           Upstream authorship does not imply endorsement of FxAeon.
+        </p>
+        <p>
+          Three parts of the patch are open as upstream pull requests:{' '}
+          <ExternalLink href="https://github.com/AladdinDAO/fx-sdk/pull/15">exact debt-ratio packing (#15)</ExternalLink>,{' '}
+          <ExternalLink href="https://github.com/AladdinDAO/fx-sdk/pull/16">concurrent pool reads (#16)</ExternalLink>, and{' '}
+          <ExternalLink href="https://github.com/AladdinDAO/fx-sdk/pull/17">no delay after the last multicall batch (#17)</ExternalLink>.
+          The short-pool fix is already in the pinned upstream source but not in an
+          npm release; the other parts are FxAeon&apos;s own. The{' '}
+          <ExternalLink href={`${source}docs/sdk-scope.md#upstream-pull-requests`}>SDK scope</ExternalLink> maps each part.
         </p>
       </>
     ),
@@ -179,6 +189,18 @@ export const sdkSections: { id: string; title: string; content: ReactNode }[] = 
           <dt>Review and refresh</dt>
           <dd>The app binds the returned leverage to the requested target and permits <code>FxRoute</code> only. Every step requires wallet approval. Reload positions after the canonical action receipt.</dd>
         </dl>
+        <Callout title="ETH long collateral is stETH">
+          <p>
+            The wstETH long pool records collateral in stETH: its PoolManager scales
+            supplied wstETH by a rate provider whose rate equals{' '}
+            <code>wstETH.stEthPerToken()</code>.
+            SDK 1.0.5 labels that figure <code>ETH</code>, so FxAeon shows it as stETH
+            without changing it. The open/add quote adds new collateral in wstETH to
+            the stETH a position holds, so FxAeon reads <code>stEthPerToken()</code>{' '}
+            beside the plan and states the estimate in stETH, rounded down. Signed
+            converter minimums stay exact in wstETH.
+          </p>
+        </Callout>
         <p>
           Token support is market-specific. See the <ExternalLink href={`${source}apps/mini-app/src/lib/fx/service.ts`}>service token and route validation</ExternalLink>{' '}
           and <ExternalLink href={`${source}apps/mini-app/src/app/trade/fxUi.ts`}>position read and reduction handling</ExternalLink>.
@@ -399,14 +421,28 @@ export const sdkSections: { id: string; title: string; content: ReactNode }[] = 
           ownership and accounting are rechecked on reuse. This fallback is not a
           sixteenth SDK method and introduces no write primitive.
         </p>
+        <h3>Position brake reads</h3>
+        <p>
+          Position rows show how far the market can move before a position reaches
+          its pool&apos;s rebalance point. While a row is shown, each position
+          refresh makes one multicall of every position&apos;s{' '}
+          <code>getPositionDebtRatio</code> and each pool oracle&apos;s{' '}
+          <code>getPrice</code>; each pool&apos;s <code>getRebalanceRatios</code>,{' '}
+          <code>getLiquidateRatios</code>, and <code>priceOracle</code> are read
+          live and cached for 60 seconds. The SDK 1.0.5 bundle contains these pool
+          views without exporting them, so FxAeon keeps a minimal ABI checked
+          against the bundle. This app-owned code is read-only and signs nothing;
+          it is not a sixteenth SDK method.
+        </p>
         <h3>Unsupported does not mean implied</h3>
         <p>
           Internal SDK files, aggregator routes, contracts, and experiments are
           not automatically supported product features. Rebalance and liquidation
-          prices are not integrated; global LTV thresholds must not be hardcoded
-          as per-position prices. The inspected scope exposes no per-position
-          rebalancing opt-out. New transaction primitives require an explicit
-          scope decision.
+          distances come from each pool&apos;s live thresholds; global LTV
+          thresholds must not be hardcoded as per-position prices. Reviews do not
+          yet show post-action thresholds. The inspected scope exposes no
+          per-position rebalancing opt-out. New transaction primitives require an
+          explicit scope decision.
         </p>
         <p>
           For the full implementation contract, use <ExternalLink href={`${source}docs/sdk-scope.md`}>SDK scope</ExternalLink>{' '}

@@ -30,8 +30,9 @@ separate states, checked against matching LayerZero messages.
 Local storage, indexers, cached reads, and display prices are not protocol
 authority. Recovery hints are revalidated against receipts and current SDK or
 canonical chain reads. Missing reads remain unavailable rather than becoming
-zero. USD prices and position estimates do not affect transaction planning or
-signing. Position value is not P&L, ROI, health, or liquidation value.
+zero. USD prices, position estimates, and the rebalance distances on position
+rows do not affect transaction planning or signing. Position value is not P&L,
+ROI, health, or liquidation value.
 
 ## Browser and release controls
 
@@ -48,6 +49,9 @@ signing. Position value is not P&L, ROI, health, or liquidation value.
   or dependency is uncompromised.
 - The optional `/api/gas` Pages Function accepts a fixed read-only Ethereum gas
   oracle request. It has no wallet or protocol authority.
+- A Telegram start parameter opens only a screen on a fixed list of same-origin
+  paths; any other value is ignored, so a launch link cannot send the app
+  elsewhere.
 - Production deployment and Telegram bot synchronization use protected GitHub
   Actions settings. See [`deployment.md`](deployment.md).
 
