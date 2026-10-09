@@ -33,7 +33,7 @@ FxAeon is a self-custodial Telegram Mini App and web app for [f(x) Protocol](htt
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/screens-dark.webp">
   <source media="(prefers-color-scheme: light)" srcset="docs/assets/readme/screens-light.webp">
-  <img alt="FxAeon on a phone: Portfolio, Trade, Earn with fxSAVE, and Borrow fxUSD" src="docs/assets/readme/screens-dark.webp" width="100%">
+  <img alt="FxAeon on a phone: Portfolio, Trade with its leverage split and a position's rebalance line, Earn with fxSAVE, and Borrow fxUSD" src="docs/assets/readme/screens-dark.webp" width="100%">
 </picture>
 
 <sub>Screens render the real app with sample data.</sub>
@@ -44,11 +44,11 @@ FxAeon is a self-custodial Telegram Mini App and web app for [f(x) Protocol](htt
   <tr>
     <td width="50%" valign="top">
       <h4>Trade</h4>
-      Go long or short on ETH and BTC with leverage, within the pool's live limits.
+      Go long or short on ETH and BTC with leverage, within the pool's live limits. The slider shows how much of the position is debt and how much is yours, and the ticket estimates the collateral, debt and fee rate before you review.
     </td>
     <td width="50%" valign="top">
       <h4>Manage positions</h4>
-      Add to, reduce, close, or re-lever any position. Each card shows how much is borrowed and how much is yours.
+      Add to, reduce, close, or re-lever any position. Each row shows how much is borrowed, how much is yours, and how far the price can move before the pool rebalances it.
     </td>
   </tr>
   <tr>
@@ -58,7 +58,7 @@ FxAeon is a self-custodial Telegram Mini App and web app for [f(x) Protocol](htt
     </td>
     <td valign="top">
       <h4>Borrow</h4>
-      Borrow fxUSD against ETH or BTC collateral, with your limit shown before you sign. Repay and withdraw the same way.
+      Borrow fxUSD against ETH or BTC collateral. Enter the collateral first, and your limit and loan-to-value update as you type. Repay and withdraw the same way.
     </td>
   </tr>
   <tr>
@@ -68,7 +68,7 @@ FxAeon is a self-custodial Telegram Mini App and web app for [f(x) Protocol](htt
     </td>
     <td valign="top">
       <h4>History</h4>
-      Every transaction reads as the action it was, with exact amounts on demand.
+      Every transaction reads as the action it was, such as "Opened ETH Long", with exact amounts on demand.
     </td>
   </tr>
 </table>
@@ -76,7 +76,7 @@ FxAeon is a self-custodial Telegram Mini App and web app for [f(x) Protocol](htt
 ## Built to be trusted
 
 - **Self-custodial.** Your Privy or browser wallet is the only signer. There are no private keys, no server-side signing and no background executor.
-- **Checked before signing.** Each route is policy-checked and simulated before a wallet prompt opens. A step that cannot be paid for, or that changed since review, stops first.
+- **Checked before signing.** Each route is policy-checked and simulated before a wallet prompt opens. A step that cannot be paid for, or that changed since review, stops first. Signed amounts read exactly, and a wallet short of gas is told how much ETH to add.
 - **A locked protocol surface.** The app uses exactly 15 f(x) Protocol SDK methods, pinned in [`fx-scope.lock.json`](fx-scope.lock.json) and [the SDK scope](docs/sdk-scope.md).
 - **Honest numbers.** Prices are display context only and never feed planning or signing. Missing data reads as unavailable, never as a guess.
 
@@ -102,6 +102,8 @@ flowchart LR
 FxAeon is a static client. Protocol reads and transaction plans come from the pinned SDK in the browser, and the user's wallet signs each step after its receipt-verified predecessor.
 
 The only server code is an optional, read-only gas endpoint ([`functions/api/gas.ts`](functions/api/gas.ts)). It cannot plan, sign or change protocol state. Ethereum is authoritative for positions, borrowing and fxSAVE. See [the architecture](docs/architecture.md).
+
+The pinned SDK carries a [reviewed local patch](patches/@aladdindao__fx-sdk@1.0.5.patch). Three of its fixes are open as upstream pull requests: exact debt-ratio packing ([fx-sdk#15](https://github.com/AladdinDAO/fx-sdk/pull/15)), concurrent pool reads ([#16](https://github.com/AladdinDAO/fx-sdk/pull/16)) and no delay after the last multicall batch ([#17](https://github.com/AladdinDAO/fx-sdk/pull/17)). [The SDK scope](docs/sdk-scope.md#upstream-pull-requests) maps each part of the patch.
 
 ## Quick start
 
