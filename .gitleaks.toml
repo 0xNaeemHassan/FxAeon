@@ -17,4 +17,8 @@ regexes = [
   # The public fxSAVE token contract. Constants named *TOKEN_ADDRESS trip the
   # generic-api-key rule; a contract address is public, never a credential.
   '''0x7743e50F534a7f9F1791DdE7dCD89F7783Eefc39''',
+  # The public wstETH and fxUSD token contracts, used as collateralTokenAddress
+  # and debtTokenAddress in test fixtures, trip the same rule for the same reason.
+  '''(?i)0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0''',
+  '''(?i)0x085780639CC2cACd35E474e71f4d000e2405d8f6''',
 ]
