@@ -12,30 +12,40 @@ type Launch = {
   platform?: string;
   userAgent?: string;
   proxy?: boolean;
+  iframe?: boolean;
+  referrer?: string;
+  ancestorOrigins?: string[];
 };
 
 /** Each document must capture its own initial launch before navigation. */
 function documentWithLaunch(launch: Launch = {}) {
   const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
   const previousNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  const previousDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
   const fake = {
-    location: { search: launch.search ?? '', hash: launch.hash ?? '' },
+    location: { search: launch.search ?? '', hash: launch.hash ?? '', ancestorOrigins: launch.ancestorOrigins },
+    parent: {} as object,
     Telegram: { WebApp: { initData: launch.initData ?? '', platform: launch.platform ?? 'unknown' } },
     ...(launch.proxy ? { TelegramWebviewProxy: {} } : {}),
   };
+  fake.parent = launch.iframe ? {} : fake;
   Object.defineProperty(globalThis, 'window', { configurable: true, value: fake });
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { userAgent: launch.userAgent ?? 'Chrome' } });
+  Object.defineProperty(globalThis, 'document', { configurable: true, value: { referrer: launch.referrer ?? '' } });
   delete require.cache[telegramModule];
   const telegram = require(telegramModule) as typeof import('../src/lib/telegram');
   return {
     fake,
     hasLaunchData: telegram.hasTelegramMiniAppLaunchData,
+    hasWebHostHint: telegram.hasTelegramWebHostHint,
     restore() {
       delete require.cache[telegramModule];
       if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow);
       else Reflect.deleteProperty(globalThis, 'window');
       if (previousNavigator) Object.defineProperty(globalThis, 'navigator', previousNavigator);
       else Reflect.deleteProperty(globalThis, 'navigator');
+      if (previousDocument) Object.defineProperty(globalThis, 'document', previousDocument);
+      else Reflect.deleteProperty(globalThis, 'document');
     },
   };
 }
@@ -54,6 +64,40 @@ test('wallet routing ignores Telegram user-agent, proxy, platform, theme, and sc
     const document = documentWithLaunch(launch);
     try { assert.equal(document.hasLaunchData(), false, JSON.stringify(launch)); }
     finally { document.restore(); }
+  }
+});
+
+test('a known Telegram Web iframe is only a late-bridge hint, never launch data', () => {
+  for (const launch of [
+    { iframe: true, referrer: 'https://web.telegram.org/k/' },
+    { iframe: true, referrer: 'https://web.telegram.org/a/' },
+    { iframe: true, ancestorOrigins: ['https://web.telegram.org'] },
+  ]) {
+    const document = documentWithLaunch(launch);
+    try {
+      assert.equal(document.hasWebHostHint(), true);
+      assert.equal(document.hasLaunchData(), false);
+    } finally { document.restore(); }
+  }
+});
+
+test('ordinary pages, unrelated frames, and lookalike origins do not wait for Telegram Web', () => {
+  for (const launch of [
+    { referrer: 'https://web.telegram.org/k/' },
+    { ancestorOrigins: ['https://web.telegram.org'] },
+    { iframe: true },
+    { iframe: true, referrer: 'http://web.telegram.org/k/' },
+    { iframe: true, referrer: 'https://web.telegram.org.example.com/k/' },
+    { iframe: true, referrer: 'https://web.telegram.org@other.example/k/' },
+    { iframe: true, referrer: 'https://t.me/FxAeonBot' },
+    { iframe: true, referrer: 'invalid-url' },
+    { iframe: true, referrer: 'https://web.telegram.org/k/', ancestorOrigins: ['https://other.example', 'https://web.telegram.org'] },
+  ]) {
+    const document = documentWithLaunch(launch);
+    try {
+      assert.equal(document.hasWebHostHint(), false, JSON.stringify(launch));
+      assert.equal(document.hasLaunchData(), false);
+    } finally { document.restore(); }
   }
 });
 

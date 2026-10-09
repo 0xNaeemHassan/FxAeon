@@ -91,6 +91,26 @@ export function hasTelegramNativeHostHint(): boolean {
   return looksLikeTelegramUserAgent(navigator.userAgent) || telegramProxy;
 }
 
+/**
+ * Telegram Web hosts Mini Apps in an iframe with an ordinary browser UA.
+ * Only its exact HTTPS parent origin justifies waiting for a late SDK after
+ * a reload consumes the launch hash. This never selects or authenticates a
+ * Privy session: actual launch data is still required after the bounded wait.
+ */
+export function hasTelegramWebHostHint(): boolean {
+  if (typeof window === 'undefined' || window.parent === window) return false;
+  try {
+    // Chromium exposes the immediate parent origin even when its referrer
+    // policy hides the URL. Other browsers can use the document's referrer.
+    const parentOrigin = window.location.ancestorOrigins?.[0];
+    if (parentOrigin) return parentOrigin === 'https://web.telegram.org';
+    return typeof document !== 'undefined'
+      && new URL(document.referrer).origin === 'https://web.telegram.org';
+  } catch {
+    return false;
+  }
+}
+
 // Capture the launch marker before client navigation or an authentication SDK
 // can consume/replace the initial hash. This is only an availability hint;
 // signed WebApp.initData remains the authentication authority.
