@@ -50,7 +50,8 @@ function withdrawalRoute(tokenOut: 'USDC' | 'fxUSD' | 'fxUSDBasePool', instant =
 test('queued fxSAVE reviews keep both later claim assets visible for either selected stablecoin', () => {
   for (const token of ['USDC', 'fxUSD'] as const) {
     const facts = primaryReviewFacts(withdrawalRoute(token));
-    const receive = { label: 'Receive', value: 'fxUSD and USDC (later claim)' };
+    // Either claim leg can be zero; review must not promise positive amounts of both.
+    const receive = { label: 'Receive', value: 'fxUSD and/or USDC (later claim)' };
     assert.deepEqual(facts.find((fact) => fact.label === 'Receive'), receive);
     assert.equal(facts.find((fact) => fact.label === 'Mode')?.value, 'Queued');
     // This correction must survive both compact review and consequence summaries.
