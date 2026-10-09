@@ -37,15 +37,15 @@ const mocks: Record<string, string> = {
     import { createContext, useContext, useEffect, useState } from 'react';
     const Context = createContext(null);
     export function HarnessWalletProvider({ children, kind }) {
-      const [connected, setConnected] = useState(false);
+      const [connected, setConnected] = useState(() => new URLSearchParams(location.search).get('connected') === '1');
       useEffect(() => {
         const h = globalThis.__providerBoundaryHarness;
         h[kind + 'Mounts'] += 1;
         return () => { h[kind + 'Unmounts'] += 1; };
       }, []);
       const address = connected ? '0x00000000000000000000000000000000000000aa' : undefined;
-      const wallet = { ready: true, authenticated: connected, address,
-        selectedWallet: address ? { address, walletClientType: 'browser' } : undefined,
+      const wallet = { ready: true, authenticated: connected, address, isEmbedded: connected && kind === 'privy',
+        selectedWallet: address ? { address, walletClientType: kind === 'privy' ? 'privy-v2' : 'browser' } : undefined,
         connect: async () => { globalThis.__providerBoundaryHarness.connectCalls += 1; setConnected(true); },
       };
       return <Context.Provider value={wallet}>{children}</Context.Provider>;
@@ -108,6 +108,16 @@ const mocks: Record<string, string> = {
   '@/components/GroupedAddress': `export const GroupedAddress = ({ address }) => <span>{address}</span>;`,
   '@/components/WalletAvatar': `export const WalletAvatar = () => <span aria-hidden="true" />;`,
   '@/lib/i18n': `export const useT = () => (key) => key;`,
+  '@/lib/fx/gasFeePolicy': `
+    export async function fetchGasTierQuotes(chainId) {
+      globalThis.__providerBoundaryHarness.gasQuoteChains.push(chainId);
+      return { tiers: {
+        standard: { gasPriceWei: 1200000000n },
+        fast: { gasPriceWei: 1500000000n },
+        rapid: { gasPriceWei: 2100000000n },
+      } };
+    }
+  `,
 };
 
 type Build = {
@@ -153,7 +163,7 @@ let bundles: Record<Variant, Bundle>;
 const emptyState: ProviderBoundaryHarnessState = {
   browserMounts: 0, browserUnmounts: 0, privyMounts: 0, privyUnmounts: 0,
   routeMounts: 0, routeUnmounts: 0, childMounts: 0, childUnmounts: 0,
-  connectCalls: 0, sdkHookCalls: 0, importMarkers: [],
+  connectCalls: 0, sdkHookCalls: 0, importMarkers: [], gasQuoteChains: [],
 };
 
 test.beforeAll(async () => {
@@ -409,4 +419,41 @@ test('a build without a Privy app ID gives Telegram a browser handoff without lo
   await expect(page.getByRole('link', { name: 'Continue in browser' })).toHaveAttribute('href', 'https://fxaeon.com/');
   await expect(page.getByRole('button', { name: 'Connect browser wallet' })).toHaveCount(0);
   await expectBrowserOnly(page, observation);
+});
+
+for (const connected of [false, true]) {
+  test(`browser transaction settings preserve slippage without gas reads or speed choices (${connected ? 'connected' : 'disconnected'})`, async ({ page }) => {
+    const observation = await openHarness(page, { path: `/transaction-settings?connected=${connected ? '1' : '0'}`, bridge: 'unknown' });
+    await expect(page.locator('[data-connected]')).toHaveAttribute('data-connected', String(connected));
+    expect((await state(page)).gasQuoteChains).toEqual([]);
+    await page.getByRole('button', { name: /^Transaction settings,/ }).click();
+    const dialog = page.getByRole('dialog', { name: 'Transaction settings', exact: true });
+    await expect(dialog.getByRole('radiogroup', { name: 'Max slippage' })).toBeVisible();
+    await expect(dialog.getByRole('radiogroup', { name: 'Network speed' })).toHaveCount(0);
+    await expect(dialog.getByRole('radio', { name: /Standard|Fast|Rapid/ })).toHaveCount(0);
+    await dialog.getByRole('radio', { name: '1%', exact: true }).click();
+    await expect(dialog.getByRole('radio', { name: '1%', exact: true })).toHaveAttribute('aria-checked', 'true');
+    await expect(dialog.getByRole('textbox', { name: 'Slippage tolerance percentage' })).toHaveValue('1');
+    expect((await state(page)).gasQuoteChains).toEqual([]);
+    await expectBrowserOnly(page, observation);
+  });
+}
+
+test('embedded transaction settings retain gas quotes and speed choices alongside slippage', async ({ page }) => {
+  const observation = await openHarness(page, { path: '/transaction-settings?connected=1', bridge: 'telegram-data' });
+  await expect(page.locator('[data-provider-mode]')).toHaveAttribute('data-provider-mode', 'privy');
+  expect((await state(page)).gasQuoteChains).toEqual([]);
+  await page.getByRole('button', { name: /^Transaction settings,/ }).click();
+  const dialog = page.getByRole('dialog', { name: 'Transaction settings', exact: true });
+  await expect(dialog.getByRole('radiogroup', { name: 'Network speed' })).toBeVisible();
+  const fast = dialog.getByRole('radio', { name: /^Fast\s*1\.50 gwei$/ });
+  await expect(fast).toBeVisible();
+  expect((await state(page)).gasQuoteChains).toEqual([1]);
+  await fast.click();
+  await expect(fast).toHaveAttribute('aria-checked', 'true');
+  await dialog.getByRole('radio', { name: '1%', exact: true }).click();
+  await expect(dialog.getByRole('textbox', { name: 'Slippage tolerance percentage' })).toHaveValue('1');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('fxaeon.settings.v1') ?? '{}'))).toMatchObject({ gasTier: 'fast', slippageBps: 100 });
+  expect((await state(page)).gasQuoteChains).toEqual([1]);
+  expect(observation.errors).toEqual([]);
 });

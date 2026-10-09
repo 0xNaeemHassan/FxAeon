@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import WalletProviderBoundary from '@/components/WalletProviderBoundary';
 import LoginPage from '@/app/login/page';
 import WalletSection from '@/components/WalletSection';
+import { TransactionSettings } from '@/components/TransactionSettings';
 import { useWalletProviderMode } from '@/lib/wallet/providerMode';
 import { usePrivyWallet } from '@/lib/wallet';
 
@@ -18,6 +19,7 @@ export type ProviderBoundaryHarnessState = {
   connectCalls: number;
   sdkHookCalls: number;
   importMarkers: string[];
+  gasQuoteChains: number[];
   browserAllowsTelegramHost?: boolean;
   navigate?: (path: string) => void;
   rerender?: () => void;
@@ -37,12 +39,13 @@ function Content({ path }: { path: string }) {
   }, []);
   return <section data-harness-ready="true" data-provider-mode={mode} data-identity={identity}
     data-connected={String(wallet.authenticated)}>
-    {path === '/settings' ? <WalletSection /> : <LoginPage />}
+    {path === '/transaction-settings' ? <TransactionSettings slippage /> : path === '/settings' ? <WalletSection /> : <LoginPage />}
   </section>;
 }
 
 function Harness() {
-  const [path, setPath] = useState(location.pathname.endsWith('/settings') ? '/settings' : '/login');
+  const [path, setPath] = useState(location.pathname.endsWith('/transaction-settings')
+    ? '/transaction-settings' : location.pathname.endsWith('/settings') ? '/settings' : '/login');
   const [, setVersion] = useState(0);
   const state = globalThis.__providerBoundaryHarness;
   state.navigate = (nextPath) => {
