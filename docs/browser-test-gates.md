@@ -7,8 +7,10 @@ The production mini-app suite and isolated component harnesses use separate Play
 | Production routes and interactions | `apps/mini-app/e2e/specs`, default Playwright config | `pnpm test:e2e` |
 | Borrow selection eligibility | `apps/mini-app/e2e/borrow-harness`, `e2e/borrow-harness.config.ts` | `pnpm test:e2e:borrow-harness` |
 | Move review layout | `apps/mini-app/e2e/move-harness`, `e2e/move-harness.config.ts` | `pnpm test:e2e:move-harness` |
-| Positions action review layout | `apps/mini-app/e2e/positions-harness`, `e2e/positions-harness.config.ts` | `pnpm test:e2e:positions-harness` |
-| Overlay lifecycle, portfolio asset states, and wallet refresh | `apps/mini-app/e2e/overlay-specs`, `playwright.overlay.config.ts` | `pnpm test:e2e:overlay` |
+| Positions: action review layout, position rows and the list-to-position flow, and a new position carried from Trade's result to its page | `apps/mini-app/e2e/positions-harness`, `e2e/positions-harness.config.ts` | `pnpm test:e2e:positions-harness` |
+| Privy embedded send adapter (its spec sits in `e2e/specs`, so `pnpm test:e2e` runs it too) | `apps/mini-app/e2e/specs/privy-send-adapter.spec.ts`, `e2e/privy-send-harness.config.ts` | `pnpm test:e2e:privy-send-harness` |
+| Trade: split slider and outcome preview, native Max, review preparation and gas checks | `apps/mini-app/e2e/trade-harness`, `e2e/trade-harness.config.ts` | `pnpm test:e2e:trade-harness` |
+| Overlay lifecycle, app shell, Portfolio first load, position brake, portfolio asset states, and wallet refresh | `apps/mini-app/e2e/overlay-specs`, `playwright.overlay.config.ts` | `pnpm test:e2e:overlay` |
 | Product state catalog | `apps/mini-app/e2e/state-lab`, `playwright.state-lab.config.ts` | `pnpm test:e2e:state-lab` |
 
 `pnpm verify` runs the isolated browser gates sequentially after the shared build checks. This keeps the fixtures out of normal product E2E and limits simultaneous browser memory use. A nonzero result from any focused suite makes `pnpm verify` fail and names the failing gate in its output.
