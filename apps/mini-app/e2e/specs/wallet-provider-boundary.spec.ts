@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import { relative, resolve } from 'node:path';
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Frame, type Page } from '@playwright/test';
 import type { ProviderBoundaryHarnessState } from '../harness/wallet-provider-boundary-entry';
 
 const root = resolve(__dirname, '../../../..');
@@ -212,14 +212,14 @@ async function openHarness(page: Page, { variant = 'configured', path = '/login'
   return { requests, errors, variant };
 }
 
-async function state(page: Page) {
+async function state(page: Page | Frame) {
   return page.evaluate(() => {
     const { navigate: _navigate, rerender: _rerender, ...snapshot } = globalThis.__providerBoundaryHarness;
     return snapshot;
   });
 }
 
-async function expectBrowserOnly(page: Page, observation: Awaited<ReturnType<typeof openHarness>>) {
+async function expectBrowserOnly(page: Page | Frame, observation: Awaited<ReturnType<typeof openHarness>>) {
   await expect(page.locator('[data-provider-mode]')).toHaveAttribute('data-provider-mode', 'browser');
   const current = await state(page);
   expect(current.browserMounts).toBe(1);
@@ -229,6 +229,34 @@ async function expectBrowserOnly(page: Page, observation: Awaited<ReturnType<typ
   expect(current.importMarkers).toEqual([]);
   expect(observation.requests.filter((path) => bundles[observation.variant].privyPaths.has(path))).toEqual([]);
   expect(observation.errors).toEqual([]);
+}
+
+async function openIframeHarness(page: Page, parentUrl: string, hash = '') {
+  const requests: string[] = [];
+  const errors: string[] = [];
+  page.on('request', (request) => requests.push(new URL(request.url()).pathname));
+  page.on('pageerror', (error) => errors.push(error.message));
+  // Use a real cross-origin iframe and browser-provided ancestor/referrer
+  // metadata. Both HTTPS origins are intercepted; no live host or private
+  // network permission is needed for the fixture.
+  const frameOrigin = 'https://fxaeon-harness.test';
+  await page.route(`${frameOrigin}/**`, (route) => {
+    const path = new URL(route.request().url()).pathname;
+    const source = bundles.configured.files.get(path);
+    if (source) return route.fulfill({ contentType: 'text/javascript', body: source });
+    if (path.endsWith('.js')) return route.fulfill({ status: 404, body: '' });
+    return route.fulfill({ contentType: 'text/html', body:
+      `<!doctype html><html><body><div id="root"></div><script>globalThis.__providerBoundaryHarness=${JSON.stringify(emptyState)}</script><script type="module" src="/configured/wallet-provider-boundary-entry.js"></script></body></html>`,
+    });
+  });
+  await page.route(parentUrl, (route) => route.fulfill({ contentType: 'text/html', body:
+    `<!doctype html><html><body><iframe title="Mini App" src="${frameOrigin}/configured/login${hash}" style="width:100%;height:700px"></iframe></body></html>`,
+  }));
+  await page.goto(parentUrl);
+  const element = await page.locator('iframe[title="Mini App"]').elementHandle();
+  const frame = await element?.contentFrame();
+  if (!frame) throw new Error('Mini App iframe did not load');
+  return { frame, requests, errors, variant: 'configured' as const };
 }
 
 async function openPendingTelegramHarness(page: Page, host: 'user-agent' | 'native-proxy') {
@@ -300,6 +328,45 @@ test('Telegram user agent with an empty SDK bridge keeps the configured browser 
   await page.getByRole('button', { name: 'Connect browser wallet' }).click();
   await expect(page.getByRole('heading', { name: 'Wallet connected' })).toBeVisible();
   await expectBrowserOnly(page, observation);
+});
+
+test('a Telegram Web iframe reload waits for the bridge after its launch hash was consumed', async ({ page }) => {
+  const observation = await openIframeHarness(page, 'https://web.telegram.org/k/', '#tgWebAppData=auth_date%3D1%26hash%3Dsynthetic');
+  const { frame } = observation;
+  await expect(frame.locator('[data-provider-mode]')).toHaveAttribute('data-provider-mode', 'privy');
+  await frame.evaluate(() => history.replaceState(null, '', location.pathname));
+  await frame.goto(frame.url());
+  await expect(frame.locator('[data-provider-wait="true"]')).toBeVisible();
+  expect(await state(frame)).toMatchObject({ browserMounts: 0, privyMounts: 0, childMounts: 0, importMarkers: [] });
+  expect(await frame.evaluate(() => navigator.userAgent)).not.toMatch(/Telegram/i);
+  await frame.evaluate(() => {
+    (window as any).Telegram = { WebApp: { platform: 'web', initData: 'auth_date=1&hash=synthetic-reload' } };
+  });
+  await expect(frame.getByRole('heading', { name: 'loginCard.signIn' })).toBeVisible();
+  await expect(frame.locator('[data-provider-mode]')).toHaveAttribute('data-provider-mode', 'privy');
+  const identity = await frame.locator('[data-identity]').getAttribute('data-identity');
+  await frame.getByRole('button', { name: 'Open settings', exact: true }).click();
+  await expect(frame.getByText('No wallet connected', { exact: true })).toBeVisible();
+  await expect(frame.locator('[data-identity]')).toHaveAttribute('data-identity', identity!);
+  expect(await state(frame)).toMatchObject({ browserMounts: 0, privyMounts: 1, privyUnmounts: 0, childMounts: 1, childUnmounts: 0 });
+  expect(observation.errors).toEqual([]);
+});
+
+test('Telegram Web parent alone cannot load Privy when the delayed bridge has no data', async ({ page }) => {
+  const observation = await openIframeHarness(page, 'https://web.telegram.org/a/');
+  await expect(observation.frame.locator('[data-provider-wait="true"]')).toBeVisible();
+  await observation.frame.evaluate(() => {
+    (window as any).Telegram = { WebApp: { platform: 'web', initData: '' } };
+  });
+  await expect(observation.frame.getByRole('button', { name: 'Connect browser wallet' })).toBeVisible();
+  await expectBrowserOnly(observation.frame, observation);
+});
+
+test('an unrelated iframe does not wait for Telegram or request Privy', async ({ page }) => {
+  const observation = await openIframeHarness(page, 'https://web.telegram.org.example.com/k/');
+  await expect(observation.frame.getByRole('button', { name: 'Connect browser wallet' })).toBeVisible();
+  await expect(observation.frame.locator('[data-provider-wait="true"]')).toHaveCount(0);
+  await expectBrowserOnly(observation.frame, observation);
 });
 
 for (const host of ['user-agent', 'native-proxy'] as const) {

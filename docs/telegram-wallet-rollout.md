@@ -11,10 +11,13 @@ provider. A user-agent string, theme/version hint, or empty Telegram SDK stub
 is insufficient. This client-side distinction is **not an admission or billing
 security boundary**: only the auth service can validate the signed identity.
 The selection is fixed for the document so navigation cannot silently replace
-the active wallet. A native Telegram host without an initial bridge or launch
-payload waits up to eight seconds for the bridge before selecting its wallet;
-ordinary web visits and launches with data remain immediate. No-Privy test builds keep the existing unauthenticated
-Telegram behavior.
+the active wallet. A native Telegram host or iframe with the exact HTTPS parent
+origin `https://web.telegram.org` waits up to eight seconds for a missing bridge
+to restore launch data after a reload. The parent origin only permits waiting;
+an empty or missing payload still selects browser mode. Top-level referrals
+from Telegram and unrelated iframe hosts do not delay ordinary web access.
+Launches with data remain immediate. No-Privy test builds keep the existing
+unauthenticated Telegram behavior.
 
 ## Rollout and connection support
 
