@@ -274,6 +274,25 @@ for (const event of ['accountsChanged', 'disconnect']) {
   });
 }
 
+test('chainChanged during a held chain read rejects its stale snapshot before signing', async ({ page }) => {
+  const observation = await openHarness(page, 'single');
+  await connect(page);
+  await expect.poll(async () => (await snapshot(page)).calls[0].filter((call) => call.method === 'eth_accounts').length).toBeGreaterThanOrEqual(2);
+  await page.evaluate(() => { globalThis.__mobileWalletHarness.wallets[0].holdChain = true; });
+  await page.getByRole('button', { name: 'Send test transaction' }).click();
+  await expect.poll(() => page.evaluate(() => globalThis.__mobileWalletHarness.wallets[0].chainReadsWaiting)).toBe(1);
+  await page.evaluate(() => {
+    const wallet = globalThis.__mobileWalletHarness.wallets[0];
+    wallet.emit('chainChanged', '0x2105');
+    wallet.settleChain();
+  });
+  await expect(page.getByRole('alert')).toHaveText('The wallet network changed before signing. Review the transaction and try again.');
+  await expect(page.locator('main')).toHaveAttribute('data-chain', '8453');
+  expect((await snapshot(page)).calls[0].filter((call) => call.method === 'eth_sendTransaction')).toEqual([]);
+  await expect(page.getByTestId('transaction-hash')).toHaveText('');
+  expect(observation.errors).toEqual([]);
+});
+
 test('a second wallet announcement invalidates an in-flight ambiguous automatic restore', async ({ page }) => {
   await page.goto(`${origin}/?wallets=single&authorized=1&holdAuto=1`);
   await expect.poll(() => page.evaluate(() => globalThis.__mobileWalletHarness.wallets[0].accountReadsWaiting)).toBe(1);

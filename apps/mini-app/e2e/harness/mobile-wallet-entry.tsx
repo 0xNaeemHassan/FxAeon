@@ -14,6 +14,9 @@ export type MobileWalletFixture = {
   holdAccounts: boolean;
   accountReadsWaiting: number;
   settleAccounts: () => void;
+  holdChain: boolean;
+  chainReadsWaiting: number;
+  settleChain: () => void;
   holdPrompt: boolean;
   promptsWaiting: number;
   settlePrompt: () => void;
@@ -37,10 +40,12 @@ function createFixture(index: number): MobileWalletFixture {
   let accounts: string[] = new URLSearchParams(location.search).get('authorized') === '1' ? [addresses[index]] : [];
   let chain = '0x1';
   let resolveAccounts: (() => void) | undefined;
+  let resolveChain: (() => void) | undefined;
   let resolvePrompt: (() => void) | undefined;
   const fixture: MobileWalletFixture = {
     calls: [], holdAccounts: new URLSearchParams(location.search).get('holdAuto') === '1', accountReadsWaiting: 0,
     settleAccounts: () => resolveAccounts?.(),
+    holdChain: false, chainReadsWaiting: 0, settleChain: () => resolveChain?.(),
     holdPrompt: false, promptsWaiting: 0, settlePrompt: () => resolvePrompt?.(),
     listenerCount: (event) => listeners.get(event)?.size ?? 0,
     emit: (event, payload) => {
@@ -66,7 +71,14 @@ function createFixture(index: number): MobileWalletFixture {
           }
           return observed;
         }
-        if (request.method === 'eth_chainId') return chain;
+        if (request.method === 'eth_chainId') {
+          const observed = chain;
+          if (fixture.holdChain) {
+            fixture.chainReadsWaiting += 1;
+            await new Promise<void>((resolve) => { resolveChain = resolve; });
+          }
+          return observed;
+        }
         if (request.method === 'wallet_switchEthereumChain') { chain = (request.params?.[0] as { chainId: string }).chainId; return null; }
         if (request.method === 'eth_sendTransaction') return `0x${(index === 0 ? 'a' : 'b').repeat(64)}`;
         return null;
