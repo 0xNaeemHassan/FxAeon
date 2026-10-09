@@ -52,6 +52,7 @@ All notable changes to FxAeon are documented here. The project currently maintai
 - Every SDK-produced transaction is independently reviewed, simulated, explicitly approved, receipt-checked, and followed by a fresh chain/SDK read.
 - Rejection, revert, timeout, and nonce drift stop a route before later steps are submitted.
 - No Privy secret, Telegram bot token, provider credential, or other signing authority is accepted by the static build.
+- A Telegram start parameter can open only a screen on a fixed list of same-origin paths; any other value is ignored.
 
 ## Historical architecture
 
